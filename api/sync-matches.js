@@ -3,6 +3,7 @@
 // og skriver dem ind i Supabase.
 //
 // Kald med: /api/sync-matches?leagueId=<vores egen liga-uuid>&smSeason=2026/2027
+// Test-tilstand (skriver intet): tilføj &dryRun=true
 //
 // Miljøvariabler der skal være sat i Vercel:
 //   SPORTMONKS_TOKEN
@@ -21,6 +22,7 @@ export default async function handler(req, res) {
 
     const leagueId = req.query.leagueId;
     const smSeasonName = req.query.smSeason || "2026/2027";
+    const dryRun = req.query.dryRun === "true";
     if (!leagueId) return res.status(400).json({ error: "Mangler leagueId query-parameter" });
 
     async function sb(path, opts = {}) {
@@ -88,6 +90,29 @@ export default async function handler(req, res) {
       if (page > 20) break; // sikkerhedsnet
     }
     const fixtures = [...fixturesById.values()];
+
+    if (dryRun) {
+      const sample = fixtures.slice(0, 15).map((fx) => {
+        const home = fx.participants?.find((p) => p.meta?.location === "home");
+        const away = fx.participants?.find((p) => p.meta?.location === "away");
+        const ftScores = (fx.scores || []).filter((s) => s.description === "FT");
+        const hs = ftScores.find((s) => s.score?.participant === "home")?.score?.goals ?? null;
+        const as = ftScores.find((s) => s.score?.participant === "away")?.score?.goals ?? null;
+        return {
+          kickoff: fx.starting_at,
+          home: home?.name,
+          away: away?.name,
+          home_score: hs,
+          away_score: as,
+        };
+      });
+      return res.status(200).json({
+        dryRun: true,
+        note: "Intet er skrevet til databasen — dette er kun en forhåndsvisning.",
+        totalFixtures: fixtures.length,
+        sample,
+      });
+    }
 
     // ---- auto-opdag og opret hold ud fra kampenes deltagere ----
     const smTeamsById = new Map();
