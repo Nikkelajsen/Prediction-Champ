@@ -1,13 +1,13 @@
 // Server-side funktion (kører på Vercel, ikke i browseren).
-// Henter kampe + resultater for Superligaen fra Sportmonks,
+// Henter kampe + resultater for den angivne liga fra Sportmonks,
 // og skriver dem ind i Supabase.
+//
+// Kald med: /api/sync-matches?leagueId=<vores egen liga-uuid>&smSeason=2026/2027
 //
 // Miljøvariabler der skal være sat i Vercel:
 //   SPORTMONKS_TOKEN
 //   SUPABASE_URL
 //   SUPABASE_SERVICE_ROLE_KEY
-
-const SPORTMONKS_SUPERLIGA_ID = 271;
 
 export default async function handler(req, res) {
   try {
@@ -18,6 +18,10 @@ export default async function handler(req, res) {
     if (!SPORTMONKS_TOKEN || !SUPABASE_URL || !SERVICE_KEY) {
       return res.status(500).json({ error: "Miljøvariabler mangler i Vercel-projektet (SPORTMONKS_TOKEN, SUPABASE_URL eller SUPABASE_SERVICE_ROLE_KEY)" });
     }
+
+    const leagueId = req.query.leagueId;
+    const smSeasonName = req.query.smSeason || "2026/2027";
+    if (!leagueId) return res.status(400).json({ error: "Mangler leagueId query-parameter" });
 
     async function sb(path, opts = {}) {
       const headers = {
@@ -33,13 +37,15 @@ export default async function handler(req, res) {
       return t ? JSON.parse(t) : null;
     }
 
-    // find Superligaen + aktiv sæson + hold i vores egen database
-    const leagues = await sb(`/rest/v1/leagues?name=eq.Superligaen&select=id`);
-    if (!leagues.length) throw new Error("Superligaen ikke fundet i databasen — kør seed-superligaen.sql først");
-    const leagueId = leagues[0].id;
+    // find ligaen i vores egen database (giver os navn + Sportmonks-liga-id)
+    const leagueRows = await sb(`/rest/v1/leagues?id=eq.${leagueId}&select=id,name,api_league_id`);
+    if (!leagueRows.length) throw new Error("Ligaen findes ikke i databasen");
+    const dbLeague = leagueRows[0];
+    if (!dbLeague.api_league_id) throw new Error(`Ligaen '${dbLeague.name}' har intet Sportmonks-liga-id (api_league_id) sat`);
+    const SPORTMONKS_LEAGUE_ID = dbLeague.api_league_id;
 
     const seasons = await sb(`/rest/v1/seasons?league_id=eq.${leagueId}&select=id&limit=1`);
-    if (!seasons.length) throw new Error("Sæson ikke fundet i databasen");
+    if (!seasons.length) throw new Error("Sæson ikke fundet i databasen for denne liga");
     const seasonId = seasons[0].id;
 
     const teams = await sb(`/rest/v1/teams?league_id=eq.${leagueId}&select=id,name`);
@@ -53,40 +59,30 @@ export default async function handler(req, res) {
         || teams.find((t) => normalize(t.name).includes(n) || n.includes(normalize(t.name)));
     }
 
-    // hent kampe fra Sportmonks i et rullende vindue (60 dage bagud, 200 dage frem).
-    // Sportmonks tillader max 100 dage pr. kald, så vi deler op i bidder,
-    // og gennemgår ALLE sider inden for hver bid (standard er 25 pr. side).
-    function addDays(iso, days) {
-      const d = new Date(iso + "T00:00:00Z");
-      d.setUTCDate(d.getUTCDate() + days);
-      return d.toISOString().slice(0, 10);
-    }
-    const overallStart = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-    const overallEnd = new Date(Date.now() + 200 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-
-    const chunks = [];
-    let cursor = overallStart;
-    while (cursor < overallEnd) {
-      const chunkEnd = addDays(cursor, 90) > overallEnd ? overallEnd : addDays(cursor, 90);
-      chunks.push([cursor, chunkEnd]);
-      cursor = addDays(chunkEnd, 1);
-    }
+    // Find Sportmonks' egen sæson-id for den ønskede sæson (fx "2026/2027"),
+    // i stedet for at stole på "currentSeason", som kan være usikker omkring sæsonskiftet.
+    const leagueRes = await fetch(
+      `https://api.sportmonks.com/v3/football/leagues/${SPORTMONKS_LEAGUE_ID}?include=seasons&api_token=${SPORTMONKS_TOKEN}`
+    );
+    if (!leagueRes.ok) throw new Error(`Sportmonks (liga): ${leagueRes.status} ${await leagueRes.text()}`);
+    const leagueData = await leagueRes.json();
+    const smSeason = (leagueData.data?.seasons || []).find((s) => s.name === smSeasonName);
+    if (!smSeason) throw new Error(`Kunne ikke finde sæsonen '${smSeasonName}' hos Sportmonks for ${dbLeague.name}`);
+    const smSeasonId = smSeason.id;
 
     const fixturesById = new Map();
-    for (const [start, end] of chunks) {
-      let page = 1;
-      let hasMore = true;
-      while (hasMore) {
-        const smUrl = `https://api.sportmonks.com/v3/football/fixtures/between/${start}/${end}` +
-          `?filters=fixtureLeagues:${SPORTMONKS_SUPERLIGA_ID}&include=participants;scores&per_page=50&page=${page}&api_token=${SPORTMONKS_TOKEN}`;
-        const smRes = await fetch(smUrl);
-        if (!smRes.ok) throw new Error(`Sportmonks: ${smRes.status} ${await smRes.text()}`);
-        const smData = await smRes.json();
-        for (const fx of smData.data || []) fixturesById.set(fx.id, fx);
-        hasMore = !!smData.pagination?.has_more;
-        page++;
-        if (page > 20) break; // sikkerhedsnet
-      }
+    let page = 1;
+    let hasMore = true;
+    while (hasMore) {
+      const smUrl = `https://api.sportmonks.com/v3/football/fixtures` +
+        `?filters=fixtureSeasons:${smSeasonId}&include=participants;scores&per_page=50&page=${page}&api_token=${SPORTMONKS_TOKEN}`;
+      const smRes = await fetch(smUrl);
+      if (!smRes.ok) throw new Error(`Sportmonks (kampe): ${smRes.status} ${await smRes.text()}`);
+      const smData = await smRes.json();
+      for (const fx of smData.data || []) fixturesById.set(fx.id, fx);
+      hasMore = !!smData.pagination?.has_more;
+      page++;
+      if (page > 20) break; // sikkerhedsnet
     }
     const fixtures = [...fixturesById.values()];
 
@@ -106,8 +102,16 @@ export default async function handler(req, res) {
       }
 
       const ftScores = (fx.scores || []).filter((s) => s.description === "FT");
-      const hs = ftScores.find((s) => s.score?.participant === "home")?.score?.goals ?? null;
-      const as = ftScores.find((s) => s.score?.participant === "away")?.score?.goals ?? null;
+      let hs = ftScores.find((s) => s.score?.participant === "home")?.score?.goals ?? null;
+      let as = ftScores.find((s) => s.score?.participant === "away")?.score?.goals ?? null;
+
+      // fallback: hvis der ikke er en "FT"-score, men kampen startede for mere end
+      // 3 timer siden, brug den seneste ("CURRENT") score i stedet
+      if (hs === null && fx.starting_at && new Date(fx.starting_at).getTime() < Date.now() - 3 * 3600 * 1000) {
+        const curScores = (fx.scores || []).filter((s) => s.description === "CURRENT");
+        hs = curScores.find((s) => s.score?.participant === "home")?.score?.goals ?? null;
+        as = curScores.find((s) => s.score?.participant === "away")?.score?.goals ?? null;
+      }
 
       toUpsert.push({
         season_id: seasonId,
