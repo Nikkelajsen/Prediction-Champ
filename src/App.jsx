@@ -251,10 +251,13 @@ function MainApp({ session, profile, onLogout }) {
   async function loadLeagues() {
     const ls = await db.select(token, "leagues", "select=*&order=name");
     setLeagues(ls);
-    if (!selectedLeagueId && ls.length) setSelectedLeagueId(ls[0].id);
+    if (!selectedLeagueId && ls.length) {
+      const preferred = ls.find((l) => l.name === "Superligaen") || ls[0];
+      setSelectedLeagueId(preferred.id);
+    }
     return ls;
   }
-
+  
   async function loadLeagueData(leagueId) {
     if (!leagueId) return;
     const seasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=*&limit=1`);
