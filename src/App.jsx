@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Trophy, Plus, Trash2, Users, CalendarDays, ClipboardList, BarChart3, Loader2, LogOut, Copy, Check } from "lucide-react";
+import { Trophy, Plus, Trash2, Users, CalendarDays, ClipboardList, BarChart3, Loader2, LogOut, Copy, Check, RefreshCw } from "lucide-react";
 
 // ---------- Supabase config ----------
 const SUPABASE_URL = "https://qfcjbpvttburccdyfnkx.supabase.co";
@@ -493,6 +493,8 @@ function MatchesTab({ token, season, teams, matches, teamsById, reload }) {
   const [away, setAway] = useState("");
   const [kickoff, setKickoff] = useState("");
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
 
   const rounds = useMemo(() => groupIntoRounds(matches), [matches]);
 
@@ -506,10 +508,45 @@ function MatchesTab({ token, season, teams, matches, teamsById, reload }) {
     } finally { setBusy(false); }
   }
 
+  async function syncFromApi() {
+    setSyncing(true); setSyncResult(null);
+    try {
+      const res = await fetch("/api/sync-matches");
+      const data = await res.json();
+      setSyncResult(data);
+      await reload();
+    } catch (e) {
+      setSyncResult({ error: e.message });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   return (
     <div>
       <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={h3}>Tilføj kamp</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h3 style={h3}>Hent kampe og resultater automatisk</h3>
+            <p style={muted}>Henter fra Sportmonks og opdaterer kampe, tidspunkter og resultater.</p>
+          </div>
+          <button style={goldBtn} onClick={syncFromApi} disabled={syncing}>
+            {syncing ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />} Hent resultater nu
+          </button>
+        </div>
+        {syncResult && !syncResult.error && (
+          <p style={{ color: "#7fd48a", fontSize: 13, marginTop: 10 }}>
+            {syncResult.synced} kampe synkroniseret ud af {syncResult.totalFixtures} fundet.
+            {syncResult.unmatched?.length > 0 && (
+              <span style={{ color: "#e08a7a" }}> Kunne ikke matche hold: {syncResult.unmatched.join(", ")}</span>
+            )}
+          </p>
+        )}
+        {syncResult?.error && <p style={{ color: "#e08a7a", fontSize: 13, marginTop: 10 }}>Fejl: {syncResult.error}</p>}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={h3}>Tilføj kamp manuelt</h3>
         <p style={muted}>Runden beregnes automatisk (tirsdag t.o.m. mandag) ud fra spilletidspunktet.</p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <select className="field" value={home} onChange={(e) => setHome(e.target.value)}>
