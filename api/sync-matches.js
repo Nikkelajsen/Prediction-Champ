@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!SPORTMONKS_TOKEN || !SUPABASE_URL || !SERVICE_KEY) {
-      return res.status(500).json({ error: "Miljøvariabler mangler i Vercel-projektet" });
+      return res.status(500).json({ error: "Miljøvariabler mangler i Vercel-projektet (SPORTMONKS_TOKEN, SUPABASE_URL eller SUPABASE_SERVICE_ROLE_KEY)" });
     }
 
     async function sb(path, opts = {}) {
@@ -53,17 +53,44 @@ export default async function handler(req, res) {
         || teams.find((t) => normalize(t.name).includes(n) || n.includes(normalize(t.name)));
     }
 
-    // hent kampe fra Sportmonks i et rullende vindue (60 dage bagud, 200 dage frem)
-    const start = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-    const end = new Date(Date.now() + 200 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-    const smUrl = `https://api.sportmonks.com/v3/football/fixtures/between/${start}/${end}` +
-      `?filters=fixtureLeagues:${SPORTMONKS_SUPERLIGA_ID}&include=participants;scores&api_token=${SPORTMONKS_TOKEN}`;
-    const smRes = await fetch(smUrl);
-    if (!smRes.ok) throw new Error(`Sportmonks: ${smRes.status} ${await smRes.text()}`);
-    const smData = await smRes.json();
-    const fixtures = smData.data || [];
+    // hent kampe fra Sportmonks i et rullende vindue (60 dage bagud, 200 dage frem).
+    // Sportmonks tillader max 100 dage pr. kald, så vi deler op i bidder,
+    // og gennemgår ALLE sider inden for hver bid (standard er 25 pr. side).
+    function addDays(iso, days) {
+      const d = new Date(iso + "T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() + days);
+      return d.toISOString().slice(0, 10);
+    }
+    const overallStart = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const overallEnd = new Date(Date.now() + 200 * 24 * 3600 * 1000).toISOString().slice(0, 10);
 
-    let synced = 0;
+    const chunks = [];
+    let cursor = overallStart;
+    while (cursor < overallEnd) {
+      const chunkEnd = addDays(cursor, 90) > overallEnd ? overallEnd : addDays(cursor, 90);
+      chunks.push([cursor, chunkEnd]);
+      cursor = addDays(chunkEnd, 1);
+    }
+
+    const fixturesById = new Map();
+    for (const [start, end] of chunks) {
+      let page = 1;
+      let hasMore = true;
+      while (hasMore) {
+        const smUrl = `https://api.sportmonks.com/v3/football/fixtures/between/${start}/${end}` +
+          `?filters=fixtureLeagues:${SPORTMONKS_SUPERLIGA_ID}&include=participants;scores&per_page=50&page=${page}&api_token=${SPORTMONKS_TOKEN}`;
+        const smRes = await fetch(smUrl);
+        if (!smRes.ok) throw new Error(`Sportmonks: ${smRes.status} ${await smRes.text()}`);
+        const smData = await smRes.json();
+        for (const fx of smData.data || []) fixturesById.set(fx.id, fx);
+        hasMore = !!smData.pagination?.has_more;
+        page++;
+        if (page > 20) break; // sikkerhedsnet
+      }
+    }
+    const fixtures = [...fixturesById.values()];
+
+    let toUpsert = [];
     const unmatched = new Set();
 
     for (const fx of fixtures) {
@@ -82,24 +109,27 @@ export default async function handler(req, res) {
       const hs = ftScores.find((s) => s.score?.participant === "home")?.score?.goals ?? null;
       const as = ftScores.find((s) => s.score?.participant === "away")?.score?.goals ?? null;
 
+      toUpsert.push({
+        season_id: seasonId,
+        home_team_id: homeTeam.id,
+        away_team_id: awayTeam.id,
+        kickoff_at: fx.starting_at,
+        home_score: hs,
+        away_score: as,
+        status: hs !== null ? "finished" : "scheduled",
+        api_fixture_id: String(fx.id),
+      });
+    }
+
+    if (toUpsert.length) {
       await sb(`/rest/v1/matches?on_conflict=api_fixture_id`, {
         method: "POST",
         prefer: "resolution=merge-duplicates,return=minimal",
-        body: JSON.stringify([{
-          season_id: seasonId,
-          home_team_id: homeTeam.id,
-          away_team_id: awayTeam.id,
-          kickoff_at: fx.starting_at,
-          home_score: hs,
-          away_score: as,
-          status: hs !== null ? "finished" : "scheduled",
-          api_fixture_id: String(fx.id),
-        }]),
+        body: JSON.stringify(toUpsert),
       });
-      synced++;
     }
 
-    res.status(200).json({ synced, totalFixtures: fixtures.length, unmatched: [...unmatched] });
+    res.status(200).json({ synced: toUpsert.length, totalFixtures: fixtures.length, unmatched: [...unmatched] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
