@@ -66,12 +66,14 @@ export default async function handler(req, res) {
     );
     if (!leagueRes.ok) throw new Error(`Sportmonks (liga): ${leagueRes.status} ${await leagueRes.text()}`);
     const leagueData = await leagueRes.json();
-const smSeason = (leagueData.data?.seasons || []).find((s) => s.name === smSeasonName);
+    const smSeason = (leagueData.data?.seasons || []).find((s) => s.name === smSeasonName);
     if (!smSeason) {
       const available = (leagueData.data?.seasons || []).map((s) => s.name).join(", ") || "(ingen sæsoner fundet)";
       throw new Error(`Kunne ikke finde sæsonen '${smSeasonName}' hos Sportmonks for ${dbLeague.name}. Tilgængelige sæsoner: ${available}`);
     }
     const smSeasonId = smSeason.id;
+
+    const fixturesById = new Map();
     let page = 1;
     let hasMore = true;
     while (hasMore) {
