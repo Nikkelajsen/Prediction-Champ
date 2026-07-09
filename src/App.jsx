@@ -238,28 +238,38 @@ function MainApp({ session, profile, onLogout }) {
   const token = session.access_token;
   const [tab, setTab] = useState("competitions");
   const [loading, setLoading] = useState(true);
-  const [league, setLeague] = useState(null);
+  const [leagues, setLeagues] = useState([]);
+  const [selectedLeagueId, setSelectedLeagueId] = useState(null);
   const [season, setSeason] = useState(null);
   const [teams, setTeams] = useState([]);
   const [matches, setMatches] = useState([]);
   const [competitions, setCompetitions] = useState([]);
   const [selectedCompId, setSelectedCompId] = useState(null);
 
-  async function loadAll() {
-    setLoading(true);
-    const leagues = await db.select(token, "leagues", "select=*&limit=1");
-    const l = leagues[0];
-    setLeague(l);
-    if (l) {
-      const seasons = await db.select(token, "seasons", `league_id=eq.${l.id}&select=*&limit=1`);
-      setSeason(seasons[0]);
-      const tms = await db.select(token, "teams", `league_id=eq.${l.id}&select=*&order=name`);
-      setTeams(tms);
-      if (seasons[0]) {
-        const ms = await db.select(token, "matches", `season_id=eq.${seasons[0].id}&select=*&order=kickoff_at`);
-        setMatches(ms);
-      }
+  const league = leagues.find((l) => l.id === selectedLeagueId) || null;
+
+  async function loadLeagues() {
+    const ls = await db.select(token, "leagues", "select=*&order=name");
+    setLeagues(ls);
+    if (!selectedLeagueId && ls.length) setSelectedLeagueId(ls[0].id);
+    return ls;
+  }
+
+  async function loadLeagueData(leagueId) {
+    if (!leagueId) return;
+    const seasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=*&limit=1`);
+    setSeason(seasons[0] || null);
+    const tms = await db.select(token, "teams", `league_id=eq.${leagueId}&select=*&order=name`);
+    setTeams(tms);
+    if (seasons[0]) {
+      const ms = await db.select(token, "matches", `season_id=eq.${seasons[0].id}&select=*&order=kickoff_at`);
+      setMatches(ms);
+    } else {
+      setMatches([]);
     }
+  }
+
+  async function loadCompetitions() {
     const myComps = await db.select(token, "competition_participants", `user_id=eq.${session.user.id}&select=competition_id`);
     if (myComps.length) {
       const ids = myComps.map((c) => c.competition_id).join(",");
@@ -269,10 +279,19 @@ function MainApp({ session, profile, onLogout }) {
     } else {
       setCompetitions([]);
     }
+  }
+
+  async function loadAll() {
+    setLoading(true);
+    const ls = await loadLeagues();
+    const activeId = selectedLeagueId || ls[0]?.id;
+    await loadLeagueData(activeId);
+    await loadCompetitions();
     setLoading(false);
   }
 
   useEffect(() => { loadAll(); }, []); // eslint-disable-line
+  useEffect(() => { if (selectedLeagueId) loadLeagueData(selectedLeagueId); }, [selectedLeagueId]); // eslint-disable-line
 
   const teamsById = useMemo(() => Object.fromEntries(teams.map((t) => [t.id, t.name])), [teams]);
 
@@ -284,9 +303,9 @@ function MainApp({ session, profile, onLogout }) {
   return (
     <div style={wrap}>
       <style>{globalCss}</style>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22, flexWrap: "wrap", gap: 10 }}>
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
         <div>
-          <div style={{ fontSize: 12, letterSpacing: 2, color: "#d4a73c", fontWeight: 700, marginBottom: 4 }}>{league?.name?.toUpperCase() || "PREDICTION CHAMP"}</div>
+          <div style={{ fontSize: 12, letterSpacing: 2, color: "#d4a73c", fontWeight: 700, marginBottom: 4 }}>PREDICTION CHAMP</div>
           <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#f4f1e8" }}>
             <Trophy size={24} style={{ verticalAlign: -4, marginRight: 8, color: "#d4a73c" }} />Prediction Champ
           </h1>
@@ -296,6 +315,19 @@ function MainApp({ session, profile, onLogout }) {
           <button onClick={onLogout} style={ghostBtn}><LogOut size={14} />Log ud</button>
         </div>
       </header>
+
+      {leagues.length > 1 && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+          {leagues.map((l) => (
+            <button key={l.id} onClick={() => setSelectedLeagueId(l.id)} style={{
+              padding: "6px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
+              border: "1px solid " + (l.id === selectedLeagueId ? "#d4a73c" : "#2c4a3c"),
+              background: l.id === selectedLeagueId ? "rgba(212,167,60,0.15)" : "transparent",
+              color: l.id === selectedLeagueId ? "#d4a73c" : "#9fb3a5",
+            }}>{l.name}</button>
+          ))}
+        </div>
+      )}
 
       <nav style={{ display: "flex", gap: 6, marginBottom: 20, overflowX: "auto", paddingBottom: 4 }}>
         <TabButton active={tab === "competitions"} onClick={() => setTab("competitions")} icon={Users}>Konkurrencer</TabButton>
@@ -310,7 +342,7 @@ function MainApp({ session, profile, onLogout }) {
           competitions={competitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} reload={loadAll} />
       )}
       {tab === "matches" && (
-        <MatchesTab token={token} season={season} teams={teams} matches={matches} teamsById={teamsById} reload={loadAll} />
+        <MatchesTab token={token} league={league} season={season} teams={teams} matches={matches} teamsById={teamsById} reload={loadAll} />
       )}
       {tab === "predictions" && (
         <PredictionsTab token={token} userId={session.user.id} competitions={competitions}
@@ -488,7 +520,7 @@ function CompetitionsTab({ token, userId, league, season, teams, competitions, s
 }
 
 // ================= TAB: MATCHES (admin, manuel indtastning) =================
-function MatchesTab({ token, season, teams, matches, teamsById, reload }) {
+function MatchesTab({ token, league, season, teams, matches, teamsById, reload }) {
   const [home, setHome] = useState("");
   const [away, setAway] = useState("");
   const [kickoff, setKickoff] = useState("");
@@ -509,9 +541,10 @@ function MatchesTab({ token, season, teams, matches, teamsById, reload }) {
   }
 
   async function syncFromApi() {
+    if (!league) return;
     setSyncing(true); setSyncResult(null);
     try {
-      const res = await fetch("/api/sync-matches");
+      const res = await fetch(`/api/sync-matches?leagueId=${league.id}`);
       const data = await res.json();
       setSyncResult(data);
       await reload();
@@ -528,7 +561,7 @@ function MatchesTab({ token, season, teams, matches, teamsById, reload }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <div>
             <h3 style={h3}>Hent kampe og resultater automatisk</h3>
-            <p style={muted}>Henter fra Sportmonks og opdaterer kampe, tidspunkter og resultater.</p>
+            <p style={muted}>Henter fra Sportmonks for {league?.name || "denne liga"} og opdaterer kampe, tidspunkter og resultater.</p>
           </div>
           <button style={goldBtn} onClick={syncFromApi} disabled={syncing}>
             {syncing ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />} Hent resultater nu
