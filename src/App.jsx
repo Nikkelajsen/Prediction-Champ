@@ -43,7 +43,23 @@ const auth = {
     restFetch(`/auth/v1/signup`, { method: "POST", body: { email, password } }),
   signIn: (email, password) =>
     restFetch(`/auth/v1/token?grant_type=password`, { method: "POST", body: { email, password } }),
+  refresh: (refresh_token) =>
+    restFetch(`/auth/v1/token?grant_type=refresh_token`, { method: "POST", body: { refresh_token } }),
+  recover: (email) =>
+    restFetch(`/auth/v1/recover`, { method: "POST", body: { email } }),
+  updatePassword: (accessToken, password) =>
+    restFetch(`/auth/v1/user`, { method: "PUT", token: accessToken, body: { password } }),
 };
+const SESSION_KEY = "pc_session";
+function saveSession(session) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch (e) {}
+}
+function loadSession() {
+  try { const raw = localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+}
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+}
 
 // ---------- scoring helpers ----------
 function outcome(h, a) { return h === a ? "X" : h > a ? "1" : "2"; }
@@ -148,56 +164,179 @@ function TabButton({ active, onClick, icon: Icon, children }) {
 
 // ================= APP ROOT =================
 export default function App() {
-  const [session, setSession] = useState(null); // {access_token, user}
+  const [session, setSession] = useState(null); // {access_token, refresh_token, user}
   const [profile, setProfile] = useState(null);
-  const [booting, setBooting] = useState(false);
+  const [booting, setBooting] = useState(true);
+  const [recoveryToken, setRecoveryToken] = useState(null);
+  const [pendingJoinCode, setPendingJoinCode] = useState(null);
+
+  async function completeAuth({ access_token, refresh_token, user }, chosenUsername) {
+    try {
+      if (chosenUsername) {
+        const rows = await db.upsert(access_token, "profiles", [{ id: user.id, display_name: chosenUsername }], "id");
+        setProfile(rows[0]);
+      } else {
+        const rows = await db.select(access_token, "profiles", `id=eq.${user.id}&select=*`);
+        setProfile(rows[0] || null);
+      }
+    } catch (e) {
+      const rows = await db.select(access_token, "profiles", `id=eq.${user.id}&select=*`);
+      setProfile(rows[0] || null);
+    }
+    setSession({ access_token, refresh_token, user });
+    saveSession({ refresh_token, user });
+  }
+
+  function handleLogout() {
+    setSession(null); setProfile(null); clearSession();
+  }
+
+  useEffect(() => {
+    // nulstil-kodeord-link? (#access_token=...&type=recovery)
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    if (hash.get("type") === "recovery" && hash.get("access_token")) {
+      setRecoveryToken(hash.get("access_token"));
+      setBooting(false);
+      return;
+    }
+    // invitationslink? (?join=KODE)
+    const params = new URLSearchParams(window.location.search);
+    const join = params.get("join");
+    if (join) setPendingJoinCode(join);
+
+    // genopret gemt session, hvis der er en
+    (async () => {
+      const saved = loadSession();
+      if (saved?.refresh_token) {
+        try {
+          const res = await auth.refresh(saved.refresh_token);
+          await completeAuth(res, null);
+        } catch (e) {
+          clearSession();
+        }
+      }
+      setBooting(false);
+    })();
+  }, []); // eslint-disable-line
+
+  // forny access token stille og roligt hvert 45. minut, så man forbliver logget ind
+  useEffect(() => {
+    if (!session?.refresh_token) return;
+    const id = setInterval(async () => {
+      try {
+        const res = await auth.refresh(session.refresh_token);
+        setSession((s) => ({ ...s, access_token: res.access_token, refresh_token: res.refresh_token }));
+        saveSession({ refresh_token: res.refresh_token, user: session.user });
+      } catch (e) { /* ignorer — næste handling beder om login, hvis nødvendigt */ }
+    }, 45 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [session?.refresh_token]); // eslint-disable-line
+
+  if (recoveryToken) {
+    return (
+      <>
+        <style>{globalCss}</style>
+        <ResetPasswordScreen accessToken={recoveryToken} onDone={() => {
+          window.location.hash = "";
+          setRecoveryToken(null);
+        }} />
+      </>
+    );
+  }
+
+  if (booting) {
+    return (
+      <div style={wrap}>
+        <style>{globalCss}</style>
+        <div style={{ display: "flex", gap: 10, color: "#cfd8d1" }}><Loader2 className="spin" size={20} />Henter …</div>
+      </div>
+    );
+  }
 
   return (
     <>
       <style>{globalCss}</style>
       {!session ? (
-        <AuthScreen onAuthed={async ({ access_token, user }, chosenUsername) => {
-          setBooting(true);
-          try {
-            if (chosenUsername) {
-              const rows = await db.upsert(access_token, "profiles", [{ id: user.id, display_name: chosenUsername }], "id");
-              setProfile(rows[0]);
-            } else {
-              const rows = await db.select(access_token, "profiles", `id=eq.${user.id}&select=*`);
-              setProfile(rows[0] || null);
-            }
-          } catch (e) {
-            const rows = await db.select(access_token, "profiles", `id=eq.${user.id}&select=*`);
-            setProfile(rows[0] || null);
-          }
-          setSession({ access_token, user });
-          setBooting(false);
-        }} booting={booting} />
+        <AuthScreen onAuthed={completeAuth} booting={false} />
       ) : (
-        <MainApp session={session} profile={profile} onLogout={() => { setSession(null); setProfile(null); }} />
+        <MainApp session={session} profile={profile} onLogout={handleLogout}
+          pendingJoinCode={pendingJoinCode} clearPendingJoinCode={() => setPendingJoinCode(null)} />
       )}
     </>
   );
 }
 
+// ================= RESET PASSWORD SCREEN =================
+function ResetPasswordScreen({ accessToken, onDone }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function submit() {
+    setError("");
+    if (password.length < 6) { setError("Adgangskoden skal være mindst 6 tegn"); return; }
+    if (password !== confirm) { setError("Adgangskoderne er ikke ens"); return; }
+    setLoading(true);
+    try {
+      await auth.updatePassword(accessToken, password);
+      setDone(true);
+    } catch (e) {
+      setError(e.message || "Noget gik galt");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ ...wrap, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 480 }}>
+      <div className="card" style={{ ...cardStyle, width: 320 }}>
+        <h2 style={{ ...h3, fontSize: 20, marginBottom: 4 }}><Trophy size={20} style={{ verticalAlign: -3, marginRight: 6, color: "#d4a73c" }} />Nyt kodeord</h2>
+        {done ? (
+          <>
+            <p style={{ color: "#7fd48a", fontSize: 14, marginTop: 10 }}>Kodeord opdateret! Du kan nu logge ind.</p>
+            <button style={{ ...primaryBtn, width: "100%", justifyContent: "center", marginTop: 10 }} onClick={onDone}>Til login</button>
+          </>
+        ) : (
+          <>
+            <p style={muted}>Vælg et nyt kodeord til din konto.</p>
+            <input className="field" style={fieldFull} type="password" placeholder="Nyt kodeord" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input className="field" style={fieldFull} type="password" placeholder="Gentag kodeord" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+            {error && <p style={{ color: "#e08a7a", fontSize: 13 }}>{error}</p>}
+            <button style={{ ...primaryBtn, width: "100%", justifyContent: "center", marginTop: 6 }} onClick={submit} disabled={loading}>
+              {loading ? <Loader2 size={16} className="spin" /> : "Gem nyt kodeord"}
+            </button>
+          </>
+        )}
+      </div>
+      <style>{`.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
 // ================= AUTH SCREEN =================
 function AuthScreen({ onAuthed, booting }) {
-  const [mode, setMode] = useState("signin");
+  const [mode, setMode] = useState("signin"); // signin | signup | forgot
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function submit() {
-    setError(""); setLoading(true);
+    setError(""); setInfo(""); setLoading(true);
     try {
       if (mode === "signup") {
         if (!username.trim()) { setError("Vælg et brugernavn"); setLoading(false); return; }
         const res = await auth.signUp(email, password);
         if (res.access_token) { await onAuthed(res, username.trim()); return; }
-        setError("Konto oprettet. Tjek om der kræves e-mail-bekræftelse i Supabase-projektet, log derefter ind.");
+        setInfo("Konto oprettet. Tjek om der kræves e-mail-bekræftelse i Supabase-projektet, log derefter ind.");
         setMode("signin");
+      } else if (mode === "forgot") {
+        await auth.recover(email);
+        setInfo("Hvis e-mailen findes, er der sendt et link til at nulstille kodeordet.");
       } else {
         const res = await auth.signIn(email, password);
         await onAuthed(res);
@@ -213,19 +352,28 @@ function AuthScreen({ onAuthed, booting }) {
     <div style={{ ...wrap, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 480 }}>
       <div className="card" style={{ ...cardStyle, width: 320 }}>
         <h2 style={{ ...h3, fontSize: 20, marginBottom: 4 }}><Trophy size={20} style={{ verticalAlign: -3, marginRight: 6, color: "#d4a73c" }} />Prediction Champ</h2>
-        <p style={muted}>{mode === "signin" ? "Log ind" : "Opret konto"}</p>
+        <p style={muted}>{mode === "signin" ? "Log ind" : mode === "signup" ? "Opret konto" : "Nulstil kodeord"}</p>
         {mode === "signup" && (
           <input className="field" style={fieldFull} placeholder="Brugernavn (vises for andre)" value={username} onChange={(e) => setUsername(e.target.value)} />
         )}
         <input className="field" style={fieldFull} placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <input className="field" style={fieldFull} type="password" placeholder="Adgangskode" value={password} onChange={(e) => setPassword(e.target.value)} />
+        {mode !== "forgot" && (
+          <input className="field" style={fieldFull} type="password" placeholder="Adgangskode" value={password} onChange={(e) => setPassword(e.target.value)} />
+        )}
         {error && <p style={{ color: "#e08a7a", fontSize: 13 }}>{error}</p>}
+        {info && <p style={{ color: "#7fd48a", fontSize: 13 }}>{info}</p>}
         <button style={{ ...primaryBtn, width: "100%", justifyContent: "center", marginTop: 6 }} onClick={submit} disabled={loading || booting}>
-          {loading || booting ? <Loader2 size={16} className="spin" /> : mode === "signin" ? "Log ind" : "Opret konto"}
+          {loading || booting ? <Loader2 size={16} className="spin" /> : mode === "signin" ? "Log ind" : mode === "signup" ? "Opret konto" : "Send nulstillingslink"}
         </button>
-        <p style={{ ...muted, marginTop: 14, textAlign: "center", cursor: "pointer" }}
-          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}>
-          {mode === "signin" ? "Ny bruger? Opret konto" : "Har du allerede en konto? Log ind"}
+        {mode === "signin" && (
+          <p style={{ ...muted, marginTop: 10, textAlign: "center", cursor: "pointer" }}
+            onClick={() => { setMode("forgot"); setError(""); setInfo(""); }}>
+            Glemt kodeord?
+          </p>
+        )}
+        <p style={{ ...muted, marginTop: 6, textAlign: "center", cursor: "pointer" }}
+          onClick={() => { setMode(mode === "signup" ? "signin" : mode === "forgot" ? "signin" : "signup"); setError(""); setInfo(""); }}>
+          {mode === "signup" ? "Har du allerede en konto? Log ind" : mode === "forgot" ? "Tilbage til login" : "Ny bruger? Opret konto"}
         </p>
       </div>
       <style>{`.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -234,7 +382,7 @@ function AuthScreen({ onAuthed, booting }) {
 }
 
 // ================= MAIN APP (logged in) =================
-function MainApp({ session, profile, onLogout }) {
+function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoinCode }) {
   const token = session.access_token;
   const [tab, setTab] = useState("competitions");
   const [loading, setLoading] = useState(true);
@@ -245,6 +393,7 @@ function MainApp({ session, profile, onLogout }) {
   const [matches, setMatches] = useState([]);
   const [competitions, setCompetitions] = useState([]);
   const [selectedCompId, setSelectedCompId] = useState(null);
+  const isAdmin = !!profile?.is_admin;
 
   const league = leagues.find((l) => l.id === selectedLeagueId) || null;
 
@@ -257,7 +406,7 @@ function MainApp({ session, profile, onLogout }) {
     }
     return ls;
   }
-  
+
   async function loadLeagueData(leagueId) {
     if (!leagueId) return;
     const seasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=*&limit=1`);
@@ -295,6 +444,28 @@ function MainApp({ session, profile, onLogout }) {
 
   useEffect(() => { loadAll(); }, []); // eslint-disable-line
   useEffect(() => { if (selectedLeagueId) loadLeagueData(selectedLeagueId); }, [selectedLeagueId]); // eslint-disable-line
+
+  useEffect(() => {
+    if (!pendingJoinCode) return;
+    (async () => {
+      try {
+        const found = await db.select(token, "competitions", `invite_code=eq.${pendingJoinCode}&select=*`);
+        if (found.length) {
+          const already = await db.select(token, "competition_participants", `competition_id=eq.${found[0].id}&user_id=eq.${session.user.id}&select=competition_id`);
+          if (!already.length) {
+            await db.insert(token, "competition_participants", [{ competition_id: found[0].id, user_id: session.user.id }]);
+          }
+          await loadCompetitions();
+          setSelectedCompId(found[0].id);
+          setTab("predictions");
+        }
+      } catch (e) { /* ignorer — koden findes måske ikke */ }
+      clearPendingJoinCode();
+      const url = new URL(window.location.href);
+      url.searchParams.delete("join");
+      window.history.replaceState({}, "", url.toString());
+    })();
+  }, [pendingJoinCode]); // eslint-disable-line
 
   const teamsById = useMemo(() => Object.fromEntries(teams.map((t) => [t.id, t.name])), [teams]);
 
@@ -334,24 +505,24 @@ function MainApp({ session, profile, onLogout }) {
 
       <nav style={{ display: "flex", gap: 6, marginBottom: 20, overflowX: "auto", paddingBottom: 4 }}>
         <TabButton active={tab === "competitions"} onClick={() => setTab("competitions")} icon={Users}>Konkurrencer</TabButton>
-        <TabButton active={tab === "matches"} onClick={() => setTab("matches")} icon={CalendarDays}>Kampe</TabButton>
         <TabButton active={tab === "predictions"} onClick={() => setTab("predictions")} icon={ClipboardList}>Forudsigelser</TabButton>
-        <TabButton active={tab === "results"} onClick={() => setTab("results")} icon={ClipboardList}>Resultater</TabButton>
         <TabButton active={tab === "board"} onClick={() => setTab("board")} icon={BarChart3}>Stilling</TabButton>
+        {isAdmin && <TabButton active={tab === "matches"} onClick={() => setTab("matches")} icon={CalendarDays}>Kampe</TabButton>}
+        {isAdmin && <TabButton active={tab === "results"} onClick={() => setTab("results")} icon={ClipboardList}>Resultater</TabButton>}
       </nav>
 
       {tab === "competitions" && (
         <CompetitionsTab token={token} userId={session.user.id} league={league} season={season} teams={teams}
           competitions={competitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} reload={loadAll} />
       )}
-      {tab === "matches" && (
+      {tab === "matches" && isAdmin && (
         <MatchesTab token={token} league={league} season={season} teams={teams} matches={matches} teamsById={teamsById} reload={loadAll} />
       )}
       {tab === "predictions" && (
         <PredictionsTab token={token} userId={session.user.id} competitions={competitions}
           selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} teamsById={teamsById} />
       )}
-      {tab === "results" && (
+      {tab === "results" && isAdmin && (
         <ResultsTab token={token} matches={matches} teamsById={teamsById} reload={loadAll} />
       )}
       {tab === "board" && (
@@ -446,8 +617,16 @@ function CompetitionsTab({ token, userId, league, season, teams, competitions, s
           <span style={{ color: "#7fa38c", fontSize: 12, marginLeft: 6 }}>
             ({c.mode === "full_season" ? "hel sæson" : c.mode === "team" ? "et hold" : "tidsperiode"})
           </span>
-          <Copy size={12} style={{ marginLeft: 8, cursor: "pointer", color: "#9fb3a5" }}
-            onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.invite_code); setCopiedId(c.id); setTimeout(() => setCopiedId(null), 1500); }} />
+          <span style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 8, cursor: "pointer", color: "#9fb3a5", fontSize: 11 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              const link = `${window.location.origin}${window.location.pathname}?join=${c.invite_code}`;
+              navigator.clipboard.writeText(link);
+              setCopiedId(c.id);
+              setTimeout(() => setCopiedId(null), 1500);
+            }}>
+            <Copy size={12} /> Del link
+          </span>
           {copiedId === c.id && <Check size={12} style={{ color: "#7fd48a", marginLeft: 4 }} />}
         </div>
         {status && !status.isComplete && status.totalMatches > 0 && (
@@ -522,26 +701,12 @@ function CompetitionsTab({ token, userId, league, season, teams, competitions, s
   );
 }
 
-// ================= TAB: MATCHES (admin, manuel indtastning) =================
+// ================= TAB: MATCHES (admin) =================
 function MatchesTab({ token, league, season, teams, matches, teamsById, reload }) {
-  const [home, setHome] = useState("");
-  const [away, setAway] = useState("");
-  const [kickoff, setKickoff] = useState("");
-  const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
 
   const rounds = useMemo(() => groupIntoRounds(matches), [matches]);
-
-  async function addMatch() {
-    if (!home || !away || home === away || !kickoff || !season) return;
-    setBusy(true);
-    try {
-      await db.insert(token, "matches", [{ season_id: season.id, home_team_id: home, away_team_id: away, kickoff_at: `${kickoff}:00` }]);
-      setHome(""); setAway(""); setKickoff("");
-      await reload();
-    } finally { setBusy(false); }
-  }
 
   async function syncFromApi() {
     if (!league) return;
@@ -581,22 +746,6 @@ function MatchesTab({ token, league, season, teams, matches, teamsById, reload }
         {syncResult?.error && <p style={{ color: "#e08a7a", fontSize: 13, marginTop: 10 }}>Fejl: {syncResult.error}</p>}
       </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={h3}>Tilføj kamp manuelt</h3>
-        <p style={muted}>Runden beregnes automatisk (tirsdag t.o.m. mandag) ud fra spilletidspunktet.</p>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <select className="field" value={home} onChange={(e) => setHome(e.target.value)}>
-            <option value="">Hjemmehold…</option>
-            {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-          <select className="field" value={away} onChange={(e) => setAway(e.target.value)}>
-            <option value="">Udehold…</option>
-            {teams.filter((t) => t.id !== home).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-          <input className="field" type="datetime-local" value={kickoff} onChange={(e) => setKickoff(e.target.value)} />
-          <button style={primaryBtn} onClick={addMatch} disabled={busy}><Plus size={14} />Tilføj</button>
-        </div>
-      </div>
       {rounds.length === 0 && <p style={muted}>Ingen kampe endnu.</p>}
       {rounds.map((r) => (
         <div key={r.key} className="card" style={{ marginBottom: 14 }}>
