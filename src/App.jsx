@@ -769,9 +769,10 @@ function MatchesTab({ token, league, season, teams, matches, teamsById, reload }
 }
 
 // ================= TAB: PREDICTIONS =================
-function PredictionsTab({ token, userId, competitions, selectedCompId, setSelectedCompId, teamsById }) {
+function PredictionsTab({ token, userId, competitions, selectedCompId, setSelectedCompId }) {
   const [allMatches, setAllMatches] = useState([]);
   const [preds, setPreds] = useState({});
+  const [teamsById, setTeamsById] = useState({});
   const [loading, setLoading] = useState(false);
   const [roundIndex, setRoundIndex] = useState(0);
   const comp = competitions.find((c) => c.id === selectedCompId);
@@ -784,9 +785,14 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
       setRoundIndex(0);
       const cms = await db.select(token, "competition_matches", `competition_id=eq.${selectedCompId}&select=match_id`);
       const ids = cms.map((c) => c.match_id);
-      if (!ids.length) { setAllMatches([]); setLoading(false); return; }
+      if (!ids.length) { setAllMatches([]); setTeamsById({}); setLoading(false); return; }
       const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
       setAllMatches(ms);
+      const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]))];
+      if (teamIds.length) {
+        const tms = await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`);
+        setTeamsById(Object.fromEntries(tms.map((t) => [t.id, t.name])));
+      }
       const myPreds = await db.select(token, "predictions", `user_id=eq.${userId}&match_id=in.(${ids.join(",")})&select=*`);
       setPreds(Object.fromEntries(myPreds.map((p) => [p.match_id, p])));
       setLoading(false);
