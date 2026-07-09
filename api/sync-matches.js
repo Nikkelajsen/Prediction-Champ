@@ -48,12 +48,12 @@ export default async function handler(req, res) {
     if (!seasons.length) throw new Error("Sæson ikke fundet i databasen for denne liga");
     const seasonId = seasons[0].id;
 
-    const teams = await sb(`/rest/v1/teams?league_id=eq.${leagueId}&select=id,name`);
+    const teams = await sb(`/rest/v1/teams?league_id=eq.${leagueId}&select=id,name,api_team_id`);
 
     function normalize(s) {
       return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
     }
-    function matchTeam(sportmonksName) {
+    function findByName(sportmonksName) {
       const n = normalize(sportmonksName);
       return teams.find((t) => normalize(t.name) === n)
         || teams.find((t) => normalize(t.name).includes(n) || n.includes(normalize(t.name)));
@@ -86,6 +86,44 @@ export default async function handler(req, res) {
     }
     const fixtures = [...fixturesById.values()];
 
+    // ---- auto-opdag og opret hold ud fra kampenes deltagere ----
+    const smTeamsById = new Map();
+    for (const fx of fixtures) {
+      for (const p of fx.participants || []) {
+        if (p?.id && p?.name) smTeamsById.set(p.id, p.name);
+      }
+    }
+
+    const newTeams = [];
+    const linkUpdates = [];
+    const smIdToOurId = new Map();
+
+    for (const [smId, smName] of smTeamsById) {
+      const byApiId = teams.find((t) => t.api_team_id === String(smId));
+      if (byApiId) { smIdToOurId.set(smId, byApiId.id); continue; }
+
+      const byName = findByName(smName);
+      if (byName) {
+        smIdToOurId.set(smId, byName.id);
+        if (byName.api_team_id !== String(smId)) linkUpdates.push({ id: byName.id, api_team_id: String(smId) });
+        continue;
+      }
+
+      newTeams.push({ league_id: leagueId, name: smName, api_team_id: String(smId) });
+    }
+
+    if (newTeams.length) {
+      const inserted = await sb(`/rest/v1/teams`, {
+        method: "POST", prefer: "return=representation", body: JSON.stringify(newTeams),
+      });
+      for (const row of inserted) smIdToOurId.set(Number(row.api_team_id), row.id);
+    }
+    for (const upd of linkUpdates) {
+      await sb(`/rest/v1/teams?id=eq.${upd.id}`, {
+        method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ api_team_id: upd.api_team_id }),
+      });
+    }
+
     let toUpsert = [];
     const unmatched = new Set();
 
@@ -94,9 +132,9 @@ export default async function handler(req, res) {
       const away = fx.participants?.find((p) => p.meta?.location === "away");
       if (!home || !away) continue;
 
-      const homeTeam = matchTeam(home.name);
-      const awayTeam = matchTeam(away.name);
-      if (!homeTeam || !awayTeam) {
+      const homeTeamId = smIdToOurId.get(home.id);
+      const awayTeamId = smIdToOurId.get(away.id);
+      if (!homeTeamId || !awayTeamId) {
         unmatched.add(`${home.name} vs ${away.name}`);
         continue;
       }
@@ -115,8 +153,8 @@ export default async function handler(req, res) {
 
       toUpsert.push({
         season_id: seasonId,
-        home_team_id: homeTeam.id,
-        away_team_id: awayTeam.id,
+        home_team_id: homeTeamId,
+        away_team_id: awayTeamId,
         kickoff_at: fx.starting_at,
         home_score: hs,
         away_score: as,
@@ -133,7 +171,12 @@ export default async function handler(req, res) {
       });
     }
 
-    res.status(200).json({ synced: toUpsert.length, totalFixtures: fixtures.length, unmatched: [...unmatched] });
+    res.status(200).json({
+      synced: toUpsert.length,
+      totalFixtures: fixtures.length,
+      teamsCreated: newTeams.length,
+      unmatched: [...unmatched],
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
