@@ -59,6 +59,42 @@ function roundLabel(key) {
   const fmt = (x) => x.toLocaleDateString("da-DK", { day: "2-digit", month: "2-digit" });
   return `${fmt(start)} – ${fmt(end)}`;
 }
+function groupIntoRounds(matches) {
+  const map = {};
+  for (const m of matches) { (map[m.round_key] ||= []).push(m); }
+  return Object.keys(map).sort().map((key) => ({
+    key, label: roundLabel(key),
+    matches: map[key].slice().sort((a, b) => (a.kickoff_at || "").localeCompare(b.kickoff_at || "")),
+  }));
+}
+function formatKickoff(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleDateString("da-DK", { weekday: "short", day: "2-digit", month: "2-digit" }) + " kl. " +
+    d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
+}
+function isLocked(match) {
+  if (match.home_score !== null && match.home_score !== undefined) return true;
+  if (!match.kickoff_at) return false;
+  const lockAt = new Date(match.kickoff_at).getTime() - 60 * 60 * 1000; // 1 time før kickoff
+  return Date.now() >= lockAt;
+}
+
+// ---------- runde-navigation (bruges af Forudsigelser og Resultater) ----------
+function RoundPager({ rounds, index, setIndex }) {
+  if (!rounds.length) return null;
+  const round = rounds[index];
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 10 }}>
+      <button style={ghostNavBtn} disabled={index <= 0} onClick={() => setIndex(Math.max(0, index - 1))}>← Forrige</button>
+      <div style={{ color: "#f4f1e8", fontWeight: 700, fontSize: 15, textAlign: "center" }}>
+        Runde {round.label}
+        <div style={{ color: "#7fa38c", fontWeight: 400, fontSize: 12 }}>({index + 1} af {rounds.length})</div>
+      </div>
+      <button style={ghostNavBtn} disabled={index >= rounds.length - 1} onClick={() => setIndex(Math.min(rounds.length - 1, index + 1))}>Næste →</button>
+    </div>
+  );
+}
 
 // ---------- small UI atoms ----------
 function ScoreInput({ value, onChange, disabled }) {
@@ -386,21 +422,17 @@ function CompetitionsTab({ token, userId, league, season, teams, competitions, s
 function MatchesTab({ token, season, teams, matches, teamsById, reload }) {
   const [home, setHome] = useState("");
   const [away, setAway] = useState("");
-  const [date, setDate] = useState("");
+  const [kickoff, setKickoff] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const rounds = useMemo(() => {
-    const map = {};
-    for (const m of matches) { (map[m.round_key] ||= []).push(m); }
-    return Object.keys(map).sort().map((key) => ({ key, label: roundLabel(key), matches: map[key] }));
-  }, [matches]);
+  const rounds = useMemo(() => groupIntoRounds(matches), [matches]);
 
   async function addMatch() {
-    if (!home || !away || home === away || !date || !season) return;
+    if (!home || !away || home === away || !kickoff || !season) return;
     setBusy(true);
     try {
-      await db.insert(token, "matches", [{ season_id: season.id, home_team_id: home, away_team_id: away, kickoff_at: `${date}T15:00:00Z` }]);
-      setHome(""); setAway(""); setDate("");
+      await db.insert(token, "matches", [{ season_id: season.id, home_team_id: home, away_team_id: away, kickoff_at: `${kickoff}:00` }]);
+      setHome(""); setAway(""); setKickoff("");
       await reload();
     } finally { setBusy(false); }
   }
@@ -409,7 +441,7 @@ function MatchesTab({ token, season, teams, matches, teamsById, reload }) {
     <div>
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={h3}>Tilføj kamp</h3>
-        <p style={muted}>Runden beregnes automatisk (tirsdag t.o.m. mandag) direkte i databasen.</p>
+        <p style={muted}>Runden beregnes automatisk (tirsdag t.o.m. mandag) ud fra spilletidspunktet.</p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <select className="field" value={home} onChange={(e) => setHome(e.target.value)}>
             <option value="">Hjemmehold…</option>
@@ -419,7 +451,7 @@ function MatchesTab({ token, season, teams, matches, teamsById, reload }) {
             <option value="">Udehold…</option>
             {teams.filter((t) => t.id !== home).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-          <input className="field" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <input className="field" type="datetime-local" value={kickoff} onChange={(e) => setKickoff(e.target.value)} />
           <button style={primaryBtn} onClick={addMatch} disabled={busy}><Plus size={14} />Tilføj</button>
         </div>
       </div>
@@ -430,7 +462,7 @@ function MatchesTab({ token, season, teams, matches, teamsById, reload }) {
           <table><tbody>
             {r.matches.map((m) => (
               <tr key={m.id} className="rowline">
-                <td style={{ color: "#9fb3a5", fontSize: 13, width: 90 }}>{m.kickoff_at.slice(0, 10)}</td>
+                <td style={{ color: "#9fb3a5", fontSize: 13, width: 140 }}>{formatKickoff(m.kickoff_at)}</td>
                 <td style={{ color: "#f4f1e8", fontWeight: 600 }}>{teamsById[m.home_team_id]} <span style={{ color: "#7fa38c" }}>vs</span> {teamsById[m.away_team_id]}</td>
                 <td style={{ textAlign: "right" }}>
                   {m.home_score !== null ? <span className="pill" style={{ background: "#2c4a3c", color: "#d4a73c" }}>{m.home_score} - {m.away_score}</span>
@@ -447,25 +479,31 @@ function MatchesTab({ token, season, teams, matches, teamsById, reload }) {
 
 // ================= TAB: PREDICTIONS =================
 function PredictionsTab({ token, userId, competitions, selectedCompId, setSelectedCompId, teamsById }) {
-  const [matches, setMatches] = useState([]);
+  const [allMatches, setAllMatches] = useState([]);
   const [preds, setPreds] = useState({});
   const [loading, setLoading] = useState(false);
+  const [roundIndex, setRoundIndex] = useState(0);
   const comp = competitions.find((c) => c.id === selectedCompId);
+  const rules = comp?.rules || { exact: 3, outcome: 1 };
 
   useEffect(() => {
     if (!selectedCompId) return;
     (async () => {
       setLoading(true);
+      setRoundIndex(0);
       const cms = await db.select(token, "competition_matches", `competition_id=eq.${selectedCompId}&select=match_id`);
       const ids = cms.map((c) => c.match_id);
-      if (!ids.length) { setMatches([]); setLoading(false); return; }
+      if (!ids.length) { setAllMatches([]); setLoading(false); return; }
       const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
-      setMatches(ms);
+      setAllMatches(ms);
       const myPreds = await db.select(token, "predictions", `user_id=eq.${userId}&match_id=in.(${ids.join(",")})&select=*`);
       setPreds(Object.fromEntries(myPreds.map((p) => [p.match_id, p])));
       setLoading(false);
     })();
   }, [selectedCompId]); // eslint-disable-line
+
+  const rounds = useMemo(() => groupIntoRounds(allMatches), [allMatches]);
+  const round = rounds[roundIndex];
 
   async function save(matchId, field, val) {
     const cur = preds[matchId] || { pred_home: null, pred_away: null };
@@ -485,15 +523,29 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
         </select>
       </div>
       {loading && <p style={muted}>Henter kampe…</p>}
-      {!loading && (
+      {!loading && rounds.length === 0 && <p style={muted}>Ingen kampe i denne konkurrence endnu.</p>}
+      {!loading && rounds.length > 0 && (
         <div className="card">
+          <RoundPager rounds={rounds} index={roundIndex} setIndex={setRoundIndex} />
           <table><tbody>
-            {matches.map((m) => {
+            {round.matches.map((m) => {
               const pred = preds[m.id] || { pred_home: null, pred_away: null };
-              const locked = m.home_score !== null;
+              const locked = isLocked(m);
+              const played = m.home_score !== null && m.home_score !== undefined;
+              const hasPred = pred.pred_home !== null && pred.pred_away !== null;
+              const pts = played ? pointsFor(pred, m, rules) : null;
+              const exact = played && hasPred && pred.pred_home === m.home_score && pred.pred_away === m.away_score;
+              const correctOutcome = played && pts !== null && pts > 0;
+
               return (
                 <tr key={m.id} className="rowline">
-                  <td style={{ color: "#f4f1e8", fontWeight: 600, minWidth: 200 }}>{teamsById[m.home_team_id]} - {teamsById[m.away_team_id]}</td>
+                  <td style={{ padding: "10px 10px" }}>
+                    <div style={{ color: "#f4f1e8", fontWeight: 600 }}>{teamsById[m.home_team_id]} - {teamsById[m.away_team_id]}</div>
+                    <div style={{ color: "#7fa38c", fontSize: 12, marginTop: 2 }}>
+                      {formatKickoff(m.kickoff_at)}
+                      {!played && locked && <span style={{ color: "#c96a5a", marginLeft: 8 }}>· Låst</span>}
+                    </div>
+                  </td>
                   <td>
                     <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                       <ScoreInput value={pred.pred_home} onChange={(v) => save(m.id, "pred_home", v)} disabled={locked} />
@@ -501,11 +553,22 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
                       <ScoreInput value={pred.pred_away} onChange={(v) => save(m.id, "pred_away", v)} disabled={locked} />
                     </div>
                   </td>
+                  <td style={{ textAlign: "right" }}>
+                    {played && (
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                        <span className="pill" style={{
+                          background: !hasPred ? "#1c3d2c" : correctOutcome ? "rgba(80,180,110,0.18)" : "rgba(201,106,90,0.18)",
+                          color: !hasPred ? "#7fa38c" : correctOutcome ? "#7fd48a" : "#e08a7a",
+                          border: exact ? "2px solid #d4a73c" : "1px solid transparent",
+                        }}>{m.home_score} - {m.away_score}</span>
+                        {hasPred && <span style={{ fontSize: 11, color: "#9fb3a5" }}>{pts} point</span>}
+                      </div>
+                    )}
+                  </td>
                 </tr>
               );
             })}
           </tbody></table>
-          {matches.length === 0 && <p style={muted}>Ingen kampe i denne konkurrence endnu.</p>}
         </div>
       )}
     </div>
@@ -514,17 +577,28 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
 
 // ================= TAB: RESULTS (manuel indtastning) =================
 function ResultsTab({ token, matches, teamsById, reload }) {
+  const [roundIndex, setRoundIndex] = useState(0);
+  const rounds = useMemo(() => groupIntoRounds(matches), [matches]);
+  const round = rounds[roundIndex];
+
   async function setScore(id, field, val) {
     await db.update(token, "matches", `id=eq.${id}`, { [field]: val, status: "finished" });
     await reload();
   }
+
+  if (rounds.length === 0) return <p style={muted}>Ingen kampe endnu — tilføj under "Kampe".</p>;
+
   return (
     <div className="card">
-      <p style={{ ...muted, marginBottom: 14 }}>Indtast faktiske resultater manuelt. Stillingen opdateres automatisk.</p>
+      <p style={{ ...muted, marginBottom: 4 }}>Indtast faktiske resultater manuelt. Stillingen opdateres automatisk.</p>
+      <RoundPager rounds={rounds} index={roundIndex} setIndex={setRoundIndex} />
       <table><tbody>
-        {matches.map((m) => (
+        {round.matches.map((m) => (
           <tr key={m.id} className="rowline">
-            <td style={{ color: "#f4f1e8", fontWeight: 600, minWidth: 220 }}>{teamsById[m.home_team_id]} vs {teamsById[m.away_team_id]}</td>
+            <td style={{ padding: "10px 10px" }}>
+              <div style={{ color: "#f4f1e8", fontWeight: 600 }}>{teamsById[m.home_team_id]} vs {teamsById[m.away_team_id]}</div>
+              <div style={{ color: "#7fa38c", fontSize: 12, marginTop: 2 }}>{formatKickoff(m.kickoff_at)}</div>
+            </td>
             <td>
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <ScoreInput value={m.home_score} onChange={(v) => setScore(m.id, "home_score", v)} />
@@ -535,7 +609,6 @@ function ResultsTab({ token, matches, teamsById, reload }) {
           </tr>
         ))}
       </tbody></table>
-      {matches.length === 0 && <p style={muted}>Ingen kampe endnu — tilføj under "Kampe".</p>}
     </div>
   );
 }
@@ -612,6 +685,7 @@ const muted = { color: "#7fa38c", fontSize: 13, margin: "0 0 10px 0" };
 const fieldFull = { width: "100%", marginBottom: 10, display: "block" };
 const primaryBtn = { display: "flex", alignItems: "center", gap: 6, background: "#d4a73c", color: "#0b2318", border: "none", borderRadius: 8, padding: "8px 14px", fontWeight: 700, cursor: "pointer", fontSize: 14 };
 const ghostBtn = { display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#c96a5a", border: "1px solid #4a2c2c", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 700 };
+const ghostNavBtn = { background: "#1c3d2c", color: "#d4a73c", border: "1px solid #2c4a3c", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" };
 const globalCss = `
   * { box-sizing: border-box; }
   input, select, button { font-family: inherit; }
