@@ -80,6 +80,33 @@ function isLocked(match) {
   return Date.now() >= lockAt;
 }
 
+// henter deltagere + kampe + forudsigelser for én konkurrence og beregner stilling + status
+async function computeCompetitionState(token, competitionId, rules) {
+  const participants = await db.select(token, "competition_participants", `competition_id=eq.${competitionId}&select=user_id`);
+  const userIds = participants.map((p) => p.user_id);
+  const profiles = userIds.length ? await db.select(token, "profiles", `id=in.(${userIds.join(",")})&select=*`) : [];
+  const cms = await db.select(token, "competition_matches", `competition_id=eq.${competitionId}&select=match_id`);
+  const matchIds = cms.map((c) => c.match_id);
+  const ms = matchIds.length ? await db.select(token, "matches", `id=in.(${matchIds.join(",")})&select=*`) : [];
+  const preds = matchIds.length ? await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&select=*`) : [];
+
+  const rows = profiles.map((p) => {
+    let total = 0;
+    for (const m of ms) {
+      const pred = preds.find((pr) => pr.match_id === m.id && pr.user_id === p.id);
+      const pts = pointsFor(pred, m, rules);
+      if (pts !== null) total += pts;
+    }
+    return { player: p.display_name, total };
+  }).sort((a, b) => b.total - a.total);
+
+  const totalMatches = ms.length;
+  const playedMatches = ms.filter((m) => m.home_score !== null && m.home_score !== undefined).length;
+  const isComplete = totalMatches > 0 && playedMatches === totalMatches;
+
+  return { rows, totalMatches, playedMatches, isComplete };
+}
+
 // ---------- runde-navigation (bruges af Forudsigelser og Resultater) ----------
 function RoundPager({ rounds, index, setIndex }) {
   if (!rounds.length) return null;
@@ -185,7 +212,7 @@ function AuthScreen({ onAuthed, booting }) {
   return (
     <div style={{ ...wrap, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 480 }}>
       <div className="card" style={{ ...cardStyle, width: 320 }}>
-        <h2 style={{ ...h3, fontSize: 20, marginBottom: 4 }}><Trophy size={20} style={{ verticalAlign: -3, marginRight: 6, color: "#d4a73c" }} />Superliga Tips</h2>
+        <h2 style={{ ...h3, fontSize: 20, marginBottom: 4 }}><Trophy size={20} style={{ verticalAlign: -3, marginRight: 6, color: "#d4a73c" }} />Prediction Champ</h2>
         <p style={muted}>{mode === "signin" ? "Log ind" : "Opret konto"}</p>
         {mode === "signup" && (
           <input className="field" style={fieldFull} placeholder="Brugernavn (vises for andre)" value={username} onChange={(e) => setUsername(e.target.value)} />
@@ -259,9 +286,9 @@ function MainApp({ session, profile, onLogout }) {
       <style>{globalCss}</style>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22, flexWrap: "wrap", gap: 10 }}>
         <div>
-          <div style={{ fontSize: 12, letterSpacing: 2, color: "#d4a73c", fontWeight: 700, marginBottom: 4 }}>{league?.name?.toUpperCase() || "SUPERLIGA TIPS"}</div>
+          <div style={{ fontSize: 12, letterSpacing: 2, color: "#d4a73c", fontWeight: 700, marginBottom: 4 }}>{league?.name?.toUpperCase() || "PREDICTION CHAMP"}</div>
           <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#f4f1e8" }}>
-            <Trophy size={24} style={{ verticalAlign: -4, marginRight: 8, color: "#d4a73c" }} />Superliga Tips
+            <Trophy size={24} style={{ verticalAlign: -4, marginRight: 8, color: "#d4a73c" }} />Prediction Champ
           </h1>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -310,6 +337,21 @@ function CompetitionsTab({ token, userId, league, season, teams, competitions, s
   const [busy, setBusy] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
   const [err, setErr] = useState("");
+  const [statusMap, setStatusMap] = useState({}); // { [compId]: { isComplete, playedMatches, totalMatches, winner } }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(competitions.map(async (c) => {
+        const rules = c.rules || { exact: 3, outcome: 1 };
+        const state = await computeCompetitionState(token, c.id, rules);
+        const winner = state.isComplete && state.rows.length ? state.rows[0] : null;
+        return [c.id, { ...state, winner }];
+      }));
+      if (!cancelled) setStatusMap(Object.fromEntries(entries));
+    })();
+    return () => { cancelled = true; };
+  }, [competitions]); // eslint-disable-line
 
   async function createCompetition() {
     if (!name || !league || !season) return;
@@ -355,29 +397,56 @@ function CompetitionsTab({ token, userId, league, season, teams, competitions, s
     }
   }
 
+  function CompetitionCard({ c }) {
+    const status = statusMap[c.id];
+    return (
+      <div key={c.id} className="pill" style={{
+        background: selectedCompId === c.id ? "rgba(212,167,60,0.15)" : "#1c3d2c",
+        border: selectedCompId === c.id ? "1px solid #d4a73c" : "1px solid transparent",
+        cursor: "pointer", padding: "6px 12px", flexDirection: "column", alignItems: "flex-start", gap: 2,
+      }} onClick={() => setSelectedCompId(c.id)}>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          {status?.isComplete && <Trophy size={12} style={{ color: "#d4a73c", marginRight: 6 }} />}
+          <span style={{ color: "#f4f1e8", fontWeight: 700 }}>{c.name}</span>
+          <span style={{ color: "#7fa38c", fontSize: 12, marginLeft: 6 }}>
+            ({c.mode === "full_season" ? "hel sæson" : c.mode === "team" ? "et hold" : "tidsperiode"})
+          </span>
+          <Copy size={12} style={{ marginLeft: 8, cursor: "pointer", color: "#9fb3a5" }}
+            onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.invite_code); setCopiedId(c.id); setTimeout(() => setCopiedId(null), 1500); }} />
+          {copiedId === c.id && <Check size={12} style={{ color: "#7fd48a", marginLeft: 4 }} />}
+        </div>
+        {status && !status.isComplete && status.totalMatches > 0 && (
+          <span style={{ color: "#7fa38c", fontSize: 11 }}>{status.playedMatches}/{status.totalMatches} kampe spillet</span>
+        )}
+        {status?.isComplete && status.winner && (
+          <span style={{ color: "#d4a73c", fontSize: 11, fontWeight: 700 }}>🏆 Vinder: {status.winner.player} ({status.winner.total} point)</span>
+        )}
+      </div>
+    );
+  }
+
+  const active = competitions.filter((c) => !statusMap[c.id]?.isComplete);
+  const completed = competitions.filter((c) => statusMap[c.id]?.isComplete);
+
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div className="card">
-        <h3 style={h3}>Dine konkurrencer</h3>
+        <h3 style={h3}>Aktive konkurrencer</h3>
         {competitions.length === 0 && <p style={muted}>Du er ikke med i nogen konkurrencer endnu — opret en, eller join med en kode.</p>}
+        {competitions.length > 0 && active.length === 0 && <p style={muted}>Ingen aktive konkurrencer lige nu.</p>}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {competitions.map((c) => (
-            <div key={c.id} className="pill" style={{
-              background: selectedCompId === c.id ? "rgba(212,167,60,0.15)" : "#1c3d2c",
-              border: selectedCompId === c.id ? "1px solid #d4a73c" : "1px solid transparent",
-              cursor: "pointer", padding: "6px 12px",
-            }} onClick={() => setSelectedCompId(c.id)}>
-              <span style={{ color: "#f4f1e8", fontWeight: 700 }}>{c.name}</span>
-              <span style={{ color: "#7fa38c", fontSize: 12, marginLeft: 6 }}>
-                ({c.mode === "full_season" ? "hel sæson" : c.mode === "team" ? "et hold" : "tidsperiode"})
-              </span>
-              <Copy size={12} style={{ marginLeft: 8, cursor: "pointer", color: "#9fb3a5" }}
-                onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.invite_code); setCopiedId(c.id); setTimeout(() => setCopiedId(null), 1500); }} />
-              {copiedId === c.id && <Check size={12} style={{ color: "#7fd48a", marginLeft: 4 }} />}
-            </div>
-          ))}
+          {active.map((c) => <CompetitionCard key={c.id} c={c} />)}
         </div>
       </div>
+
+      {completed.length > 0 && (
+        <div className="card">
+          <h3 style={h3}>Afsluttede konkurrencer</h3>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {completed.map((c) => <CompetitionCard key={c.id} c={c} />)}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h3 style={h3}>Join med kode</h3>
@@ -615,7 +684,7 @@ function ResultsTab({ token, matches, teamsById, reload }) {
 
 // ================= TAB: BOARD (leaderboard) =================
 function BoardTab({ token, competitions, selectedCompId, setSelectedCompId, teamsById }) {
-  const [rows, setRows] = useState([]);
+  const [state, setState] = useState(null);
   const [loading, setLoading] = useState(false);
   const comp = competitions.find((c) => c.id === selectedCompId);
 
@@ -623,25 +692,9 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId, team
     if (!selectedCompId || !comp) return;
     (async () => {
       setLoading(true);
-      const participants = await db.select(token, "competition_participants", `competition_id=eq.${selectedCompId}&select=user_id`);
-      const userIds = participants.map((p) => p.user_id);
-      const profiles = userIds.length ? await db.select(token, "profiles", `id=in.(${userIds.join(",")})&select=*`) : [];
-      const cms = await db.select(token, "competition_matches", `competition_id=eq.${selectedCompId}&select=match_id`);
-      const matchIds = cms.map((c) => c.match_id);
-      const ms = matchIds.length ? await db.select(token, "matches", `id=in.(${matchIds.join(",")})&select=*`) : [];
-      const preds = matchIds.length ? await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&select=*`) : [];
       const rules = comp.rules || { exact: 3, outcome: 1 };
-
-      const totals = profiles.map((p) => {
-        let total = 0;
-        for (const m of ms) {
-          const pred = preds.find((pr) => pr.match_id === m.id && pr.user_id === p.id);
-          const pts = pointsFor(pred, m, rules);
-          if (pts !== null) total += pts;
-        }
-        return { player: p.display_name, total };
-      }).sort((a, b) => b.total - a.total);
-      setRows(totals);
+      const result = await computeCompetitionState(token, selectedCompId, rules);
+      setState(result);
       setLoading(false);
     })();
   }, [selectedCompId, comp]); // eslint-disable-line
@@ -656,13 +709,20 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId, team
         </select>
       </div>
       <div className="card">
-        <h3 style={h3}>Stilling</h3>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+          <h3 style={{ ...h3, marginBottom: 0 }}>Stilling</h3>
+          {state?.isComplete
+            ? <span className="pill" style={{ background: "rgba(212,167,60,0.15)", color: "#d4a73c" }}><Trophy size={12} style={{ marginRight: 4 }} />Afsluttet</span>
+            : state && state.totalMatches > 0 && <span className="pill" style={{ background: "#1c3d2c", color: "#7fa38c" }}>{state.playedMatches}/{state.totalMatches} kampe spillet</span>}
+        </div>
         {loading && <p style={muted}>Beregner…</p>}
-        {!loading && (
+        {!loading && state && (
           <table><tbody>
-            {rows.map((r, i) => (
+            {state.rows.map((r, i) => (
               <tr key={r.player} className="rowline">
-                <td style={{ color: i === 0 ? "#d4a73c" : "#7fa38c", fontWeight: 700 }}>{i + 1}</td>
+                <td style={{ color: i === 0 ? "#d4a73c" : "#7fa38c", fontWeight: 700 }}>
+                  {i === 0 && state.isComplete ? "🏆" : i + 1}
+                </td>
                 <td style={{ color: "#f4f1e8", fontWeight: 600 }}>{r.player}</td>
                 <td style={{ textAlign: "right" }}>
                   <span className="pill" style={{ background: i === 0 ? "#3a3010" : "#1c3d2c", color: i === 0 ? "#d4a73c" : "#e7ecdf", fontSize: 15 }}>{r.total}</span>
@@ -671,7 +731,7 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId, team
             ))}
           </tbody></table>
         )}
-        {!loading && rows.length === 0 && <p style={muted}>Ingen deltagere endnu.</p>}
+        {!loading && state && state.rows.length === 0 && <p style={muted}>Ingen deltagere endnu.</p>}
       </div>
     </div>
   );
