@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Trophy, Plus, Trash2, Users, CalendarDays, ClipboardList, BarChart3, Loader2, LogOut, Copy, Check, RefreshCw } from "lucide-react";
+import { Trophy, Plus, Trash2, Users, CalendarDays, ClipboardList, BarChart3, Loader2, LogOut, Copy, Check, RefreshCw, Info } from "lucide-react";
 
 // ---------- Supabase config ----------
 const SUPABASE_URL = "https://qfcjbpvttburccdyfnkx.supabase.co";
@@ -66,7 +66,22 @@ function outcome(h, a) { return h === a ? "X" : h > a ? "1" : "2"; }
 function pointsFor(pred, actual, rules) {
   if (!pred || actual.home_score === null || actual.away_score === null) return null;
   if (pred.pred_home === actual.home_score && pred.pred_away === actual.away_score) return rules.exact;
-  if (outcome(pred.pred_home, pred.pred_away) === outcome(actual.home_score, actual.away_score)) return rules.outcome;
+  const predOutcome = outcome(pred.pred_home, pred.pred_away);
+  const actualOutcome = outcome(actual.home_score, actual.away_score);
+  if (predOutcome === actualOutcome) return rules.outcome;
+
+  // straf: aldrig hvis man gættede uafgjort
+  if (predOutcome === "X") return 0;
+  const penaltyBase = rules.wrongWinPenalty ?? 1;
+  if (!penaltyBase) return 0;
+
+  const reversedWinner = actualOutcome !== "X" && predOutcome !== actualOutcome;
+  const predDiff = pred.pred_home - pred.pred_away;
+  const actualDiff = actual.home_score - actual.away_score;
+  const diffOff = Math.abs(predDiff - actualDiff) > 5;
+
+  if (reversedWinner && diffOff) return -2 * penaltyBase;
+  if (reversedWinner || diffOff) return -1 * penaltyBase;
   return 0;
 }
 function roundLabel(key) {
@@ -499,6 +514,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
         <TabButton active={tab === "competitions"} onClick={() => setTab("competitions")} icon={Users}>Konkurrencer</TabButton>
         <TabButton active={tab === "predictions"} onClick={() => setTab("predictions")} icon={ClipboardList}>Forudsigelser</TabButton>
         <TabButton active={tab === "board"} onClick={() => setTab("board")} icon={BarChart3}>Stilling</TabButton>
+        <TabButton active={tab === "rules"} onClick={() => setTab("rules")} icon={Info}>Regler</TabButton>
         {isAdmin && <TabButton active={tab === "matches"} onClick={() => setTab("matches")} icon={CalendarDays}>Kampe</TabButton>}
         {isAdmin && <TabButton active={tab === "results"} onClick={() => setTab("results")} icon={ClipboardList}>Resultater</TabButton>}
       </nav>
@@ -520,11 +536,52 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       {tab === "board" && (
         <BoardTab token={token} competitions={filteredCompetitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} />
       )}
+      {tab === "rules" && <RulesTab />}
     </div>
   );
 }
 
-// ================= TAB: COMPETITIONS =================
+// ================= TAB: RULES =================
+function RulesTab() {
+  const Row = ({ label, value, color }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #1f3a2c" }}>
+      <span style={{ color: "#cfd8d1", fontSize: 14 }}>{label}</span>
+      <span className="pill" style={{ background: "#1c3d2c", color: color || "#d4a73c", fontWeight: 700 }}>{value}</span>
+    </div>
+  );
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <div className="card">
+        <h3 style={h3}>Pointsystem</h3>
+        <p style={muted}>Sådan beregnes point for hver kamp, du har forudsagt.</p>
+        <Row label="Korrekt resultat (fx gættet 2-1, endte 2-1)" value="+3 point" color="#d4a73c" />
+        <Row label="Korrekt udfald (rigtig vinder/uafgjort, forkert resultat)" value="+1 point" color="#7fd48a" />
+        <Row label="Forkert gæt (uden nogen af de to nedenstående)" value="0 point" />
+        <Row label="Gættede en vinder, men det modsatte hold vandt — eller gættede en vinder, men målforskellen ramte mere end 5 mål forkert" value="−1 point" color="#e08a7a" />
+        <Row label="Begge ovenstående på samme tid (helt galt på den)" value="−2 point" color="#e08a7a" />
+        <p style={{ ...muted, marginTop: 10 }}>
+          Straf gælder <strong>aldrig</strong>, hvis du gættede uafgjort — der er kun nedside ved at gætte på en vinder.
+        </p>
+      </div>
+
+      <div className="card">
+        <h3 style={h3}>Hvornår låses en forudsigelse?</h3>
+        <p style={{ color: "#cfd8d1", fontSize: 14 }}>
+          Din forudsigelse låses automatisk <strong>1 time før kampens starttidspunkt</strong> — derefter kan hverken
+          du eller andre ændre den. Er kampen allerede afgjort (resultatet er kendt), er den også låst.
+        </p>
+      </div>
+
+      <div className="card">
+        <h3 style={h3}>Runder</h3>
+        <p style={{ color: "#cfd8d1", fontSize: 14 }}>
+          En runde løber fra <strong>tirsdag til og med mandag</strong>. Kampe grupperes automatisk i runder ud fra
+          deres kickoff-tidspunkt.
+        </p>
+      </div>
+    </div>
+  );
+}
 function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId, setSelectedCompId, reload }) {
   const [createLeagueId, setCreateLeagueId] = useState(leagues[0]?.id || "");
   const [createSeason, setCreateSeason] = useState(null);
@@ -559,7 +616,7 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
     let cancelled = false;
     (async () => {
       const entries = await Promise.all(competitions.map(async (c) => {
-        const rules = c.rules || { exact: 3, outcome: 1 };
+        const rules = c.rules || { exact: 3, outcome: 1, wrongWinPenalty: 1 };
         const state = await computeCompetitionState(token, c.id, rules);
         const winner = state.isComplete && state.rows.length ? state.rows[0] : null;
         return [c.id, { ...state, winner }];
@@ -574,8 +631,9 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
     setBusy(true); setErr("");
     try {
       const mode_params = mode === "team" ? { team_id: teamId } : mode === "time_range" ? { start_date: startDate, end_date: endDate } : {};
+      const rules = { exact: 3, outcome: 1, wrongWinPenalty: 1 };
       const [comp] = await db.insert(token, "competitions", [{
-        name, league_id: createLeagueId, season_id: createSeason.id, mode, mode_params, created_by: userId,
+        name, league_id: createLeagueId, season_id: createSeason.id, mode, mode_params, rules, created_by: userId,
       }]);
       await db.insert(token, "competition_participants", [{ competition_id: comp.id, user_id: userId }]);
 
@@ -823,7 +881,7 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
   const [loading, setLoading] = useState(false);
   const [roundIndex, setRoundIndex] = useState(0);
   const comp = competitions.find((c) => c.id === selectedCompId);
-  const rules = comp?.rules || { exact: 3, outcome: 1 };
+  const rules = comp?.rules || { exact: 3, outcome: 1, wrongWinPenalty: 1 };
 
   useEffect(() => {
     if (!selectedCompId) return;
@@ -1003,7 +1061,7 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId, team
     if (!selectedCompId || !comp) return;
     (async () => {
       setLoading(true);
-      const rules = comp.rules || { exact: 3, outcome: 1 };
+      const rules = comp.rules || { exact: 3, outcome: 1, wrongWinPenalty: 1 };
       const result = await computeCompetitionState(token, selectedCompId, rules);
       setState(result);
       setLoading(false);
