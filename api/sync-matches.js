@@ -80,7 +80,7 @@ export default async function handler(req, res) {
     let hasMore = true;
     while (hasMore) {
       const smUrl = `https://api.sportmonks.com/v3/football/fixtures` +
-        `?filters=fixtureSeasons:${smSeasonId}&include=participants;scores&per_page=50&page=${page}&api_token=${SPORTMONKS_TOKEN}`;
+        `?filters=fixtureSeasons:${smSeasonId}&include=participants;scores;state&per_page=50&page=${page}&api_token=${SPORTMONKS_TOKEN}`;
       const smRes = await fetch(smUrl);
       if (!smRes.ok) throw new Error(`Sportmonks (kampe): ${smRes.status} ${await smRes.text()}`);
       const smData = await smRes.json();
@@ -91,15 +91,24 @@ export default async function handler(req, res) {
     }
     const fixtures = [...fixturesById.values()];
 
+    const FINISHED_STATES = ["FT", "AET", "FT_PEN"];
+    function extractScore(fx) {
+      const isFinished = FINISHED_STATES.includes(fx.state?.short_name);
+      if (!isFinished) return { hs: null, as: null, finished: false };
+      const curScores = (fx.scores || []).filter((s) => s.description === "CURRENT");
+      const hs = curScores.find((s) => s.score?.participant === "home")?.score?.goals ?? null;
+      const as = curScores.find((s) => s.score?.participant === "away")?.score?.goals ?? null;
+      return { hs, as, finished: true };
+    }
+
     if (dryRun) {
       const sample = fixtures.slice(0, 15).map((fx) => {
         const home = fx.participants?.find((p) => p.meta?.location === "home");
         const away = fx.participants?.find((p) => p.meta?.location === "away");
-        const ftScores = (fx.scores || []).filter((s) => s.description === "FT");
-        const hs = ftScores.find((s) => s.score?.participant === "home")?.score?.goals ?? null;
-        const as = ftScores.find((s) => s.score?.participant === "away")?.score?.goals ?? null;
+        const { hs, as } = extractScore(fx);
         return {
           kickoff: fx.starting_at,
+          state: fx.state?.short_name,
           home: home?.name,
           away: away?.name,
           home_score: hs,
@@ -167,17 +176,7 @@ export default async function handler(req, res) {
         continue;
       }
 
-      const ftScores = (fx.scores || []).filter((s) => s.description === "FT");
-      let hs = ftScores.find((s) => s.score?.participant === "home")?.score?.goals ?? null;
-      let as = ftScores.find((s) => s.score?.participant === "away")?.score?.goals ?? null;
-
-      // fallback: hvis der ikke er en "FT"-score, men kampen startede for mere end
-      // 3 timer siden, brug den seneste ("CURRENT") score i stedet
-      if (hs === null && fx.starting_at && new Date(fx.starting_at).getTime() < Date.now() - 3 * 3600 * 1000) {
-        const curScores = (fx.scores || []).filter((s) => s.description === "CURRENT");
-        hs = curScores.find((s) => s.score?.participant === "home")?.score?.goals ?? null;
-        as = curScores.find((s) => s.score?.participant === "away")?.score?.goals ?? null;
-      }
+      const { hs, as, finished } = extractScore(fx);
 
       toUpsert.push({
         season_id: seasonId,
@@ -186,7 +185,7 @@ export default async function handler(req, res) {
         kickoff_at: fx.starting_at,
         home_score: hs,
         away_score: as,
-        status: hs !== null ? "finished" : "scheduled",
+        status: finished ? "finished" : "scheduled",
         api_fixture_id: String(fx.id),
       });
     }
