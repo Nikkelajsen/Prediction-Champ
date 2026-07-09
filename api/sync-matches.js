@@ -3,7 +3,6 @@
 // og skriver dem ind i Supabase.
 //
 // Kald med: /api/sync-matches?leagueId=<vores egen liga-uuid>&smSeason=2026/2027
-// Test-tilstand (skriver intet): tilføj &dryRun=true
 //
 // Miljøvariabler der skal være sat i Vercel:
 //   SPORTMONKS_TOKEN
@@ -15,15 +14,11 @@ export default async function handler(req, res) {
     const SPORTMONKS_TOKEN = process.env.SPORTMONKS_TOKEN;
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const SYNC_SECRET = process.env.SYNC_SECRET;
 
     if (!SPORTMONKS_TOKEN || !SUPABASE_URL || !SERVICE_KEY) {
       return res.status(500).json({ error: "Miljøvariabler mangler i Vercel-projektet (SPORTMONKS_TOKEN, SUPABASE_URL eller SUPABASE_SERVICE_ROLE_KEY)" });
     }
-
-    const leagueId = req.query.leagueId;
-    const smSeasonName = req.query.smSeason || "2026/2027";
-    const dryRun = req.query.dryRun === "true";
-    if (!leagueId) return res.status(400).json({ error: "Mangler leagueId query-parameter" });
 
     async function sb(path, opts = {}) {
       const headers = {
@@ -38,6 +33,33 @@ export default async function handler(req, res) {
       const t = await r.text();
       return t ? JSON.parse(t) : null;
     }
+
+    // ---- autorisation: enten en admin-brugers login, eller den delte hemmelige nøgle (til ekstern cron) ----
+    async function isAuthorized() {
+      if (SYNC_SECRET && req.query.secret === SYNC_SECRET) return true;
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith("Bearer ")) {
+        const userToken = authHeader.slice(7);
+        try {
+          const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+            headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${userToken}` },
+          });
+          if (!userRes.ok) return false;
+          const user = await userRes.json();
+          const profs = await sb(`/rest/v1/profiles?id=eq.${user.id}&select=is_admin`);
+          return !!profs[0]?.is_admin;
+        } catch (e) { return false; }
+      }
+      return false;
+    }
+    if (!(await isAuthorized())) {
+      return res.status(401).json({ error: "Ikke autoriseret" });
+    }
+
+    const leagueId = req.query.leagueId;
+    const smSeasonName = req.query.smSeason || "2026/2027";
+    const dryRun = req.query.dryRun === "true";
+    if (!leagueId) return res.status(400).json({ error: "Mangler leagueId query-parameter" });
 
     // find ligaen i vores egen database (giver os navn + Sportmonks-liga-id)
     const leagueRows = await sb(`/rest/v1/leagues?id=eq.${leagueId}&select=id,name,api_league_id`);
