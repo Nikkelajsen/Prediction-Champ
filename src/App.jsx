@@ -749,7 +749,9 @@ function MatchesTab({ token, leagues, reloadLeagues }) {
     if (!league) return;
     setSyncing(true); setSyncResult(null);
     try {
-      const res = await fetch(`/api/sync-matches?leagueId=${league.id}`);
+      const res = await fetch(`/api/sync-matches?leagueId=${league.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await res.json();
       setSyncResult(data);
       await reloadLeagues();
