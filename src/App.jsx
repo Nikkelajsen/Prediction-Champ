@@ -456,12 +456,13 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     })();
   }, [pendingJoinCode]); // eslint-disable-line
 
-  const activeFilterIds = filterLeagueIds || leagues.map((l) => l.id);
+  const visibleLeagues = leagues.filter((l) => l.is_visible !== false);
+  const activeFilterIds = filterLeagueIds || visibleLeagues.map((l) => l.id);
   const filteredCompetitions = competitions.filter((c) => activeFilterIds.includes(c.league_id));
 
   function toggleLeagueFilter(id) {
     setFilterLeagueIds((cur) => {
-      const base = cur || leagues.map((l) => l.id);
+      const base = cur || visibleLeagues.map((l) => l.id);
       if (base.includes(id)) {
         const next = base.filter((x) => x !== id);
         return next.length ? next : base; // aldrig helt tom
@@ -491,11 +492,11 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
         </div>
       </header>
 
-      {leagues.length > 1 && (tab === "competitions" || tab === "predictions" || tab === "board") && (
+      {visibleLeagues.length > 1 && (tab === "competitions" || tab === "predictions" || tab === "board") && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ color: "#7fa38c", fontSize: 11, marginBottom: 6, letterSpacing: 1 }}>FILTRÉR PÅ LIGA</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {leagues.map((l) => {
+            {visibleLeagues.map((l) => {
               const active = activeFilterIds.includes(l.id);
               return (
                 <button key={l.id} onClick={() => toggleLeagueFilter(l.id)} style={{
@@ -520,7 +521,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       </nav>
 
       {tab === "competitions" && (
-        <CompetitionsTab token={token} userId={session.user.id} leagues={leagues}
+        <CompetitionsTab token={token} userId={session.user.id} leagues={visibleLeagues}
           competitions={filteredCompetitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} reload={loadAll} />
       )}
       {tab === "matches" && isAdmin && (
@@ -929,7 +930,7 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
       {!loading && rounds.length > 0 && (
         <div className="card">
           <RoundPager rounds={rounds} index={roundIndex} setIndex={setRoundIndex} />
-          <table><tbody>
+          <div style={{ display: "flex", flexDirection: "column" }}>
             {round.matches.map((m) => {
               const pred = preds[m.id] || { pred_home: null, pred_away: null };
               const locked = isLocked(m);
@@ -940,37 +941,34 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
               const correctOutcome = played && pts !== null && pts > 0;
 
               return (
-                <tr key={m.id} className="rowline">
-                  <td style={{ padding: "10px 10px" }}>
-                    <div style={{ color: "#f4f1e8", fontWeight: 600 }}>{teamsById[m.home_team_id]} - {teamsById[m.away_team_id]}</div>
-                    <div style={{ color: "#7fa38c", fontSize: 12, marginTop: 2 }}>
-                      {formatKickoff(m.kickoff_at)}
-                      {!played && locked && <span style={{ color: "#c96a5a", marginLeft: 8 }}>· Låst</span>}
-                    </div>
-                  </td>
-                  <td>
+                <div key={m.id} className="rowline" style={{ padding: "12px 0" }}>
+                  <div style={{ color: "#f4f1e8", fontWeight: 600 }}>{teamsById[m.home_team_id]} - {teamsById[m.away_team_id]}</div>
+                  <div style={{ color: "#7fa38c", fontSize: 12, marginTop: 2, marginBottom: 10 }}>
+                    {formatKickoff(m.kickoff_at)}
+                    {!played && locked && <span style={{ color: "#c96a5a", marginLeft: 8 }}>· Låst</span>}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
                     <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                       <ScoreInput value={pred.pred_home} onChange={(v) => save(m.id, "pred_home", v)} disabled={locked} />
                       <span style={{ color: "#7fa38c" }}>-</span>
                       <ScoreInput value={pred.pred_away} onChange={(v) => save(m.id, "pred_away", v)} disabled={locked} />
                     </div>
-                  </td>
-                  <td style={{ textAlign: "right" }}>
                     {played && (
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span className="pill" style={{
                           background: !hasPred ? "#1c3d2c" : correctOutcome ? "rgba(80,180,110,0.18)" : "rgba(201,106,90,0.18)",
                           color: !hasPred ? "#7fa38c" : correctOutcome ? "#7fd48a" : "#e08a7a",
                           border: exact ? "2px solid #d4a73c" : "1px solid transparent",
+                          fontSize: 15, padding: "6px 12px", whiteSpace: "nowrap",
                         }}>{m.home_score} - {m.away_score}</span>
-                        {hasPred && <span style={{ fontSize: 11, color: "#9fb3a5" }}>{pts} point</span>}
+                        {hasPred && <span style={{ fontSize: 12, color: "#9fb3a5", whiteSpace: "nowrap" }}>{pts > 0 ? `+${pts}` : pts} point</span>}
                       </div>
                     )}
-                  </td>
-                </tr>
+                  </div>
+                </div>
               );
             })}
-          </tbody></table>
+          </div>
         </div>
       )}
     </div>
