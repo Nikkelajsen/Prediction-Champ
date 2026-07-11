@@ -630,6 +630,7 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
   const [upcoming, setUpcoming] = useState([]); // [{match, leagueName}]
   const [upcomingTeams, setUpcomingTeams] = useState({});
   const [pickedIds, setPickedIds] = useState([]);
+  const [pickLeagueIds, setPickLeagueIds] = useState(null); // null = alle (filter i håndplukket-vælgeren)
   const [randomCount, setRandomCount] = useState(6);
   const [randomLeagueIds, setRandomLeagueIds] = useState(null); // null = alle
 
@@ -808,7 +809,21 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
   const completed = visible.filter((c) => statusMap[c.id]?.isComplete);
 
   // gruppér kommende kampe pr. runde og liga til plukkeren
-  const upcomingRounds = useMemo(() => groupIntoRounds(upcoming), [upcoming]);
+  // håndplukket: filtrér vælgeren på valgte ligaer
+  const pickAllowed = pickLeagueIds || leagues.map((l) => l.id);
+  const upcomingRounds = useMemo(
+    () => groupIntoRounds(upcoming.filter((m) => pickAllowed.includes(m._leagueId))),
+    [upcoming, pickLeagueIds, leagues] // eslint-disable-line
+  );
+
+  // tilfældig: hvor mange kampe er der reelt i den nærmeste kommende runde?
+  const randomPool = useMemo(() => {
+    const allowed = randomLeagueIds || leagues.map((l) => l.id);
+    const pool = upcoming.filter((m) => allowed.includes(m._leagueId));
+    if (!pool.length) return [];
+    const firstRound = pool.reduce((min, m) => (m.round_key < min ? m.round_key : min), pool[0].round_key);
+    return pool.filter((m) => m.round_key === firstRound);
+  }, [upcoming, randomLeagueIds, leagues]);
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -887,7 +902,10 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ color: "#cfd8d1", fontSize: 14 }}>Antal kampe:</span>
-                <input className="field" type="number" min="1" max="20" style={{ width: 70 }} value={randomCount} onChange={(e) => setRandomCount(e.target.value)} />
+                <input className="field" type="number" min="1" max={Math.max(1, randomPool.length)} style={{ width: 70 }}
+                  value={Math.min(Number(randomCount) || 1, Math.max(1, randomPool.length))}
+                  onChange={(e) => setRandomCount(Math.min(Number(e.target.value) || 1, Math.max(1, randomPool.length)))} />
+                <span style={{ color: "#7fa38c", fontSize: 12 }}>({randomPool.length} tilgængelige i nærmeste runde)</span>
               </div>
               {leagues.length > 1 && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -908,32 +926,53 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
                   })}
                 </div>
               )}
-              <p style={muted}>Trækker {randomCount || 6} tilfældige kampe fra den nærmeste kommende runde.</p>
+              <p style={muted}>Trækker tilfældige kampe fra den nærmeste kommende runde.</p>
             </>
           )}
 
           {mode === "custom" && (
-            <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid #2c4a3c", borderRadius: 10, padding: 10 }}>
-              {upcomingRounds.length === 0 && <p style={muted}>Ingen kommende kampe fundet.</p>}
-              {upcomingRounds.map((r) => (
-                <div key={r.key} style={{ marginBottom: 10 }}>
-                  <div style={{ color: "#d4a73c", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Runde {r.label}</div>
-                  {r.matches.map((m) => {
-                    const checked = pickedIds.includes(m.id);
+            <>
+              {leagues.length > 1 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {leagues.map((l) => {
+                    const sel = pickAllowed.includes(l.id);
                     return (
-                      <label key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13 }}>
-                        <input type="checkbox" checked={checked} onChange={() =>
-                          setPickedIds(checked ? pickedIds.filter((x) => x !== m.id) : [...pickedIds, m.id])
-                        } />
-                        <span style={{ color: "#f4f1e8" }}>{upcomingTeams[m.home_team_id]} - {upcomingTeams[m.away_team_id]}</span>
-                        <span style={{ color: "#7fa38c", fontSize: 11, marginLeft: "auto", whiteSpace: "nowrap" }}>{m._leagueName} · {formatKickoff(m.kickoff_at)}</span>
-                      </label>
+                      <button key={l.id} type="button" onClick={() => {
+                        const base = pickLeagueIds || leagues.map((x) => x.id);
+                        const next = sel ? base.filter((x) => x !== l.id) : [...base, l.id];
+                        setPickLeagueIds(next.length ? next : base);
+                      }} style={{
+                        padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                        border: "1px solid " + (sel ? "#d4a73c" : "#2c4a3c"),
+                        background: sel ? "rgba(212,167,60,0.15)" : "transparent",
+                        color: sel ? "#d4a73c" : "#9fb3a5",
+                      }}>{sel ? "✓ " : ""}{l.name}</button>
                     );
                   })}
                 </div>
-              ))}
-              {pickedIds.length > 0 && <p style={{ ...muted, marginBottom: 0 }}>{pickedIds.length} kampe valgt</p>}
-            </div>
+              )}
+              <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid #2c4a3c", borderRadius: 10, padding: 10 }}>
+                {upcomingRounds.length === 0 && <p style={muted}>Ingen kommende kampe fundet.</p>}
+                {upcomingRounds.map((r) => (
+                  <div key={r.key} style={{ marginBottom: 10 }}>
+                    <div style={{ color: "#d4a73c", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Runde {r.label}</div>
+                    {r.matches.map((m) => {
+                      const checked = pickedIds.includes(m.id);
+                      return (
+                        <label key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13 }}>
+                          <input type="checkbox" checked={checked} onChange={() =>
+                            setPickedIds(checked ? pickedIds.filter((x) => x !== m.id) : [...pickedIds, m.id])
+                          } />
+                          <span style={{ color: "#f4f1e8" }}>{upcomingTeams[m.home_team_id]} - {upcomingTeams[m.away_team_id]}</span>
+                          <span style={{ color: "#7fa38c", fontSize: 11, marginLeft: "auto", whiteSpace: "nowrap" }}>{m._leagueName} · {formatKickoff(m.kickoff_at)}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ))}
+                {pickedIds.length > 0 && <p style={{ ...muted, marginBottom: 0 }}>{pickedIds.length} kampe valgt</p>}
+              </div>
+            </>
           )}
 
           {err && <p style={{ color: "#e08a7a", fontSize: 13 }}>{err}</p>}
