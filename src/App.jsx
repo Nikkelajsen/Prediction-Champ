@@ -137,8 +137,14 @@ async function computeCompetitionState(token, competitionId, rules) {
   const rounds = groupIntoRounds(ms);
   const predsByKey = new Map(preds.map((pr) => [`${pr.match_id}:${pr.user_id}`, pr]));
 
+  // kun runder hvor mindst én kamp er spillet
+  const playedRounds = rounds.filter((r) => r.matches.some((m) => m.home_score !== null && m.home_score !== undefined));
+  const playedKeys = playedRounds.map((r) => r.key);
+  const lastKey = playedKeys[playedKeys.length - 1];
+
   const rows = profiles.map((p) => {
     let total = 0;
+    let exactCount = 0;
     const perRound = {};
     for (const round of rounds) {
       let rTotal = 0;
@@ -146,20 +152,29 @@ async function computeCompetitionState(token, competitionId, rules) {
       for (const m of round.matches) {
         const pred = predsByKey.get(`${m.id}:${p.id}`);
         const pts = pointsFor(pred, m, rules);
-        if (pts !== null) { rTotal += pts; rPlayed = true; }
+        if (pts !== null) {
+          rTotal += pts; rPlayed = true;
+          if (pred && pred.pred_home === m.home_score && pred.pred_away === m.away_score) exactCount++;
+        }
       }
       if (rPlayed) perRound[round.key] = rTotal;
       total += rTotal;
     }
-    return { player: p.display_name, total, perRound };
+    const form3 = playedKeys.slice(-3).reduce((s, k) => s + (perRound[k] ?? 0), 0);
+    const prevTotal = lastKey !== undefined ? total - (perRound[lastKey] ?? 0) : total;
+    return { player: p.display_name, total, perRound, exactCount, form3, prevTotal };
   }).sort((a, b) => b.total - a.total);
+
+  // placeringsændring i forhold til stillingen før den seneste spillede runde
+  if (playedKeys.length >= 2) {
+    const prevOrder = rows.slice().sort((a, b) => b.prevTotal - a.prevTotal);
+    const prevRank = new Map(prevOrder.map((r, i) => [r.player, i]));
+    rows.forEach((r, i) => { r.rankDelta = (prevRank.get(r.player) ?? i) - i; });
+  }
 
   const totalMatches = ms.length;
   const playedMatches = ms.filter((m) => m.home_score !== null && m.home_score !== undefined).length;
   const isComplete = totalMatches > 0 && playedMatches === totalMatches;
-
-  // kun runder hvor mindst én kamp er spillet (relevant for "point pr. runde"-tabellen)
-  const playedRounds = rounds.filter((r) => r.matches.some((m) => m.home_score !== null && m.home_score !== undefined));
 
   return { rows, rounds: playedRounds, totalMatches, playedMatches, isComplete };
 }
@@ -600,6 +615,11 @@ function RulesTab() {
           Din forudsigelse låses automatisk <strong>1 time før kampens starttidspunkt</strong> — derefter kan hverken
           du eller andre ændre den. Er kampen allerede afgjort (resultatet er kendt), er den også låst.
         </p>
+        <p style={{ color: "#cfd8d1", fontSize: 14 }}>
+          Nogle konkurrencer bruger et <strong>rullende gætte-vindue</strong>: dér kan en kamp først tippes
+          fra <strong>7 dage før kickoff</strong> — så alle tipper med nogenlunde samme viden, og man skal
+          forbi appen løbende gennem sæsonen. Det vælges, når konkurrencen oprettes.
+        </p>
       </div>
 
       <div className="card">
@@ -633,6 +653,7 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
   const [pickLeagueIds, setPickLeagueIds] = useState(null); // null = alle (filter i håndplukket-vælgeren)
   const [randomCount, setRandomCount] = useState(6);
   const [randomLeagueIds, setRandomLeagueIds] = useState(null); // null = alle
+  const [rollingWindow, setRollingWindow] = useState(false);
 
   useEffect(() => {
     if (!createLeagueId && leagues.length) setCreateLeagueId(leagues[0].id);
@@ -712,7 +733,7 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
       const mode_params = mode === "team" ? { team_id: teamId }
         : mode === "time_range" ? { start_date: startDate, end_date: endDate }
         : mode === "random" ? { count: Number(randomCount) || 6 } : {};
-      const rules = { exact: 3, outcome: 1, wrongWinPenalty: 1 };
+      const rules = { exact: 3, outcome: 1, wrongWinPenalty: 1, ...(rollingWindow ? { openDaysBefore: 7 } : {}) };
       const [comp] = await db.insert(token, "competitions", [{
         name,
         league_id: crossLeague ? null : createLeagueId,
@@ -975,6 +996,11 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
             </>
           )}
 
+          <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#cfd8d1", fontSize: 13, cursor: "pointer" }}>
+            <input type="checkbox" checked={rollingWindow} onChange={(e) => setRollingWindow(e.target.checked)} />
+            Rullende gætte-vindue — kampe kan først tippes 7 dage før kickoff
+          </label>
+
           {err && <p style={{ color: "#e08a7a", fontSize: 13 }}>{err}</p>}
           <button style={primaryBtn} onClick={createCompetition} disabled={busy || !name}>
             <Plus size={14} /> Opret konkurrence
@@ -1100,6 +1126,7 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
   const [roundIndex, setRoundIndex] = useState(0);
   const [savedIds, setSavedIds] = useState({});
   const [expandedId, setExpandedId] = useState(null);
+  const [matchComps, setMatchComps] = useState({}); // matchId -> [competitionIds]
   const [, setTick] = useState(0);
   const comp = compFilter !== "all" ? competitions.find((c) => c.id === compFilter) : null;
   const rules = comp?.rules || { exact: 3, outcome: 1, wrongWinPenalty: 1 };
@@ -1116,8 +1143,11 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
     (async () => {
       setLoading(true);
       setExpandedId(null);
-      const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=match_id`);
+      const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=competition_id,match_id`);
       const ids = [...new Set(cms.map((c) => c.match_id))];
+      const mcMap = {};
+      for (const c of cms) (mcMap[c.match_id] ||= []).push(c.competition_id);
+      setMatchComps(mcMap);
       if (!ids.length) { setAllMatches([]); setTeamsById({}); setLoading(false); return; }
       const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
       setAllMatches(ms);
@@ -1164,6 +1194,20 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
     return hours > 0 ? `Låser om ${hours} t ${mins} min` : `Låser om ${mins} min`;
   }
 
+  // rullende vindue: en kamp er "ikke åben endnu", hvis ALLE konkurrencer,
+  // den indgår i, har openDaysBefore sat, og kickoff er længere væk end det.
+  // (forudsigelser deles på tværs, så én konkurrence uden vindue åbner kampen)
+  function opensAt(m) {
+    const compIds = matchComps[m.id] || [];
+    const comps = compIds.map((id) => competitions.find((c) => c.id === id)).filter(Boolean);
+    if (!comps.length) return null;
+    const windows = comps.map((c) => c.rules?.openDaysBefore || 0);
+    if (windows.some((w) => !w)) return null; // mindst én uden vindue → altid åben
+    const maxDays = Math.max(...windows);
+    const openTime = new Date(m.kickoff_at).getTime() - maxDays * 24 * 3600 * 1000;
+    return Date.now() < openTime ? new Date(openTime) : null;
+  }
+
   if (!competitions.length) return <p style={muted}>Opret eller join en konkurrence først.</p>;
 
   return (
@@ -1189,6 +1233,7 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
               const exact = played && hasPred && pred.pred_home === m.home_score && pred.pred_away === m.away_score;
               const correctOutcome = played && pts !== null && pts > 0;
               const countdown = !locked ? lockCountdown(m) : null;
+              const notOpenUntil = !locked ? opensAt(m) : null;
               const expanded = expandedId === m.id;
               const matchPreds = locked ? allPreds.filter((p) => p.match_id === m.id) : [];
 
@@ -1198,13 +1243,14 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
                   <div style={{ color: "#7fa38c", fontSize: 12, marginTop: 2, marginBottom: 10 }}>
                     {formatKickoff(m.kickoff_at)}
                     {!played && locked && <span style={{ color: "#c96a5a", marginLeft: 8 }}>· Låst</span>}
-                    {countdown && <span style={{ color: "#d4a73c", marginLeft: 8 }}>· {countdown}</span>}
+                    {countdown && !notOpenUntil && <span style={{ color: "#d4a73c", marginLeft: 8 }}>· {countdown}</span>}
+                    {notOpenUntil && <span style={{ color: "#9fb3a5", marginLeft: 8 }}>· Åbner {formatKickoff(notOpenUntil.toISOString())}</span>}
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <ScoreInput value={pred.pred_home} onChange={(v) => save(m.id, "pred_home", v)} disabled={locked} />
+                      <ScoreInput value={pred.pred_home} onChange={(v) => save(m.id, "pred_home", v)} disabled={locked || !!notOpenUntil} />
                       <span style={{ color: "#7fa38c" }}>-</span>
-                      <ScoreInput value={pred.pred_away} onChange={(v) => save(m.id, "pred_away", v)} disabled={locked} />
+                      <ScoreInput value={pred.pred_away} onChange={(v) => save(m.id, "pred_away", v)} disabled={locked || !!notOpenUntil} />
                       {savedIds[m.id] && <Check size={16} style={{ color: "#7fd48a" }} />}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1390,20 +1436,43 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId }) {
             : state && state.totalMatches > 0 && <span className="pill" style={{ background: "#1c3d2c", color: "#7fa38c" }}>{state.playedMatches}/{state.totalMatches} kampe spillet</span>}
         </div>
         {loading && <p style={muted}>Beregner…</p>}
-        {!loading && state && (
-          <table><tbody>
-            {state.rows.map((r, i) => (
-              <tr key={r.player} className="rowline">
-                <td style={{ color: i === 0 ? "#d4a73c" : "#7fa38c", fontWeight: 700 }}>
-                  {i === 0 && state.isComplete ? "🏆" : i + 1}
-                </td>
-                <td style={{ color: "#f4f1e8", fontWeight: 600 }}>{r.player}</td>
-                <td style={{ textAlign: "right" }}>
-                  <span className="pill" style={{ background: i === 0 ? "#3a3010" : "#1c3d2c", color: i === 0 ? "#d4a73c" : "#e7ecdf", fontSize: 15 }}>{r.total}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody></table>
+        {!loading && state && state.rows.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr className="rowline">
+                  <th style={{ color: "#9fb3a5", fontSize: 12 }}>#</th>
+                  <th style={{ color: "#9fb3a5", fontSize: 12 }}>Spiller</th>
+                  <th style={{ color: "#9fb3a5", fontSize: 12, textAlign: "center" }} title="Antal præcise resultater">🎯</th>
+                  <th style={{ color: "#9fb3a5", fontSize: 12, textAlign: "center", whiteSpace: "nowrap" }} title="Point i de seneste 3 runder">Form</th>
+                  <th style={{ color: "#9fb3a5", fontSize: 12, textAlign: "right" }}>Point</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.rows.map((r, i) => (
+                  <tr key={r.player} className="rowline">
+                    <td style={{ color: i === 0 ? "#d4a73c" : "#7fa38c", fontWeight: 700, whiteSpace: "nowrap" }}>
+                      {i === 0 && state.isComplete ? "🏆" : i + 1}
+                      {r.rankDelta !== undefined && r.rankDelta !== 0 && (
+                        <span style={{ fontSize: 11, marginLeft: 4, color: r.rankDelta > 0 ? "#7fd48a" : "#e08a7a" }}>
+                          {r.rankDelta > 0 ? `▲${r.rankDelta}` : `▼${Math.abs(r.rankDelta)}`}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ color: "#f4f1e8", fontWeight: 600 }}>{r.player}</td>
+                    <td style={{ textAlign: "center", color: "#cfd8d1", fontSize: 13 }}>{r.exactCount}</td>
+                    <td style={{ textAlign: "center", color: "#9fb3a5", fontSize: 13 }}>{r.form3}</td>
+                    <td style={{ textAlign: "right" }}>
+                      <span className="pill" style={{ background: i === 0 ? "#3a3010" : "#1c3d2c", color: i === 0 ? "#d4a73c" : "#e7ecdf", fontSize: 15 }}>{r.total}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!loading && state && state.rows.length > 0 && (
+          <p style={{ ...muted, marginTop: 8, marginBottom: 0 }}>🎯 = præcise resultater · Form = point i de seneste 3 runder · ▲▼ = ændring efter seneste runde</p>
         )}
         {!loading && state && state.rows.length === 0 && <p style={muted}>Ingen deltagere endnu.</p>}
       </div>
