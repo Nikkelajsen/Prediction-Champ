@@ -37,6 +37,8 @@ const db = {
     }),
   update: (token, table, query, patch) =>
     restFetch(`/rest/v1/${table}?${query}`, { method: "PATCH", token, body: patch, prefer: "return=representation" }),
+  del: (token, table, query) =>
+    restFetch(`/rest/v1/${table}?${query}`, { method: "DELETE", token, prefer: "return=minimal" }),
 };
 const auth = {
   signUp: (email, password) =>
@@ -97,6 +99,17 @@ function groupIntoRounds(matches) {
     key, label: roundLabel(key),
     matches: map[key].slice().sort((a, b) => (a.kickoff_at || "").localeCompare(b.kickoff_at || "")),
   }));
+}
+// indeks for den runde, der indeholder i dag — eller den nærmeste kommende
+function currentRoundIndex(rounds) {
+  if (!rounds.length) return 0;
+  const today = new Date().toISOString().slice(0, 10);
+  for (let i = 0; i < rounds.length; i++) {
+    const end = new Date(rounds[i].key + "T12:00:00");
+    end.setDate(end.getDate() + 6);
+    if (end.toISOString().slice(0, 10) >= today) return i;
+  }
+  return rounds.length - 1;
 }
 function formatKickoff(iso) {
   if (!iso) return "";
@@ -427,12 +440,14 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   }
 
   async function loadCompetitions() {
-    const myComps = await db.select(token, "competition_participants", `user_id=eq.${session.user.id}&select=competition_id`);
+    const myComps = await db.select(token, "competition_participants", `user_id=eq.${session.user.id}&select=competition_id,hidden`);
     if (myComps.length) {
+      const hiddenMap = Object.fromEntries(myComps.map((c) => [c.competition_id, !!c.hidden]));
       const ids = myComps.map((c) => c.competition_id).join(",");
       const comps = await db.select(token, "competitions", `id=in.(${ids})&select=*`);
-      setCompetitions(comps);
-      if (!selectedCompId && comps.length) setSelectedCompId(comps[0].id);
+      const merged = comps.map((c) => ({ ...c, _hidden: hiddenMap[c.id] || false }));
+      setCompetitions(merged);
+      if (!selectedCompId && merged.length) setSelectedCompId(merged[0].id);
     } else {
       setCompetitions([]);
     }
@@ -471,7 +486,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
 
   const visibleLeagues = leagues.filter((l) => l.is_visible !== false);
   const activeFilterIds = filterLeagueIds || visibleLeagues.map((l) => l.id);
-  const filteredCompetitions = competitions.filter((c) => activeFilterIds.includes(c.league_id));
+  const filteredCompetitions = competitions.filter((c) => !c.league_id || activeFilterIds.includes(c.league_id));
 
   function toggleLeagueFilter(id) {
     setFilterLeagueIds((cur) => {
@@ -535,7 +550,8 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
 
       {tab === "competitions" && (
         <CompetitionsTab token={token} userId={session.user.id} leagues={visibleLeagues}
-          competitions={filteredCompetitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} reload={loadAll} />
+          competitions={filteredCompetitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} reload={loadAll}
+          goToBoard={(id) => { setSelectedCompId(id); setTab("board"); }} />
       )}
       {tab === "matches" && isAdmin && (
         <MatchesTab token={token} leagues={leagues} reloadLeagues={loadLeagues} />
@@ -596,7 +612,7 @@ function RulesTab() {
     </div>
   );
 }
-function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId, setSelectedCompId, reload }) {
+function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId, setSelectedCompId, reload, goToBoard }) {
   const [createLeagueId, setCreateLeagueId] = useState(leagues[0]?.id || "");
   const [createSeason, setCreateSeason] = useState(null);
   const [createTeams, setCreateTeams] = useState([]);
@@ -607,9 +623,15 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
   const [endDate, setEndDate] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [copiedId, setCopiedId] = useState(null);
   const [err, setErr] = useState("");
   const [statusMap, setStatusMap] = useState({}); // { [compId]: { isComplete, playedMatches, totalMatches, winner } }
+  const [showArchived, setShowArchived] = useState(false);
+  // til custom/random: kommende kampe på tværs af ligaer
+  const [upcoming, setUpcoming] = useState([]); // [{match, leagueName}]
+  const [upcomingTeams, setUpcomingTeams] = useState({});
+  const [pickedIds, setPickedIds] = useState([]);
+  const [randomCount, setRandomCount] = useState(6);
+  const [randomLeagueIds, setRandomLeagueIds] = useState(null); // null = alle
 
   useEffect(() => {
     if (!createLeagueId && leagues.length) setCreateLeagueId(leagues[0].id);
@@ -618,13 +640,37 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
   useEffect(() => {
     if (!createLeagueId) return;
     (async () => {
-      const seasons = await db.select(token, "seasons", `league_id=eq.${createLeagueId}&select=*&limit=1`);
+      const seasons = await db.select(token, "seasons", `league_id=eq.${createLeagueId}&select=*&order=start_date.desc&limit=1`);
       setCreateSeason(seasons[0] || null);
       const tms = await db.select(token, "teams", `league_id=eq.${createLeagueId}&select=*&order=name`);
       setCreateTeams(tms);
       setTeamId("");
     })();
   }, [createLeagueId]); // eslint-disable-line
+
+  // hent kommende kampe på tværs af alle synlige ligaer (til håndplukket/tilfældig)
+  useEffect(() => {
+    if (mode !== "custom" && mode !== "random") return;
+    (async () => {
+      const leagueIds = leagues.map((l) => l.id);
+      if (!leagueIds.length) return;
+      const seasons = await db.select(token, "seasons", `league_id=in.(${leagueIds.join(",")})&select=id,league_id&order=start_date.desc`);
+      // nyeste sæson pr. liga
+      const newestByLeague = {};
+      for (const s of seasons) if (!newestByLeague[s.league_id]) newestByLeague[s.league_id] = s;
+      const seasonIds = Object.values(newestByLeague).map((s) => s.id);
+      if (!seasonIds.length) { setUpcoming([]); return; }
+      const seasonToLeague = Object.fromEntries(Object.values(newestByLeague).map((s) => [s.id, s.league_id]));
+      const leagueNames = Object.fromEntries(leagues.map((l) => [l.id, l.name]));
+      const nowIso = new Date().toISOString();
+      const ms = await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&kickoff_at=gte.${nowIso}&select=*&order=kickoff_at&limit=300`);
+      const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]))];
+      const tms = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
+      setUpcomingTeams(Object.fromEntries(tms.map((t) => [t.id, t.name])));
+      setUpcoming(ms.map((m) => ({ ...m, _leagueId: seasonToLeague[m.season_id], _leagueName: leagueNames[seasonToLeague[m.season_id]] })));
+      setPickedIds([]);
+    })();
+  }, [mode, leagues]); // eslint-disable-line
 
   useEffect(() => {
     let cancelled = false;
@@ -641,25 +687,51 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
   }, [competitions]); // eslint-disable-line
 
   async function createCompetition() {
-    if (!name || !createLeagueId || !createSeason) return;
+    if (!name) return;
     setBusy(true); setErr("");
     try {
-      const mode_params = mode === "team" ? { team_id: teamId } : mode === "time_range" ? { start_date: startDate, end_date: endDate } : {};
+      const crossLeague = mode === "custom" || mode === "random";
+      if (!crossLeague && (!createLeagueId || !createSeason)) { setBusy(false); return; }
+
+      let matchIds = [];
+      if (mode === "custom") {
+        matchIds = pickedIds;
+        if (!matchIds.length) { setErr("Vælg mindst én kamp"); setBusy(false); return; }
+      } else if (mode === "random") {
+        const allowedLeagues = randomLeagueIds || leagues.map((l) => l.id);
+        const pool = upcoming.filter((m) => allowedLeagues.includes(m._leagueId));
+        if (!pool.length) { setErr("Ingen kommende kampe i de valgte ligaer"); setBusy(false); return; }
+        // nærmeste kommende runde
+        const firstRound = pool.reduce((min, m) => (m.round_key < min ? m.round_key : min), pool[0].round_key);
+        const roundPool = pool.filter((m) => m.round_key === firstRound);
+        const shuffled = roundPool.slice().sort(() => Math.random() - 0.5);
+        matchIds = shuffled.slice(0, Math.max(1, Number(randomCount) || 6)).map((m) => m.id);
+      }
+
+      const mode_params = mode === "team" ? { team_id: teamId }
+        : mode === "time_range" ? { start_date: startDate, end_date: endDate }
+        : mode === "random" ? { count: Number(randomCount) || 6 } : {};
       const rules = { exact: 3, outcome: 1, wrongWinPenalty: 1 };
       const [comp] = await db.insert(token, "competitions", [{
-        name, league_id: createLeagueId, season_id: createSeason.id, mode, mode_params, rules, created_by: userId,
+        name,
+        league_id: crossLeague ? null : createLeagueId,
+        season_id: crossLeague ? null : createSeason.id,
+        mode, mode_params, rules, created_by: userId,
       }]);
       await db.insert(token, "competition_participants", [{ competition_id: comp.id, user_id: userId }]);
 
-      // find matchende kampe og kobl dem på
-      let query = `season_id=eq.${createSeason.id}&select=id`;
-      if (mode === "team" && teamId) query += `&or=(home_team_id.eq.${teamId},away_team_id.eq.${teamId})`;
-      if (mode === "time_range" && startDate && endDate) query += `&kickoff_at=gte.${startDate}&kickoff_at=lte.${endDate}T23:59:59`;
-      const matchedMatches = await db.select(token, "matches", query);
-      if (matchedMatches.length) {
-        await db.insert(token, "competition_matches", matchedMatches.map((m) => ({ competition_id: comp.id, match_id: m.id })));
+      if (crossLeague) {
+        await db.insert(token, "competition_matches", matchIds.map((id) => ({ competition_id: comp.id, match_id: id })));
+      } else {
+        let query = `season_id=eq.${createSeason.id}&select=id`;
+        if (mode === "team" && teamId) query += `&or=(home_team_id.eq.${teamId},away_team_id.eq.${teamId})`;
+        if (mode === "time_range" && startDate && endDate) query += `&kickoff_at=gte.${startDate}&kickoff_at=lte.${endDate}T23:59:59`;
+        const matchedMatches = await db.select(token, "matches", query);
+        if (matchedMatches.length) {
+          await db.insert(token, "competition_matches", matchedMatches.map((m) => ({ competition_id: comp.id, match_id: m.id })));
+        }
       }
-      setName(""); setTeamId(""); setStartDate(""); setEndDate("");
+      setName(""); setTeamId(""); setStartDate(""); setEndDate(""); setPickedIds([]);
       await reload();
       setSelectedCompId(comp.id);
     } catch (e) {
@@ -685,31 +757,40 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
     }
   }
 
-  function CompetitionCard({ c }) {
+  async function setArchived(compId, hidden) {
+    await db.update(token, "competition_participants", `competition_id=eq.${compId}&user_id=eq.${userId}`, { hidden });
+    await reload();
+  }
+
+  async function deleteCompetition(comp) {
+    if (!window.confirm(`Slet "${comp.name}" for ALLE deltagere? Dette kan ikke fortrydes.`)) return;
+    await db.del(token, "competitions", `id=eq.${comp.id}`);
+    await reload();
+  }
+
+  const modeLabel = (m) => m === "full_season" ? "hel sæson" : m === "team" ? "et hold" : m === "time_range" ? "tidsperiode" : m === "custom" ? "håndplukket" : "tilfældig kupon";
+
+  function CompetitionCard({ c, archived }) {
     const status = statusMap[c.id];
     return (
       <div key={c.id} className="pill" style={{
-        background: selectedCompId === c.id ? "rgba(212,167,60,0.15)" : "#1c3d2c",
-        border: selectedCompId === c.id ? "1px solid #d4a73c" : "1px solid transparent",
-        cursor: "pointer", padding: "6px 12px", flexDirection: "column", alignItems: "flex-start", gap: 2,
-      }} onClick={() => setSelectedCompId(c.id)}>
-        <div style={{ display: "flex", alignItems: "center" }}>
-          {status?.isComplete && <Trophy size={12} style={{ color: "#d4a73c", marginRight: 6 }} />}
+        background: "#1c3d2c", border: "1px solid transparent",
+        cursor: "pointer", padding: "8px 12px", flexDirection: "column", alignItems: "flex-start", gap: 2,
+      }} onClick={() => goToBoard(c.id)} title="Se stillingen">
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
+          {status?.isComplete && <Trophy size={12} style={{ color: "#d4a73c", marginRight: 2 }} />}
           <span style={{ color: "#f4f1e8", fontWeight: 700 }}>{c.name}</span>
-          <span style={{ color: "#7fa38c", fontSize: 12, marginLeft: 6 }}>
-            ({c.mode === "full_season" ? "hel sæson" : c.mode === "team" ? "et hold" : "tidsperiode"})
-          </span>
-          <span style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 8, cursor: "pointer", color: "#9fb3a5", fontSize: 11 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              const link = `${window.location.origin}${window.location.pathname}?join=${c.invite_code}`;
-              navigator.clipboard.writeText(link);
-              setCopiedId(c.id);
-              setTimeout(() => setCopiedId(null), 1500);
-            }}>
-            <Copy size={12} /> Del link
-          </span>
-          {copiedId === c.id && <Check size={12} style={{ color: "#7fd48a", marginLeft: 4 }} />}
+          <span style={{ color: "#7fa38c", fontSize: 12 }}>({modeLabel(c.mode)})</span>
+          {(status?.isComplete || archived) && (
+            <span style={{ color: "#9fb3a5", fontSize: 11, marginLeft: 6, textDecoration: "underline" }}
+              onClick={(e) => { e.stopPropagation(); setArchived(c.id, !archived); }}>
+              {archived ? "Gendan" : "Arkivér"}
+            </span>
+          )}
+          {c.created_by === userId && (
+            <Trash2 size={12} style={{ color: "#c96a5a", marginLeft: 6 }}
+              onClick={(e) => { e.stopPropagation(); deleteCompetition(c); }} />
+          )}
         </div>
         {status && !status.isComplete && status.totalMatches > 0 && (
           <span style={{ color: "#7fa38c", fontSize: 11 }}>{status.playedMatches}/{status.totalMatches} kampe spillet</span>
@@ -721,13 +802,19 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
     );
   }
 
-  const active = competitions.filter((c) => !statusMap[c.id]?.isComplete);
-  const completed = competitions.filter((c) => statusMap[c.id]?.isComplete);
+  const visible = competitions.filter((c) => !c._hidden);
+  const archivedComps = competitions.filter((c) => c._hidden);
+  const active = visible.filter((c) => !statusMap[c.id]?.isComplete);
+  const completed = visible.filter((c) => statusMap[c.id]?.isComplete);
+
+  // gruppér kommende kampe pr. runde og liga til plukkeren
+  const upcomingRounds = useMemo(() => groupIntoRounds(upcoming), [upcoming]);
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div className="card">
         <h3 style={h3}>Aktive konkurrencer</h3>
+        <p style={{ ...muted, marginTop: -4 }}>Klik på en konkurrence for at se stillingen.</p>
         {competitions.length === 0 && <p style={muted}>Du er ikke med i nogen konkurrencer endnu — opret en, eller join med en kode.</p>}
         {competitions.length > 0 && active.length === 0 && <p style={muted}>Ingen aktive konkurrencer lige nu.</p>}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -744,6 +831,20 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
         </div>
       )}
 
+      {archivedComps.length > 0 && (
+        <div className="card">
+          <span style={{ color: "#9fb3a5", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}
+            onClick={() => setShowArchived(!showArchived)}>
+            {showArchived ? "Skjul arkiverede" : `Vis arkiverede (${archivedComps.length})`}
+          </span>
+          {showArchived && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+              {archivedComps.map((c) => <CompetitionCard key={c.id} c={c} archived />)}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="card">
         <h3 style={h3}>Join med kode</h3>
         <div style={{ display: "flex", gap: 8 }}>
@@ -754,16 +855,21 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
 
       <div className="card">
         <h3 style={h3}>Opret ny konkurrence</h3>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 420 }}>
-          <select className="field" value={createLeagueId} onChange={(e) => setCreateLeagueId(e.target.value)}>
-            {leagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 480 }}>
           <input className="field" placeholder="Navn på konkurrence…" value={name} onChange={(e) => setName(e.target.value)} />
           <select className="field" value={mode} onChange={(e) => setMode(e.target.value)}>
             <option value="full_season">Hel sæson</option>
             <option value="team">Et hold</option>
             <option value="time_range">Tidsperiode (fx 3 uger)</option>
+            <option value="custom">Håndplukkede kampe</option>
+            <option value="random">Tilfældig kupon</option>
           </select>
+
+          {(mode === "full_season" || mode === "team" || mode === "time_range") && leagues.length > 1 && (
+            <select className="field" value={createLeagueId} onChange={(e) => setCreateLeagueId(e.target.value)}>
+              {leagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          )}
           {mode === "team" && (
             <select className="field" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
               <option value="">Vælg hold…</option>
@@ -776,6 +882,60 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
               <input className="field" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </div>
           )}
+
+          {mode === "random" && (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: "#cfd8d1", fontSize: 14 }}>Antal kampe:</span>
+                <input className="field" type="number" min="1" max="20" style={{ width: 70 }} value={randomCount} onChange={(e) => setRandomCount(e.target.value)} />
+              </div>
+              {leagues.length > 1 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {leagues.map((l) => {
+                    const sel = (randomLeagueIds || leagues.map((x) => x.id)).includes(l.id);
+                    return (
+                      <button key={l.id} type="button" onClick={() => {
+                        const base = randomLeagueIds || leagues.map((x) => x.id);
+                        const next = sel ? base.filter((x) => x !== l.id) : [...base, l.id];
+                        setRandomLeagueIds(next.length ? next : base);
+                      }} style={{
+                        padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                        border: "1px solid " + (sel ? "#d4a73c" : "#2c4a3c"),
+                        background: sel ? "rgba(212,167,60,0.15)" : "transparent",
+                        color: sel ? "#d4a73c" : "#9fb3a5",
+                      }}>{sel ? "✓ " : ""}{l.name}</button>
+                    );
+                  })}
+                </div>
+              )}
+              <p style={muted}>Trækker {randomCount || 6} tilfældige kampe fra den nærmeste kommende runde.</p>
+            </>
+          )}
+
+          {mode === "custom" && (
+            <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid #2c4a3c", borderRadius: 10, padding: 10 }}>
+              {upcomingRounds.length === 0 && <p style={muted}>Ingen kommende kampe fundet.</p>}
+              {upcomingRounds.map((r) => (
+                <div key={r.key} style={{ marginBottom: 10 }}>
+                  <div style={{ color: "#d4a73c", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Runde {r.label}</div>
+                  {r.matches.map((m) => {
+                    const checked = pickedIds.includes(m.id);
+                    return (
+                      <label key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13 }}>
+                        <input type="checkbox" checked={checked} onChange={() =>
+                          setPickedIds(checked ? pickedIds.filter((x) => x !== m.id) : [...pickedIds, m.id])
+                        } />
+                        <span style={{ color: "#f4f1e8" }}>{upcomingTeams[m.home_team_id]} - {upcomingTeams[m.away_team_id]}</span>
+                        <span style={{ color: "#7fa38c", fontSize: 11, marginLeft: "auto", whiteSpace: "nowrap" }}>{m._leagueName} · {formatKickoff(m.kickoff_at)}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ))}
+              {pickedIds.length > 0 && <p style={{ ...muted, marginBottom: 0 }}>{pickedIds.length} kampe valgt</p>}
+            </div>
+          )}
+
           {err && <p style={{ color: "#e08a7a", fontSize: 13 }}>{err}</p>}
           <button style={primaryBtn} onClick={createCompetition} disabled={busy || !name}>
             <Plus size={14} /> Opret konkurrence
@@ -791,6 +951,7 @@ function MatchesTab({ token, leagues, reloadLeagues }) {
   const [leagueId, setLeagueId] = useState(leagues[0]?.id || "");
   const [teams, setTeams] = useState([]);
   const [matches, setMatches] = useState([]);
+  const [roundIndex, setRoundIndex] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
 
@@ -806,10 +967,11 @@ function MatchesTab({ token, leagues, reloadLeagues }) {
     if (!leagueId) return;
     const tms = await db.select(token, "teams", `league_id=eq.${leagueId}&select=*&order=name`);
     setTeams(tms);
-    const seasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=id&limit=1`);
+    const seasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=id&order=start_date.desc&limit=1`);
     if (seasons[0]) {
       const ms = await db.select(token, "matches", `season_id=eq.${seasons[0].id}&select=*&order=kickoff_at`);
       setMatches(ms);
+      setRoundIndex(currentRoundIndex(groupIntoRounds(ms)));
     } else {
       setMatches([]);
     }
@@ -866,11 +1028,11 @@ function MatchesTab({ token, leagues, reloadLeagues }) {
       </div>
 
       {rounds.length === 0 && <p style={muted}>Ingen kampe endnu.</p>}
-      {rounds.map((r) => (
-        <div key={r.key} className="card" style={{ marginBottom: 14 }}>
-          <h4 style={{ ...h3, marginBottom: 10 }}>Runde {r.label}</h4>
+      {rounds.length > 0 && (
+        <div className="card">
+          <RoundPager rounds={rounds} index={roundIndex} setIndex={setRoundIndex} />
           <table><tbody>
-            {r.matches.map((m) => (
+            {rounds[roundIndex].matches.map((m) => (
               <tr key={m.id} className="rowline">
                 <td style={{ color: "#9fb3a5", fontSize: 13, width: 140 }}>{formatKickoff(m.kickoff_at)}</td>
                 <td style={{ color: "#f4f1e8", fontWeight: 600 }}>{teamsById[m.home_team_id]} <span style={{ color: "#7fa38c" }}>vs</span> {teamsById[m.away_team_id]}</td>
@@ -882,13 +1044,14 @@ function MatchesTab({ token, leagues, reloadLeagues }) {
             ))}
           </tbody></table>
         </div>
-      ))}
+      )}
     </div>
   );
 }
 
 // ================= TAB: PREDICTIONS =================
 function PredictionsTab({ token, userId, competitions, selectedCompId, setSelectedCompId }) {
+  const [compFilter, setCompFilter] = useState("all"); // "all" eller et konkurrence-id
   const [allMatches, setAllMatches] = useState([]);
   const [preds, setPreds] = useState({});
   const [allPreds, setAllPreds] = useState([]);
@@ -899,7 +1062,7 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
   const [savedIds, setSavedIds] = useState({});
   const [expandedId, setExpandedId] = useState(null);
   const [, setTick] = useState(0);
-  const comp = competitions.find((c) => c.id === selectedCompId);
+  const comp = compFilter !== "all" ? competitions.find((c) => c.id === compFilter) : null;
   const rules = comp?.rules || { exact: 3, outcome: 1, wrongWinPenalty: 1 };
 
   // genberegn nedtælling/låsning hvert minut
@@ -909,13 +1072,13 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
   }, []);
 
   useEffect(() => {
-    if (!selectedCompId) return;
+    const compIds = compFilter === "all" ? competitions.map((c) => c.id) : [compFilter];
+    if (!compIds.length) { setAllMatches([]); return; }
     (async () => {
       setLoading(true);
-      setRoundIndex(0);
       setExpandedId(null);
-      const cms = await db.select(token, "competition_matches", `competition_id=eq.${selectedCompId}&select=match_id`);
-      const ids = cms.map((c) => c.match_id);
+      const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=match_id`);
+      const ids = [...new Set(cms.map((c) => c.match_id))];
       if (!ids.length) { setAllMatches([]); setTeamsById({}); setLoading(false); return; }
       const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
       setAllMatches(ms);
@@ -928,13 +1091,15 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
       const ap = await db.select(token, "predictions", `match_id=in.(${ids.join(",")})&select=*`);
       setAllPreds(ap);
       setPreds(Object.fromEntries(ap.filter((p) => p.user_id === userId).map((p) => [p.match_id, p])));
-      const parts = await db.select(token, "competition_participants", `competition_id=eq.${selectedCompId}&select=user_id`);
-      const partIds = parts.map((p) => p.user_id);
+      const parts = await db.select(token, "competition_participants", `competition_id=in.(${compIds.join(",")})&select=user_id`);
+      const partIds = [...new Set(parts.map((p) => p.user_id))];
       const profs = partIds.length ? await db.select(token, "profiles", `id=in.(${partIds.join(",")})&select=id,display_name`) : [];
       setParticipants(profs);
+      const rds = groupIntoRounds(ms);
+      setRoundIndex(currentRoundIndex(rds));
       setLoading(false);
     })();
-  }, [selectedCompId]); // eslint-disable-line
+  }, [compFilter, competitions]); // eslint-disable-line
 
   const rounds = useMemo(() => groupIntoRounds(allMatches), [allMatches]);
   const round = rounds[roundIndex];
@@ -965,7 +1130,8 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
   return (
     <div>
       <div style={{ marginBottom: 14 }}>
-        <select className="field" value={selectedCompId || ""} onChange={(e) => setSelectedCompId(e.target.value)}>
+        <select className="field" value={compFilter} onChange={(e) => setCompFilter(e.target.value)}>
+          <option value="all">Alle konkurrencer</option>
           {competitions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
@@ -1072,13 +1238,13 @@ function ResultsTab({ token, leagues }) {
 
   async function loadData() {
     if (!leagueId) return;
-    setRoundIndex(0);
     const tms = await db.select(token, "teams", `league_id=eq.${leagueId}&select=*&order=name`);
     setTeams(tms);
-    const seasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=id&limit=1`);
+    const seasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=id&order=start_date.desc&limit=1`);
     if (seasons[0]) {
       const ms = await db.select(token, "matches", `season_id=eq.${seasons[0].id}&select=*&order=kickoff_at`);
       setMatches(ms);
+      setRoundIndex(currentRoundIndex(groupIntoRounds(ms)));
     } else {
       setMatches([]);
     }
@@ -1088,7 +1254,11 @@ function ResultsTab({ token, leagues }) {
 
   async function setScore(id, field, val) {
     await db.update(token, "matches", `id=eq.${id}`, { [field]: val, status: "finished" });
-    await loadData();
+    const tmsSeasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=id&order=start_date.desc&limit=1`);
+    if (tmsSeasons[0]) {
+      const ms = await db.select(token, "matches", `season_id=eq.${tmsSeasons[0].id}&select=*&order=kickoff_at`);
+      setMatches(ms);
+    }
   }
 
   return (
@@ -1130,15 +1300,18 @@ function ResultsTab({ token, leagues }) {
 }
 
 // ================= TAB: BOARD (leaderboard) =================
-function BoardTab({ token, competitions, selectedCompId, setSelectedCompId, teamsById }) {
+function BoardTab({ token, competitions, selectedCompId, setSelectedCompId }) {
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showAllRounds, setShowAllRounds] = useState(false);
   const comp = competitions.find((c) => c.id === selectedCompId);
 
   useEffect(() => {
     if (!selectedCompId || !comp) return;
     (async () => {
       setLoading(true);
+      setShowAllRounds(false);
       const rules = comp.rules || { exact: 3, outcome: 1, wrongWinPenalty: 1 };
       const result = await computeCompetitionState(token, selectedCompId, rules);
       setState(result);
@@ -1146,14 +1319,29 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId, team
     })();
   }, [selectedCompId, comp]); // eslint-disable-line
 
+  function copyInviteLink() {
+    if (!comp) return;
+    const link = `${window.location.origin}${window.location.pathname}?join=${comp.invite_code}`;
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   if (!competitions.length) return <p style={muted}>Opret eller join en konkurrence først.</p>;
+
+  // nyeste runder først; vis kun 3 medmindre "vis alle"
+  const roundsDesc = state?.rounds ? state.rounds.slice().reverse() : [];
+  const shownRounds = showAllRounds ? roundsDesc : roundsDesc.slice(0, 3);
 
   return (
     <div>
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
         <select className="field" value={selectedCompId || ""} onChange={(e) => setSelectedCompId(e.target.value)}>
           {competitions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+        <button style={goldBtn} onClick={copyInviteLink}>
+          {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Link kopieret!" : "Invitér ven"}
+        </button>
       </div>
       <div className="card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
@@ -1181,33 +1369,30 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId, team
         {!loading && state && state.rows.length === 0 && <p style={muted}>Ingen deltagere endnu.</p>}
       </div>
 
-      {!loading && state && state.rounds?.length > 0 && (
+      {!loading && state && roundsDesc.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
           <h3 style={h3}>Point pr. runde</h3>
           <div style={{ overflowX: "auto" }}>
             <table>
               <thead>
                 <tr className="rowline">
-                  <th style={{ color: "#9fb3a5", fontSize: 13 }}>Spiller</th>
-                  {state.rounds.map((r) => (
-                    <th key={r.key} style={{ color: "#9fb3a5", fontSize: 12, textAlign: "center", whiteSpace: "nowrap" }}>{r.label}</th>
+                  <th style={{ color: "#9fb3a5", fontSize: 13 }}>Runde</th>
+                  {state.rows.map((row) => (
+                    <th key={row.player} style={{ color: "#9fb3a5", fontSize: 12, textAlign: "center", whiteSpace: "nowrap" }}>{row.player}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {state.rows.map((row) => {
-                  const bestInRound = {};
-                  for (const r of state.rounds) {
-                    bestInRound[r.key] = Math.max(...state.rows.map((x) => x.perRound[r.key] ?? -Infinity));
-                  }
+                {shownRounds.map((r) => {
+                  const best = Math.max(...state.rows.map((x) => x.perRound[r.key] ?? -Infinity));
                   return (
-                    <tr key={row.player} className="rowline">
-                      <td style={{ color: "#f4f1e8", fontWeight: 600, whiteSpace: "nowrap" }}>{row.player}</td>
-                      {state.rounds.map((r) => {
+                    <tr key={r.key} className="rowline">
+                      <td style={{ color: "#cfd8d1", fontSize: 13, whiteSpace: "nowrap" }}>{r.label}</td>
+                      {state.rows.map((row) => {
                         const v = row.perRound[r.key];
-                        const isBest = v !== undefined && v === bestInRound[r.key] && v > 0;
+                        const isBest = v !== undefined && v === best && v > 0;
                         return (
-                          <td key={r.key} style={{ textAlign: "center", color: isBest ? "#d4a73c" : "#cfd8d1", fontWeight: isBest ? 700 : 400 }}>
+                          <td key={row.player} style={{ textAlign: "center", color: isBest ? "#d4a73c" : "#cfd8d1", fontWeight: isBest ? 700 : 400 }}>
                             {v ?? "–"}
                           </td>
                         );
@@ -1218,6 +1403,12 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId, team
               </tbody>
             </table>
           </div>
+          {roundsDesc.length > 3 && (
+            <p style={{ ...muted, marginTop: 10, marginBottom: 0, cursor: "pointer", textDecoration: "underline" }}
+              onClick={() => setShowAllRounds(!showAllRounds)}>
+              {showAllRounds ? "Vis kun de 3 seneste" : `Vis alle ${roundsDesc.length} runder`}
+            </p>
+          )}
         </div>
       )}
     </div>
