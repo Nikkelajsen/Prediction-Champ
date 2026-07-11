@@ -68,7 +68,7 @@ export default async function handler(req, res) {
     if (!dbLeague.api_league_id) throw new Error(`Ligaen '${dbLeague.name}' har intet Sportmonks-liga-id (api_league_id) sat`);
     const SPORTMONKS_LEAGUE_ID = dbLeague.api_league_id;
 
-    const seasons = await sb(`/rest/v1/seasons?league_id=eq.${leagueId}&select=id&limit=1`);
+    const seasons = await sb(`/rest/v1/seasons?league_id=eq.${leagueId}&select=id,api_season_id&order=start_date.desc&limit=1`);
     if (!seasons.length) throw new Error("Sæson ikke fundet i databasen for denne liga");
     const seasonId = seasons[0].id;
 
@@ -83,19 +83,26 @@ export default async function handler(req, res) {
         || teams.find((t) => normalize(t.name).includes(n) || n.includes(normalize(t.name)));
     }
 
-    // Find Sportmonks' egen sæson-id for den ønskede sæson (fx "2026/2027"),
-    // i stedet for at stole på "currentSeason", som kan være usikker omkring sæsonskiftet.
-    const leagueRes = await fetch(
-      `https://api.sportmonks.com/v3/football/leagues/${SPORTMONKS_LEAGUE_ID}?include=seasons&api_token=${SPORTMONKS_TOKEN}`
-    );
-    if (!leagueRes.ok) throw new Error(`Sportmonks (liga): ${leagueRes.status} ${await leagueRes.text()}`);
-    const leagueData = await leagueRes.json();
-    const smSeason = (leagueData.data?.seasons || []).find((s) => s.name === smSeasonName);
-    if (!smSeason) {
-      const available = (leagueData.data?.seasons || []).map((s) => s.name).join(", ") || "(ingen sæsoner fundet)";
-      throw new Error(`Kunne ikke finde sæsonen '${smSeasonName}' hos Sportmonks for ${dbLeague.name}. Tilgængelige sæsoner: ${available}`);
+    // Sportmonks sæson-id: brug det gemte, hvis vi har det — ellers slå op
+    // ved navn (fx "2026/2027") og gem det på vores season-række, så
+    // fremtidige kørsler (og sæsonskift) ikke afhænger af navne-opslag.
+    let smSeasonId = seasons[0].api_season_id;
+    if (!smSeasonId) {
+      const leagueRes = await fetch(
+        `https://api.sportmonks.com/v3/football/leagues/${SPORTMONKS_LEAGUE_ID}?include=seasons&api_token=${SPORTMONKS_TOKEN}`
+      );
+      if (!leagueRes.ok) throw new Error(`Sportmonks (liga): ${leagueRes.status} ${await leagueRes.text()}`);
+      const leagueData = await leagueRes.json();
+      const smSeason = (leagueData.data?.seasons || []).find((s) => s.name === smSeasonName);
+      if (!smSeason) {
+        const available = (leagueData.data?.seasons || []).map((s) => s.name).join(", ") || "(ingen sæsoner fundet)";
+        throw new Error(`Kunne ikke finde sæsonen '${smSeasonName}' hos Sportmonks for ${dbLeague.name}. Tilgængelige sæsoner: ${available}`);
+      }
+      smSeasonId = smSeason.id;
+      await sb(`/rest/v1/seasons?id=eq.${seasonId}`, {
+        method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ api_season_id: String(smSeasonId) }),
+      });
     }
-    const smSeasonId = smSeason.id;
 
     const fixturesById = new Map();
     let page = 1;
