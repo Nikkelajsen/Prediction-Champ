@@ -491,6 +491,7 @@ function AuthScreen({ onAuthed, booting }) {
 function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoinCode }) {
   const token = session.access_token;
   const [tab, setTab] = useState("competitions");
+  const [globalView, setGlobalView] = useState("rating");
   const [loading, setLoading] = useState(true);
   const [leagues, setLeagues] = useState([]);
   const [filterLeagueIds, setFilterLeagueIds] = useState(null); // null = alle (ingen filter)
@@ -617,7 +618,8 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       {tab === "competitions" && (
         <CompetitionsTab token={token} userId={session.user.id} leagues={visibleLeagues}
           competitions={filteredCompetitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} reload={loadAll}
-          goToBoard={(id) => { setSelectedCompId(id); setTab("board"); }} />
+          goToBoard={(id) => { setSelectedCompId(id); setTab("board"); }}
+          goToMonthly={() => { setGlobalView("monthly"); setTab("global"); }} />
       )}
       {tab === "matches" && isAdmin && (
         <MatchesTab token={token} leagues={leagues} reloadLeagues={loadLeagues} />
@@ -686,7 +688,7 @@ function RulesTab() {
     </div>
   );
 }
-function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId, setSelectedCompId, reload, goToBoard }) {
+function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId, setSelectedCompId, reload, goToBoard, goToMonthly }) {
   const [createLeagueId, setCreateLeagueId] = useState(leagues[0]?.id || "");
   const [createSeason, setCreateSeason] = useState(null);
   const [createTeams, setCreateTeams] = useState([]);
@@ -908,6 +910,15 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
         {competitions.length === 0 && <p style={muted}>Du er ikke med i nogen konkurrencer endnu — opret en, eller join med en kode.</p>}
         {competitions.length > 0 && active.length === 0 && <p style={muted}>Ingen aktive konkurrencer lige nu.</p>}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <div className="pill" onClick={goToMonthly} title="Se månedsligaen"
+            style={{ background: "#243a1c", border: "1px solid #d4a73c55", cursor: "pointer", padding: "8px 12px", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
+              <Trophy size={12} style={{ color: "#d4a73c", marginRight: 2 }} />
+              <span style={{ color: "#f4f1e8", fontWeight: 700 }}>Månedsliga</span>
+              <span style={{ color: "#7fa38c", fontSize: 12 }}>(alle er med)</span>
+            </div>
+            <span style={{ color: "#9fb3a5", fontSize: 11 }}>Månedens Prediction Champ på tværs af alle</span>
+          </div>
           {active.map((c) => <CompetitionCard key={c.id} c={c} />)}
         </div>
       </div>
@@ -1439,8 +1450,8 @@ function ResultsTab({ token, leagues }) {
 }
 
 // ================= TAB: GLOBAL (rating + monthly league) =================
-function GlobalTab({ token, isAdmin }) {
-  const [view, setView] = useState("rating"); // rating | monthly
+function GlobalTab({ token, isAdmin, initialView }) {
+  const [view, setView] = useState(initialView || "rating"); // rating | monthly
   const [ratingRows, setRatingRows] = useState(null);
   const [months, setMonths] = useState([]);
   const [month, setMonth] = useState(currentMonthKey());
@@ -1497,7 +1508,8 @@ function GlobalTab({ token, isAdmin }) {
       {view === "rating" && (
         <div className="card">
           <h3 style={h3}>Prediction Champ Rating</h3>
-          <p style={muted}>Rangering af alle spillere efter rating — på tværs af alle ligaer. <span style={{ color: "#7fa38c" }}>* = foreløbig (under 5 runder).</span></p>
+          <p style={muted}>Din rating er et mål for <strong>hvor gode dine gæt er</strong> — ikke hvor mange point du har samlet. Alle starter på 1000, og efter hver spillerunde stiger du, hvis du rammer bedre end de andre, og falder, hvis du rammer dårligere. Det tæller ekstra at slå spillere med høj rating. Hver kamp tæller kun én gang, uanset hvor mange ligaer du er med i.</p>
+          <p style={muted}>Rangering af alle spillere på tværs af alle ligaer. <span style={{ color: "#7fa38c" }}>* = foreløbig (under 5 runder).</span></p>
           {loading && <p style={muted}>Henter…</p>}
           {!loading && ratingRows && ratingRows.length === 0 && <p style={muted}>Ingen ratings endnu — de beregnes, når der er spillet runder med resultater.</p>}
           {!loading && ratingRows && ratingRows.length > 0 && (
@@ -1532,7 +1544,7 @@ function GlobalTab({ token, isAdmin }) {
               {months.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
-          <p style={muted}>Alle er automatisk med. Hver kamp tæller kun én gang, uanset hvor mange ligaer den er i.</p>
+          <p style={muted}>Alle brugere er automatisk med — ingen tilmelding. Månedsligaen samler dine point for alle kampe i den valgte kalendermåned, og hver kamp tæller kun én gang, uanset hvor mange ligaer den er i. Den med flest point kåres som <strong>Månedens Prediction Champ</strong>, og stillingen nulstilles den 1. i hver måned.</p>
           {champ && (
             <div style={{ background: "#1c3d2c", borderRadius: 10, padding: "10px 14px", margin: "6px 0 12px", display: "flex", alignItems: "center", gap: 10 }}>
               <Trophy size={18} style={{ color: "#d4a73c" }} />
