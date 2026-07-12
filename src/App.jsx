@@ -145,6 +145,7 @@ async function computeCompetitionState(token, competitionId, rules) {
   const rows = profiles.map((p) => {
     let total = 0;
     let exactCount = 0;
+    let outcomeCount = 0;
     const perRound = {};
     for (const round of rounds) {
       let rTotal = 0;
@@ -155,6 +156,7 @@ async function computeCompetitionState(token, competitionId, rules) {
         if (pts !== null) {
           rTotal += pts; rPlayed = true;
           if (pred && pred.pred_home === m.home_score && pred.pred_away === m.away_score) exactCount++;
+          else if (pts === rules.outcome) outcomeCount++;
         }
       }
       if (rPlayed) perRound[round.key] = rTotal;
@@ -162,8 +164,8 @@ async function computeCompetitionState(token, competitionId, rules) {
     }
     const form3 = playedKeys.slice(-3).reduce((s, k) => s + (perRound[k] ?? 0), 0);
     const prevTotal = lastKey !== undefined ? total - (perRound[lastKey] ?? 0) : total;
-    return { player: p.display_name, total, perRound, exactCount, form3, prevTotal };
-  }).sort((a, b) => b.total - a.total);
+    return { player: p.display_name, total, perRound, exactCount, outcomeCount, form3, prevTotal };
+  }).sort((a, b) => b.total - a.total || b.exactCount - a.exactCount || b.outcomeCount - a.outcomeCount);
 
   // placeringsændring i forhold til stillingen før den seneste spillede runde
   if (playedKeys.length >= 2) {
@@ -606,6 +608,10 @@ function RulesTab() {
         <Row label="Begge ovenstående på samme tid (helt galt på den)" value="−2 point" color="#e08a7a" />
         <p style={{ ...muted, marginTop: 10 }}>
           Straf gælder <strong>aldrig</strong>, hvis du gættede uafgjort — der er kun nedside ved at gætte på en vinder.
+        </p>
+        <p style={{ ...muted, marginTop: 6 }}>
+          <strong>Ved pointlighed</strong> når en konkurrence afsluttes: flest <strong>præcise resultater</strong> afgør
+          først, dernæst flest <strong>korrekte udfald</strong>.
         </p>
       </div>
 
