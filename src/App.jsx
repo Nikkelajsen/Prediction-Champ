@@ -64,26 +64,22 @@ function clearSession() {
 }
 
 // ---------- scoring helpers ----------
+// Simpelt, straffrit pointsystem:
+//   +3 korrekt resultat · +1 korrekt udfald · 0 forkert gæt
 function outcome(h, a) { return h === a ? "X" : h > a ? "1" : "2"; }
 function pointsFor(pred, actual, rules) {
-  if (!pred || actual.home_score === null || actual.away_score === null) return null;
-  if (pred.pred_home === actual.home_score && pred.pred_away === actual.away_score) return rules.exact;
-  const predOutcome = outcome(pred.pred_home, pred.pred_away);
-  const actualOutcome = outcome(actual.home_score, actual.away_score);
-  if (predOutcome === actualOutcome) return rules.outcome;
+  if (!pred
+    || actual.home_score == null || actual.away_score == null
+    || pred.pred_home == null || pred.pred_away == null) return null;
 
-  // straf: aldrig hvis man gættede uafgjort
-  if (predOutcome === "X") return 0;
-  const penaltyBase = rules.wrongWinPenalty ?? 1;
-  if (!penaltyBase) return 0;
+  const exact = rules?.exact ?? 3;
+  const out = rules?.outcome ?? 1;
 
-  const reversedWinner = actualOutcome !== "X" && predOutcome !== actualOutcome;
-  const predDiff = pred.pred_home - pred.pred_away;
-  const actualDiff = actual.home_score - actual.away_score;
-  const diffOff = Math.abs(predDiff - actualDiff) > 5;
-
-  if (reversedWinner && diffOff) return -2 * penaltyBase;
-  if (reversedWinner || diffOff) return -1 * penaltyBase;
+  // Korrekt resultat
+  if (pred.pred_home === actual.home_score && pred.pred_away === actual.away_score) return exact;
+  // Korrekt udfald, forkert resultat
+  if (outcome(pred.pred_home, pred.pred_away) === outcome(actual.home_score, actual.away_score)) return out;
+  // Forkert gæt
   return 0;
 }
 function roundLabel(key) {
@@ -602,12 +598,10 @@ function RulesTab() {
         <h3 style={h3}>Pointsystem</h3>
         <p style={muted}>Sådan beregnes point for hver kamp, du har forudsagt.</p>
         <Row label="Korrekt resultat (fx gættet 2-1, endte 2-1)" value="+3 point" color="#d4a73c" />
-        <Row label="Korrekt udfald (rigtig vinder/uafgjort, forkert resultat)" value="+1 point" color="#7fd48a" />
-        <Row label="Forkert gæt (uden nogen af de to nedenstående)" value="0 point" />
-        <Row label="Gættede en vinder, men det modsatte hold vandt — eller gættede en vinder, men målforskellen ramte mere end 5 mål forkert" value="−1 point" color="#e08a7a" />
-        <Row label="Begge ovenstående på samme tid (helt galt på den)" value="−2 point" color="#e08a7a" />
+        <Row label="Korrekt udfald (rigtig vinder eller uafgjort, forkert resultat)" value="+1 point" color="#7fd48a" />
+        <Row label="Forkert gæt" value="0 point" />
         <p style={{ ...muted, marginTop: 10 }}>
-          Straf gælder <strong>aldrig</strong>, hvis du gættede uafgjort — der er kun nedside ved at gætte på en vinder.
+          Ingen straf — du kan aldrig få minuspoint. Det handler om at samle så mange rigtige gæt som muligt.
         </p>
         <p style={{ ...muted, marginTop: 6 }}>
           <strong>Ved pointlighed</strong> når en konkurrence afsluttes: flest <strong>præcise resultater</strong> afgør
@@ -704,7 +698,7 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
     let cancelled = false;
     (async () => {
       const entries = await Promise.all(competitions.map(async (c) => {
-        const rules = c.rules || { exact: 3, outcome: 1, wrongWinPenalty: 1 };
+        const rules = c.rules || { exact: 3, outcome: 1 };
         const state = await computeCompetitionState(token, c.id, rules);
         const winner = state.isComplete && state.rows.length ? state.rows[0] : null;
         return [c.id, { ...state, winner }];
@@ -739,7 +733,7 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
       const mode_params = mode === "team" ? { team_id: teamId }
         : mode === "time_range" ? { start_date: startDate, end_date: endDate }
         : mode === "random" ? { count: Number(randomCount) || 6 } : {};
-      const rules = { exact: 3, outcome: 1, wrongWinPenalty: 1, ...(rollingWindow ? { openDaysBefore: 7 } : {}) };
+      const rules = { exact: 3, outcome: 1, ...(rollingWindow ? { openDaysBefore: 7 } : {}) };
       const [comp] = await db.insert(token, "competitions", [{
         name,
         league_id: crossLeague ? null : createLeagueId,
@@ -1135,7 +1129,7 @@ function PredictionsTab({ token, userId, competitions, selectedCompId, setSelect
   const [matchComps, setMatchComps] = useState({}); // matchId -> [competitionIds]
   const [, setTick] = useState(0);
   const comp = compFilter !== "all" ? competitions.find((c) => c.id === compFilter) : null;
-  const rules = comp?.rules || { exact: 3, outcome: 1, wrongWinPenalty: 1 };
+  const rules = comp?.rules || { exact: 3, outcome: 1 };
 
   // genberegn nedtælling/låsning hvert minut
   useEffect(() => {
@@ -1403,7 +1397,7 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId }) {
     (async () => {
       setLoading(true);
       setShowAllRounds(false);
-      const rules = comp.rules || { exact: 3, outcome: 1, wrongWinPenalty: 1 };
+      const rules = comp.rules || { exact: 3, outcome: 1 };
       const result = await computeCompetitionState(token, selectedCompId, rules);
       setState(result);
       setLoading(false);
