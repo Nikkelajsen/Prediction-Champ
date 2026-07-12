@@ -51,6 +51,8 @@ const auth = {
     restFetch(`/auth/v1/recover`, { method: "POST", body: { email } }),
   updatePassword: (accessToken, password) =>
     restFetch(`/auth/v1/user`, { method: "PUT", token: accessToken, body: { password } }),
+  checkUsername: (name) =>
+    restFetch(`/rest/v1/rpc/username_available`, { method: "POST", body: { name } }),
 };
 const SESSION_KEY = "pc_session";
 function saveSession(session) {
@@ -130,6 +132,12 @@ async function computeCompetitionState(token, competitionId, rules) {
   const ms = matchIds.length ? await db.select(token, "matches", `id=in.(${matchIds.join(",")})&select=*`) : [];
   const preds = matchIds.length ? await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&select=*`) : [];
 
+  // team-navne til visning af enkeltkampe
+  const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]).filter(Boolean))];
+  const teams = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
+  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  ms.forEach((m) => { m._home = teamName.get(m.home_team_id); m._away = teamName.get(m.away_team_id); });
+
   const rounds = groupIntoRounds(ms);
   const predsByKey = new Map(preds.map((pr) => [`${pr.match_id}:${pr.user_id}`, pr]));
 
@@ -160,7 +168,7 @@ async function computeCompetitionState(token, competitionId, rules) {
     }
     const form3 = playedKeys.slice(-3).reduce((s, k) => s + (perRound[k] ?? 0), 0);
     const prevTotal = lastKey !== undefined ? total - (perRound[lastKey] ?? 0) : total;
-    return { player: p.display_name, total, perRound, exactCount, outcomeCount, form3, prevTotal };
+    return { userId: p.id, player: p.display_name, total, perRound, exactCount, outcomeCount, form3, prevTotal };
   }).sort((a, b) => b.total - a.total || b.exactCount - a.exactCount || b.outcomeCount - a.outcomeCount);
 
   // placeringsændring i forhold til stillingen før den seneste spillede runde
@@ -174,7 +182,49 @@ async function computeCompetitionState(token, competitionId, rules) {
   const playedMatches = ms.filter((m) => m.home_score !== null && m.home_score !== undefined).length;
   const isComplete = totalMatches > 0 && playedMatches === totalMatches;
 
-  return { rows, rounds: playedRounds, totalMatches, playedMatches, isComplete };
+  return { userId: undefined, rows, rounds: playedRounds, allRounds: rounds, predsByKey, totalMatches, playedMatches, isComplete };
+}
+
+// ---------- global rating + monthly league (scope 'ALL') ----------
+async function loadRatingBoard(token) {
+  const ratings = await db.select(token, "ratings", `scope=eq.ALL&select=user_id,rating,rounds_played,provisional&order=rating.desc`);
+  if (!ratings.length) return [];
+  const ids = ratings.map((r) => r.user_id);
+  const profiles = await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`);
+  const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
+  return ratings.map((r) => ({
+    userId: r.user_id,
+    player: nameById.get(r.user_id) || "—",
+    rating: Math.round(Number(r.rating)),
+    roundsPlayed: r.rounds_played,
+    provisional: r.provisional,
+  }));
+}
+
+// map of user_id -> rating, for showing rating next to names in any standings
+async function loadRatingMap(token) {
+  const ratings = await db.select(token, "ratings", `scope=eq.ALL&select=user_id,rating,provisional`);
+  return new Map(ratings.map((r) => [r.user_id, { rating: Math.round(Number(r.rating)), provisional: r.provisional }]));
+}
+
+function currentMonthKey() { return new Date().toISOString().slice(0, 7); }
+
+async function loadMonthlyBoard(token, month) {
+  const rows = await db.select(token, "monthly_standings",
+    `month=eq.${month}&scope=eq.ALL&select=user_id,total_points,matches,exact_count&order=total_points.desc,exact_count.desc`);
+  if (!rows.length) return [];
+  const ids = rows.map((r) => r.user_id);
+  const profiles = await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`);
+  const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
+  return rows.map((r) => ({
+    player: nameById.get(r.user_id) || "—",
+    total: r.total_points, matches: r.matches, exactCount: r.exact_count,
+  }));
+}
+
+async function loadMonthsAvailable(token) {
+  const rows = await db.select(token, "monthly_standings", `scope=eq.ALL&select=month`);
+  return [...new Set(rows.map((r) => r.month))].sort().reverse();
 }
 
 // ---------- runde-navigation (bruges af Forudsigelser og Resultater) ----------
@@ -384,6 +434,8 @@ function AuthScreen({ onAuthed, booting }) {
     try {
       if (mode === "signup") {
         if (!username.trim()) { setError("Vælg et brugernavn"); setLoading(false); return; }
+        const available = await auth.checkUsername(username.trim());
+        if (!available) { setError("Brugernavnet er allerede taget. Vælg et andet."); setLoading(false); return; }
         const res = await auth.signUp(email, password);
         if (res.access_token) { await onAuthed(res, username.trim()); return; }
         setInfo("Konto oprettet. Tjek om der kræves e-mail-bekræftelse i Supabase-projektet, log derefter ind.");
@@ -556,6 +608,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
         <TabButton active={tab === "competitions"} onClick={() => setTab("competitions")} icon={Users}>Konkurrencer</TabButton>
         <TabButton active={tab === "predictions"} onClick={() => setTab("predictions")} icon={ClipboardList}>Forudsigelser</TabButton>
         <TabButton active={tab === "board"} onClick={() => setTab("board")} icon={BarChart3}>Stilling</TabButton>
+        <TabButton active={tab === "global"} onClick={() => setTab("global")} icon={Trophy}>Global</TabButton>
         <TabButton active={tab === "rules"} onClick={() => setTab("rules")} icon={Info}>Regler</TabButton>
         {isAdmin && <TabButton active={tab === "matches"} onClick={() => setTab("matches")} icon={CalendarDays}>Kampe</TabButton>}
         {isAdmin && <TabButton active={tab === "results"} onClick={() => setTab("results")} icon={ClipboardList}>Resultater</TabButton>}
@@ -579,6 +632,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       {tab === "board" && (
         <BoardTab token={token} competitions={filteredCompetitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} />
       )}
+      {tab === "global" && <GlobalTab token={token} isAdmin={isAdmin} />}
       {tab === "rules" && <RulesTab />}
     </div>
   );
@@ -597,7 +651,7 @@ function RulesTab() {
       <div className="card">
         <h3 style={h3}>Pointsystem</h3>
         <p style={muted}>Sådan beregnes point for hver kamp, du har forudsagt.</p>
-        <Row label="Korrekt resultat (fx gættet 2-1, endte 2-1)" value="+3 point" color="#d4a73c" />
+        <Row label="Korrekt resultat (fx gættet 2-1, endte 2-1)" value="+3 point" color="#22c55e" />
         <Row label="Korrekt udfald (rigtig vinder eller uafgjort, forkert resultat)" value="+1 point" color="#7fd48a" />
         <Row label="Forkert gæt" value="0 point" />
         <p style={{ ...muted, marginTop: 10 }}>
@@ -1384,12 +1438,235 @@ function ResultsTab({ token, leagues }) {
   );
 }
 
+// ================= TAB: GLOBAL (rating + monthly league) =================
+function GlobalTab({ token, isAdmin }) {
+  const [view, setView] = useState("rating"); // rating | monthly
+  const [ratingRows, setRatingRows] = useState(null);
+  const [months, setMonths] = useState([]);
+  const [month, setMonth] = useState(currentMonthKey());
+  const [monthlyRows, setMonthlyRows] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [recomputing, setRecomputing] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [rb, ms] = await Promise.all([loadRatingBoard(token), loadMonthsAvailable(token)]);
+      setRatingRows(rb);
+      setMonths(ms.length ? ms : [currentMonthKey()]);
+      const chosen = ms.includes(month) ? month : (ms[0] || currentMonthKey());
+      setMonth(chosen);
+      setMonthlyRows(await loadMonthlyBoard(token, chosen));
+    } catch (e) { setMsg(e.message || "Kunne ikke hente data"); }
+    setLoading(false);
+  }
+  useEffect(() => { load(); }, []); // eslint-disable-line
+
+  async function changeMonth(m) {
+    setMonth(m); setMonthlyRows(null);
+    setMonthlyRows(await loadMonthlyBoard(token, m));
+  }
+
+  async function recompute() {
+    setRecomputing(true); setMsg("");
+    try {
+      await restFetch(`/rest/v1/rpc/recompute_ratings`, { method: "POST", token, body: {} });
+      setMsg("Ratings opdateret.");
+      await load();
+    } catch (e) { setMsg("Fejl: " + (e.message || "kunne ikke opdatere")); }
+    setRecomputing(false);
+  }
+
+  const champ = monthlyRows && monthlyRows.length ? monthlyRows[0] : null;
+  const isPastMonth = month < currentMonthKey();
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <button onClick={() => setView("rating")} style={pillBtn(view === "rating")}>Rating</button>
+        <button onClick={() => setView("monthly")} style={pillBtn(view === "monthly")}>Månedsliga</button>
+        {isAdmin && (
+          <button onClick={recompute} disabled={recomputing} style={{ ...ghostNavBtn, marginLeft: "auto" }}>
+            {recomputing ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />} Opdater ratings
+          </button>
+        )}
+      </div>
+      {msg && <p style={{ ...muted, margin: 0 }}>{msg}</p>}
+
+      {view === "rating" && (
+        <div className="card">
+          <h3 style={h3}>Prediction Champ Rating</h3>
+          <p style={muted}>Rangering af alle spillere efter rating — på tværs af alle ligaer. <span style={{ color: "#7fa38c" }}>* = foreløbig (under 5 runder).</span></p>
+          {loading && <p style={muted}>Henter…</p>}
+          {!loading && ratingRows && ratingRows.length === 0 && <p style={muted}>Ingen ratings endnu — de beregnes, når der er spillet runder med resultater.</p>}
+          {!loading && ratingRows && ratingRows.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead><tr className="rowline">
+                  <th style={thStyle}>#</th><th style={thStyle}>Spiller</th>
+                  <th style={{ ...thStyle, textAlign: "center" }}>Runder</th>
+                  <th style={{ ...thStyle, textAlign: "right" }}>Rating</th>
+                </tr></thead>
+                <tbody>
+                  {ratingRows.map((r, i) => (
+                    <tr key={r.userId} className="rowline">
+                      <td style={{ color: i === 0 ? "#d4a73c" : "#7fa38c", fontWeight: 700 }}>{i === 0 ? "🏆" : i + 1}</td>
+                      <td style={{ color: "#f4f1e8", fontWeight: 600 }}>{r.player}{r.provisional ? <span style={{ color: "#7fa38c" }} title="Foreløbig">*</span> : ""}</td>
+                      <td style={{ textAlign: "center", color: "#9fb3a5", fontSize: 13 }}>{r.roundsPlayed}</td>
+                      <td style={{ textAlign: "right" }}><span className="pill" style={{ background: i === 0 ? "#3a3010" : "#1c3d2c", color: i === 0 ? "#d4a73c" : "#cbb26a", fontSize: 15, fontWeight: 700 }}>{r.rating}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === "monthly" && (
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <h3 style={{ ...h3, margin: 0 }}>Månedsliga</h3>
+            <select className="field" value={month} onChange={(e) => changeMonth(e.target.value)} style={{ ...fieldFull, width: "auto", padding: "6px 10px" }}>
+              {months.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <p style={muted}>Alle er automatisk med. Hver kamp tæller kun én gang, uanset hvor mange ligaer den er i.</p>
+          {champ && (
+            <div style={{ background: "#1c3d2c", borderRadius: 10, padding: "10px 14px", margin: "6px 0 12px", display: "flex", alignItems: "center", gap: 10 }}>
+              <Trophy size={18} style={{ color: "#d4a73c" }} />
+              <span style={{ color: "#f4f1e8", fontWeight: 700 }}>{isPastMonth ? "Månedens Prediction Champ" : "Fører lige nu"}: {champ.player}</span>
+              <span style={{ color: "#d4a73c", fontWeight: 700, marginLeft: "auto" }}>{champ.total} point</span>
+            </div>
+          )}
+          {loading && <p style={muted}>Henter…</p>}
+          {!loading && monthlyRows && monthlyRows.length === 0 && <p style={muted}>Ingen point i denne måned endnu.</p>}
+          {!loading && monthlyRows && monthlyRows.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead><tr className="rowline">
+                  <th style={thStyle}>#</th><th style={thStyle}>Spiller</th>
+                  <th style={{ ...thStyle, textAlign: "center" }} title="Antal præcise resultater">🎯</th>
+                  <th style={{ ...thStyle, textAlign: "center" }}>Kampe</th>
+                  <th style={{ ...thStyle, textAlign: "right" }}>Point</th>
+                </tr></thead>
+                <tbody>
+                  {monthlyRows.map((r, i) => (
+                    <tr key={r.player} className="rowline">
+                      <td style={{ color: i === 0 ? "#d4a73c" : "#7fa38c", fontWeight: 700 }}>{i === 0 ? "🏆" : i + 1}</td>
+                      <td style={{ color: "#f4f1e8", fontWeight: 600 }}>{r.player}</td>
+                      <td style={{ textAlign: "center", color: "#cfd8d1", fontSize: 13 }}>{r.exactCount}</td>
+                      <td style={{ textAlign: "center", color: "#9fb3a5", fontSize: 13 }}>{r.matches}</td>
+                      <td style={{ textAlign: "right" }}><span className="pill" style={{ background: i === 0 ? "#3a3010" : "#1c3d2c", color: i === 0 ? "#d4a73c" : "#e7ecdf", fontSize: 15 }}>{r.total}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ================= Modal: én brugers forudsigelser pr. færdigspillet runde =================
+// completedRounds: [{ key, label, matches: [...] }] — KUN runder hvor alle kampe har resultat.
+// predsByKey: Map("matchId:userId" -> prediction). userId/playerName: hvem vi viser.
+function UserRoundPredictions({ playerName, userId, completedRounds, predsByKey, rules, initialKey, onClose }) {
+  const startIdx = (() => {
+    if (initialKey) { const i = completedRounds.findIndex((r) => r.key === initialKey); if (i >= 0) return i; }
+    return completedRounds.length - 1; // seneste færdigspillede
+  })();
+  const [idx, setIdx] = useState(startIdx);
+  const round = completedRounds[idx];
+  const canPrev = idx > 0;                       // ældre runde
+  const canNext = idx < completedRounds.length - 1; // nyere runde
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft" && canPrev) setIdx((v) => v - 1);
+      else if (e.key === "ArrowRight" && canNext) setIdx((v) => v + 1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canPrev, canNext, onClose]);
+
+  if (!round) return null;
+
+  // ekstra sikkerhedsnet: vis kun kampe der rent faktisk har resultat
+  const playedMatches = round.matches.filter((m) => m.home_score !== null && m.home_score !== undefined);
+  let roundTotal = 0;
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: "#0f2a1d", border: "1px solid #2c4a3c", borderRadius: 14, width: "100%",
+        maxWidth: 460, maxHeight: "85vh", overflowY: "auto", padding: 18,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+          <span style={{ fontSize: 12, letterSpacing: 1, color: "#7fa38c" }}>FORUDSIGELSER</span>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#9fb3a5", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+        <h3 style={{ ...h3, marginBottom: 2 }}>{playerName}</h3>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, margin: "10px 0 14px" }}>
+          <button disabled={!canPrev} onClick={() => setIdx((v) => v - 1)} style={navArrow(canPrev)}>← Ældre</button>
+          <span style={{ color: "#cfd8d1", fontSize: 13, fontWeight: 700, textAlign: "center" }}>Runde {round.label}</span>
+          <button disabled={!canNext} onClick={() => setIdx((v) => v + 1)} style={navArrow(canNext)}>Nyere →</button>
+        </div>
+
+        <div style={{ display: "grid", gap: 6 }}>
+          {playedMatches.map((m) => {
+            const pred = predsByKey.get(`${m.id}:${userId}`);
+            const pts = pointsFor(pred, m, rules);
+            if (pts !== null) roundTotal += pts;
+            const has = pred && pred.pred_home !== null && pred.pred_home !== undefined;
+            const ptColor = pts === (rules?.exact ?? 3) ? "#22c55e" : pts === (rules?.outcome ?? 1) ? "#7fd48a" : "#7fa38c";
+            return (
+              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "#132f21", borderRadius: 8, padding: "8px 10px" }}>
+                <span style={{ flex: 1, color: "#9fb3a5", fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {m._home || m.home_team_id} – {m._away || m.away_team_id}
+                </span>
+                <span style={{ color: "#cfd8d1", fontSize: 13, fontWeight: 700, minWidth: 34, textAlign: "center" }}>
+                  {has ? `${pred.pred_home}-${pred.pred_away}` : "–"}
+                </span>
+                <span style={{ color: "#5c7266", fontSize: 12 }}>facit</span>
+                <span style={{ color: "#e7ecdf", fontSize: 13, fontWeight: 700, minWidth: 34, textAlign: "center" }}>{m.home_score}-{m.away_score}</span>
+                <span className="pill" style={{ background: "#1c3d2c", color: ptColor, fontSize: 12, minWidth: 30, textAlign: "center" }}>
+                  {pts === null ? "–" : `+${pts}`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, paddingTop: 12, borderTop: "1px solid #2c4a3c" }}>
+          <span style={{ color: "#9fb3a5", fontSize: 13 }}>Rundens total</span>
+          <span style={{ color: "#d4a73c", fontWeight: 800, fontSize: 16 }}>{roundTotal} point</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+const navArrow = (enabled) => ({
+  background: enabled ? "#1c3d2c" : "transparent", color: enabled ? "#d4a73c" : "#3f5348",
+  border: "1px solid " + (enabled ? "#2c4a3c" : "#22352b"), borderRadius: 8, padding: "6px 10px",
+  fontSize: 13, fontWeight: 700, cursor: enabled ? "pointer" : "default", whiteSpace: "nowrap",
+});
+
 // ================= TAB: BOARD (leaderboard) =================
 function BoardTab({ token, competitions, selectedCompId, setSelectedCompId }) {
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showAllRounds, setShowAllRounds] = useState(false);
+  const [viewUser, setViewUser] = useState(null); // { userId, playerName, initialKey }
   const comp = competitions.find((c) => c.id === selectedCompId);
 
   useEffect(() => {
@@ -1399,6 +1676,13 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId }) {
       setShowAllRounds(false);
       const rules = comp.rules || { exact: 3, outcome: 1 };
       const result = await computeCompetitionState(token, selectedCompId, rules);
+      try {
+        const ratingMap = await loadRatingMap(token);
+        result.rows.forEach((row) => {
+          const rt = ratingMap.get(row.userId);
+          if (rt) { row.rating = rt.rating; row.provisional = rt.provisional; }
+        });
+      } catch (e) { /* ratings optional; standings still render */ }
       setState(result);
       setLoading(false);
     })();
@@ -1417,6 +1701,16 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId }) {
   // nyeste runder først; vis kun 3 medmindre "vis alle"
   const roundsDesc = state?.rounds ? state.rounds.slice().reverse() : [];
   const shownRounds = showAllRounds ? roundsDesc : roundsDesc.slice(0, 3);
+
+  // KUN runder hvor ALLE kampe har resultat — så man aldrig ser gæt på uspillede kampe
+  const completedRounds = (state?.allRounds || []).filter(
+    (r) => r.matches.length > 0 && r.matches.every((m) => m.home_score !== null && m.home_score !== undefined)
+  );
+  const hasCompleted = completedRounds.length > 0;
+  const openUser = (userId, playerName, initialKey = null) => {
+    if (!hasCompleted) return;
+    setViewUser({ userId, playerName, initialKey });
+  };
 
   return (
     <div>
@@ -1443,6 +1737,7 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId }) {
                 <tr className="rowline">
                   <th style={{ color: "#9fb3a5", fontSize: 12 }}>#</th>
                   <th style={{ color: "#9fb3a5", fontSize: 12 }}>Spiller</th>
+                  <th style={{ color: "#9fb3a5", fontSize: 12, textAlign: "center", whiteSpace: "nowrap" }} title="Prediction Champ Rating">Rating</th>
                   <th style={{ color: "#9fb3a5", fontSize: 12, textAlign: "center" }} title="Antal præcise resultater">🎯</th>
                   <th style={{ color: "#9fb3a5", fontSize: 12, textAlign: "center", whiteSpace: "nowrap" }} title="Point i de seneste 3 runder">Form</th>
                   <th style={{ color: "#9fb3a5", fontSize: 12, textAlign: "right" }}>Point</th>
@@ -1459,7 +1754,16 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId }) {
                         </span>
                       )}
                     </td>
-                    <td style={{ color: "#f4f1e8", fontWeight: 600 }}>{r.player}</td>
+                    <td style={{ color: "#f4f1e8", fontWeight: 600 }}>
+                      {hasCompleted
+                        ? <span onClick={() => openUser(r.userId, r.player)} style={{ cursor: "pointer", textDecoration: "underline", textDecorationColor: "#3f5348" }}>{r.player}</span>
+                        : r.player}
+                    </td>
+                    <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
+                      {r.rating != null
+                        ? <span style={{ color: "#cbb26a", fontWeight: 700, fontSize: 13 }}>{r.rating}{r.provisional ? <span style={{ color: "#7fa38c", fontWeight: 400 }} title="Foreløbig – under 5 runder">*</span> : ""}</span>
+                        : <span style={{ color: "#5c7266", fontSize: 13 }}>–</span>}
+                    </td>
                     <td style={{ textAlign: "center", color: "#cfd8d1", fontSize: 13 }}>{r.exactCount}</td>
                     <td style={{ textAlign: "center", color: "#9fb3a5", fontSize: 13 }}>{r.form3}</td>
                     <td style={{ textAlign: "right" }}>
@@ -1499,9 +1803,12 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId }) {
                       {state.rows.map((row) => {
                         const v = row.perRound[r.key];
                         const isBest = v !== undefined && v === best && v > 0;
+                        const clickable = v !== undefined && completedRounds.some((cr) => cr.key === r.key);
                         return (
                           <td key={row.player} style={{ textAlign: "center", color: isBest ? "#d4a73c" : "#cfd8d1", fontWeight: isBest ? 700 : 400 }}>
-                            {v ?? "–"}
+                            {clickable
+                              ? <span onClick={() => openUser(row.userId, row.player, r.key)} style={{ cursor: "pointer", textDecoration: "underline", textDecorationColor: "#3f5348" }}>{v}</span>
+                              : (v ?? "–")}
                           </td>
                         );
                       })}
@@ -1519,6 +1826,18 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId }) {
           )}
         </div>
       )}
+
+      {viewUser && state && (
+        <UserRoundPredictions
+          playerName={viewUser.playerName}
+          userId={viewUser.userId}
+          completedRounds={completedRounds}
+          predsByKey={state.predsByKey}
+          rules={comp?.rules || { exact: 3, outcome: 1 }}
+          initialKey={viewUser.initialKey}
+          onClose={() => setViewUser(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1533,6 +1852,13 @@ const primaryBtn = { display: "flex", alignItems: "center", gap: 6, background: 
 const goldBtn = { display: "flex", alignItems: "center", gap: 6, background: "#1c3d2c", color: "#d4a73c", border: "1px solid #d4a73c", borderRadius: 8, padding: "8px 14px", fontWeight: 700, cursor: "pointer", fontSize: 14 };
 const ghostBtn = { display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#c96a5a", border: "1px solid #4a2c2c", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 700 };
 const ghostNavBtn = { background: "#1c3d2c", color: "#d4a73c", border: "1px solid #2c4a3c", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" };
+const thStyle = { color: "#9fb3a5", fontSize: 12 };
+const pillBtn = (active) => ({
+  padding: "6px 16px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
+  border: "1px solid " + (active ? "#d4a73c" : "#2c4a3c"),
+  background: active ? "rgba(212,167,60,0.15)" : "transparent",
+  color: active ? "#d4a73c" : "#9fb3a5",
+});
 const globalCss = `
   * { box-sizing: border-box; }
   input, select, button { font-family: inherit; }
