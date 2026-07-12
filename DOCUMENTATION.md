@@ -1,178 +1,119 @@
-# Prediction Champ — Dokumentation
-
-_Sidst opdateret: juli 2026_
-
-Prediction Champ er en webapp, hvor venner kan konkurrere om at forudsige fodboldresultater. Denne fil dokumenterer, hvordan systemet hænger sammen, så det er nemmere at vedligeholde og udvide senere.
-
+Prediction Champ — Dokumentation
+Sidst opdateret: juli 2026
+Prediction Champ er en webapp, hvor venner konkurrerer om at forudsige fodboldresultater. Denne fil dokumenterer, hvordan systemet hænger sammen.
 ---
-
-## 1. Overblik over arkitekturen
-
+1. Overblik over arkitekturen
 ```
 ┌─────────────────┐        ┌──────────────────┐        ┌─────────────────┐
 │   Sportmonks     │──────▶│  Vercel Function  │──────▶│    Supabase      │
 │  (football data) │        │ /api/sync-matches │        │ (database + auth)│
 └─────────────────┘        └──────────────────┘        └─────────────────┘
                                                                   ▲
-                                                                  │
                                                           ┌──────────────┐
                                                           │  React-app    │
                                                           │ (Vercel-hosted)│
                                                           └──────────────┘
                                                                   ▲
-                                                                  │
                                                             Brugere (browser)
 ```
-
-- **Frontend**: React + Vite, bygget som en almindelig webapp (ikke en Claude-artifact — den kører uden for Claude's sandkasse, så den kan tale med rigtige eksterne services).
-- **Hosting**: Vercel (gratis Hobby-plan). Auto-deployer hver gang der committes til GitHub.
-- **Database + login**: Supabase (Postgres-database, indbygget authentication).
-- **Fodbolddata**: Sportmonks API (gratis plan, dækker Superligaen).
-- **Kildekode**: GitHub-repository `Nikkelajsen/Prediction-Champ`.
-
-Der er ingen npm/Supabase SDK i brug — al kommunikation foregår via almindelige `fetch`-kald til Supabases REST-API (PostgREST) og Auth-API. Det holder projektet enkelt og afhængighedsfrit.
-
+Frontend: React + Vite, ét stort komponentbibliotek i `src/App.jsx`, rent `fetch`-baseret mod Supabase (ingen SDK).
+Hosting: Vercel (Hobby-plan). Auto-deployer ved hver commit til GitHub.
+Database + login: Supabase (Postgres + Auth), tilgået via REST/PostgREST.
+Fodbolddata: Sportmonks API (gratis plan).
+PWA: `manifest.json` + ikoner i `public/`, så appen kan tilføjes til hjemmeskærmen som en rigtig app.
+Kildekode: GitHub-repository `Nikkelajsen/Prediction-Champ`.
 ---
-
-## 2. Mappestruktur
-
-```
-prediction-champ-webapp/
-├── index.html
-├── package.json
-├── vite.config.js
-├── src/
-│   ├── main.jsx        (entry point)
-│   └── App.jsx          (hele appen — alle komponenter i én fil)
-└── api/
-    └── sync-matches.js  (Vercel serverless function — kører server-side)
-```
-
-`App.jsx` er bevidst holdt som én fil for at gøre det nemt at dele/opdatere kode i denne slags trin-for-trin-forløb. Den kan splittes op i flere filer senere, hvis den vokser sig for stor til at overskue.
-
+2. Database-skema
+Tabel	Formål
+`leagues`	Ligaer. `api_league_id` = Sportmonks' liga-id. `is_visible` styrer om ligaen vises for almindelige brugere (admin ser altid alt).
+`seasons`	Sæson pr. liga. `api_season_id` gemmes automatisk af sync-funktionen første gang, så fremtidige kørsler ikke behøver navne-opslag.
+`teams`	Hold. `api_team_id` = Sportmonks' hold-id, sat automatisk.
+`matches`	Kampe. `round_key` (tirsdag–mandag, auto-beregnet), `home_score`/`away_score`, `api_fixture_id` (unik).
+`profiles`	Brugerprofiler. `display_name`, `is_admin`.
+`competitions`	`mode` ∈ `full_season / team / time_range / custom / random`. `league_id`/`season_id` er nullable — `custom` og `random` kan spænde over flere ligaer. `rules` (jsonb) indeholder pointregler og evt. `openDaysBefore` (rullende gætte-vindue).
+`competition_participants`	Deltagere. `hidden` = brugerens egen arkivering (påvirker ikke andre deltagere).
+`competition_matches`	Hvilke kampe hører til hvilken konkurrence.
+`predictions`	Én forudsigelse pr. bruger pr. kamp, delt på tværs af konkurrencer.
+RLS-hovedregel for `predictions` (vigtig, rettet i patch 10): man kan altid læse sine egne forudsigelser; andres kun for kampe, der er låst (kickoff minus 1 time er passeret). Dette forhindrer snyd (at kigge andres gæt inden man selv tipper).
 ---
-
-## 3. Database-skema (Supabase / Postgres)
-
-| Tabel | Formål |
-|---|---|
-| `leagues` | Ligaer (Superligaen, Superliga Playoff, senere flere). Har `api_league_id` = Sportmonks' egen liga-id. |
-| `seasons` | Én sæson pr. liga (fx "2026/27"). |
-| `teams` | Hold, tilhører én liga. Har `api_team_id` = Sportmonks' hold-id (udfyldes automatisk af sync-funktionen). |
-| `matches` | Kampe. Har `round_key` (beregnes automatisk: tirsdag t.o.m. mandag), `home_score`/`away_score`, `api_fixture_id` (Sportmonks' kamp-id, unik). |
-| `profiles` | Brugerprofiler (kobler til Supabases indbyggede `auth.users`). Har `display_name` og `is_admin`. |
-| `competitions` | En konkurrence: navn, `mode` (`full_season` / `team` / `time_range`), `mode_params`, `rules` (pointregler), `invite_code`. |
-| `competition_participants` | Hvem deltager i hvilken konkurrence. |
-| `competition_matches` | Hvilke kampe hører til hvilken konkurrence (udfyldes automatisk ved oprettelse ud fra valgt mode). |
-| `predictions` | Én forudsigelse pr. bruger pr. kamp (deles på tværs af konkurrencer). |
-
-**Row Level Security (RLS)** er slået til på alle tabeller. Hovedreglen: alle logget-ind brugere kan læse det meste (holdlister, kampe, andres forudsigelser til brug for stilling), men man kan kun skrive/redigere sine egne data (egen profil, egne forudsigelser).
-
-Alle SQL-migrationer, vi har kørt undervejs, ligger som separate `.sql`-filer, du har fået tilsendt i denne samtale (schema, patch1-6, seed, oprydninger). De er allerede kørt — denne liste er til reference, hvis databasen nogensinde skal genskabes fra bunden.
-
+3. Konkurrence-modes
+Mode	Beskrivelse
+`full_season`	Alle kampe i den valgte ligas sæson
+`team`	Alle kampe med ét specifikt hold
+`time_range`	Alle kampe i et datointerval
+`custom`	Håndplukkede kampe, valgt på tværs af alle synlige ligaer, med liga-filter i vælgeren
+`random`	Et valgt antal tilfældige kampe fra den nærmeste kommende runde, med mulighed for at afgrænse til bestemte ligaer. Antallet begrænses automatisk til hvad der reelt er tilgængeligt
+`custom` og `random` sætter `league_id`/`season_id` til `null` på konkurrencen — de er ikke bundet til én liga.
+Rullende gætte-vindue
+Valgfrit pr. konkurrence (afkrydsning ved oprettelse): sætter `rules.openDaysBefore` (typisk 7). En kamp kan først forudsiges det angivne antal dage før kickoff. Da forudsigelser deles på tværs af konkurrencer, gælder vinduet kun, hvis alle konkurrencer en kamp indgår i har det sat — ellers ville det være muligt at omgå vinduet via en anden konkurrence.
 ---
-
-## 4. Nøglebegreber
-
-### Runde-beregning
-En runde defineres som **tirsdag t.o.m. mandag**. Det beregnes automatisk ud fra en kamps `kickoff_at`-tidspunkt (en Postgres-funktion `round_key()`), så det ikke skal vedligeholdes manuelt.
-
-### Konkurrence-modes
-Når en konkurrence oprettes, vælges én af tre modes, som afgør hvilke kampe der automatisk kobles på:
-- **`full_season`**: alle kampe i den valgte sæson
-- **`team`**: alle kampe med ét specifikt hold (hjemme og ude)
-- **`time_range`**: alle kampe i et valgt datointerval (fx 3 uger)
-
-### Pointberegning
-Hver konkurrence har sine egne `rules` (standard: 3 point for korrekt resultat, 1 point for korrekt udfald 1/X/2, 0 for forkert). Beregnes live ud fra forudsigelser + faktiske resultater — intet gemmes som "point" i databasen, det udregnes hver gang.
-
-### Lås af forudsigelser
-En forudsigelse låses automatisk **1 time før kickoff**, eller så snart kampen har fået et resultat.
-
-### Liga-filter vs. liga-administration
-- **Konkurrencer / Forudsigelser / Stilling**: viser data på tværs af alle ligaer som udgangspunkt. Et filter øverst (afkrydsning) lader dig indsnævre til én eller flere specifikke ligaer.
-- **Kampe / Resultater / "Opret ny konkurrence"**: har hver deres egen liga-vælger, da de arbejder med én liga ad gangen.
-
-### Admin-rolle
-Kun brugere med `is_admin = true` i `profiles`-tabellen kan se fanerne "Kampe" og "Resultater" (manuel kamp-styring/resultatindtastning). Sættes manuelt via SQL.
-
+4. Pointsystem
++3: præcist resultat
++1: korrekt udfald (1/X/2), forkert resultat
+0: forkert, eller ingen forudsigelse afgivet (bevidst valg — ingen straf for at glemme en kamp)
+−1: gættede en vinder, men det modsatte hold vandt, eller gættede målforskel var mere end 5 mål forkert (aldrig ved uafgjort — hverken gættet eller faktisk resultat)
+−2: begge ovenstående straffe rammer samme kamp
+Tiebreaker ved pointlighed: flest præcise resultater afgør først, dernæst flest korrekte udfald.
+Reglerne er faste og gælder alle konkurrencer (gemt i `rules`-feltet ved oprettelse, med sikre standardværdier for ældre konkurrencer uden feltet).
 ---
-
-## 5. Automatisk resultathentning (Sportmonks-sync)
-
-`api/sync-matches.js` er en Vercel-funktion, der:
-1. Finder ligaens Sportmonks-id og den ønskede sæson (matcher på navn, fx "2026/2027")
-2. Henter alle kampe for den sæson (med pagination, da Sportmonks kun sender 50 ad gangen)
-3. **Auto-opdager og opretter hold** ud fra kampenes deltagere — ingen manuel holdliste-vedligeholdelse
-4. Udtrækker resultater **kun** når en kamp reelt er slut (`state.short_name` er `FT`, `AET` eller `FT_PEN`) — scoren hentes fra Sportmonks' `CURRENT`-felt
-5. Gemmer/opdaterer kampene i Supabase (upsert på `api_fixture_id`, så intet dubleres)
-
-**Kaldes med**: `/api/sync-matches?leagueId=<vores liga-uuid>&smSeason=2026/2027`
-**Testtilstand** (skriver intet til databasen): tilføj `&dryRun=true`
-
-### Adgang
-Funktionen kræver enten:
-- Et gyldigt login-token fra en admin-bruger (bruges automatisk af "Hent resultater nu"-knappen i appen), **eller**
-- En hemmelig nøgle via `&secret=...` (bruges af den eksterne automatiske trigger)
-
-### Automatisk kørsel
-Da Vercels gratis plan kun tillader automatik én gang i døgnet, bruger vi **cron-job.org** (gratis ekstern tjeneste) til at kalde linket hvert 10.-15. minut. Der skal være ét cron-job pr. liga.
-
+5. Stilling og Forudsigelser — UI-detaljer
+Stilling:
+Viser placering, 🎯 (antal præcise resultater), Form (point i seneste 3 runder), og ▲/▼ for placeringsændring efter seneste runde
+"Invitér ven"-knap kopierer et join-link (`?join=kode`) direkte til udklipsholderen
+"Point pr. runde"-tabel: spillere som kolonner, runder som rækker, nyeste runde øverst, kun de 3 seneste vises som standard med en "Vis alle X runder"-knap
+Forudsigelser:
+Standardvisning: alle kampe fra alle brugerens konkurrencer, samlet og dedupliceret pr. runde — med en dropdown til at indsnævre til én konkurrence
+Starter automatisk på den runde, der indeholder i dag (eller den nærmeste kommende)
+Grønt ✓ vises kort efter et gemt gæt
+Nedtælling ("Låser om X t Y min") vises for kampe, der låser inden for 24 timer
+"Alles gæt" foldes ud under en låst kamp og viser alle deltageres gæt + point
+Konkurrencer:
+Klik på et kort hopper direkte til Stilling for den konkurrence
+Arkivér/Gendan (pr. bruger — påvirker ikke andres visning) på afsluttede konkurrencer
+Skraldespand (kun synlig for opretteren) sletter konkurrencen for alle deltagere, med bekræftelse
 ---
-
-## 6. Miljøvariabler (Vercel → Settings → Environments → Production)
-
-| Variabel | Formål |
-|---|---|
-| `SPORTMONKS_TOKEN` | API-nøgle til Sportmonks |
-| `SUPABASE_URL` | Jeres Supabase-projekts URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Privilegeret Supabase-nøgle (kun server-side, aldrig i browseren) |
-| `SYNC_SECRET` | Hemmelig nøgle så eksterne cron-kald kan autorisere sig |
-
+6. Automatisk resultathentning (`api/sync-matches.js`)
+Slår ligaens Sportmonks-id og gemte sæson-id op (eller sæson-navn første gang, og gemmer id'et)
+Henter alle kampe for sæsonen med pagination
+Auto-opdager og opretter hold ud fra kampenes deltagere
+Udtrækker resultat kun når `state.short_name` er `FT`/`AET`/`FT_PEN` — scoren hentes fra `description: "CURRENT"`
+Upserter kampene i Supabase (`api_fixture_id` er unik nøgle)
+Kaldes med: `/api/sync-matches?leagueId=<uuid>&smSeason=2026/2027`
+Test uden at skrive noget: tilføj `&dryRun=true`
+Adgang: enten en admin-brugers login-token (bruges automatisk af "Hent resultater nu"), eller `&secret=<SYNC_SECRET>` (bruges af den eksterne cron).
+Automatisk kørsel: cron-job.org kalder linket hvert 10.-15. minut (Vercels gratis cron er kun 1×/døgn, for sjældent). Ét cron-job pr. liga.
 ---
-
-## 7. Sådan opdaterer du koden
-
-1. Rediger filen direkte på GitHub (blyant-ikon → redigér → commit), **eller** bed Claude om at lave ændringen og indsæt den fulde fil
-2. Vercel bygger og deployer automatisk inden for 30-60 sekunder efter en commit
-3. Tjek "Deployments"-fanen i Vercel, hvis noget ikke opdaterer sig som forventet
-
-Det faste domæne `https://prediction-champ.vercel.app` peger altid på den seneste deployment — brug aldrig de midlertidige URL'er med tilfældige koder i (de kan være forældede).
-
+7. Miljøvariabler
+Variabel	Formål
+`SPORTMONKS_TOKEN`	API-nøgle til Sportmonks
+`SUPABASE_URL`	Supabase-projektets URL
+`SUPABASE_SERVICE_ROLE_KEY`	Server-side Supabase-nøgle (aldrig i frontend)
+`SYNC_SECRET`	Autoriserer eksterne cron-kald til sync-funktionen
 ---
-
-## 8. Sådan tilføjer du en ny liga (fx Premier League)
-
-1. Find ligaens Sportmonks-id (søg i deres dokumentation, eller spørg Claude om at slå det op)
-2. Indsæt en ny række i `leagues` (navn, land, `api_league_id`)
-3. Indsæt en sæson-række i `seasons` for den nye liga
-4. Kald sync-funktionen med den nye ligas id — den opretter selv holdene ud fra Sportmonks' data
-5. Husk at oprette et ekstra cron-job til automatisk opdatering af den nye liga
-
-Ingen kodeændringer nødvendige — hele pointen med arkitekturen er, at nye ligaer er en dataopgave, ikke en programmeringsopgave.
-
+8. Sådan tilføjer du en ny liga
+Find ligaens Sportmonks-id
+Indsæt en ny række i `leagues` (+ `api_league_id`)
+Indsæt en sæson-række i `seasons`
+Kald sync-funktionen med den nye ligas id — den opretter selv holdene
+Opret et ekstra cron-job til automatisk opdatering
+Ingen kodeændringer nødvendige.
 ---
-
-## 9. Kendte begrænsninger / ting der kan forbedres senere
-
-- **Superliga Playoff** kan endnu ikke synkroniseres — Sportmonks har ikke oprettet 2026/27-sæsonen for den del endnu (sker formentlig i foråret, når grundspillet er slut)
-- Alle logget-ind brugere kan i dag oprette konti uden godkendelse — fint til en lukket venneflok, men værd at revurdere ved bredere lancering
-- Ingen "app store"-app — det er en webapp, tilgået via browser (kan evt. "tilføjes til hjemmeskærm" som en PWA-lignende genvej)
-- Ingen automatisk sletning/arkivering af meget gamle, afsluttede konkurrencer — de bliver bare liggende
-
+9. Kendte begrænsninger
+Superliga Playoff kan ikke synkroniseres endnu — Sportmonks har ikke oprettet 2026/27-sæsonen for den del (formentlig til foråret). Den er skjult for almindelige brugere (`is_visible = false`) men tilgængelig for admin under Kampe/Resultater.
+Alle kan oprette konti uden godkendelse — fint til en lukket venneflok.
+Ingen push-notifikationer eller e-mail-påmindelser om deadlines.
+`App.jsx` er stor (~1.100+ linjer) — bør splittes op i flere filer, hvis den fortsætter med at vokse.
 ---
-
-## 10. Fejlfindingslog (ting vi har løst undervejs, til reference)
-
-| Symptom | Årsag | Løsning |
-|---|---|---|
-| "Load failed" i artifact-preview | Claude-artifacts kan ikke lave eksterne netværkskald | Deploy som rigtig webapp på Vercel i stedet |
-| "infinite recursion" i Supabase | To RLS-policies tjekkede hinanden cirkulært | Forenklede den ene policy til at tillade alle autentificerede |
-| Kampe fra forrige sæson blandet ind | Sync brugte datointerval i stedet for præcis sæson-match | Skiftede til at matche på Sportmonks' eget sæsonnavn |
-| Alle resultater var `null` | Antog forkert feltnavn ("FT") for resultater | Sportmonks bruger `description: "CURRENT"` sammen med `state.short_name` for at afgøre om kampen er slut |
-| Kunne ikke joine konkurrence med kode | RLS forhindrede opslag på invitationskode, før man var medlem | Åbnede læse-adgang til `competitions` for alle autentificerede |
-| Forkerte holdnavne på tværs af ligaer | Holdnavne blev slået op i forkert ligas holdliste | Forudsigelser/Stilling henter nu holdnavne direkte fra kampenes egne data |
-
+10. Fejlfindingslog
+Symptom	Årsag	Løsning
+"Load failed" i artifact-preview	Claude-artifacts kan ikke lave eksterne netværkskald	Deploy som rigtig webapp på Vercel
+"infinite recursion" i Supabase	To RLS-policies refererede hinanden cirkulært	Forenklet policy
+Kampe fra forrige sæson blandet ind	Sync brugte datointerval i stedet for sæson-match	Match på Sportmonks' sæsonnavn
+Alle resultater var `null`	Forkert antaget feltnavn ("FT")	Sportmonks bruger `CURRENT` + `state.short_name`
+Kunne ikke joine med kode	RLS blokerede opslag før medlemskab	Åbnet læse-adgang til `competitions`
+Forkerte holdnavne på tværs af ligaer	Holdnavne slået op i forkert ligas liste	Forudsigelser/Stilling henter navne fra kampenes egne data
+Andre viste 0 point i Stilling	To separate RLS-policies for `predictions` kombinerede ikke som forventet	Samlet til én policy med OR (patch 10)
+`SyntaxError: Unexpected token '<'` i Vercel-logs	En fil var blevet korrumperet under copy-paste til GitHub	Markér alt i filen, slet, indsæt hele filen på ny
+Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke altid Sportmonks' navne	Oprydnings-SQL sletter ubrugte hold uden api-id (patch 9)
 ---
-
-_Denne fil er en øjebliksbillede-dokumentation. Bed Claude om at opdatere den, når der sker større ændringer._
+Bed Claude om at opdatere denne fil, når der sker større ændringer.
