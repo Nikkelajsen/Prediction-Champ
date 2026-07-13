@@ -66,7 +66,19 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
     const cur = preds[matchId] || { pred_home: null, pred_away: null };
     const next = { ...cur, [field]: val };
     setPreds({ ...preds, [matchId]: next });
-    if (next.pred_home === null || next.pred_away === null) return;
+    if (next.pred_home === null || next.pred_away === null) {
+      // Tippet er ryddet. Var der et gemt (fuldstændigt) tip, skal det slettes i databasen —
+      // ellers dukker det op igen næste gang appen åbnes (kun lokal state blev tømt).
+      const wasSaved = cur.pred_home !== null && cur.pred_home !== undefined
+        && cur.pred_away !== null && cur.pred_away !== undefined;
+      if (wasSaved) {
+        try {
+          await db.del(token, "predictions", `user_id=eq.${userId}&match_id=eq.${matchId}`);
+          setAllPreds((ap) => ap.filter((p) => !(p.user_id === userId && p.match_id === matchId)));
+        } catch (e) { /* best-effort — næste gem/sletning retter op */ }
+      }
+      return;
+    }
     try {
       await db.upsert(token, "predictions", [{ user_id: userId, match_id: matchId, pred_home: next.pred_home, pred_away: next.pred_away }], "user_id,match_id");
       setSavedIds((s) => ({ ...s, [matchId]: true }));
