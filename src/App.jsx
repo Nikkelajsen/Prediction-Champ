@@ -1204,7 +1204,7 @@ function ChampionshipTab({ token, userId }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
             Månedsliga
-            <InfoDot title="Månedsliga">Point pr. kamp i gennemsnit for månedens runder. Uafgjort afgøres på flest præcise resultater. Månedens vinder kåres som Månedens Prediction Champ. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</InfoDot>
+            <InfoDot title="Månedsliga">Dine samlede point for alle månedens kampe (hver kamp tælles én gang på tværs af ligaer). Uafgjort afgøres på flest præcise resultater. Månedens vinder kåres som Månedens Prediction Champ. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</InfoDot>
           </div>
           <select className="field" value={month} onChange={(e) => changeMonth(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
             {months.map((m) => <option key={m} value={m}>{monthName(m)}</option>)}
@@ -1225,7 +1225,6 @@ function ChampionshipTab({ token, userId }) {
         {!loading && rows && rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen point i denne måned endnu.</p>}
         {!loading && rows && rows.map((r, i) => {
           const you = r.userId === userId;
-          const avg = r.matches > 0 ? (r.total / r.matches) : 0;
           return (
             <div key={r.userId} style={{
               display: "grid", gridTemplateColumns: "24px 1fr auto auto", gap: 10, alignItems: "center",
@@ -1235,12 +1234,12 @@ function ChampionshipTab({ token, userId }) {
             }}>
               <span style={{ fontFamily: font.display, fontWeight: 700, color: i === 0 ? C.gold : C.muted }}>{i + 1}</span>
               <span style={{ fontSize: 14, fontWeight: you ? 700 : 400 }}>{r.player}{you ? " (dig)" : ""}</span>
-              <span style={{ color: C.muted, fontSize: 12 }}>{r.exactCount} × 🎯</span>
-              <span style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700 }}>{avg.toFixed(2).replace(".", ",")}</span>
+              <span style={{ color: C.muted, fontSize: 12 }}>{r.exactCount} × 🎯 · {r.matches} kampe</span>
+              <span style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700 }}>{r.total}</span>
             </div>
           );
         })}
-        <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>Point pr. kamp i gennemsnit · uafgjort afgøres på flest præcise resultater</div>
+        <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>Samlede point for månedens kampe · uafgjort afgøres på flest præcise resultater</div>
       </Card>
 
       {/* Sæsonchampionship (statisk — datamodellen udvides senere) */}
