@@ -98,6 +98,19 @@ function groupIntoRounds(matches) {
     matches: map[key].slice().sort((a, b) => (a.kickoff_at || "").localeCompare(b.kickoff_at || "")),
   }));
 }
+// beholder kun kampe fra og med den første runde, der IKKE er helt afsluttet endnu
+// (dvs. mindst én kamp i runden mangler resultat) — bruges når en ny konkurrence
+// oprettes, så den ikke starter med point fra allerede spillede/afgivne runder.
+function filterFromNextUnfinishedRound(matches) {
+  if (!matches.length) return matches;
+  const byRound = {};
+  for (const m of matches) { (byRound[m.round_key] ||= []).push(m); }
+  const roundKeys = Object.keys(byRound).sort();
+  const isRoundFinished = (key) => byRound[key].every((m) => m.home_score !== null && m.home_score !== undefined);
+  const nextUnfinished = roundKeys.find((key) => !isRoundFinished(key));
+  if (nextUnfinished === undefined) return []; // alle runder er allerede spillet færdig
+  return matches.filter((m) => m.round_key >= nextUnfinished);
+}
 // indeks for den runde, der indeholder i dag — eller den nærmeste kommende
 function currentRoundIndex(rounds) {
   if (!rounds.length) return 0;
@@ -801,10 +814,14 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
       if (crossLeague) {
         await db.insert(token, "competition_matches", matchIds.map((id) => ({ competition_id: comp.id, match_id: id })));
       } else {
-        let query = `season_id=eq.${createSeason.id}&select=id`;
+        let query = `season_id=eq.${createSeason.id}&select=id,round_key,home_score`;
         if (mode === "team" && teamId) query += `&or=(home_team_id.eq.${teamId},away_team_id.eq.${teamId})`;
         if (mode === "time_range" && startDate && endDate) query += `&kickoff_at=gte.${startDate}&kickoff_at=lte.${endDate}T23:59:59`;
-        const matchedMatches = await db.select(token, "matches", query);
+        let matchedMatches = await db.select(token, "matches", query);
+        // Nye konkurrencer skal altid starte fra 0 point: udelad runder der allerede er
+        // helt afsluttet, så tidligere afgivne forudsigelser ikke giver point med det samme.
+        // Konkurrencen starter i stedet fra den næste ikke-afsluttede spillerunde.
+        matchedMatches = filterFromNextUnfinishedRound(matchedMatches);
         if (matchedMatches.length) {
           await db.insert(token, "competition_matches", matchedMatches.map((m) => ({ competition_id: comp.id, match_id: m.id })));
         }
