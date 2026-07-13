@@ -101,6 +101,13 @@ begin
     ),
     'in_private_league', (select count(distinct user_id) from public.competition_participants),
 
+    -- Konkurrencer (kun private/brugeroprettede — virtuelle konkurrencer er ikke rækker her)
+    'competitions_total', (select count(*) from public.competitions),
+    'competitions_by_mode', (
+      select coalesce(jsonb_agg(jsonb_build_object('mode', mode, 'count', c) order by c desc), '[]'::jsonb)
+      from (select mode, count(*) c from public.competitions group by mode) m
+    ),
+
     -- Frafald
     'inactive_30d', (select count(*) from public.profiles p
                      where not exists (
