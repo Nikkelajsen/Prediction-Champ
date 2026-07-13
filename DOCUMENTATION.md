@@ -16,7 +16,7 @@ Prediction Champ er en webapp, hvor venner konkurrerer om at forudsige fodboldre
                                                                   ▲
                                                             Brugere (browser)
 ```
-Frontend: React + Vite, ét stort komponentbibliotek i `src/App.jsx` (~2.400 linjer), rent `fetch`-baseret mod Supabase (ingen SDK). Mobil-first: 4-fane bundnavigation, maks. bredde ~430 px centreret (se afsnit 7).
+Frontend: React + Vite, rent `fetch`-baseret mod Supabase (ingen SDK). Koden er opdelt i moduler under `src/`: `lib/` (`supabase.js` = REST-klient/auth, `scoring.js` = point/runde-helpers, `data.js` = alle async-loaders), `ui/` (`theme.js` = designtokens/styles, `components.jsx` = delkomponenter), og `screens/` (én fil pr. fane/skærm + `MainApp.jsx` = shell/navigation). `App.jsx` er en tynd rod, der booter session/auth. Mobil-first: 4-fane bundnavigation, maks. bredde ~430 px centreret (se afsnit 7).
 Hosting: Vercel (Hobby-plan). Auto-deployer ved hver commit til GitHub (se afsnit 11).
 Database + login: Supabase (Postgres + Auth), tilgået via REST/PostgREST. Frontenden bruger en offentlig `publishable`-nøgle, hårdkodet i `src/App.jsx` — det er by design (nøglen er offentlig og beskyttet af RLS).
 Fodbolddata: Sportmonks API (gratis plan).
@@ -151,7 +151,7 @@ Test: der er ingen automatisk testsuite. Verificér ændringer manuelt (byg + kl
 Superliga Playoff kan ikke synkroniseres endnu — Sportmonks har ikke oprettet 2026/27-sæsonen for den del (formentlig til foråret). Den er skjult for almindelige brugere (`is_visible = false`) men tilgængelig for admin under Kampe/Resultater.
 Alle kan oprette konti uden godkendelse — fint til en lukket venneflok.
 Ingen push-notifikationer eller e-mail-påmindelser om deadlines.
-`App.jsx` er stor (~2.400 linjer) — bør splittes op i flere filer, hvis den fortsætter med at vokse.
+Koden er opdelt i moduler (afsnit 1). Den enkelte fil er nu overskuelig (største ~240 linjer); ved yderligere vækst kan `data.js` og de største skærme deles videre op.
 Sæsonchampionship beregnes i browseren (`loadSeasonBoard`), ikke som et DB-view. Ved mange brugere/kampe bør det flyttes til et `monthly_standings`-lignende view for hastighed.
 Rating-genberegningen er en fuld genberegning fra bunden hver gang. Det er hurtigt ved venneflok-skala; ved mange tusinde brugere bør beregningen laves inkrementel eller optimeres (sortér + histogram i stedet for alle-mod-alle).
 Preview og produktion deler database (afsnit 9) — der findes ingen separat test-database.
@@ -171,6 +171,9 @@ Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke
 ---
 14. Changelog
 Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 13).
+
+Juli 2026 — Kodeopdeling (refaktorering)
+Den monolitiske `src/App.jsx` (~2.400 linjer) er delt op i fokuserede moduler under `src/lib`, `src/ui` og `src/screens` (afsnit 1). Ren struktur-ændring — ingen ændring i adfærd, UI eller data; verificeret ved gennemklik af alle skærme.
 
 Juli 2026 — Sæsonchampionship live
 Sæsonchampionship-kortet på Championship-fanen er nu en rigtig stilling (var før statisk): samlede point for hele Superliga-sæsonen, alle automatisk med, flest point vinder (tiebreak: flest præcise). Beregnes i frontenden af `loadSeasonBoard`; kun spillede/låste kampe tæller, så RLS tillader at læse alles gæt (afsnit 5).
