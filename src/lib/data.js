@@ -1,5 +1,5 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
-import { db } from "./supabase.js";
+import { db, restFetch } from "./supabase.js";
 import { groupIntoRounds, isLocked, outcome, pointsFor, roundLabel } from "./scoring.js";
 
 // henter deltagere + kampe + forudsigelser for én konkurrence og beregner stilling + status
@@ -270,4 +270,25 @@ function monthName(monthKey) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export { computeCompetitionState, loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, computeHomeTips, daFullDate, fmtCountdown, monthName };
+// ---------- Aktivitets-sporing + brugerstatistik ----------
+// touchActivity: letvægts-"ping" ved app-start. RPC'en registrerer, at brugeren har
+// været inde i dag (last_seen_at + user_activity_days). Throttlet til maks. 1×/time via
+// localStorage, så gentagne genstarter/refresh ikke spammer. Fejl ignoreres stille —
+// sporing må aldrig blokere appen.
+const PING_KEY = "pc_last_ping";
+async function touchActivity(token) {
+  try {
+    const last = Number(localStorage.getItem(PING_KEY) || 0);
+    if (Date.now() - last < 60 * 60 * 1000) return; // maks. 1 ping pr. time
+    await restFetch(`/rest/v1/rpc/touch_activity`, { method: "POST", token, body: {} });
+    localStorage.setItem(PING_KEY, String(Date.now()));
+  } catch (e) { /* ignorer — sporing er best-effort */ }
+}
+
+// loadUserStats: henter aggregeret brugerstatistik. RPC'en er admin-kun (security
+// definer med is_admin-guard) og returnerer alle nøgletal + kurver i ét kald.
+async function loadUserStats(token) {
+  return restFetch(`/rest/v1/rpc/admin_user_stats`, { method: "POST", token, body: {} });
+}
+
+export { computeCompetitionState, loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, computeHomeTips, daFullDate, fmtCountdown, monthName, touchActivity, loadUserStats };

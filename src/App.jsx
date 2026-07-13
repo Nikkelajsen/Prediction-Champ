@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { auth, clearSession, db, loadSession, saveSession } from "./lib/supabase.js";
+import { touchActivity } from "./lib/data.js";
 import { C, globalCss, muted, wrapOuter } from "./ui/theme.js";
 import { AuthScreen, ResetPasswordScreen } from "./screens/Auth.jsx";
 import MainApp from "./screens/MainApp.jsx";
@@ -28,6 +29,7 @@ export default function App() {
     }
     setSession({ access_token, refresh_token, user });
     saveSession({ refresh_token, user });
+    touchActivity(access_token); // best-effort aktivitets-ping (throttlet, fejler stille)
   }
 
   function handleLogout() {
