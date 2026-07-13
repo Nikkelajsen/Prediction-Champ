@@ -29,7 +29,7 @@ Tabel	Formål
 `seasons`	Sæson pr. liga. `api_season_id` gemmes automatisk af sync-funktionen første gang, så fremtidige kørsler ikke behøver navne-opslag.
 `teams`	Hold. `api_team_id` = Sportmonks' hold-id, sat automatisk.
 `matches`	Kampe. `round_key` (tirsdag–mandag, auto-beregnet), `home_score`/`away_score`, `api_fixture_id` (unik).
-`profiles`	Brugerprofiler. `display_name`, `is_admin`. `display_name` er unikt (case-insensitivt) — se afsnit 6.
+`profiles`	Brugerprofiler. `display_name`, `is_admin`, `created_at` (tilmelding, backfillet fra `auth.users`), `last_seen_at` (senest aktiv, sat af `touch_activity()`). `display_name` er unikt (case-insensitivt) — se afsnit 6.
 `competitions`	`mode` ∈ `full_season / team / time_range / custom / random`. `league_id`/`season_id` er nullable — `custom` og `random` kan spænde over flere ligaer. `rules` (jsonb) indeholder pointregler og evt. `openDaysBefore` (rullende gætte-vindue).
 `competition_participants`	Deltagere. `hidden` = brugerens egen arkivering (påvirker ikke andre deltagere).
 `competition_matches`	Hvilke kampe hører til hvilken konkurrence.
@@ -37,6 +37,7 @@ Tabel	Formål
 `ratings`	Aktuel Prediction Champ Rating pr. bruger. Nøgle `(user_id, scope)`. Se afsnit 5.
 `rating_history`	Rating-snapshot pr. bruger pr. runde. Kolonner: `user_id`, `scope`, `round_key`, `rating_after`, `delta` (rundens ratingændring), `round_score`, `matches_predicted`, `rnk`. Se afsnit 5.
 `monthly_standings` (view)	Live-view der beregner månedsligaens stilling direkte fra `predictions` + `matches`. Se afsnit 5.
+`user_activity_days`	Aktivitets-sporing til brugerstatistik: én række pr. bruger pr. aktiv dag (`user_id`, `day`, PK begge). Skrives af `touch_activity()` ved app-start. RLS slået til uden policies — læses/skrives kun via `security definer`-funktioner. Se afsnit 15.
 RLS-hovedregel for `predictions` (vigtig, rettet i patch 10): man kan altid læse sine egne forudsigelser; andres kun for kampe, der er låst (kickoff minus 1 time er passeret). Dette forhindrer snyd (at kigge andres gæt inden man selv tipper).
 ---
 3. Konkurrence-modes
@@ -213,5 +214,16 @@ Tidligere patches (udvalgte)
 Patch 10: samlet `predictions`-RLS til én policy med OR (andre viste 0 point i Stilling).
 Patch 9: oprydnings-SQL fjerner dublet-hold uden `api_team_id`.
 Tidligere: rullende gætte-vindue (`openDaysBefore`), håndplukkede/tilfældige konkurrence-modes, arkivering pr. bruger, join-link med kode, automatisk resultathentning via Sportmonks + ekstern cron.
+---
+15. Brugerstatistik & aktivitets-sporing
+Admin-skærmen har en "Statistik"-underfane (kun admins) med overblik over brugerne. Al SQL ligger i `sql/user_stats.sql` (idempotent, køres i Supabase SQL-editor med "Run without RLS" — jf. afsnit 13).
+
+Aktivitets-sporing
+Der fandtes ingen aktivitets-historik i forvejen (sessioner ligger i `localStorage`, token fornys i baggrunden → `auth.users.last_sign_in_at` er upålidelig). I stedet registrerer appen selv aktivitet: ved app-start kaldes `touch_activity()` (`security definer`), som sætter `profiles.last_seen_at = now()` og upserter dagens række i `user_activity_days` (én pr. bruger pr. dag → besøgsfrekvens uden ubegrænset vækst). Frontenden kalder det via `touchActivity(token)` (`data.js`) fra `App.jsx`'s `completeAuth`, throttlet til maks. 1×/time (`localStorage`-nøgle `pc_last_ping`), best-effort så det aldrig blokerer appen. Aktivitetstal begynder derfor først at samle sig fra funktionen blev taget i brug.
+
+Nøgletal
+Hentes i ét kald via `admin_user_stats()` (`security definer` med `is_admin`-guard → `jsonb`, så den offentlige RLS-nøgle ikke eksponerer rådata). Frontend-helper: `loadUserStats(token)`; visning i `StatsPanel` (AdminScreen). Målte størrelser: total & nye (7/30 dage) fra `created_at`; aktive DAU/WAU/MAU + fastholdelse (DAU/MAU) og gns. aktive dage fra `user_activity_days`; engagement (har tippet, gns. tips/bruger, med i privat liga) fra `predictions`/`competition_participants`; konkurrencer (antal private ligaer + fordeling pr. `mode` med procent — kun brugeroprettede, ikke de virtuelle) fra `competitions`; frafald (aldrig tippet, inaktive 30+ dage); samt to søjlekurver (tilmeldinger/uge, aktive/dag). Total/nye dækker også eksisterende brugere, da `created_at` er backfillet fra `auth.users`.
+
+Rettigheder: `user_activity_days` har RLS slået til uden policies (kun tilgængelig via de to `security definer`-funktioner). Begge funktioner er `grant execute ... to authenticated`; kun `admin_user_stats()` er admin-gated internt.
 ---
 Bed Claude om at opdatere denne fil, når der sker større ændringer.

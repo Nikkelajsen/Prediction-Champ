@@ -200,6 +200,39 @@ function ResultsPanel({ token, leagues }) {
 }
 
 // ---------- Statistik ----------
+// Danske labels for konkurrence-modes (matcher CreateCompetitionScreen).
+const MODE_LABELS = {
+  full_season: "Hel sæson",
+  team: "Et hold",
+  time_range: "Tidsperiode",
+  custom: "Håndplukkede",
+  random: "Tilfældig kupon",
+};
+
+// Kategorisk fordeling som vandrette magnitude-søjler: label + antal + procent.
+// Enkelt hue (identitet bæres af label, ikke farve) → ingen CVD-adjacens-problem.
+function ModeBars({ data, total }) {
+  if (!data || !data.length) return <p style={{ ...muted, margin: 0 }}>Ingen konkurrencer endnu.</p>;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {data.map((d) => {
+        const pct = total ? Math.round((d.count / total) * 100) : 0;
+        return (
+          <div key={d.mode}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+              <span style={{ color: C.text }}>{MODE_LABELS[d.mode] || d.mode}</span>
+              <span style={{ color: C.muted }}>{d.count} · {pct}%</span>
+            </div>
+            <div style={{ height: 8, background: C.surface2, borderRadius: 999, overflow: "hidden" }}>
+              <div style={{ width: `${pct}%`, height: "100%", background: C.green, borderRadius: 999 }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // Et enkelt nøgletal ("stat tile").
 function StatTile({ label, value, hint }) {
   return (
@@ -292,6 +325,15 @@ function StatsPanel({ token }) {
         <StatTile label="Har aldrig tippet" value={s.never_predicted} />
         <StatTile label="Inaktive i 30+ dage" value={s.inactive_30d} />
       </StatGroup>
+
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+          <div style={{ fontFamily: font.display, fontWeight: 700, textTransform: "uppercase", fontSize: 15 }}>Konkurrencer</div>
+          <div style={{ fontFamily: font.display, fontWeight: 700, fontSize: 22, color: C.text }}>{s.competitions_total ?? 0}</div>
+        </div>
+        <ModeBars data={s.competitions_by_mode || []} total={s.competitions_total || 0} />
+        <p style={{ ...muted, margin: "12px 0 0" }}>Kun private ligaer — de officielle (månedsliga m.fl.) tælles ikke med.</p>
+      </Card>
 
       <Card>
         <div style={{ fontFamily: font.display, fontWeight: 700, textTransform: "uppercase", fontSize: 15, marginBottom: 10 }}>Nye tilmeldinger pr. uge</div>
