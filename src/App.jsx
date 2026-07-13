@@ -2149,9 +2149,26 @@ function CreateCompetitionScreen({ token, userId, leagues, onBack, onCreated, op
 // ================================================================
 function AdminScreen({ token, leagues, reloadLeagues, onBack }) {
   const [sub, setSub] = useState("matches");
+  const [recomputing, setRecomputing] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function recompute() {
+    setRecomputing(true); setMsg("");
+    try {
+      await restFetch(`/rest/v1/rpc/recompute_ratings`, { method: "POST", token, body: {} });
+      setMsg("Ratings opdateret.");
+    } catch (e) { setMsg("Fejl: " + (e.message || "kunne ikke opdatere")); }
+    setRecomputing(false);
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <BackBar title="Admin" onBack={onBack} />
+      <BackBar title="Admin" onBack={onBack} right={
+        <button style={btnGhost} onClick={recompute} disabled={recomputing}>
+          {recomputing ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />} Opdater ratings
+        </button>
+      } />
+      {msg && <p style={{ ...muted, margin: 0 }}>{msg}</p>}
       <div style={{ display: "flex", gap: 8 }}>
         <button style={chip(sub === "matches")} onClick={() => setSub("matches")}>Kampe</button>
         <button style={chip(sub === "results")} onClick={() => setSub("results")}>Resultater</button>
