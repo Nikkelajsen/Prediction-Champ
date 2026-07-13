@@ -1,7 +1,8 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect, useMemo } from "react";
 import { Crown } from "lucide-react";
-import { currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadSeasonBoard, monthName } from "../lib/data.js";
+import { currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, monthName } from "../lib/data.js";
+import { roundLabel } from "../lib/scoring.js";
 import { C, font, muted } from "../ui/theme.js";
 import { Card, Eyebrow, H, InfoDot } from "../ui/components.jsx";
 
@@ -11,6 +12,9 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
   const [rows, setRows] = useState(null);
   const [loading, setLoading] = useState(true);
   const [season, setSeason] = useState(null); // null=henter · undefined=ingen liga · objekt=data
+  const [rounds, setRounds] = useState([]);
+  const [roundKey, setRoundKey] = useState(null);
+  const [roundBoard, setRoundBoard] = useState(null);
 
   const superliga = useMemo(
     () => leagues.find((l) => /superliga/i.test(l.name || "") && l.is_visible !== false)
@@ -44,9 +48,31 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
     return () => { cancelled = true; };
   }, [token, superliga]); // eslint-disable-line
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const rs = await loadRoundsAvailable(token);
+      if (cancelled) return;
+      setRounds(rs);
+      if (rs.length) {
+        setRoundKey(rs[0]);
+        const b = await loadRoundBoard(token, rs[0]);
+        if (!cancelled) setRoundBoard(b);
+      } else {
+        setRoundBoard({ rows: [], totalMatches: 0, playedMatches: 0, isComplete: false });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token]); // eslint-disable-line
+
   async function changeMonth(m) {
     setMonth(m); setRows(null);
     setRows(await loadMonthlyBoard(token, m));
+  }
+
+  async function changeRound(k) {
+    setRoundKey(k); setRoundBoard(null);
+    setRoundBoard(await loadRoundBoard(token, k));
   }
 
   const champ = rows && rows.length ? rows[0] : null;
@@ -58,6 +84,54 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
         <Eyebrow>Officielle konkurrencer · alle er med <InfoDot title="Championship">Officielle konkurrencer, hvor alle brugere automatisk er med — ingen tilmelding.</InfoDot></Eyebrow>
         <H>Championship</H>
       </div>
+
+      {/* Rundeliga — Rundens Prediction Champ */}
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
+            Rundeliga
+            <InfoDot title="Rundeliga">Dine samlede point for én enkelt spillerunde (på tværs af alle ligaer, hver kamp én gang). Alle er automatisk med. Uafgjort afgøres på flest præcise resultater, og rundens bedste kåres som Rundens Prediction Champ. Vælg en runde i dropdownen.</InfoDot>
+          </div>
+          {rounds.length > 0 && (
+            <select className="field" value={roundKey || ""} onChange={(e) => changeRound(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
+              {rounds.map((k) => <option key={k} value={k}>{roundLabel(k)}</option>)}
+            </select>
+          )}
+        </div>
+
+        {roundBoard === null && <p style={{ ...muted, margin: 0 }}>Henter…</p>}
+        {roundBoard && rounds.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen spillede runder endnu — stillingen kommer, når en runde er i gang.</p>}
+        {roundBoard && rounds.length > 0 && roundBoard.rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen point i denne runde endnu.</p>}
+
+        {roundBoard && roundBoard.rows.length > 0 && (
+          <>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8, background: "rgba(240,180,41,0.1)",
+              border: `1px solid rgba(240,180,41,0.35)`, borderRadius: 10, padding: "8px 12px", marginBottom: 10,
+            }}>
+              <Crown size={16} color={C.gold} />
+              <span style={{ fontSize: 13 }}><b>{roundBoard.rows[0].player}</b> {roundBoard.isComplete ? "er Rundens Prediction Champ" : "fører lige nu"}</span>
+            </div>
+            {roundBoard.rows.map((r, i) => {
+              const you = r.userId === userId;
+              return (
+                <div key={r.userId} style={{
+                  display: "grid", gridTemplateColumns: "24px 1fr auto auto", gap: 10, alignItems: "center",
+                  padding: "8px 0", borderTop: i ? `1px solid ${C.line}` : "none",
+                  background: you ? "rgba(34,197,94,0.06)" : "transparent",
+                  margin: you ? "0 -8px" : 0, paddingLeft: you ? 8 : 0, paddingRight: you ? 8 : 0, borderRadius: you ? 8 : 0,
+                }}>
+                  <span style={{ fontFamily: font.display, fontWeight: 700, color: i === 0 ? C.gold : C.muted }}>{i + 1}</span>
+                  <span style={{ fontSize: 14, fontWeight: you ? 700 : 400 }}>{r.player}{you ? " (dig)" : ""}</span>
+                  <span style={{ color: C.muted, fontSize: 12 }}>{r.exactCount} × 🎯 · {r.matches} kampe</span>
+                  <span style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700 }}>{r.total}</span>
+                </div>
+              );
+            })}
+            <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>Samlede point for runden · uafgjort afgøres på flest præcise resultater</div>
+          </>
+        )}
+      </Card>
 
       {/* Månedsliga */}
       <Card>

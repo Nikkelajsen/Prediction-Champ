@@ -76,6 +76,9 @@ Automatisk genberegning
 En statement-level trigger (`matches_recompute_ratings`) på `matches` kalder `recompute_ratings()` automatisk, hver gang kampe ændres — altså så snart et resultat tastes ind. Statement-level betyder at den fyrer én gang pr. sætning, også når en hel runde gemmes på én gang (ikke én gang pr. kamp).
 Der er også en manuel "Opdater ratings"-knap i Admin-skærmen (kun admin, nås via tandhjulet i topbjælken) som reserve.
 
+Rundeliga
+Alle brugere er automatisk med. Samlede point for én enkelt spillerunde (`round_key`), på tværs af alle ligaer, hver kamp én gang. Rangeres efter flest point (tiebreak: flest præcise); den øverste kåres som Rundens Prediction Champ, når runden er færdigspillet. Beregnes i frontenden (som sæsonchampionship): `loadRoundBoard(token, roundKey)` summerer point for alle spillede kampe i runden, og `loadRoundsAvailable(token)` giver de runder, der har mindst én spillet kamp (nyeste først, valgbar i en dropdown). Championship-fanen lander på den seneste runde. Kun spillede/låste kampe tæller, så RLS tillader at læse alles gæt.
+
 Månedsliga
 Alle brugere er automatisk med — ingen tilmelding. Viewet `monthly_standings` summerer hver brugers point for alle kampe i en kalendermåned (igen: hver kamp én gang). Rangeres efter flest samlede point (tiebreak: flest præcise resultater); den øverste er Månedens Prediction Champ. Stillingen nulstilles reelt den 1., fordi viewet grupperer på måned. Tidligere måneder kan vælges i en dropdown og ligger fast, da kampene er spillet. Helper: `loadMonthlyBoard`.
 
@@ -97,7 +100,7 @@ Topbjælke: krone + "Prediction Champ", samt til højre: ⓘ (åbner "Sådan vir
 De fire faner (bundnav):
 Hjem — deadline-kort (næste rundes deadline + antal kampe der mangler tips + "Tip nu"-knap; helper `computeHomeTips`), rating-snapshot (rating, bevægelse, placering, formkurve → linker til Rating), og "Dine placeringer" (månedsliga + private ligaer, hver linker videre). Har brugeren tippet alt, viser kortet en "Alle tips er inde"-tilstand.
 Ligaer — brugerens private konkurrencer som kort (navn, type, antal deltagere, egen placering). Opret (åbner opret-skærm), Join med kode, Arkivér/Gendan og Slet (kun opretter). Klik på et kort → Stilling.
-Championship — officielle konkurrencer, alle automatisk med: Månedsliga (månedsvælger + Månedens Prediction Champ + stilling) og Sæsonchampionship (live stilling + Sæsonens Prediction Champ + progress).
+Championship — officielle konkurrencer, alle automatisk med: Rundeliga (rundevælger + Rundens Prediction Champ), Månedsliga (månedsvælger + Månedens Prediction Champ) og Sæsonchampionship (live stilling + Sæsonens Prediction Champ + progress).
 Rating — rangliste med rating, formkurve-prikker (seneste 5 runder), bevægelse ▲/▼ og "NY"-badge. Egen række fremhæves.
 
 Drill-in-skærme (nås fra fanerne, ikke i bundnav):
@@ -171,6 +174,9 @@ Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke
 ---
 14. Changelog
 Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 13).
+
+Juli 2026 — Rundeliga (Rundens Prediction Champ)
+Nyt kort i Championship: samlede point for én enkelt spillerunde med rundevælger, så rundens bedste kan kåres som Rundens Prediction Champ efter hver runde. Alle er automatisk med — samme princip som månedsligaen. Beregnes i frontenden (`loadRoundBoard` / `loadRoundsAvailable`, afsnit 5).
 
 Juli 2026 — Kodeopdeling (refaktorering)
 Den monolitiske `src/App.jsx` (~2.400 linjer) er delt op i fokuserede moduler under `src/lib`, `src/ui` og `src/screens` (afsnit 1). Ren struktur-ændring — ingen ændring i adfærd, UI eller data; verificeret ved gennemklik af alle skærme.

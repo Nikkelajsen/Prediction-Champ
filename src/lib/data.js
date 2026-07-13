@@ -134,6 +134,39 @@ async function loadMonthsAvailable(token) {
   return [...new Set(rows.map((r) => r.month))].sort().reverse();
 }
 
+// ---------- Rundeliga: samlede point for én enkelt spillerunde (round_key) ----------
+// Samme princip som månedsligaen: alle er automatisk med, på tværs af alle ligaer,
+// hver kamp tælles én gang. Beregnet i appen; kun spillede (låste) kampe tæller.
+async function loadRoundsAvailable(token) {
+  const rows = await db.select(token, "matches", `home_score=not.is.null&select=round_key`);
+  return [...new Set(rows.map((r) => r.round_key))].sort().reverse();
+}
+async function loadRoundBoard(token, roundKey) {
+  const ms = await db.select(token, "matches", `round_key=eq.${roundKey}&select=id,home_score,away_score`);
+  if (!ms.length) return { rows: [], totalMatches: 0, playedMatches: 0, isComplete: false };
+  const matchIds = ms.map((m) => m.id);
+  const preds = await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&select=user_id,match_id,pred_home,pred_away`);
+  const matchById = new Map(ms.map((m) => [m.id, m]));
+  const rules = { exact: 3, outcome: 1 };
+  const byUser = {};
+  for (const p of preds) {
+    const m = matchById.get(p.match_id);
+    if (!m || m.home_score == null || m.away_score == null) continue; // kun spillede kampe
+    const pts = pointsFor(p, m, rules);
+    if (pts == null) continue;
+    const u = (byUser[p.user_id] ||= { total: 0, exactCount: 0, matches: 0 });
+    u.total += pts; u.matches += 1;
+    if (p.pred_home === m.home_score && p.pred_away === m.away_score) u.exactCount++;
+  }
+  const userIds = Object.keys(byUser);
+  const profiles = userIds.length ? await db.select(token, "profiles", `id=in.(${userIds.join(",")})&select=id,display_name`) : [];
+  const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
+  const rows = userIds.map((uid) => ({ userId: uid, player: nameById.get(uid) || "—", ...byUser[uid] }))
+    .sort((a, b) => b.total - a.total || b.exactCount - a.exactCount);
+  const playedMatches = ms.filter((m) => m.home_score != null && m.away_score != null).length;
+  return { rows, totalMatches: ms.length, playedMatches, isComplete: ms.length > 0 && playedMatches === ms.length };
+}
+
 // ---------- Sæsonchampionship: samlede point for hele en ligas sæson ----------
 // Beregnet i appen: alle er automatisk med (alle der har tippet en kamp i sæsonen).
 // Kun spillede kampe tæller — de er altid låste, så alles gæt kan læses (RLS).
@@ -237,4 +270,4 @@ function monthName(monthKey) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export { computeCompetitionState, loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadSeasonBoard, computeHomeTips, daFullDate, fmtCountdown, monthName };
+export { computeCompetitionState, loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, computeHomeTips, daFullDate, fmtCountdown, monthName };
