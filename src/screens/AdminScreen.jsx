@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { RefreshCw, Loader2 } from "lucide-react";
 import { db, restFetch } from "../lib/supabase.js";
+import { loadUserStats } from "../lib/data.js";
 import { currentRoundIndex, formatKickoff, groupIntoRounds } from "../lib/scoring.js";
 import { C, btnGhost, btnGold, chip, font, muted } from "../ui/theme.js";
 import { BackBar, Card, RoundPager, ScoreInput } from "../ui/components.jsx";
@@ -28,12 +29,14 @@ function AdminScreen({ token, leagues, reloadLeagues, onBack }) {
         </button>
       } />
       {msg && <p style={{ ...muted, margin: 0 }}>{msg}</p>}
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button style={chip(sub === "matches")} onClick={() => setSub("matches")}>Kampe</button>
         <button style={chip(sub === "results")} onClick={() => setSub("results")}>Resultater</button>
+        <button style={chip(sub === "stats")} onClick={() => setSub("stats")}>Statistik</button>
       </div>
       {sub === "matches" && <MatchesPanel token={token} leagues={leagues} reloadLeagues={reloadLeagues} />}
       {sub === "results" && <ResultsPanel token={token} leagues={leagues} />}
+      {sub === "stats" && <StatsPanel token={token} />}
     </div>
   );
 }
@@ -192,6 +195,115 @@ function ResultsPanel({ token, leagues }) {
           </tbody></table>
         </Card>
       )}
+    </div>
+  );
+}
+
+// ---------- Statistik ----------
+// Et enkelt nøgletal ("stat tile").
+function StatTile({ label, value, hint }) {
+  return (
+    <div style={{ background: C.surface2, border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px" }}>
+      <div style={{ fontFamily: font.display, fontWeight: 700, fontSize: 28, lineHeight: 1.05, color: C.text }}>{value}</div>
+      <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>{label}</div>
+      {hint && <div style={{ color: C.muted, fontSize: 11, marginTop: 4, opacity: 0.8 }}>{hint}</div>}
+    </div>
+  );
+}
+
+// Overskrift for en gruppe af nøgletal.
+function StatGroup({ title, children }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontFamily: font.display, textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 13, color: C.muted }}>{title}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>{children}</div>
+    </div>
+  );
+}
+
+// Enkelt-serie søjlediagram (magnitude over tid). Tynde søjler med afrundet top,
+// 2px mellemrum, diskret baseline. Ingen legend — titlen navngiver serien.
+// Hover viser etikette + værdi via native title. Farve = én temafarve.
+function MiniBars({ data, color, formatLabel }) {
+  if (!data || !data.length) return <p style={{ ...muted, margin: 0 }}>Ingen data endnu.</p>;
+  const max = Math.max(1, ...data.map((d) => d.value));
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 96, borderBottom: `1px solid ${C.line}`, paddingBottom: 0 }}>
+      {data.map((d, i) => (
+        <div key={i} title={`${formatLabel(d.key)}: ${d.value}`}
+          style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", minWidth: 0 }}>
+          <span style={{ color: C.muted, fontSize: 9, lineHeight: 1, marginBottom: 2 }}>{d.value || ""}</span>
+          <div style={{
+            width: "100%", height: `${Math.max(d.value > 0 ? 3 : 0, (d.value / max) * 74)}px`,
+            background: color, borderRadius: "4px 4px 0 0",
+          }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatsPanel({ token }) {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true); setErr("");
+      try { setStats(await loadUserStats(token)); }
+      catch (e) { setErr(e.message || "Kunne ikke hente statistik"); }
+      setLoading(false);
+    })();
+  }, [token]);
+
+  if (loading) return <p style={{ ...muted, display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={14} className="spin" /> Henter statistik …</p>;
+  if (err) return <p style={{ color: C.red, fontSize: 13 }}>Fejl: {err}</p>;
+  if (!stats) return null;
+
+  const s = stats;
+  const stickiness = s.mau ? Math.round((s.dau / s.mau) * 100) : 0;
+  const signups = (s.signups_by_week || []).map((r) => ({ key: r.week, value: r.count }));
+  const actives = (s.active_by_day || []).map((r) => ({ key: r.day, value: r.count }));
+  const weekLabel = (iso) => { const d = new Date(iso); return d.toLocaleDateString("da-DK", { day: "numeric", month: "short" }); };
+  const dayLabel = (iso) => { const d = new Date(iso); return d.toLocaleDateString("da-DK", { weekday: "short", day: "numeric", month: "short" }); };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <StatGroup title="Brugere">
+        <StatTile label="Brugere i alt" value={s.total} />
+        <StatTile label="Nye seneste 30 dage" value={s.new_30d} hint={`heraf ${s.new_7d} seneste 7 dage`} />
+      </StatGroup>
+
+      <StatGroup title="Aktivitet">
+        <StatTile label="Aktive i dag" value={s.dau} />
+        <StatTile label="Aktive seneste 7 dage" value={s.wau} />
+        <StatTile label="Aktive seneste 30 dage" value={s.mau} />
+        <StatTile label="Fastholdelse (DAU/MAU)" value={`${stickiness}%`} hint={`gns. ${s.avg_active_days_30d} aktive dage/bruger`} />
+      </StatGroup>
+
+      <StatGroup title="Engagement">
+        <StatTile label="Har afgivet mindst ét tip" value={s.has_predicted} hint={s.total ? `${Math.round((s.has_predicted / s.total) * 100)}% af alle` : undefined} />
+        <StatTile label="Gns. tips pr. bruger" value={s.avg_predictions} />
+        <StatTile label="Med i en privat liga" value={s.in_private_league} />
+      </StatGroup>
+
+      <StatGroup title="Frafald">
+        <StatTile label="Har aldrig tippet" value={s.never_predicted} />
+        <StatTile label="Inaktive i 30+ dage" value={s.inactive_30d} />
+      </StatGroup>
+
+      <Card>
+        <div style={{ fontFamily: font.display, fontWeight: 700, textTransform: "uppercase", fontSize: 15, marginBottom: 10 }}>Nye tilmeldinger pr. uge</div>
+        <MiniBars data={signups} color={C.gold} formatLabel={weekLabel} />
+        <p style={{ ...muted, margin: "8px 0 0" }}>Seneste ~12 uger.</p>
+      </Card>
+
+      <Card>
+        <div style={{ fontFamily: font.display, fontWeight: 700, textTransform: "uppercase", fontSize: 15, marginBottom: 10 }}>Aktive brugere pr. dag</div>
+        <MiniBars data={actives} color={C.green} formatLabel={dayLabel} />
+        <p style={{ ...muted, margin: "8px 0 0" }}>Seneste 30 dage. Aktivitet begynder først at tælle fra denne funktion blev taget i brug.</p>
+      </Card>
     </div>
   );
 }

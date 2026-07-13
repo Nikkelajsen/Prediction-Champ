@@ -175,6 +175,9 @@ Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke
 14. Changelog
 Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 13).
 
+Juli 2026 — Brugerstatistik (admin)
+Ny "Statistik"-underfane i Admin-skærmen (ved siden af Kampe/Resultater), kun for admins. Viser nøgletal om brugerne: total & nye (7/30 dage), aktive DAU/WAU/MAU + fastholdelse (DAU/MAU) og gns. aktive dage, engagement (har tippet, gns. tips pr. bruger, med i privat liga) og frafald (aldrig tippet, inaktive 30+ dage), samt to søjlekurver (tilmeldinger/uge, aktive/dag). Aktivitet spores selv via et letvægts-"ping" (`touch_activity()`) ved app-start — throttlet til maks. 1×/time i frontenden (`touchActivity` i `data.js`, kaldt fra `App.jsx`'s `completeAuth`). SQL i `sql/user_stats.sql` (idempotent): tilføjer `profiles.created_at`/`last_seen_at`, tabellen `user_activity_days` (én række pr. bruger pr. aktiv dag, RLS uden policies), samt `security definer`-funktionerne `touch_activity()` (auth) og `admin_user_stats()` (admin-guard, returnerer alle nøgletal som jsonb). Frontend-helper: `loadUserStats`. Bemærk: aktivitetstal begynder først at samle sig fra funktionen tages i brug; total/nye dækker også eksisterende brugere via backfill fra `auth.users`.
+
 Juli 2026 — Rundeliga (Rundens Prediction Champ)
 Nyt kort i Championship: samlede point for én enkelt spillerunde med rundevælger, så rundens bedste kan kåres som Rundens Prediction Champ efter hver runde. Alle er automatisk med — samme princip som månedsligaen. Beregnes i frontenden (`loadRoundBoard` / `loadRoundsAvailable`, afsnit 5).
 
