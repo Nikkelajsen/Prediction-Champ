@@ -222,31 +222,26 @@ async function loadRatingMap(token) {
 }
 
 // rating_history -> pr. bruger: formkurve (seneste 5 runder) + bevægelse (seneste rundes ratingændring)
-// Defensiv: kolonnenavnene i rating_history kendes ikke med sikkerhed, så vi henter select=*
-// og udleder felterne. Fejler noget, degraderer vi pænt (ingen form/bevægelse).
+// Kolonner: user_id, scope, round_key, rating_after, delta, round_score, matches_predicted, rnk.
+// Formkurve-prik pr. runde ud fra rundens ratingændring (delta): grøn=stærk, gul=middel, grå=svag.
+// Fejler kaldet (fx tom tabel), degraderer vi pænt til ingen form/bevægelse.
 async function loadRatingHistory(token) {
   try {
-    const rows = await db.select(token, "rating_history", `scope=eq.ALL&select=*`);
+    const rows = await db.select(token, "rating_history",
+      `scope=eq.ALL&select=user_id,round_key,delta&order=round_key.asc`);
     if (!rows || !rows.length) return new Map();
-    const sample = rows[0];
-    const keys = Object.keys(sample);
-    const roundField =
-      ["round_key", "round", "round_no", "round_index", "round_idx"].find((k) => k in sample) ||
-      keys.find((k) => /round/i.test(k));
-    const changeField = keys.find((k) => /(change|delta|move|diff)/i.test(k));
-    if (!roundField) return new Map();
     const byUser = {};
     for (const r of rows) { (byUser[r.user_id] ||= []).push(r); }
     const map = new Map();
     for (const [uid, list] of Object.entries(byUser)) {
-      list.sort((a, b) => String(a[roundField]).localeCompare(String(b[roundField])));
+      // list er allerede sorteret stigende på round_key (server-side order)
       const last5 = list.slice(-5);
       const form = last5.map((r) => {
-        const ch = changeField != null ? Number(r[changeField]) : 0;
+        const ch = Number(r.delta);
         if (!isFinite(ch)) return 1;
         return ch > 5 ? 2 : ch < -5 ? 0 : 1; // 2=grøn (stærk) · 1=gul (middel) · 0=grå (svag)
       });
-      const move = changeField != null && list.length ? Math.round(Number(list[list.length - 1][changeField]) || 0) : 0;
+      const move = Math.round(Number(list[list.length - 1].delta) || 0);
       map.set(uid, { form, move });
     }
     return map;
