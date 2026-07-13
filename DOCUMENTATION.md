@@ -159,6 +159,14 @@ Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke
 13. Changelog
 Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 12).
 
+Juli 2026 — Ny 4-fane brugerflade (mobil-first)
+Navigationen er omstruktureret til fire faner i en bundnavigation — **Hjem · Ligaer · Championship · Rating** — i et nyt mørkeblåt design (Barlow-fonte, maks. bredde ~430 px centreret). Database, scoring, rating og al konkurrence-logik er uændret (bevaret 1:1). Fordeling af det gamle indhold:
+- **Hjem:** deadline-kort (næste rundes deadline + antal manglende tips, "Tip nu"), rating-snapshot (rating, bevægelse, placering, formkurve), og "Dine placeringer" (månedsliga + private ligaer). Tom tilstand når alt er tippet.
+- **Ligaer:** de private konkurrencer (tidligere "Aktive konkurrencer"), opret/join, arkivér/gendan, slet. Det virtuelle Månedsliga-kort er fjernet herfra — Championship er nu dens hjem.
+- **Championship:** Månedsliga med månedsvælger + Månedens Prediction Champ, plus statisk sæsonchampionship-kort (datamodellen udvides senere).
+- **Rating:** rating-leaderboard med formkurve-prikker (seneste 5 runder), bevægelse (▲/▼ fra `rating_history`) og "NY"-badge for spillere under 5 runder.
+Stilling og Tip (forudsigelser) er nu drill-in-skærme, der nås fra Hjem/Ligaer/Championship. Admin (Kampe + Resultater) nås via tandhjul i topbjælken. Ny "Sådan virker det"-side (ⓘ i topbjælken) samler pointsystem, tiebreak, rating, championship/månedsliga, tips-synlighed og rullende vindue; hver fane har desuden et kontekstuelt ⓘ. Den gamle Global- og Regler-fane er fjernet (indholdet er flyttet).
+
 Juli 2026 — Nye konkurrencer starter altid fra 0
 Rettet: en ny `full_season`/`team`-konkurrence kunne før få point med det samme, hvis brugeren allerede havde afgivet forudsigelser på de samme kampe i andre konkurrencer (da `predictions` er delt på tværs af konkurrencer). `createCompetition` udelader nu allerede afsluttede runder ved oprettelse og starter i stedet fra næste ikke-afsluttede spillerunde (afsnit 3).
 
