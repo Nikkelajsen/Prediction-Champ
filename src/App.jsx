@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Trophy, Plus, Trash2, Users, CalendarDays, ClipboardList, BarChart3, Loader2, LogOut, Copy, Check, RefreshCw, Info } from "lucide-react";
+import { Trophy, Plus, Trash2, Users, CalendarDays, ClipboardList, Loader2, LogOut, Copy, Check, RefreshCw, Info, Home, Award, TrendingUp } from "lucide-react";
 
 // ---------- Supabase config ----------
 const SUPABASE_URL = "https://qfcjbpvttburccdyfnkx.supabase.co";
@@ -220,6 +220,26 @@ async function loadRatingMap(token) {
   return new Map(ratings.map((r) => [r.user_id, { rating: Math.round(Number(r.rating)), provisional: r.provisional }]));
 }
 
+// henter rating-historik pr. runde, grupperet pr. bruger (til bevægelse ▲/▼ og formkurve på Rating-fanen).
+// Fejler stille (tom map), hvis tabellen ikke kan læses, så leaderboardet stadig virker uden bevægelse/form.
+function histField(entry, keys) {
+  for (const k of keys) { if (entry[k] !== undefined && entry[k] !== null) return entry[k]; }
+  return null;
+}
+async function loadRatingHistoryByUser(token) {
+  try {
+    const rows = await db.select(token, "rating_history", `scope=eq.ALL&select=*&order=round_key.asc`);
+    const byUser = new Map();
+    for (const r of rows) {
+      if (!byUser.has(r.user_id)) byUser.set(r.user_id, []);
+      byUser.get(r.user_id).push(r);
+    }
+    return byUser;
+  } catch (e) {
+    return new Map();
+  }
+}
+
 function currentMonthKey() { return new Date().toISOString().slice(0, 7); }
 
 async function loadMonthlyBoard(token, month) {
@@ -230,6 +250,7 @@ async function loadMonthlyBoard(token, month) {
   const profiles = await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`);
   const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
   return rows.map((r) => ({
+    userId: r.user_id,
     player: nameById.get(r.user_id) || "—",
     total: r.total_points, matches: r.matches, exactCount: r.exact_count,
   }));
@@ -238,6 +259,26 @@ async function loadMonthlyBoard(token, month) {
 async function loadMonthsAvailable(token) {
   const rows = await db.select(token, "monthly_standings", `scope=eq.ALL&select=month`);
   return [...new Set(rows.map((r) => r.month))].sort().reverse();
+}
+
+// henter runder + forudsigelser for alle kampe i en given kalendermåned (til Championship-standings-modal)
+async function loadMonthlyRoundsAndPreds(token, month) {
+  const start = `${month}-01`;
+  const [y, m] = month.split("-").map(Number);
+  const endDate = new Date(Date.UTC(y, m, 1));
+  const end = endDate.toISOString().slice(0, 10);
+  const ms = await db.select(token, "matches", `kickoff_at=gte.${start}&kickoff_at=lt.${end}&select=*&order=kickoff_at`);
+  if (!ms.length) return { completedRounds: [], predsByKey: new Map() };
+  const teamIds = [...new Set(ms.flatMap((mm) => [mm.home_team_id, mm.away_team_id]).filter(Boolean))];
+  const teams = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
+  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  ms.forEach((mm) => { mm._home = teamName.get(mm.home_team_id); mm._away = teamName.get(mm.away_team_id); });
+  const matchIds = ms.map((mm) => mm.id);
+  const preds = await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&select=*`);
+  const predsByKey = new Map(preds.map((pr) => [`${pr.match_id}:${pr.user_id}`, pr]));
+  const rounds = groupIntoRounds(ms);
+  const completedRounds = rounds.filter((r) => r.matches.length > 0 && r.matches.every((mm) => mm.home_score !== null && mm.home_score !== undefined));
+  return { completedRounds, predsByKey };
 }
 
 // ---------- runde-navigation (bruges af Forudsigelser og Resultater) ----------
@@ -503,8 +544,9 @@ function AuthScreen({ onAuthed, booting }) {
 // ================= MAIN APP (logged in) =================
 function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoinCode }) {
   const token = session.access_token;
-  const [tab, setTab] = useState("competitions");
-  const [globalView, setGlobalView] = useState("rating");
+  const [tab, setTab] = useState("home");
+  const [leaguesView, setLeaguesView] = useState("list"); // list | predictions | board
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [loading, setLoading] = useState(true);
   const [leagues, setLeagues] = useState([]);
   const [filterLeagueIds, setFilterLeagueIds] = useState(null); // null = alle (ingen filter)
@@ -553,7 +595,8 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
           }
           await loadCompetitions();
           setSelectedCompId(found[0].id);
-          setTab("predictions");
+          setTab("leagues");
+          setLeaguesView("predictions");
         }
       } catch (e) { /* ignorer — koden findes måske ikke */ }
       clearPendingJoinCode();
@@ -595,11 +638,12 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 13, color: "#9fb3a5" }}>{profile?.display_name}</span>
+          <button onClick={() => setShowHowItWorks(true)} style={ghostNavBtn} title="Sådan virker det"><Info size={14} /></button>
           <button onClick={onLogout} style={ghostBtn}><LogOut size={14} />Log ud</button>
         </div>
       </header>
 
-      {visibleLeagues.length > 1 && (tab === "competitions" || tab === "predictions" || tab === "board") && (
+      {visibleLeagues.length > 1 && tab === "leagues" && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ color: "#7fa38c", fontSize: 11, marginBottom: 6, letterSpacing: 1 }}>FILTRÉR PÅ LIGA</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -618,43 +662,311 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
         </div>
       )}
 
-      <nav style={{ display: "flex", gap: 6, marginBottom: 20, overflowX: "auto", paddingBottom: 4 }}>
-        <TabButton active={tab === "competitions"} onClick={() => setTab("competitions")} icon={Users}>Konkurrencer</TabButton>
-        <TabButton active={tab === "predictions"} onClick={() => setTab("predictions")} icon={ClipboardList}>Forudsigelser</TabButton>
-        <TabButton active={tab === "board"} onClick={() => setTab("board")} icon={BarChart3}>Stilling</TabButton>
-        <TabButton active={tab === "global"} onClick={() => setTab("global")} icon={Trophy}>Global</TabButton>
-        <TabButton active={tab === "rules"} onClick={() => setTab("rules")} icon={Info}>Regler</TabButton>
-        {isAdmin && <TabButton active={tab === "matches"} onClick={() => setTab("matches")} icon={CalendarDays}>Kampe</TabButton>}
-        {isAdmin && <TabButton active={tab === "results"} onClick={() => setTab("results")} icon={ClipboardList}>Resultater</TabButton>}
-      </nav>
+      {isAdmin && (
+        <nav style={{ display: "flex", gap: 6, marginBottom: 20, overflowX: "auto", paddingBottom: 4 }}>
+          <TabButton active={tab === "matches"} onClick={() => setTab("matches")} icon={CalendarDays}>Kampe</TabButton>
+          <TabButton active={tab === "results"} onClick={() => setTab("results")} icon={ClipboardList}>Resultater</TabButton>
+        </nav>
+      )}
 
-      {tab === "competitions" && (
-        <CompetitionsTab token={token} userId={session.user.id} leagues={visibleLeagues}
-          competitions={filteredCompetitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} reload={loadAll}
-          goToBoard={(id) => { setSelectedCompId(id); setTab("board"); }}
-          goToMonthly={() => { setGlobalView("monthly"); setTab("global"); }} />
-      )}
-      {tab === "matches" && isAdmin && (
-        <MatchesTab token={token} leagues={leagues} reloadLeagues={loadLeagues} />
-      )}
-      {tab === "predictions" && (
-        <PredictionsTab token={token} userId={session.user.id} competitions={filteredCompetitions}
-          selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} />
-      )}
-      {tab === "results" && isAdmin && (
-        <ResultsTab token={token} leagues={leagues} />
-      )}
-      {tab === "board" && (
-        <BoardTab token={token} competitions={filteredCompetitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} />
-      )}
-      {tab === "global" && <GlobalTab token={token} isAdmin={isAdmin} />}
-      {tab === "rules" && <RulesTab />}
+      <div style={{ paddingBottom: 84 }}>
+        {tab === "home" && (
+          <HomeTab token={token} userId={session.user.id} profile={profile} competitions={competitions}
+            goToLeagues={(id) => { if (id) setSelectedCompId(id); setTab("leagues"); setLeaguesView("board"); }}
+            goToPredictions={() => { setTab("leagues"); setLeaguesView("predictions"); }}
+            goToRating={() => setTab("rating")}
+            goToMonthly={() => setTab("championship")} />
+        )}
+        {tab === "leagues" && (
+          <LeaguesTab token={token} userId={session.user.id} leagues={visibleLeagues}
+            competitions={filteredCompetitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} reload={loadAll}
+            view={leaguesView} setView={setLeaguesView} />
+        )}
+        {tab === "matches" && isAdmin && (
+          <MatchesTab token={token} leagues={leagues} reloadLeagues={loadLeagues} />
+        )}
+        {tab === "results" && isAdmin && (
+          <ResultsTab token={token} leagues={leagues} />
+        )}
+        {tab === "championship" && <ChampionshipTab token={token} isAdmin={isAdmin} />}
+        {tab === "rating" && <RatingTab token={token} userId={session.user.id} />}
+      </div>
+
+      <BottomNav tab={tab} setTab={setTab} />
+      {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
     </div>
   );
 }
 
-// ================= TAB: RULES =================
-function RulesTab() {
+// ================= BOTTOM NAVIGATION (4 faner) =================
+function BottomNav({ tab, setTab }) {
+  const items = [
+    { id: "home", label: "Hjem", icon: Home },
+    { id: "leagues", label: "Ligaer", icon: Users },
+    { id: "championship", label: "Championship", icon: Award },
+    { id: "rating", label: "Rating", icon: TrendingUp },
+  ];
+  return (
+    <nav style={bottomNavWrap}>
+      {items.map((it) => {
+        const active = tab === it.id;
+        const Icon = it.icon;
+        return (
+          <button key={it.id} onClick={() => setTab(it.id)} style={bottomNavBtn(active)}>
+            <Icon size={20} />
+            <span style={{ fontSize: 10, fontWeight: 700 }}>{it.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+// ================= TAB: LEAGUES (Konkurrencer + Forudsigelser + Stilling) =================
+function LeaguesTab({ token, userId, leagues, competitions, selectedCompId, setSelectedCompId, reload, view, setView }) {
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+        <button onClick={() => setView("list")} style={pillBtn(view === "list")}>Konkurrencer</button>
+        <button onClick={() => setView("predictions")} style={pillBtn(view === "predictions")}>Forudsigelser</button>
+        <button onClick={() => setView("board")} style={pillBtn(view === "board")}>Stilling</button>
+      </div>
+      {view === "list" && (
+        <CompetitionsTab token={token} userId={userId} leagues={leagues}
+          competitions={competitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} reload={reload}
+          goToBoard={(id) => { setSelectedCompId(id); setView("board"); }} />
+      )}
+      {view === "predictions" && (
+        <PredictionsTab token={token} userId={userId} competitions={competitions}
+          selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} />
+      )}
+      {view === "board" && (
+        <BoardTab token={token} competitions={competitions} selectedCompId={selectedCompId} setSelectedCompId={setSelectedCompId} />
+      )}
+    </div>
+  );
+}
+
+// ================= TAB: HOME (midlertidig, udbygges i fase 4) =================
+function HomeTab({ token, userId, profile, competitions, goToLeagues, goToPredictions, goToRating, goToMonthly }) {
+  const [loading, setLoading] = useState(true);
+  const [deadline, setDeadline] = useState(null); // { roundLabel, missing, deadlineIso } | null
+  const [emptyNextDate, setEmptyNextDate] = useState(null); // iso date string når alt er tippet
+  const [ratingSummary, setRatingSummary] = useState(null); // { rating, rank, provisional, movement }
+  const [positions, setPositions] = useState([]); // [{ key, label, rankText, onClick }]
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const active = competitions.filter((c) => !c._hidden);
+      const compIds = active.map((c) => c.id);
+
+      // ---- deadline-kort: næste runde blandt brugerens aktive konkurrencer ----
+      let nextDeadline = null;
+      let nextOpenDate = null;
+      if (compIds.length) {
+        const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=match_id`);
+        const matchIds = [...new Set(cms.map((c) => c.match_id))];
+        if (matchIds.length) {
+          const ms = await db.select(token, "matches", `id=in.(${matchIds.join(",")})&select=*&order=kickoff_at`);
+          const myPreds = await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&user_id=eq.${userId}&select=match_id,pred_home,pred_away`);
+          const predicted = new Set(myPreds.filter((p) => p.pred_home !== null && p.pred_away !== null).map((p) => p.match_id));
+          const rounds = groupIntoRounds(ms);
+          const idx = currentRoundIndex(rounds);
+          for (let i = idx; i < rounds.length; i++) {
+            const missingMatches = rounds[i].matches.filter((m) => !isLocked(m) && !predicted.has(m.id));
+            if (missingMatches.length > 0) {
+              const earliest = missingMatches.reduce((min, m) => (!min || m.kickoff_at < min.kickoff_at ? m : min), null);
+              nextDeadline = {
+                roundLabel: rounds[i].label,
+                missing: missingMatches.length,
+                deadlineIso: earliest?.kickoff_at || null,
+              };
+              break;
+            }
+            if (i === rounds.length - 1) {
+              const future = rounds.find((r) => r.matches.some((m) => !isLocked(m)));
+              nextOpenDate = future?.matches?.[0]?.kickoff_at || null;
+            }
+          }
+        }
+      }
+
+      // ---- rating-snapshot ----
+      let ratingInfo = null;
+      try {
+        const [board, hist] = await Promise.all([loadRatingBoard(token), loadRatingHistoryByUser(token)]);
+        const idx = board.findIndex((r) => r.userId === userId);
+        if (idx >= 0) {
+          const row = board[idx];
+          const userHist = hist.get(userId) || [];
+          let movement = null;
+          if (userHist.length) {
+            const last = userHist[userHist.length - 1];
+            const explicit = histField(last, ["change", "rating_change", "delta"]);
+            if (explicit !== null) movement = Math.round(Number(explicit));
+            else if (userHist.length >= 2) {
+              const prevRating = histField(userHist[userHist.length - 2], ["rating"]);
+              const lastRating = histField(last, ["rating"]);
+              if (prevRating !== null && lastRating !== null) movement = Math.round(Number(lastRating) - Number(prevRating));
+            }
+          }
+          ratingInfo = { rating: row.rating, rank: idx + 1, provisional: row.provisional, movement };
+        }
+      } catch (e) { /* rating er valgfrit på Hjem */ }
+
+      // ---- dine placeringer: månedsliga + private ligaer ----
+      const posRows = [];
+      try {
+        const monthRows = await loadMonthlyBoard(token, currentMonthKey());
+        const mi = monthRows.findIndex((r) => r.userId === userId);
+        if (mi >= 0) posRows.push({ key: "monthly", label: "Månedsliga", rankText: `#${mi + 1} af ${monthRows.length} · ${monthRows[mi].total} point`, onClick: goToMonthly });
+      } catch (e) { /* ignorer */ }
+      await Promise.all(active.map(async (c) => {
+        try {
+          const rules = c.rules || { exact: 3, outcome: 1 };
+          const state = await computeCompetitionState(token, c.id, rules);
+          const ri = state.rows.findIndex((r) => r.userId === userId);
+          if (ri >= 0) posRows.push({ key: c.id, label: c.name, rankText: `#${ri + 1} af ${state.rows.length} · ${state.rows[ri].total} point`, onClick: () => goToLeagues(c.id) });
+        } catch (e) { /* ignorer enkelte konkurrencer der fejler */ }
+      }));
+
+      if (!cancelled) {
+        setDeadline(nextDeadline);
+        setEmptyNextDate(nextDeadline ? null : nextOpenDate);
+        setRatingSummary(ratingInfo);
+        setPositions(posRows);
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token, userId, competitions]); // eslint-disable-line
+
+  function deadlineCountdown(iso) {
+    if (!iso) return null;
+    const msLeft = new Date(iso).getTime() - 60 * 60 * 1000 - Date.now();
+    if (msLeft <= 0) return "Låser snart";
+    const hours = Math.floor(msLeft / 3600000);
+    const mins = Math.floor((msLeft % 3600000) / 60000);
+    return hours > 0 ? `Låser om ${hours} t ${mins} min` : `Låser om ${mins} min`;
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <div className="card">
+        <h3 style={h3}>Velkommen, {profile?.display_name}</h3>
+        <p style={muted}>Tip kampe, konkurrér med venner, og følg din Prediction Champ Rating.</p>
+      </div>
+
+      {loading && <div className="card"><p style={muted}>Henter…</p></div>}
+
+      {!loading && deadline && (
+        <div className="card" style={{ border: "1px solid #d4a73c55" }}>
+          <h3 style={h3}>Runde {deadline.roundLabel}</h3>
+          <p style={{ color: "#cfd8d1", fontSize: 14, marginTop: -4 }}>
+            Du mangler at tippe <strong>{deadline.missing}</strong> {deadline.missing === 1 ? "kamp" : "kampe"}.
+            {deadline.deadlineIso && <span style={{ color: "#d4a73c" }}> {deadlineCountdown(deadline.deadlineIso)}</span>}
+          </p>
+          <button style={primaryBtn} onClick={goToPredictions}><ClipboardList size={15} /> Tip nu</button>
+        </div>
+      )}
+      {!loading && !deadline && (
+        <div className="card">
+          <h3 style={h3}>Alle tips er inde 🎉</h3>
+          <p style={muted}>
+            {emptyNextDate ? `Næste runde åbner ${formatKickoff(emptyNextDate)}.` : "Følg med — nye kampe tilføjes snart."}
+          </p>
+        </div>
+      )}
+
+      {!loading && ratingSummary && (
+        <div className="card" style={{ cursor: "pointer" }} onClick={goToRating}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <h3 style={{ ...h3, marginBottom: 2 }}>Din rating</h3>
+              <p style={{ ...muted, margin: 0 }}>Placering #{ratingSummary.rank}{ratingSummary.provisional ? " · foreløbig" : ""}</p>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div className="pill" style={{ background: "#1c3d2c", color: "#d4a73c", fontSize: 16, fontWeight: 700 }}>{ratingSummary.rating}</div>
+              {ratingSummary.movement !== null && ratingSummary.movement !== 0 && (
+                <div style={{ fontSize: 12, fontWeight: 700, marginTop: 4, color: ratingSummary.movement > 0 ? "#7fd48a" : "#e08a7a" }}>
+                  {ratingSummary.movement > 0 ? `▲${ratingSummary.movement}` : `▼${Math.abs(ratingSummary.movement)}`}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!loading && positions.length > 0 && (
+        <div className="card">
+          <h3 style={h3}>Dine placeringer</h3>
+          <div style={{ display: "grid", gap: 6 }}>
+            {positions.map((p) => (
+              <div key={p.key} onClick={p.onClick} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "8px 10px", background: "#132f21", borderRadius: 8, cursor: "pointer",
+              }}>
+                <span style={{ color: "#f4f1e8", fontWeight: 600, fontSize: 14 }}>{p.label}</span>
+                <span style={{ color: "#9fb3a5", fontSize: 13 }}>{p.rankText}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <h3 style={h3}>Genveje</h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <button style={goldBtn} onClick={() => goToLeagues()}><Users size={15} /> Se ligaer og konkurrencer</button>
+          <button style={goldBtn} onClick={goToMonthly}><Award size={15} /> Championship / Månedsliga</button>
+          <button style={goldBtn} onClick={goToRating}><TrendingUp size={15} /> Prediction Champ Rating</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ================= Kontekstuel ⓘ-forklaring pr. sektion =================
+function SectionInfo({ title, text, details }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+      <p style={{ ...muted, margin: 0, flex: 1 }}>{text}</p>
+      <Info size={15} style={{ color: "#7fa38c", cursor: "pointer", flexShrink: 0, marginTop: 2 }} onClick={() => setOpen(true)} />
+      {open && (
+        <InfoModal title={title} onClose={() => setOpen(false)}>
+          <p style={{ color: "#cfd8d1", fontSize: 14 }}>{text}</p>
+          {details}
+        </InfoModal>
+      )}
+    </div>
+  );
+}
+
+function InfoModal({ title, children, onClose }) {
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: "#0f2a1d", border: "1px solid #2c4a3c", borderRadius: 14, width: "100%",
+        maxWidth: 420, maxHeight: "85vh", overflowY: "auto", padding: 18,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <h3 style={{ ...h3, margin: 0 }}>{title}</h3>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#9fb3a5", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ================= "Sådan virker det"-side (samlet regelsæt, nås fra topbjælken) =================
+function HowItWorksModal({ onClose }) {
   const Row = ({ label, value, color }) => (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #1f3a2c" }}>
       <span style={{ color: "#cfd8d1", fontSize: 14 }}>{label}</span>
@@ -662,46 +974,56 @@ function RulesTab() {
     </div>
   );
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <div className="card">
-        <h3 style={h3}>Pointsystem</h3>
-        <p style={muted}>Sådan beregnes point for hver kamp, du har forudsagt.</p>
-        <Row label="Korrekt resultat (fx gættet 2-1, endte 2-1)" value="+3 point" color="#22c55e" />
-        <Row label="Korrekt udfald (rigtig vinder eller uafgjort, forkert resultat)" value="+1 point" color="#7fd48a" />
-        <Row label="Forkert gæt" value="0 point" />
-        <p style={{ ...muted, marginTop: 10 }}>
-          Ingen straf — du kan aldrig få minuspoint. Det handler om at samle så mange rigtige gæt som muligt.
-        </p>
-        <p style={{ ...muted, marginTop: 6 }}>
-          <strong>Ved pointlighed</strong> når en konkurrence afsluttes: flest <strong>præcise resultater</strong> afgør
-          først, dernæst flest <strong>korrekte udfald</strong>.
-        </p>
+    <InfoModal title="Sådan virker det" onClose={onClose}>
+      <div style={{ display: "grid", gap: 18 }}>
+        <div>
+          <h4 style={{ ...h3, fontSize: 14 }}>1. Pointsystem</h4>
+          <Row label="Korrekt resultat (fx gættet 2-1, endte 2-1)" value="+3 point" color="#22c55e" />
+          <Row label="Korrekt udfald (rigtig vinder eller uafgjort, forkert resultat)" value="+1 point" color="#7fd48a" />
+          <Row label="Forkert gæt" value="0 point" />
+          <p style={{ ...muted, marginTop: 10, marginBottom: 0 }}>Ingen straf — du kan aldrig få minuspoint.</p>
+        </div>
+        <div>
+          <h4 style={{ ...h3, fontSize: 14 }}>2. Tiebreak</h4>
+          <p style={{ color: "#cfd8d1", fontSize: 14, margin: 0 }}>
+            Ved pointlighed: flest <strong>præcise resultater</strong> afgør først, dernæst flest <strong>korrekte udfald</strong>.
+          </p>
+        </div>
+        <div>
+          <h4 style={{ ...h3, fontSize: 14 }}>3. Prediction Champ Rating</h4>
+          <p style={{ color: "#cfd8d1", fontSize: 14, margin: 0 }}>
+            Parvis multiplayer-Elo på tværs af alle ligaer. Alle starter på 1000. De første 5 runder er
+            <strong> provisoriske</strong> ("NY"-badge) med en højere K-faktor. Beregnes én gang pr. spillerunde
+            ud fra gennemsnitspoint pr. kamp — at slå højere ratede spillere giver mere.
+          </p>
+        </div>
+        <div>
+          <h4 style={{ ...h3, fontSize: 14 }}>4. Månedsliga & Championship</h4>
+          <p style={{ color: "#cfd8d1", fontSize: 14, margin: 0 }}>
+            Månedsligaen samler alle brugeres point for kampe i en kalendermåned — ingen tilmelding, alle er med.
+            Flest point vinder <strong>Månedens Prediction Champ</strong>, og stillingen nulstilles den 1. i hver måned.
+            Championship-fanen samler månedsligaen og fremtidige officielle konkurrencer ét sted.
+          </p>
+        </div>
+        <div>
+          <h4 style={{ ...h3, fontSize: 14 }}>5. Tips-synlighed</h4>
+          <p style={{ color: "#cfd8d1", fontSize: 14, margin: 0 }}>
+            Du kan først se andres tips, når alle kampe i en runde har fået resultat — ingen kan se dine tips for uspillede kampe.
+          </p>
+        </div>
+        <div>
+          <h4 style={{ ...h3, fontSize: 14 }}>6. Rullende gætte-vindue</h4>
+          <p style={{ color: "#cfd8d1", fontSize: 14, margin: 0 }}>
+            Nogle ligaer bruger et rullende gætte-vindue: en kamp kan først tippes et antal dage før kickoff (typisk 7),
+            så alle tipper med nogenlunde samme viden. Det vælges, når konkurrencen oprettes. Din forudsigelse
+            låses under alle omstændigheder automatisk 1 time før kampens starttidspunkt.
+          </p>
+        </div>
       </div>
-
-      <div className="card">
-        <h3 style={h3}>Hvornår låses en forudsigelse?</h3>
-        <p style={{ color: "#cfd8d1", fontSize: 14 }}>
-          Din forudsigelse låses automatisk <strong>1 time før kampens starttidspunkt</strong> — derefter kan hverken
-          du eller andre ændre den. Er kampen allerede afgjort (resultatet er kendt), er den også låst.
-        </p>
-        <p style={{ color: "#cfd8d1", fontSize: 14 }}>
-          Nogle konkurrencer bruger et <strong>rullende gætte-vindue</strong>: dér kan en kamp først tippes
-          fra <strong>7 dage før kickoff</strong> — så alle tipper med nogenlunde samme viden, og man skal
-          forbi appen løbende gennem sæsonen. Det vælges, når konkurrencen oprettes.
-        </p>
-      </div>
-
-      <div className="card">
-        <h3 style={h3}>Runder</h3>
-        <p style={{ color: "#cfd8d1", fontSize: 14 }}>
-          En runde løber fra <strong>tirsdag til og med mandag</strong>. Kampe grupperes automatisk i runder ud fra
-          deres kickoff-tidspunkt.
-        </p>
-      </div>
-    </div>
+    </InfoModal>
   );
 }
-function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId, setSelectedCompId, reload, goToBoard, goToMonthly }) {
+function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId, setSelectedCompId, reload, goToBoard }) {
   const [createLeagueId, setCreateLeagueId] = useState(leagues[0]?.id || "");
   const [createSeason, setCreateSeason] = useState(null);
   const [createTeams, setCreateTeams] = useState([]);
@@ -922,20 +1244,12 @@ function CompetitionsTab({ token, userId, leagues, competitions, selectedCompId,
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div className="card">
+        <SectionInfo title="Ligaer" text="Private konkurrencer, du opretter og inviterer venner til." />
         <h3 style={h3}>Aktive konkurrencer</h3>
-        <p style={{ ...muted, marginTop: -4 }}>Klik på en konkurrence for at se stillingen.</p>
+        <p style={{ ...muted, marginTop: -4 }}>Klik på en konkurrence for at se stillingen. Månedsliga og Championship findes nu under Championship-fanen.</p>
         {competitions.length === 0 && <p style={muted}>Du er ikke med i nogen konkurrencer endnu — opret en, eller join med en kode.</p>}
         {competitions.length > 0 && active.length === 0 && <p style={muted}>Ingen aktive konkurrencer lige nu.</p>}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <div className="pill" onClick={goToMonthly} title="Se månedsligaen"
-            style={{ background: "#243a1c", border: "1px solid #d4a73c55", cursor: "pointer", padding: "8px 12px", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
-              <Trophy size={12} style={{ color: "#d4a73c", marginRight: 2 }} />
-              <span style={{ color: "#f4f1e8", fontWeight: 700 }}>Månedsliga</span>
-              <span style={{ color: "#7fa38c", fontSize: 12 }}>(alle er med)</span>
-            </div>
-            <span style={{ color: "#9fb3a5", fontSize: 11 }}>Månedens Prediction Champ på tværs af alle</span>
-          </div>
           {active.map((c) => <CompetitionCard key={c.id} c={c} />)}
         </div>
       </div>
@@ -1466,34 +1780,37 @@ function ResultsTab({ token, leagues }) {
   );
 }
 
-// ================= TAB: GLOBAL (rating + monthly league) =================
-function GlobalTab({ token, isAdmin, initialView }) {
-  const [view, setView] = useState(initialView || "rating"); // rating | monthly
-  const [ratingRows, setRatingRows] = useState(null);
+// ================= TAB: CHAMPIONSHIP (månedsliga + kommende officielle konkurrencer) =================
+function ChampionshipTab({ token, isAdmin }) {
   const [months, setMonths] = useState([]);
   const [month, setMonth] = useState(currentMonthKey());
   const [monthlyRows, setMonthlyRows] = useState(null);
   const [loading, setLoading] = useState(false);
   const [recomputing, setRecomputing] = useState(false);
   const [msg, setMsg] = useState("");
+  const [viewUser, setViewUser] = useState(null); // { userId, playerName }
+  const [monthDetail, setMonthDetail] = useState(null); // { completedRounds, predsByKey }
 
   async function load() {
     setLoading(true);
     try {
-      const [rb, ms] = await Promise.all([loadRatingBoard(token), loadMonthsAvailable(token)]);
-      setRatingRows(rb);
+      const ms = await loadMonthsAvailable(token);
       setMonths(ms.length ? ms : [currentMonthKey()]);
       const chosen = ms.includes(month) ? month : (ms[0] || currentMonthKey());
       setMonth(chosen);
-      setMonthlyRows(await loadMonthlyBoard(token, chosen));
+      const [rows, detail] = await Promise.all([loadMonthlyBoard(token, chosen), loadMonthlyRoundsAndPreds(token, chosen)]);
+      setMonthlyRows(rows);
+      setMonthDetail(detail);
     } catch (e) { setMsg(e.message || "Kunne ikke hente data"); }
     setLoading(false);
   }
   useEffect(() => { load(); }, []); // eslint-disable-line
 
   async function changeMonth(m) {
-    setMonth(m); setMonthlyRows(null);
-    setMonthlyRows(await loadMonthlyBoard(token, m));
+    setMonth(m); setMonthlyRows(null); setMonthDetail(null);
+    const [rows, detail] = await Promise.all([loadMonthlyBoard(token, m), loadMonthlyRoundsAndPreds(token, m)]);
+    setMonthlyRows(rows);
+    setMonthDetail(detail);
   }
 
   async function recompute() {
@@ -1508,94 +1825,194 @@ function GlobalTab({ token, isAdmin, initialView }) {
 
   const champ = monthlyRows && monthlyRows.length ? monthlyRows[0] : null;
   const isPastMonth = month < currentMonthKey();
+  const hasCompleted = monthDetail?.completedRounds?.length > 0;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-        <button onClick={() => setView("rating")} style={pillBtn(view === "rating")}>Rating</button>
-        <button onClick={() => setView("monthly")} style={pillBtn(view === "monthly")}>Månedsliga</button>
-        {isAdmin && (
-          <button onClick={recompute} disabled={recomputing} style={{ ...ghostNavBtn, marginLeft: "auto" }}>
-            {recomputing ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />} Opdater ratings
-          </button>
-        )}
-      </div>
+      <SectionInfo title="Championship" text="Officielle konkurrencer, alle er automatisk med." />
       {msg && <p style={{ ...muted, margin: 0 }}>{msg}</p>}
 
-      {view === "rating" && (
-        <div className="card">
-          <h3 style={h3}>Prediction Champ Rating</h3>
-          <p style={muted}>Din rating er et mål for <strong>hvor gode dine gæt er</strong> — ikke hvor mange point du har samlet. Alle starter på 1000, og efter hver spillerunde stiger du, hvis du rammer bedre end de andre, og falder, hvis du rammer dårligere. Det tæller ekstra at slå spillere med høj rating. Hver kamp tæller kun én gang, uanset hvor mange ligaer du er med i.</p>
-          <p style={muted}>Rangering af alle spillere på tværs af alle ligaer. <span style={{ color: "#7fa38c" }}>* = foreløbig (under 5 runder).</span></p>
-          {loading && <p style={muted}>Henter…</p>}
-          {!loading && ratingRows && ratingRows.length === 0 && <p style={muted}>Ingen ratings endnu — de beregnes, når der er spillet runder med resultater.</p>}
-          {!loading && ratingRows && ratingRows.length > 0 && (
-            <div style={{ overflowX: "auto" }}>
-              <table>
-                <thead><tr className="rowline">
-                  <th style={thStyle}>#</th><th style={thStyle}>Spiller</th>
-                  <th style={{ ...thStyle, textAlign: "center" }}>Runder</th>
-                  <th style={{ ...thStyle, textAlign: "right" }}>Rating</th>
-                </tr></thead>
-                <tbody>
-                  {ratingRows.map((r, i) => (
-                    <tr key={r.userId} className="rowline">
+      <div className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <h3 style={{ ...h3, margin: 0 }}>Månedsliga</h3>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {isAdmin && (
+              <button onClick={recompute} disabled={recomputing} style={ghostNavBtn}>
+                {recomputing ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />} Opdater ratings
+              </button>
+            )}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "10px 0" }}>
+          {months.map((m) => (
+            <button key={m} onClick={() => changeMonth(m)} style={pillBtn(m === month)}>{m}</button>
+          ))}
+        </div>
+        <SectionInfo title="Månedsliga"
+          text="Point pr. kamp i gennemsnit for månedens runder. Uafgjort afgøres på flest præcise resultater. Månedens vinder kåres som Månedens Prediction Champ."
+          details={<p style={{ color: "#cfd8d1", fontSize: 14, marginTop: 8 }}>Alle brugere er automatisk med — ingen tilmelding. Hver kamp tæller kun én gang, uanset hvor mange ligaer den er i. Stillingen nulstilles den 1. i hver måned.</p>} />
+        {champ && (
+          <div style={{ background: "#1c3d2c", borderRadius: 10, padding: "10px 14px", margin: "6px 0 12px", display: "flex", alignItems: "center", gap: 10 }}>
+            <Trophy size={18} style={{ color: "#d4a73c" }} />
+            <span style={{ color: "#f4f1e8", fontWeight: 700 }}>{isPastMonth ? "Månedens Prediction Champ" : "Fører lige nu"}: {champ.player}</span>
+            <span style={{ color: "#d4a73c", fontWeight: 700, marginLeft: "auto" }}>{champ.total} point</span>
+          </div>
+        )}
+        {loading && <p style={muted}>Henter…</p>}
+        {!loading && monthlyRows && monthlyRows.length === 0 && <p style={muted}>Ingen point i denne måned endnu.</p>}
+        {!loading && monthlyRows && monthlyRows.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead><tr className="rowline">
+                <th style={thStyle}>#</th><th style={thStyle}>Spiller</th>
+                <th style={{ ...thStyle, textAlign: "center" }} title="Antal præcise resultater">🎯</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Kampe</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Point</th>
+              </tr></thead>
+              <tbody>
+                {monthlyRows.map((r, i) => (
+                  <tr key={r.userId} className="rowline">
+                    <td style={{ color: i === 0 ? "#d4a73c" : "#7fa38c", fontWeight: 700 }}>{i === 0 ? "🏆" : i + 1}</td>
+                    <td style={{ color: "#f4f1e8", fontWeight: 600 }}>
+                      {hasCompleted
+                        ? <span onClick={() => setViewUser({ userId: r.userId, playerName: r.player })} style={{ cursor: "pointer", textDecoration: "underline", textDecorationColor: "#3f5348" }}>{r.player}</span>
+                        : r.player}
+                    </td>
+                    <td style={{ textAlign: "center", color: "#cfd8d1", fontSize: 13 }}>{r.exactCount}</td>
+                    <td style={{ textAlign: "center", color: "#9fb3a5", fontSize: 13 }}>{r.matches}</td>
+                    <td style={{ textAlign: "right" }}><span className="pill" style={{ background: i === 0 ? "#3a3010" : "#1c3d2c", color: i === 0 ? "#d4a73c" : "#e7ecdf", fontSize: 15 }}>{r.total}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <h3 style={h3}>Sæsonchampionship</h3>
+        <p style={muted}>Kommer snart — en officiel konkurrence for hele sæsonen, som alle automatisk er med i.</p>
+      </div>
+
+      {viewUser && monthDetail && (
+        <UserRoundPredictions
+          playerName={viewUser.playerName}
+          userId={viewUser.userId}
+          completedRounds={monthDetail.completedRounds}
+          predsByKey={monthDetail.predsByKey}
+          rules={{ exact: 3, outcome: 1 }}
+          initialKey={null}
+          onClose={() => setViewUser(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ================= TAB: RATING (Prediction Champ Rating leaderboard) =================
+function RatingTab({ token, userId }) {
+  const [ratingRows, setRatingRows] = useState(null);
+  const [historyByUser, setHistoryByUser] = useState(new Map());
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [rows, hist] = await Promise.all([loadRatingBoard(token), loadRatingHistoryByUser(token)]);
+      setRatingRows(rows);
+      setHistoryByUser(hist);
+    } catch (e) { setMsg(e.message || "Kunne ikke hente data"); }
+    setLoading(false);
+  }
+  useEffect(() => { load(); }, []); // eslint-disable-line
+
+  function movementFor(uid) {
+    const hist = historyByUser.get(uid) || [];
+    if (!hist.length) return null;
+    const last = hist[hist.length - 1];
+    const explicit = histField(last, ["change", "rating_change", "delta"]);
+    if (explicit !== null) return Math.round(Number(explicit));
+    if (hist.length >= 2) {
+      const prevRating = histField(hist[hist.length - 2], ["rating"]);
+      const lastRating = histField(last, ["rating"]);
+      if (prevRating !== null && lastRating !== null) return Math.round(Number(lastRating) - Number(prevRating));
+    }
+    return null;
+  }
+
+  function formDotsFor(uid) {
+    const hist = historyByUser.get(uid) || [];
+    const last5 = hist.slice(-5);
+    return last5.map((entry) => {
+      let delta = histField(entry, ["change", "rating_change", "delta"]);
+      if (delta === null) {
+        const idx = hist.indexOf(entry);
+        if (idx > 0) {
+          const prevRating = histField(hist[idx - 1], ["rating"]);
+          const curRating = histField(entry, ["rating"]);
+          if (prevRating !== null && curRating !== null) delta = Number(curRating) - Number(prevRating);
+        }
+      }
+      return delta === null ? 0 : Number(delta);
+    });
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <SectionInfo title="Rating" text="Din langsigtede dygtighed på tværs af alle ligaer. Opdateres efter hver runde. Championship er dét, man vinder — rating er dét, man er." />
+      {msg && <p style={{ ...muted, margin: 0 }}>{msg}</p>}
+      <div className="card">
+        <h3 style={h3}>Prediction Champ Rating</h3>
+        <p style={muted}>Din rating er et mål for <strong>hvor gode dine gæt er</strong> — ikke hvor mange point du har samlet. Alle starter på 1000, og efter hver spillerunde stiger du, hvis du rammer bedre end de andre, og falder, hvis du rammer dårligere. Det tæller ekstra at slå spillere med høj rating. Hver kamp tæller kun én gang, uanset hvor mange ligaer du er med i.</p>
+        <p style={muted}>Rangering af alle spillere på tværs af alle ligaer. <span className="pill" style={{ background: "rgba(212,167,60,0.15)", color: "#d4a73c", fontSize: 10 }}>NY</span> = foreløbig (under 5 runder).</p>
+        {loading && <p style={muted}>Henter…</p>}
+        {!loading && ratingRows && ratingRows.length === 0 && <p style={muted}>Ingen ratings endnu — de beregnes, når der er spillet runder med resultater.</p>}
+        {!loading && ratingRows && ratingRows.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead><tr className="rowline">
+                <th style={thStyle}>#</th><th style={thStyle}>Spiller</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Runder</th>
+                <th style={{ ...thStyle, textAlign: "center" }} title="Bevægelse siden sidste runde">▲▼</th>
+                <th style={{ ...thStyle, textAlign: "center" }} title="Form – seneste 5 runder">Form</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Rating</th>
+              </tr></thead>
+              <tbody>
+                {ratingRows.map((r, i) => {
+                  const movement = movementFor(r.userId);
+                  const dots = formDotsFor(r.userId);
+                  return (
+                    <tr key={r.userId} className="rowline" style={r.userId === userId ? { background: "rgba(212,167,60,0.08)" } : undefined}>
                       <td style={{ color: i === 0 ? "#d4a73c" : "#7fa38c", fontWeight: 700 }}>{i === 0 ? "🏆" : i + 1}</td>
-                      <td style={{ color: "#f4f1e8", fontWeight: 600 }}>{r.player}{r.provisional ? <span style={{ color: "#7fa38c" }} title="Foreløbig">*</span> : ""}</td>
+                      <td style={{ color: "#f4f1e8", fontWeight: 600 }}>
+                        {r.player}
+                        {r.provisional && <span className="pill" style={{ background: "rgba(212,167,60,0.15)", color: "#d4a73c", fontSize: 10, marginLeft: 6 }} title="Foreløbig – under 5 runder">NY</span>}
+                      </td>
                       <td style={{ textAlign: "center", color: "#9fb3a5", fontSize: 13 }}>{r.roundsPlayed}</td>
+                      <td style={{ textAlign: "center", fontSize: 12, fontWeight: 700, color: movement > 0 ? "#7fd48a" : movement < 0 ? "#e08a7a" : "#5c7266" }}>
+                        {movement === null ? "–" : movement > 0 ? `▲${movement}` : movement < 0 ? `▼${Math.abs(movement)}` : "–"}
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <span style={{ display: "inline-flex", gap: 3 }}>
+                          {dots.length === 0 && <span style={{ color: "#5c7266", fontSize: 12 }}>–</span>}
+                          {dots.map((d, di) => (
+                            <span key={di} title={d > 0 ? `+${Math.round(d)}` : `${Math.round(d)}`} style={{
+                              width: 7, height: 7, borderRadius: "50%", display: "inline-block",
+                              background: d > 0 ? "#7fd48a" : d < 0 ? "#e08a7a" : "#3f5348",
+                            }} />
+                          ))}
+                        </span>
+                      </td>
                       <td style={{ textAlign: "right" }}><span className="pill" style={{ background: i === 0 ? "#3a3010" : "#1c3d2c", color: i === 0 ? "#d4a73c" : "#cbb26a", fontSize: 15, fontWeight: 700 }}>{r.rating}</span></td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {view === "monthly" && (
-        <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-            <h3 style={{ ...h3, margin: 0 }}>Månedsliga</h3>
-            <select className="field" value={month} onChange={(e) => changeMonth(e.target.value)} style={{ ...fieldFull, width: "auto", padding: "6px 10px" }}>
-              {months.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-          <p style={muted}>Alle brugere er automatisk med — ingen tilmelding. Månedsligaen samler dine point for alle kampe i den valgte kalendermåned, og hver kamp tæller kun én gang, uanset hvor mange ligaer den er i. Den med flest point kåres som <strong>Månedens Prediction Champ</strong>, og stillingen nulstilles den 1. i hver måned.</p>
-          {champ && (
-            <div style={{ background: "#1c3d2c", borderRadius: 10, padding: "10px 14px", margin: "6px 0 12px", display: "flex", alignItems: "center", gap: 10 }}>
-              <Trophy size={18} style={{ color: "#d4a73c" }} />
-              <span style={{ color: "#f4f1e8", fontWeight: 700 }}>{isPastMonth ? "Månedens Prediction Champ" : "Fører lige nu"}: {champ.player}</span>
-              <span style={{ color: "#d4a73c", fontWeight: 700, marginLeft: "auto" }}>{champ.total} point</span>
-            </div>
-          )}
-          {loading && <p style={muted}>Henter…</p>}
-          {!loading && monthlyRows && monthlyRows.length === 0 && <p style={muted}>Ingen point i denne måned endnu.</p>}
-          {!loading && monthlyRows && monthlyRows.length > 0 && (
-            <div style={{ overflowX: "auto" }}>
-              <table>
-                <thead><tr className="rowline">
-                  <th style={thStyle}>#</th><th style={thStyle}>Spiller</th>
-                  <th style={{ ...thStyle, textAlign: "center" }} title="Antal præcise resultater">🎯</th>
-                  <th style={{ ...thStyle, textAlign: "center" }}>Kampe</th>
-                  <th style={{ ...thStyle, textAlign: "right" }}>Point</th>
-                </tr></thead>
-                <tbody>
-                  {monthlyRows.map((r, i) => (
-                    <tr key={r.player} className="rowline">
-                      <td style={{ color: i === 0 ? "#d4a73c" : "#7fa38c", fontWeight: 700 }}>{i === 0 ? "🏆" : i + 1}</td>
-                      <td style={{ color: "#f4f1e8", fontWeight: 600 }}>{r.player}</td>
-                      <td style={{ textAlign: "center", color: "#cfd8d1", fontSize: 13 }}>{r.exactCount}</td>
-                      <td style={{ textAlign: "center", color: "#9fb3a5", fontSize: 13 }}>{r.matches}</td>
-                      <td style={{ textAlign: "right" }}><span className="pill" style={{ background: i === 0 ? "#3a3010" : "#1c3d2c", color: i === 0 ? "#d4a73c" : "#e7ecdf", fontSize: 15 }}>{r.total}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -1872,7 +2289,17 @@ function BoardTab({ token, competitions, selectedCompId, setSelectedCompId }) {
 }
 
 // ---------- styles ----------
-const wrap = { minHeight: "100%", background: "#0b2318", color: "#f4f1e8", fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif", padding: 24, borderRadius: 16 };
+const wrap = { minHeight: "100%", background: "#0b2318", color: "#f4f1e8", fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif", padding: 24, borderRadius: 16, maxWidth: 430, margin: "0 auto", position: "relative" };
+const bottomNavWrap = {
+  position: "fixed", left: "50%", bottom: 0, transform: "translateX(-50%)", width: "100%", maxWidth: 430,
+  display: "flex", justifyContent: "space-around", background: "#0f2019", borderTop: "1px solid #244a37",
+  padding: "8px 4px calc(8px + env(safe-area-inset-bottom))", zIndex: 50,
+};
+const bottomNavBtn = (active) => ({
+  display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flex: 1,
+  background: "transparent", border: "none", cursor: "pointer", padding: "4px 2px",
+  color: active ? "#d4a73c" : "#7fa38c",
+});
 const cardStyle = { background: "#123526", border: "1px solid #244a37", borderRadius: 14, padding: 18 };
 const h3 = { margin: "0 0 6px 0", fontSize: 16, fontWeight: 700, color: "#f4f1e8" };
 const muted = { color: "#7fa38c", fontSize: 13, margin: "0 0 10px 0" };
