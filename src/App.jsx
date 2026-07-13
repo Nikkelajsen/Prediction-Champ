@@ -925,13 +925,13 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
     return () => { cancelled = true; };
   }, [token, userId, competitions]); // eslint-disable-line
 
-  const firstName = (profile?.display_name || "").split(" ")[0] || profile?.display_name || "";
+  const displayName = profile?.display_name || "";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
         <Eyebrow>{daFullDate()}</Eyebrow>
-        <H size={30}>Hej {firstName}</H>
+        <H size={30}>Hej {displayName}</H>
       </div>
 
       {/* Signatur: næste deadline */}
