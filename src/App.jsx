@@ -271,6 +271,39 @@ async function loadMonthsAvailable(token) {
   return [...new Set(rows.map((r) => r.month))].sort().reverse();
 }
 
+// ---------- Sæsonchampionship: samlede point for hele en ligas sæson ----------
+// Beregnet i appen: alle er automatisk med (alle der har tippet en kamp i sæsonen).
+// Kun spillede kampe tæller — de er altid låste, så alles gæt kan læses (RLS).
+async function loadSeasonBoard(token, leagueId) {
+  const seasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=id,name,start_date&order=start_date.desc&limit=1`);
+  if (!seasons.length) return null;
+  const season = seasons[0];
+  const ms = await db.select(token, "matches", `season_id=eq.${season.id}&select=id,round_key,home_score,away_score`);
+  if (!ms.length) return { season, rows: [], totalMatches: 0, playedMatches: 0, isComplete: false };
+  const matchIds = ms.map((m) => m.id);
+  const preds = await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&select=user_id,match_id,pred_home,pred_away`);
+  const matchById = new Map(ms.map((m) => [m.id, m]));
+  const rules = { exact: 3, outcome: 1 };
+  const byUser = {};
+  for (const p of preds) {
+    const m = matchById.get(p.match_id);
+    if (!m || m.home_score == null || m.away_score == null) continue; // kun spillede kampe
+    const pts = pointsFor(p, m, rules);
+    if (pts == null) continue;
+    const u = (byUser[p.user_id] ||= { total: 0, exactCount: 0, matches: 0 });
+    u.total += pts; u.matches += 1;
+    if (p.pred_home === m.home_score && p.pred_away === m.away_score) u.exactCount++;
+  }
+  const userIds = Object.keys(byUser);
+  const profiles = userIds.length ? await db.select(token, "profiles", `id=in.(${userIds.join(",")})&select=id,display_name`) : [];
+  const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
+  const rows = userIds.map((uid) => ({ userId: uid, player: nameById.get(uid) || "—", ...byUser[uid] }))
+    .sort((a, b) => b.total - a.total || b.exactCount - a.exactCount);
+  const playedMatches = ms.filter((m) => m.home_score != null && m.away_score != null).length;
+  const totalMatches = ms.length;
+  return { season, rows, totalMatches, playedMatches, isComplete: totalMatches > 0 && playedMatches === totalMatches };
+}
+
 // ---------- Hjem: næste deadline + manglende tips på tværs af brugerens konkurrencer ----------
 async function computeHomeTips(token, userId, competitions) {
   const compIds = competitions.map((c) => c.id);
@@ -808,7 +841,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     body = <LigaerTab token={token} userId={userId} competitions={competitions}
       openBoard={openBoard} openCreate={openCreate} reload={loadAll} />;
   } else if (tab === "championship") {
-    body = <ChampionshipTab token={token} userId={userId} />;
+    body = <ChampionshipTab token={token} userId={userId} leagues={visibleLeagues} />;
   } else if (tab === "rating") {
     body = <RatingTab token={token} userId={userId} />;
   }
@@ -1165,11 +1198,18 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, reload 
 // ================================================================
 //  FANE: CHAMPIONSHIP (månedsliga + kommende officielle events)
 // ================================================================
-function ChampionshipTab({ token, userId }) {
+function ChampionshipTab({ token, userId, leagues = [] }) {
   const [months, setMonths] = useState([]);
   const [month, setMonth] = useState(currentMonthKey());
   const [rows, setRows] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [season, setSeason] = useState(null); // null=henter · undefined=ingen liga · objekt=data
+
+  const superliga = useMemo(
+    () => leagues.find((l) => /superliga/i.test(l.name || "") && l.is_visible !== false)
+      || leagues.find((l) => /superliga/i.test(l.name || "")) || null,
+    [leagues]
+  );
 
   useEffect(() => {
     (async () => {
@@ -1183,6 +1223,19 @@ function ChampionshipTab({ token, userId }) {
       setLoading(false);
     })();
   }, []); // eslint-disable-line
+
+  useEffect(() => {
+    if (!superliga) { setSeason(undefined); return; }
+    let cancelled = false;
+    (async () => {
+      setSeason(null);
+      try {
+        const b = await loadSeasonBoard(token, superliga.id);
+        if (!cancelled) setSeason(b || undefined);
+      } catch (e) { if (!cancelled) setSeason(undefined); }
+    })();
+    return () => { cancelled = true; };
+  }, [token, superliga]); // eslint-disable-line
 
   async function changeMonth(m) {
     setMonth(m); setRows(null);
@@ -1242,15 +1295,53 @@ function ChampionshipTab({ token, userId }) {
         <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>Samlede point for månedens kampe · uafgjort afgøres på flest præcise resultater</div>
       </Card>
 
-      {/* Sæsonchampionship (statisk — datamodellen udvides senere) */}
+      {/* Sæsonchampionship (live — samlede point for hele sæsonen) */}
       <Card>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Sæsonchampionship</div>
-            <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>Hele Superligaen · løber over hele sæsonen</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
+            Sæsonchampionship
+            <InfoDot title="Sæsonchampionship">Dine samlede point for alle {superliga?.name || "Superligaens"} kampe i hele sæsonen. Alle er automatisk med. Uafgjort afgøres på flest præcise resultater, og sæsonens bedste kåres som Sæsonens Prediction Champ.</InfoDot>
           </div>
-          <Minus color={C.muted} size={18} />
+          {season && season.rows && season.totalMatches > 0 && (
+            <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{season.playedMatches}/{season.totalMatches} spillet</span>
+          )}
         </div>
+        <div style={{ color: C.muted, fontSize: 12, marginTop: -4, marginBottom: 8 }}>
+          {superliga?.name || "Superligaen"} · løber over hele sæsonen
+        </div>
+
+        {season === null && <p style={{ ...muted, margin: 0 }}>Henter…</p>}
+        {season === undefined && <p style={{ ...muted, margin: 0 }}>Sæsonchampionship er ikke tilgængeligt endnu.</p>}
+        {season && season.rows && season.rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen point i sæsonen endnu — stillingen fyldes, når kampene spilles.</p>}
+
+        {season && season.rows && season.rows.length > 0 && (
+          <>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8, background: "rgba(240,180,41,0.1)",
+              border: `1px solid rgba(240,180,41,0.35)`, borderRadius: 10, padding: "8px 12px", marginBottom: 10,
+            }}>
+              <Crown size={16} color={C.gold} />
+              <span style={{ fontSize: 13 }}><b>{season.rows[0].player}</b> {season.isComplete ? "er Sæsonens Prediction Champ" : "fører lige nu"}</span>
+            </div>
+            {season.rows.map((r, i) => {
+              const you = r.userId === userId;
+              return (
+                <div key={r.userId} style={{
+                  display: "grid", gridTemplateColumns: "24px 1fr auto auto", gap: 10, alignItems: "center",
+                  padding: "8px 0", borderTop: i ? `1px solid ${C.line}` : "none",
+                  background: you ? "rgba(34,197,94,0.06)" : "transparent",
+                  margin: you ? "0 -8px" : 0, paddingLeft: you ? 8 : 0, paddingRight: you ? 8 : 0, borderRadius: you ? 8 : 0,
+                }}>
+                  <span style={{ fontFamily: font.display, fontWeight: 700, color: i === 0 ? C.gold : C.muted }}>{i + 1}</span>
+                  <span style={{ fontSize: 14, fontWeight: you ? 700 : 400 }}>{r.player}{you ? " (dig)" : ""}</span>
+                  <span style={{ color: C.muted, fontSize: 12 }}>{r.exactCount} × 🎯 · {r.matches} kampe</span>
+                  <span style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700 }}>{r.total}</span>
+                </div>
+              );
+            })}
+            <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>Samlede point for hele sæsonen · uafgjort afgøres på flest præcise resultater</div>
+          </>
+        )}
       </Card>
 
       {/* Plads til flere events */}
