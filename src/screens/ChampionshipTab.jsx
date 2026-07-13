@@ -89,8 +89,8 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
       <Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-            Rundeliga
-            <InfoDot title="Rundeliga">Dine samlede point for én enkelt spillerunde (på tværs af alle ligaer, hver kamp én gang). Alle er automatisk med. Uafgjort afgøres på flest præcise resultater, og rundens bedste kåres som Rundens Prediction Champ. Vælg en runde i dropdownen.</InfoDot>
+            Rundens Prediction Champ
+            <InfoDot title="Rundens Prediction Champ">Dine samlede point for én enkelt spillerunde (på tværs af alle ligaer, hver kamp én gang). Alle er automatisk med. Uafgjort afgøres på flest præcise resultater, og rundens bedste kåres som Rundens Prediction Champ. Vælg en runde i dropdownen.</InfoDot>
           </div>
           {rounds.length > 0 && (
             <select className="field" value={roundKey || ""} onChange={(e) => changeRound(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
@@ -137,8 +137,8 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
       <Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-            Månedsliga
-            <InfoDot title="Månedsliga">Dine samlede point for alle månedens kampe (hver kamp tælles én gang på tværs af ligaer). Uafgjort afgøres på flest præcise resultater. Månedens vinder kåres som Månedens Prediction Champ. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</InfoDot>
+            Månedens Prediction Champ
+            <InfoDot title="Månedens Prediction Champ">Dine samlede point for alle månedens kampe (hver kamp tælles én gang på tværs af ligaer). Uafgjort afgøres på flest præcise resultater. Månedens vinder kåres som Månedens Prediction Champ. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</InfoDot>
           </div>
           <select className="field" value={month} onChange={(e) => changeMonth(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
             {months.map((m) => <option key={m} value={m}>{monthName(m)}</option>)}
@@ -180,8 +180,8 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
       <Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-            Sæsonchampionship
-            <InfoDot title="Sæsonchampionship">Dine samlede point for alle {superliga?.name || "Superligaens"} kampe i hele sæsonen. Alle er automatisk med. Uafgjort afgøres på flest præcise resultater, og sæsonens bedste kåres som Sæsonens Prediction Champ.</InfoDot>
+            Sæsonens Prediction Champ
+            <InfoDot title="Sæsonens Prediction Champ">Dine samlede point for alle {superliga?.name || "Superligaens"} kampe i hele sæsonen. Alle er automatisk med. Uafgjort afgøres på flest præcise resultater, og sæsonens bedste kåres som Sæsonens Prediction Champ.</InfoDot>
           </div>
           {season && season.rows && season.totalMatches > 0 && (
             <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{season.playedMatches}/{season.totalMatches} spillet</span>
@@ -192,7 +192,7 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
         </div>
 
         {season === null && <p style={{ ...muted, margin: 0 }}>Henter…</p>}
-        {season === undefined && <p style={{ ...muted, margin: 0 }}>Sæsonchampionship er ikke tilgængeligt endnu.</p>}
+        {season === undefined && <p style={{ ...muted, margin: 0 }}>Sæsonens Prediction Champ er ikke tilgængelig endnu.</p>}
         {season && season.rows && season.rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen point i sæsonen endnu — stillingen fyldes, når kampene spilles.</p>}
 
         {season && season.rows && season.rows.length > 0 && (
