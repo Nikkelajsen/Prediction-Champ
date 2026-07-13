@@ -47,6 +47,7 @@ Mode	Beskrivelse
 `custom`	Håndplukkede kampe, valgt på tværs af alle synlige ligaer, med liga-filter i vælgeren
 `random`	Et valgt antal tilfældige kampe fra den nærmeste kommende runde, med mulighed for at afgrænse til bestemte ligaer. Antallet begrænses automatisk til hvad der reelt er tilgængeligt
 `custom` og `random` sætter `league_id`/`season_id` til `null` på konkurrencen — de er ikke bundet til én liga.
+Nye konkurrencer starter altid på 0 point: for `full_season` og `team` (som trækker kampe direkte fra hele sæsonen) udelader `createCompetition` automatisk allerede afsluttede runder ved oprettelsen. Da `predictions` deles på tværs af konkurrencer, ville en ny konkurrence ellers med det samme give point for forudsigelser, man allerede havde afgivet i andre konkurrencer. Reglen: find den første spillerunde (`round_key`) hvor ikke alle kampe har resultat endnu, og medtag kun kampe fra og med den runde (helper: `filterFromNextUnfinishedRound`). Er hele sæsonen allerede spillet færdig, oprettes konkurrencen uden kampe. `custom` og `random` er upåvirket, da de i forvejen kun tilbyder kommende/ikke-spillede kampe i vælgeren; `time_range` filtrerer stadig kun på det datointerval, brugeren selv angiver.
 Månedsligaen er en særlig "virtuel" konkurrence: den findes ikke som en `competitions`-række, men vises automatisk for alle brugere (se afsnit 5).
 Rullende gætte-vindue
 Valgfrit pr. konkurrence (afkrydsning ved oprettelse): sætter `rules.openDaysBefore` (typisk 7). En kamp kan først forudsiges det angivne antal dage før kickoff. Da forudsigelser deles på tværs af konkurrencer, gælder vinduet kun, hvis alle konkurrencer en kamp indgår i har det sat — ellers ville det være muligt at omgå vinduet via en anden konkurrence.
@@ -157,6 +158,9 @@ Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke
 ---
 13. Changelog
 Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 12).
+
+Juli 2026 — Nye konkurrencer starter altid fra 0
+Rettet: en ny `full_season`/`team`-konkurrence kunne før få point med det samme, hvis brugeren allerede havde afgivet forudsigelser på de samme kampe i andre konkurrencer (da `predictions` er delt på tværs af konkurrencer). `createCompetition` udelader nu allerede afsluttede runder ved oprettelse og starter i stedet fra næste ikke-afsluttede spillerunde (afsnit 3).
 
 Juli 2026 — Rating & månedsliga
 Prediction Champ Rating: selvkorrigerende Elo, én gang pr. runde, alle ligaer samlet (afsnit 5). Ny Global-fane med rating-rangliste og månedsliga.
