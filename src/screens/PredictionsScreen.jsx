@@ -4,7 +4,7 @@ import { Check } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, outcome, pointsFor } from "../lib/scoring.js";
 import { C, muted } from "../ui/theme.js";
-import { BackBar, Card, RoundPager, ScoreInput } from "../ui/components.jsx";
+import { BackBar, Card, H, RoundPager, ScoreInput } from "../ui/components.jsx";
 
 function PredictionsScreen({ token, userId, competitions, initialFilter, onBack }) {
   const [compFilter, setCompFilter] = useState(initialFilter || "all");
@@ -116,7 +116,7 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <BackBar title="Tip" onBack={onBack} />
+      {onBack ? <BackBar title="Tip" onBack={onBack} /> : <div style={{ marginBottom: 16 }}><H>Tip</H></div>}
       {!competitions.length ? (
         <p style={muted}>Opret eller join en konkurrence først.</p>
       ) : (
