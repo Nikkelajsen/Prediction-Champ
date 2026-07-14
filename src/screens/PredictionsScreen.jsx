@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Check } from "lucide-react";
 import { db } from "../lib/supabase.js";
-import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, outcome, pointsFor } from "../lib/scoring.js";
+import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, outcome, pointsFor, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS } from "../lib/scoring.js";
 import { C, muted } from "../ui/theme.js";
 import { BackBar, Card, H, RoundPager, ScoreInput } from "../ui/components.jsx";
 
@@ -61,6 +61,7 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
   }, [compFilter, competitions]); // eslint-disable-line
 
   const rounds = useMemo(() => groupIntoRounds(allMatches), [allMatches]);
+  const roundLockMap = useMemo(() => buildRoundLockMap(allMatches), [allMatches]);
   const round = rounds[roundIndex];
 
   async function save(matchId, field, val) {
@@ -96,8 +97,9 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
   }
 
   function lockCountdown(m) {
-    if (!m.kickoff_at) return null;
-    const msLeft = new Date(m.kickoff_at).getTime() - 60 * 60 * 1000 - Date.now();
+    const earliest = roundLockMap.get(roundLockKey(m));
+    if (earliest == null) return null;
+    const msLeft = earliest - LOCK_LEAD_MS - Date.now();
     if (msLeft <= 0 || msLeft > 24 * 3600 * 1000) return null;
     const hours = Math.floor(msLeft / 3600000);
     const mins = Math.floor((msLeft % 3600000) / 60000);
@@ -134,7 +136,7 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {round.matches.map((m) => {
                   const pred = preds[m.id] || { pred_home: null, pred_away: null };
-                  const locked = isLocked(m);
+                  const locked = isLocked(m, roundLockMap);
                   const played = m.home_score !== null && m.home_score !== undefined;
                   const hasPred = pred.pred_home !== null && pred.pred_away !== null;
                   const pts = played ? pointsFor(pred, m, rules) : null;
