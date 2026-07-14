@@ -32,7 +32,7 @@ function HowItWorksScreen({ onBack }) {
         Du kan først se andres tips, når runden er låst — ingen kan se dine tips inden da. Alle kampe i en runde låses samtidig, 1 time før rundens første kamp. Så tipper alle på samme grundlag og ingen kan spekulere i resultater undervejs.
       </Section>
       <Section title="Rullende gætte-vindue">
-        Nogle ligaer bruger et rullende vindue: en kamp kan først tippes et bestemt antal dage før kickoff (typisk 7). Så tipper alle med nogenlunde samme viden. Det vælges, når konkurrencen oprettes.
+        Nogle ligaer bruger et rullende vindue: en runde kan først tippes et bestemt antal dage før rundens første kamp (typisk 7). Så tipper alle med nogenlunde samme viden. Det vælges, når konkurrencen oprettes.
       </Section>
     </div>
   );
