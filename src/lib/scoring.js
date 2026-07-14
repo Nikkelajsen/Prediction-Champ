@@ -59,11 +59,37 @@ function formatKickoff(iso) {
   return d.toLocaleDateString("da-DK", { weekday: "short", day: "2-digit", month: "2-digit" }) + " kl. " +
     d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
 }
-function isLocked(match) {
-  if (match.home_score !== null && match.home_score !== undefined) return true;
-  if (!match.kickoff_at) return false;
-  const lockAt = new Date(match.kickoff_at).getTime() - 60 * 60 * 1000; // 1 time før kickoff
-  return Date.now() >= lockAt;
+const LOCK_LEAD_MS = 60 * 60 * 1000; // 1 time før rundens første kickoff
+
+// Rundenøgle til låsning: scoper på (season_id, round_key) — samme som RLS-policyen.
+// To ligaer der deler samme kalenderuge (round_key) er dermed separate runder.
+function roundLockKey(m) { return `${m.season_id ?? ""}|${m.round_key ?? ""}`; }
+
+// Map<key, tidligste kickoff (ms)> over en fuld kampliste. Kampe uden kickoff
+// springes over; en runde uden kendte kickoffs får ingen entry ⇒ aldrig låst.
+function buildRoundLockMap(matches) {
+  const map = new Map();
+  for (const m of matches) {
+    if (!m.kickoff_at) continue;
+    const key = roundLockKey(m);
+    const t = new Date(m.kickoff_at).getTime();
+    const cur = map.get(key);
+    if (cur === undefined || t < cur) map.set(key, t);
+  }
+  return map;
 }
 
-export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked };
+// En kamp er låst hvis den har fået resultat, ELLER hvis vi er inden for 1 time
+// af rundens TIDLIGSTE kickoff. roundLockMap kommer fra buildRoundLockMap over
+// hele kamplisten. Uden map falder vi tilbage til per-kamp (så intet crasher).
+function isLocked(match, roundLockMap) {
+  if (match.home_score !== null && match.home_score !== undefined) return true;
+  if (!match.kickoff_at) return false;
+  const earliest = roundLockMap
+    ? roundLockMap.get(roundLockKey(match))
+    : new Date(match.kickoff_at).getTime();
+  if (earliest === undefined || earliest === null) return false;
+  return Date.now() >= earliest - LOCK_LEAD_MS;
+}
+
+export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap };

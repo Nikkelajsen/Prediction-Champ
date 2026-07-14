@@ -29,7 +29,7 @@ function HowItWorksScreen({ onBack }) {
         <b>Championship</b> er officielle konkurrencer, hvor alle automatisk er med. <b>Månedsligaen</b> samler dine point for alle kampe i kalendermåneden (point pr. kamp i gennemsnit). Månedens bedste kåres som <b>Månedens Prediction Champ</b>, og stillingen nulstilles den 1.
       </Section>
       <Section title="Tips-synlighed">
-        Du kan først se andres tips, når alle kampe i en runde har fået resultat — ingen kan se dine tips for uspillede kampe. En forudsigelse låses 1 time før kickoff.
+        Du kan først se andres tips, når runden er låst — ingen kan se dine tips inden da. Alle kampe i en runde låses samtidig, 1 time før rundens første kamp. Så tipper alle på samme grundlag og ingen kan spekulere i resultater undervejs.
       </Section>
       <Section title="Rullende gætte-vindue">
         Nogle ligaer bruger et rullende vindue: en kamp kan først tippes et bestemt antal dage før kickoff (typisk 7). Så tipper alle med nogenlunde samme viden. Det vælges, når konkurrencen oprettes.

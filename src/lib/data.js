@@ -1,6 +1,6 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { db, restFetch } from "./supabase.js";
-import { currentRoundIndex, groupIntoRounds, isLocked, outcome, pointsFor, roundLabel } from "./scoring.js";
+import { currentRoundIndex, groupIntoRounds, isLocked, outcome, pointsFor, roundLabel, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS } from "./scoring.js";
 
 // henter deltagere + kampe + forudsigelser for én konkurrence og beregner stilling + status
 async function computeCompetitionState(token, competitionId, rules) {
@@ -210,6 +210,7 @@ async function computeHomeTips(token, userId, competitions) {
   const matchComps = {};
   for (const c of cms) (matchComps[c.match_id] ||= []).push(c.competition_id);
   const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
+  const lockMap = buildRoundLockMap(ms);
   const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]).filter(Boolean))];
   const teams = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
@@ -229,7 +230,7 @@ async function computeHomeTips(token, userId, competitions) {
   const now = Date.now();
   const played = (m) => m.home_score !== null && m.home_score !== undefined;
 
-  const tippable = ms.filter((m) => !played(m) && !isLocked(m) && !opensAt(m) && m.kickoff_at);
+  const tippable = ms.filter((m) => !played(m) && !isLocked(m, lockMap) && !opensAt(m) && m.kickoff_at);
   const isTipped = (m) => { const p = predByMatch.get(m.id); return !!(p && p.pred_home != null && p.pred_away != null); };
   const allOk = () => {
     const future = ms.filter((m) => !played(m) && m.kickoff_at && new Date(m.kickoff_at).getTime() > now)
@@ -248,7 +249,7 @@ async function computeHomeTips(token, userId, competitions) {
     .sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));
   if (!roundUntipped.length) return allOk();
 
-  const deadline = Math.min(...roundUntipped.map((m) => new Date(m.kickoff_at).getTime() - 3600 * 1000));
+  const deadline = Math.min(...roundUntipped.map((m) => (lockMap.get(roundLockKey(m)) ?? new Date(m.kickoff_at).getTime()) - LOCK_LEAD_MS));
   const names = roundUntipped.slice(0, 3).map((m) => `${teamName.get(m.home_team_id) || "?"} – ${teamName.get(m.away_team_id) || "?"}`);
   return { hasComps: true, allTipped: false, roundKey: nextRoundKey, roundLabelText: roundLabel(nextRoundKey), deadline, missingCount: roundUntipped.length, names };
 }
