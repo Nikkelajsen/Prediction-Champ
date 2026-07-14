@@ -16,16 +16,6 @@
 
 import webpush from "web-push";
 
-// ---- scoring (samme regler som frontendens scoring.js — bevidst duplikeret,
-// så serverfunktionen ikke afhænger af frontend-moduler) ----
-const RULES = { exact: 3, outcome: 1 };
-function outcome(h, a) { return h === a ? "X" : h > a ? "1" : "2"; }
-function pointsFor(pred, m) {
-  if (!pred || m.home_score == null || m.away_score == null || pred.pred_home == null || pred.pred_away == null) return null;
-  if (pred.pred_home === m.home_score && pred.pred_away === m.away_score) return RULES.exact;
-  if (outcome(pred.pred_home, pred.pred_away) === outcome(m.home_score, m.away_score)) return RULES.outcome;
-  return 0;
-}
 function roundLabel(key) {
   const start = new Date(key + "T12:00:00");
   const end = new Date(start); end.setDate(start.getDate() + 6);
@@ -169,31 +159,19 @@ export default async function handler(req, res) {
       const finishedRounds = Object.entries(byRound)
         .filter(([, list]) => list.length > 0 && list.every((m) => m.home_score != null && m.away_score != null));
 
-      for (const [roundKey, list] of finishedRounds) {
-        const matchIds = list.map((m) => m.id);
-        const preds = await sb(`/rest/v1/predictions?match_id=in.(${matchIds.join(",")})&select=user_id,match_id,pred_home,pred_away`);
-        const matchById = new Map(list.map((m) => [m.id, m]));
-        const byUser = {};
-        for (const p of preds) {
-          const pts = pointsFor(p, matchById.get(p.match_id));
-          if (pts == null) continue;
-          const u = (byUser[p.user_id] ||= { total: 0, exactCount: 0 });
-          u.total += pts;
-          if (p.pred_home === matchById.get(p.match_id).home_score && p.pred_away === matchById.get(p.match_id).away_score) u.exactCount++;
-        }
-        const board = Object.entries(byUser)
-          .map(([uid, u]) => ({ uid, ...u }))
-          .sort((a, b) => b.total - a.total || b.exactCount - a.exactCount);
+      for (const [roundKey] of finishedRounds) {
+        // samme kilde som Championship-fanen: DB-viewet round_standings (sql/standings_views.sql)
+        const board = await sb(`/rest/v1/round_standings?round_key=eq.${roundKey}&select=user_id,total_points,exact_count&order=total_points.desc,exact_count.desc`);
         board.forEach((r, i) => { r.rank = i + 1; });
 
         for (const r of board) {
-          if (!subsByUser[r.uid]) continue;
+          if (!subsByUser[r.user_id]) continue;
           const champ = r.rank === 1;
           outbox.push({
-            userId: r.uid,
+            userId: r.user_id,
             key: `result:${roundKey}`,
             title: champ ? "Du er Rundens Prediction Champ! 🏆" : "Runden er slut ⚽",
-            body: `Runden ${roundLabel(roundKey)}: du fik ${r.total} point og blev nr. ${r.rank} af ${board.length}.`,
+            body: `Runden ${roundLabel(roundKey)}: du fik ${r.total_points} point og blev nr. ${r.rank} af ${board.length}.`,
             tag: `result-${roundKey}`,
           });
         }

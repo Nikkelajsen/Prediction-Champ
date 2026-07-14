@@ -1,5 +1,4 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
-import { X } from "lucide-react";
 
 // ---------- scoring helpers ----------
 // Simpelt, straffrit pointsystem:

@@ -136,7 +136,8 @@ async function loadMonthsAvailable(token) {
 
 // ---------- Rundeliga: samlede point for én enkelt spillerunde (round_key) ----------
 // Samme princip som månedsligaen: alle er automatisk med, på tværs af alle ligaer,
-// hver kamp tælles én gang. Beregnet i appen; kun spillede (låste) kampe tæller.
+// hver kamp tælles én gang. Stillingen læses fra DB-viewet round_standings
+// (sql/standings_views.sql) — kun spillede (låste) kampe indgår i viewet.
 async function loadRoundsAvailable(token) {
   const rows = await db.select(token, "matches", `home_score=not.is.null&select=round_key`);
   return [...new Set(rows.map((r) => r.round_key))].sort().reverse();
@@ -144,57 +145,38 @@ async function loadRoundsAvailable(token) {
 async function loadRoundBoard(token, roundKey) {
   const ms = await db.select(token, "matches", `round_key=eq.${roundKey}&select=id,home_score,away_score`);
   if (!ms.length) return { rows: [], totalMatches: 0, playedMatches: 0, isComplete: false };
-  const matchIds = ms.map((m) => m.id);
-  const preds = await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&select=user_id,match_id,pred_home,pred_away`);
-  const matchById = new Map(ms.map((m) => [m.id, m]));
-  const rules = { exact: 3, outcome: 1 };
-  const byUser = {};
-  for (const p of preds) {
-    const m = matchById.get(p.match_id);
-    if (!m || m.home_score == null || m.away_score == null) continue; // kun spillede kampe
-    const pts = pointsFor(p, m, rules);
-    if (pts == null) continue;
-    const u = (byUser[p.user_id] ||= { total: 0, exactCount: 0, matches: 0 });
-    u.total += pts; u.matches += 1;
-    if (p.pred_home === m.home_score && p.pred_away === m.away_score) u.exactCount++;
-  }
-  const userIds = Object.keys(byUser);
-  const profiles = userIds.length ? await db.select(token, "profiles", `id=in.(${userIds.join(",")})&select=id,display_name`) : [];
+  const board = await db.select(token, "round_standings",
+    `round_key=eq.${roundKey}&select=user_id,total_points,matches,exact_count&order=total_points.desc,exact_count.desc`);
+  const ids = board.map((r) => r.user_id);
+  const profiles = ids.length ? await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`) : [];
   const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
-  const rows = userIds.map((uid) => ({ userId: uid, player: nameById.get(uid) || "—", ...byUser[uid] }))
-    .sort((a, b) => b.total - a.total || b.exactCount - a.exactCount);
+  const rows = board.map((r) => ({
+    userId: r.user_id, player: nameById.get(r.user_id) || "—",
+    total: r.total_points, exactCount: r.exact_count, matches: r.matches,
+  }));
   const playedMatches = ms.filter((m) => m.home_score != null && m.away_score != null).length;
   return { rows, totalMatches: ms.length, playedMatches, isComplete: ms.length > 0 && playedMatches === ms.length };
 }
 
 // ---------- Sæsonchampionship: samlede point for hele en ligas sæson ----------
-// Beregnet i appen: alle er automatisk med (alle der har tippet en kamp i sæsonen).
-// Kun spillede kampe tæller — de er altid låste, så alles gæt kan læses (RLS).
+// Alle er automatisk med (alle der har tippet en spillet kamp i sæsonen).
+// Stillingen læses fra DB-viewet season_standings (sql/standings_views.sql);
+// kampene hentes kun til fremdrifts-tælleren (spillet/total).
 async function loadSeasonBoard(token, leagueId) {
   const seasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=id,name,start_date&order=start_date.desc&limit=1`);
   if (!seasons.length) return null;
   const season = seasons[0];
-  const ms = await db.select(token, "matches", `season_id=eq.${season.id}&select=id,round_key,home_score,away_score`);
+  const ms = await db.select(token, "matches", `season_id=eq.${season.id}&select=id,home_score,away_score`);
   if (!ms.length) return { season, rows: [], totalMatches: 0, playedMatches: 0, isComplete: false };
-  const matchIds = ms.map((m) => m.id);
-  const preds = await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&select=user_id,match_id,pred_home,pred_away`);
-  const matchById = new Map(ms.map((m) => [m.id, m]));
-  const rules = { exact: 3, outcome: 1 };
-  const byUser = {};
-  for (const p of preds) {
-    const m = matchById.get(p.match_id);
-    if (!m || m.home_score == null || m.away_score == null) continue; // kun spillede kampe
-    const pts = pointsFor(p, m, rules);
-    if (pts == null) continue;
-    const u = (byUser[p.user_id] ||= { total: 0, exactCount: 0, matches: 0 });
-    u.total += pts; u.matches += 1;
-    if (p.pred_home === m.home_score && p.pred_away === m.away_score) u.exactCount++;
-  }
-  const userIds = Object.keys(byUser);
-  const profiles = userIds.length ? await db.select(token, "profiles", `id=in.(${userIds.join(",")})&select=id,display_name`) : [];
+  const board = await db.select(token, "season_standings",
+    `season_id=eq.${season.id}&select=user_id,total_points,matches,exact_count&order=total_points.desc,exact_count.desc`);
+  const ids = board.map((r) => r.user_id);
+  const profiles = ids.length ? await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`) : [];
   const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
-  const rows = userIds.map((uid) => ({ userId: uid, player: nameById.get(uid) || "—", ...byUser[uid] }))
-    .sort((a, b) => b.total - a.total || b.exactCount - a.exactCount);
+  const rows = board.map((r) => ({
+    userId: r.user_id, player: nameById.get(r.user_id) || "—",
+    total: r.total_points, exactCount: r.exact_count, matches: r.matches,
+  }));
   const playedMatches = ms.filter((m) => m.home_score != null && m.away_score != null).length;
   const totalMatches = ms.length;
   return { season, rows, totalMatches, playedMatches, isComplete: totalMatches > 0 && playedMatches === totalMatches };
