@@ -1,6 +1,6 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
-import { Home, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings } from "lucide-react";
+import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { C, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
 import HjemTab from "./HjemTab.jsx";
@@ -87,6 +87,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
 
   const tabs = [
     { id: "hjem", label: "Hjem", icon: Home },
+    { id: "tip", label: "Tip", icon: ClipboardList },
     { id: "ligaer", label: "Ligaer", icon: Users },
     { id: "championship", label: "Championship", icon: Trophy },
     { id: "rating", label: "Rating", icon: TrendingUp },
@@ -115,6 +116,9 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   } else if (tab === "hjem") {
     body = <HjemTab token={token} userId={userId} profile={profile} competitions={competitions.filter((c) => !c._hidden)}
       goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} />;
+  } else if (tab === "tip") {
+    body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
+      initialFilter="all" />;
   } else if (tab === "ligaer") {
     body = <LigaerTab token={token} userId={userId} competitions={competitions}
       openBoard={openBoard} openCreate={openCreate} reload={loadAll} />;
