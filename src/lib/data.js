@@ -230,23 +230,27 @@ async function computeHomeTips(token, userId, competitions) {
   const played = (m) => m.home_score !== null && m.home_score !== undefined;
 
   const tippable = ms.filter((m) => !played(m) && !isLocked(m) && !opensAt(m) && m.kickoff_at);
-  const untipped = tippable.filter((m) => {
-    const p = predByMatch.get(m.id);
-    return !(p && p.pred_home != null && p.pred_away != null);
-  });
-
-  if (!untipped.length) {
+  const isTipped = (m) => { const p = predByMatch.get(m.id); return !!(p && p.pred_home != null && p.pred_away != null); };
+  const allOk = () => {
     const future = ms.filter((m) => !played(m) && m.kickoff_at && new Date(m.kickoff_at).getTime() > now)
       .sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));
     return { hasComps: true, allTipped: true, nextOpen: future[0]?.kickoff_at || null };
-  }
+  };
 
-  untipped.sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));
-  const roundKey = untipped[0].round_key;
-  const roundUntipped = untipped.filter((m) => m.round_key === roundKey);
+  // "Næste runde" = den TIDLIGSTE runde, der stadig har kampe man kan tippe. Vi viser
+  // KUN status for den runde: er den fuldt tippet, er alt ok (grøn) — også selvom senere
+  // runder mangler tips (de bliver "næste runde" i tur, efterhånden som runderne spilles).
+  // (Før valgte vi den tidligste UTIPPEDE kamp, så en runde langt ude kunne fejlagtigt
+  // vise rødt, selvom de nærmeste runder var tippet.)
+  if (!tippable.length) return allOk();
+  const nextRoundKey = tippable.reduce((min, m) => (m.round_key < min ? m.round_key : min), tippable[0].round_key);
+  const roundUntipped = tippable.filter((m) => m.round_key === nextRoundKey && !isTipped(m))
+    .sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));
+  if (!roundUntipped.length) return allOk();
+
   const deadline = Math.min(...roundUntipped.map((m) => new Date(m.kickoff_at).getTime() - 3600 * 1000));
   const names = roundUntipped.slice(0, 3).map((m) => `${teamName.get(m.home_team_id) || "?"} – ${teamName.get(m.away_team_id) || "?"}`);
-  return { hasComps: true, allTipped: false, roundKey, roundLabelText: roundLabel(roundKey), deadline, missingCount: roundUntipped.length, names };
+  return { hasComps: true, allTipped: false, roundKey: nextRoundKey, roundLabelText: roundLabel(nextRoundKey), deadline, missingCount: roundUntipped.length, names };
 }
 
 // ---------- Hjem: live-oversigt over indeværende runde ----------
