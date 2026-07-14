@@ -16,6 +16,7 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
   const [loading, setLoading] = useState(false);
   const [roundIndex, setRoundIndex] = useState(0);
   const [savedIds, setSavedIds] = useState({});
+  const [errIds, setErrIds] = useState({});
   const [expandedId, setExpandedId] = useState(null);
   const [matchComps, setMatchComps] = useState({});
   const [, setTick] = useState(0);
@@ -73,9 +74,17 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
         && cur.pred_away !== null && cur.pred_away !== undefined;
       if (wasSaved) {
         try {
-          await db.del(token, "predictions", `user_id=eq.${userId}&match_id=eq.${matchId}`);
-          setAllPreds((ap) => ap.filter((p) => !(p.user_id === userId && p.match_id === matchId)));
-        } catch (e) { /* best-effort — næste gem/sletning retter op */ }
+          const deleted = await db.del(token, "predictions", `user_id=eq.${userId}&match_id=eq.${matchId}`);
+          // Med Prefer: return=representation svarer PostgREST med de faktisk slettede
+          // rækker. Tom liste = intet blev slettet (RLS-policyen mangler/blokerer), selvom
+          // rækken findes — gør det synligt i stedet for at fejle lydløst.
+          if (Array.isArray(deleted) && deleted.length === 0) {
+            setErrIds((s) => ({ ...s, [matchId]: true }));
+          } else {
+            setErrIds((s) => { const c = { ...s }; delete c[matchId]; return c; });
+            setAllPreds((ap) => ap.filter((p) => !(p.user_id === userId && p.match_id === matchId)));
+          }
+        } catch (e) { setErrIds((s) => ({ ...s, [matchId]: true })); }
       }
       return;
     }
@@ -151,6 +160,7 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
                           <span style={{ color: C.muted }}>-</span>
                           <ScoreInput value={pred.pred_away} onChange={(v) => save(m.id, "pred_away", v)} disabled={locked || !!notOpenUntil} />
                           {savedIds[m.id] && <Check size={16} style={{ color: C.green }} />}
+                          {errIds[m.id] && <span style={{ fontSize: 11, color: C.red }}>Kunne ikke slette</span>}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           {played && (
