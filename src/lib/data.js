@@ -1,6 +1,6 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { db, restFetch } from "./supabase.js";
-import { groupIntoRounds, isLocked, outcome, pointsFor, roundLabel } from "./scoring.js";
+import { currentRoundIndex, groupIntoRounds, isLocked, outcome, pointsFor, roundLabel } from "./scoring.js";
 
 // henter deltagere + kampe + forudsigelser for én konkurrence og beregner stilling + status
 async function computeCompetitionState(token, competitionId, rules) {
@@ -249,6 +249,54 @@ async function computeHomeTips(token, userId, competitions) {
   return { hasComps: true, allTipped: false, roundKey, roundLabelText: roundLabel(roundKey), deadline, missingCount: roundUntipped.length, names };
 }
 
+// ---------- Hjem: live-oversigt over indeværende runde ----------
+// Samler brugerens konkurrence-kampe, grupperer i runder og vælger den runde der
+// spilles nu (eller nærmeste kommende, via currentRoundIndex). Returnerer rundens
+// kampe med resultat + brugerens eget tip + point, så Hjem kan vise en oversigt der
+// opdaterer løbende, efterhånden som resultater tikker ind (sync). Hver kamp tælles
+// én gang (dedup på match-id), da predictions deles på tværs af konkurrencer.
+async function computeCurrentRound(token, userId, competitions) {
+  const compIds = competitions.map((c) => c.id);
+  if (!compIds.length) return null;
+  const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=match_id`);
+  const ids = [...new Set(cms.map((c) => c.match_id))];
+  if (!ids.length) return null;
+  const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
+  if (!ms.length) return null;
+  const rounds = groupIntoRounds(ms);
+  const round = rounds[currentRoundIndex(rounds)];
+  if (!round || !round.matches.length) return null;
+
+  const teamIds = [...new Set(round.matches.flatMap((m) => [m.home_team_id, m.away_team_id]).filter(Boolean))];
+  const teams = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
+  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  const roundMatchIds = round.matches.map((m) => m.id);
+  const preds = await db.select(token, "predictions", `match_id=in.(${roundMatchIds.join(",")})&user_id=eq.${userId}&select=match_id,pred_home,pred_away`);
+  const predByMatch = new Map(preds.map((p) => [p.match_id, p]));
+  const rules = { exact: 3, outcome: 1 };
+
+  let myPoints = 0, playedCount = 0;
+  const matches = round.matches.map((m) => {
+    const played = m.home_score != null && m.away_score != null;
+    const pred = predByMatch.get(m.id) || null;
+    const points = played ? pointsFor(pred, m, rules) : null;
+    if (played) { playedCount++; if (points != null) myPoints += points; }
+    const inProgress = !played && m.kickoff_at && new Date(m.kickoff_at).getTime() <= Date.now();
+    return {
+      id: m.id,
+      home: teamName.get(m.home_team_id) || "?",
+      away: teamName.get(m.away_team_id) || "?",
+      homeScore: m.home_score, awayScore: m.away_score,
+      kickoff: m.kickoff_at, played, inProgress, pred, points,
+    };
+  });
+  return {
+    roundKey: round.key, roundLabelText: round.label,
+    matches, myPoints, playedCount, totalCount: round.matches.length,
+    isComplete: playedCount === round.matches.length,
+  };
+}
+
 // ---------- dato/tid-formattering til Hjem ----------
 function daFullDate(d = new Date()) {
   const s = d.toLocaleDateString("da-DK", { weekday: "long", day: "numeric", month: "long" });
@@ -291,4 +339,4 @@ async function loadUserStats(token) {
   return restFetch(`/rest/v1/rpc/admin_user_stats`, { method: "POST", token, body: {} });
 }
 
-export { computeCompetitionState, loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, computeHomeTips, daFullDate, fmtCountdown, monthName, touchActivity, loadUserStats };
+export { computeCompetitionState, loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, computeHomeTips, computeCurrentRound, daFullDate, fmtCountdown, monthName, touchActivity, loadUserStats };
