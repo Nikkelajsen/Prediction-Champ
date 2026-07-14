@@ -2,12 +2,35 @@
 import { useState, useEffect } from "react";
 import { ChevronRight, Clock, Check } from "lucide-react";
 import { formatKickoff, outcome } from "../lib/scoring.js";
-import { computeCompetitionState, computeHomeTips, currentMonthKey, daFullDate, fmtCountdown, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
+import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, fmtCountdown, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { C, btnGreen, font, muted } from "../ui/theme.js";
 import { Card, Eyebrow, FormDots, H, Move } from "../ui/components.jsx";
 
+// lille point-pille til runde-oversigten: grøn +3 · guld +1 · dæmpet 0 · "–" hvis intet tip
+function PointsPill({ pts }) {
+  if (pts == null) return <span style={{ color: C.muted, fontSize: 12 }}>–</span>;
+  const col = pts >= 3 ? C.green : pts >= 1 ? C.gold : C.muted;
+  const bg = pts >= 3 ? "rgba(34,197,94,0.15)" : pts >= 1 ? "rgba(240,180,41,0.15)" : "transparent";
+  const border = pts >= 1 ? "none" : `1px solid ${C.line}`;
+  return (
+    <span style={{ background: bg, color: col, border, fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "2px 8px", minWidth: 30, textAlign: "center" }}>
+      {pts > 0 ? `+${pts}` : "0"}
+    </span>
+  );
+}
+
+// kompakt kickoff til runde-oversigten (fx "man. 12.05. 14.00")
+function shortKick(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const day = d.toLocaleDateString("da-DK", { weekday: "short", day: "2-digit", month: "2-digit" });
+  const t = d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
+  return `${day} ${t}`;
+}
+
 function HjemTab({ token, userId, profile, competitions, goTab, openPredictions, openBoard }) {
   const [tips, setTips] = useState(null);
+  const [round, setRound] = useState(null); // live-oversigt over indeværende runde
   const [snapshot, setSnapshot] = useState(null); // { rating, move, form, rank, total }
   const [placements, setPlacements] = useState(null); // [{ label, pos, gold, onClick }]
   const [, setTick] = useState(0);
@@ -16,6 +39,21 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
     const id = setInterval(() => setTick((t) => t + 1), 60000);
     return () => clearInterval(id);
   }, []);
+
+  // Indeværende runde: hentes ved mount og genindlæses hvert minut, så resultater/point
+  // opdaterer løbende efterhånden som kampene spilles (results tikker ind via sync).
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const r = await computeCurrentRound(token, userId, competitions);
+        if (!cancelled) setRound(r);
+      } catch (e) { if (!cancelled) setRound(null); }
+    };
+    load();
+    const id = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [token, userId, competitions]); // eslint-disable-line
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +137,44 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           </div>
           <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{tips.names.join(" · ")}</div>
           <button style={{ ...btnGreen, marginTop: 12 }} onClick={() => openPredictions("all", tips.roundKey)}>Tip nu</button>
+        </Card>
+      )}
+
+      {/* Indeværende runde: live-oversigt der opdaterer løbende */}
+      {round && round.totalCount > 0 && (
+        <Card onClick={() => openPredictions("all", round.roundKey)}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <Eyebrow>Indeværende runde</Eyebrow>
+            <span style={{ color: C.muted, fontSize: 12 }}>{round.playedCount}/{round.totalCount} spillet</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Runde {round.roundLabelText}</span>
+            {round.playedCount > 0 && (
+              <span style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, color: C.gold }}>{round.myPoints} p</span>
+            )}
+          </div>
+          <div style={{ marginTop: 6 }}>
+            {round.matches.map((m, i) => (
+              <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${C.line}` }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.home} – {m.away}</div>
+                  <div style={{ color: C.muted, fontSize: 11, marginTop: 1 }}>{m.pred ? `Dit tip: ${m.pred.pred_home}-${m.pred.pred_away}` : "Intet tip"}</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  {m.played ? (
+                    <>
+                      <span style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>{m.homeScore}-{m.awayScore}</span>
+                      <PointsPill pts={m.points} />
+                    </>
+                  ) : m.inProgress ? (
+                    <span style={{ color: C.green, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>I gang</span>
+                  ) : (
+                    <span style={{ color: C.muted, fontSize: 12 }}>{shortKick(m.kickoff)}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </Card>
       )}
 
