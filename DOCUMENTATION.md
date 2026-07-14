@@ -39,6 +39,8 @@ Tabel	Formål
 `monthly_standings` (view)	Live-view der beregner månedsligaens stilling direkte fra `predictions` + `matches`. Se afsnit 5.
 `round_standings` (view)	Live-view med rundeligaens stilling pr. `round_key` (`sql/standings_views.sql`). Se afsnit 5.
 `season_standings` (view)	Live-view med sæsonchampionship-stillingen pr. `season_id` (`sql/standings_views.sql`). Se afsnit 5.
+`push_subscriptions`	Web Push-abonnementer, én række pr. enhed/browser der har slået notifikationer til. RLS: kun egne rækker. Se afsnit 16.
+`notification_log`	Log over sendte push-beskeder pr. bruger (`user_id`, `key`), så samme besked aldrig sendes to gange. Kun serverfunktionen læser/skriver. Se afsnit 16.
 `user_activity_days`	Aktivitets-sporing til brugerstatistik: én række pr. bruger pr. aktiv dag (`user_id`, `day`, PK begge). Skrives af `touch_activity()` ved app-start. RLS slået til uden policies — læses/skrives kun via `security definer`-funktioner. Se afsnit 15.
 RLS-hovedregel for `predictions` (vigtig, rettet i patch 10): man kan altid læse sine egne forudsigelser; andres kun for kampe, der er låst. Dette forhindrer snyd (at kigge andres gæt inden man selv tipper). **Låsning er runde-baseret** (jf. `sql/predictions_round_lock_policies.sql`): alle kampe i en runde — samme `(season_id, round_key)` — låser samtidig, 1 time før rundens *tidligste* kickoff (eller så snart en kamp har fået resultat). Reglen `nu >= min(kickoff) − 1t` er i SQL udtrykt null-sikkert som "der findes en kamp i runden med `kickoff_at <= now() + 1 time`". Frontenden bruger samme regel via `isLocked(match, roundLockMap)` i `src/lib/scoring.js`. Så tipper alle på samme vidensgrundlag, og ingen kan spekulere i tidlige resultater eller afslørede gæt undervejs i runden.
 ---
@@ -101,7 +103,7 @@ Appen er mobil-first med en bundnavigation på fire faner og en topbjælke.
 Topbjælke: krone + "Prediction Champ", samt til højre: ⓘ (åbner "Sådan virker det"-siden), tandhjul (kun admin → Admin-skærmen), og log ud.
 
 De fire faner (bundnav):
-Hjem — deadline-kort (næste rundes deadline + antal kampe der mangler tips + "Tip nu"-knap; helper `computeHomeTips`), rating-snapshot (rating, bevægelse, placering, formkurve → linker til Rating), og "Dine placeringer" (månedsliga + private ligaer, hver linker videre). Deadline-kortet er farvekodet: rødt når man mangler tips til næste runde, grønt ("Alt ok — alle tips er inde") når alt er tippet. Derunder en live-oversigt over indeværende runde (resultat/tip/point pr. kamp + samlede point), der genindlæses hvert minut mens kampene spilles (helper `computeCurrentRound`).
+Hjem — deadline-kort (næste rundes deadline + antal kampe der mangler tips + "Tip nu"-knap; helper `computeHomeTips`), rating-snapshot (rating, bevægelse, placering, formkurve → linker til Rating), og "Dine placeringer" (månedsliga + private ligaer, hver linker videre). Deadline-kortet er farvekodet: rødt når man mangler tips til næste runde, grønt ("Alt ok — alle tips er inde") når alt er tippet. Derunder en live-oversigt over indeværende runde (resultat/tip/point pr. kamp + samlede point), der genindlæses hvert minut mens kampene spilles (helper `computeCurrentRound`). Nederst et opt-in-kort til push-notifikationer (afsnit 16), som kan skjules og forsvinder når man er tilmeldt.
 Ligaer — brugerens private konkurrencer som kort (navn, type, antal deltagere, egen placering). Opret (åbner opret-skærm), Join med kode, Arkivér/Gendan (kun afsluttede/arkiverede) og Slet (opretteren, på alle egne ligaer). Klik på et kort → Stilling.
 Championship — officielle konkurrencer, alle automatisk med: Rundeliga (rundevælger + Rundens Prediction Champ), Månedsliga (månedsvælger + Månedens Prediction Champ) og Sæsonchampionship (live stilling + Sæsonens Prediction Champ + progress).
 Rating — rangliste med rating, formkurve-prikker (seneste 5 runder), bevægelse ▲/▼ og "NY"-badge. Egen række fremhæves.
@@ -130,8 +132,11 @@ Variabel	Formål
 `SPORTMONKS_TOKEN`	API-nøgle til Sportmonks
 `SUPABASE_URL`	Supabase-projektets URL
 `SUPABASE_SERVICE_ROLE_KEY`	Server-side Supabase-nøgle (aldrig i frontend)
-`SYNC_SECRET`	Autoriserer eksterne cron-kald til sync-funktionen
-Disse bruges kun af serverfunktionen (`api/sync-matches.js`). Frontenden bruger som udgangspunkt en hårdkodet offentlig `SUPABASE_URL` + `publishable`-nøgle (i `src/lib/supabase.js`), men kan pege på en anden database via to valgfrie byggetids-variabler:
+`SYNC_SECRET`	Autoriserer eksterne cron-kald til serverfunktionerne
+`VAPID_PUBLIC_KEY`	Web Push: offentlig VAPID-nøgle (generér med `npx web-push generate-vapid-keys`)
+`VAPID_PRIVATE_KEY`	Web Push: privat VAPID-nøgle (aldrig i frontend eller git)
+`VAPID_SUBJECT`	Valgfri `mailto:`-kontaktadresse, som sendes til push-tjenesterne
+Disse bruges kun af serverfunktionerne (`api/sync-matches.js` og `api/send-notifications.js`). Frontenden bruger som udgangspunkt en hårdkodet offentlig `SUPABASE_URL` + `publishable`-nøgle (i `src/lib/supabase.js`), men kan pege på en anden database via to valgfrie byggetids-variabler:
 `VITE_SUPABASE_URL`	Frontend: overstyr Supabase-URL (fx staging). Udeladt = produktion
 `VITE_SUPABASE_KEY`	Frontend: overstyr publishable-nøgle. Udeladt = produktion
 Staging-database (anbefalet opsætning): opret et Supabase-projekt nr. 2, kør alle scripts fra `sql/` (+ det oprindelige skema-/rating-script) dérinde, og sæt `VITE_SUPABASE_URL`/`VITE_SUPABASE_KEY` i Vercel KUN for Preview-miljøet (Settings → Environment Variables → Preview). Sæt tilsvarende `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` for Preview, så også serverfunktionen rammer staging. Lokalt: kopiér `.env.example` til `.env.local`.
@@ -160,7 +165,7 @@ Test: Vitest-suiten (`src/lib/*.test.js`) dækker den rene logik — pointberegn
 12. Kendte begrænsninger
 Superliga Playoff kan ikke synkroniseres endnu — Sportmonks har ikke oprettet 2026/27-sæsonen for den del (formentlig til foråret). Den er skjult for almindelige brugere (`is_visible = false`) men tilgængelig for admin under Kampe/Resultater.
 Alle kan oprette konti uden godkendelse — fint til en lukket venneflok.
-Ingen push-notifikationer eller e-mail-påmindelser om deadlines.
+Push-notifikationer kræver opt-in pr. enhed (afsnit 16); der er ingen e-mail-påmindelser. På iOS virker push kun, når appen er føjet til hjemmeskærmen (iOS 16.4+).
 Koden er opdelt i moduler (afsnit 1). Den enkelte fil er nu overskuelig (største ~240 linjer); ved yderligere vækst kan `data.js` og de største skærme deles videre op.
 Rating-genberegningen er stadig en fuld genberegning fra bunden, men kører nu kun når et resultat reelt ændres (afsnit 5). Ved mange tusinde brugere bør selve beregningen laves inkrementel eller optimeres (sortér + histogram i stedet for alle-mod-alle).
 Det oprindelige skema-/rating-SQL ligger ikke i repoet (kun i Supabase). Indsæt det i `sql/`-mappen, så hele databasen kan genskabes fra git — nødvendigt bl.a. for at opsætte staging.
@@ -181,6 +186,9 @@ Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke
 ---
 14. Changelog
 Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 13).
+
+Juli 2026 — Push-notifikationer
+Web Push med to beskedtyper: deadline-påmindelse (runder der mangler tips og låser snart — runde-baseret, som låsereglen) og runde-resultat (point + placering fra `round_standings`-viewet; vinderen kåres som Rundens Prediction Champ). Opt-in-kort på Hjem, service worker uden cache, nye tabeller `push_subscriptions` + `notification_log` (`sql/push_notifications.sql`), ny serverfunktion `api/send-notifications.js` (VAPID/web-push, dryRun, dedup, oprydning af døde abonnementer) og nyt cron-job. Se afsnit 16.
 
 Juli 2026 — Teknisk gæld: DB-views, staging-mulighed, testsuite, smartere rating-trigger
 Fire skaleringsforbedringer uden ændring i, hvad brugerne ser:
@@ -250,5 +258,18 @@ Nøgletal
 Hentes i ét kald via `admin_user_stats()` (`security definer` med `is_admin`-guard → `jsonb`, så den offentlige RLS-nøgle ikke eksponerer rådata). Frontend-helper: `loadUserStats(token)`; visning i `StatsPanel` (AdminScreen). Målte størrelser: total & nye (7/30 dage) fra `created_at`; aktive DAU/WAU/MAU + fastholdelse (DAU/MAU) og gns. aktive dage fra `user_activity_days`; engagement (har tippet, gns. tips/bruger, med i privat liga) fra `predictions`/`competition_participants`; konkurrencer (antal private ligaer + fordeling pr. `mode` med procent — kun brugeroprettede, ikke de virtuelle) fra `competitions`; frafald (aldrig tippet, inaktive 30+ dage); samt to søjlekurver (tilmeldinger/uge, aktive/dag). Total/nye dækker også eksisterende brugere, da `created_at` er backfillet fra `auth.users`.
 
 Rettigheder: `user_activity_days` har RLS slået til uden policies (kun tilgængelig via de to `security definer`-funktioner). Begge funktioner er `grant execute ... to authenticated`; kun `admin_user_stats()` er admin-gated internt.
+---
+16. Push-notifikationer (`api/send-notifications.js`)
+Web Push til brugere, der har slået notifikationer til. To slags beskeder:
+- Deadline-påmindelse: runder der mangler brugerens tips og låser inden for de næste timer (standard 3, styres med `&hours=`). Runde-baseret som låsereglen (afsnit 2): en runde — samme `(season_id, round_key)` — låser 1 time før sin tidligste kickoff. Maks. én påmindelse pr. runde pr. dag pr. bruger.
+- Runde-resultat: når ALLE kampe i en runde har fået resultat — rundens point + placering fra `round_standings`-viewet (samme kilde som Championship-fanen, så tallene altid matcher); vinderen får en "Rundens Prediction Champ"-besked.
+Tilmelding: opt-in-kort på Hjem-fanen (kan skjules; vises ikke igen når man er tilmeldt eller har sagt nej i browseren). Frontend-helpers i `src/lib/push.js`, service worker i `public/sw.js` (bevidst UDEN fetch-handler — den cacher intet, så PWA'en aldrig hænger fast i en gammel version). På iOS kræver Web Push, at appen først er føjet til hjemmeskærmen (iOS 16.4+); kortet forklarer det selv. Ved log ud afmeldes enhedens abonnement, så en delt enhed ikke får den forrige brugers beskeder.
+Data: `push_subscriptions` (abonnementer) + `notification_log` (dedup). Begge oprettes af det idempotente script `sql/push_notifications.sql` (kør med "Run without RLS", jf. afsnit 13).
+Udsendelse: `web-push`-pakken (VAPID). Frontendens tilmelding henter den offentlige nøgle via `/api/send-notifications?action=vapidKey` (offentligt), så nøglen kun findes i Vercels miljøvariabler. Døde abonnementer (HTTP 404/410 fra push-tjenesten) slettes automatisk.
+Kaldes med: `/api/send-notifications?secret=<SYNC_SECRET>`
+Test uden at sende noget: tilføj `&dryRun=true` (viser hvad der VILLE blive sendt)
+Adgang: som sync-funktionen (admin-token eller `SYNC_SECRET`).
+Automatisk kørsel: ét ekstra cron-job.org-job, der kalder linket hvert 15.-30. minut (dækker alle ligaer på én gang).
+Engangsopsætning: 1) kør `sql/push_notifications.sql` i Supabase, 2) generér nøgler med `npx web-push generate-vapid-keys`, 3) sæt `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` (og evt. `VAPID_SUBJECT`) i Vercel, 4) opret cron-jobbet.
 ---
 Bed Claude om at opdatere denne fil, når der sker større ændringer.
