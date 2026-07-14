@@ -85,12 +85,14 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, reload 
             <ChevronRight size={18} color={C.muted} />
           </div>
         </div>
-        {(s?.isComplete || isArchived) && (
+        {(s?.isComplete || isArchived || c.created_by === userId) && (
           <div style={{ marginTop: 8, display: "flex", gap: 14, alignItems: "center" }}>
-            <span onClick={(e) => { e.stopPropagation(); setArchived(c.id, !isArchived); }}
-              style={{ color: C.muted, fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>
-              {isArchived ? "Gendan" : "Arkivér"}
-            </span>
+            {(s?.isComplete || isArchived) && (
+              <span onClick={(e) => { e.stopPropagation(); setArchived(c.id, !isArchived); }}
+                style={{ color: C.muted, fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>
+                {isArchived ? "Gendan" : "Arkivér"}
+              </span>
+            )}
             {c.created_by === userId && (
               <span onClick={(e) => { e.stopPropagation(); deleteCompetition(c); }}
                 style={{ color: C.red, fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>

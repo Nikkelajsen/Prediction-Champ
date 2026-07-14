@@ -79,10 +79,10 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         </Card>
       )}
       {tips && tips.hasComps && tips.allTipped && (
-        <Card style={{ borderColor: C.line }}>
+        <Card style={{ borderColor: C.green, background: "linear-gradient(135deg, #14212F 0%, #14302A 100%)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Check size={16} color={C.green} />
-            <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Alle tips er inde</div>
+            <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", color: C.green }}>Alt ok — alle tips er inde</div>
           </div>
           <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
             {tips.nextOpen ? `Næste kamp: ${formatKickoff(tips.nextOpen)}` : "Vi giver besked, når næste runde åbner."}
@@ -90,8 +90,8 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         </Card>
       )}
       {tips && tips.hasComps && !tips.allTipped && !tips.noMatches && !tips.error && (
-        <Card style={{ borderColor: C.green, background: "linear-gradient(135deg, #14212F 0%, #14302A 100%)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, color: C.green, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        <Card style={{ borderColor: C.red, background: "linear-gradient(135deg, #14212F 0%, #2E1620 100%)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, color: C.red, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>
             <Clock size={13} /> Deadline om {fmtCountdown(tips.deadline)}
           </div>
           <div style={{ fontFamily: font.display, fontSize: 22, fontWeight: 700, textTransform: "uppercase", marginTop: 4 }}>
