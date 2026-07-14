@@ -36,7 +36,7 @@ const db = {
   update: (token, table, query, patch) =>
     restFetch(`/rest/v1/${table}?${query}`, { method: "PATCH", token, body: patch, prefer: "return=representation" }),
   del: (token, table, query) =>
-    restFetch(`/rest/v1/${table}?${query}`, { method: "DELETE", token, prefer: "return=minimal" }),
+    restFetch(`/rest/v1/${table}?${query}`, { method: "DELETE", token, prefer: "return=representation" }),
 };
 const auth = {
   signUp: (email, password) =>

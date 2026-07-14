@@ -16,6 +16,7 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
   const [loading, setLoading] = useState(false);
   const [roundIndex, setRoundIndex] = useState(0);
   const [savedIds, setSavedIds] = useState({});
+  const [errIds, setErrIds] = useState({});
   const [expandedId, setExpandedId] = useState(null);
   const [matchComps, setMatchComps] = useState({});
   const [, setTick] = useState(0);
@@ -66,7 +67,27 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
     const cur = preds[matchId] || { pred_home: null, pred_away: null };
     const next = { ...cur, [field]: val };
     setPreds({ ...preds, [matchId]: next });
-    if (next.pred_home === null || next.pred_away === null) return;
+    if (next.pred_home === null || next.pred_away === null) {
+      // Tippet er ryddet. Var der et gemt (fuldstændigt) tip, skal det slettes i databasen —
+      // ellers dukker det op igen næste gang appen åbnes (kun lokal state blev tømt).
+      const wasSaved = cur.pred_home !== null && cur.pred_home !== undefined
+        && cur.pred_away !== null && cur.pred_away !== undefined;
+      if (wasSaved) {
+        try {
+          const deleted = await db.del(token, "predictions", `user_id=eq.${userId}&match_id=eq.${matchId}`);
+          // Med Prefer: return=representation svarer PostgREST med de faktisk slettede
+          // rækker. Tom liste = intet blev slettet (RLS-policyen mangler/blokerer), selvom
+          // rækken findes — gør det synligt i stedet for at fejle lydløst.
+          if (Array.isArray(deleted) && deleted.length === 0) {
+            setErrIds((s) => ({ ...s, [matchId]: true }));
+          } else {
+            setErrIds((s) => { const c = { ...s }; delete c[matchId]; return c; });
+            setAllPreds((ap) => ap.filter((p) => !(p.user_id === userId && p.match_id === matchId)));
+          }
+        } catch (e) { setErrIds((s) => ({ ...s, [matchId]: true })); }
+      }
+      return;
+    }
     try {
       await db.upsert(token, "predictions", [{ user_id: userId, match_id: matchId, pred_home: next.pred_home, pred_away: next.pred_away }], "user_id,match_id");
       setSavedIds((s) => ({ ...s, [matchId]: true }));
@@ -139,6 +160,7 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
                           <span style={{ color: C.muted }}>-</span>
                           <ScoreInput value={pred.pred_away} onChange={(v) => save(m.id, "pred_away", v)} disabled={locked || !!notOpenUntil} />
                           {savedIds[m.id] && <Check size={16} style={{ color: C.green }} />}
+                          {errIds[m.id] && <span style={{ fontSize: 11, color: C.red }}>Kunne ikke slette</span>}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           {played && (
