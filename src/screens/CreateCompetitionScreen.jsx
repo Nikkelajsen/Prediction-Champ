@@ -226,7 +226,7 @@ function CreateCompetitionScreen({ token, userId, leagues, onBack, onCreated, op
 
           <label style={{ display: "flex", alignItems: "center", gap: 8, color: C.text, fontSize: 13, cursor: "pointer" }}>
             <input type="checkbox" checked={rollingWindow} onChange={(e) => setRollingWindow(e.target.checked)} />
-            Rullende gætte-vindue — kampe kan først tippes 7 dage før kickoff
+            Rullende gætte-vindue — runden kan først tippes 7 dage før rundens første kamp
           </label>
 
           {err && <p style={{ color: C.red, fontSize: 13, margin: 0 }}>{err}</p>}

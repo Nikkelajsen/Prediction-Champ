@@ -112,7 +112,11 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
     const windows = comps.map((c) => c.rules?.openDaysBefore || 0);
     if (windows.some((w) => !w)) return null;
     const maxDays = Math.max(...windows);
-    const openTime = new Date(m.kickoff_at).getTime() - maxDays * 24 * 3600 * 1000;
+    // Åbning er runde-baseret ligesom låsningen: vinduet regnes fra rundens
+    // TIDLIGSTE kickoff, ikke kampens eget. Ellers kunne en kamp åbne EFTER
+    // runden er låst (blindgyde: "Åbner…" → "Låst" uden at kunne tippes).
+    const roundStart = roundLockMap.get(roundLockKey(m)) ?? new Date(m.kickoff_at).getTime();
+    const openTime = roundStart - maxDays * 24 * 3600 * 1000;
     return Date.now() < openTime ? new Date(openTime) : null;
   }
 

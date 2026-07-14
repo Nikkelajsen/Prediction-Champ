@@ -217,7 +217,8 @@ async function computeHomeTips(token, userId, competitions) {
   const preds = await db.select(token, "predictions", `match_id=in.(${ids.join(",")})&user_id=eq.${userId}&select=match_id,pred_home,pred_away`);
   const predByMatch = new Map(preds.map((p) => [p.match_id, p]));
 
-  // rullende vindue: en kamp er "ikke åben endnu", hvis ALLE konkurrencer, den indgår i, har openDaysBefore
+  // rullende vindue: en kamp er "ikke åben endnu", hvis ALLE konkurrencer, den indgår i, har openDaysBefore.
+  // Vinduet er runde-baseret (regnet fra rundens tidligste kickoff), så en kamp aldrig åbner efter rundelåsen.
   const opensAt = (m) => {
     const cids = matchComps[m.id] || [];
     const cs = cids.map((id) => competitions.find((c) => c.id === id)).filter(Boolean);
@@ -225,7 +226,8 @@ async function computeHomeTips(token, userId, competitions) {
     const w = cs.map((c) => c.rules?.openDaysBefore || 0);
     if (w.some((x) => !x)) return false;
     const md = Math.max(...w);
-    return Date.now() < new Date(m.kickoff_at).getTime() - md * 24 * 3600 * 1000;
+    const roundStart = lockMap.get(roundLockKey(m)) ?? new Date(m.kickoff_at).getTime();
+    return Date.now() < roundStart - md * 24 * 3600 * 1000;
   };
   const now = Date.now();
   const played = (m) => m.home_score !== null && m.home_score !== undefined;
