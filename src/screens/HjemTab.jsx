@@ -1,10 +1,69 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
-import { ChevronRight, Clock, Check } from "lucide-react";
+import { Bell, ChevronRight, Clock, Check, X } from "lucide-react";
 import { formatKickoff, outcome } from "../lib/scoring.js";
 import { computeCompetitionState, computeHomeTips, currentMonthKey, daFullDate, fmtCountdown, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
-import { C, btnGreen, font, muted } from "../ui/theme.js";
+import { enablePush, getExistingSubscription, isPushSupported } from "../lib/push.js";
+import { C, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
 import { Card, Eyebrow, FormDots, H, Move } from "../ui/components.jsx";
+
+const PUSH_DISMISS_KEY = "pc_push_dismissed";
+
+// Opt-in-kort til push-notifikationer. Vises kun hvor det giver mening:
+// browseren understøtter push, brugeren har ikke sagt nej, og er ikke tilmeldt endnu.
+function PushOptInCard({ token, userId }) {
+  const [state, setState] = useState(null); // null | "available" | "hidden"
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!isPushSupported() || Notification.permission === "denied" || localStorage.getItem(PUSH_DISMISS_KEY)) {
+          if (!cancelled) setState("hidden");
+          return;
+        }
+        const sub = await getExistingSubscription();
+        if (!cancelled) setState(sub ? "hidden" : "available");
+      } catch (e) { if (!cancelled) setState("hidden"); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (state !== "available") return null;
+
+  async function onEnable() {
+    setBusy(true); setError("");
+    try {
+      await enablePush(token, userId);
+      setState("hidden");
+    } catch (e) {
+      setError(e.message || "Noget gik galt — prøv igen.");
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Bell size={15} color={C.gold} />
+          <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, textTransform: "uppercase" }}>Få besked før deadline</div>
+        </div>
+        <button style={iconBtn} aria-label="Skjul" onClick={() => { try { localStorage.setItem(PUSH_DISMISS_KEY, "1"); } catch (e) {} setState("hidden"); }}>
+          <X size={16} />
+        </button>
+      </div>
+      <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
+        Vi minder dig om at tippe, inden runden låser — og fortæller, hvordan den gik.
+      </div>
+      {error && <div style={{ color: C.red, fontSize: 13, marginTop: 8 }}>{error}</div>}
+      <button style={{ ...btnGreen, marginTop: 12, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={onEnable}>
+        {busy ? "Slår til …" : "Slå notifikationer til"}
+      </button>
+    </Card>
+  );
+}
 
 function HjemTab({ token, userId, profile, competitions, goTab, openPredictions, openBoard }) {
   const [tips, setTips] = useState(null);
@@ -139,6 +198,9 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           ))}
         </Card>
       )}
+
+      {/* Push-notifikationer: opt-in */}
+      <PushOptInCard token={token} userId={userId} />
     </div>
   );
 }

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { auth, clearSession, db, loadSession, saveSession } from "./lib/supabase.js";
+import { disablePush } from "./lib/push.js";
 import { C, globalCss, muted, wrapOuter } from "./ui/theme.js";
 import { AuthScreen, ResetPasswordScreen } from "./screens/Auth.jsx";
 import MainApp from "./screens/MainApp.jsx";
@@ -31,6 +32,8 @@ export default function App() {
   }
 
   function handleLogout() {
+    // afmeld enhedens push-abonnement, så en delt enhed ikke får den forrige brugers beskeder
+    disablePush(session?.access_token).catch(() => {});
     setSession(null); setProfile(null); clearSession();
   }
 

@@ -17,7 +17,7 @@ Prediction Champ er en webapp, hvor venner konkurrerer om at forudsige fodboldre
                                                             Brugere (browser)
 ```
 Frontend: React + Vite, rent `fetch`-baseret mod Supabase (ingen SDK). Koden er opdelt i moduler under `src/`: `lib/` (`supabase.js` = REST-klient/auth, `scoring.js` = point/runde-helpers, `data.js` = alle async-loaders), `ui/` (`theme.js` = designtokens/styles, `components.jsx` = delkomponenter), og `screens/` (én fil pr. fane/skærm + `MainApp.jsx` = shell/navigation). `App.jsx` er en tynd rod, der booter session/auth. Mobil-first: 4-fane bundnavigation, maks. bredde ~430 px centreret (se afsnit 7).
-Hosting: Vercel (Hobby-plan). Auto-deployer ved hver commit til GitHub (se afsnit 11).
+Hosting: Vercel (Hobby-plan). Auto-deployer ved hver commit til GitHub (se afsnit 12).
 Database + login: Supabase (Postgres + Auth), tilgået via REST/PostgREST. Frontenden bruger en offentlig `publishable`-nøgle, hårdkodet i `src/App.jsx` — det er by design (nøglen er offentlig og beskyttet af RLS).
 Fodbolddata: Sportmonks API (gratis plan).
 PWA: `manifest.json` + ikoner i `public/`, så appen kan tilføjes til hjemmeskærmen som en rigtig app. Manifest og ikoner følger appens mørkeblå tema (`#0C1622` + guld pokal).
@@ -37,6 +37,8 @@ Tabel	Formål
 `ratings`	Aktuel Prediction Champ Rating pr. bruger. Nøgle `(user_id, scope)`. Se afsnit 5.
 `rating_history`	Rating-snapshot pr. bruger pr. runde. Kolonner: `user_id`, `scope`, `round_key`, `rating_after`, `delta` (rundens ratingændring), `round_score`, `matches_predicted`, `rnk`. Se afsnit 5.
 `monthly_standings` (view)	Live-view der beregner månedsligaens stilling direkte fra `predictions` + `matches`. Se afsnit 5.
+`push_subscriptions`	Web Push-abonnementer, én række pr. enhed/browser der har slået notifikationer til. RLS: kun egne rækker. Se afsnit 9.
+`notification_log`	Log over sendte push-beskeder pr. bruger (`user_id`, `key`), så samme besked aldrig sendes to gange. Kun serverfunktionen læser/skriver. Se afsnit 9.
 RLS-hovedregel for `predictions` (vigtig, rettet i patch 10): man kan altid læse sine egne forudsigelser; andres kun for kampe, der er låst (kickoff minus 1 time er passeret). Dette forhindrer snyd (at kigge andres gæt inden man selv tipper).
 ---
 3. Konkurrence-modes
@@ -83,7 +85,7 @@ Månedsliga
 Alle brugere er automatisk med — ingen tilmelding. Viewet `monthly_standings` summerer hver brugers point for alle kampe i en kalendermåned (igen: hver kamp én gang). Rangeres efter flest samlede point (tiebreak: flest præcise resultater); den øverste er Månedens Prediction Champ. Stillingen nulstilles reelt den 1., fordi viewet grupperer på måned. Tidligere måneder kan vælges i en dropdown og ligger fast, da kampene er spillet. Helper: `loadMonthlyBoard`.
 
 Sæsonchampionship
-Alle brugere er automatisk med. Samlede point for alle kampe i en ligas aktuelle sæson (i praksis Superligaen), rangeret efter flest point (tiebreak: flest præcise); den øverste er Sæsonens Prediction Champ. I modsætning til månedsligaen findes der IKKE et DB-view for dette — det beregnes i frontenden af helperen `loadSeasonBoard(token, leagueId)`, som henter sæsonens kampe + gæt og summerer point pr. bruger. Kun spillede kampe tæller, og de er altid låste, så RLS tillader at læse alles gæt (ingen snyde-risiko). Championship-fanen finder ligaen ud fra navnet (`/superliga/i`, synlig). Ved venneflok-skala er klient-beregningen hurtig nok; ved mange brugere/kampe bør den flyttes til et DB-view som månedsligaen (se afsnit 12).
+Alle brugere er automatisk med. Samlede point for alle kampe i en ligas aktuelle sæson (i praksis Superligaen), rangeret efter flest point (tiebreak: flest præcise); den øverste er Sæsonens Prediction Champ. I modsætning til månedsligaen findes der IKKE et DB-view for dette — det beregnes i frontenden af helperen `loadSeasonBoard(token, leagueId)`, som henter sæsonens kampe + gæt og summerer point pr. bruger. Kun spillede kampe tæller, og de er altid låste, så RLS tillader at læse alles gæt (ingen snyde-risiko). Championship-fanen finder ligaen ud fra navnet (`/superliga/i`, synlig). Ved venneflok-skala er klient-beregningen hurtig nok; ved mange brugere/kampe bør den flyttes til et DB-view som månedsligaen (se afsnit 13).
 
 Rettigheder: `ratings` og `rating_history` har RLS med læse-adgang for `authenticated`. `recompute_ratings()` er `security definer` (kører som ejer). Viewet `monthly_standings` arver `predictions`/`matches`' adgang.
 ---
@@ -98,7 +100,7 @@ Appen er mobil-first med en bundnavigation på fire faner og en topbjælke.
 Topbjælke: krone + "Prediction Champ", samt til højre: ⓘ (åbner "Sådan virker det"-siden), tandhjul (kun admin → Admin-skærmen), og log ud.
 
 De fire faner (bundnav):
-Hjem — deadline-kort (næste rundes deadline + antal kampe der mangler tips + "Tip nu"-knap; helper `computeHomeTips`), rating-snapshot (rating, bevægelse, placering, formkurve → linker til Rating), og "Dine placeringer" (månedsliga + private ligaer, hver linker videre). Har brugeren tippet alt, viser kortet en "Alle tips er inde"-tilstand.
+Hjem — deadline-kort (næste rundes deadline + antal kampe der mangler tips + "Tip nu"-knap; helper `computeHomeTips`), rating-snapshot (rating, bevægelse, placering, formkurve → linker til Rating), og "Dine placeringer" (månedsliga + private ligaer, hver linker videre). Har brugeren tippet alt, viser kortet en "Alle tips er inde"-tilstand. Nederst et opt-in-kort til push-notifikationer (afsnit 9), som kan skjules og forsvinder når man er tilmeldt.
 Ligaer — brugerens private konkurrencer som kort (navn, type, antal deltagere, egen placering). Opret (åbner opret-skærm), Join med kode, Arkivér/Gendan og Slet (kun opretter). Klik på et kort → Stilling.
 Championship — officielle konkurrencer, alle automatisk med: Rundeliga (rundevælger + Rundens Prediction Champ), Månedsliga (månedsvælger + Månedens Prediction Champ) og Sæsonchampionship (live stilling + Sæsonens Prediction Champ + progress).
 Rating — rangliste med rating, formkurve-prikker (seneste 5 runder), bevægelse ▲/▼ og "NY"-badge. Egen række fremhæves.
@@ -122,16 +124,32 @@ Test uden at skrive noget: tilføj `&dryRun=true`
 Adgang: enten en admin-brugers login-token (bruges automatisk af "Hent resultater nu"), eller `&secret=<SYNC_SECRET>` (bruges af den eksterne cron).
 Automatisk kørsel: cron-job.org kalder linket hvert 10.-15. minut (Vercels gratis cron er kun 1×/døgn, for sjældent). Ét cron-job pr. liga.
 ---
-9. Miljøvariabler
+9. Push-notifikationer (`api/send-notifications.js`)
+Web Push til brugere, der har slået notifikationer til. To slags beskeder:
+- Deadline-påmindelse: kampe der mangler brugerens tips og låser inden for de næste timer (standard 3, styres med `&hours=`). Maks. én påmindelse pr. runde pr. dag pr. bruger.
+- Runde-resultat: når ALLE kampe i en runde har fået resultat — rundens point + placering; vinderen får en "Rundens Prediction Champ"-besked.
+Tilmelding: opt-in-kort på Hjem-fanen (kan skjules; vises ikke igen når man er tilmeldt eller har sagt nej i browseren). Frontend-helpers i `src/lib/push.js`, service worker i `public/sw.js` (bevidst UDEN fetch-handler — den cacher intet, så PWA'en aldrig hænger fast i en gammel version). På iOS kræver Web Push, at appen først er føjet til hjemmeskærmen (iOS 16.4+); kortet forklarer det selv.
+Data: `push_subscriptions` (abonnementer) + `notification_log` (dedup). Begge oprettes af det idempotente script `sql/push_notifications.sql` (kør med "Run without RLS", jf. afsnit 14).
+Udsendelse: `web-push`-pakken (VAPID). Frontendens tilmelding henter den offentlige nøgle via `/api/send-notifications?action=vapidKey` (offentligt), så nøglen kun findes i Vercels miljøvariabler. Døde abonnementer (HTTP 404/410 fra push-tjenesten) slettes automatisk.
+Kaldes med: `/api/send-notifications?secret=<SYNC_SECRET>`
+Test uden at sende noget: tilføj `&dryRun=true` (viser hvad der VILLE blive sendt)
+Adgang: som sync-funktionen (admin-token eller `SYNC_SECRET`).
+Automatisk kørsel: ét ekstra cron-job.org-job, der kalder linket hvert 15.-30. minut (dækker alle ligaer på én gang).
+Engangsopsætning: 1) kør `sql/push_notifications.sql` i Supabase, 2) generér nøgler med `npx web-push generate-vapid-keys`, 3) sæt `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` (og evt. `VAPID_SUBJECT`) i Vercel, 4) opret cron-jobbet.
+---
+10. Miljøvariabler
 Variabel	Formål
 `SPORTMONKS_TOKEN`	API-nøgle til Sportmonks
 `SUPABASE_URL`	Supabase-projektets URL
 `SUPABASE_SERVICE_ROLE_KEY`	Server-side Supabase-nøgle (aldrig i frontend)
-`SYNC_SECRET`	Autoriserer eksterne cron-kald til sync-funktionen
-Disse bruges kun af serverfunktionen (`api/sync-matches.js`). Frontenden bruger derimod en hårdkodet offentlig `SUPABASE_URL` + `publishable`-nøgle i `src/App.jsx`.
+`SYNC_SECRET`	Autoriserer eksterne cron-kald til serverfunktionerne
+`VAPID_PUBLIC_KEY`	Web Push: offentlig VAPID-nøgle (generér med `npx web-push generate-vapid-keys`)
+`VAPID_PRIVATE_KEY`	Web Push: privat VAPID-nøgle (aldrig i frontend eller git)
+`VAPID_SUBJECT`	Valgfri `mailto:`-kontaktadresse, som sendes til push-tjenesterne
+Disse bruges kun af serverfunktionerne (`api/sync-matches.js` og `api/send-notifications.js`). Frontenden bruger derimod en hårdkodet offentlig `SUPABASE_URL` + `publishable`-nøgle i `src/App.jsx`.
 VIGTIGT: Alle miljøer peger på SAMME Supabase-projekt — også Vercels preview-URL pr. branch. Data (resultater, gæt, konkurrencer) deles derfor mellem preview og produktion. Test derfor UI/navigation frit på en preview, men undgå at taste rigtige resultater ind dér, da de rammer alle brugere.
 ---
-10. Sådan tilføjer du en ny liga
+11. Sådan tilføjer du en ny liga
 Find ligaens Sportmonks-id
 Indsæt en ny række i `leagues` (+ `api_league_id`)
 Indsæt en sæson-række i `seasons`
@@ -139,27 +157,27 @@ Kald sync-funktionen med den nye ligas id — den opretter selv holdene
 Opret et ekstra cron-job til automatisk opdatering
 Ingen kodeændringer nødvendige.
 ---
-11. Lokal udvikling & deploy
+12. Lokal udvikling & deploy
 Krav: Node 18+ (repoet er testet med Node 22).
 Kom i gang:
 `npm install` — installér afhængigheder (React, Vite, lucide-react)
 `npm run dev` — start udviklingsserver på http://localhost:5173
 `npm run build` — byg til produktion (output i `dist/`)
 `npm run preview` — se produktions-build lokalt
-Deploy: Vercel auto-deployer ved hver commit til `main`. Hver branch får desuden automatisk en preview-URL, så nye ting kan testes side om side med den live app (husk afsnit 9: samme database).
+Deploy: Vercel auto-deployer ved hver commit til `main`. Hver branch får desuden automatisk en preview-URL, så nye ting kan testes side om side med den live app (husk afsnit 10: samme database).
 Arbejdsgang: udvikl på en feature-branch → åbn en pull request → merge til `main`. `main` = det, alle brugere ser. `node_modules/` og `dist/` er git-ignoreret.
 Test: der er ingen automatisk testsuite. Verificér ændringer manuelt (byg + klik igennem på preview). PWA-cache kan holde på en gammel version — et hard-refresh (eller geninstallation af hjemmeskærms-genvejen) tvinger den nye frem.
 ---
-12. Kendte begrænsninger
+13. Kendte begrænsninger
 Superliga Playoff kan ikke synkroniseres endnu — Sportmonks har ikke oprettet 2026/27-sæsonen for den del (formentlig til foråret). Den er skjult for almindelige brugere (`is_visible = false`) men tilgængelig for admin under Kampe/Resultater.
 Alle kan oprette konti uden godkendelse — fint til en lukket venneflok.
-Ingen push-notifikationer eller e-mail-påmindelser om deadlines.
+Push-notifikationer kræver opt-in pr. enhed (afsnit 9); der er ingen e-mail-påmindelser. På iOS virker push kun, når appen er føjet til hjemmeskærmen (iOS 16.4+).
 Koden er opdelt i moduler (afsnit 1). Den enkelte fil er nu overskuelig (største ~240 linjer); ved yderligere vækst kan `data.js` og de største skærme deles videre op.
 Sæsonchampionship beregnes i browseren (`loadSeasonBoard`), ikke som et DB-view. Ved mange brugere/kampe bør det flyttes til et `monthly_standings`-lignende view for hastighed.
 Rating-genberegningen er en fuld genberegning fra bunden hver gang. Det er hurtigt ved venneflok-skala; ved mange tusinde brugere bør beregningen laves inkrementel eller optimeres (sortér + histogram i stedet for alle-mod-alle).
-Preview og produktion deler database (afsnit 9) — der findes ingen separat test-database.
+Preview og produktion deler database (afsnit 10) — der findes ingen separat test-database.
 ---
-13. Fejlfindingslog
+14. Fejlfindingslog
 Symptom	Årsag	Løsning
 "Load failed" i artifact-preview	Claude-artifacts kan ikke lave eksterne netværkskald	Deploy som rigtig webapp på Vercel
 "infinite recursion" i Supabase	To RLS-policies refererede hinanden cirkulært	Forenklet policy
@@ -172,8 +190,11 @@ Andre viste 0 point i Stilling	To separate RLS-policies for `predictions` kombin
 Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke altid Sportmonks' navne	Oprydnings-SQL sletter ubrugte hold uden api-id (patch 9)
 "unterminated dollar-quoted string" ved rating-SQL	Supabases "Run and enable RLS"-knap indsatte RLS-kode midt inde i en `$$`-funktion	Kør scriptet med "Run without RLS" — scriptet sætter selv RLS på de tabeller der skal have det
 ---
-14. Changelog
-Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 13).
+15. Changelog
+Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 14).
+
+Juli 2026 — Push-notifikationer
+Web Push med to beskedtyper: deadline-påmindelse (kampe der mangler tips og låser snart) og runde-resultat (point + placering, vinderen kåres som Rundens Prediction Champ). Opt-in-kort på Hjem, service worker uden cache, nye tabeller `push_subscriptions` + `notification_log` (`sql/push_notifications.sql`), ny serverfunktion `api/send-notifications.js` (VAPID/web-push, dryRun, dedup, oprydning af døde abonnementer) og nyt cron-job. Se afsnit 9.
 
 Juli 2026 — Rundeliga (Rundens Prediction Champ)
 Nyt kort i Championship: samlede point for én enkelt spillerunde med rundevælger, så rundens bedste kan kåres som Rundens Prediction Champ efter hver runde. Alle er automatisk med — samme princip som månedsligaen. Beregnes i frontenden (`loadRoundBoard` / `loadRoundsAvailable`, afsnit 5).
