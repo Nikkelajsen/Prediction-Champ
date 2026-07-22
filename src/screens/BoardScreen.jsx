@@ -6,7 +6,7 @@ import { computeCompetitionState, loadRatingMap } from "../lib/data.js";
 import { C, btnGhost, btnGold, font, muted, thStyle } from "../ui/theme.js";
 import { BackBar, Card, UserRoundPredictions } from "../ui/components.jsx";
 
-function BoardScreen({ token, userId, competitions, initialCompId, onBack, goToPredictions }) {
+function BoardScreen({ token, userId, competitions, initialCompId, inviterName, onBack, goToPredictions }) {
   const [selectedCompId, setSelectedCompId] = useState(initialCompId || competitions[0]?.id || null);
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -34,12 +34,22 @@ function BoardScreen({ token, userId, competitions, initialCompId, onBack, goToP
     })();
   }, [selectedCompId, comp]); // eslint-disable-line
 
-  function copyInviteLink() {
+  async function shareInvite() {
     if (!comp) return;
     const link = `${window.location.origin}${window.location.pathname}?join=${comp.invite_code}`;
-    navigator.clipboard.writeText(link);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const intro = inviterName
+      ? `${inviterName} har inviteret dig til ligaen "${comp.name}" på Prediction Champ ⚽`
+      : `Du er inviteret til ligaen "${comp.name}" på Prediction Champ ⚽`;
+    const text = `${intro}\nGæt resultater, saml point og se hvem der er bedst. Tryk her for at være med:\n${link}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Prediction Champ", text });
+      } else {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch (e) { /* bruger annullerede deling — ignorér */ }
   }
 
   if (!competitions.length) {
@@ -62,7 +72,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, onBack, goToP
         <select className="field" style={{ flex: 1, minWidth: 160 }} value={selectedCompId || ""} onChange={(e) => setSelectedCompId(e.target.value)}>
           {competitions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <button style={btnGold} onClick={copyInviteLink}>
+        <button style={btnGold} onClick={shareInvite}>
           {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Kopieret!" : "Invitér"}
         </button>
         <button style={btnGhost} onClick={() => goToPredictions(selectedCompId)}><ClipboardList size={15} /> Tip</button>

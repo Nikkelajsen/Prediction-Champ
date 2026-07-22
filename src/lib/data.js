@@ -219,7 +219,9 @@ async function computeHomeTips(token, userId, competitions) {
   const allOk = () => {
     const future = ms.filter((m) => !played(m) && m.kickoff_at && new Date(m.kickoff_at).getTime() > now)
       .sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));
-    return { hasComps: true, allTipped: true, nextOpen: future[0]?.kickoff_at || null };
+    // roundKey for den nærmeste kommende runde, så "Se tips" på det grønne kort
+    // kan åbne Tip landet på den runde (samme sted som "Tip nu" ved manglende tips).
+    return { hasComps: true, allTipped: true, nextOpen: future[0]?.kickoff_at || null, roundKey: future[0]?.round_key || null };
   };
 
   // "Næste runde" = den TIDLIGSTE runde, der stadig har kampe man kan tippe. Vi viser

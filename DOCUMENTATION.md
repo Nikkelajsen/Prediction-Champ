@@ -96,6 +96,7 @@ Rettigheder: `ratings` og `rating_history` har RLS med læse-adgang for `authent
 `profiles.display_name` har et unikt, case-insensitivt indeks (`profiles_display_name_lower_idx`) — den egentlige garanti mod dubletter, også ved samtidige oprettelser.
 Funktionen `username_available(name)` (kaldbar af `anon` + `authenticated`) tjekker om et navn er ledigt, før kontoen oprettes. Frontenden kalder den ved signup og blokerer med en venlig besked ("Brugernavnet er allerede taget"), så man ikke får oprettet en konto der alligevel fejler.
 Et brugernavn behøver ikke være ens rigtige navn; Hjem-fanen hilser med hele `display_name`.
+Længde: **2–20 tegn**. Håndhæves i frontenden (`Auth.jsx`) og af en check-constraint på `profiles.display_name` (`sql/username_constraints.sql`, `NOT VALID` så gamle rækker ikke fejler). Grænsen beskytter mobil-layoutet, da `display_name` bl.a. bruges som kolonneoverskrift i "Point pr. runde"-tabellen.
 ---
 7. Brugerflade og navigation
 Appen er mobil-first med en bundnavigation på fire faner og en topbjælke.
@@ -110,7 +111,7 @@ Rating — rangliste med rating, formkurve-prikker (seneste 5 runder), bevægels
 
 Drill-in-skærme (nås fra fanerne, ikke i bundnav):
 Stilling — vælg konkurrence i dropdown; viser placering, Rating (`*` = foreløbig), 🎯 (præcise resultater), Form (point i seneste 3 runder) og ▲/▼ for placeringsændring. Klik på et navn åbner brugerens forudsigelser for færdigspillede runder (bladr frem/tilbage); klik på et pointtal i "Point pr. runde"-tabellen åbner samme visning landet på netop den runde. Snyde-sikring: kun runder hvor ALLE kampe har resultat vises. "Invitér"-knap kopierer et join-link (`?join=kode`). "Point pr. runde"-tabel: spillere som kolonner, runder som rækker, nyeste øverst, kun de 3 seneste vises med en "Vis alle X runder"-knap.
-Tip (forudsigelser) — dropdown til at vælge "Alle konkurrencer" eller én; kampe deduplikeres pr. runde. Starter på den runde der indeholder i dag (eller nærmeste kommende). Grønt ✓ efter et gemt gæt. Nedtælling ("Låser om X t Y min") for kampe der låser inden for 24 timer. "Alles gæt" foldes ud under en låst kamp og viser alle deltageres gæt + point.
+Tip (forudsigelser) — to dropdowns: filtrér på liga (matchens egen liga via `season_id`, vises kun når kampene spænder over flere ligaer) og/eller konkurrence ("Alle konkurrencer" eller én); kampe deduplikeres pr. runde. Starter på den runde der indeholder i dag (eller nærmeste kommende). Grønt ✓ efter et gemt gæt. Nedtælling ("Låser om X t Y min") for kampe der låser inden for 24 timer. "Alles gæt" foldes ud under en låst kamp og viser alle deltageres gæt + point.
 Opret liga — hele opret-flowet (mode-valg, hold/dato/håndplukket/tilfældig, rullende vindue).
 
 Regler/hjælp: "Sådan virker det"-siden (fra ⓘ i topbjælken) samler pointsystem, tiebreak, rating, championship/månedsliga, tips-synlighed og rullende vindue. Derudover har hver fane et kontekstuelt ⓘ med en kort forklaring.

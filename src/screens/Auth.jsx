@@ -80,11 +80,13 @@ function AuthScreen({ onAuthed, booting }) {
     setError(""); setInfo(""); setLoading(true);
     try {
       if (mode === "signup") {
-        if (!username.trim()) { setError("Vælg et brugernavn"); setLoading(false); return; }
-        const available = await auth.checkUsername(username.trim());
+        const uname = username.trim();
+        if (!uname) { setError("Vælg et brugernavn"); setLoading(false); return; }
+        if (uname.length < 2 || uname.length > 20) { setError("Brugernavnet skal være 2–20 tegn"); setLoading(false); return; }
+        const available = await auth.checkUsername(uname);
         if (!available) { setError("Brugernavnet er allerede taget. Vælg et andet."); setLoading(false); return; }
         const res = await auth.signUp(email, password);
-        if (res.access_token) { await onAuthed(res, username.trim()); return; }
+        if (res.access_token) { await onAuthed(res, uname); return; }
         setInfo("Konto oprettet. Tjek om der kræves e-mail-bekræftelse i Supabase-projektet, log derefter ind.");
         setMode("signin");
       } else if (mode === "forgot") {
@@ -105,7 +107,7 @@ function AuthScreen({ onAuthed, booting }) {
     <AuthShell>
       <p style={muted}>{mode === "signin" ? "Log ind" : mode === "signup" ? "Opret konto" : "Nulstil kodeord"}</p>
       {mode === "signup" && (
-        <input className="field" style={fieldFull} placeholder="Brugernavn (vises for andre)" value={username} onChange={(e) => setUsername(e.target.value)} />
+        <input className="field" style={fieldFull} maxLength={20} placeholder="Brugernavn (vises for andre)" value={username} onChange={(e) => setUsername(e.target.value)} />
       )}
       <input className="field" style={fieldFull} placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} />
       {mode !== "forgot" && (

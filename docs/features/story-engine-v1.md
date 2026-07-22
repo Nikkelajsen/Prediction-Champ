@@ -26,10 +26,10 @@ Tre principper fra produktbogen er ufravigelige:
 Historier genereres, når en runde afsluttes — dvs. når alle rundens kampe har fået resultat, og ratings er genberegnet (det trigger-flow findes allerede). Rækkefølgen er vigtig: point → stillinger → ratings → **historier**. Dermed kan historieregler læse på friske ratings.
 
 **Hvor ser brugeren den?**
-Ét **historie-kort** øverst på Hjem-fanen:
+Ét **historie-kort** på Hjem-fanen, som sit eget kort **direkte under tips-status-kortet** (deadline/alt-ok):
 
 - Kortet vises fra runden afsluttes, og indtil næste runde er afsluttet (eller brugeren afviser det).
-- Når en ny rundes deadline nærmer sig, viger historie-kortet for deadline-kortet — deadline er altid vigtigst, når der skal handles.
+- Historie-kortet og tips-status deler ikke plads: tips-status forbliver øverst (handling først), og historie-kortet vises **altid** direkte under det — også når det røde "mangler tips"-kort er fremme. Det er bevidst, at man både mødes af "hvad skal jeg gøre" og "hvad skete der".
 - Kortet har en "Del"-knap, der deler historien som tekst (`navigator.share`, fallback til udklipsholder). Det er ambassadør-princippet fra kapitel 3: giv den person, der taler mest om konkurrencen, noget at sende i gruppens beskedtråd.
 
 **Hvad hvis intet skete?**
@@ -202,7 +202,7 @@ Sletter og genberegner rundens rækker (idempotent, ligesom `recompute_ratings`)
 
 **Frontend:** HjemTab henter én række fra `latest_story` for den **seneste fuldt afsluttede runde** og viser kortet, indtil (a) næste runde afsluttes, eller (b) brugeren afviser (`dismissed_at`). Del-knappen bruger `navigator.share` med headline + body (fallback: udklipsholder).
 
-**Deadline-kortet slår historie-kortet:** historie-kortet vises kun, når Hjem *ikke* viser det røde "mangler tips"-deadline-kort — dvs. når `computeHomeTips` returnerer `allTipped` (eller ingen nær deadline). Når der skal handles, er deadline altid vigtigst. Ingen ny logik: bare en betingelse i `HjemTab` oven på den eksisterende `computeHomeTips`.
+**Placering på Hjem:** historie-kortet rendes som sit eget kort **direkte under tips-status-kortet** i `HjemTab` (mellem tips-status og "Indeværende runde"-kortet). Det vises **altid**, når der findes en ikke-afvist historie for den seneste afsluttede runde — også samtidig med det røde "mangler tips"-kort. Tips-status forbliver øverst, så handling ikke fortrænges; historien er ugens følelsesmæssige krog lige under. Visuelt er kortet **guld-fremhævet** (`borderColor: C.gold` + svag ravgul gradient), så det læses som ugens highlight.
 
 **RLS:** Brugere kan kun læse rækker med eget `user_id`. Ingen kan se andres historier — de er personlige.
 

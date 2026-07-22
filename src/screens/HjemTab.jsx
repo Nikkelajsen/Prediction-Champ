@@ -4,7 +4,7 @@ import { Bell, ChevronRight, Clock, Check, X } from "lucide-react";
 import { formatKickoff, outcome } from "../lib/scoring.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, fmtCountdown, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { enablePush, getExistingSubscription, isPushSupported } from "../lib/push.js";
-import { C, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
+import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
 import { Card, Eyebrow, FormDots, H, Move } from "../ui/components.jsx";
 
 const PUSH_DISMISS_KEY = "pc_push_dismissed";
@@ -193,6 +193,9 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
             {tips.nextOpen ? `Næste kamp: ${formatKickoff(tips.nextOpen)}` : "Vi giver besked, når næste runde åbner."}
           </div>
+          {tips.roundKey && (
+            <button style={{ ...btnGhost, marginTop: 12, borderColor: C.green, color: C.green }} onClick={() => openPredictions("all", tips.roundKey)}>Se tips</button>
+          )}
         </Card>
       )}
       {tips && tips.hasComps && !tips.allTipped && !tips.noMatches && !tips.error && (

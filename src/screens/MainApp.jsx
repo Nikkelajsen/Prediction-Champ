@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X } from "lucide-react";
 import { db } from "../lib/supabase.js";
-import { C, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
+import { C, btnGhost, btnGreen, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
+import { Modal } from "../ui/components.jsx";
 import HjemTab from "./HjemTab.jsx";
 import LigaerTab from "./LigaerTab.jsx";
 import ChampionshipTab from "./ChampionshipTab.jsx";
@@ -12,6 +13,9 @@ import PredictionsScreen from "./PredictionsScreen.jsx";
 import CreateCompetitionScreen from "./CreateCompetitionScreen.jsx";
 import AdminScreen from "./AdminScreen.jsx";
 import HowItWorksScreen from "./HowItWorksScreen.jsx";
+import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
+
+const PWA_ONBOARDED_KEY = "pc_pwa_onboarded";
 
 function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoinCode }) {
   const token = session.access_token;
@@ -24,6 +28,8 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   const [leagues, setLeagues] = useState([]);
   const [competitions, setCompetitions] = useState([]);
   const [joinError, setJoinError] = useState(""); // fejl fra invite-join-deeplink (?join=kode)
+  const [pendingJoin, setPendingJoin] = useState(null); // { competition, inviterName } — bekræftelse før join
+  const [showInstall, setShowInstall] = useState(false); // første-login "føj til hjemmeskærm"-vejledning
 
   async function loadLeagues() {
     const ls = await db.select(token, "leagues", "select=*&order=name");
@@ -54,6 +60,19 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
 
   useEffect(() => { loadAll(); }, []); // eslint-disable-line
 
+  // Første login: vis "føj til hjemmeskærm"-vejledning én gang (ikke hvis appen
+  // allerede er installeret, eller hvis vi er midt i et invite-join-flow).
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem(PWA_ONBOARDED_KEY);
+      if (!seen && !isStandalone() && !pendingJoinCode) setShowInstall(true);
+    } catch (e) { /* localStorage utilgængelig — spring over */ }
+  }, []); // eslint-disable-line
+  function dismissInstall() {
+    try { localStorage.setItem(PWA_ONBOARDED_KEY, "1"); } catch (e) {}
+    setShowInstall(false);
+  }
+
   useEffect(() => {
     if (!pendingJoinCode) return;
     (async () => {
@@ -61,13 +80,24 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       try {
         const found = await db.select(token, "competitions", `invite_code=eq.${pendingJoinCode}&select=*`);
         if (found.length) {
-          const already = await db.select(token, "competition_participants", `competition_id=eq.${found[0].id}&user_id=eq.${userId}&select=competition_id`);
-          if (!already.length) {
-            await db.insert(token, "competition_participants", [{ competition_id: found[0].id, user_id: userId }]);
+          const comp = found[0];
+          const already = await db.select(token, "competition_participants", `competition_id=eq.${comp.id}&user_id=eq.${userId}&select=competition_id`);
+          if (already.length) {
+            // allerede medlem — ingen bekræftelse nødvendig, gå direkte til ligaen
+            await loadCompetitions();
+            setTab("ligaer");
+            setScreen({ type: "board", compId: comp.id });
+          } else {
+            // vis bekræftelse i stedet for at joine direkte
+            let inviterName = "";
+            if (comp.created_by) {
+              try {
+                const prof = await db.select(token, "profiles", `id=eq.${comp.created_by}&select=display_name`);
+                inviterName = prof[0]?.display_name || "";
+              } catch (e) { /* inviter-navn er valgfrit */ }
+            }
+            setPendingJoin({ competition: comp, inviterName });
           }
-          await loadCompetitions();
-          setTab("ligaer");
-          setScreen({ type: "predictions", compFilter: found[0].id });
         } else {
           setJoinError("Ingen konkurrence fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
         }
@@ -80,6 +110,21 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       window.history.replaceState({}, "", url.toString());
     })();
   }, [pendingJoinCode]); // eslint-disable-line
+
+  async function confirmJoin() {
+    if (!pendingJoin) return;
+    const comp = pendingJoin.competition;
+    try {
+      await db.insert(token, "competition_participants", [{ competition_id: comp.id, user_id: userId }]);
+      await loadCompetitions();
+      setPendingJoin(null);
+      setTab("ligaer");
+      setScreen({ type: "predictions", compFilter: comp.id });
+    } catch (e) {
+      setPendingJoin(null);
+      setJoinError("Kunne ikke tilslutte konkurrencen lige nu. Prøv igen om lidt.");
+    }
+  }
 
   const visibleLeagues = leagues.filter((l) => l.is_visible !== false);
 
@@ -108,10 +153,10 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     );
   } else if (screen?.type === "board") {
     body = <BoardScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
-      initialCompId={screen.compId} onBack={() => setScreen(null)} goToPredictions={openPredictions} />;
+      initialCompId={screen.compId} inviterName={profile?.display_name} onBack={() => setScreen(null)} goToPredictions={openPredictions} />;
   } else if (screen?.type === "predictions") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
-      initialFilter={screen.compFilter} onBack={() => setScreen(null)} />;
+      leagues={visibleLeagues} initialFilter={screen.compFilter} initialRoundKey={screen.roundKey} onBack={() => setScreen(null)} />;
   } else if (screen?.type === "create") {
     body = <CreateCompetitionScreen token={token} userId={userId} leagues={visibleLeagues}
       onBack={() => setScreen(null)} onCreated={async () => { await loadCompetitions(); }} openBoard={openBoard} />;
@@ -124,7 +169,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} />;
   } else if (tab === "tip") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
-      initialFilter="all" />;
+      leagues={visibleLeagues} initialFilter="all" />;
   } else if (tab === "ligaer") {
     body = <LigaerTab token={token} userId={userId} competitions={competitions}
       openBoard={openBoard} openCreate={openCreate} reload={loadAll} />;
@@ -194,6 +239,26 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
           })}
         </div>
       </div>
+
+      {pendingJoin && (
+        <Modal title="Join liga?" onClose={() => setPendingJoin(null)}>
+          <p style={{ margin: "0 0 4px" }}>
+            {pendingJoin.inviterName ? <><b>{pendingJoin.inviterName}</b> har inviteret dig til </> : "Du er inviteret til "}
+            ligaen <b>{pendingJoin.competition.name}</b>. Vil du være med?
+          </p>
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button style={{ ...btnGreen, flex: 1, width: "auto" }} onClick={confirmJoin}>Ja, join</button>
+            <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={() => setPendingJoin(null)}>Annullér</button>
+          </div>
+        </Modal>
+      )}
+
+      {showInstall && !pendingJoin && (
+        <Modal title="Føj til hjemmeskærm" onClose={dismissInstall}>
+          <InstallGuide />
+          <button style={{ ...btnGreen, marginTop: 16 }} onClick={dismissInstall}>Forstået</button>
+        </Modal>
+      )}
     </div>
   );
 }
