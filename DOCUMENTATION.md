@@ -96,6 +96,7 @@ Rettigheder: `ratings` og `rating_history` har RLS med læse-adgang for `authent
 `profiles.display_name` har et unikt, case-insensitivt indeks (`profiles_display_name_lower_idx`) — den egentlige garanti mod dubletter, også ved samtidige oprettelser.
 Funktionen `username_available(name)` (kaldbar af `anon` + `authenticated`) tjekker om et navn er ledigt, før kontoen oprettes. Frontenden kalder den ved signup og blokerer med en venlig besked ("Brugernavnet er allerede taget"), så man ikke får oprettet en konto der alligevel fejler.
 Et brugernavn behøver ikke være ens rigtige navn; Hjem-fanen hilser med hele `display_name`.
+Længde: **2–20 tegn**. Håndhæves i frontenden (`Auth.jsx`) og af en check-constraint på `profiles.display_name` (`sql/username_constraints.sql`, `NOT VALID` så gamle rækker ikke fejler). Grænsen beskytter mobil-layoutet, da `display_name` bl.a. bruges som kolonneoverskrift i "Point pr. runde"-tabellen.
 ---
 7. Brugerflade og navigation
 Appen er mobil-first med en bundnavigation på fire faner og en topbjælke.
