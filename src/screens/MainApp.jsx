@@ -156,7 +156,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       initialCompId={screen.compId} inviterName={profile?.display_name} onBack={() => setScreen(null)} goToPredictions={openPredictions} />;
   } else if (screen?.type === "predictions") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
-      initialFilter={screen.compFilter} initialRoundKey={screen.roundKey} onBack={() => setScreen(null)} />;
+      leagues={visibleLeagues} initialFilter={screen.compFilter} initialRoundKey={screen.roundKey} onBack={() => setScreen(null)} />;
   } else if (screen?.type === "create") {
     body = <CreateCompetitionScreen token={token} userId={userId} leagues={visibleLeagues}
       onBack={() => setScreen(null)} onCreated={async () => { await loadCompetitions(); }} openBoard={openBoard} />;
@@ -169,7 +169,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} />;
   } else if (tab === "tip") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
-      initialFilter="all" />;
+      leagues={visibleLeagues} initialFilter="all" />;
   } else if (tab === "ligaer") {
     body = <LigaerTab token={token} userId={userId} competitions={competitions}
       openBoard={openBoard} openCreate={openCreate} reload={loadAll} />;

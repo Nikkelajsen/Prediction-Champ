@@ -6,8 +6,10 @@ import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, outcome, p
 import { C, muted } from "../ui/theme.js";
 import { BackBar, Card, H, RoundPager, ScoreInput } from "../ui/components.jsx";
 
-function PredictionsScreen({ token, userId, competitions, initialFilter, initialRoundKey, onBack }) {
+function PredictionsScreen({ token, userId, competitions, leagues = [], initialFilter, initialRoundKey, onBack }) {
   const [compFilter, setCompFilter] = useState(initialFilter || "all");
+  const [leagueFilter, setLeagueFilter] = useState("all");
+  const [seasonLeague, setSeasonLeague] = useState({}); // season_id -> league_id
   const [allMatches, setAllMatches] = useState([]);
   const [preds, setPreds] = useState({});
   const [allPreds, setAllPreds] = useState([]);
@@ -42,6 +44,13 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, initial
       if (!ids.length) { setAllMatches([]); setTeamsById({}); setLoading(false); return; }
       const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
       setAllMatches(ms);
+      // season_id -> league_id, så Tips kan filtreres på liga (matchens egen liga,
+      // uafhængigt af konkurrencens league_id — virker også for custom/random-kuponer).
+      const seasonIds = [...new Set(ms.map((m) => m.season_id).filter(Boolean))];
+      if (seasonIds.length) {
+        const seasons = await db.select(token, "seasons", `id=in.(${seasonIds.join(",")})&select=id,league_id`);
+        setSeasonLeague(Object.fromEntries(seasons.map((s) => [s.id, s.league_id])));
+      } else { setSeasonLeague({}); }
       const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]))];
       if (teamIds.length) {
         const tms = await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`);
@@ -62,9 +71,24 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, initial
     })();
   }, [compFilter, competitions]); // eslint-disable-line
 
-  const rounds = useMemo(() => groupIntoRounds(allMatches), [allMatches]);
-  const roundLockMap = useMemo(() => buildRoundLockMap(allMatches), [allMatches]);
+  // Ligaer der optræder i de hentede kampe (til liga-dropdownen).
+  const leagueOptions = useMemo(() => {
+    const ids = [...new Set(allMatches.map((m) => seasonLeague[m.season_id]).filter(Boolean))];
+    return ids.map((id) => ({ id, name: leagues.find((l) => l.id === id)?.name || "Liga" }));
+  }, [allMatches, seasonLeague, leagues]);
+  // Kampe filtreret på valgt liga (matchens egen liga via season_id).
+  const filteredMatches = useMemo(
+    () => leagueFilter === "all" ? allMatches : allMatches.filter((m) => seasonLeague[m.season_id] === leagueFilter),
+    [allMatches, leagueFilter, seasonLeague]
+  );
+  const rounds = useMemo(() => groupIntoRounds(filteredMatches), [filteredMatches]);
+  const roundLockMap = useMemo(() => buildRoundLockMap(filteredMatches), [filteredMatches]);
   const round = rounds[roundIndex];
+
+  // Skift af liga-filter: spring til den nærmeste runde i det filtrerede sæt.
+  useEffect(() => {
+    setRoundIndex(currentRoundIndex(rounds));
+  }, [leagueFilter]); // eslint-disable-line
 
   // Reager på en ny ønsket runde (fx et nyt "Se tips"/"Tip nu"-klik fra Hjem, hvor
   // kampene ikke genindlæses fordi konkurrence-filteret er uændret).
@@ -137,13 +161,21 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, initial
         <p style={muted}>Opret eller join en konkurrence først.</p>
       ) : (
         <>
-          <select className="field" value={compFilter} onChange={(e) => setCompFilter(e.target.value)}>
-            <option value="all">Alle konkurrencer</option>
-            {competitions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {leagueOptions.length > 1 && (
+              <select className="field" style={{ flex: 1, minWidth: 140 }} value={leagueFilter} onChange={(e) => setLeagueFilter(e.target.value)}>
+                <option value="all">Alle ligaer</option>
+                {leagueOptions.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            )}
+            <select className="field" style={{ flex: 1, minWidth: 140 }} value={compFilter} onChange={(e) => setCompFilter(e.target.value)}>
+              <option value="all">Alle konkurrencer</option>
+              {competitions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
 
           {loading && <p style={muted}>Henter kampe…</p>}
-          {!loading && rounds.length === 0 && <p style={muted}>Ingen kampe i denne konkurrence endnu.</p>}
+          {!loading && rounds.length === 0 && <p style={muted}>Ingen kampe i det valgte filter endnu.</p>}
           {!loading && rounds.length > 0 && (
             <Card>
               <RoundPager rounds={rounds} index={roundIndex} setIndex={setRoundIndex} />
