@@ -13,6 +13,9 @@ import PredictionsScreen from "./PredictionsScreen.jsx";
 import CreateCompetitionScreen from "./CreateCompetitionScreen.jsx";
 import AdminScreen from "./AdminScreen.jsx";
 import HowItWorksScreen from "./HowItWorksScreen.jsx";
+import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
+
+const PWA_ONBOARDED_KEY = "pc_pwa_onboarded";
 
 function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoinCode }) {
   const token = session.access_token;
@@ -26,6 +29,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   const [competitions, setCompetitions] = useState([]);
   const [joinError, setJoinError] = useState(""); // fejl fra invite-join-deeplink (?join=kode)
   const [pendingJoin, setPendingJoin] = useState(null); // { competition, inviterName } — bekræftelse før join
+  const [showInstall, setShowInstall] = useState(false); // første-login "føj til hjemmeskærm"-vejledning
 
   async function loadLeagues() {
     const ls = await db.select(token, "leagues", "select=*&order=name");
@@ -55,6 +59,19 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   }
 
   useEffect(() => { loadAll(); }, []); // eslint-disable-line
+
+  // Første login: vis "føj til hjemmeskærm"-vejledning én gang (ikke hvis appen
+  // allerede er installeret, eller hvis vi er midt i et invite-join-flow).
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem(PWA_ONBOARDED_KEY);
+      if (!seen && !isStandalone() && !pendingJoinCode) setShowInstall(true);
+    } catch (e) { /* localStorage utilgængelig — spring over */ }
+  }, []); // eslint-disable-line
+  function dismissInstall() {
+    try { localStorage.setItem(PWA_ONBOARDED_KEY, "1"); } catch (e) {}
+    setShowInstall(false);
+  }
 
   useEffect(() => {
     if (!pendingJoinCode) return;
@@ -233,6 +250,13 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
             <button style={{ ...btnGreen, flex: 1, width: "auto" }} onClick={confirmJoin}>Ja, join</button>
             <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={() => setPendingJoin(null)}>Annullér</button>
           </div>
+        </Modal>
+      )}
+
+      {showInstall && !pendingJoin && (
+        <Modal title="Føj til hjemmeskærm" onClose={dismissInstall}>
+          <InstallGuide />
+          <button style={{ ...btnGreen, marginTop: 16 }} onClick={dismissInstall}>Forstået</button>
         </Modal>
       )}
     </div>

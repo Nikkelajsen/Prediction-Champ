@@ -1,6 +1,7 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { C, font, muted } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
+import InstallGuide from "./InstallGuide.jsx";
 
 function HowItWorksScreen({ onBack }) {
   const Section = ({ title, children }) => (
@@ -33,6 +34,9 @@ function HowItWorksScreen({ onBack }) {
       </Section>
       <Section title="Rullende gætte-vindue">
         Nogle ligaer bruger et rullende vindue: en runde kan først tippes et bestemt antal dage før rundens første kamp (typisk 7). Så tipper alle med nogenlunde samme viden. Det vælges, når konkurrencen oprettes.
+      </Section>
+      <Section title="Installér som app">
+        <InstallGuide />
       </Section>
     </div>
   );
