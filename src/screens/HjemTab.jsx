@@ -138,19 +138,28 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         }
       } catch (e) { if (!cancelled) setSnapshot({ none: true }); }
 
-      // placeringer: månedsliga + hver privat konkurrence
+      // placeringer: månedsliga + hver privat konkurrence.
+      // Hentes parallelt (månedsliga + alle konkurrencer på én gang); rækkefølgen
+      // på listen bevares (månedsliga først, dernæst konkurrencer i input-orden).
+      // Bemærk: private konkurrencers stilling findes ikke i standings-views'ene
+      // (de er globale pr. runde/sæson), så computeCompetitionState er stadig nødvendig.
       try {
+        const comps = competitions.filter((x) => !x._hidden);
+        const [monthly, compStates] = await Promise.all([
+          loadMonthlyBoard(token, currentMonthKey()),
+          Promise.all(comps.map((c) =>
+            computeCompetitionState(token, c.id, c.rules || { exact: 3, outcome: 1 }).catch(() => null)
+          )),
+        ]);
         const list = [];
-        const monthly = await loadMonthlyBoard(token, currentMonthKey());
         const mIdx = monthly.findIndex((r) => r.userId === userId);
         if (mIdx >= 0) list.push({ label: "Månedsliga · " + monthName(currentMonthKey()), pos: `${mIdx + 1}.`, tab: "championship" });
-        for (const c of competitions.filter((x) => !x._hidden)) {
-          try {
-            const state = await computeCompetitionState(token, c.id, c.rules || { exact: 3, outcome: 1 });
-            const rIdx = state.rows.findIndex((r) => r.userId === userId);
-            if (rIdx >= 0 && state.rows.length) list.push({ label: c.name, pos: `${rIdx + 1}.`, compId: c.id });
-          } catch (e) { /* spring over */ }
-        }
+        comps.forEach((c, i) => {
+          const state = compStates[i];
+          if (!state) return; // fejlede — spring over
+          const rIdx = state.rows.findIndex((r) => r.userId === userId);
+          if (rIdx >= 0 && state.rows.length) list.push({ label: c.name, pos: `${rIdx + 1}.`, compId: c.id });
+        });
         if (!cancelled) setPlacements(list);
       } catch (e) { if (!cancelled) setPlacements([]); }
     })();
