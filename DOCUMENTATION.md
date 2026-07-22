@@ -124,7 +124,7 @@ Upserter kampene i Supabase (`api_fixture_id` er unik nøgle)
 Bemærk: når sync opdaterer kampe med resultat, udløser DB-triggeren automatisk en rating-genberegning (afsnit 5)
 Kaldes med: `/api/sync-matches?leagueId=<uuid>&smSeason=2026/2027`
 Test uden at skrive noget: tilføj `&dryRun=true`
-Adgang: enten en admin-brugers login-token (bruges automatisk af "Hent resultater nu"), eller `&secret=<SYNC_SECRET>` (bruges af den eksterne cron).
+Adgang: enten en admin-brugers login-token (bruges automatisk af "Hent resultater nu"), eller den delte `SYNC_SECRET`. Hemmeligheden sendes helst i headeren `x-sync-secret` (så den ikke havner i request-logs); `&secret=<SYNC_SECRET>` i query-strengen virker fortsat som fallback. Flyt gerne cron-job.org-jobbet til headeren.
 Automatisk kørsel: cron-job.org kalder linket hvert 10.-15. minut (Vercels gratis cron er kun 1×/døgn, for sjældent). Ét cron-job pr. liga.
 ---
 9. Miljøvariabler
@@ -161,6 +161,19 @@ Kom i gang:
 Deploy: Vercel auto-deployer ved hver commit til `main`. Hver branch får desuden automatisk en preview-URL, så nye ting kan testes side om side med den live app (husk afsnit 9: samme database, medmindre Preview-miljøet peger på staging).
 Arbejdsgang: udvikl på en feature-branch → åbn en pull request → merge til `main`. `main` = det, alle brugere ser. `node_modules/` og `dist/` er git-ignoreret.
 Test: Vitest-suiten (`src/lib/*.test.js`) dækker den rene logik — pointberegning, runde-gruppering, runde-baseret låsning samt stillings-loaderne (med mocket database). UI og dataflow verificeres stadig manuelt (byg + klik igennem på preview). PWA-cache kan holde på en gammel version — et hard-refresh (eller geninstallation af hjemmeskærms-genvejen) tvinger den nye frem.
+
+Tjekliste før merge
+Fast tjekliste inden en branch merges til `main` (test på preview-URL, både mobil og desktop). Oprindeligt QA-listen fra migrationen til 4-fane-fladen; bevaret her som permanent regressions-tjek, da alle punkter fortsat er kernefunktioner:
+- [ ] Alle konkurrencetyper kan oprettes, tilgås og arkiveres.
+- [ ] Invite-links virker og lander det rigtige sted i navigationen.
+- [ ] UserRoundPredictions-visningen virker fra både liga- og Championship-stillinger, og viser kun runder hvor alle kampe har resultat.
+- [ ] Rullende gætte-vindue (`openDaysBefore`) opfører sig som forventet.
+- [ ] Rating auto-genberegnes ved gemte resultater; admin-knappen "Opdater ratings" virker fortsat.
+- [ ] Hjem-fanens deadline-kort viser korrekt antal manglende tips og skifter korrekt til grøn, når alt er tippet.
+- [ ] Månedsvælgeren viser korrekte historiske måneder og kårer rigtig månedsvinder.
+- [ ] PWA-installation og ikoner virker uændret.
+- [ ] Admin kan stadig oprette/rette kampe og resultater.
+- [ ] Ingen døde links eller efterladte referencer til fjernede skærme/kort.
 ---
 12. Kendte begrænsninger
 Superliga Playoff kan ikke synkroniseres endnu — Sportmonks har ikke oprettet 2026/27-sæsonen for den del (formentlig til foråret). Den er skjult for almindelige brugere (`is_visible = false`) men tilgængelig for admin under Kampe/Resultater.
@@ -186,6 +199,9 @@ Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke
 ---
 14. Changelog
 Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 13).
+
+Juli 2026 — Dokumentation-oprydning + produktdokumenter
+Den gennemførte migrationsplan (4-fane-fladen) er slettet; dens QA-tjekliste er bevaret som permanent "Tjekliste før merge" i afsnit 11. Nye produktdokumenter tilføjet under `docs/`: `docs/PRODUCT_BOOK.md` (produktfilosofi), `docs/ROADMAP.md` (status, prioritering, beslutningslog) og `docs/features/` (feature-specs, fx `story-engine-v1.md`). `CLAUDE.md` omskrevet: `DOCUMENTATION.md` er den tekniske sandhed; produktbeslutninger/nye features læser `docs/`-dokumenterne, og `docs/ROADMAP.md` opdateres, hver gang en feature leveres eller en beslutning træffes.
 
 Juli 2026 — Push-notifikationer
 Web Push med to beskedtyper: deadline-påmindelse (runder der mangler tips og låser snart — runde-baseret, som låsereglen) og runde-resultat (point + placering fra `round_standings`-viewet; vinderen kåres som Rundens Prediction Champ). Opt-in-kort på Hjem, service worker uden cache, nye tabeller `push_subscriptions` + `notification_log` (`sql/push_notifications.sql`), ny serverfunktion `api/send-notifications.js` (VAPID/web-push, dryRun, dedup, oprydning af døde abonnementer) og nyt cron-job. Se afsnit 16.
@@ -266,9 +282,9 @@ Web Push til brugere, der har slået notifikationer til. To slags beskeder:
 Tilmelding: opt-in-kort på Hjem-fanen (kan skjules; vises ikke igen når man er tilmeldt eller har sagt nej i browseren). Frontend-helpers i `src/lib/push.js`, service worker i `public/sw.js` (bevidst UDEN fetch-handler — den cacher intet, så PWA'en aldrig hænger fast i en gammel version). På iOS kræver Web Push, at appen først er føjet til hjemmeskærmen (iOS 16.4+); kortet forklarer det selv. Ved log ud afmeldes enhedens abonnement, så en delt enhed ikke får den forrige brugers beskeder.
 Data: `push_subscriptions` (abonnementer) + `notification_log` (dedup). Begge oprettes af det idempotente script `sql/push_notifications.sql` (kør med "Run without RLS", jf. afsnit 13).
 Udsendelse: `web-push`-pakken (VAPID). Frontendens tilmelding henter den offentlige nøgle via `/api/send-notifications?action=vapidKey` (offentligt), så nøglen kun findes i Vercels miljøvariabler. Døde abonnementer (HTTP 404/410 fra push-tjenesten) slettes automatisk.
-Kaldes med: `/api/send-notifications?secret=<SYNC_SECRET>`
+Kaldes med: `/api/send-notifications` med `SYNC_SECRET` i headeren `x-sync-secret` (foretrukket) eller `?secret=<SYNC_SECRET>` (fallback)
 Test uden at sende noget: tilføj `&dryRun=true` (viser hvad der VILLE blive sendt)
-Adgang: som sync-funktionen (admin-token eller `SYNC_SECRET`).
+Adgang: som sync-funktionen (admin-token eller `SYNC_SECRET` via header/query).
 Automatisk kørsel: ét ekstra cron-job.org-job, der kalder linket hvert 15.-30. minut (dækker alle ligaer på én gang).
 Engangsopsætning: 1) kør `sql/push_notifications.sql` i Supabase, 2) generér nøgler med `npx web-push generate-vapid-keys`, 3) sæt `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` (og evt. `VAPID_SUBJECT`) i Vercel, 4) opret cron-jobbet.
 ---

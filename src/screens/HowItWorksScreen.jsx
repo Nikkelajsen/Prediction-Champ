@@ -26,7 +26,7 @@ function HowItWorksScreen({ onBack }) {
         Parvis multiplayer-Elo. Alle starter på <b>1000</b>. Du stiger, hvis du rammer bedre end de andre i runden, og falder, hvis du rammer dårligere — det tæller ekstra at slå spillere med høj rating. Beregnes én gang pr. runde ud fra dine gennemsnitspoint pr. kamp. De første 5 runder er foreløbige (<b>NY</b>-badge).
       </Section>
       <Section title="Månedsliga & Championship">
-        <b>Championship</b> er officielle konkurrencer, hvor alle automatisk er med. <b>Månedsligaen</b> samler dine point for alle kampe i kalendermåneden (point pr. kamp i gennemsnit). Månedens bedste kåres som <b>Månedens Prediction Champ</b>, og stillingen nulstilles den 1.
+        <b>Championship</b> er officielle konkurrencer, hvor alle automatisk er med. <b>Månedsligaen</b> samler dine samlede point for månedens kampe (tiebreak: flest præcise). Månedens bedste kåres som <b>Månedens Prediction Champ</b>, og stillingen nulstilles den 1.
       </Section>
       <Section title="Tips-synlighed">
         Du kan først se andres tips, når runden er låst — ingen kan se dine tips inden da. Alle kampe i en runde låses samtidig, 1 time før rundens første kamp. Så tipper alle på samme grundlag og ingen kan spekulere i resultater undervejs.

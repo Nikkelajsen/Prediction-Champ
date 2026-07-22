@@ -1,6 +1,6 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
-import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings } from "lucide-react";
+import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { C, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
 import HjemTab from "./HjemTab.jsx";
@@ -23,6 +23,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   const [loading, setLoading] = useState(true);
   const [leagues, setLeagues] = useState([]);
   const [competitions, setCompetitions] = useState([]);
+  const [joinError, setJoinError] = useState(""); // fejl fra invite-join-deeplink (?join=kode)
 
   async function loadLeagues() {
     const ls = await db.select(token, "leagues", "select=*&order=name");
@@ -56,6 +57,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   useEffect(() => {
     if (!pendingJoinCode) return;
     (async () => {
+      setJoinError("");
       try {
         const found = await db.select(token, "competitions", `invite_code=eq.${pendingJoinCode}&select=*`);
         if (found.length) {
@@ -66,8 +68,12 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
           await loadCompetitions();
           setTab("ligaer");
           setScreen({ type: "predictions", compFilter: found[0].id });
+        } else {
+          setJoinError("Ingen konkurrence fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
         }
-      } catch (e) { /* ignorer */ }
+      } catch (e) {
+        setJoinError("Kunne ikke tilslutte konkurrencen lige nu. Prøv igen om lidt.");
+      }
       clearPendingJoinCode();
       const url = new URL(window.location.href);
       url.searchParams.delete("join");
@@ -152,6 +158,16 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
 
         {/* Content */}
         <div style={{ flex: 1, padding: "18px 18px 96px", overflowY: "auto" }}>
+          {joinError && (
+            <div style={{
+              display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 14,
+              padding: "12px 14px", borderRadius: 12,
+              border: `1px solid ${C.red}`, background: "rgba(239,68,68,0.10)",
+            }}>
+              <span style={{ color: C.red, fontSize: 13, flex: 1 }}>{joinError}</span>
+              <button onClick={() => setJoinError("")} aria-label="Luk" style={iconBtn}><X size={16} /></button>
+            </div>
+          )}
           {body}
         </div>
 
