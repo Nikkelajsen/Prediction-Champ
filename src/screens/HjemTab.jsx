@@ -1,8 +1,8 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
-import { Bell, ChevronRight, Clock, Check, X } from "lucide-react";
+import { Bell, ChevronRight, Clock, Check, X, Share2 } from "lucide-react";
 import { formatKickoff, outcome } from "../lib/scoring.js";
-import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, fmtCountdown, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
+import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { enablePush, getExistingSubscription, isPushSupported } from "../lib/push.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
 import { Card, Eyebrow, FormDots, H, Move } from "../ui/components.jsx";
@@ -65,6 +65,30 @@ function PushOptInCard({ token, userId }) {
   );
 }
 
+// Historie-kort (Story Engine v1). Guld-fremhævet, vises direkte under tips-status.
+// v1: skyggetilstand — kaldes kun for admin fra HjemTab. Del deler headline+body;
+// Afvis sætter dismissed_at og skjuler kortet.
+function StoryCard({ story, onDismiss }) {
+  async function share() {
+    const text = `${story.headline}\n${story.body}`;
+    try {
+      if (navigator.share) await navigator.share({ title: "Prediction Champ", text });
+      else await navigator.clipboard.writeText(text);
+    } catch (e) { /* bruger annullerede — ignorér */ }
+  }
+  return (
+    <Card style={{ borderColor: C.gold, background: "linear-gradient(135deg, #14212F 0%, #221E14 100%)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <Eyebrow>Rundens historie</Eyebrow>
+        <button style={iconBtn} aria-label="Afvis" onClick={onDismiss}><X size={16} /></button>
+      </div>
+      <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, lineHeight: 1.15 }}>{story.headline}</div>
+      <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.5, marginTop: 6 }}>{story.body}</div>
+      <button style={{ ...btnGhost, marginTop: 12, borderColor: C.gold, color: C.gold }} onClick={share}><Share2 size={14} /> Del</button>
+    </Card>
+  );
+}
+
 // lille point-pille til runde-oversigten: grøn +3 · guld +1 · dæmpet 0 · "–" hvis intet tip
 function PointsPill({ pts }) {
   if (pts == null) return <span style={{ color: C.muted, fontSize: 12 }}>–</span>;
@@ -92,7 +116,25 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
   const [round, setRound] = useState(null); // live-oversigt over indeværende runde
   const [snapshot, setSnapshot] = useState(null); // { rating, move, form, rank, total }
   const [placements, setPlacements] = useState(null); // [{ label, pos, gold, onClick }]
+  const [story, setStory] = useState(null); // Story Engine — seneste historie (v1: kun admin)
   const [, setTick] = useState(0);
+
+  // Historie-kort (skyggetilstand): hentes kun for admin i v1.
+  useEffect(() => {
+    if (!profile?.is_admin) { setStory(null); return; }
+    let cancelled = false;
+    (async () => {
+      const s = await loadLatestStory(token);
+      if (!cancelled) setStory(s);
+    })();
+    return () => { cancelled = true; };
+  }, [token, profile]); // eslint-disable-line
+
+  async function onDismissStory() {
+    const s = story;
+    setStory(null);
+    if (s?.id) await dismissStory(token, s.id);
+  }
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 60000);
@@ -210,6 +252,9 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           <button style={{ ...btnGreen, marginTop: 12 }} onClick={() => openPredictions("all", tips.roundKey)}>Tip nu</button>
         </Card>
       )}
+
+      {/* Rundens historie (Story Engine) — direkte under tips-status, altid synlig */}
+      {story && <StoryCard story={story} onDismiss={onDismissStory} />}
 
       {/* Indeværende runde: live-oversigt der opdaterer løbende */}
       {round && round.totalCount > 0 && (

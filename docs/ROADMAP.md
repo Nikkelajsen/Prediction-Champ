@@ -25,7 +25,7 @@ Opgjort mod MVP-kravene i produktbogens kapitel 3, ud fra den faktiske kodebase.
 | Frivillig tilmelding pr. konkurrence | 🟡 Delvist | Opnås i praksis via separate invite-links, men uden liga-lag findes der ikke et sted, hvor et medlem kan se og til-/framelde ligaens konkurrencer. |
 | Grundlæggende karriere og head-to-head | ❌ Mangler | Ratinghistorikken er første byggesten, men der findes ingen profil-/karrierevisning og ingen head-to-head-opgørelser. |
 | Få, relevante notifikationer | ✅ Bygget | Web Push (juli 2026): deadline-påmindelse før rundelåsen og runde-resultat med point og placering. `notification_log` sikrer, at samme besked aldrig sendes to gange. |
-| Story Engine (enkel første version) | ❌ Mangler | Findes ikke i appen endnu, men **v1 er nu fuldt specificeret** i [`features/story-engine-v1.md`](./features/story-engine-v1.md) — regelkatalog, tekster, datamodel, acceptkriterier og udrulning. Klar til implementering. |
+| Story Engine (enkel første version) | 🟡 Skyggetilstand | v1 bygget: `stories`+`latest_story`, `generate_stories()` (9 regler) i matches-triggeren (exception-guarded), guld-historie-kort på Hjem. Vises pt. **kun for admin** — kalibreres på rigtige data, før det åbnes for alle. Spec: [`features/story-engine-v1.md`](./features/story-engine-v1.md). |
 
 **Ud over MVP-listen er der allerede bygget:** flere konkurrenceformater (hel sæson, enkelt hold, datointerval, håndplukkede kampe, tilfældig kupon), arkivering pr. bruger, indsigt i andres tips for afsluttede runder, PWA-installation, en fuld admin-flade til kampe og resultater, DB-views til runde- og sæsonstillinger (`round_standings`/`season_standings`), en vitest-testsuite, staging-konfiguration, optimeret rating-trigger og rundebaseret åbningsvindue for tips.
 
@@ -45,7 +45,7 @@ Opgjort mod MVP-kravene i produktbogens kapitel 3, ud fra den faktiske kodebase.
 
 | Nr. | Indsats | Hvorfor nu | Omfang |
 |---|---|---|---|
-| 1 | **Story Engine v1 (regelbaseret)** | Produktets motor ifølge kapitel 6 — og dataene findes allerede. Spec klar: [`features/story-engine-v1.md`](./features/story-engine-v1.md). Ingen AI nødvendig i v1. Start i skyggetilstand de første 1–2 runder. | Mellem |
+| 1 | **Story Engine v1 (regelbaseret)** | ✅ Bygget, kører i skyggetilstand (kun admin). Produktets motor ifølge kapitel 6. Ingen AI. Næste: verificér tone/mængde på 1–2 rigtige runder, kalibrér tærskler (A4), åbn så for alle. | Mellem |
 | 2 | **Head-to-head som historieregel** | Indgår allerede i Story Engine v1-kataloget (regel 40 og 60) i stedet for en selvstændig statistikside — billigere og mere i bogens ånd. | Lille |
 | 3 | **Liga-laget (permanente fællesskaber)** | Bogens vigtigste strukturelle princip og den største ændring. En gruppe-tabel oven på de eksisterende konkurrencer (konkurrencer får et gruppetilhør, medlemskab flyttes til gruppen, til-/framelding pr. konkurrence). Kan indføres uden at rive det eksisterende ned — Ligaer-fanen er allerede navngivet til det. Modnes i Del 2, før den bygges. | Stor |
 | 4 | **Karriereprofil** | Første version: ratingkurve over tid, titler (månedstitler), længste stimer og største rivaler. Bliver markant mere værdifuld, når Story Engine og liga-laget har produceret indhold i nogle måneder. | Mellem |

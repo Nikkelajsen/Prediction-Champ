@@ -42,6 +42,8 @@ Tabel	Formål
 `push_subscriptions`	Web Push-abonnementer, én række pr. enhed/browser der har slået notifikationer til. RLS: kun egne rækker. Se afsnit 16.
 `notification_log`	Log over sendte push-beskeder pr. bruger (`user_id`, `key`), så samme besked aldrig sendes to gange. Kun serverfunktionen læser/skriver. Se afsnit 16.
 `user_activity_days`	Aktivitets-sporing til brugerstatistik: én række pr. bruger pr. aktiv dag (`user_id`, `day`, PK begge). Skrives af `touch_activity()` ved app-start. RLS slået til uden policies — læses/skrives kun via `security definer`-funktioner. Se afsnit 15.
+`stories`	Story Engine-historier pr. bruger pr. runde (`user_id`, `round_key`, `competition_id` nullable, `rule`, `priority`, `league_size`, `payload`, `headline`, `body`, `dismissed_at`). Skrives kun af `generate_stories()`. RLS: læs/afvis kun egne. Se afsnit 17.
+`latest_story` (view)	Præcis én kandidat pr. `(user_id, round_key)`: laveste `priority`, dernæst største liga (`league_size`), dernæst `competition_id`. Se afsnit 17.
 RLS-hovedregel for `predictions` (vigtig, rettet i patch 10): man kan altid læse sine egne forudsigelser; andres kun for kampe, der er låst. Dette forhindrer snyd (at kigge andres gæt inden man selv tipper). **Låsning er runde-baseret** (jf. `sql/predictions_round_lock_policies.sql`): alle kampe i en runde — samme `(season_id, round_key)` — låser samtidig, 1 time før rundens *tidligste* kickoff (eller så snart en kamp har fået resultat). Reglen `nu >= min(kickoff) − 1t` er i SQL udtrykt null-sikkert som "der findes en kamp i runden med `kickoff_at <= now() + 1 time`". Frontenden bruger samme regel via `isLocked(match, roundLockMap)` i `src/lib/scoring.js`. Så tipper alle på samme vidensgrundlag, og ingen kan spekulere i tidlige resultater eller afslørede gæt undervejs i runden.
 ---
 3. Konkurrence-modes
@@ -201,6 +203,9 @@ Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke
 14. Changelog
 Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 13).
 
+Juli 2026 — Story Engine v1 (skyggetilstand)
+Regelbaseret historie-motor: når en runde afsluttes, genereres pr. bruger én historie om, hvad runden betød. Nye objekter `stories` + `latest_story` (`sql/story_engine.sql`) og funktionen `generate_stories(round_key)`, som kaldes sidst i matches-triggeren efter ratings (`sql/rating_trigger_optimization.sql`) — pakket i en exception-guard, så en historik-fejl aldrig kan blokere resultat-lagring/rating. Ni regler (Månedens Champ, førsteplads overtaget/mistet, ratingrekord, head-to-head, comeback, stime, rundens vinder, perfekt træfsikkerhed), deterministisk udvælgelse (laveste prioritet → største liga → `competition_id`). Frontend: guld-fremhævet historie-kort på Hjem direkte under tips-status (helpers `loadLatestStory`/`dismissStory`, ren regel-logik + tests i `src/lib/stories.js`). **Starter i skyggetilstand: kortet vises kun for admin.** Se afsnit 17.
+
 Juli 2026 — Hurtige rettelser (batch)
 Fire mindre rettelser leveret samlet: (1) "Sådan virker det"-siden beskriver nu månedsligaen som samlede point (tiebreak: flest præcise) i stedet for gennemsnit, så teksten matcher `monthly_standings`-viewet (rating bruger fortsat gennemsnit). (2) Hjem-fanens "Dine placeringer" henter månedsliga + alle konkurrencer parallelt (`Promise.all`) i stedet for sekventielt — rækkefølge og fejl-spring bevaret; private konkurrencers stilling ligger ikke i de globale standings-views, så `computeCompetitionState` er stadig nødvendig pr. konkurrence. (3) Serverfunktionerne (`api/sync-matches.js`, `api/send-notifications.js`) accepterer `SYNC_SECRET` via headeren `x-sync-secret` med `?secret=`-query som fallback, så hemmeligheden ikke havner i request-logs (afsnit 8 og 16). (4) Invite-join via deep-link (`?join=kode`) viser nu en fejl-besked i `MainApp` ved ukendt kode eller fejl, i stedet for en tavs catch.
 
@@ -291,5 +296,23 @@ Test uden at sende noget: tilføj `&dryRun=true` (viser hvad der VILLE blive sen
 Adgang: som sync-funktionen (admin-token eller `SYNC_SECRET` via header/query).
 Automatisk kørsel: ét ekstra cron-job.org-job, der kalder linket hvert 15.-30. minut (dækker alle ligaer på én gang).
 Engangsopsætning: 1) kør `sql/push_notifications.sql` i Supabase, 2) generér nøgler med `npx web-push generate-vapid-keys`, 3) sæt `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` (og evt. `VAPID_SUBJECT`) i Vercel, 4) opret cron-jobbet.
+---
+---
+17. Story Engine v1 (`sql/story_engine.sql`)
+Regelbaseret historie-motor (ingen AI). Fuld spec: `docs/features/story-engine-v1.md`. Når en runde afsluttes, får hver bruger én historie om, hvad runden betød *for dem*.
+
+Beregning: `generate_stories(round_key)` (`security definer`, idempotent — sletter og genberegner rundens rækker) kaldes sidst i matches-triggeren (`sql/rating_trigger_optimization.sql`), efter `recompute_ratings()`, i rækkefølgen point → stillinger → ratings → historier. Kaldet er pakket i en exception-guard, så en fejl i historik-genereringen ALDRIG kan rulle resultat-lagring eller rating tilbage (best-effort). Kun runder, hvor alle kampe har resultat, genererer historier.
+
+Regelkatalog (prioritet, lavest vinder): 10 Månedens Champ · 20 Førsteplads overtaget · 21 Førsteplads mistet · 30 Ny ratingrekord · 40 Head-to-head-overhaling · 50 Comeback · 60 Stime mod rival · 70 Rundens vinder · 80 Perfekt træfsikkerhed. Pr. bruger pr. runde vælges én via viewet `latest_story` (laveste prioritet → største liga `league_size` → `competition_id`). Alle udløste kandidater gemmes (råmateriale til minde-arkiv senere).
+
+Data & RLS: `stories` (payload + færdig `headline`/`body` + `league_size`-snapshot). RLS: en bruger kan kun læse/afvise egne historier. Skrivning sker kun via `generate_stories()`.
+
+Frontend: guld-fremhævet historie-kort på Hjem, direkte under tips-status-kortet, altid synligt (viger ikke for deadline). Helpers `loadLatestStory`/`dismissStory` (`data.js`); ren regel-/tekst-logik i `src/lib/stories.js` (enhedstestet). "Del" deler headline+body (`navigator.share`, fallback udklipsholder); "Afvis" sætter `dismissed_at`.
+
+Skyggetilstand: v1 viser kortet KUN for admin (`profile.is_admin`), så historierne kan læses med friske øjne på rigtige data, før de vises for alle. Tærskler (comeback ≥3 pladser, stime ≥3 runder) kalibreres i denne periode.
+
+Engangsopsætning: kør `sql/story_engine.sql` i Supabase ("Run without RLS"), og gen-kør `sql/rating_trigger_optimization.sql` (hooker `generate_stories` ind i triggeren). SQL'en er skrevet mod det dokumenterede skema (afsnit 2) — verificér i skyggetilstand, da det oprindelige skema ikke ligger i repoet (afsnit 12).
+
+Bemærkning (v2): runde-resultat-notifikationen (afsnit 16) kan senere bruge brugerens historie-`headline` som beskedtekst i stedet for den generiske point/placering-tekst.
 ---
 Bed Claude om at opdatere denne fil, når der sker større ændringer.

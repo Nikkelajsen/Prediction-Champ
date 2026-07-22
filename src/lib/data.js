@@ -330,4 +330,25 @@ async function loadUserStats(token) {
   return restFetch(`/rest/v1/rpc/admin_user_stats`, { method: "POST", token, body: {} });
 }
 
-export { computeCompetitionState, loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, computeHomeTips, computeCurrentRound, daFullDate, fmtCountdown, monthName, touchActivity, loadUserStats };
+// ---------- Story Engine: seneste historie til Hjem ----------
+// Læser latest_story-viewet (RLS: kun egne rækker) for den seneste runde. Er den
+// seneste historie afvist, returneres null (så en afvist historie ikke afslører en
+// ældre runde). Degraderer stille til null, hvis viewet endnu ikke findes (skygge/L3).
+async function loadLatestStory(token) {
+  try {
+    const rows = await db.select(token, "latest_story", `order=round_key.desc&limit=1`);
+    if (!rows || !rows.length) return null;
+    const s = rows[0];
+    if (s.dismissed_at) return null;
+    return s;
+  } catch (e) { return null; }
+}
+
+// Afvis en historie (sætter dismissed_at). Best-effort.
+async function dismissStory(token, id) {
+  try {
+    await db.update(token, "stories", `id=eq.${id}`, { dismissed_at: new Date().toISOString() });
+  } catch (e) { /* best-effort */ }
+}
+
+export { computeCompetitionState, loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, computeHomeTips, computeCurrentRound, daFullDate, fmtCountdown, monthName, touchActivity, loadUserStats, loadLatestStory, dismissStory };
