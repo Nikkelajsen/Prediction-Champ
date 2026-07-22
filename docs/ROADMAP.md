@@ -63,9 +63,9 @@ Spørgsmål, der er identificeret, men bevidst ikke afgjort endnu. Når en beslu
 |---|---|---|---|
 | A1 | **Navn: Prediction Hub eller Prediction Champ?** | Appen hedder Champ, bogen Hub. | Før markedsføring ud over vennekredsen. |
 | A2 | **Månedsliga ved flere turneringer: samlede point eller snit?** | Total belønner aktivitet (flere konkurrencer = flere kampe = fordel); snit belønner præcision. Med kun Superliga er det ligegyldigt. | Når turnering nr. 2 tilføjes (Del 2). |
-| A3 | **Story Engine ved stille runder: intet kort eller dæmpet "status quo"-kort?** | Bogen siger stilhed er en funktion; udkastet anbefaler intet kort. | Efter skyggetilstand, på rigtige data. |
-| A4 | **Story Engine-tærskler: comeback ≥3 pladser, stime ≥3 runder** | Rene gæt — skal kalibreres. | Efter skyggetilstand, på rigtige data. |
-| A5 | **Emojis i historie-kort: til eller fra?** | Gør kortet skimbart på mobil, men mindre klassisk. | Efter skyggetilstand. |
+| A3 | **Story Engine ved stille runder: intet kort eller dæmpet "status quo"-kort?** | Bogen siger stilhed er en funktion; udkastet anbefaler intet kort. **v1-default: intet kort (stilhed).** | Revurderes efter skyggetilstand, på rigtige data. |
+| A4 | **Story Engine-tærskler: comeback ≥3 pladser, stime ≥3 runder** | Rene gæt — skal kalibreres. **v1-default: spec'ens tærskler (comeback ≥3, stime ≥3), kører i skyggetilstand.** | Kalibreres efter skyggetilstand, på rigtige data. |
+| A5 | **Emojis i historie-kort: til eller fra?** | Gør kortet skimbart på mobil, men mindre klassisk. **v1-default: emojis til.** | Revurderes efter skyggetilstand. |
 
 ## Trufne beslutninger
 
@@ -79,3 +79,4 @@ Spørgsmål, der er identificeret, men bevidst ikke afgjort endnu. Når en beslu
 | Juli 2026 | Push-notifikationer: kun to beskedtyper (deadline-påmindelse og runde-resultat), dedupleret via `notification_log`. | "Få, relevante notifikationer" — hellere to beskeder, der altid rammer, end ti, der støjer. |
 | Juli 2026 | Stillinger beregnes i DB-views (`round_standings`, `season_standings`) frem for i browseren. | PostgreSQL som kilde til sandhed; skalerer med flere brugere og kampe. |
 | Juli 2026 | `SYNC_SECRET` sendes til serverfunktionerne via headeren `x-sync-secret` (query-string `?secret=` bevaret som fallback). | Hemmeligheden skal ikke ende i request-logs. Verificeret: kald uden header giver 401, cron-jobs med header giver 200. **Senere (teknisk gæld):** fjern `?secret=`-fallbacken helt, så kun headeren accepteres — først når alle cron-jobs (ét sync-job pr. liga + notifikations-jobbet) er bekræftet flyttet til headeren, ellers fejler de med 401. |
+| Juli 2026 | Story Engine v1: udvælgelsen pr. bruger pr. runde er deterministisk — `priority asc`, dernæst største liga (snapshottet `league_size desc`), dernæst `competition_id`/`id` som garanteret unik tiebreak. Ligastørrelse aflæses IKKE live. | Fler-liga-brugere udløser flere kandidater; visningen skal altid give præcis én, reproducerbar historie, der ikke driver, når medlemskab ændres. Detaljer i [`features/story-engine-v1.md`](./features/story-engine-v1.md) afsnit 6. |
