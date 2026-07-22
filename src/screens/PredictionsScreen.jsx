@@ -162,12 +162,10 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
       ) : (
         <>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {leagueOptions.length > 1 && (
-              <select className="field" style={{ flex: 1, minWidth: 140 }} value={leagueFilter} onChange={(e) => setLeagueFilter(e.target.value)}>
-                <option value="all">Alle ligaer</option>
-                {leagueOptions.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            )}
+            <select className="field" style={{ flex: 1, minWidth: 140 }} value={leagueFilter} onChange={(e) => setLeagueFilter(e.target.value)}>
+              <option value="all">Alle ligaer</option>
+              {leagueOptions.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
             <select className="field" style={{ flex: 1, minWidth: 140 }} value={compFilter} onChange={(e) => setCompFilter(e.target.value)}>
               <option value="all">Alle konkurrencer</option>
               {competitions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
