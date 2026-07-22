@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X } from "lucide-react";
 import { db } from "../lib/supabase.js";
-import { C, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
+import { C, btnGhost, btnGreen, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
+import { Modal } from "../ui/components.jsx";
 import HjemTab from "./HjemTab.jsx";
 import LigaerTab from "./LigaerTab.jsx";
 import ChampionshipTab from "./ChampionshipTab.jsx";
@@ -24,6 +25,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   const [leagues, setLeagues] = useState([]);
   const [competitions, setCompetitions] = useState([]);
   const [joinError, setJoinError] = useState(""); // fejl fra invite-join-deeplink (?join=kode)
+  const [pendingJoin, setPendingJoin] = useState(null); // { competition, inviterName } — bekræftelse før join
 
   async function loadLeagues() {
     const ls = await db.select(token, "leagues", "select=*&order=name");
@@ -61,13 +63,24 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       try {
         const found = await db.select(token, "competitions", `invite_code=eq.${pendingJoinCode}&select=*`);
         if (found.length) {
-          const already = await db.select(token, "competition_participants", `competition_id=eq.${found[0].id}&user_id=eq.${userId}&select=competition_id`);
-          if (!already.length) {
-            await db.insert(token, "competition_participants", [{ competition_id: found[0].id, user_id: userId }]);
+          const comp = found[0];
+          const already = await db.select(token, "competition_participants", `competition_id=eq.${comp.id}&user_id=eq.${userId}&select=competition_id`);
+          if (already.length) {
+            // allerede medlem — ingen bekræftelse nødvendig, gå direkte til ligaen
+            await loadCompetitions();
+            setTab("ligaer");
+            setScreen({ type: "board", compId: comp.id });
+          } else {
+            // vis bekræftelse i stedet for at joine direkte
+            let inviterName = "";
+            if (comp.created_by) {
+              try {
+                const prof = await db.select(token, "profiles", `id=eq.${comp.created_by}&select=display_name`);
+                inviterName = prof[0]?.display_name || "";
+              } catch (e) { /* inviter-navn er valgfrit */ }
+            }
+            setPendingJoin({ competition: comp, inviterName });
           }
-          await loadCompetitions();
-          setTab("ligaer");
-          setScreen({ type: "predictions", compFilter: found[0].id });
         } else {
           setJoinError("Ingen konkurrence fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
         }
@@ -80,6 +93,21 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       window.history.replaceState({}, "", url.toString());
     })();
   }, [pendingJoinCode]); // eslint-disable-line
+
+  async function confirmJoin() {
+    if (!pendingJoin) return;
+    const comp = pendingJoin.competition;
+    try {
+      await db.insert(token, "competition_participants", [{ competition_id: comp.id, user_id: userId }]);
+      await loadCompetitions();
+      setPendingJoin(null);
+      setTab("ligaer");
+      setScreen({ type: "predictions", compFilter: comp.id });
+    } catch (e) {
+      setPendingJoin(null);
+      setJoinError("Kunne ikke tilslutte konkurrencen lige nu. Prøv igen om lidt.");
+    }
+  }
 
   const visibleLeagues = leagues.filter((l) => l.is_visible !== false);
 
@@ -194,6 +222,19 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
           })}
         </div>
       </div>
+
+      {pendingJoin && (
+        <Modal title="Join liga?" onClose={() => setPendingJoin(null)}>
+          <p style={{ margin: "0 0 4px" }}>
+            {pendingJoin.inviterName ? <><b>{pendingJoin.inviterName}</b> har inviteret dig til </> : "Du er inviteret til "}
+            ligaen <b>{pendingJoin.competition.name}</b>. Vil du være med?
+          </p>
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button style={{ ...btnGreen, flex: 1, width: "auto" }} onClick={confirmJoin}>Ja, join</button>
+            <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={() => setPendingJoin(null)}>Annullér</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
