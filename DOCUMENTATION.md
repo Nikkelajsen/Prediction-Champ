@@ -161,6 +161,19 @@ Kom i gang:
 Deploy: Vercel auto-deployer ved hver commit til `main`. Hver branch får desuden automatisk en preview-URL, så nye ting kan testes side om side med den live app (husk afsnit 9: samme database, medmindre Preview-miljøet peger på staging).
 Arbejdsgang: udvikl på en feature-branch → åbn en pull request → merge til `main`. `main` = det, alle brugere ser. `node_modules/` og `dist/` er git-ignoreret.
 Test: Vitest-suiten (`src/lib/*.test.js`) dækker den rene logik — pointberegning, runde-gruppering, runde-baseret låsning samt stillings-loaderne (med mocket database). UI og dataflow verificeres stadig manuelt (byg + klik igennem på preview). PWA-cache kan holde på en gammel version — et hard-refresh (eller geninstallation af hjemmeskærms-genvejen) tvinger den nye frem.
+
+Tjekliste før merge
+Fast tjekliste inden en branch merges til `main` (test på preview-URL, både mobil og desktop). Oprindeligt QA-listen fra migrationen til 4-fane-fladen; bevaret her som permanent regressions-tjek, da alle punkter fortsat er kernefunktioner:
+- [ ] Alle konkurrencetyper kan oprettes, tilgås og arkiveres.
+- [ ] Invite-links virker og lander det rigtige sted i navigationen.
+- [ ] UserRoundPredictions-visningen virker fra både liga- og Championship-stillinger, og viser kun runder hvor alle kampe har resultat.
+- [ ] Rullende gætte-vindue (`openDaysBefore`) opfører sig som forventet.
+- [ ] Rating auto-genberegnes ved gemte resultater; admin-knappen "Opdater ratings" virker fortsat.
+- [ ] Hjem-fanens deadline-kort viser korrekt antal manglende tips og skifter korrekt til grøn, når alt er tippet.
+- [ ] Månedsvælgeren viser korrekte historiske måneder og kårer rigtig månedsvinder.
+- [ ] PWA-installation og ikoner virker uændret.
+- [ ] Admin kan stadig oprette/rette kampe og resultater.
+- [ ] Ingen døde links eller efterladte referencer til fjernede skærme/kort.
 ---
 12. Kendte begrænsninger
 Superliga Playoff kan ikke synkroniseres endnu — Sportmonks har ikke oprettet 2026/27-sæsonen for den del (formentlig til foråret). Den er skjult for almindelige brugere (`is_visible = false`) men tilgængelig for admin under Kampe/Resultater.
@@ -186,6 +199,9 @@ Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke
 ---
 14. Changelog
 Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 13).
+
+Juli 2026 — Dokumentation-oprydning + produktdokumenter
+Den gennemførte migrationsplan (4-fane-fladen) er slettet; dens QA-tjekliste er bevaret som permanent "Tjekliste før merge" i afsnit 11. Nye produktdokumenter tilføjet under `docs/`: `docs/PRODUCT_BOOK.md` (produktfilosofi), `docs/ROADMAP.md` (status, prioritering, beslutningslog) og `docs/features/` (feature-specs, fx `story-engine-v1.md`). `CLAUDE.md` omskrevet: `DOCUMENTATION.md` er den tekniske sandhed; produktbeslutninger/nye features læser `docs/`-dokumenterne, og `docs/ROADMAP.md` opdateres, hver gang en feature leveres eller en beslutning træffes.
 
 Juli 2026 — Push-notifikationer
 Web Push med to beskedtyper: deadline-påmindelse (runder der mangler tips og låser snart — runde-baseret, som låsereglen) og runde-resultat (point + placering fra `round_standings`-viewet; vinderen kåres som Rundens Prediction Champ). Opt-in-kort på Hjem, service worker uden cache, nye tabeller `push_subscriptions` + `notification_log` (`sql/push_notifications.sql`), ny serverfunktion `api/send-notifications.js` (VAPID/web-push, dryRun, dedup, oprydning af døde abonnementer) og nyt cron-job. Se afsnit 16.
