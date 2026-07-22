@@ -1,7 +1,11 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 // ---------- Supabase config ----------
-const SUPABASE_URL = "https://qfcjbpvttburccdyfnkx.supabase.co";
-const SUPABASE_KEY = "sb_publishable_Et9Dahm8LOhZk6cS1XRqhA_9RuNmnvC";
+// Produktionsværdierne er hårdkodede fallbacks (offentlig publishable-nøgle,
+// beskyttet af RLS — by design). Sæt VITE_SUPABASE_URL/VITE_SUPABASE_KEY
+// (fx i Vercels Preview-miljø eller .env.local) for at pege på en
+// staging-database i stedet — se .env.example og DOCUMENTATION.md afsnit 9.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://qfcjbpvttburccdyfnkx.supabase.co";
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || "sb_publishable_Et9Dahm8LOhZk6cS1XRqhA_9RuNmnvC";
 
 // ---------- tiny REST helpers (no SDK needed) ----------
 async function restFetch(path, { method = "GET", body, token, prefer } = {}) {
