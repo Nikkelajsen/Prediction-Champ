@@ -35,7 +35,7 @@ Opgjort mod MVP-kravene i produktbogens kapitel 3, ud fra den faktiske kodebase.
 
 - **Spillerunder:** Bogen beskriver en global tirsdag–mandag-runde på tværs af turneringer. Appen beregner i dag pr. turneringsrunde — hvilket med Superligaen alene reelt er det samme. Ombygning til kalenderuger udskydes bevidst, til flere turneringer er i drift.
 - **Navngivning:** Appen hedder i dag Prediction Champ; bogen anvender arbejdstitlen Prediction Hub. Endelig navnebeslutning udestår.
-- **Månedsliga-beskrivelser:** Visningen i Championship er rettet til samlede point (juli 2026), men "Sådan virker det"-siden (`HowItWorksScreen.jsx`) siger fortsat "point pr. kamp i gennemsnit". Det korrekte er **samlede point** (tiebreak: flest præcise); gennemsnit bruges kun i ratingen.
+- ~~**Månedsliga-beskrivelser:** "Sådan virker det"-siden sagde "point pr. kamp i gennemsnit".~~ **Lukket (juli 2026):** `HowItWorksScreen.jsx` retter nu teksten til **samlede point** (tiebreak: flest præcise), så den matcher `monthly_standings`-viewet og Championship-visningen. Gennemsnit bruges kun i ratingen.
 
 ---
 
