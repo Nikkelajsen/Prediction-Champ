@@ -108,7 +108,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     );
   } else if (screen?.type === "board") {
     body = <BoardScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
-      initialCompId={screen.compId} onBack={() => setScreen(null)} goToPredictions={openPredictions} />;
+      initialCompId={screen.compId} inviterName={profile?.display_name} onBack={() => setScreen(null)} goToPredictions={openPredictions} />;
   } else if (screen?.type === "predictions") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
       initialFilter={screen.compFilter} initialRoundKey={screen.roundKey} onBack={() => setScreen(null)} />;
