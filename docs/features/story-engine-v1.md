@@ -39,7 +39,7 @@ Så vises **intet kort** — ikke et "status quo"-kort, bare stilhed. Det gør d
 
 ## 3. Regelkataloget (prioriteret)
 
-Hver regel har et prioritetstal. Pr. bruger pr. runde vælges historien med lavest tal; ved lighed vinder historien fra den største liga.
+Hver regel har et prioritetstal. Pr. bruger pr. runde vælges historien med lavest tal; ved lighed vinder historien fra den største liga (flest deltagere). Er en bruger med i flere ligaer, udløses typisk flere kandidater (én eller flere pr. liga + de globale) — alle gemmes, men kun én vises. Den fulde, deterministiske udvælgelses­regel (og hvorfor global-vs-liga aldrig kan gå lige op) står i afsnit 6.
 
 | Prio | Regel | Udløses når | Datakilde |
 |---|---|---|---|
@@ -169,6 +169,7 @@ create table stories (
   competition_id uuid references competitions(id),  -- null for globale (rating, måned)
   rule text not null,          -- 'LEAD_TAKEN', 'RATING_HIGH', ...
   priority int not null,
+  league_size int,             -- snapshot: antal deltagere i ligaen ved generering; null for globale
   payload jsonb not null,      -- fx {"rival":"Jimmy","led_rounds":3,"gap":2}
   headline text not null,      -- færdigrenderet dansk tekst
   body text not null,
@@ -179,12 +180,29 @@ create table stories (
 ```
 
 - **Både payload og færdig tekst gemmes.** Teksten gør v1 triviel at vise; payloaden gør det muligt senere at forbedre formuleringer eller bygge minde-arkivet uden datatab.
-- **Alle udløste kandidater gemmes** (ikke kun vinderen). Visningen vælger laveste prioritet pr. bruger via et view `latest_story`. Det giver gratis råmateriale til "Historier bliver til minder" senere.
+- **Alle udløste kandidater gemmes** (ikke kun vinderen). Visningen vælger laveste prioritet pr. bruger. Det giver gratis råmateriale til "Historier bliver til minder" senere.
+- **`league_size` snapshottes ved generering** — ligastørrelsen aflæses IKKE live i viewet. Ellers kunne den viste historie for samme runde skifte, hvis nogen joiner/forlader ligaen bagefter. Snapshot = frosset, reproducerbart valg (og idempotent gen-kørsel giver samme resultat).
+
+**Deterministisk udvælgelse (`latest_story`-view):**
+Præcis én historie pr. `(user_id, round_key)`. Tre sorteringsnøgler, hvor den sidste er garanteret unik, så viewet aldrig kan returnere to rækker eller skifte vilkårligt:
+
+```sql
+-- pr. (user_id, round_key): vælg rækken med
+order by priority asc, league_size desc nulls last, competition_id asc
+limit 1   -- fx via distinct on (user_id, round_key) med denne order
+-- vis kun ikke-afviste: where dismissed_at is null
+```
+
+1. **`priority asc`** — laveste tal (vigtigst) vinder.
+2. **`league_size desc nulls last`** — ved samme prio vinder den største liga. `nulls last` betyder, at en global historie (uden ligastørrelse) taber en lighed til en liga-historie — men det sker aldrig i praksis, for de globale prioriteter (10, 30) er unikke på stigen og kan ikke gå lige op med en liga-historie. Reglen er derfor entydig, og `nulls last` er blot et sikkerhedsnet.
+3. **`competition_id asc`** (eller story-`id`) — endelig, garanteret unik tiebreak, så der altid returneres præcis én række.
 
 **Funktion `generate_stories(round_key)`:**
-Sletter og genberegner rundens rækker (idempotent, ligesom `recompute_ratings`). Kaldes til sidst i det eksisterende trigger-flow på `matches` — efter ratings. Reglerne 20–70 beregnes ud fra stillinger før/efter runden, som kan afledes af rundepoint.
+Sletter og genberegner rundens rækker (idempotent, ligesom `recompute_ratings`). Kaldes til sidst i det eksisterende trigger-flow på `matches` — efter ratings. Triggeren sender **kun fuldt afsluttede runder** videre (alle rundens kampe har resultat); delvist spillede runder genererer ingen historier endnu. Reglerne 20–70 beregnes ud fra stillinger før/efter runden, som kan afledes af rundepoint.
 
-**Frontend:** HjemTab henter én række fra `latest_story` og viser kortet. "Afvis" sætter `dismissed_at`. Del-knappen bruger `navigator.share` med headline + body (fallback: udklipsholder).
+**Frontend:** HjemTab henter én række fra `latest_story` for den **seneste fuldt afsluttede runde** og viser kortet, indtil (a) næste runde afsluttes, eller (b) brugeren afviser (`dismissed_at`). Del-knappen bruger `navigator.share` med headline + body (fallback: udklipsholder).
+
+**Deadline-kortet slår historie-kortet:** historie-kortet vises kun, når Hjem *ikke* viser det røde "mangler tips"-deadline-kort — dvs. når `computeHomeTips` returnerer `allTipped` (eller ingen nær deadline). Når der skal handles, er deadline altid vigtigst. Ingen ny logik: bare en betingelse i `HjemTab` oven på den eksisterende `computeHomeTips`.
 
 **RLS:** Brugere kan kun læse rækker med eget `user_id`. Ingen kan se andres historier — de er personlige.
 
