@@ -124,7 +124,7 @@ Upserter kampene i Supabase (`api_fixture_id` er unik nøgle)
 Bemærk: når sync opdaterer kampe med resultat, udløser DB-triggeren automatisk en rating-genberegning (afsnit 5)
 Kaldes med: `/api/sync-matches?leagueId=<uuid>&smSeason=2026/2027`
 Test uden at skrive noget: tilføj `&dryRun=true`
-Adgang: enten en admin-brugers login-token (bruges automatisk af "Hent resultater nu"), eller `&secret=<SYNC_SECRET>` (bruges af den eksterne cron).
+Adgang: enten en admin-brugers login-token (bruges automatisk af "Hent resultater nu"), eller den delte `SYNC_SECRET`. Hemmeligheden sendes helst i headeren `x-sync-secret` (så den ikke havner i request-logs); `&secret=<SYNC_SECRET>` i query-strengen virker fortsat som fallback. Flyt gerne cron-job.org-jobbet til headeren.
 Automatisk kørsel: cron-job.org kalder linket hvert 10.-15. minut (Vercels gratis cron er kun 1×/døgn, for sjældent). Ét cron-job pr. liga.
 ---
 9. Miljøvariabler
@@ -282,9 +282,9 @@ Web Push til brugere, der har slået notifikationer til. To slags beskeder:
 Tilmelding: opt-in-kort på Hjem-fanen (kan skjules; vises ikke igen når man er tilmeldt eller har sagt nej i browseren). Frontend-helpers i `src/lib/push.js`, service worker i `public/sw.js` (bevidst UDEN fetch-handler — den cacher intet, så PWA'en aldrig hænger fast i en gammel version). På iOS kræver Web Push, at appen først er føjet til hjemmeskærmen (iOS 16.4+); kortet forklarer det selv. Ved log ud afmeldes enhedens abonnement, så en delt enhed ikke får den forrige brugers beskeder.
 Data: `push_subscriptions` (abonnementer) + `notification_log` (dedup). Begge oprettes af det idempotente script `sql/push_notifications.sql` (kør med "Run without RLS", jf. afsnit 13).
 Udsendelse: `web-push`-pakken (VAPID). Frontendens tilmelding henter den offentlige nøgle via `/api/send-notifications?action=vapidKey` (offentligt), så nøglen kun findes i Vercels miljøvariabler. Døde abonnementer (HTTP 404/410 fra push-tjenesten) slettes automatisk.
-Kaldes med: `/api/send-notifications?secret=<SYNC_SECRET>`
+Kaldes med: `/api/send-notifications` med `SYNC_SECRET` i headeren `x-sync-secret` (foretrukket) eller `?secret=<SYNC_SECRET>` (fallback)
 Test uden at sende noget: tilføj `&dryRun=true` (viser hvad der VILLE blive sendt)
-Adgang: som sync-funktionen (admin-token eller `SYNC_SECRET`).
+Adgang: som sync-funktionen (admin-token eller `SYNC_SECRET` via header/query).
 Automatisk kørsel: ét ekstra cron-job.org-job, der kalder linket hvert 15.-30. minut (dækker alle ligaer på én gang).
 Engangsopsætning: 1) kør `sql/push_notifications.sql` i Supabase, 2) generér nøgler med `npx web-push generate-vapid-keys`, 3) sæt `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` (og evt. `VAPID_SUBJECT`) i Vercel, 4) opret cron-jobbet.
 ---

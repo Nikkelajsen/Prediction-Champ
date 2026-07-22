@@ -35,8 +35,11 @@ export default async function handler(req, res) {
     }
 
     // ---- autorisation: enten en admin-brugers login, eller den delte hemmelige nøgle (til ekstern cron) ----
+    // Hemmeligheden læses helst fra headeren x-sync-secret (så den ikke havner i
+    // request-logs); query-parameteren ?secret= bevares som fallback for eksisterende cron-jobs.
     async function isAuthorized() {
-      if (SYNC_SECRET && req.query.secret === SYNC_SECRET) return true;
+      const providedSecret = req.headers["x-sync-secret"] || req.query.secret;
+      if (SYNC_SECRET && providedSecret === SYNC_SECRET) return true;
       const authHeader = req.headers.authorization;
       if (authHeader?.startsWith("Bearer ")) {
         const userToken = authHeader.slice(7);
