@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // db mockes, så loaderne kan testes uden netværk/Supabase
 vi.mock("./supabase.js", () => ({ db: { select: vi.fn() }, restFetch: vi.fn() }));
 import { db } from "./supabase.js";
-import { loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey } from "./data.js";
+import { loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory } from "./data.js";
 
 // mock-svar pr. tabel/view
 function mockTables(tables) {
@@ -84,6 +84,22 @@ describe("loadSeasonBoard (season_standings-view)", () => {
     expect(board.playedMatches).toBe(2);
     expect(board.totalMatches).toBe(3);
     expect(board.isComplete).toBe(false);
+  });
+});
+
+describe("loadLatestStory (latest_story-view)", () => {
+  it("returnerer seneste ikke-afviste historie", async () => {
+    mockTables({ latest_story: [{ id: "s1", round_key: "2026-07-21", headline: "H", body: "B", dismissed_at: null }] });
+    const s = await loadLatestStory("token");
+    expect(s.id).toBe("s1");
+  });
+  it("returnerer null når den seneste historie er afvist", async () => {
+    mockTables({ latest_story: [{ id: "s1", round_key: "2026-07-21", dismissed_at: "2026-07-22T00:00:00Z" }] });
+    expect(await loadLatestStory("token")).toBeNull();
+  });
+  it("returnerer null uden historier", async () => {
+    mockTables({ latest_story: [] });
+    expect(await loadLatestStory("token")).toBeNull();
   });
 });
 
