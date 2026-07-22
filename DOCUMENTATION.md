@@ -200,6 +200,9 @@ Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke
 14. Changelog
 Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 13).
 
+Juli 2026 — Hurtige rettelser (batch)
+Fire mindre rettelser leveret samlet: (1) "Sådan virker det"-siden beskriver nu månedsligaen som samlede point (tiebreak: flest præcise) i stedet for gennemsnit, så teksten matcher `monthly_standings`-viewet (rating bruger fortsat gennemsnit). (2) Hjem-fanens "Dine placeringer" henter månedsliga + alle konkurrencer parallelt (`Promise.all`) i stedet for sekventielt — rækkefølge og fejl-spring bevaret; private konkurrencers stilling ligger ikke i de globale standings-views, så `computeCompetitionState` er stadig nødvendig pr. konkurrence. (3) Serverfunktionerne (`api/sync-matches.js`, `api/send-notifications.js`) accepterer `SYNC_SECRET` via headeren `x-sync-secret` med `?secret=`-query som fallback, så hemmeligheden ikke havner i request-logs (afsnit 8 og 16). (4) Invite-join via deep-link (`?join=kode`) viser nu en fejl-besked i `MainApp` ved ukendt kode eller fejl, i stedet for en tavs catch.
+
 Juli 2026 — Dokumentation-oprydning + produktdokumenter
 Den gennemførte migrationsplan (4-fane-fladen) er slettet; dens QA-tjekliste er bevaret som permanent "Tjekliste før merge" i afsnit 11. Nye produktdokumenter tilføjet under `docs/`: `docs/PRODUCT_BOOK.md` (produktfilosofi), `docs/ROADMAP.md` (status, prioritering, beslutningslog) og `docs/features/` (feature-specs, fx `story-engine-v1.md`). `CLAUDE.md` omskrevet: `DOCUMENTATION.md` er den tekniske sandhed; produktbeslutninger/nye features læser `docs/`-dokumenterne, og `docs/ROADMAP.md` opdateres, hver gang en feature leveres eller en beslutning træffes.
 
