@@ -111,7 +111,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       initialCompId={screen.compId} onBack={() => setScreen(null)} goToPredictions={openPredictions} />;
   } else if (screen?.type === "predictions") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
-      initialFilter={screen.compFilter} onBack={() => setScreen(null)} />;
+      initialFilter={screen.compFilter} initialRoundKey={screen.roundKey} onBack={() => setScreen(null)} />;
   } else if (screen?.type === "create") {
     body = <CreateCompetitionScreen token={token} userId={userId} leagues={visibleLeagues}
       onBack={() => setScreen(null)} onCreated={async () => { await loadCompetitions(); }} openBoard={openBoard} />;

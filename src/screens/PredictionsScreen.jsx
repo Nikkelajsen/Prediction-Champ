@@ -6,7 +6,7 @@ import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, outcome, p
 import { C, muted } from "../ui/theme.js";
 import { BackBar, Card, H, RoundPager, ScoreInput } from "../ui/components.jsx";
 
-function PredictionsScreen({ token, userId, competitions, initialFilter, onBack }) {
+function PredictionsScreen({ token, userId, competitions, initialFilter, initialRoundKey, onBack }) {
   const [compFilter, setCompFilter] = useState(initialFilter || "all");
   const [allMatches, setAllMatches] = useState([]);
   const [preds, setPreds] = useState({});
@@ -55,7 +55,9 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
       const profs = partIds.length ? await db.select(token, "profiles", `id=in.(${partIds.join(",")})&select=id,display_name`) : [];
       setParticipants(profs);
       const rds = groupIntoRounds(ms);
-      setRoundIndex(currentRoundIndex(rds));
+      // Land på den ønskede runde (fra "Tip nu"/"Se tips" på Hjem), ellers den nærmeste runde.
+      const targetIdx = initialRoundKey ? rds.findIndex((r) => r.key === initialRoundKey) : -1;
+      setRoundIndex(targetIdx >= 0 ? targetIdx : currentRoundIndex(rds));
       setLoading(false);
     })();
   }, [compFilter, competitions]); // eslint-disable-line
@@ -63,6 +65,14 @@ function PredictionsScreen({ token, userId, competitions, initialFilter, onBack 
   const rounds = useMemo(() => groupIntoRounds(allMatches), [allMatches]);
   const roundLockMap = useMemo(() => buildRoundLockMap(allMatches), [allMatches]);
   const round = rounds[roundIndex];
+
+  // Reager på en ny ønsket runde (fx et nyt "Se tips"/"Tip nu"-klik fra Hjem, hvor
+  // kampene ikke genindlæses fordi konkurrence-filteret er uændret).
+  useEffect(() => {
+    if (!initialRoundKey || !rounds.length) return;
+    const idx = rounds.findIndex((r) => r.key === initialRoundKey);
+    if (idx >= 0) setRoundIndex(idx);
+  }, [initialRoundKey, rounds]);
 
   async function save(matchId, field, val) {
     const cur = preds[matchId] || { pred_home: null, pred_away: null };
