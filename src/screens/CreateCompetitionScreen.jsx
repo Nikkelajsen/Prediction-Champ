@@ -28,6 +28,11 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   const [rollingWindow, setRollingWindow] = useState(false);
   const [availableStages, setAvailableStages] = useState([]);
   const [selectedStages, setSelectedStages] = useState([]);
+  // Full sæson kan spænde over flere turneringer på én gang (fx Superliga + Premier League).
+  const [seasonByLeague, setSeasonByLeague] = useState({}); // league_id -> nyeste sæson
+  const [stagesByLeague, setStagesByLeague] = useState({}); // league_id -> [stage-navne]
+  const [fsLeagueIds, setFsLeagueIds] = useState([]);       // valgte turneringer
+  const [fsStages, setFsStages] = useState({});             // league_id -> valgte stages
 
   useEffect(() => { if (!createLeagueId && leagues.length) setCreateLeagueId(leagues[0].id); }, [leagues]); // eslint-disable-line
   useEffect(() => { (async () => { try { setGroups(await loadMyGroups(token, userId)); } catch (e) { setGroups([]); } })(); }, [token, userId]); // eslint-disable-line
@@ -53,6 +58,45 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
       }
     })();
   }, [createLeagueId]); // eslint-disable-line
+
+  // Full sæson: indlæs nyeste sæson + tilgængelige stages for ALLE turneringer,
+  // så hver kan vælges (og stage-scopes) enkeltvis og flere kan kombineres.
+  useEffect(() => {
+    if (mode !== "full_season") return;
+    (async () => {
+      const leagueIds = leagues.map((l) => l.id);
+      if (!leagueIds.length) return;
+      const seasons = await db.select(token, "seasons", `league_id=in.(${leagueIds.join(",")})&select=id,league_id&order=start_date.desc`);
+      const newestByLeague = {};
+      for (const s of seasons) if (!newestByLeague[s.league_id]) newestByLeague[s.league_id] = s;
+      setSeasonByLeague(newestByLeague);
+      const seasonIds = Object.values(newestByLeague).map((s) => s.id);
+      const seasonToLeague = Object.fromEntries(Object.values(newestByLeague).map((s) => [s.id, s.league_id]));
+      const rows = seasonIds.length ? await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&select=season_id,stage_name`) : [];
+      const bySet = {};
+      for (const r of rows) {
+        if (!r.stage_name) continue;
+        const lid = seasonToLeague[r.season_id];
+        (bySet[lid] ||= new Set()).add(r.stage_name);
+      }
+      const stagesObj = {};
+      for (const lid of leagueIds) stagesObj[lid] = bySet[lid] ? [...bySet[lid]] : [];
+      setStagesByLeague(stagesObj);
+      setFsLeagueIds((prev) => (prev.length ? prev : (leagues[0] ? [leagues[0].id] : [])));
+      setFsStages(stagesObj); // standard: alle stages valgt pr. turnering
+    })();
+  }, [mode, leagues]); // eslint-disable-line
+
+  function toggleFsLeague(lid) {
+    setFsLeagueIds((prev) => (prev.includes(lid) ? prev.filter((x) => x !== lid) : [...prev, lid]));
+  }
+  function toggleFsStage(lid, stage) {
+    setFsStages((prev) => {
+      const cur = prev[lid] ?? (stagesByLeague[lid] || []);
+      const next = cur.includes(stage) ? cur.filter((x) => x !== stage) : [...cur, stage];
+      return { ...prev, [lid]: next.length ? next : cur };
+    });
+  }
 
   useEffect(() => {
     if (mode !== "custom" && mode !== "random") return;
@@ -80,6 +124,49 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     if (!name) return;
     setBusy(true); setErr("");
     try {
+      // Full sæson: kan spænde over én eller flere turneringer (fx Superliga
+      // grundspil + Premier League). Kampene materialiseres i competition_matches
+      // pr. turnering — med den turnerings egne stage-valg — så læse-stierne
+      // (stilling, tips) virker uændret via competition_matches.
+      if (mode === "full_season") {
+        const selIds = fsLeagueIds.filter((id) => seasonByLeague[id]);
+        if (!selIds.length) { setErr("Vælg mindst én turnering"); setBusy(false); return; }
+        const multi = selIds.length > 1;
+        const tournaments = [];
+        const matchIds = [];
+        for (const lid of selIds) {
+          const season = seasonByLeague[lid];
+          const avail = stagesByLeague[lid] || [];
+          const sel = fsStages[lid] ?? avail;
+          const isSubset = avail.length > 1 && sel.length > 0 && sel.length < avail.length;
+          const stageFilter = isSubset ? sel : [];
+          let ms = await db.select(token, "matches", `season_id=eq.${season.id}&select=id,round_key,home_score,stage_name`);
+          ms = filterByStages(ms, stageFilter);
+          ms = filterFromNextUnfinishedRound(ms);
+          for (const m of ms) matchIds.push(m.id);
+          tournaments.push({ league_id: lid, season_id: season.id, ...(isSubset ? { stages: sel } : {}) });
+        }
+        const rules = { exact: 3, outcome: 1, ...(rollingWindow ? { openDaysBefore: 7 } : {}) };
+        const only = tournaments[0];
+        // Én turnering: bevar den bundne form (league_id/season_id sat, evt. stages).
+        // Flere turneringer: liga-løs som custom/random (null), turneringer gemt i mode_params.
+        const mode_params = multi ? { tournaments } : (only.stages ? { stages: only.stages } : {});
+        const [comp] = await db.insert(token, "competitions", [{
+          name,
+          league_id: multi ? null : only.league_id,
+          season_id: multi ? null : only.season_id,
+          group_id: groupId || null,
+          mode: "full_season", mode_params, rules, created_by: userId,
+        }]);
+        await db.insert(token, "competition_participants", [{ competition_id: comp.id, user_id: userId }]);
+        if (matchIds.length) {
+          await db.insert(token, "competition_matches", matchIds.map((id) => ({ competition_id: comp.id, match_id: id })));
+        }
+        await onCreated();
+        openBoard(comp.id);
+        return;
+      }
+
       const crossLeague = mode === "custom" || mode === "random";
       if (!crossLeague && (!createLeagueId || !createSeason)) { setBusy(false); return; }
 
@@ -178,12 +265,48 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
             <option value="random">Tilfældig kupon</option>
           </select>
 
-          {(mode === "full_season" || mode === "team" || mode === "time_range") && leagues.length > 1 && (
+          {mode === "full_season" && (
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ color: C.muted, fontSize: 12 }}>Turneringer{fsLeagueIds.length > 1 ? " — flere valgt" : ""}</span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {leagues.map((l) => {
+                  const sel = fsLeagueIds.includes(l.id);
+                  return (
+                    <button key={l.id} type="button" onClick={() => toggleFsLeague(l.id)} style={chip(sel)}>
+                      {sel ? "✓ " : ""}{l.name}
+                    </button>
+                  );
+                })}
+              </div>
+              {fsLeagueIds.map((lid) => {
+                const avail = stagesByLeague[lid] || [];
+                if (avail.length <= 1) return null;
+                const league = leagues.find((l) => l.id === lid);
+                const sel = fsStages[lid] ?? avail;
+                return (
+                  <div key={lid} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ color: C.muted, fontSize: 11 }}>{league?.name} — grundspil / slutspil</span>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {avail.map((s) => {
+                        const on = sel.includes(s);
+                        return (
+                          <button key={s} type="button" onClick={() => toggleFsStage(lid, s)} style={chip(on)}>
+                            {on ? "✓ " : ""}{stageOptionLabel(s)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </label>
+          )}
+          {(mode === "team" || mode === "time_range") && leagues.length > 1 && (
             <select className="field" value={createLeagueId} onChange={(e) => setCreateLeagueId(e.target.value)}>
               {leagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
           )}
-          {(mode === "full_season" || mode === "team" || mode === "time_range") && availableStages.length > 1 && (
+          {(mode === "team" || mode === "time_range") && availableStages.length > 1 && (
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <span style={{ color: C.muted, fontSize: 12 }}>Stages (grundspil / slutspil)</span>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
