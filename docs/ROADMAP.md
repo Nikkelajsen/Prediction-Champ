@@ -51,7 +51,7 @@ Opgjort mod MVP-kravene i produktbogens kapitel 3, ud fra den faktiske kodebase.
 | 4 | **Karriereprofil** | Første version: ratingkurve over tid, titler (månedstitler), længste stimer og største rivaler. Bliver markant mere værdifuld, når Story Engine og liga-laget har produceret indhold i nogle måneder. **Spec: [`features/karriereprofil-v1.md`](./features/karriereprofil-v1.md)** — forudsætninger F1 (skema-eksport til repoet, jf. DOCUMENTATION afsnit 12) og F2 (én pointkilde) skal lukkes først. | Mellem |
 | 5 | **Global tirsdag–mandag-runde** | Udskydes bevidst, til flere turneringer (Premier League, Champions League) er i drift — først dér adskiller den sig reelt fra turneringsrunder. Drejebog for turnering #2: [`features/turnering-2.md`](./features/turnering-2.md). | Mellem |
 
-**Eksplicit næste handling (forudsætning for trin 4 og for ny SQL generelt):** eksportér kerneskemaet fra Supabase til `sql/schema.sql` — opskrift i `DOCUMENTATION.md` afsnit 12. Kræver Supabase-adgang (manuel engangsopgave).
+**Eksplicit næste handling (forudsætning for trin 4 og for ny SQL generelt):** eksportér kerneskemaet fra Supabase til `sql/schema.sql` — udførlig begynder-guide i [`sql/README.md`](../sql/README.md). Kræver Supabase-adgang (manuel engangsopgave).
 
 **Tommelfingerregel:** Trin 1–2 kan leveres inden for den igangværende sæson og bygger direkte oven på de nye push-notifikationer (historierne kan på sigt genbruges som indhold i runde-resultat-notifikationen). Trin 3 modnes i Del 2 af produktbogen, før den bygges. Trin 4–5 venter, til der er data og turneringer nok til, at de giver mening.
 
