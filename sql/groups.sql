@@ -222,6 +222,20 @@ $$;
 
 grant execute on function public.move_competition_to_group(uuid, uuid) to authenticated;
 
+-- ======================= 7. Backfill: deltagere → liga-medlemmer =======================
+-- Engangs-oprydning (idempotent): sørg for, at ALLE deltagere i en konkurrence, der
+-- hører til en liga, også er medlemmer af ligaen. Fanger historiske deltagere fra før
+-- rettelsen, hvor et konkurrence-deep-link (?join=) kun meldte ind i konkurrencen og
+-- ikke i ligaen. Nye joins (deep-link + manuel kode) melder nu ind i begge, og
+-- move_competition_to_group() gør det samme ved flytning — så dette er kun et catch-up.
+-- Bevarer eksisterende roller (on conflict do nothing → en admin forbliver admin).
+insert into public.group_members (group_id, user_id, role)
+select distinct c.group_id, cp.user_id, 'member'
+from public.competition_participants cp
+join public.competitions c on c.id = cp.competition_id
+where c.group_id is not null
+on conflict (group_id, user_id) do nothing;
+
 -- ======================= Noter før/efter kørsel =======================
 -- 1) Verificér ingen "infinite recursion" på group_members (kendt fælde). Test som en
 --    almindelig bruger:  select * from public.group_members;  — må ikke fejle.
