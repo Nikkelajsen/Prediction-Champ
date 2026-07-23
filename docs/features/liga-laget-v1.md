@@ -140,7 +140,7 @@ Ingen ændringer i `api/` — liga-laget er rent DB + frontend.
 **Princip: ingen automatisk gruppering.** Vi kan ikke gætte, hvilke konkurrencer der hører til samme fællesskab (samme opretter kan sagtens køre to adskilte vennegrupper), og et forkert gæt ville flytte medlemskaber uden samtykke. I stedet:
 
 1. **Dag 1:** Alle eksisterende konkurrencer har `group_id = null` og virker præcis som før under "Øvrige konkurrencer". Intet i brugernes verden går i stykker; gamle `?join=`-links virker uændret.
-2. **"Flyt til liga":** En konkurrences opretter kan flytte den ind i en liga, vedkommende er admin i (sætter `group_id`). Ved flytning tilføjes konkurrencens nuværende deltagere automatisk som medlemmer af ligaen (`role='member'`, hvis de ikke allerede er med) — fællesskabet følger med, ingen mister adgang eller skal gen-invitere. Udføres af en `security definer`-funktion `move_competition_to_group(comp_id, group_id)` (guard: kaldes af konkurrencens opretter, som også er liga-admin), da almindelig RLS ikke kan indsætte andres medlemsrækker.
+2. **"Flyt til liga":** En konkurrences opretter kan flytte den ind i en liga, vedkommende er medlem af (sætter `group_id`). Ved flytning tilføjes konkurrencens nuværende deltagere automatisk som medlemmer af ligaen (`role='member'`, hvis de ikke allerede er med) — fællesskabet følger med, ingen mister adgang eller skal gen-invitere. Udføres af en `security definer`-funktion `move_competition_to_group(comp_id, group_id)` (guard: kalderen ejer konkurrencen og er medlem af mål-ligaen — jf. A6, ingen admin-gate), da almindelig RLS ikke kan indsætte andres medlemsrækker.
 3. **Engangs-nudge:** Første gang en bruger med egne liga-løse konkurrencer åbner Ligaer-fanen efter udrulning, vises et lille kort: "Nyt: Saml dine konkurrencer i en liga" → opret liga → flyt. Kan afvises (localStorage).
 4. **Gamle konkurrence-links:** `?join=<konkurrence-kode>` fortsætter med at virke. Peger koden på en konkurrence i en liga, melder joinet brugeren ind i **både ligaen og konkurrencen** (én bekræftelse: "…inviteret til {konkurrence} i ligaen {liga}").
 
@@ -152,7 +152,7 @@ Hver fase kan merges og udrulles separat (test på preview, jf. tjeklisten i `DO
 
 | Fase | Indhold | Omfang | Kan merges alene? |
 |---|---|---|---|
-| **1. DB-fundament** | `sql/groups.sql`: tabeller, RLS, `is_group_member()`, `move_competition_to_group()`, `competitions.group_id`, `competition_participants`-DELETE-policy. Køres i Supabase (staging først). | Lille | Ja — ingen UI-effekt |
+| **1. DB-fundament** ✅ | `sql/groups.sql` **leveret**: tabeller, RLS, `is_group_member()`/`is_group_admin()`, `move_competition_to_group()`, `competitions.group_id`, `competition_participants`-DELETE-policy. Skal køres i Supabase (staging først). | Lille | Ja — ingen UI-effekt |
 | **2. Liga-UI** | Opret liga, liga-kort på Ligaer-fanen, liga-siden (medlemmer, konkurrencer, Deltag/Forlad, Invitér), `?liga=`-deep-link, liga-dropdown i opret-konkurrence, Hjem-gruppering, terminologi-fejning (fodboldliga → "turnering", afsnit 2) | Stor | Ja — liga-løse konkurrencer uberørte |
 | **3. Adoption** | "Flyt til liga"-flowet, engangs-nudge, konkurrence-link melder også ind i ligaen, HowItWorks-tekst, QA-tjekliste udvidet | Mellem | Ja |
 | **4. Efterfølgende (uden for v1)** | Per-liga-rating (`ratings.scope`), Story Engine-tekster med liga-navn, medlems-administration (fjern/forfrem), liga-identitet (ikon/farve), Karriereprofil-titler pr. liga | — | Separate features |
