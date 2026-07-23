@@ -1,6 +1,6 @@
 # Feature: Liga-laget v1 (permanente fællesskaber)
 
-**Status: Plan/spec — til godkendelse før implementering** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 4–5 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 3*
+**Status: Godkendt — klar til implementering (fase 1 først)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 4–5 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 3*
 
 *Bogens vigtigste strukturelle princip: ligaen (fællesskabet) er produktets centrum. Konkurrencer er kapitler i ligaens historie. Denne plan indfører liga-laget oven på det eksisterende — uden at rive noget ned.*
 
@@ -22,15 +22,24 @@ Det, der IKKE ændres: pointsystem, låseregler, rating, Championship-fanen, `pr
 
 ## 2. Begreber og navngivning (vigtig kollision)
 
-Ordet "liga" er i dag brugt om **to forskellige ting**:
+Ordet "liga" er i dag brugt om **to forskellige ting** (fodboldligaer og private konkurrencer). Med liga-laget indføres en fast ordbog, så hvert ord kun betyder én ting:
 
-| Begreb | I dag | Efter liga-laget |
+| UI-ord (besluttet) | Betydning | DB |
 |---|---|---|
-| `leagues` (DB) | Fodboldturneringer (Superligaen, Sportmonks-id) | Uændret — hedder fortsat `leagues` |
-| "Ligaer" (UI-fanen) | Brugerens private *konkurrencer* | Brugerens *fællesskaber* (den nye enhed) |
-| Den nye enhed | — | DB: **`groups`** / **`group_members`** · UI: **"liga"** |
+| **Turnering** | Fodboldliga/turnering fra Sportmonks (Superligaen, Premier League …) | `leagues` (uændret navn — kun UI-teksten skifter) |
+| **Liga** | Fællesskabet — den nye permanente enhed | `groups` / `group_members` |
+| **Konkurrence** | En tippekonkurrence (kapitel i en liga) | `competitions` (uændret) |
 
-**Beslutning:** Den nye DB-enhed hedder `groups` (medlemmer: `group_members`) for at undgå kollision med `leagues` (turneringer). I al brugervendt tekst hedder den "liga" — det er bogens sprog, og Ligaer-fanen er allerede navngivet til det. I kode-kommentarer skrives "liga (group)" ved risiko for forveksling.
+**Beslutninger:**
+
+- Den nye DB-enhed hedder `groups` (medlemmer: `group_members`) for at undgå kollision med `leagues`. I al brugervendt tekst hedder den "liga" — det er bogens sprog, og Ligaer-fanen er allerede navngivet til det. I kode-kommentarer skrives "liga (group)" ved risiko for forveksling.
+- **Alt i UI, der handler om fodboldligaer, omdøbes til "turnering"** — så "liga" udelukkende betyder fællesskabet. Konkrete steder (fejes i fase 2 sammen med den nye UI):
+  - `PredictionsScreen.jsx`: turnerings-filteret ("Alle ligaer" → "Alle turneringer", fallback-navnet "Liga" → "Turnering").
+  - `CreateCompetitionScreen.jsx`: turneringsvalg ved oprettelse ("Ingen kommende kampe i de valgte ligaer" → "… valgte turneringer" m.fl.).
+  - `AdminScreen.jsx`: "denne liga" → "denne turnering" (Sportmonks-sync-teksten). "Med i en privat liga"-statistikken omformuleres til konkurrence/liga-sprog, når liga-laget er ude.
+  - `HowItWorksScreen.jsx`: gennemskrives med ordbogen (fx "Nogle ligaer bruger et rullende vindue" → "Nogle konkurrencer …").
+  - `ChampionshipTab.jsx` / `RatingTab.jsx`: InfoDot-tekster som "på tværs af alle ligaer" → "på tværs af alle dine konkurrencer".
+  - DB-navne (`leagues`, `league_id`) og interne variabelnavne røres ikke — det er en ren UI-tekst-omdøbning.
 
 ---
 
@@ -119,6 +128,7 @@ Opretteren indsættes som `role='admin'` i samme flow som liga-oprettelsen (fron
 | `src/screens/BoardScreen.jsx` | "Invitér"-knappen viser liga-linket, når konkurrencen har en liga (ellers uændret konkurrence-link) | Lille |
 | `src/screens/HowItWorksScreen.jsx` | Nyt afsnit: liga vs. konkurrence, til-/framelding | Lille |
 | `src/App.jsx` | Læs `?liga=`-parameteren ved boot (samme mønster som `pendingJoinCode`) | Lille |
+| Terminologi-fejning | Fodboldliga → "turnering" i al UI-tekst (afsnit 2: PredictionsScreen, CreateCompetitionScreen, AdminScreen, HowItWorks, Championship-/Rating-InfoDots) | Lille |
 | `src/lib/*.test.js` | Tests af de nye helpers med mocket database (samme stil som `data.test.js`) | Lille |
 
 Ingen ændringer i `api/` — liga-laget er rent DB + frontend.
@@ -143,7 +153,7 @@ Hver fase kan merges og udrulles separat (test på preview, jf. tjeklisten i `DO
 | Fase | Indhold | Omfang | Kan merges alene? |
 |---|---|---|---|
 | **1. DB-fundament** | `sql/groups.sql`: tabeller, RLS, `is_group_member()`, `move_competition_to_group()`, `competitions.group_id`, `competition_participants`-DELETE-policy. Køres i Supabase (staging først). | Lille | Ja — ingen UI-effekt |
-| **2. Liga-UI** | Opret liga, liga-kort på Ligaer-fanen, liga-siden (medlemmer, konkurrencer, Deltag/Forlad, Invitér), `?liga=`-deep-link, liga-dropdown i opret-konkurrence, Hjem-gruppering | Stor | Ja — liga-løse konkurrencer uberørte |
+| **2. Liga-UI** | Opret liga, liga-kort på Ligaer-fanen, liga-siden (medlemmer, konkurrencer, Deltag/Forlad, Invitér), `?liga=`-deep-link, liga-dropdown i opret-konkurrence, Hjem-gruppering, terminologi-fejning (fodboldliga → "turnering", afsnit 2) | Stor | Ja — liga-løse konkurrencer uberørte |
 | **3. Adoption** | "Flyt til liga"-flowet, engangs-nudge, konkurrence-link melder også ind i ligaen, HowItWorks-tekst, QA-tjekliste udvidet | Mellem | Ja |
 | **4. Efterfølgende (uden for v1)** | Per-liga-rating (`ratings.scope`), Story Engine-tekster med liga-navn, medlems-administration (fjern/forfrem), liga-identitet (ikon/farve), Karriereprofil-titler pr. liga | — | Separate features |
 
@@ -185,16 +195,17 @@ Rækkefølgen respekterer roadmappens tommelfingerregel: Story Engine-kalibrerin
 
 ---
 
-## 11. Åbne beslutninger (før implementering)
+## 11. Beslutninger (afgjort juli 2026)
 
-Føres i roadmappens beslutningslog; her med anbefalet default:
+Godkendt sammen med planen; ført i roadmappens beslutningslog:
 
-| # | Spørgsmål | Anbefaling (default) |
+| # | Spørgsmål | Beslutning |
 |---|---|---|
 | A6 | Hvem må oprette konkurrencer i en liga — kun liga-admin eller alle medlemmer? | **Alle medlemmer.** Bogen gør admin til vært, ikke gatekeeper; mindst friktion i små vennegrupper. Kan strammes senere uden datamodel-ændring. |
 | A7 | Skal konkurrence-invite-links udfases, når liga-laget er i drift? | **Behold som fallback i v1**, skjul dem blot i UI for liga-konkurrencer. Udfasning besluttes, når "Øvrige konkurrencer" er tom i praksis. |
 | A8 | Kan man deltage i en enkelt konkurrence uden at være liga-medlem ("gæst")? | **Nej i v1** — deltagelse i en liga-konkurrence kræver medlemskab (join via konkurrence-link melder én ind i begge, afsnit 6). Én regel, ingen kant-tilfælde. |
+| — | UI-terminologi for fodboldligaer | **"Turnering"** i al brugervendt tekst; "liga" betyder herefter kun fællesskabet (afsnit 2). DB-navne uændrede. |
 
 ---
 
-*Næste skridt: Godkend afsnit 2 (navngivning), afsnit 6 (blød migrering) og A6–A8 → implementér fase 1 (SQL på staging) → fase 2 som feature-branch.*
+*Næste skridt: Implementér fase 1 (`sql/groups.sql` på staging) → fase 2 som feature-branch (liga-UI + terminologi-fejning) → fase 3 (adoption).*
