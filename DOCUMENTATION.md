@@ -28,7 +28,7 @@ Tabel	Formål
 `leagues`	Ligaer. `api_league_id` = Sportmonks' liga-id. `is_visible` styrer om ligaen vises for almindelige brugere (admin ser altid alt).
 `seasons`	Sæson pr. liga. `api_season_id` gemmes automatisk af sync-funktionen første gang, så fremtidige kørsler ikke behøver navne-opslag.
 `teams`	Hold. `api_team_id` = Sportmonks' hold-id, sat automatisk.
-`matches`	Kampe. `round_key` (tirsdag–mandag, auto-beregnet), `home_score`/`away_score`, `api_fixture_id` (unik).
+`matches`	Kampe. `round_key` (tirsdag–mandag, auto-beregnet), `home_score`/`away_score`, `stage_name` (Sportmonks-stage, fx "Regular Season"/"Championship Round"/"Relegation Round" — se afsnit 8/10), `api_fixture_id` (unik).
 `profiles`	Brugerprofiler. `display_name`, `is_admin`, `created_at` (tilmelding, backfillet fra `auth.users`), `last_seen_at` (senest aktiv, sat af `touch_activity()`). `display_name` er unikt (case-insensitivt) — se afsnit 6.
 `competitions`	`mode` ∈ `full_season / team / time_range / custom / random`. `league_id`/`season_id` er nullable — `custom` og `random` kan spænde over flere ligaer. `group_id` (nullable, `on delete set null`) = liga-tilhør (liga-laget, afsnit 18); `null` = liga-løs konkurrence. `rules` (jsonb) indeholder pointregler og evt. `openDaysBefore` (rullende gætte-vindue).
 `competition_participants`	Deltagere. `hidden` = brugerens egen arkivering (påvirker ikke andre deltagere). DELETE-policy (liga-laget): man kan framelde sig en konkurrence, men ikke hvis man har tips på allerede låste kampe.
@@ -56,6 +56,7 @@ Mode	Beskrivelse
 `custom`	Håndplukkede kampe, valgt på tværs af alle synlige ligaer, med liga-filter i vælgeren
 `random`	Et valgt antal tilfældige kampe fra den nærmeste kommende runde, med mulighed for at afgrænse til bestemte ligaer. Antallet begrænses automatisk til hvad der reelt er tilgængeligt
 `custom` og `random` sætter `league_id`/`season_id` til `null` på konkurrencen — de er ikke bundet til én liga.
+Stage-scope (grundspil/slutspil): for de sæson-baserede modes (`full_season`, `team`, `time_range`) kan konkurrencen afgrænses til bestemte Sportmonks-stages, når sæsonen har mere end én (fx grundspil vs. mesterskabs-/nedrykningsspil). Vælgeren viser kun de stages, der faktisk har kampe i sæsonen; standard er alle. Filtreringen sker ved oprettelsen (kampene materialiseres i `competition_matches` — se afsnit 2), så vælges der først et delmængde-valg, gemmes det også i `mode_params.stages`. Vælges alle (eller er der kun én stage), tages alt med — også ældre kampe uden `stage_name`. Bevidst udskudt: live-auto-tilknytning af kampe, der først udgives senere (fx playoff til foråret) — en stage-konkurrence oprettes, når Sportmonks har skemalagt kampene.
 Nye konkurrencer starter altid på 0 point: for `full_season` og `team` (som trækker kampe direkte fra hele sæsonen) udelader oprettelsen automatisk allerede afsluttede runder. Da `predictions` deles på tværs af konkurrencer, ville en ny konkurrence ellers med det samme give point for forudsigelser, man allerede havde afgivet i andre konkurrencer. Reglen: find den første spillerunde (`round_key`) hvor ikke alle kampe har resultat endnu, og medtag kun kampe fra og med den runde (helper: `filterFromNextUnfinishedRound`). Er hele sæsonen allerede spillet færdig, oprettes konkurrencen uden kampe. `custom` og `random` er upåvirket, da de i forvejen kun tilbyder kommende/ikke-spillede kampe i vælgeren; `time_range` filtrerer stadig kun på det datointerval, brugeren selv angiver.
 Månedsligaen og sæsonchampionship er særlige "virtuelle" konkurrencer: de findes ikke som `competitions`-rækker, men vises automatisk for alle brugere (se afsnit 5).
 Rullende gætte-vindue
@@ -122,7 +123,7 @@ Regler/hjælp: "Sådan virker det"-siden (fra ⓘ i topbjælken) samler pointsys
 ---
 8. Automatisk resultathentning (`api/sync-matches.js`)
 Slår ligaens Sportmonks-id og gemte sæson-id op (eller sæson-navn første gang, og gemmer id'et)
-Henter alle kampe for sæsonen med pagination
+Henter alle kampe for sæsonen med pagination (`include=…;stage`, så hver kamps stage gemmes i `matches.stage_name` — grundspil/mesterskabsspil/nedrykningsspil). Superligaen er én sæson med flere stages, så alle stages hentes i samme kald
 Auto-opdager og opretter hold ud fra kampenes deltagere
 Udtrækker resultat kun når `state.short_name` er `FT`/`AET`/`FT_PEN` — scoren hentes fra `description: "CURRENT"`
 Upserter kampene i Supabase (`api_fixture_id` er unik nøgle)
@@ -181,7 +182,7 @@ Fast tjekliste inden en branch merges til `main` (test på preview-URL, både mo
 - [ ] Ingen døde links eller efterladte referencer til fjernede skærme/kort.
 ---
 12. Kendte begrænsninger
-Superliga Playoff kan ikke synkroniseres endnu — Sportmonks har ikke oprettet 2026/27-sæsonen for den del (formentlig til foråret). Den er skjult for almindelige brugere (`is_visible = false`) men tilgængelig for admin under Kampe/Resultater.
+Superliga-slutspillet (mesterskabs-/nedrykningsspil) er ikke en separat liga, men *stages* i hovedsæsonen hos Sportmonks. De synkroniseres derfor automatisk sammen med grundspillet — men først når Sportmonks har skemalagt kampene (formentlig til foråret). Indtil da findes de ikke i databasen, så en konkurrence scoped til fx mesterskabsspil kan først oprettes, når kampene er udgivet (bevidst valg — ingen live-auto-tilknytning). (Den tidligere skjulte "Superliga Playoff"-liga byggede på en fejlantagelse og er fjernet — se `sql/matches_stage.sql`.)
 Alle kan oprette konti uden godkendelse — fint til en lukket venneflok.
 Push-notifikationer kræver opt-in pr. enhed (afsnit 16); der er ingen e-mail-påmindelser. På iOS virker push kun, når appen er føjet til hjemmeskærmen (iOS 16.4+).
 Koden er opdelt i moduler (afsnit 1). Den enkelte fil er nu overskuelig (største ~240 linjer); ved yderligere vækst kan `data.js` og de største skærme deles videre op.

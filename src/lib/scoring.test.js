@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, buildRoundLockMap, roundLockKey } from "./scoring.js";
+import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, buildRoundLockMap, roundLockKey, stageOptionLabel, stageBadgeLabel, filterByStages } from "./scoring.js";
 
 const RULES = { exact: 3, outcome: 1 };
 
@@ -60,6 +60,44 @@ describe("groupIntoRounds", () => {
     expect(rounds[1].matches.map((m) => m.kickoff_at)).toEqual([
       "2026-07-15T17:00:00Z", "2026-07-18T14:00:00Z",
     ]);
+  });
+});
+
+describe("stageOptionLabel / stageBadgeLabel", () => {
+  it("oversætter kendte Sportmonks-stages til dansk", () => {
+    expect(stageOptionLabel("Championship Round")).toBe("Mesterskabsspil");
+    expect(stageOptionLabel("Relegation Round")).toBe("Nedrykningsspil");
+    expect(stageOptionLabel("Regular Season")).toBe("Grundspil");
+  });
+
+  it("falder tilbage til det rå navn for ukendte stages", () => {
+    expect(stageOptionLabel("Some New Stage")).toBe("Some New Stage");
+  });
+
+  it("skjuler grundspil-badge, men viser slutspils-stages", () => {
+    expect(stageBadgeLabel("Regular Season")).toBeNull();
+    expect(stageBadgeLabel(null)).toBeNull();
+    expect(stageBadgeLabel("Championship Round")).toBe("Mesterskabsspil");
+    expect(stageBadgeLabel("Relegation Round")).toBe("Nedrykningsspil");
+  });
+});
+
+describe("filterByStages", () => {
+  const ms = [
+    { id: "a", stage_name: "Regular Season" },
+    { id: "b", stage_name: "Championship Round" },
+    { id: "c", stage_name: "Relegation Round" },
+    { id: "d", stage_name: null },
+  ];
+
+  it("tom/undefined liste ⇒ alle kampe (også uden stage_name)", () => {
+    expect(filterByStages(ms, [])).toHaveLength(4);
+    expect(filterByStages(ms, undefined)).toHaveLength(4);
+  });
+
+  it("filtrerer til de valgte stages", () => {
+    expect(filterByStages(ms, ["Championship Round"]).map((m) => m.id)).toEqual(["b"]);
+    expect(filterByStages(ms, ["Championship Round", "Relegation Round"]).map((m) => m.id)).toEqual(["b", "c"]);
   });
 });
 

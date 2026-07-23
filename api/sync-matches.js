@@ -112,7 +112,7 @@ export default async function handler(req, res) {
     let hasMore = true;
     while (hasMore) {
       const smUrl = `https://api.sportmonks.com/v3/football/fixtures` +
-        `?filters=fixtureSeasons:${smSeasonId}&include=participants;scores;state&per_page=50&page=${page}&api_token=${SPORTMONKS_TOKEN}`;
+        `?filters=fixtureSeasons:${smSeasonId}&include=participants;scores;state;stage&per_page=50&page=${page}&api_token=${SPORTMONKS_TOKEN}`;
       const smRes = await fetch(smUrl);
       if (!smRes.ok) throw new Error(`Sportmonks (kampe): ${smRes.status} ${await smRes.text()}`);
       const smData = await smRes.json();
@@ -141,6 +141,7 @@ export default async function handler(req, res) {
         return {
           kickoff: fx.starting_at,
           state: fx.state?.short_name,
+          stage: fx.stage?.name ?? null,
           home: home?.name,
           away: away?.name,
           home_score: hs,
@@ -218,6 +219,7 @@ export default async function handler(req, res) {
         home_score: hs,
         away_score: as,
         status: finished ? "finished" : "scheduled",
+        stage_name: fx.stage?.name ?? null,
         api_fixture_id: String(fx.id),
       });
     }
