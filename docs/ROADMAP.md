@@ -72,6 +72,7 @@ Spørgsmål, der er identificeret, men bevidst ikke afgjort endnu. Når en beslu
 
 | Dato | Beslutning | Begrundelse |
 |---|---|---|
+| Juli 2026 | `full_season`-konkurrencer kan spænde over flere turneringer på én gang (multivalg af turneringer + stages pr. turnering). Én turnering = uændret bundet form; flere = liga-løs (`league_id`/`season_id` = `null`, turneringer i `mode_params.tournaments`), kampe materialiseret pr. turnering i `competition_matches`. | Forbereder turnering nr. 2 (Premier League m.fl.): brugeren kan lave fx "Superliga grundspil + Premier League" i én konkurrence. Genbruger den liga-løse infrastruktur fra `custom`/`random`, så læse-stier (stilling/tips) er uændrede. Berører A2 (månedsliga-scoring) og punkt 5 (global runde), som stadig afventer, at turnering nr. 2 er i drift. |
 | Juli 2026 | Pointsystem forenklet til 3–1–0 uden minuspoint. | Simulering viste, at minuspoint forvirrede og lod en "tip altid uafgjort"-strategi konkurrere. |
 | Juli 2026 | Rundebaseret tipslås (hele runden låses ved tidligste kickoff −1 t) i stedet for pr. kamp. | Lukker muligheden for at justere sene tips efter tidlige resultater. |
 | Juli 2026 | Rating beregnes som gennemsnitspoint pr. kamp; Månedsliga som samlede point. | Rating skal være fair på tværs af deltagelsesomfang; Månedsliga må gerne belønne deltagelse (revurderes i A2). |
