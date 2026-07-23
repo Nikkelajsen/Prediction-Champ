@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Check } from "lucide-react";
 import { db } from "../lib/supabase.js";
-import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, outcome, pointsFor, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS } from "../lib/scoring.js";
+import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, outcome, pointsFor, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS, stageBadgeLabel } from "../lib/scoring.js";
 import { C, muted } from "../ui/theme.js";
 import { BackBar, Card, H, RoundPager, ScoreInput } from "../ui/components.jsx";
 
@@ -193,7 +193,14 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
 
                   return (
                     <div key={m.id} style={{ padding: "12px 0", borderBottom: `1px solid ${C.line}` }}>
-                      <div style={{ color: C.text, fontWeight: 600 }}>{teamsById[m.home_team_id]} - {teamsById[m.away_team_id]}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ color: C.text, fontWeight: 600 }}>{teamsById[m.home_team_id]} - {teamsById[m.away_team_id]}</span>
+                        {stageBadgeLabel(m.stage_name) && (
+                          <span style={{ background: C.surface2, color: C.gold, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>
+                            {stageBadgeLabel(m.stage_name)}
+                          </span>
+                        )}
+                      </div>
                       <div style={{ color: C.muted, fontSize: 12, marginTop: 2, marginBottom: 10 }}>
                         {formatKickoff(m.kickoff_at)}
                         {!played && locked && <span style={{ color: C.red, marginLeft: 8 }}>· Låst</span>}

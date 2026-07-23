@@ -52,6 +52,27 @@ function currentRoundIndex(rounds) {
   }
   return rounds.length - 1;
 }
+// ---------- stages (grundspil / mesterskabsspil / nedrykningsspil) ----------
+// Sportmonks leverer stage-navne på engelsk; vi oversætter til dansk i UI'et.
+const STAGE_LABELS = {
+  "Regular Season": "Grundspil",
+  "Championship Round": "Mesterskabsspil",
+  "Relegation Round": "Nedrykningsspil",
+  "Conference League Play-offs – Final": "Conference League-playoff",
+};
+// Chip/valg-label: vis altid (fallback = det rå navn).
+function stageOptionLabel(name) { return STAGE_LABELS[name] || name; }
+// Kamp-badge: skjul grundspil — stage er kun interessant, når sæsonen er delt.
+function stageBadgeLabel(name) {
+  if (!name || /regular season/i.test(name)) return null;
+  return STAGE_LABELS[name] || name;
+}
+// Filtrér kampe til de valgte stages (tom/undefined ⇒ alle stages).
+function filterByStages(matches, stages) {
+  if (!stages || !stages.length) return matches;
+  return matches.filter((m) => stages.includes(m.stage_name));
+}
+
 function formatKickoff(iso) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -91,4 +112,4 @@ function isLocked(match, roundLockMap) {
   return Date.now() >= earliest - LOCK_LEAD_MS;
 }
 
-export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap };
+export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageOptionLabel, stageBadgeLabel, filterByStages };

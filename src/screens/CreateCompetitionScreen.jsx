@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { db } from "../lib/supabase.js";
 import { loadMyGroups } from "../lib/data.js";
-import { filterFromNextUnfinishedRound, formatKickoff, groupIntoRounds, outcome } from "../lib/scoring.js";
+import { filterByStages, filterFromNextUnfinishedRound, formatKickoff, groupIntoRounds, outcome, stageOptionLabel } from "../lib/scoring.js";
 import { C, btnGreen, chip, muted } from "../ui/theme.js";
 import { BackBar, Card, H } from "../ui/components.jsx";
 
@@ -26,6 +26,8 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   const [randomCount, setRandomCount] = useState(6);
   const [randomLeagueIds, setRandomLeagueIds] = useState(null);
   const [rollingWindow, setRollingWindow] = useState(false);
+  const [availableStages, setAvailableStages] = useState([]);
+  const [selectedStages, setSelectedStages] = useState([]);
 
   useEffect(() => { if (!createLeagueId && leagues.length) setCreateLeagueId(leagues[0].id); }, [leagues]); // eslint-disable-line
   useEffect(() => { (async () => { try { setGroups(await loadMyGroups(token, userId)); } catch (e) { setGroups([]); } })(); }, [token, userId]); // eslint-disable-line
@@ -34,10 +36,21 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     if (!createLeagueId) return;
     (async () => {
       const seasons = await db.select(token, "seasons", `league_id=eq.${createLeagueId}&select=*&order=start_date.desc&limit=1`);
-      setCreateSeason(seasons[0] || null);
+      const season = seasons[0] || null;
+      setCreateSeason(season);
       const tms = await db.select(token, "teams", `league_id=eq.${createLeagueId}&select=*&order=name`);
       setCreateTeams(tms);
       setTeamId("");
+      // udled hvilke stages der faktisk har kampe i sæsonen (fx grundspil, mesterskabsspil, nedrykningsspil)
+      if (season) {
+        const rows = await db.select(token, "matches", `season_id=eq.${season.id}&select=stage_name`);
+        const stages = [...new Set(rows.map((r) => r.stage_name).filter(Boolean))];
+        setAvailableStages(stages);
+        setSelectedStages(stages);
+      } else {
+        setAvailableStages([]);
+        setSelectedStages([]);
+      }
     })();
   }, [createLeagueId]); // eslint-disable-line
 
@@ -84,9 +97,19 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
         matchIds = shuffled.slice(0, Math.max(1, Number(randomCount) || 6)).map((m) => m.id);
       }
 
-      const mode_params = mode === "team" ? { team_id: teamId }
-        : mode === "time_range" ? { start_date: startDate, end_date: endDate }
-        : mode === "random" ? { count: Number(randomCount) || 6 } : {};
+      // Stage-filter gælder kun sæson-baserede modes. Kun et ægte delmængde-valg
+      // filtrerer — dækker valget alle stages (eller er der kun én), tages alt med
+      // (så kampe uden stage_name fra ældre sync ikke utilsigtet droppes).
+      const isStageSubset = !crossLeague && availableStages.length > 1
+        && selectedStages.length > 0 && selectedStages.length < availableStages.length;
+      const stageFilter = isStageSubset ? selectedStages : [];
+
+      const mode_params = {
+        ...(mode === "team" ? { team_id: teamId }
+          : mode === "time_range" ? { start_date: startDate, end_date: endDate }
+          : mode === "random" ? { count: Number(randomCount) || 6 } : {}),
+        ...(isStageSubset ? { stages: selectedStages } : {}),
+      };
       const rules = { exact: 3, outcome: 1, ...(rollingWindow ? { openDaysBefore: 7 } : {}) };
       const [comp] = await db.insert(token, "competitions", [{
         name,
@@ -100,10 +123,11 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
       if (crossLeague) {
         await db.insert(token, "competition_matches", matchIds.map((id) => ({ competition_id: comp.id, match_id: id })));
       } else {
-        let query = `season_id=eq.${createSeason.id}&select=id,round_key,home_score`;
+        let query = `season_id=eq.${createSeason.id}&select=id,round_key,home_score,stage_name`;
         if (mode === "team" && teamId) query += `&or=(home_team_id.eq.${teamId},away_team_id.eq.${teamId})`;
         if (mode === "time_range" && startDate && endDate) query += `&kickoff_at=gte.${startDate}&kickoff_at=lte.${endDate}T23:59:59`;
         let matchedMatches = await db.select(token, "matches", query);
+        matchedMatches = filterByStages(matchedMatches, stageFilter);
         matchedMatches = filterFromNextUnfinishedRound(matchedMatches);
         if (matchedMatches.length) {
           await db.insert(token, "competition_matches", matchedMatches.map((m) => ({ competition_id: comp.id, match_id: m.id })));
@@ -158,6 +182,22 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
             <select className="field" value={createLeagueId} onChange={(e) => setCreateLeagueId(e.target.value)}>
               {leagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
+          )}
+          {(mode === "full_season" || mode === "team" || mode === "time_range") && availableStages.length > 1 && (
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ color: C.muted, fontSize: 12 }}>Stages (grundspil / slutspil)</span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {availableStages.map((s) => {
+                  const sel = selectedStages.includes(s);
+                  return (
+                    <button key={s} type="button" onClick={() => {
+                      const next = sel ? selectedStages.filter((x) => x !== s) : [...selectedStages, s];
+                      setSelectedStages(next.length ? next : selectedStages);
+                    }} style={chip(sel)}>{sel ? "✓ " : ""}{stageOptionLabel(s)}</button>
+                  );
+                })}
+              </div>
+            </label>
           )}
           {mode === "team" && (
             <select className="field" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
