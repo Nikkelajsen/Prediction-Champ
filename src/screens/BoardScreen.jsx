@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Trophy, Copy, Check, ClipboardList } from "lucide-react";
 import { outcome } from "../lib/scoring.js";
+import { db } from "../lib/supabase.js";
 import { computeCompetitionState, loadRatingMap } from "../lib/data.js";
 import { C, btnGhost, btnGold, font, muted, thStyle } from "../ui/theme.js";
 import { BackBar, Card, UserRoundPredictions } from "../ui/components.jsx";
@@ -13,7 +14,22 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
   const [copied, setCopied] = useState(false);
   const [showAllRounds, setShowAllRounds] = useState(false);
   const [viewUser, setViewUser] = useState(null);
+  const [groupCode, setGroupCode] = useState(null); // invite-kode for konkurrencens liga (hvis nogen)
   const comp = competitions.find((c) => c.id === selectedCompId);
+
+  // Har konkurrencen en liga, deler vi liga-linket i stedet for konkurrence-linket.
+  useEffect(() => {
+    let cancelled = false;
+    setGroupCode(null);
+    if (!comp?.group_id) return;
+    (async () => {
+      try {
+        const g = await db.select(token, "groups", `id=eq.${comp.group_id}&select=invite_code,name`);
+        if (!cancelled && g?.length) setGroupCode(g[0]);
+      } catch (e) { /* falder tilbage til konkurrence-link */ }
+    })();
+    return () => { cancelled = true; };
+  }, [token, comp?.group_id]); // eslint-disable-line
 
   useEffect(() => {
     if (!selectedCompId || !comp) return;
@@ -36,10 +52,14 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
 
   async function shareInvite() {
     if (!comp) return;
-    const link = `${window.location.origin}${window.location.pathname}?join=${comp.invite_code}`;
+    // Konkurrence i en liga → del liga-linket (ét fælles link). Ellers konkurrence-linket.
+    const link = groupCode
+      ? `${window.location.origin}${window.location.pathname}?liga=${groupCode.invite_code}`
+      : `${window.location.origin}${window.location.pathname}?join=${comp.invite_code}`;
+    const target = groupCode ? `ligaen "${groupCode.name}"` : `konkurrencen "${comp.name}"`;
     const intro = inviterName
-      ? `${inviterName} har inviteret dig til ligaen "${comp.name}" på Prediction Champ ⚽`
-      : `Du er inviteret til ligaen "${comp.name}" på Prediction Champ ⚽`;
+      ? `${inviterName} har inviteret dig til ${target} på Prediction Champ ⚽`
+      : `Du er inviteret til ${target} på Prediction Champ ⚽`;
     const text = `${intro}\nGæt resultater, saml point og se hvem der er bedst. Tryk her for at være med:\n${link}`;
     try {
       if (navigator.share) {

@@ -13,6 +13,13 @@ function HowItWorksScreen({ onBack }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <BackBar title="Sådan virker det" onBack={onBack} />
+      <Section title="Liga, turnering & konkurrence">
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div><b>Liga</b> = dit permanente fællesskab (venner, kontor, familie). Del ét invite-link, så er alle med.</div>
+          <div><b>Konkurrence</b> = en tippekonkurrence inde i ligaen. Du vælger selv, hvilke af ligaens konkurrencer du er med i.</div>
+          <div><b>Turnering</b> = den rigtige fodboldturnering (fx Superligaen), som kampene kommer fra.</div>
+        </div>
+      </Section>
       <Section title="Pointsystem">
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <div><span style={{ color: C.green, fontWeight: 700 }}>+3</span> for præcist resultat (fx gættet 2-1, endte 2-1).</div>
@@ -33,7 +40,7 @@ function HowItWorksScreen({ onBack }) {
         Du kan først se andres tips, når runden er låst — ingen kan se dine tips inden da. Alle kampe i en runde låses samtidig, 1 time før rundens første kamp. Så tipper alle på samme grundlag og ingen kan spekulere i resultater undervejs.
       </Section>
       <Section title="Rullende gætte-vindue">
-        Nogle ligaer bruger et rullende vindue: en runde kan først tippes et bestemt antal dage før rundens første kamp (typisk 7). Så tipper alle med nogenlunde samme viden. Det vælges, når konkurrencen oprettes.
+        Nogle konkurrencer bruger et rullende vindue: en runde kan først tippes et bestemt antal dage før rundens første kamp (typisk 7). Så tipper alle med nogenlunde samme viden. Det vælges, når konkurrencen oprettes.
       </Section>
       <Section title="Installér som app">
         <InstallGuide />

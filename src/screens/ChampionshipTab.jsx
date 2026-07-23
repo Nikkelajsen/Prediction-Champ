@@ -90,7 +90,7 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
             Rundens Prediction Champ
-            <InfoDot title="Rundens Prediction Champ">Dine samlede point for én enkelt spillerunde (på tværs af alle ligaer, hver kamp én gang). Alle er automatisk med. Uafgjort afgøres på flest præcise resultater, og rundens bedste kåres som Rundens Prediction Champ. Vælg en runde i dropdownen.</InfoDot>
+            <InfoDot title="Rundens Prediction Champ">Dine samlede point for én enkelt spillerunde (på tværs af alle turneringer, hver kamp én gang). Alle er automatisk med. Uafgjort afgøres på flest præcise resultater, og rundens bedste kåres som Rundens Prediction Champ. Vælg en runde i dropdownen.</InfoDot>
           </div>
           {rounds.length > 0 && (
             <select className="field" value={roundKey || ""} onChange={(e) => changeRound(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
@@ -138,7 +138,7 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
             Månedens Prediction Champ
-            <InfoDot title="Månedens Prediction Champ">Dine samlede point for alle månedens kampe (hver kamp tælles én gang på tværs af ligaer). Uafgjort afgøres på flest præcise resultater. Månedens vinder kåres som Månedens Prediction Champ. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</InfoDot>
+            <InfoDot title="Månedens Prediction Champ">Dine samlede point for alle månedens kampe (hver kamp tælles én gang på tværs af turneringer). Uafgjort afgøres på flest præcise resultater. Månedens vinder kåres som Månedens Prediction Champ. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</InfoDot>
           </div>
           <select className="field" value={month} onChange={(e) => changeMonth(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
             {months.map((m) => <option key={m} value={m}>{monthName(m)}</option>)}

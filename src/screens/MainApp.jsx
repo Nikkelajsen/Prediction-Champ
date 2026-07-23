@@ -2,10 +2,12 @@
 import { useState, useEffect } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X } from "lucide-react";
 import { db } from "../lib/supabase.js";
+import { loadGroupByCode, joinGroup } from "../lib/data.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
 import { Modal } from "../ui/components.jsx";
 import HjemTab from "./HjemTab.jsx";
 import LigaerTab from "./LigaerTab.jsx";
+import GroupScreen from "./GroupScreen.jsx";
 import ChampionshipTab from "./ChampionshipTab.jsx";
 import RatingTab from "./RatingTab.jsx";
 import BoardScreen from "./BoardScreen.jsx";
@@ -17,7 +19,7 @@ import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
 
 const PWA_ONBOARDED_KEY = "pc_pwa_onboarded";
 
-function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoinCode }) {
+function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoinCode, pendingLigaCode, clearPendingLigaCode }) {
   const token = session.access_token;
   const userId = session.user.id;
   const isAdmin = !!profile?.is_admin;
@@ -29,6 +31,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   const [competitions, setCompetitions] = useState([]);
   const [joinError, setJoinError] = useState(""); // fejl fra invite-join-deeplink (?join=kode)
   const [pendingJoin, setPendingJoin] = useState(null); // { competition, inviterName } — bekræftelse før join
+  const [pendingGroupJoin, setPendingGroupJoin] = useState(null); // { group } — bekræftelse før liga-join
   const [showInstall, setShowInstall] = useState(false); // første-login "føj til hjemmeskærm"-vejledning
 
   async function loadLeagues() {
@@ -111,6 +114,44 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     })();
   }, [pendingJoinCode]); // eslint-disable-line
 
+  // Liga-invite via deep-link (?liga=kode): bekræft før join (samme mønster som ?join=).
+  useEffect(() => {
+    if (!pendingLigaCode) return;
+    (async () => {
+      setJoinError("");
+      try {
+        const g = await loadGroupByCode(token, pendingLigaCode);
+        if (g) {
+          const already = await db.select(token, "group_members", `group_id=eq.${g.id}&user_id=eq.${userId}&select=user_id`);
+          if (already.length) { setTab("ligaer"); setScreen({ type: "group", groupId: g.id }); }
+          else setPendingGroupJoin({ group: g });
+        } else {
+          setJoinError("Ingen liga fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
+        }
+      } catch (e) {
+        setJoinError("Kunne ikke tilslutte ligaen lige nu. Prøv igen om lidt.");
+      }
+      clearPendingLigaCode();
+      const url = new URL(window.location.href);
+      url.searchParams.delete("liga");
+      window.history.replaceState({}, "", url.toString());
+    })();
+  }, [pendingLigaCode]); // eslint-disable-line
+
+  async function confirmGroupJoin() {
+    if (!pendingGroupJoin) return;
+    const g = pendingGroupJoin.group;
+    try {
+      await joinGroup(token, userId, g.id);
+      setPendingGroupJoin(null);
+      setTab("ligaer");
+      setScreen({ type: "group", groupId: g.id });
+    } catch (e) {
+      setPendingGroupJoin(null);
+      setJoinError("Kunne ikke tilslutte ligaen lige nu. Prøv igen om lidt.");
+    }
+  }
+
   async function confirmJoin() {
     if (!pendingJoin) return;
     const comp = pendingJoin.competition;
@@ -132,7 +173,8 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   const goTab = (t) => { setScreen(null); setTab(t); };
   const openBoard = (compId) => setScreen({ type: "board", compId });
   const openPredictions = (compFilter = "all", roundKey = null) => setScreen({ type: "predictions", compFilter, roundKey });
-  const openCreate = () => setScreen({ type: "create" });
+  const openCreate = (groupId = null) => setScreen({ type: "create", groupId });
+  const openGroup = (groupId) => setScreen({ type: "group", groupId });
   const openAdmin = () => setScreen({ type: "admin" });
   const openHow = () => setScreen({ type: "how" });
 
@@ -157,9 +199,14 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   } else if (screen?.type === "predictions") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
       leagues={visibleLeagues} initialFilter={screen.compFilter} initialRoundKey={screen.roundKey} onBack={() => setScreen(null)} />;
+  } else if (screen?.type === "group") {
+    body = <GroupScreen token={token} userId={userId} groupId={screen.groupId}
+      myCompetitions={competitions} onBack={() => setScreen(null)} openBoard={openBoard}
+      openCreate={openCreate} reloadGroups={async () => { await loadCompetitions(); }} />;
   } else if (screen?.type === "create") {
     body = <CreateCompetitionScreen token={token} userId={userId} leagues={visibleLeagues}
-      onBack={() => setScreen(null)} onCreated={async () => { await loadCompetitions(); }} openBoard={openBoard} />;
+      initialGroupId={screen.groupId} onBack={() => setScreen(null)}
+      onCreated={async () => { await loadCompetitions(); }} openBoard={openBoard} />;
   } else if (screen?.type === "admin") {
     body = <AdminScreen token={token} leagues={leagues} reloadLeagues={loadLeagues} onBack={() => setScreen(null)} />;
   } else if (screen?.type === "how") {
@@ -172,7 +219,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       leagues={visibleLeagues} initialFilter="all" />;
   } else if (tab === "ligaer") {
     body = <LigaerTab token={token} userId={userId} competitions={competitions}
-      openBoard={openBoard} openCreate={openCreate} reload={loadAll} />;
+      openBoard={openBoard} openCreate={openCreate} openGroup={openGroup} reload={loadAll} />;
   } else if (tab === "championship") {
     body = <ChampionshipTab token={token} userId={userId} leagues={visibleLeagues} />;
   } else if (tab === "rating") {
@@ -253,7 +300,19 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
         </Modal>
       )}
 
-      {showInstall && !pendingJoin && (
+      {pendingGroupJoin && (
+        <Modal title="Join liga?" onClose={() => setPendingGroupJoin(null)}>
+          <p style={{ margin: "0 0 4px" }}>
+            Du er inviteret til ligaen <b>{pendingGroupJoin.group.name}</b>. Vil du være med?
+          </p>
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button style={{ ...btnGreen, flex: 1, width: "auto" }} onClick={confirmGroupJoin}>Ja, join</button>
+            <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={() => setPendingGroupJoin(null)}>Annullér</button>
+          </div>
+        </Modal>
+      )}
+
+      {showInstall && !pendingJoin && !pendingGroupJoin && (
         <Modal title="Føj til hjemmeskærm" onClose={dismissInstall}>
           <InstallGuide />
           <button style={{ ...btnGreen, marginTop: 16 }} onClick={dismissInstall}>Forstået</button>

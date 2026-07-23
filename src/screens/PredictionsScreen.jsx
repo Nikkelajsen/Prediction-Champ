@@ -74,7 +74,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
   // Ligaer der optræder i de hentede kampe (til liga-dropdownen).
   const leagueOptions = useMemo(() => {
     const ids = [...new Set(allMatches.map((m) => seasonLeague[m.season_id]).filter(Boolean))];
-    return ids.map((id) => ({ id, name: leagues.find((l) => l.id === id)?.name || "Liga" }));
+    return ids.map((id) => ({ id, name: leagues.find((l) => l.id === id)?.name || "Turnering" }));
   }, [allMatches, seasonLeague, leagues]);
   // Kampe filtreret på valgt liga (matchens egen liga via season_id).
   const filteredMatches = useMemo(
@@ -163,7 +163,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
         <>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <select className="field" style={{ flex: 1, minWidth: 140 }} value={leagueFilter} onChange={(e) => setLeagueFilter(e.target.value)}>
-              <option value="all">Alle ligaer</option>
+              <option value="all">Alle turneringer</option>
               {leagueOptions.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
             <select className="field" style={{ flex: 1, minWidth: 140 }} value={compFilter} onChange={(e) => setCompFilter(e.target.value)}>

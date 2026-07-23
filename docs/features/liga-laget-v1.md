@@ -153,8 +153,8 @@ Hver fase kan merges og udrulles separat (test på preview, jf. tjeklisten i `DO
 | Fase | Indhold | Omfang | Kan merges alene? |
 |---|---|---|---|
 | **1. DB-fundament** ✅ | `sql/groups.sql` **leveret**: tabeller, RLS, `is_group_member()`/`is_group_admin()`, `move_competition_to_group()`, `competitions.group_id`, `competition_participants`-DELETE-policy. Skal køres i Supabase (staging først). | Lille | Ja — ingen UI-effekt |
-| **2. Liga-UI** | Opret liga, liga-kort på Ligaer-fanen, liga-siden (medlemmer, konkurrencer, Deltag/Forlad, Invitér), `?liga=`-deep-link, liga-dropdown i opret-konkurrence, Hjem-gruppering, terminologi-fejning (fodboldliga → "turnering", afsnit 2) | Stor | Ja — liga-løse konkurrencer uberørte |
-| **3. Adoption** | "Flyt til liga"-flowet, engangs-nudge, konkurrence-link melder også ind i ligaen, HowItWorks-tekst, QA-tjekliste udvidet | Mellem | Ja |
+| **2. Liga-UI** ✅ | **Leveret:** opret liga, liga-kort på Ligaer-fanen, liga-siden (`GroupScreen`: medlemmer, konkurrencer, Deltag/Forlad, Invitér), `?liga=`-deep-link, liga-dropdown i opret-konkurrence, terminologi-fejning (fodboldliga → "turnering"), BoardScreen deler liga-link. *Hjem-gruppering pr. liga udskudt som kosmetisk polish (konkurrencer vises fortsat korrekt i "Dine placeringer").* | Stor | Ja — liga-løse konkurrencer uberørte |
+| **3. Adoption** ✅ | **Leveret sammen med fase 2:** "Flyt til liga"-flowet (`move_competition_to_group` fra GroupScreen), engangs-nudge på Ligaer-fanen, samlet join-felt (liga- eller konkurrence-kode; konkurrence-link melder også ind i ligaen), HowItWorks-tekst. QA-tjekliste udvides ved staging-verifikation. | Mellem | Ja |
 | **4. Efterfølgende (uden for v1)** | Per-liga-rating (`ratings.scope`), Story Engine-tekster med liga-navn, medlems-administration (fjern/forfrem), liga-identitet (ikon/farve), Karriereprofil-titler pr. liga | — | Separate features |
 
 Rækkefølgen respekterer roadmappens tommelfingerregel: Story Engine-kalibreringen (trin 1–2) kører videre uafhængigt; liga-laget rører ikke trigger-flowet.

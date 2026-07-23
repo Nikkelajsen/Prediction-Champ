@@ -1,12 +1,15 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect, useMemo } from "react";
 import { db } from "../lib/supabase.js";
+import { loadMyGroups } from "../lib/data.js";
 import { filterFromNextUnfinishedRound, formatKickoff, groupIntoRounds, outcome } from "../lib/scoring.js";
 import { C, btnGreen, chip, muted } from "../ui/theme.js";
 import { BackBar, Card, H } from "../ui/components.jsx";
 
-function CreateCompetitionScreen({ token, userId, leagues, onBack, onCreated, openBoard }) {
+function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null, onBack, onCreated, openBoard }) {
   const [createLeagueId, setCreateLeagueId] = useState(leagues[0]?.id || "");
+  const [groups, setGroups] = useState([]);
+  const [groupId, setGroupId] = useState(initialGroupId || "");
   const [createSeason, setCreateSeason] = useState(null);
   const [createTeams, setCreateTeams] = useState([]);
   const [name, setName] = useState("");
@@ -25,6 +28,7 @@ function CreateCompetitionScreen({ token, userId, leagues, onBack, onCreated, op
   const [rollingWindow, setRollingWindow] = useState(false);
 
   useEffect(() => { if (!createLeagueId && leagues.length) setCreateLeagueId(leagues[0].id); }, [leagues]); // eslint-disable-line
+  useEffect(() => { (async () => { try { setGroups(await loadMyGroups(token, userId)); } catch (e) { setGroups([]); } })(); }, [token, userId]); // eslint-disable-line
 
   useEffect(() => {
     if (!createLeagueId) return;
@@ -73,7 +77,7 @@ function CreateCompetitionScreen({ token, userId, leagues, onBack, onCreated, op
       } else if (mode === "random") {
         const allowedLeagues = randomLeagueIds || leagues.map((l) => l.id);
         const pool = upcoming.filter((m) => allowedLeagues.includes(m._leagueId));
-        if (!pool.length) { setErr("Ingen kommende kampe i de valgte ligaer"); setBusy(false); return; }
+        if (!pool.length) { setErr("Ingen kommende kampe i de valgte turneringer"); setBusy(false); return; }
         const firstRound = pool.reduce((min, m) => (m.round_key < min ? m.round_key : min), pool[0].round_key);
         const roundPool = pool.filter((m) => m.round_key === firstRound);
         const shuffled = roundPool.slice().sort(() => Math.random() - 0.5);
@@ -88,6 +92,7 @@ function CreateCompetitionScreen({ token, userId, leagues, onBack, onCreated, op
         name,
         league_id: crossLeague ? null : createLeagueId,
         season_id: crossLeague ? null : createSeason.id,
+        group_id: groupId || null,
         mode, mode_params, rules, created_by: userId,
       }]);
       await db.insert(token, "competition_participants", [{ competition_id: comp.id, user_id: userId }]);
@@ -128,10 +133,19 @@ function CreateCompetitionScreen({ token, userId, leagues, onBack, onCreated, op
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <BackBar title="Opret liga" onBack={onBack} />
+      <BackBar title="Opret konkurrence" onBack={onBack} />
       <Card>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <input className="field" placeholder="Navn på konkurrence…" value={name} onChange={(e) => setName(e.target.value)} />
+          {groups.length > 0 && (
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ color: C.muted, fontSize: 12 }}>Liga</span>
+              <select className="field" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                <option value="">Ingen liga</option>
+                {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            </label>
+          )}
           <select className="field" value={mode} onChange={(e) => setMode(e.target.value)}>
             <option value="full_season">Hel sæson</option>
             <option value="team">Et hold</option>

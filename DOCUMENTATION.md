@@ -30,8 +30,10 @@ Tabel	Formål
 `teams`	Hold. `api_team_id` = Sportmonks' hold-id, sat automatisk.
 `matches`	Kampe. `round_key` (tirsdag–mandag, auto-beregnet), `home_score`/`away_score`, `api_fixture_id` (unik).
 `profiles`	Brugerprofiler. `display_name`, `is_admin`, `created_at` (tilmelding, backfillet fra `auth.users`), `last_seen_at` (senest aktiv, sat af `touch_activity()`). `display_name` er unikt (case-insensitivt) — se afsnit 6.
-`competitions`	`mode` ∈ `full_season / team / time_range / custom / random`. `league_id`/`season_id` er nullable — `custom` og `random` kan spænde over flere ligaer. `rules` (jsonb) indeholder pointregler og evt. `openDaysBefore` (rullende gætte-vindue).
-`competition_participants`	Deltagere. `hidden` = brugerens egen arkivering (påvirker ikke andre deltagere).
+`competitions`	`mode` ∈ `full_season / team / time_range / custom / random`. `league_id`/`season_id` er nullable — `custom` og `random` kan spænde over flere ligaer. `group_id` (nullable, `on delete set null`) = liga-tilhør (liga-laget, afsnit 18); `null` = liga-løs konkurrence. `rules` (jsonb) indeholder pointregler og evt. `openDaysBefore` (rullende gætte-vindue).
+`competition_participants`	Deltagere. `hidden` = brugerens egen arkivering (påvirker ikke andre deltagere). DELETE-policy (liga-laget): man kan framelde sig en konkurrence, men ikke hvis man har tips på allerede låste kampe.
+`groups`	Liga-laget: den permanente liga-enhed (fællesskabet). `name` (2–40 tegn), `invite_code` (unikt, ét delbart link pr. liga), `created_by`. UI kalder den en "liga"; `leagues` (fodbold) hedder en "turnering". Se afsnit 18.
+`group_members`	Medlemskab af en liga. Nøgle `(group_id, user_id)`, `role` ∈ `admin / member`. RLS via `security definer`-funktionen `is_group_member()` (undgår rekursion). Se afsnit 18.
 `competition_matches`	Hvilke kampe hører til hvilken konkurrence.
 `predictions`	Én forudsigelse pr. bruger pr. kamp, delt på tværs af konkurrencer.
 `ratings`	Aktuel Prediction Champ Rating pr. bruger. Nøgle `(user_id, scope)`. Se afsnit 5.
@@ -203,6 +205,9 @@ Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke
 14. Changelog
 Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 13).
 
+Juli 2026 — Liga-laget v1 (permanente fællesskaber)
+Bogens vigtigste strukturelle princip: en permanent liga-enhed (fællesskab), som konkurrencer lever indeni. Nye tabeller `groups` + `group_members` og kolonnen `competitions.group_id` (`sql/groups.sql`, idempotent). Medlemskab bor på ligaen; hvert medlem til-/framelder sig ligaens konkurrencer enkeltvis. Ét delbart invite-link pr. liga (`?liga=<kode>`); gamle konkurrence-links (`?join=`) virker fortsat og melder joineren ind i både liga og konkurrence. Ny liga-side (`src/screens/GroupScreen.jsx`), omstruktureret Ligaer-fane (ligaer øverst, "Øvrige konkurrencer" nedenunder), liga-dropdown ved oprettelse af konkurrence, blød migrering (`move_competition_to_group()` — deltagere følger med som medlemmer), engangs-nudge. Terminologi-ordbog: **"turnering"** = fodboldliga (`leagues`), **"liga"** = fællesskab (`groups`), **"konkurrence"** = tippekonkurrence. Rating, Championship, låseregler og Story Engine er upåvirkede. Spec: `docs/features/liga-laget-v1.md`. Se afsnit 18. **Engangsopsætning: kør `sql/groups.sql` i Supabase ("Run without RLS"); verificér på staging (skemaet ligger ikke i repoet, afsnit 12).**
+
 Juli 2026 — Story Engine v1 (skyggetilstand)
 Regelbaseret historie-motor: når en runde afsluttes, genereres pr. bruger én historie om, hvad runden betød. Nye objekter `stories` + `latest_story` (`sql/story_engine.sql`) og funktionen `generate_stories(round_key)`, som kaldes sidst i matches-triggeren efter ratings (`sql/rating_trigger_optimization.sql`) — pakket i en exception-guard, så en historik-fejl aldrig kan blokere resultat-lagring/rating. Ni regler (Månedens Champ, førsteplads overtaget/mistet, ratingrekord, head-to-head, comeback, stime, rundens vinder, perfekt træfsikkerhed), deterministisk udvælgelse (laveste prioritet → største liga → `competition_id`). Frontend: guld-fremhævet historie-kort på Hjem direkte under tips-status (helpers `loadLatestStory`/`dismissStory`, ren regel-logik + tests i `src/lib/stories.js`). **Starter i skyggetilstand: kortet vises kun for admin.** Se afsnit 17.
 
@@ -314,5 +319,20 @@ Skyggetilstand: v1 viser kortet KUN for admin (`profile.is_admin`), så historie
 Engangsopsætning: kør `sql/story_engine.sql` i Supabase ("Run without RLS"), og gen-kør `sql/rating_trigger_optimization.sql` (hooker `generate_stories` ind i triggeren). SQL'en er skrevet mod det dokumenterede skema (afsnit 2) — verificér i skyggetilstand, da det oprindelige skema ikke ligger i repoet (afsnit 12).
 
 Bemærkning (v2): runde-resultat-notifikationen (afsnit 16) kan senere bruge brugerens historie-`headline` som beskedtekst i stedet for den generiske point/placering-tekst.
+---
+18. Liga-laget (`sql/groups.sql`)
+Den permanente liga-enhed (fællesskabet), som konkurrencer lever indeni. Fuld spec: `docs/features/liga-laget-v1.md`.
+
+Ordbog (vigtig — "liga" var før tvetydig): **turnering** = fodboldliga fra Sportmonks (`leagues`), **liga** = fællesskabet (`groups`), **konkurrence** = tippekonkurrence (`competitions`). Al brugervendt tekst følger ordbogen; DB-navne (`leagues`, `league_id`) er uændrede.
+
+Datamodel: `groups` (navn, `invite_code`, `created_by`) + `group_members` (`(group_id, user_id)`, `role` ∈ `admin/member`) + `competitions.group_id` (nullable, `on delete set null`). Sletter man en liga, bliver dens konkurrencer liga-løse (slettes aldrig).
+
+RLS: `groups` er læsbar for alle authenticated (nødvendigt for join-med-kode). `group_members` læses via `security definer`-funktionen `is_group_member(gid)` — policyen slår ALDRIG direkte op i `group_members` (ville give "infinite recursion", jf. afsnit 13). `is_group_admin(gid)` gater omdøb/sletning. Man melder kun sig selv ind (`user_id = auth.uid()`); kun ligaens opretter må indsætte sig som `admin`. `competition_participants` har en ny DELETE-policy: forlad en konkurrence, men ikke med tips på allerede låste kampe (genbruger runde-lås-udtrykket fra afsnit 2). Sletning af en liga kræver admin + at den er tom (ingen konkurrencer).
+
+Blød migrering: eksisterende konkurrencer har `group_id = null` og virker uændret ("Øvrige konkurrencer" på Ligaer-fanen). Ingen automatisk gruppering. Opretteren flytter selv en konkurrence ind i en liga via `move_competition_to_group(comp_id, group_id)` (`security definer`; guard: kalderen ejer konkurrencen og er medlem af ligaen) — konkurrencens deltagere bliver automatisk liga-medlemmer.
+
+Frontend: `GroupScreen.jsx` (liga-siden), omstruktureret `LigaerTab.jsx` (ligaer øverst + samlet join-felt + engangs-nudge), liga-dropdown i `CreateCompetitionScreen.jsx`, `?liga=<kode>`-deep-link i `App.jsx`/`MainApp.jsx`, liga-link i `BoardScreen.jsx`. Data-helpers i `data.js` (`loadMyGroups`, `loadGroupDetail`, `createGroup`, `joinGroup`, `leaveGroup`, `deleteGroup`, `joinCompetition`, `leaveCompetition`, `moveCompetitionToGroup`, `loadGroupByCode`). Enhedstests i `data.test.js`.
+
+Engangsopsætning: kør `sql/groups.sql` i Supabase ("Run without RLS"). Verificér i staging først — det oprindelige skema ligger ikke i repoet (afsnit 12), så kolonne-/tabelnavne skal matche. Tjek eksplicit for "infinite recursion" på `group_members` (kendt fælde).
 ---
 Bed Claude om at opdatere denne fil, når der sker større ændringer.
