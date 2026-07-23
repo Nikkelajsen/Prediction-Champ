@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Bell, ChevronRight, Clock, Check, X, Share2 } from "lucide-react";
 import { formatKickoff, outcome } from "../lib/scoring.js";
+import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { enablePush, getExistingSubscription, isPushSupported } from "../lib/push.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
@@ -111,6 +112,56 @@ function shortKick(iso) {
   return `${day} ${t}`;
 }
 
+// "Dine placeringer": månedsliga (global) øverst, dernæst konkurrencer grupperet
+// pr. liga (liga-laget). Har brugeren ingen ligaer, vises konkurrencerne fladt som før.
+function Placements({ placements, goTab, openBoard }) {
+  const monthlyRows = placements.filter((r) => r.tab);
+  const compRows = placements.filter((r) => r.compId);
+  const hasGroups = compRows.some((r) => r.groupId);
+
+  const Row = ({ r, top }) => (
+    <div onClick={() => (r.tab ? goTab(r.tab) : openBoard(r.compId))} style={{
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      padding: "10px 0", borderTop: top ? `1px solid ${C.line}` : "none", cursor: "pointer",
+    }}>
+      <span style={{ fontSize: 14 }}>{r.label}</span>
+      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, color: r.pos === "1." ? C.gold : C.text }}>{r.pos}</span>
+        <ChevronRight size={15} color={C.muted} />
+      </span>
+    </div>
+  );
+  const SubHead = ({ children }) => (
+    <div style={{ fontFamily: font.display, textTransform: "uppercase", letterSpacing: "0.1em", fontSize: 11, color: C.muted, margin: "12px 0 2px" }}>{children}</div>
+  );
+
+  if (!hasGroups) {
+    return <>{[...monthlyRows, ...compRows].map((r, i) => <Row key={r.compId || r.tab} r={r} top={i > 0} />)}</>;
+  }
+
+  // grupper konkurrence-rækker pr. liga (første-optrædende rækkefølge); liga-løse sidst
+  const order = [];
+  const byKey = new Map();
+  for (const r of compRows) {
+    const key = r.groupId || "__loose__";
+    if (!byKey.has(key)) { byKey.set(key, { key, name: r.groupId ? r.groupName : "Øvrige", rows: [] }); order.push(key); }
+    byKey.get(key).rows.push(r);
+  }
+  const groups = order.map((k) => byKey.get(k)).sort((a, b) => (a.key === "__loose__" ? 1 : 0) - (b.key === "__loose__" ? 1 : 0));
+
+  return (
+    <>
+      {monthlyRows.map((r, i) => <Row key={r.tab} r={r} top={i > 0} />)}
+      {groups.map((g) => (
+        <div key={g.key}>
+          <SubHead>{g.name}</SubHead>
+          {g.rows.map((r, i) => <Row key={r.compId} r={r} top={i > 0} />)}
+        </div>
+      ))}
+    </>
+  );
+}
+
 function HjemTab({ token, userId, profile, competitions, goTab, openPredictions, openBoard }) {
   const [tips, setTips] = useState(null);
   const [round, setRound] = useState(null); // live-oversigt over indeværende runde
@@ -187,12 +238,16 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       // (de er globale pr. runde/sæson), så computeCompetitionState er stadig nødvendig.
       try {
         const comps = competitions.filter((x) => !x._hidden);
-        const [monthly, compStates] = await Promise.all([
+        // liga-navne til gruppering af konkurrence-placeringer (liga-laget)
+        const groupIds = [...new Set(comps.map((c) => c.group_id).filter(Boolean))];
+        const [monthly, compStates, groupRows] = await Promise.all([
           loadMonthlyBoard(token, currentMonthKey()),
           Promise.all(comps.map((c) =>
             computeCompetitionState(token, c.id, c.rules || { exact: 3, outcome: 1 }).catch(() => null)
           )),
+          groupIds.length ? db.select(token, "groups", `id=in.(${groupIds.join(",")})&select=id,name`).catch(() => []) : Promise.resolve([]),
         ]);
+        const groupNameById = new Map(groupRows.map((g) => [g.id, g.name]));
         const list = [];
         const mIdx = monthly.findIndex((r) => r.userId === userId);
         if (mIdx >= 0) list.push({ label: "Månedsliga · " + monthName(currentMonthKey()), pos: `${mIdx + 1}.`, tab: "championship" });
@@ -200,7 +255,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           const state = compStates[i];
           if (!state) return; // fejlede — spring over
           const rIdx = state.rows.findIndex((r) => r.userId === userId);
-          if (rIdx >= 0 && state.rows.length) list.push({ label: c.name, pos: `${rIdx + 1}.`, compId: c.id });
+          if (rIdx >= 0 && state.rows.length) list.push({ label: c.name, pos: `${rIdx + 1}.`, compId: c.id, groupId: c.group_id || null, groupName: c.group_id ? (groupNameById.get(c.group_id) || "Liga") : null });
         });
         if (!cancelled) setPlacements(list);
       } catch (e) { if (!cancelled) setPlacements([]); }
@@ -313,22 +368,11 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         </Card>
       )}
 
-      {/* Placeringer */}
+      {/* Placeringer — konkurrencer grupperet pr. liga (liga-laget) */}
       {placements && placements.length > 0 && (
         <Card>
           <Eyebrow>Dine placeringer</Eyebrow>
-          {placements.map((r, i) => (
-            <div key={i} onClick={() => r.tab ? goTab(r.tab) : openBoard(r.compId)} style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "10px 0", borderTop: i ? `1px solid ${C.line}` : "none", cursor: "pointer",
-            }}>
-              <span style={{ fontSize: 14 }}>{r.label}</span>
-              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, color: r.pos === "1." ? C.gold : C.text }}>{r.pos}</span>
-                <ChevronRight size={15} color={C.muted} />
-              </span>
-            </div>
-          ))}
+          <Placements placements={placements} goTab={goTab} openBoard={openBoard} />
         </Card>
       )}
 

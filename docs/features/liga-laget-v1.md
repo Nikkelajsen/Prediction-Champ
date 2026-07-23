@@ -1,6 +1,6 @@
 # Feature: Liga-laget v1 (permanente fællesskaber)
 
-**Status: Godkendt — klar til implementering (fase 1 først)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 4–5 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 3*
+**Status: ✅ Leveret og live (juli 2026)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 4–5 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 3*
 
 *Bogens vigtigste strukturelle princip: ligaen (fællesskabet) er produktets centrum. Konkurrencer er kapitler i ligaens historie. Denne plan indfører liga-laget oven på det eksisterende — uden at rive noget ned.*
 
@@ -153,7 +153,7 @@ Hver fase kan merges og udrulles separat (test på preview, jf. tjeklisten i `DO
 | Fase | Indhold | Omfang | Kan merges alene? |
 |---|---|---|---|
 | **1. DB-fundament** ✅ | `sql/groups.sql` **leveret**: tabeller, RLS, `is_group_member()`/`is_group_admin()`, `move_competition_to_group()`, `competitions.group_id`, `competition_participants`-DELETE-policy. Skal køres i Supabase (staging først). | Lille | Ja — ingen UI-effekt |
-| **2. Liga-UI** ✅ | **Leveret:** opret liga, liga-kort på Ligaer-fanen, liga-siden (`GroupScreen`: medlemmer, konkurrencer, Deltag/Forlad, Invitér), `?liga=`-deep-link, liga-dropdown i opret-konkurrence, terminologi-fejning (fodboldliga → "turnering"), BoardScreen deler liga-link. *Hjem-gruppering pr. liga udskudt som kosmetisk polish (konkurrencer vises fortsat korrekt i "Dine placeringer").* | Stor | Ja — liga-løse konkurrencer uberørte |
+| **2. Liga-UI** ✅ | **Leveret:** opret liga, liga-kort på Ligaer-fanen, liga-siden (`GroupScreen`: medlemmer, konkurrencer, Deltag/Forlad, Invitér), `?liga=`-deep-link, liga-dropdown i opret-konkurrence, terminologi-fejning (fodboldliga → "turnering"), BoardScreen deler liga-link, Hjem's "Dine placeringer" grupperet pr. liga (`Placements`). | Stor | Ja — liga-løse konkurrencer uberørte |
 | **3. Adoption** ✅ | **Leveret sammen med fase 2:** "Flyt til liga"-flowet (`move_competition_to_group` fra GroupScreen), engangs-nudge på Ligaer-fanen, samlet join-felt (liga- eller konkurrence-kode; konkurrence-link melder også ind i ligaen), HowItWorks-tekst. QA-tjekliste udvides ved staging-verifikation. | Mellem | Ja |
 | **4. Efterfølgende (uden for v1)** | Per-liga-rating (`ratings.scope`), Story Engine-tekster med liga-navn, medlems-administration (fjern/forfrem), liga-identitet (ikon/farve), Karriereprofil-titler pr. liga | — | Separate features |
 
