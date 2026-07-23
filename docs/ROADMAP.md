@@ -1,6 +1,6 @@
 # Roadmap — Status og prioritering
 
-**Senest opdateret: 23. juli 2026** · *Levende dokument — opdateres, hver gang en feature leveres eller en beslutning træffes. Filosofien bag prioriteringen: [`PRODUCT_BOOK.md`](./PRODUCT_BOOK.md).*
+**Senest opdateret: 23. juli 2026** (notifikations-dedup gjort kapløbssikker) · *Levende dokument — opdateres, hver gang en feature leveres eller en beslutning træffes. Filosofien bag prioriteringen: [`PRODUCT_BOOK.md`](./PRODUCT_BOOK.md).*
 
 ---
 
@@ -24,7 +24,7 @@ Opgjort mod MVP-kravene i produktbogens kapitel 3, ud fra den faktiske kodebase.
 | Konkurrencer inde i ligaer | ✅ Bygget | `competitions.group_id` + liga-dropdown ved oprettelse + liga-side viser ligaens konkurrencer. Liga-løse konkurrencer bevares under "Øvrige". |
 | Frivillig tilmelding pr. konkurrence | ✅ Bygget | Deltag/Forlad pr. konkurrence på liga-siden. Framelding blokeres af RLS, hvis man har tips på låste kampe. |
 | Grundlæggende karriere og head-to-head | ❌ Mangler | Ratinghistorikken er første byggesten, men der findes ingen profil-/karrierevisning og ingen head-to-head-opgørelser. |
-| Få, relevante notifikationer | ✅ Bygget | Web Push (juli 2026): deadline-påmindelse før rundelåsen og runde-resultat med point og placering. `notification_log` sikrer, at samme besked aldrig sendes to gange. |
+| Få, relevante notifikationer | ✅ Bygget | Web Push (juli 2026): deadline-påmindelse før rundelåsen og runde-resultat med point og placering. `notification_log` sikrer, at samme besked aldrig sendes to gange — dedup er nu kapløbssikker (claim-før-send), så to samtidige cron-kald ikke længere giver dubletnotifikationer. |
 | Story Engine (enkel første version) | 🟡 Skyggetilstand | v1 bygget: `stories`+`latest_story`, `generate_stories()` (9 regler) i matches-triggeren (exception-guarded), guld-historie-kort på Hjem. Vises pt. **kun for admin** — kalibreres på rigtige data, før det åbnes for alle. Spec: [`features/story-engine-v1.md`](./features/story-engine-v1.md). |
 
 **Ud over MVP-listen er der allerede bygget:** flere konkurrenceformater (hel sæson, enkelt hold, datointerval, håndplukkede kampe, tilfældig kupon), arkivering pr. bruger, indsigt i andres tips for afsluttede runder, PWA-installation, en fuld admin-flade til kampe og resultater, DB-views til runde- og sæsonstillinger (`round_standings`/`season_standings`), en vitest-testsuite, staging-konfiguration, optimeret rating-trigger og rundebaseret åbningsvindue for tips.
@@ -79,6 +79,7 @@ Spørgsmål, der er identificeret, men bevidst ikke afgjort endnu. Når en beslu
 | Juli 2026 | Stack fastholdes som Vite + React + JavaScript (ikke Next.js/TypeScript/Tailwind). | Migrering ville koste uger uden brugerværdi. Teknologien må ikke definere produktet. |
 | Juli 2026 | Head-to-head bygges som Story Engine-regler, ikke som statistikside. | Billigere, og i tråd med "Stories over Statistics". |
 | Juli 2026 | Push-notifikationer: kun to beskedtyper (deadline-påmindelse og runde-resultat), dedupleret via `notification_log`. | "Få, relevante notifikationer" — hellere to beskeder, der altid rammer, end ti, der støjer. |
+| Juli 2026 | Notifikations-dedup gjort kapløbssikker: hver besked reserveres (`claim`) i `notification_log` med `resolution=ignore-duplicates` FØR afsendelse, og kun de rækker, kaldet selv indsatte, sendes (tidligere: læs log → send → skriv log, som to samtidige kørsler kunne løbe forbi). | Bruger rapporterede to ens notifikationer på samme tid. Årsag: check-derefter-send-dedup uden atomicitet — flere/overlappende cron-kald til `/api/send-notifications` læste begge en tom log og sendte hver sin kopi. Claim-før-send gør indsættelsen til den atomare lås. Husk: kun ÉT cron-job for notifikations-funktionen (den dækker alle ligaer på én gang). |
 | Juli 2026 | Stillinger beregnes i DB-views (`round_standings`, `season_standings`) frem for i browseren. | PostgreSQL som kilde til sandhed; skalerer med flere brugere og kampe. |
 | Juli 2026 | `SYNC_SECRET` sendes til serverfunktionerne via headeren `x-sync-secret` (query-string `?secret=` bevaret som fallback). | Hemmeligheden skal ikke ende i request-logs. Verificeret: kald uden header giver 401, cron-jobs med header giver 200. **Senere (teknisk gæld):** fjern `?secret=`-fallbacken helt, så kun headeren accepteres — først når alle cron-jobs (ét sync-job pr. liga + notifikations-jobbet) er bekræftet flyttet til headeren, ellers fejler de med 401. |
 | Juli 2026 | Story Engine v1: udvælgelsen pr. bruger pr. runde er deterministisk — `priority asc`, dernæst største liga (snapshottet `league_size desc`), dernæst `competition_id`/`id` som garanteret unik tiebreak. Ligastørrelse aflæses IKKE live. | Fler-liga-brugere udløser flere kandidater; visningen skal altid give præcis én, reproducerbar historie, der ikke driver, når medlemskab ændres. Detaljer i [`features/story-engine-v1.md`](./features/story-engine-v1.md) afsnit 6. |
