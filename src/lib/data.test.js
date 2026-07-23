@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // db mockes, så loaderne kan testes uden netværk/Supabase
-vi.mock("./supabase.js", () => ({ db: { select: vi.fn() }, restFetch: vi.fn() }));
-import { db } from "./supabase.js";
-import { loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory } from "./data.js";
+vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn() }, restFetch: vi.fn() }));
+import { db, restFetch } from "./supabase.js";
+import { loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadMyGroups, loadGroupDetail, leaveCompetition, moveCompetitionToGroup } from "./data.js";
 
 // mock-svar pr. tabel/view
 function mockTables(tables) {
@@ -15,7 +15,7 @@ function mockTables(tables) {
 
 // bloksyntaks er vigtig: mockReset() returnerer mocken, og en returneret
 // funktion ville blive kørt af vitest som cleanup-hook (uden argumenter)
-beforeEach(() => { db.select.mockReset(); });
+beforeEach(() => { db.select.mockReset(); db.del.mockReset(); restFetch.mockReset(); });
 
 describe("loadRoundBoard (round_standings-view)", () => {
   it("mapper viewets rækker til stillingsrækker med navne", async () => {
@@ -100,6 +100,62 @@ describe("loadLatestStory (latest_story-view)", () => {
   it("returnerer null uden historier", async () => {
     mockTables({ latest_story: [] });
     expect(await loadLatestStory("token")).toBeNull();
+  });
+});
+
+describe("liga-laget (grupper)", () => {
+  it("loadMyGroups tæller medlemmer + konkurrencer pr. liga og bevarer egen rolle", async () => {
+    db.select.mockImplementation(async (token, table, query) => {
+      if (table === "group_members" && query.includes("user_id=eq.")) return [{ group_id: "g1", role: "admin" }];
+      if (table === "group_members") return [{ group_id: "g1" }, { group_id: "g1" }]; // alle medlemmer
+      if (table === "groups") return [{ id: "g1", name: "Kontoret", invite_code: "abc" }];
+      if (table === "competitions") return [{ id: "c1", group_id: "g1" }, { id: "c2", group_id: "g1" }];
+      throw new Error(`uventet tabel: ${table}`);
+    });
+    const res = await loadMyGroups("token", "u1");
+    expect(res).toHaveLength(1);
+    expect(res[0]).toMatchObject({ id: "g1", role: "admin", memberCount: 2, compCount: 2 });
+  });
+
+  it("loadMyGroups giver tom liste uden medlemskaber", async () => {
+    db.select.mockImplementation(async () => []);
+    expect(await loadMyGroups("token", "u1")).toEqual([]);
+  });
+
+  it("loadGroupDetail samler medlemmer, egen rolle og deltagelse pr. konkurrence", async () => {
+    db.select.mockImplementation(async (token, table, query) => {
+      switch (table) {
+        case "groups": return [{ id: "g1", name: "Kontoret", invite_code: "abc" }];
+        case "group_members": return [
+          { user_id: "u1", role: "admin", joined_at: "2026-01-01" },
+          { user_id: "u2", role: "member", joined_at: "2026-01-02" },
+        ];
+        case "profiles": return [{ id: "u1", display_name: "Anna" }, { id: "u2", display_name: "Bo" }];
+        case "competitions": return [{ id: "c1", name: "Superliga", mode: "full_season", group_id: "g1" }];
+        case "competition_participants":
+          return query.includes("user_id=eq.u1") ? [{ competition_id: "c1" }] : [{ competition_id: "c1" }, { competition_id: "c1" }];
+        default: throw new Error(`uventet tabel: ${table}`);
+      }
+    });
+    const d = await loadGroupDetail("token", "u1", "g1");
+    expect(d.isMember).toBe(true);
+    expect(d.myRole).toBe("admin");
+    expect(d.members).toHaveLength(2);
+    expect(d.competitions[0]).toMatchObject({ id: "c1", joined: true, participantCount: 2 });
+  });
+
+  it("leaveCompetition returnerer true når rækken slettes, false når RLS blokerer", async () => {
+    db.del.mockResolvedValueOnce([{ competition_id: "c1", user_id: "u1" }]);
+    expect(await leaveCompetition("token", "u1", "c1")).toBe(true);
+    db.del.mockResolvedValueOnce([]); // blokeret (tips på låst runde)
+    expect(await leaveCompetition("token", "u1", "c1")).toBe(false);
+  });
+
+  it("moveCompetitionToGroup kalder RPC med rigtige parametre", async () => {
+    restFetch.mockResolvedValueOnce(null);
+    await moveCompetitionToGroup("token", "c1", "g1");
+    expect(restFetch).toHaveBeenCalledWith("/rest/v1/rpc/move_competition_to_group",
+      expect.objectContaining({ method: "POST", token: "token", body: { p_comp_id: "c1", p_group_id: "g1" } }));
   });
 });
 

@@ -21,7 +21,7 @@ function RatingTab({ token, userId }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
-        <Eyebrow>På tværs af alle ligaer <InfoDot title="Rating">Din langsigtede dygtighed på tværs af alle ligaer. Opdateres efter hver runde. Championship er dét, man vinder — rating er dét, man er.</InfoDot></Eyebrow>
+        <Eyebrow>På tværs af alle turneringer <InfoDot title="Rating">Din langsigtede dygtighed på tværs af alle turneringer. Opdateres efter hver runde. Championship er dét, man vinder — rating er dét, man er.</InfoDot></Eyebrow>
         <H>Rating</H>
         <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
           Din langsigtede dygtighed. Opdateres efter hver runde — Championship er dét, man vinder; rating er dét, man <i>er</i>.

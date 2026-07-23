@@ -14,6 +14,7 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [recoveryToken, setRecoveryToken] = useState(null);
   const [pendingJoinCode, setPendingJoinCode] = useState(null);
+  const [pendingLigaCode, setPendingLigaCode] = useState(null);
 
   async function completeAuth({ access_token, refresh_token, user }, chosenUsername) {
     try {
@@ -49,6 +50,8 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const join = params.get("join");
     if (join) setPendingJoinCode(join);
+    const liga = params.get("liga");
+    if (liga) setPendingLigaCode(liga);
 
     (async () => {
       const saved = loadSession();
@@ -106,7 +109,8 @@ export default function App() {
         <AuthScreen onAuthed={completeAuth} booting={false} />
       ) : (
         <MainApp session={session} profile={profile} onLogout={handleLogout}
-          pendingJoinCode={pendingJoinCode} clearPendingJoinCode={() => setPendingJoinCode(null)} />
+          pendingJoinCode={pendingJoinCode} clearPendingJoinCode={() => setPendingJoinCode(null)}
+          pendingLigaCode={pendingLigaCode} clearPendingLigaCode={() => setPendingLigaCode(null)} />
       )}
     </>
   );

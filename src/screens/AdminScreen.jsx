@@ -91,7 +91,7 @@ function MatchesPanel({ token, leagues, reloadLeagues }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, textTransform: "uppercase" }}>Hent kampe & resultater</div>
-            <p style={{ ...muted, margin: "4px 0 0" }}>Fra Sportmonks for {league?.name || "denne liga"}.</p>
+            <p style={{ ...muted, margin: "4px 0 0" }}>Fra Sportmonks for {league?.name || "denne turnering"}.</p>
           </div>
           <button style={btnGold} onClick={syncFromApi} disabled={syncing}>
             {syncing ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />} Hent nu
@@ -318,7 +318,7 @@ function StatsPanel({ token }) {
       <StatGroup title="Engagement">
         <StatTile label="Har afgivet mindst ét tip" value={s.has_predicted} hint={s.total ? `${Math.round((s.has_predicted / s.total) * 100)}% af alle` : undefined} />
         <StatTile label="Gns. tips pr. bruger" value={s.avg_predictions} />
-        <StatTile label="Med i en privat liga" value={s.in_private_league} />
+        <StatTile label="Med i en privat konkurrence" value={s.in_private_league} />
       </StatGroup>
 
       <StatGroup title="Frafald">
@@ -332,7 +332,7 @@ function StatsPanel({ token }) {
           <div style={{ fontFamily: font.display, fontWeight: 700, fontSize: 22, color: C.text }}>{s.competitions_total ?? 0}</div>
         </div>
         <ModeBars data={s.competitions_by_mode || []} total={s.competitions_total || 0} />
-        <p style={{ ...muted, margin: "12px 0 0" }}>Kun private ligaer — de officielle (månedsliga m.fl.) tælles ikke med.</p>
+        <p style={{ ...muted, margin: "12px 0 0" }}>Kun private konkurrencer — de officielle (månedsliga m.fl.) tælles ikke med.</p>
       </Card>
 
       <Card>
