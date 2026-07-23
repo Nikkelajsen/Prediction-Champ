@@ -156,6 +156,9 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     if (!pendingJoin) return;
     const comp = pendingJoin.competition;
     try {
+      // Har konkurrencen en liga, melder vi ind i BÅDE ligaen og konkurrencen
+      // (samme adfærd som "Join med kode" — konkurrence-linket er også en liga-invite).
+      if (comp.group_id) await joinGroup(token, userId, comp.group_id);
       await db.insert(token, "competition_participants", [{ competition_id: comp.id, user_id: userId }]);
       await loadCompetitions();
       setPendingJoin(null);
@@ -288,10 +291,11 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       </div>
 
       {pendingJoin && (
-        <Modal title="Join liga?" onClose={() => setPendingJoin(null)}>
+        <Modal title="Join konkurrence?" onClose={() => setPendingJoin(null)}>
           <p style={{ margin: "0 0 4px" }}>
             {pendingJoin.inviterName ? <><b>{pendingJoin.inviterName}</b> har inviteret dig til </> : "Du er inviteret til "}
-            ligaen <b>{pendingJoin.competition.name}</b>. Vil du være med?
+            konkurrencen <b>{pendingJoin.competition.name}</b>. Vil du være med?
+            {pendingJoin.competition.group_id ? " Du bliver samtidig medlem af dens liga." : ""}
           </p>
           <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
             <button style={{ ...btnGreen, flex: 1, width: "auto" }} onClick={confirmJoin}>Ja, join</button>
