@@ -1,0 +1,99 @@
+name: Skema-eksport
+
+# Regenererer sql/schema.sql fra produktionsdatabasen (Vej 1 i sql/README.md).
+#
+# Kører på GitHub's runnere, som — i modsætning til web-sandkassen — har fri
+# netadgang til Supabase på port 5432. Krav: repo-secret SUPABASE_DB_URL med
+# session-pooler-strengen, fx:
+#   postgresql://postgres.<ref>:<password>@aws-0-eu-west-1.pooler.supabase.com:5432/postgres
+# (Settings → Secrets and variables → Actions → New repository secret.)
+
+on:
+  workflow_dispatch: {}
+  # Slå eventuelt en fast kadence til ved at fjerne kommentaren nedenfor:
+  # schedule:
+  #   - cron: "0 6 * * 1"   # hver mandag kl. 06:00 UTC
+
+permissions:
+  contents: write
+
+concurrency:
+  group: schema-export-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installér pg_dump (PostgreSQL 17-klient)
+        run: |
+          set -euo pipefail
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          pg_dump --version
+
+      - name: Eksportér public-skema → sql/schema.sql
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::error::Secret SUPABASE_DB_URL mangler. Tilføj den under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          pg_dump "$SUPABASE_DB_URL" \
+            --schema=public \
+            --schema-only \
+            --no-owner \
+            -f sql/schema.sql
+          echo "Skrev sql/schema.sql ($(wc -l < sql/schema.sql) linjer)."
+
+      - name: Verifikationstjekliste
+        run: |
+          set -euo pipefail
+          fail=0
+
+          # 1. Filen findes og er ikke tom
+          if [ -s sql/schema.sql ]; then echo "OK 1: filen er ikke-tom"; else echo "FEJL 1: filen er tom/mangler"; fail=1; fi
+
+          # 2. Ingen data (kun skema) → forvent 0
+          n=$(grep -cE '^(COPY|INSERT) ' sql/schema.sql || true)
+          if [ "$n" -eq 0 ]; then echo "OK 2: ingen data-linjer"; else echo "FEJL 2: fandt $n COPY/INSERT-linjer"; fail=1; fi
+
+          # 3. Ingen ejer-info → forvent 0
+          n=$(grep -c 'OWNER TO' sql/schema.sql || true)
+          if [ "$n" -eq 0 ]; then echo "OK 3: ingen OWNER TO"; else echo "FEJL 3: fandt $n OWNER TO-linjer"; fail=1; fi
+
+          # 4. Grants er med → forvent > 0
+          n=$(grep -c '^GRANT ' sql/schema.sql || true)
+          if [ "$n" -gt 0 ]; then echo "OK 4: $n GRANT-linjer"; else echo "FEJL 4: ingen GRANT-linjer"; fail=1; fi
+
+          # 5. Skemaet er fyldt → forvent > 0
+          n=$(grep -c 'CREATE TABLE' sql/schema.sql || true)
+          if [ "$n" -gt 0 ]; then echo "OK 5: $n CREATE TABLE"; else echo "FEJL 5: ingen CREATE TABLE"; fail=1; fi
+
+          # 6. Kun public-skemaet → ingen auth./storage.-objekter
+          other=$(grep -oE 'CREATE (TABLE|FUNCTION|VIEW) [a-z_]+\.' sql/schema.sql | sort -u | grep -v ' public\.' || true)
+          if [ -z "$other" ]; then echo "OK 6: kun public.-objekter"; else echo "FEJL 6: fandt ikke-public objekter:"; echo "$other"; fail=1; fi
+
+          if [ "$fail" -ne 0 ]; then echo "::error::Verifikationstjeklisten fejlede."; exit 1; fi
+          echo "Alle tjek bestået."
+
+      - name: Commit hvis ændret
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sql/schema.sql
+          if git diff --cached --quiet; then
+            echo "Ingen ændringer i sql/schema.sql — intet at committe."
+          else
+            git commit -m "chore(sql): opdatér skema-eksport (schema.sql)"
+            git push origin HEAD:${{ github.ref_name }}
+            echo "Committede og pushede opdateret sql/schema.sql."
+          fi

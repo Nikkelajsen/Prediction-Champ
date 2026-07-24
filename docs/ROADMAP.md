@@ -1,6 +1,6 @@
 # Roadmap — Status og prioritering
 
-**Senest opdateret: 23. juli 2026** (Hjem-fanen gjort liga-bevidst) · *Levende dokument — opdateres, hver gang en feature leveres eller en beslutning træffes. Filosofien bag prioriteringen: [`PRODUCT_BOOK.md`](./PRODUCT_BOOK.md).*
+**Senest opdateret: 24. juli 2026** (skema-eksport-guide `sql/README.md`) · *Levende dokument — opdateres, hver gang en feature leveres eller en beslutning træffes. Filosofien bag prioriteringen: [`PRODUCT_BOOK.md`](./PRODUCT_BOOK.md).*
 
 ---
 
@@ -72,6 +72,7 @@ Spørgsmål, der er identificeret, men bevidst ikke afgjort endnu. Når en beslu
 
 | Dato | Beslutning | Begrundelse |
 |---|---|---|
+| Juli 2026 | Skema-eksporten dokumenteret i `sql/README.md`: `sql/schema.sql` er en **genereret** fuld-skema-eksport (`public`, kun skema, uden ejer-info, med grants) via `pg_dump --schema=public --schema-only --no-owner` (Vej 1) eller `supabase db dump` (Vej 2), med verifikationstjekliste. Selve dumpet skal køres et sted med direkte DB-adgang (port 5432) — ikke fra web-sandkassen, som blokerer alt andet end HTTPS. | Ét versioneret øjebliksbillede af produktionsskemaet, der kan læses/diffes/genskabes uden at lække ejer-roller eller data. `--no-owner` fjerner ejerskab; grants beholdes bevidst (ikke `--no-privileges`), fordi de er en del af skemaets sikkerhedskontrakt (RLS-roller). |
 | Juli 2026 | `full_season`-konkurrencer kan spænde over flere turneringer på én gang (multivalg af turneringer + stages pr. turnering). Én turnering = uændret bundet form; flere = liga-løs (`league_id`/`season_id` = `null`, turneringer i `mode_params.tournaments`), kampe materialiseret pr. turnering i `competition_matches`. | Forbereder turnering nr. 2 (Premier League m.fl.): brugeren kan lave fx "Superliga grundspil + Premier League" i én konkurrence. Genbruger den liga-løse infrastruktur fra `custom`/`random`, så læse-stier (stilling/tips) er uændrede. Berører A2 (månedsliga-scoring) og punkt 5 (global runde), som stadig afventer, at turnering nr. 2 er i drift. |
 | Juli 2026 | Pointsystem forenklet til 3–1–0 uden minuspoint. | Simulering viste, at minuspoint forvirrede og lod en "tip altid uafgjort"-strategi konkurrere. |
 | Juli 2026 | Rundebaseret tipslås (hele runden låses ved tidligste kickoff −1 t) i stedet for pr. kamp. | Lukker muligheden for at justere sene tips efter tidlige resultater. |
