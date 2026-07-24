@@ -1,12 +1,12 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
-import { Bell, ChevronRight, Clock, Check, X, Share2 } from "lucide-react";
+import { Bell, ChevronRight, ChevronDown, Clock, Check, X, Share2 } from "lucide-react";
 import { formatKickoff, outcome } from "../lib/scoring.js";
 import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadMyGroups, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { enablePush, getExistingSubscription, isPushSupported } from "../lib/push.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
-import { Card, Eyebrow, FormDots, H, Move } from "../ui/components.jsx";
+import { Card, Eyebrow, H, Move } from "../ui/components.jsx";
 
 const PUSH_DISMISS_KEY = "pc_push_dismissed";
 
@@ -165,6 +165,7 @@ function Placements({ placements, goTab, openBoard }) {
 function HjemTab({ token, userId, profile, competitions, goTab, openPredictions, openBoard, openGroup, openProfile }) {
   const [tips, setTips] = useState(null);
   const [round, setRound] = useState(null); // live-oversigt over indeværende runde
+  const [roundOpen, setRoundOpen] = useState(false); // foldet som standard: viser kun X/Y + point
   const [snapshot, setSnapshot] = useState(null); // { rating, move, form, rank, total }
   const [placements, setPlacements] = useState(null); // [{ label, pos, gold, onClick }]
   const [story, setStory] = useState(null); // Story Engine — seneste historie (live for alle)
@@ -279,9 +280,23 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div>
-        <Eyebrow>{daFullDate()}</Eyebrow>
-        <H size={30}>Hej {displayName}</H>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <Eyebrow>{daFullDate()}</Eyebrow>
+          <H size={30}>Hej {displayName}</H>
+        </div>
+        {/* Rating (kun tal + bevægelse) ved navnet — tappbar til karriereprofil.
+            Placering ("Nr. X af Y") udelades bevidst for at spare plads. */}
+        {snapshot && !snapshot.none && (
+          <div onClick={() => (openProfile ? openProfile(userId) : goTab("rating"))}
+            style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", cursor: "pointer", flexShrink: 0 }}>
+            <span style={{ fontFamily: font.display, textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10, color: C.muted }}>Rating</span>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+              <span style={{ fontFamily: font.display, fontSize: 26, fontWeight: 700 }}>{snapshot.rating}{snapshot.provisional ? <span style={{ color: C.muted, fontSize: 15 }}>*</span> : ""}</span>
+              <Move d={snapshot.move} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Signatur: næste deadline */}
@@ -339,60 +354,53 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       {/* Rundens historie (Story Engine) — direkte under tips-status, altid synlig */}
       {story && <StoryCard story={story} onDismiss={onDismissStory} />}
 
-      {/* Indeværende runde: live-oversigt der opdaterer løbende */}
+      {/* Indeværende runde: live-oversigt der opdaterer løbende.
+          Foldet som standard (viser kun X/Y spillet + akkumulerede point);
+          et klik på header folder den fulde kamp-for-kamp-visning ud. */}
       {round && round.totalCount > 0 && (
-        <Card onClick={() => openPredictions("all", round.roundKey)}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <Eyebrow>Indeværende runde</Eyebrow>
-            <span style={{ color: C.muted, fontSize: 12 }}>{round.playedCount}/{round.totalCount} spillet</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Runde {round.roundLabelText}</span>
-            {round.playedCount > 0 && (
-              <span style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, color: C.gold }}>{round.myPoints} p</span>
-            )}
-          </div>
-          <div style={{ marginTop: 6 }}>
-            {round.matches.map((m, i) => (
-              <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${C.line}` }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.home} – {m.away}</div>
-                  <div style={{ color: C.muted, fontSize: 11, marginTop: 1 }}>{m.pred ? `Dit tip: ${m.pred.pred_home}-${m.pred.pred_away}` : "Intet tip"}</div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                  {m.played ? (
-                    <>
-                      <span style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>{m.homeScore}-{m.awayScore}</span>
-                      <PointsPill pts={m.points} />
-                    </>
-                  ) : m.inProgress ? (
-                    <span style={{ color: C.green, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>I gang</span>
-                  ) : (
-                    <span style={{ color: C.muted, fontSize: 12 }}>{shortKick(m.kickoff)}</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Rating-snapshot — åbner egen karriereprofil (rating, kurve, titler, milepæle) */}
-      {snapshot && !snapshot.none && (
-        <Card onClick={() => (openProfile ? openProfile(userId) : goTab("rating"))}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <Eyebrow>Din rating</Eyebrow>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                <span style={{ fontFamily: font.display, fontSize: 34, fontWeight: 700 }}>{snapshot.rating}{snapshot.provisional ? <span style={{ color: C.muted, fontSize: 18 }}>*</span> : ""}</span>
-                <Move d={snapshot.move} />
-              </div>
-              <div style={{ color: C.muted, fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
-                Nr. {snapshot.rank} af {snapshot.total} {snapshot.form.length > 0 && <>· <FormDots form={snapshot.form} /></>}
-              </div>
+        <Card>
+          <div onClick={() => setRoundOpen((v) => !v)} style={{ cursor: "pointer" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <Eyebrow>Indeværende runde</Eyebrow>
+              <span style={{ color: C.muted, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                {round.playedCount}/{round.totalCount} spillet
+                <ChevronDown size={14} style={{ transform: roundOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+              </span>
             </div>
-            <ChevronRight color={C.muted} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Runde {round.roundLabelText}</span>
+              {round.playedCount > 0 && (
+                <span style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, color: C.gold }}>{round.myPoints} p</span>
+              )}
+            </div>
           </div>
+          {roundOpen && (
+            <>
+              <div style={{ marginTop: 6 }}>
+                {round.matches.map((m) => (
+                  <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${C.line}` }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.home} – {m.away}</div>
+                      <div style={{ color: C.muted, fontSize: 11, marginTop: 1 }}>{m.pred ? `Dit tip: ${m.pred.pred_home}-${m.pred.pred_away}` : "Intet tip"}</div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      {m.played ? (
+                        <>
+                          <span style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>{m.homeScore}-{m.awayScore}</span>
+                          <PointsPill pts={m.points} />
+                        </>
+                      ) : m.inProgress ? (
+                        <span style={{ color: C.green, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>I gang</span>
+                      ) : (
+                        <span style={{ color: C.muted, fontSize: 12 }}>{shortKick(m.kickoff)}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button style={{ ...btnGhost, marginTop: 12 }} onClick={() => openPredictions("all", round.roundKey)}>Åbn tip <ChevronRight size={14} /></button>
+            </>
+          )}
         </Card>
       )}
 

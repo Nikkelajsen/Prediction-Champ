@@ -1,10 +1,91 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect, useMemo } from "react";
-import { Crown } from "lucide-react";
-import { currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, monthName } from "../lib/data.js";
+import { Crown, ChevronLeft, ChevronRight } from "lucide-react";
+import { currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRatingMap, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, monthName } from "../lib/data.js";
 import { roundLabel } from "../lib/scoring.js";
-import { C, font, muted } from "../ui/theme.js";
-import { Card, Eyebrow, H, InfoDot } from "../ui/components.jsx";
+import { C, font, muted, pagerBtn, thStyle } from "../ui/theme.js";
+import { Card, Eyebrow, H, InfoDot, Modal } from "../ui/components.jsx";
+
+// Stilling i samme format som liga (BoardScreen): en rigtig tabel med kolonne-
+// overskrifter, så 🎯 (præcise resultater) er en kolonne-header i stedet for at
+// stå på hver række. `offset` giver den korrekte placering ved paginering.
+function StandingsTable({ rows, userId, isComplete, ratingMap, offset = 0 }) {
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table>
+        <thead><tr className="rowline">
+          <th style={thStyle}>#</th>
+          <th style={thStyle}>Spiller</th>
+          <th style={{ ...thStyle, textAlign: "center" }} title="Prediction Champ Rating">Rating</th>
+          <th style={{ ...thStyle, textAlign: "center" }} title="Antal præcise resultater">🎯</th>
+          <th style={{ ...thStyle, textAlign: "right" }}>Point</th>
+        </tr></thead>
+        <tbody>
+          {rows.map((r, i) => {
+            const rank = offset + i;
+            const you = r.userId === userId;
+            const rt = ratingMap?.get(r.userId);
+            return (
+              <tr key={r.userId} className="rowline" style={{ background: you ? "rgba(34,197,94,0.06)" : "transparent" }}>
+                <td style={{ color: rank === 0 ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display }}>
+                  {rank === 0 && isComplete ? "🏆" : rank + 1}
+                </td>
+                <td style={{ color: C.text, fontWeight: you ? 700 : 600 }}>{r.player}{you ? " (dig)" : ""}</td>
+                <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
+                  {rt
+                    ? <span style={{ color: C.gold, fontWeight: 700, fontSize: 13 }}>{rt.rating}{rt.provisional ? <span style={{ color: C.muted, fontWeight: 400 }} title="Foreløbig">*</span> : ""}</span>
+                    : <span style={{ color: C.muted, fontSize: 13 }}>–</span>}
+                </td>
+                <td style={{ textAlign: "center", color: C.text, fontSize: 13 }}>{r.exactCount}</td>
+                <td style={{ textAlign: "right" }}>
+                  <span style={{ background: rank === 0 ? "rgba(240,180,41,0.15)" : C.surface2, color: rank === 0 ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 10px" }}>{r.total}</span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Fuld stilling i modal med paginering (maks. 20 pr. side).
+function FullStandingsModal({ title, rows, userId, isComplete, ratingMap, onClose }) {
+  const [page, setPage] = useState(0);
+  const perPage = 20;
+  const pages = Math.max(1, Math.ceil(rows.length / perPage));
+  const start = page * perPage;
+  const slice = rows.slice(start, start + perPage);
+  return (
+    <Modal title={title} onClose={onClose}>
+      <StandingsTable rows={slice} offset={start} userId={userId} isComplete={isComplete} ratingMap={ratingMap} />
+      {pages > 1 && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+          <button style={pagerBtn(page > 0)} disabled={page <= 0} onClick={() => setPage((p) => Math.max(0, p - 1))}><ChevronLeft size={16} /></button>
+          <span style={{ color: C.muted, fontSize: 12 }}>Side {page + 1} af {pages}</span>
+          <button style={pagerBtn(page < pages - 1)} disabled={page >= pages - 1} onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}><ChevronRight size={16} /></button>
+        </div>
+      )}
+      <p style={{ ...muted, marginTop: 10, marginBottom: 0, fontSize: 11 }}>🎯 = præcise resultater · uafgjort afgøres på flest præcise resultater</p>
+    </Modal>
+  );
+}
+
+// Kort-visning: top 5 i tabel-format + link til fuld stilling, når der er flere.
+function Standings({ rows, userId, isComplete, ratingMap, title, onOpenFull }) {
+  return (
+    <>
+      <StandingsTable rows={rows.slice(0, 5)} userId={userId} isComplete={isComplete} ratingMap={ratingMap} />
+      {rows.length > 5 && (
+        <p style={{ ...muted, marginTop: 8, marginBottom: 0, cursor: "pointer", textDecoration: "underline" }}
+          onClick={() => onOpenFull({ title, rows, isComplete })}>
+          Vis hele stillingen ({rows.length}) →
+        </p>
+      )}
+      <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>🎯 = præcise resultater · uafgjort afgøres på flest præcise resultater</div>
+    </>
+  );
+}
 
 function ChampionshipTab({ token, userId, leagues = [] }) {
   const [months, setMonths] = useState([]);
@@ -15,12 +96,18 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
   const [rounds, setRounds] = useState([]);
   const [roundKey, setRoundKey] = useState(null);
   const [roundBoard, setRoundBoard] = useState(null);
+  const [ratingMap, setRatingMap] = useState(null); // user_id -> { rating, provisional }
+  const [full, setFull] = useState(null); // { title, rows, isComplete } — fuld-stilling-modal
 
   const superliga = useMemo(
     () => leagues.find((l) => /superliga/i.test(l.name || "") && l.is_visible !== false)
       || leagues.find((l) => /superliga/i.test(l.name || "")) || null,
     [leagues]
   );
+
+  useEffect(() => {
+    loadRatingMap(token).then(setRatingMap).catch(() => setRatingMap(new Map()));
+  }, [token]);
 
   useEffect(() => {
     (async () => {
@@ -112,23 +199,8 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
               <Crown size={16} color={C.gold} />
               <span style={{ fontSize: 13 }}><b>{roundBoard.rows[0].player}</b> {roundBoard.isComplete ? "er Rundens Prediction Champ" : "fører lige nu"}</span>
             </div>
-            {roundBoard.rows.map((r, i) => {
-              const you = r.userId === userId;
-              return (
-                <div key={r.userId} style={{
-                  display: "grid", gridTemplateColumns: "24px 1fr auto auto", gap: 10, alignItems: "center",
-                  padding: "8px 0", borderTop: i ? `1px solid ${C.line}` : "none",
-                  background: you ? "rgba(34,197,94,0.06)" : "transparent",
-                  margin: you ? "0 -8px" : 0, paddingLeft: you ? 8 : 0, paddingRight: you ? 8 : 0, borderRadius: you ? 8 : 0,
-                }}>
-                  <span style={{ fontFamily: font.display, fontWeight: 700, color: i === 0 ? C.gold : C.muted }}>{i + 1}</span>
-                  <span style={{ fontSize: 14, fontWeight: you ? 700 : 400 }}>{r.player}{you ? " (dig)" : ""}</span>
-                  <span style={{ color: C.muted, fontSize: 12 }}>{r.exactCount} × 🎯 · {r.matches} kampe</span>
-                  <span style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700 }}>{r.total}</span>
-                </div>
-              );
-            })}
-            <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>Samlede point for runden · uafgjort afgøres på flest præcise resultater</div>
+            <Standings rows={roundBoard.rows} userId={userId} isComplete={roundBoard.isComplete} ratingMap={ratingMap}
+              title={`Rundeliga · runde ${roundKey ? roundLabel(roundKey) : ""}`} onOpenFull={setFull} />
           </>
         )}
       </Card>
@@ -157,23 +229,10 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
 
         {loading && <p style={{ ...muted, margin: 0 }}>Henter…</p>}
         {!loading && rows && rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen point i denne måned endnu.</p>}
-        {!loading && rows && rows.map((r, i) => {
-          const you = r.userId === userId;
-          return (
-            <div key={r.userId} style={{
-              display: "grid", gridTemplateColumns: "24px 1fr auto auto", gap: 10, alignItems: "center",
-              padding: "8px 0", borderTop: i ? `1px solid ${C.line}` : "none",
-              background: you ? "rgba(34,197,94,0.06)" : "transparent",
-              margin: you ? "0 -8px" : 0, paddingLeft: you ? 8 : 0, paddingRight: you ? 8 : 0, borderRadius: you ? 8 : 0,
-            }}>
-              <span style={{ fontFamily: font.display, fontWeight: 700, color: i === 0 ? C.gold : C.muted }}>{i + 1}</span>
-              <span style={{ fontSize: 14, fontWeight: you ? 700 : 400 }}>{r.player}{you ? " (dig)" : ""}</span>
-              <span style={{ color: C.muted, fontSize: 12 }}>{r.exactCount} × 🎯 · {r.matches} kampe</span>
-              <span style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700 }}>{r.total}</span>
-            </div>
-          );
-        })}
-        <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>Samlede point for månedens kampe · uafgjort afgøres på flest præcise resultater</div>
+        {!loading && rows && rows.length > 0 && (
+          <Standings rows={rows} userId={userId} isComplete={isPast} ratingMap={ratingMap}
+            title={`Månedsliga · ${monthName(month)}`} onOpenFull={setFull} />
+        )}
       </Card>
 
       {/* Sæsonchampionship (live — samlede point for hele sæsonen) */}
@@ -204,23 +263,8 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
               <Crown size={16} color={C.gold} />
               <span style={{ fontSize: 13 }}><b>{season.rows[0].player}</b> {season.isComplete ? "er Sæsonens Prediction Champ" : "fører lige nu"}</span>
             </div>
-            {season.rows.map((r, i) => {
-              const you = r.userId === userId;
-              return (
-                <div key={r.userId} style={{
-                  display: "grid", gridTemplateColumns: "24px 1fr auto auto", gap: 10, alignItems: "center",
-                  padding: "8px 0", borderTop: i ? `1px solid ${C.line}` : "none",
-                  background: you ? "rgba(34,197,94,0.06)" : "transparent",
-                  margin: you ? "0 -8px" : 0, paddingLeft: you ? 8 : 0, paddingRight: you ? 8 : 0, borderRadius: you ? 8 : 0,
-                }}>
-                  <span style={{ fontFamily: font.display, fontWeight: 700, color: i === 0 ? C.gold : C.muted }}>{i + 1}</span>
-                  <span style={{ fontSize: 14, fontWeight: you ? 700 : 400 }}>{r.player}{you ? " (dig)" : ""}</span>
-                  <span style={{ color: C.muted, fontSize: 12 }}>{r.exactCount} × 🎯 · {r.matches} kampe</span>
-                  <span style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700 }}>{r.total}</span>
-                </div>
-              );
-            })}
-            <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>Samlede point for hele sæsonen · uafgjort afgøres på flest præcise resultater</div>
+            <Standings rows={season.rows} userId={userId} isComplete={season.isComplete} ratingMap={ratingMap}
+              title={`Sæsonchampionship · ${superliga?.name || "Superligaen"}`} onOpenFull={setFull} />
           </>
         )}
       </Card>
@@ -231,6 +275,11 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
           Her lander fremtidige events — fx en cup-weekend eller tema-runder
         </div>
       </Card>
+
+      {full && (
+        <FullStandingsModal title={full.title} rows={full.rows} userId={userId} isComplete={full.isComplete}
+          ratingMap={ratingMap} onClose={() => setFull(null)} />
+      )}
     </div>
   );
 }
