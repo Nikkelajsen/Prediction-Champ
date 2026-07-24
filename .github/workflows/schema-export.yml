@@ -10,9 +10,8 @@ name: Skema-eksport
 
 on:
   workflow_dispatch: {}
-  # Slå eventuelt en fast kadence til ved at fjerne kommentaren nedenfor:
-  # schedule:
-  #   - cron: "0 6 * * 1"   # hver mandag kl. 06:00 UTC
+  schedule:
+    - cron: "0 6 * * 1"   # hver mandag kl. 06:00 UTC — sikkerhedsnet mod skema-drift
 
 permissions:
   contents: write
