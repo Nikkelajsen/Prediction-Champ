@@ -280,7 +280,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div style={{ minWidth: 0 }}>
           <Eyebrow>{daFullDate()}</Eyebrow>
           <H size={30}>Hej {displayName}</H>
@@ -290,8 +290,8 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         {snapshot && !snapshot.none && (
           <div onClick={() => (openProfile ? openProfile(userId) : goTab("rating"))}
             style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", cursor: "pointer", flexShrink: 0 }}>
-            <span style={{ fontFamily: font.display, textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10, color: C.muted }}>Rating</span>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <Eyebrow>Rating</Eyebrow>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: -8 }}>
               <span style={{ fontFamily: font.display, fontSize: 26, fontWeight: 700 }}>{snapshot.rating}{snapshot.provisional ? <span style={{ color: C.muted, fontSize: 15 }}>*</span> : ""}</span>
               <Move d={snapshot.move} />
             </div>
