@@ -1,6 +1,6 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
-import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X } from "lucide-react";
+import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { loadGroupByCode, joinGroup } from "../lib/data.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
@@ -252,6 +252,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
             Prediction Champ
           </span>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={() => openProfile(userId)} aria-label="Min karriereprofil" style={iconBtn}><User size={18} /></button>
             <button onClick={openHow} aria-label="Sådan virker det" style={iconBtn}><Info size={18} /></button>
             {isAdmin && <button onClick={openAdmin} aria-label="Admin" style={iconBtn}><Settings size={18} /></button>}
             <button onClick={onLogout} aria-label="Log ud" style={iconBtn}><LogOut size={17} /></button>
