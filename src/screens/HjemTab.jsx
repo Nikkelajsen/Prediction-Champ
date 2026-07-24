@@ -67,7 +67,7 @@ function PushOptInCard({ token, userId }) {
 }
 
 // Historie-kort (Story Engine v1). Guld-fremhævet, vises direkte under tips-status.
-// v1: skyggetilstand — kaldes kun for admin fra HjemTab. Del deler headline+body;
+// Live for alle brugere. Del deler headline+body;
 // Afvis sætter dismissed_at og skjuler kortet.
 function StoryCard({ story, onDismiss }) {
   async function share() {
@@ -167,7 +167,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
   const [round, setRound] = useState(null); // live-oversigt over indeværende runde
   const [snapshot, setSnapshot] = useState(null); // { rating, move, form, rank, total }
   const [placements, setPlacements] = useState(null); // [{ label, pos, gold, onClick }]
-  const [story, setStory] = useState(null); // Story Engine — seneste historie (v1: kun admin)
+  const [story, setStory] = useState(null); // Story Engine — seneste historie (live for alle)
   const [groups, setGroups] = useState(null); // brugerens ligaer (grupper) — til tom-tilstand
   const [, setTick] = useState(0);
 
@@ -183,16 +183,15 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
     return () => { cancelled = true; };
   }, [token, userId]);
 
-  // Historie-kort (skyggetilstand): hentes kun for admin i v1.
+  // Historie-kort: hentes for alle brugere (Story Engine er live, jf. ROADMAP juli 2026).
   useEffect(() => {
-    if (!profile?.is_admin) { setStory(null); return; }
     let cancelled = false;
     (async () => {
       const s = await loadLatestStory(token);
       if (!cancelled) setStory(s);
     })();
     return () => { cancelled = true; };
-  }, [token, profile]); // eslint-disable-line
+  }, [token]);
 
   async function onDismissStory() {
     const s = story;
