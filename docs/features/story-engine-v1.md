@@ -1,6 +1,6 @@
 # Feature: Story Engine v1
 
-**Status: ✅ Leveret — kører i skyggetilstand, kun admin (juli 2026)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 1*
+**Status: ✅ Leveret — live for alle brugere (juli 2026)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 1*
 
 *Regelbaseret første version. Ingen AI. Bygget på data, der allerede findes i databasen.*
 
@@ -210,9 +210,9 @@ Sletter og genberegner rundens rækker (idempotent, ligesom `recompute_ratings`)
 
 ## 7. Udrulning
 
-1. **Skyggetilstand (1–2 runder):** Historier genereres, men vises kun for admin. Formålet er at læse dem med friske øjne: Rammer tonen? Er der for mange? For få?
-2. **Justér tærskler:** Comeback-grænsen (≥3 pladser) og stime-grænsen (≥3 runder) er gæt — de kalibreres på rigtige data (åben beslutning A4).
-3. **Live for alle** med et lille "Nyt: Historier"-kort første gang.
+1. **Skyggetilstand (1–2 runder):** ✅ Gennemført. Historier blev genereret, men vist kun for admin, så tonen kunne læses med friske øjne.
+2. **Justér tærskler:** Comeback-grænsen (≥3 pladser) og stime-grænsen (≥3 runder) er gæt — de kalibreres fortsat på rigtige data (åben beslutning A4).
+3. **Live for alle:** ✅ Skyggetilstand fjernet (juli 2026) — historie-kortet hentes nu for alle brugere på Hjem (`HjemTab`, `loadLatestStory`). Tærskel-kalibrering (A4) kører videre på live-data.
 
 ## 8. Acceptkriterier
 
@@ -236,4 +236,4 @@ Sletter og genberegner rundens rækker (idempotent, ligesom `recompute_ratings`)
 
 ---
 
-*Næste skridt: Kalibrér i skyggetilstand på 1–2 rigtige runder (åbne beslutninger A3/A4/A5 i roadmappen: stille runder, tærskler, emojis) → åbn derefter for alle med et lille "Nyt: Historier"-kort.*
+*Status: Live for alle brugere (juli 2026). Næste skridt: kalibrér tærskler og tone på live-data (åbne beslutninger A3/A4/A5 i roadmappen: stille runder, tærskler, emojis).*

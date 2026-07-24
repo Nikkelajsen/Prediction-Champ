@@ -207,6 +207,9 @@ Dubletter i `teams` (med og uden `api_team_id`)	Seed-listens navne matchede ikke
 14. Changelog
 Nyeste øverst. Ældre "patch"-numre stammer fra tidligere fejlrettelser (se afsnit 13).
 
+Juli 2026 — Story Engine live for alle
+Skyggetilstanden er fjernet: historie-kortet på Hjem vises nu for alle brugere. Gaten var udelukkende frontend (`HjemTab` hentede kun `latest_story`, når `profile.is_admin`) — genereringen (`generate_stories`) og RLS'en (`stories`: læs/afvis kun egne) var altid pr. bruger, så ingen SQL-ændring var nødvendig. `is_admin`-betingelsen i historie-hentnings-`useEffect`'en er fjernet, så alle henter deres egen seneste historie. Tærskler (comeback ≥3 pladser, stime ≥3 runder, A4) kalibreres videre på live-data. Se afsnit 17.
+
 Juli 2026 — Karriereprofil v1
 Ny drill-in-skærm (`src/screens/ProfileScreen.jsx`), der samler brugerens karriere som en fortælling: hoved (navn, "medlem siden", rating + ▲/▼ + "NY"-badge), titler (månedstitler + antal rundesejre, kun for afsluttede måneder/runder), milepæle (kronologisk minde-liste fra story-arkivets `headline` — private, kun egen profil), ratingkurve (letvægts inline-SVG, provisorisk periode markeret) og rivaler (story-optælling, kun egen profil), med diskrete basistal nederst (point, 🎯 præcise, træfsikkerhed, tippede kampe). Ingen nye tabeller — al læsning samles i ét DB-RPC `career_profile(profile_user_id)` (`sql/career_profile.sql`, `security definer`, mønster som `admin_user_stats()`), gated på K1-relationen (egen profil, eller en man deler en liga/konkurrence med) i stedet for admin. Basistal og titler bruger samme 3/1-udtryk som `round_standings`/`season_standings` (F2), så de altid matcher Championship-fanen. Milepæle læses separat client-side via den eksisterende RLS på `stories` (kun egne rækker), så de forbliver private; rivaler kommer kun med i RPC-svaret for egen profil. Frontend-helpers `loadCareerProfile`/`loadCareerMilestones` (`data.js`, enhedstestet). Nået via rating-snapshot-kortet på Hjem og navne-klik i Rating-ranglisten (andres profiler uden delt liga/konkurrence giver en pæn "forbidden"-tekst). Engangsopsætning: kør `sql/career_profile.sql` i Supabase ("Run without RLS"). Se afsnit 19. Spec: `docs/features/karriereprofil-v1.md`.
 
@@ -323,9 +326,9 @@ Data & RLS: `stories` (payload + færdig `headline`/`body` + `league_size`-snaps
 
 Frontend: guld-fremhævet historie-kort på Hjem, direkte under tips-status-kortet, altid synligt (viger ikke for deadline). Helpers `loadLatestStory`/`dismissStory` (`data.js`); ren regel-/tekst-logik i `src/lib/stories.js` (enhedstestet). "Del" deler headline+body (`navigator.share`, fallback udklipsholder); "Afvis" sætter `dismissed_at`.
 
-Skyggetilstand: v1 viser kortet KUN for admin (`profile.is_admin`), så historierne kan læses med friske øjne på rigtige data, før de vises for alle. Tærskler (comeback ≥3 pladser, stime ≥3 runder) kalibreres i denne periode.
+Synlighed: kortet er live for alle brugere (skyggetilstand fjernet, juli 2026). `HjemTab` henter `loadLatestStory` for enhver bruger — tidligere var hentningen gated på `profile.is_admin`. Tærskler (comeback ≥3 pladser, stime ≥3 runder) kalibreres videre på live-data (åben beslutning A4).
 
-Engangsopsætning: kør `sql/story_engine.sql` i Supabase ("Run without RLS"), og gen-kør `sql/rating_trigger_optimization.sql` (hooker `generate_stories` ind i triggeren). SQL'en er skrevet mod det dokumenterede skema (afsnit 2) — verificér i skyggetilstand, og tjek kolonne-/tabelnavne mod `sql/schema.sql` (fuldt skema-øjebliksbillede, afsnit 12).
+Engangsopsætning: kør `sql/story_engine.sql` i Supabase ("Run without RLS"), og gen-kør `sql/rating_trigger_optimization.sql` (hooker `generate_stories` ind i triggeren). SQL'en er skrevet mod det dokumenterede skema (afsnit 2) — tjek kolonne-/tabelnavne mod `sql/schema.sql` (fuldt skema-øjebliksbillede, afsnit 12).
 
 Bemærkning (v2): runde-resultat-notifikationen (afsnit 16) kan senere bruge brugerens historie-`headline` som beskedtekst i stedet for den generiske point/placering-tekst.
 ---
