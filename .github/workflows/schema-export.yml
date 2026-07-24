@@ -35,7 +35,10 @@ jobs:
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
-          pg_dump --version
+          # Runneren har pg_dump 16 forudinstalleret på PATH; læg pg17-binæren forrest,
+          # ellers fejler dumpet med "server version mismatch" mod Supabases PG 17-server.
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Eksportér public-skema → sql/schema.sql
         env:
