@@ -50,7 +50,7 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 
 ## 4. Forudsætning
 
-**F1 (delt med [`karriereprofil-v1.md`](./karriereprofil-v1.md)): kerneskemaet eksporteres til repoet** (`sql/schema.sql`, se DOCUMENTATION.md afsnit 12), før der skrives ny SQL eller fejlsøges på tværs af turneringer. Driftstrinnene i 3.1 kan dog udføres uden.
+**F1 (delt med [`karriereprofil-v1.md`](./karriereprofil-v1.md)): ✅ Lukket (juli 2026)** — kerneskemaet ligger i `sql/schema.sql` og holdes opdateret af det ugentlige workflow (`.github/workflows/schema-export.yml`, guide i `sql/README.md`).
 
 ## 5. Acceptkriterier
 

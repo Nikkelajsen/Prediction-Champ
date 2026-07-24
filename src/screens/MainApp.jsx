@@ -46,7 +46,13 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       const hiddenMap = Object.fromEntries(myComps.map((c) => [c.competition_id, !!c.hidden]));
       const ids = myComps.map((c) => c.competition_id).join(",");
       const comps = await db.select(token, "competitions", `id=in.(${ids})&select=*`);
-      const merged = comps.map((c) => ({ ...c, _hidden: hiddenMap[c.id] || false }));
+      // Arkivering (`hidden`) er en affordance for LIGA-LØSE konkurrencer (kun der vises
+      // Arkivér/Gendan). En konkurrence, der ligger i en liga, styres via Deltag/Framelding
+      // — ikke arkivering. Uden dette kunne et forældet hidden-flag (fx sat mens konkurrencen
+      // var liga-løs og siden flyttet ind i en liga via move_competition_to_group) skjule den
+      // på Hjem/Tip, selvom liga-siden stadig viser den som "Med" — og brugeren kunne ikke
+      // gendanne den, da Gendan-knappen ikke findes for liga-konkurrencer.
+      const merged = comps.map((c) => ({ ...c, _hidden: c.group_id ? false : (hiddenMap[c.id] || false) }));
       setCompetitions(merged);
       return merged;
     }
@@ -213,7 +219,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     body = <HowItWorksScreen onBack={() => setScreen(null)} />;
   } else if (tab === "hjem") {
     body = <HjemTab token={token} userId={userId} profile={profile} competitions={competitions.filter((c) => !c._hidden)}
-      goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} />;
+      goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} openGroup={openGroup} />;
   } else if (tab === "tip") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
       leagues={visibleLeagues} initialFilter="all" />;

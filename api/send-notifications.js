@@ -200,22 +200,44 @@ export default async function handler(req, res) {
     if (!outbox.length) return res.status(200).json({ sent: 0, note: "Intet at sende lige nu" });
 
     // ---- dedup mod notification_log ----
+    // Dette første filter er kun en optimering (spring beskeder over, en tidligere
+    // kørsel allerede har sendt). Den EGENTLIGE sikring mod dubletter er "claim"-
+    // trinnet nedenfor: vi skriver til notification_log FØR vi sender, og sender kun
+    // de rækker, netop denne kørsel selv fik indsat. Ellers taber check-derefter-send
+    // et kapløb, hvis to kald til funktionen kører samtidig (fx flere cron-job, der
+    // rammer endpointet på samme minut, eller overlappende kørsler): begge læser en
+    // tom log, begge sender — og brugeren får to ens notifikationer på samme tid.
     const userIds = [...new Set(outbox.map((o) => o.userId))];
     const keys = [...new Set(outbox.map((o) => o.key))];
     const logged = await sb(`/rest/v1/notification_log?user_id=in.(${userIds.join(",")})&key=in.(${keys.map((k) => encodeURIComponent(`"${k}"`)).join(",")})&select=user_id,key`);
     const alreadySent = new Set(logged.map((l) => `${l.user_id}:${l.key}`));
-    const toSend = outbox.filter((o) => !alreadySent.has(`${o.userId}:${o.key}`));
+    const candidates = outbox.filter((o) => !alreadySent.has(`${o.userId}:${o.key}`));
 
     if (dryRun) {
       return res.status(200).json({
         dryRun: true,
         note: "Intet er sendt eller logget — dette er kun en forhåndsvisning.",
-        wouldSend: toSend.map(({ userId, key, title, body }) => ({ userId, key, title, body })),
+        wouldSend: candidates.map(({ userId, key, title, body }) => ({ userId, key, title, body })),
       });
     }
-    if (!toSend.length) return res.status(200).json({ sent: 0, note: "Alt er allerede sendt" });
+    if (!candidates.length) return res.status(200).json({ sent: 0, note: "Alt er allerede sendt" });
 
-    // ---- send + log + ryd døde abonnementer op ----
+    // ---- claim: reservér beskederne i notification_log FØR de sendes ----
+    // resolution=ignore-duplicates ⇒ rækker, som en anden (samtidig eller tidligere)
+    // kørsel allerede har taget, springes over og returneres IKKE. Kun de rækker,
+    // dette kald selv indsatte, kommer retur — og kun dem sender vi. Dermed er
+    // indsættelsen den atomare lås, der forhindrer to samtidige kørsler i at sende
+    // den samme besked hver især.
+    const claimed = (await sb(`/rest/v1/notification_log?on_conflict=user_id,key`, {
+      method: "POST",
+      prefer: "resolution=ignore-duplicates,return=representation",
+      body: JSON.stringify(candidates.map((o) => ({ user_id: o.userId, key: o.key }))),
+    })) || [];
+    const claimedSet = new Set(claimed.map((r) => `${r.user_id}:${r.key}`));
+    const toSend = candidates.filter((o) => claimedSet.has(`${o.userId}:${o.key}`));
+    if (!toSend.length) return res.status(200).json({ sent: 0, note: "Alt er allerede sendt (taget af en anden kørsel)" });
+
+    // ---- send + ryd døde abonnementer op ----
     let sent = 0;
     const deadSubIds = new Set();
     for (const msg of toSend) {
@@ -232,11 +254,6 @@ export default async function handler(req, res) {
         }
       }
     }
-    await sb(`/rest/v1/notification_log?on_conflict=user_id,key`, {
-      method: "POST",
-      prefer: "resolution=ignore-duplicates,return=minimal",
-      body: JSON.stringify(toSend.map((o) => ({ user_id: o.userId, key: o.key }))),
-    });
     if (deadSubIds.size) {
       await sb(`/rest/v1/push_subscriptions?id=in.(${[...deadSubIds].join(",")})`, { method: "DELETE", prefer: "return=minimal" });
     }

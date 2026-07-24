@@ -74,7 +74,7 @@ Oppefra og ned på profilsiden:
 
 | # | Forudsætning | Hvorfor |
 |---|---|---|
-| **F1** | **Kerneskemaet eksporteres til repoet** (`sql/schema.sql` — se DOCUMENTATION.md afsnit 12). | Al ny SQL skrives ellers i blinde mod det *dokumenterede* skema — samme forbehold som Story Engine- og liga-laget-spec'erne måtte tage. Karriereprofilen er ren læse-SQL oven på netop de tabeller, der ikke er versioneret. |
+| **F1** | ~~Kerneskemaet eksporteres til repoet~~ **✅ Lukket (juli 2026):** `sql/schema.sql` er i repoet og holdes opdateret af det ugentlige workflow `.github/workflows/schema-export.yml` (guide: `sql/README.md`). | Ny SQL kan nu skrives og verificeres mod den faktiske DDL. |
 | **F2** | **Én pointkilde.** Afklar scoring-dupliketten: `pointsFor` (frontend) læser `rules`-jsonb, mens `round_standings`/`season_standings`/`monthly_standings`/`generate_stories` hardkoder 3/1. Beslut enten (a) `pc_points` i DB læser `rules`, eller (b) det slås fast, at globale opgørelser altid er 3/1 uanset konkurrence-regler — og det dokumenteres. | Karriereprofilens basistal skal bygge på stillingernes kilde. Uden afklaring arver profilen en kendt inkonsistens og gør den mere synlig. |
 
 ## 8. Åbne beslutninger
@@ -97,4 +97,4 @@ Oppefra og ned på profilsiden:
 
 ---
 
-*Næste skridt: Luk F1 (skema-eksport — brugerens opgave, kræver Supabase-adgang) og afgør F2 + K1 → implementér som feature-branch.*
+*Næste skridt: F1 er lukket — afgør F2 + K1 → implementér som feature-branch.*

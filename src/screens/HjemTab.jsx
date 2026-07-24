@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { Bell, ChevronRight, Clock, Check, X, Share2 } from "lucide-react";
 import { formatKickoff, outcome } from "../lib/scoring.js";
 import { db } from "../lib/supabase.js";
-import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
+import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadMyGroups, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { enablePush, getExistingSubscription, isPushSupported } from "../lib/push.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
 import { Card, Eyebrow, FormDots, H, Move } from "../ui/components.jsx";
@@ -162,13 +162,26 @@ function Placements({ placements, goTab, openBoard }) {
   );
 }
 
-function HjemTab({ token, userId, profile, competitions, goTab, openPredictions, openBoard }) {
+function HjemTab({ token, userId, profile, competitions, goTab, openPredictions, openBoard, openGroup }) {
   const [tips, setTips] = useState(null);
   const [round, setRound] = useState(null); // live-oversigt over indeværende runde
   const [snapshot, setSnapshot] = useState(null); // { rating, move, form, rank, total }
   const [placements, setPlacements] = useState(null); // [{ label, pos, gold, onClick }]
   const [story, setStory] = useState(null); // Story Engine — seneste historie (v1: kun admin)
+  const [groups, setGroups] = useState(null); // brugerens ligaer (grupper) — til tom-tilstand
   const [, setTick] = useState(0);
+
+  // Ligaer (grupper): hentes for at kunne skelne "helt uden fællesskab" fra "med i en liga,
+  // men endnu ikke tilmeldt en konkurrence" i tom-tilstanden. Uden dette fik et liga-medlem
+  // uden aktiv konkurrence fejlagtigt beskeden "Du er ikke med i nogen ligaer endnu".
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try { const g = await loadMyGroups(token, userId); if (!cancelled) setGroups(g); }
+      catch (e) { if (!cancelled) setGroups([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [token, userId]);
 
   // Historie-kort (skyggetilstand): hentes kun for admin i v1.
   useEffect(() => {
@@ -274,7 +287,23 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
 
       {/* Signatur: næste deadline */}
       {tips === null && <Card><span style={{ color: C.muted, fontSize: 13 }}>Henter din næste deadline…</span></Card>}
-      {tips && !tips.hasComps && (
+      {/* Tom-tilstand: skeln mellem "helt uden fællesskab" og "med i en liga, men uden
+          aktiv konkurrence". Vent på ligaerne (groups !== null), så vi ikke først viser den
+          forkerte besked og bagefter retter den. */}
+      {tips && !tips.hasComps && groups === null && (
+        <Card><span style={{ color: C.muted, fontSize: 13 }}>Henter dine ligaer…</span></Card>
+      )}
+      {tips && !tips.hasComps && groups && groups.length > 0 && (
+        <Card style={{ borderStyle: "dashed", background: "transparent" }}>
+          <div style={{ color: C.muted, fontSize: 14, textAlign: "center" }}>
+            Du er med i {groups.length === 1 ? <>ligaen <b style={{ color: C.text }}>{groups[0].name}</b></> : `${groups.length} ligaer`}, men har ikke tilmeldt dig en konkurrence endnu.{" "}
+            <span onClick={() => (groups.length === 1 ? openGroup?.(groups[0].id) : goTab("ligaer"))} style={{ color: C.green, cursor: "pointer", fontWeight: 700 }}>
+              {groups.length === 1 ? "Åbn ligaen og deltag →" : "Vælg en konkurrence →"}
+            </span>
+          </div>
+        </Card>
+      )}
+      {tips && !tips.hasComps && groups && groups.length === 0 && (
         <Card style={{ borderStyle: "dashed", background: "transparent" }}>
           <div style={{ color: C.muted, fontSize: 14, textAlign: "center" }}>
             Du er ikke med i nogen ligaer endnu. <span onClick={() => goTab("ligaer")} style={{ color: C.green, cursor: "pointer", fontWeight: 700 }}>Opret eller join én →</span>
