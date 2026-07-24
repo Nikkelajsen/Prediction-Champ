@@ -14,6 +14,7 @@ import BoardScreen from "./BoardScreen.jsx";
 import PredictionsScreen from "./PredictionsScreen.jsx";
 import CreateCompetitionScreen from "./CreateCompetitionScreen.jsx";
 import AdminScreen from "./AdminScreen.jsx";
+import ProfileScreen from "./ProfileScreen.jsx";
 import HowItWorksScreen from "./HowItWorksScreen.jsx";
 import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
 
@@ -181,6 +182,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   const openPredictions = (compFilter = "all", roundKey = null) => setScreen({ type: "predictions", compFilter, roundKey });
   const openCreate = (groupId = null) => setScreen({ type: "create", groupId });
   const openGroup = (groupId) => setScreen({ type: "group", groupId });
+  const openProfile = (profileUserId) => setScreen({ type: "profile", profileUserId });
   const openAdmin = () => setScreen({ type: "admin" });
   const openHow = () => setScreen({ type: "how" });
 
@@ -215,11 +217,13 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       onCreated={async () => { await loadCompetitions(); }} openBoard={openBoard} />;
   } else if (screen?.type === "admin") {
     body = <AdminScreen token={token} leagues={leagues} reloadLeagues={loadLeagues} onBack={() => setScreen(null)} />;
+  } else if (screen?.type === "profile") {
+    body = <ProfileScreen token={token} viewerUserId={userId} profileUserId={screen.profileUserId} onBack={() => setScreen(null)} />;
   } else if (screen?.type === "how") {
     body = <HowItWorksScreen onBack={() => setScreen(null)} />;
   } else if (tab === "hjem") {
     body = <HjemTab token={token} userId={userId} profile={profile} competitions={competitions.filter((c) => !c._hidden)}
-      goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} openGroup={openGroup} />;
+      goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} openGroup={openGroup} openProfile={openProfile} />;
   } else if (tab === "tip") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
       leagues={visibleLeagues} initialFilter="all" />;
@@ -229,7 +233,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   } else if (tab === "championship") {
     body = <ChampionshipTab token={token} userId={userId} leagues={visibleLeagues} />;
   } else if (tab === "rating") {
-    body = <RatingTab token={token} userId={userId} />;
+    body = <RatingTab token={token} userId={userId} openProfile={openProfile} />;
   }
 
   return (

@@ -4,7 +4,7 @@ import { loadRatingBoard, loadRatingHistory } from "../lib/data.js";
 import { C, font, muted } from "../ui/theme.js";
 import { Card, Eyebrow, FormDots, H, InfoDot, Move } from "../ui/components.jsx";
 
-function RatingTab({ token, userId }) {
+function RatingTab({ token, userId, openProfile }) {
   const [rows, setRows] = useState(null);
   const [hist, setHist] = useState(new Map());
   const [loading, setLoading] = useState(true);
@@ -46,7 +46,10 @@ function RatingTab({ token, userId }) {
                 <span style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, color: i === 0 ? C.gold : C.muted }}>{i + 1}</span>
                 <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                   <span style={{ fontSize: 14, fontWeight: you ? 700 : 500 }}>
-                    {r.player}{you ? " (dig)" : ""}
+                    <span onClick={() => openProfile?.(r.userId)}
+                      style={{ cursor: openProfile ? "pointer" : "default", textDecoration: openProfile ? "underline" : "none", textDecorationColor: C.line }}>
+                      {r.player}{you ? " (dig)" : ""}
+                    </span>
                     {r.provisional && <span style={{
                       marginLeft: 6, fontSize: 10, color: C.gold, border: `1px solid ${C.gold}`,
                       borderRadius: 4, padding: "1px 4px", verticalAlign: "middle",
