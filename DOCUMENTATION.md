@@ -72,7 +72,7 @@ Tiebreaker ved pointlighed: flest præcise resultater afgør først, dernæst fl
 Reglerne er faste og gælder alle konkurrencer (gemt i `rules`-feltet ved oprettelse, med sikre standardværdier — `{ exact: 3, outcome: 1 }` — for ældre konkurrencer uden feltet). Frontenden beregner point i helperen `pointsFor(pred, actual, rules)`.
 ---
 5. Prediction Champ Rating, månedsliga og sæsonchampionship
-Rating, månedsliga, rundeliga og sæsonchampionship bor alle i databasen (SQL) og læses af frontenden. SQL-scripterne er idempotente og kan køres igen når som helst (nye scripts ligger i `sql/`-mappen; det oprindelige skema-/rating-script bør også indsættes dér, så alt er versioneret — se afsnit 12).
+Rating, månedsliga, rundeliga og sæsonchampionship bor alle i databasen (SQL) og læses af frontenden. SQL-scripterne er idempotente og kan køres igen når som helst (nye scripts ligger i `sql/`-mappen; hele `public`-skemaet er desuden versioneret som øjebliksbillede i `sql/schema.sql` — se afsnit 12).
 
 Prediction Champ Rating
 Et selvkorrigerende Elo-tal, der måler hvor gode ens gæt er — ikke hvor mange point man har samlet, og uafhængigt af hvor mange ligaer man er med i.
@@ -146,7 +146,7 @@ Variabel	Formål
 Disse bruges kun af serverfunktionerne (`api/sync-matches.js` og `api/send-notifications.js`). Frontenden bruger som udgangspunkt en hårdkodet offentlig `SUPABASE_URL` + `publishable`-nøgle (i `src/lib/supabase.js`), men kan pege på en anden database via to valgfrie byggetids-variabler:
 `VITE_SUPABASE_URL`	Frontend: overstyr Supabase-URL (fx staging). Udeladt = produktion
 `VITE_SUPABASE_KEY`	Frontend: overstyr publishable-nøgle. Udeladt = produktion
-Staging-database (anbefalet opsætning): opret et Supabase-projekt nr. 2, kør alle scripts fra `sql/` (+ det oprindelige skema-/rating-script) dérinde, og sæt `VITE_SUPABASE_URL`/`VITE_SUPABASE_KEY` i Vercel KUN for Preview-miljøet (Settings → Environment Variables → Preview). Sæt tilsvarende `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` for Preview, så også serverfunktionen rammer staging. Lokalt: kopiér `.env.example` til `.env.local`.
+Staging-database (anbefalet opsætning): opret et Supabase-projekt nr. 2, kør `sql/schema.sql` dérinde (genskaber hele `public`-skemaet på én gang — tabeller, views, funktioner og grants; de enkelte `sql/`-scripts er da unødvendige), og sæt `VITE_SUPABASE_URL`/`VITE_SUPABASE_KEY` i Vercel KUN for Preview-miljøet (Settings → Environment Variables → Preview). Sæt tilsvarende `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` for Preview, så også serverfunktionen rammer staging. Lokalt: kopiér `.env.example` til `.env.local`.
 VIGTIGT: Uden disse variabler peger ALLE miljøer på SAMME Supabase-projekt — også Vercels preview-URL pr. branch. Data (resultater, gæt, konkurrencer) deles i så fald mellem preview og produktion: test UI/navigation frit på en preview, men undgå at taste rigtige resultater ind dér, da de rammer alle brugere.
 ---
 10. Sådan tilføjer du en ny liga
@@ -188,7 +188,7 @@ Alle kan oprette konti uden godkendelse — fint til en lukket venneflok.
 Push-notifikationer kræver opt-in pr. enhed (afsnit 16); der er ingen e-mail-påmindelser. På iOS virker push kun, når appen er føjet til hjemmeskærmen (iOS 16.4+).
 Koden er opdelt i moduler (afsnit 1). Den enkelte fil er nu overskuelig (største ~240 linjer); ved yderligere vækst kan `data.js` og de største skærme deles videre op.
 Rating-genberegningen er stadig en fuld genberegning fra bunden, men kører nu kun når et resultat reelt ændres (afsnit 5). Ved mange tusinde brugere bør selve beregningen laves inkrementel eller optimeres (sortér + histogram i stedet for alle-mod-alle).
-Det oprindelige skema-/rating-SQL ligger ikke i repoet (kun i Supabase). Indsæt det i `sql/`-mappen, så hele databasen kan genskabes fra git — nødvendigt bl.a. for at opsætte staging.
+Skemaet er nu versioneret i git: hele `public`-skemaet (struktur — tabeller, views, funktioner og grants, uden data og uden ejer-info) ligger i `sql/schema.sql`, genereret af skema-eksport-workflowen (`.github/workflows/schema-export.yml` — manuelt + ugentligt; guide i `sql/README.md`). Tidligere lå kun de enkelte migrerings-scripts i repoet. Bemærk begrænsningerne: `schema.sql` er et *øjebliksbillede*, ikke migrerings-kilden (skemaændringer laves fortsat via nye scripts i `sql/`, som workflowen så fanger i næste dump), det dækker kun `public` (ikke Supabase-interne skemaer som `auth`/`storage`), og det indeholder ingen data.
 Preview og produktion deler database, medmindre staging-variablerne er sat (afsnit 9) — selve staging-projektet skal oprettes manuelt i Supabase.
 ---
 13. Fejlfindingslog
@@ -322,7 +322,7 @@ Frontend: guld-fremhævet historie-kort på Hjem, direkte under tips-status-kort
 
 Skyggetilstand: v1 viser kortet KUN for admin (`profile.is_admin`), så historierne kan læses med friske øjne på rigtige data, før de vises for alle. Tærskler (comeback ≥3 pladser, stime ≥3 runder) kalibreres i denne periode.
 
-Engangsopsætning: kør `sql/story_engine.sql` i Supabase ("Run without RLS"), og gen-kør `sql/rating_trigger_optimization.sql` (hooker `generate_stories` ind i triggeren). SQL'en er skrevet mod det dokumenterede skema (afsnit 2) — verificér i skyggetilstand, da det oprindelige skema ikke ligger i repoet (afsnit 12).
+Engangsopsætning: kør `sql/story_engine.sql` i Supabase ("Run without RLS"), og gen-kør `sql/rating_trigger_optimization.sql` (hooker `generate_stories` ind i triggeren). SQL'en er skrevet mod det dokumenterede skema (afsnit 2) — verificér i skyggetilstand, og tjek kolonne-/tabelnavne mod `sql/schema.sql` (fuldt skema-øjebliksbillede, afsnit 12).
 
 Bemærkning (v2): runde-resultat-notifikationen (afsnit 16) kan senere bruge brugerens historie-`headline` som beskedtekst i stedet for den generiske point/placering-tekst.
 ---
@@ -339,6 +339,6 @@ Blød migrering: eksisterende konkurrencer har `group_id = null` og virker uænd
 
 Frontend: `GroupScreen.jsx` (liga-siden), omstruktureret `LigaerTab.jsx` (ligaer øverst + samlet join-felt + engangs-nudge), liga-dropdown i `CreateCompetitionScreen.jsx`, `?liga=<kode>`-deep-link i `App.jsx`/`MainApp.jsx`, liga-link i `BoardScreen.jsx`, og Hjem-fanens "Dine placeringer" grupperet pr. liga (`Placements`-komponent i `HjemTab.jsx`). Data-helpers i `data.js` (`loadMyGroups`, `loadGroupDetail`, `createGroup`, `joinGroup`, `leaveGroup`, `deleteGroup`, `joinCompetition`, `leaveCompetition`, `moveCompetitionToGroup`, `loadGroupByCode`). Enhedstests i `data.test.js`.
 
-Engangsopsætning: kør `sql/groups.sql` i Supabase ("Run without RLS"). Verificér i staging først — det oprindelige skema ligger ikke i repoet (afsnit 12), så kolonne-/tabelnavne skal matche. Tjek eksplicit for "infinite recursion" på `group_members` (kendt fælde).
+Engangsopsætning: kør `sql/groups.sql` i Supabase ("Run without RLS"). Verificér i staging først, og tjek kolonne-/tabelnavne mod `sql/schema.sql` (fuldt skema-øjebliksbillede, afsnit 12). Tjek eksplicit for "infinite recursion" på `group_members` (kendt fælde).
 ---
 Bed Claude om at opdatere denne fil, når der sker større ændringer.
