@@ -66,6 +66,17 @@ supabase db dump --schema public -f sql/schema.sql
 CLI'en udelader ejer-info som standard og tager grants med. Resultatet skal opfylde
 samme verifikationstjekliste som Vej 1.
 
+### Vej 3 — GitHub Action (automatiseret)
+
+`.github/workflows/schema-export.yml` kører Vej 1 på en GitHub-runner (som har fri
+netadgang til port 5432, i modsætning til web-sandkassen), kører verifikations-
+tjeklisten og committer `sql/schema.sql`, hvis noget er ændret.
+
+Engangsopsætning: læg forbindelsesstrengen ind som repo-secret `SUPABASE_DB_URL`
+(*Settings → Secrets and variables → Actions → New repository secret*). Kør derefter
+workflowen manuelt via **Actions → Skema-eksport → Run workflow** (eller slå den
+udkommenterede `schedule` til for fast kadence).
+
 ---
 
 ## Verifikationstjekliste
