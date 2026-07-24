@@ -43,7 +43,7 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 
 ### 3.3 Beslutninger, der udløses (fra roadmappens åbne beslutninger)
 
-- **A2 — Månedsliga ved flere turneringer: samlede point eller snit?** Skal afgøres *senest her*. Total belønner aktivitet (flere turneringer = flere kampe = fordel til dem, der tipper alt); snit belønner præcision. Nuværende linje (juli 2026-beslutningen): rating = gennemsnit, månedsliga = total. Afgørelsen føres i ROADMAP's beslutningslog, og `HowItWorksScreen` opdateres, hvis den ændres.
+- **A2 — ✅ Lukket (juli 2026):** Månedsligaen tæller **samlede point**, også med flere turneringer (rating dækker præcision via gennemsnit). Ingen kodeændring — `monthly_standings` og "Sådan virker det"-teksten er allerede korrekte.
 - **Trin 5 — global tirsdag–mandag-runde** bliver først reelt anderledes end turneringsrunder, når turnering #2 er i drift. Forbliver bevidst udskudt; dette dokument ændrer ikke på det, men tilføjelsen af turnering #2 er dens forudsætning.
 
 ---

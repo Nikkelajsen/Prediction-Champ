@@ -1,6 +1,6 @@
 # Feature: Karriereprofil v1
 
-**Status: Specificeret — afventer forudsætninger (se afsnit 7)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 5–6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 4*
+**Status: ✅ Klar til implementering (juli 2026 — F1/F2/K1 afgjort, se afsnit 7–8)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 5–6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 4*
 
 *Brugerens karriere som fortælling — milepæle, titler og rivaliseringer. Ikke en statistikside. Bygget på data, der allerede findes i databasen.*
 
@@ -75,13 +75,13 @@ Oppefra og ned på profilsiden:
 | # | Forudsætning | Hvorfor |
 |---|---|---|
 | **F1** | ~~Kerneskemaet eksporteres til repoet~~ **✅ Lukket (juli 2026):** `sql/schema.sql` er i repoet og holdes opdateret af det ugentlige workflow `.github/workflows/schema-export.yml` (guide: `sql/README.md`). | Ny SQL kan nu skrives og verificeres mod den faktiske DDL. |
-| **F2** | **Én pointkilde.** Afklar scoring-dupliketten: `pointsFor` (frontend) læser `rules`-jsonb, mens `round_standings`/`season_standings`/`monthly_standings`/`generate_stories` hardkoder 3/1. Beslut enten (a) `pc_points` i DB læser `rules`, eller (b) det slås fast, at globale opgørelser altid er 3/1 uanset konkurrence-regler — og det dokumenteres. | Karriereprofilens basistal skal bygge på stillingernes kilde. Uden afklaring arver profilen en kendt inkonsistens og gør den mere synlig. |
+| **F2** | ~~Én pointkilde~~ **✅ Besluttet (juli 2026): 3-1-0 fastfryses overalt.** `rules`-feltet er historisk; alle opgørelser er altid 3/1 (DB'ens `pc_points` er kilden). Karriereprofilens tal bygger direkte på `pc_points`/stillings-views'ene. | Bekræftet mod `sql/schema.sql`: `pc_points()` hardkoder 3/1 og ignorerer `rules` — beslutningen matcher den faktiske adfærd. Frontendens `rules`-læsning kan afvikles som separat oprydning. |
 
 ## 8. Åbne beslutninger
 
 | # | Spørgsmål | v1-anbefaling |
 |---|---|---|
-| K1 | **Hvem kan se en profil?** Kun egen, eller alle man deler liga/konkurrence med? | Delte ligaer/konkurrencer (rivalisering kræver et publikum) — men milepæle forbliver private. |
+| K1 | ~~Hvem kan se en profil?~~ **✅ Besluttet (juli 2026):** alle, man deler en liga eller konkurrence med, kan se profilen (hoved, titler, kurve, basistal) — milepæle fra `stories` forbliver private. | Rivalisering kræver et publikum; historier er personlige. |
 | K2 | **Per-turnering-opdeling fra start?** `ratings.scope` er forberedt til per-liga-rating. | Nej — vent til turnering #2 er i drift ([`turnering-2.md`](./turnering-2.md)), ellers bygges en vælger uden indhold. |
 | K3 | **Rival-definitionen.** Ren `stories`-optælling (regel 40/60) eller også placerings-nabo-analyse fra `rating_history.rnk`? | Start med `stories`-optælling (billigst, allerede fortælle-formet); udvid hvis den giver for få rivaler i små ligaer. |
 
@@ -97,4 +97,4 @@ Oppefra og ned på profilsiden:
 
 ---
 
-*Næste skridt: F1 er lukket — afgør F2 + K1 → implementér som feature-branch.*
+*Næste skridt: Alle forudsætninger og blokerende beslutninger er lukket — implementér som feature-branch (SQL verificeres mod `sql/schema.sql`).*
