@@ -1,6 +1,6 @@
 # Feature: Story Engine v1
 
-**Status: Specificeret — klar til implementering (skyggetilstand først)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 2*
+**Status: ✅ Leveret — kører i skyggetilstand, kun admin (juli 2026)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 1*
 
 *Regelbaseret første version. Ingen AI. Bygget på data, der allerede findes i databasen.*
 
@@ -221,7 +221,7 @@ Sletter og genberegner rundens rækker (idempotent, ligesom `recompute_ratings`)
 - En runde uden udløste regler viser intet historie-kort.
 - Genkørsel af `generate_stories` for samme runde ændrer ingenting (idempotent).
 - Ingen historie omtaler en bruger negativt om placering i bunden eller dårlige præstationer.
-- Historie-kortet viger for deadline-kortet, når der er utippede kampe med nær deadline.
+- Historie-kortet vises altid direkte under tips-status-kortet — også samtidig med det røde "mangler tips"-kort (jf. beslutningen i ROADMAP, juli 2026: handling øverst, historie lige under).
 - En bruger kan aldrig læse en anden brugers historier (RLS).
 - Månedens Champ-teksten angiver samlede point (aldrig gennemsnit).
 
@@ -236,4 +236,4 @@ Sletter og genberegner rundens rækker (idempotent, ligesom `recompute_ratings`)
 
 ---
 
-*Næste skridt: Godkend regelkatalog og tone → implementér som feature-branch med skyggetilstand → kalibrér på runde 1–2 af den nye sæson.*
+*Næste skridt: Kalibrér i skyggetilstand på 1–2 rigtige runder (åbne beslutninger A3/A4/A5 i roadmappen: stille runder, tærskler, emojis) → åbn derefter for alle med et lille "Nyt: Historier"-kort.*
