@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // db mockes, så loaderne kan testes uden netværk/Supabase
 vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
-import { loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadMyGroups, loadGroupDetail, leaveCompetition, moveCompetitionToGroup } from "./data.js";
+import { loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, leaveCompetition, moveCompetitionToGroup } from "./data.js";
 
 // mock-svar pr. tabel/view
 function mockTables(tables) {
@@ -100,6 +100,42 @@ describe("loadLatestStory (latest_story-view)", () => {
   it("returnerer null uden historier", async () => {
     mockTables({ latest_story: [] });
     expect(await loadLatestStory("token")).toBeNull();
+  });
+});
+
+describe("karriereprofil", () => {
+  it("loadCareerProfile kalder RPC med profile_user_id og returnerer jsonb", async () => {
+    const payload = { head: { display_name: "Anna" }, titles: { monthly: [], round_wins: 0 }, curve: [], base: {}, rivals: [], is_own: true };
+    restFetch.mockResolvedValueOnce(payload);
+    const res = await loadCareerProfile("token", "u1");
+    expect(res).toBe(payload);
+    expect(restFetch).toHaveBeenCalledWith("/rest/v1/rpc/career_profile",
+      expect.objectContaining({ method: "POST", token: "token", body: { profile_user_id: "u1" } }));
+  });
+
+  it("loadCareerMilestones returnerer [] for andres profil uden at læse stories", async () => {
+    const res = await loadCareerMilestones("token", "u2", false);
+    expect(res).toEqual([]);
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it("loadCareerMilestones mapper egne stories-rækker (nyeste først)", async () => {
+    mockTables({
+      stories: [
+        { id: "s1", round_key: "2026-07-21", rule: "MONTH_CHAMP", headline: "👑 Månedens", body: "B1", created_at: "2026-07-22" },
+        { id: "s2", round_key: "2026-07-14", rule: "STREAK", headline: "🔥 Stime", body: "B2", created_at: "2026-07-15" },
+      ],
+    });
+    const res = await loadCareerMilestones("token", "u1", true);
+    expect(res).toEqual([
+      { id: "s1", roundKey: "2026-07-21", rule: "MONTH_CHAMP", headline: "👑 Månedens", body: "B1", createdAt: "2026-07-22" },
+      { id: "s2", roundKey: "2026-07-14", rule: "STREAK", headline: "🔥 Stime", body: "B2", createdAt: "2026-07-15" },
+    ]);
+  });
+
+  it("loadCareerMilestones degraderer stille til [] ved fejl", async () => {
+    db.select.mockRejectedValueOnce(new Error("boom"));
+    expect(await loadCareerMilestones("token", "u1", true)).toEqual([]);
   });
 });
 

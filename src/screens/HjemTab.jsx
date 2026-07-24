@@ -162,7 +162,7 @@ function Placements({ placements, goTab, openBoard }) {
   );
 }
 
-function HjemTab({ token, userId, profile, competitions, goTab, openPredictions, openBoard, openGroup }) {
+function HjemTab({ token, userId, profile, competitions, goTab, openPredictions, openBoard, openGroup, openProfile }) {
   const [tips, setTips] = useState(null);
   const [round, setRound] = useState(null); // live-oversigt over indeværende runde
   const [snapshot, setSnapshot] = useState(null); // { rating, move, form, rank, total }
@@ -378,9 +378,9 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         </Card>
       )}
 
-      {/* Rating-snapshot */}
+      {/* Rating-snapshot — åbner egen karriereprofil (rating, kurve, titler, milepæle) */}
       {snapshot && !snapshot.none && (
-        <Card onClick={() => goTab("rating")}>
+        <Card onClick={() => (openProfile ? openProfile(userId) : goTab("rating"))}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <Eyebrow>Din rating</Eyebrow>

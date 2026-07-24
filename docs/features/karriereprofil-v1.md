@@ -1,6 +1,6 @@
 # Feature: Karriereprofil v1
 
-**Status: ✅ Klar til implementering (juli 2026 — F1/F2/K1 afgjort, se afsnit 7–8)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 5–6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 4*
+**Status: ✅ Leveret (juli 2026) — `sql/career_profile.sql` + `src/screens/ProfileScreen.jsx`. K1 med fra start (andres profiler for delt liga/konkurrence).** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 5–6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 4*
 
 *Brugerens karriere som fortælling — milepæle, titler og rivaliseringer. Ikke en statistikside. Bygget på data, der allerede findes i databasen.*
 
