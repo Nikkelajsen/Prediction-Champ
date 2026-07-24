@@ -289,9 +289,9 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
             Placering ("Nr. X af Y") udelades bevidst for at spare plads. */}
         {snapshot && !snapshot.none && (
           <div onClick={() => (openProfile ? openProfile(userId) : goTab("rating"))}
-            style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", cursor: "pointer", flexShrink: 0 }}>
+            style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", cursor: "pointer", flexShrink: 0 }}>
             <Eyebrow>Rating</Eyebrow>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: -8 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
               <span style={{ fontFamily: font.display, fontSize: 26, fontWeight: 700 }}>{snapshot.rating}{snapshot.provisional ? <span style={{ color: C.muted, fontSize: 15 }}>*</span> : ""}</span>
               <Move d={snapshot.move} />
             </div>
