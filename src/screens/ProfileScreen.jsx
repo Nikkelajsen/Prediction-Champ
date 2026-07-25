@@ -65,8 +65,8 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
       } catch (e) {
         if (cancelled) return;
         const msg = String(e?.message || e).toLowerCase();
-        setError(msg.includes("forbidden")
-          ? "Du kan kun se profiler for brugere, du deler en liga eller konkurrence med."
+        setError(msg.includes("not found")
+          ? "Profilen findes ikke længere."
           : "Kunne ikke hente profilen lige nu. Prøv igen om lidt.");
       } finally {
         if (!cancelled) setLoading(false);

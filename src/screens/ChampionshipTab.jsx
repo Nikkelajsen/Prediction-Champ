@@ -4,12 +4,12 @@ import { Crown, ChevronLeft, ChevronRight } from "lucide-react";
 import { currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRatingMap, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, monthName } from "../lib/data.js";
 import { roundLabel } from "../lib/scoring.js";
 import { C, font, muted, pagerBtn, thStyle } from "../ui/theme.js";
-import { Card, Eyebrow, H, InfoDot, Modal } from "../ui/components.jsx";
+import { Card, Eyebrow, H, InfoDot, Modal, PlayerName } from "../ui/components.jsx";
 
 // Stilling i samme format som liga (BoardScreen): en rigtig tabel med kolonne-
 // overskrifter, så 🎯 (præcise resultater) er en kolonne-header i stedet for at
 // stå på hver række. `offset` giver den korrekte placering ved paginering.
-function StandingsTable({ rows, userId, isComplete, ratingMap, offset = 0 }) {
+function StandingsTable({ rows, userId, isComplete, ratingMap, offset = 0, openProfile }) {
   return (
     <table style={{ tableLayout: "fixed", width: "100%" }}>
       <colgroup>
@@ -37,7 +37,7 @@ function StandingsTable({ rows, userId, isComplete, ratingMap, offset = 0 }) {
                 {rank === 0 && isComplete ? "🏆" : rank + 1}
               </td>
               <td style={{ color: C.text, fontWeight: you ? 700 : 600, padding: "8px 4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {r.player}{you ? " (dig)" : ""}
+                <PlayerName userId={r.userId} name={r.player} you={you} onOpenProfile={openProfile} truncate />
               </td>
               <td style={{ textAlign: "center", whiteSpace: "nowrap", padding: "8px 2px" }}>
                 {rt
@@ -57,7 +57,7 @@ function StandingsTable({ rows, userId, isComplete, ratingMap, offset = 0 }) {
 }
 
 // Fuld stilling i modal med paginering (maks. 20 pr. side).
-function FullStandingsModal({ title, rows, userId, isComplete, ratingMap, onClose }) {
+function FullStandingsModal({ title, rows, userId, isComplete, ratingMap, onClose, openProfile }) {
   const [page, setPage] = useState(0);
   const perPage = 20;
   const pages = Math.max(1, Math.ceil(rows.length / perPage));
@@ -65,7 +65,7 @@ function FullStandingsModal({ title, rows, userId, isComplete, ratingMap, onClos
   const slice = rows.slice(start, start + perPage);
   return (
     <Modal title={title} onClose={onClose}>
-      <StandingsTable rows={slice} offset={start} userId={userId} isComplete={isComplete} ratingMap={ratingMap} />
+      <StandingsTable rows={slice} offset={start} userId={userId} isComplete={isComplete} ratingMap={ratingMap} openProfile={openProfile} />
       {pages > 1 && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
           <button style={pagerBtn(page > 0)} disabled={page <= 0} onClick={() => setPage((p) => Math.max(0, p - 1))}><ChevronLeft size={16} /></button>
@@ -79,10 +79,10 @@ function FullStandingsModal({ title, rows, userId, isComplete, ratingMap, onClos
 }
 
 // Kort-visning: top 5 i tabel-format + link til fuld stilling, når der er flere.
-function Standings({ rows, userId, isComplete, ratingMap, title, onOpenFull }) {
+function Standings({ rows, userId, isComplete, ratingMap, title, onOpenFull, openProfile }) {
   return (
     <>
-      <StandingsTable rows={rows.slice(0, 5)} userId={userId} isComplete={isComplete} ratingMap={ratingMap} />
+      <StandingsTable rows={rows.slice(0, 5)} userId={userId} isComplete={isComplete} ratingMap={ratingMap} openProfile={openProfile} />
       {rows.length > 5 && (
         <p style={{ ...muted, marginTop: 8, marginBottom: 0, cursor: "pointer", textDecoration: "underline" }}
           onClick={() => onOpenFull({ title, rows, isComplete })}>
@@ -94,7 +94,7 @@ function Standings({ rows, userId, isComplete, ratingMap, title, onOpenFull }) {
   );
 }
 
-function ChampionshipTab({ token, userId, leagues = [] }) {
+function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   const [months, setMonths] = useState([]);
   const [month, setMonth] = useState(currentMonthKey());
   const [rows, setRows] = useState(null);
@@ -204,10 +204,13 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
               border: `1px solid rgba(240,180,41,0.35)`, borderRadius: 10, padding: "8px 12px", marginBottom: 10,
             }}>
               <Crown size={16} color={C.gold} />
-              <span style={{ fontSize: 13 }}><b>{roundBoard.rows[0].player}</b> {roundBoard.isComplete ? "er Rundens Prediction Champ" : "fører lige nu"}</span>
+              <span style={{ fontSize: 13 }}>
+                <b><PlayerName userId={roundBoard.rows[0].userId} name={roundBoard.rows[0].player} onOpenProfile={openProfile} /></b>
+                {" "}{roundBoard.isComplete ? "er Rundens Prediction Champ" : "fører lige nu"}
+              </span>
             </div>
             <Standings rows={roundBoard.rows} userId={userId} isComplete={roundBoard.isComplete} ratingMap={ratingMap}
-              title={`Rundeliga · runde ${roundKey ? roundLabel(roundKey) : ""}`} onOpenFull={setFull} />
+              title={`Rundeliga · runde ${roundKey ? roundLabel(roundKey) : ""}`} onOpenFull={setFull} openProfile={openProfile} />
           </>
         )}
       </Card>
@@ -230,7 +233,10 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
             border: `1px solid rgba(240,180,41,0.35)`, borderRadius: 10, padding: "8px 12px", marginBottom: 10,
           }}>
             <Crown size={16} color={C.gold} />
-            <span style={{ fontSize: 13 }}><b>{champ.player}</b> {isPast ? "er Månedens Prediction Champ" : "fører lige nu"}</span>
+            <span style={{ fontSize: 13 }}>
+              <b><PlayerName userId={champ.userId} name={champ.player} onOpenProfile={openProfile} /></b>
+              {" "}{isPast ? "er Månedens Prediction Champ" : "fører lige nu"}
+            </span>
           </div>
         )}
 
@@ -238,7 +244,7 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
         {!loading && rows && rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen point i denne måned endnu.</p>}
         {!loading && rows && rows.length > 0 && (
           <Standings rows={rows} userId={userId} isComplete={isPast} ratingMap={ratingMap}
-            title={`Månedsliga · ${monthName(month)}`} onOpenFull={setFull} />
+            title={`Månedsliga · ${monthName(month)}`} onOpenFull={setFull} openProfile={openProfile} />
         )}
       </Card>
 
@@ -268,10 +274,13 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
               border: `1px solid rgba(240,180,41,0.35)`, borderRadius: 10, padding: "8px 12px", marginBottom: 10,
             }}>
               <Crown size={16} color={C.gold} />
-              <span style={{ fontSize: 13 }}><b>{season.rows[0].player}</b> {season.isComplete ? "er Sæsonens Prediction Champ" : "fører lige nu"}</span>
+              <span style={{ fontSize: 13 }}>
+                <b><PlayerName userId={season.rows[0].userId} name={season.rows[0].player} onOpenProfile={openProfile} /></b>
+                {" "}{season.isComplete ? "er Sæsonens Prediction Champ" : "fører lige nu"}
+              </span>
             </div>
             <Standings rows={season.rows} userId={userId} isComplete={season.isComplete} ratingMap={ratingMap}
-              title={`Sæsonchampionship · ${superliga?.name || "Superligaen"}`} onOpenFull={setFull} />
+              title={`Sæsonchampionship · ${superliga?.name || "Superligaen"}`} onOpenFull={setFull} openProfile={openProfile} />
           </>
         )}
       </Card>
@@ -285,7 +294,7 @@ function ChampionshipTab({ token, userId, leagues = [] }) {
 
       {full && (
         <FullStandingsModal title={full.title} rows={full.rows} userId={userId} isComplete={full.isComplete}
-          ratingMap={ratingMap} onClose={() => setFull(null)} />
+          ratingMap={ratingMap} onClose={() => setFull(null)} openProfile={openProfile} />
       )}
     </div>
   );

@@ -4,7 +4,7 @@ import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Users } from 
 import { db } from "../lib/supabase.js";
 import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, isPlayed, liveInfo, pointsFor, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS, stageBadgeLabel } from "../lib/scoring.js";
 import { C, chip, font, muted, pagerBtn } from "../ui/theme.js";
-import { BackBar, Card, FinalBadge, H, LiveBadge, PointsPill, ScoreInput } from "../ui/components.jsx";
+import { BackBar, Card, FinalBadge, H, LiveBadge, PlayerName, PointsPill, ScoreInput } from "../ui/components.jsx";
 
 // ---------- tid: datoen står i dagens overskrift, rækken viser kun klokkeslæt ----------
 function hhmm(iso) {
@@ -100,7 +100,7 @@ const scoreChip = (extra) => ({
 // midt i indtastningen.
 function MatchRow({
   m, pred, rules, homeName, awayName, locked, played, live, notOpenUntil, openLabel, countdown,
-  showFinal, saved, err, onSave, expanded, onToggleExpanded, participants, matchPreds, userId, last,
+  showFinal, saved, err, onSave, expanded, onToggleExpanded, participants, matchPreds, userId, last, openProfile,
 }) {
   const hasPred = pred.pred_home !== null && pred.pred_away !== null;
   const pts = played ? pointsFor(pred, m, rules) : null;
@@ -212,7 +212,9 @@ function MatchRow({
             const ppts = played && pp ? pointsFor(pp, m, rules) : null;
             return (
               <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "3px 0", fontSize: 12 }}>
-                <span style={{ color: p.id === userId ? C.gold : C.text, fontWeight: p.id === userId ? 700 : 400 }}>{p.display_name}</span>
+                <span style={{ color: p.id === userId ? C.gold : C.text, fontWeight: p.id === userId ? 700 : 400, flex: 1, minWidth: 0 }}>
+                  <PlayerName userId={p.id} name={p.display_name} onOpenProfile={openProfile} truncate />
+                </span>
                 <span style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <span style={{ color: C.text, fontFamily: "ui-monospace, monospace" }}>{pp ? `${pp.pred_home}-${pp.pred_away}` : "–"}</span>
                   {ppts !== null && <PointsPill pts={ppts} />}
@@ -226,7 +228,7 @@ function MatchRow({
   );
 }
 
-function PredictionsScreen({ token, userId, competitions, leagues = [], initialFilter, initialRoundKey, onBack }) {
+function PredictionsScreen({ token, userId, competitions, leagues = [], initialFilter, initialRoundKey, onBack, openProfile }) {
   const [compFilter, setCompFilter] = useState(initialFilter || "all");
   const [leagueFilter, setLeagueFilter] = useState("all");
   const [seasonLeague, setSeasonLeague] = useState({}); // season_id -> league_id
@@ -546,6 +548,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
                         participants={participants}
                         matchPreds={locked ? allPreds.filter((p) => p.match_id === m.id) : []}
                         userId={userId}
+                        openProfile={openProfile}
                         last={di === days.length - 1 && mi === day.matches.length - 1}
                       />
                     );

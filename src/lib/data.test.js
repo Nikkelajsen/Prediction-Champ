@@ -196,12 +196,28 @@ describe("liga-laget (grupper)", () => {
 });
 
 describe("dato-helpers", () => {
+  // Systemtiden fryses: fmtCountdown læser selv Date.now(), så en test, der først
+  // aflæser sit eget `now`, kapper altid et par millisekunder af resttiden. Præcis
+  // 2 d 3 t bliver derfor "2 d 2 t" (gulvafrunding er den rigtige adfærd for en
+  // deadline — man må aldrig få at vide, at der er mere tid tilbage, end der er).
+  // Med fast tid kan de øvrige grænser tjekkes eksakt frem for med "9 eller 10".
   it("fmtCountdown viser dage/timer/minutter afhængigt af afstand", () => {
-    const now = Date.now();
-    expect(fmtCountdown(now + 2 * 24 * 3600 * 1000 + 3 * 3600 * 1000)).toMatch(/^2 d 3 t$/);
-    expect(fmtCountdown(now + 2 * 3600 * 1000 + 5 * 60 * 1000)).toMatch(/^2 t [45] min$/);
-    expect(fmtCountdown(now + 10 * 60 * 1000)).toMatch(/^(9|10) min$/);
-    expect(fmtCountdown(now - 1000)).toBe("0 min");
+    vi.useFakeTimers();
+    try {
+      const now = new Date("2026-07-25T12:00:00.000Z");
+      vi.setSystemTime(now);
+      const om = (ms) => fmtCountdown(now.getTime() + ms);
+
+      expect(om(2 * 24 * 3600 * 1000 + 3 * 3600 * 1000)).toBe("2 d 3 t");
+      expect(om(2 * 3600 * 1000 + 5 * 60 * 1000)).toBe("2 t 5 min");
+      expect(om(10 * 60 * 1000)).toBe("10 min");
+      // dage skjuler minutter, timer skjuler sekunder — og under et minut er "0 min"
+      expect(om(24 * 3600 * 1000 + 59 * 60 * 1000)).toBe("1 d 0 t");
+      expect(om(59 * 1000)).toBe("0 min");
+      expect(om(-1000)).toBe("0 min");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("monthName giver dansk månedsnavn med stort begyndelsesbogstav", () => {

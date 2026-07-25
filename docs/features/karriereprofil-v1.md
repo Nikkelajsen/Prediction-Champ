@@ -37,8 +37,8 @@ Oppefra og ned på profilsiden:
 
 ## 3. Brugerflow
 
-- **Adgang:** klik på eget navn/rating-snapshot på Hjem, og på eget navn i ranglister. Profilen er en drill-in-skærm (som Stilling/Liga-siden) — ingen ny fane i bundnavigationen.
-- **Andres profiler (åben beslutning K1, se afsnit 8):** v1-anbefaling er, at man kan åbne profiler for brugere, man deler en liga (fællesskab) eller konkurrence med — det er dér, rivaliseringen bor. Milepæle fra `stories` er dog personlige (RLS: kun egne) og vises **kun på ens egen profil**; andres profil viser hoved, titler, kurve og basistal.
+- **Adgang:** **et brugernavn er altid vejen til karrieren** — alle steder, hvor et navn står i appen, åbner et tryk på det den pågældendes karriere. I dag: Hjem ("Hej *navn*" + rating-snapshot), Rating-ranglisten, konkurrence-stillingen og dens "Point pr. runde"-overskrifter, Championship-tabellerne (top 5, fuld stilling og de tre kåringer), liga-medlemslisten, "Alles gæt" på Tip-skærmen, vinderen på et afsluttet konkurrence-kort og navnet i runde-tips-overlayet. Profilen er en drill-in-skærm (som Stilling/Liga-siden) — ingen ny fane i bundnavigationen. Fælles komponent: `PlayerName` i `src/ui/components.jsx`.
+- **Andres profiler (K1, se afsnit 8):** enhver indlogget bruger kan åbne enhver karriere og se hoved, titler, kurve og basistal. Milepæle fra `stories` er personlige (RLS: kun egne) og vises **kun på ens egen profil** — det samme gælder rivaler.
 - **Tom tilstand:** en ny bruger uden titler/milepæle ser hoved + kurve + en venlig tekst ("Din karriere er lige begyndt — den første runde skriver det første kapitel"). Ingen tomme nul-tabeller.
 
 ---
@@ -81,7 +81,7 @@ Oppefra og ned på profilsiden:
 
 | # | Spørgsmål | v1-anbefaling |
 |---|---|---|
-| K1 | ~~Hvem kan se en profil?~~ **✅ Besluttet (juli 2026):** alle, man deler en liga eller konkurrence med, kan se profilen (hoved, titler, kurve, basistal) — milepæle fra `stories` forbliver private. | Rivalisering kræver et publikum; historier er personlige. |
+| K1 | ~~Hvem kan se en profil?~~ **✅ Besluttet (juli 2026), udvidet (juli 2026):** oprindeligt "alle, man deler en liga eller konkurrence med". **Nu: enhver indlogget bruger kan se enhver profil** (hoved, titler, kurve, basistal) — milepæle og rivaler forbliver private. | Rivalisering kræver et publikum; historier er personlige. Udvidelsen: på Championship er alle automatisk med, og navn, rating, point og præcise hits står i forvejen offentligt på Rating-/Championship-fanerne — den gamle gate afviste folk, man reelt konkurrerer med, og beskyttede intet, der ikke allerede var på en rangliste. |
 | K2 | **Per-turnering-opdeling fra start?** `ratings.scope` er forberedt til per-liga-rating. | Nej — vent til turnering #2 er i drift ([`turnering-2.md`](./turnering-2.md)), ellers bygges en vælger uden indhold. |
 | K3 | **Rival-definitionen.** Ren `stories`-optælling (regel 40/60) eller også placerings-nabo-analyse fra `rating_history.rnk`? | Start med `stories`-optælling (billigst, allerede fortælle-formet); udvid hvis den giver for få rivaler i små ligaer. |
 
@@ -90,8 +90,10 @@ Oppefra og ned på profilsiden:
 1. Bruger med månedstitel + rundesejre → titler vises nyeste først, med korrekt måned/runde.
 2. Bruger uden titler/milepæle → tom tilstand-tekst, ingen nul-rækker.
 3. Basistal sammenlignes med Championship-fanen for samme bruger → identiske.
-4. Bruger A åbner Bruger B's profil (deler liga) → hoved/titler/kurve/basistal synlige, ingen milepæle.
-5. Bruger A åbner Bruger C's profil (ingen delt liga/konkurrence) → afvist (K1-regel), pæn fejltekst.
+4. Bruger A åbner Bruger B's profil (deler liga) → hoved/titler/kurve/basistal synlige, ingen milepæle og ingen rivaler.
+5. Bruger A åbner Bruger C's profil (ingen delt liga/konkurrence, fx fra Championship-tabellen) → samme visning som testcase 4, ingen afvisning.
+8. Et navn trykkes hvert sted, det optræder (Hjem, Rating, Stilling, Point pr. runde, Championship top 5 + fuld stilling + kåringer, liga-medlemsliste, Alles gæt, konkurrence-vinder, runde-tips-overlay) → karriereskærmen åbnes for den rigtige bruger.
+9. Navnet i konkurrence-stillingen åbner karrieren, mens pointtallet i samme række åbner spillerens tips runde for runde.
 6. Provisorisk spiller (< 5 runder) → kurve med provisorisk markering, "NY"-badge i hovedet.
 7. Resultat rettes af admin → profilens tal følger med efter trigger-genberegning (samme flow som stillinger/ratings).
 

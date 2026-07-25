@@ -6,7 +6,7 @@ import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadMyGroups, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { enablePush, getExistingSubscription, isPushSupported } from "../lib/push.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
-import { Card, Eyebrow, H, LiveBadge, Move, PointsPill } from "../ui/components.jsx";
+import { Card, Eyebrow, H, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
 
 const PUSH_DISMISS_KEY = "pc_push_dismissed";
 
@@ -270,7 +270,8 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div style={{ minWidth: 0 }}>
           <Eyebrow>{daFullDate()}</Eyebrow>
-          <H size={30}>Hej {displayName}</H>
+          {/* Eget navn er samme indgang som alle andre navne i appen → karrieren. */}
+          <H size={30}>Hej <PlayerName userId={userId} name={displayName} onOpenProfile={openProfile} /></H>
         </div>
         {/* Rating (kun tal + bevægelse) ved navnet — tappbar til karriereprofil.
             Placering ("Nr. X af Y") udelades bevidst for at spare plads. */}
