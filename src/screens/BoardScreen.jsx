@@ -126,7 +126,17 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
             </tr></thead>
             <tbody>
               {state.rows.map((r, i) => (
-                <tr key={r.player} className="rowline" style={{ background: r.userId === userId ? "rgba(34,197,94,0.06)" : "transparent" }}>
+                // Hele rækken er tryk-fladen til spillerens tips runde for runde.
+                // Et enkelt tal er et for lille mål på en telefon, og cursor:pointer
+                // er usynligt på touch. Navnet ligger ovenpå og stopper propagationen
+                // (PlayerName), så det stadig fører til karrieren.
+                <tr key={r.player} className="rowline"
+                  onClick={hasCompleted ? () => openUser(r.userId, r.player) : undefined}
+                  title={hasCompleted ? `Se ${r.player}s tips runde for runde` : undefined}
+                  style={{
+                    background: r.userId === userId ? "rgba(34,197,94,0.06)" : "transparent",
+                    cursor: hasCompleted ? "pointer" : "default",
+                  }}>
                   <td style={{ color: i === 0 ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display, padding: "8px 2px" }}>
                     {i === 0 && state.isComplete ? "🏆" : i + 1}
                     {r.rankDelta !== undefined && r.rankDelta !== 0 && (
@@ -135,8 +145,6 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
                       </span>
                     )}
                   </td>
-                  {/* Navnet er personen (→ karriere); pointtallet er pointene
-                      (→ spillerens tips runde for runde). */}
                   <td style={{ color: C.text, fontWeight: r.userId === userId ? 700 : 600, padding: "8px 4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     <PlayerName userId={r.userId} name={r.player} onOpenProfile={openProfile} truncate />
                   </td>
@@ -148,13 +156,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
                   <td style={{ textAlign: "center", color: C.text, fontSize: 13, padding: "8px 2px" }}>{r.exactCount}</td>
                   <td style={{ textAlign: "center", color: C.muted, fontSize: 13, padding: "8px 2px" }}>{r.form3}</td>
                   <td style={{ textAlign: "right", padding: "8px 2px" }}>
-                    <span onClick={hasCompleted ? () => openUser(r.userId, r.player) : undefined}
-                      title={hasCompleted ? `Se ${r.player}s tips runde for runde` : undefined}
-                      style={{
-                        background: i === 0 ? "rgba(240,180,41,0.15)" : C.surface2, color: i === 0 ? C.gold : C.text,
-                        fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 8px",
-                        cursor: hasCompleted ? "pointer" : "default",
-                      }}>{r.total}</span>
+                    <span style={{ background: i === 0 ? "rgba(240,180,41,0.15)" : C.surface2, color: i === 0 ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 8px" }}>{r.total}</span>
                   </td>
                 </tr>
               ))}
@@ -164,7 +166,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
         {!loading && state && state.rows.length > 0 && (
           <p style={{ ...muted, marginTop: 8, marginBottom: 0, fontSize: 11 }}>
             🎯 = præcise resultater · Form = point seneste 3 runder · ▲▼ = ændring efter seneste runde
-            {hasCompleted ? " · tryk på et navn for karrieren, på point for tips runde for runde" : ""}
+            {hasCompleted ? " · tryk på en række for spillerens tips runde for runde, på navnet for karrieren" : ""}
           </p>
         )}
         {!loading && state && state.rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen deltagere endnu.</p>}
