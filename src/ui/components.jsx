@@ -196,16 +196,16 @@ function RoundPager({ rounds, index, setIndex }) {
   );
 }
 
-// én brugers forudsigelser pr. færdigspillet runde
-function UserRoundPredictions({ playerName, userId, completedRounds, predsByKey, rules, initialKey, onClose, onOpenProfile }) {
+// én brugers forudsigelser pr. LÅST runde (kalderen filtrerer til låste kampe)
+function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, rules, initialKey, onClose, onOpenProfile }) {
   const startIdx = (() => {
-    if (initialKey) { const i = completedRounds.findIndex((r) => r.key === initialKey); if (i >= 0) return i; }
-    return completedRounds.length - 1;
+    if (initialKey) { const i = lockedRounds.findIndex((r) => r.key === initialKey); if (i >= 0) return i; }
+    return lockedRounds.length - 1;
   })();
   const [idx, setIdx] = useState(startIdx);
-  const round = completedRounds[idx];
+  const round = lockedRounds[idx];
   const canPrev = idx > 0;
-  const canNext = idx < completedRounds.length - 1;
+  const canNext = idx < lockedRounds.length - 1;
 
   useEffect(() => {
     const onKey = (e) => {
@@ -218,7 +218,9 @@ function UserRoundPredictions({ playerName, userId, completedRounds, predsByKey,
   }, [canPrev, canNext, onClose]);
 
   if (!round) return null;
-  const playedMatches = round.matches.filter((m) => m.home_score !== null && m.home_score !== undefined);
+  // Kalderen leverer kun LÅSTE kampe: fra låsen kan ingen rette sit gæt, så
+  // gættet må vises, uanset om kampen er spillet endnu. En låst, endnu ikke
+  // spillet kamp viser derfor gættet med "–" som facit og ingen point.
   let roundTotal = 0;
 
   return (
@@ -248,11 +250,12 @@ function UserRoundPredictions({ playerName, userId, completedRounds, predsByKey,
         </div>
 
         <div style={{ display: "grid", gap: 6 }}>
-          {playedMatches.map((m) => {
+          {round.matches.map((m) => {
             const pred = predsByKey.get(`${m.id}:${userId}`);
             const pts = pointsFor(pred, m, rules);
             if (pts !== null) roundTotal += pts;
             const has = pred && pred.pred_home !== null && pred.pred_home !== undefined;
+            const played = m.home_score !== null && m.home_score !== undefined;
             const ptColor = pts === (rules?.exact ?? 3) ? C.green : pts === (rules?.outcome ?? 1) ? C.greenSoft : C.muted;
             return (
               <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, background: C.surface2, borderRadius: 8, padding: "8px 10px" }}>
@@ -263,7 +266,9 @@ function UserRoundPredictions({ playerName, userId, completedRounds, predsByKey,
                   {has ? `${pred.pred_home}-${pred.pred_away}` : "–"}
                 </span>
                 <span style={{ color: C.muted, fontSize: 12 }}>facit</span>
-                <span style={{ color: C.text, fontSize: 13, fontWeight: 700, minWidth: 34, textAlign: "center" }}>{m.home_score}-{m.away_score}</span>
+                <span style={{ color: played ? C.text : C.muted, fontSize: 13, fontWeight: 700, minWidth: 34, textAlign: "center" }}>
+                  {played ? `${m.home_score}-${m.away_score}` : "–"}
+                </span>
                 <span style={{ background: C.surface, color: ptColor, fontSize: 12, fontWeight: 700, minWidth: 30, textAlign: "center", borderRadius: 999, padding: "2px 8px" }}>
                   {pts === null ? "–" : `+${pts}`}
                 </span>

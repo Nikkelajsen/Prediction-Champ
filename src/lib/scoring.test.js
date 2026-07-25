@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, buildRoundLockMap, roundLockKey, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo } from "./scoring.js";
+import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockedRoundsOf, buildRoundLockMap, roundLockKey, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo } from "./scoring.js";
 
 const RULES = { exact: 3, outcome: 1 };
 
@@ -163,6 +163,47 @@ describe("runde-baseret låsning (roundLockKey / buildRoundLockMap / isLocked)",
     expect(isLocked({ ...s1r1, home_score: null, kickoff_at: "2026-07-14T12:30:00Z" })).toBe(true); // 30 min til egen kickoff
     expect(isLocked({ ...s1r1, home_score: null, kickoff_at: "2026-07-14T14:00:00Z" })).toBe(false); // 2 timer til egen kickoff
     expect(isLocked({ ...s1r1, home_score: null, kickoff_at: null })).toBe(false);
+  });
+});
+
+describe("lockedRoundsOf", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const round = (key, matches) => ({ key, label: key, matches });
+  const m = (season_id, round_key, kickoff_at, home_score = null) => ({ season_id, round_key, kickoff_at, home_score });
+
+  it("tager låste runder med UDEN at kræve resultater", () => {
+    // 30 min før første kickoff: runden er låst, men ingen kamp er spillet.
+    // Dette var fejlen — kravet om færdigspillede kampe skjulte hele drill-in'et.
+    vi.useFakeTimers({ now: new Date("2026-07-15T16:30:00Z") });
+    const r = round("2026-07-13", [m("s1", "2026-07-13", "2026-07-15T17:00:00Z"), m("s1", "2026-07-13", "2026-07-18T14:00:00Z")]);
+    const out = lockedRoundsOf([r]);
+    expect(out).toHaveLength(1);
+    expect(out[0].matches).toHaveLength(2);
+  });
+
+  it("udelader runder, der endnu ikke har låst", () => {
+    vi.useFakeTimers({ now: new Date("2026-07-15T15:30:00Z") }); // 1½ time før
+    const r = round("2026-07-13", [m("s1", "2026-07-13", "2026-07-15T17:00:00Z")]);
+    expect(lockedRoundsOf([r])).toEqual([]);
+  });
+
+  it("beskærer til de låste kampe, når en runde rummer to turneringer med hver sin lås", () => {
+    vi.useFakeTimers({ now: new Date("2026-07-15T16:30:00Z") });
+    const laast = m("s1", "2026-07-13", "2026-07-15T17:00:00Z");   // låser 16:00
+    const aaben = m("s2", "2026-07-13", "2026-07-19T17:00:00Z");   // egen sæson, låser først 18/7
+    const out = lockedRoundsOf([round("2026-07-13", [laast, aaben])]);
+    expect(out[0].matches).toEqual([laast]); // det åbne gæt må ikke afsløres
+  });
+
+  it("tager spillede kampe med, uanset hvornår de lå", () => {
+    vi.useFakeTimers({ now: new Date("2026-07-15T15:30:00Z") });
+    const spillet = m("s1", "2026-07-06", "2026-07-08T17:00:00Z", 2);
+    expect(lockedRoundsOf([round("2026-07-06", [spillet])])[0].matches).toEqual([spillet]);
+  });
+
+  it("giver tom liste uden runder", () => {
+    expect(lockedRoundsOf([])).toEqual([]);
   });
 });
 

@@ -112,6 +112,19 @@ function isLocked(match, roundLockMap) {
   return Date.now() >= earliest - LOCK_LEAD_MS;
 }
 
+// De runder, hvor andres tips må vises — nemlig fra låsen, hvor ingen længere
+// kan rette sit gæt. Hver runde beskæres til sine LÅSTE kampe, så et gæt aldrig
+// kan ses før deadline: en runde kan indeholde kampe fra flere turneringer, og
+// låsen er scopet på (season_id, round_key), så de kan låse på hver sit tidspunkt.
+// Et resultat er ikke et krav — en låst, endnu ikke spillet kamp viser gættet
+// uden facit. Samme regel som "Alles gæt" på Tip-skærmen.
+function lockedRoundsOf(rounds) {
+  const lockMap = buildRoundLockMap(rounds.flatMap((r) => r.matches));
+  return rounds
+    .map((r) => ({ ...r, matches: r.matches.filter((m) => isLocked(m, lockMap)) }))
+    .filter((r) => r.matches.length > 0);
+}
+
 // ---------- live-resultater ----------
 // Live-stillingen bor i SEPARATE kolonner (live_*) og tæller ALDRIG point: en kamp
 // er først "spillet", når home_score er sat. Derfor kan stillinger, rating og point
@@ -140,4 +153,4 @@ function liveInfo(m) {
   };
 }
 
-export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo };
+export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockedRoundsOf, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo };
