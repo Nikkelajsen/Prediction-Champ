@@ -78,11 +78,16 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
 
   const roundsDesc = state?.rounds ? state.rounds.slice().reverse() : [];
   const shownRounds = showAllRounds ? roundsDesc : roundsDesc.slice(0, 3);
-  const completedRounds = (state?.allRounds || []).filter(
-    (r) => r.matches.length > 0 && r.matches.every((m) => m.home_score !== null && m.home_score !== undefined)
-  );
-  const hasCompleted = completedRounds.length > 0;
-  const openUser = (uid, playerName, initialKey = null) => { if (hasCompleted) setViewUser({ userId: uid, playerName, initialKey }); };
+  // En runde kan åbnes, så snart den har mindst ét færdigspillet resultat.
+  // Kravet var før, at HELE runden var spillet — men så lukkede én udsat eller
+  // endnu ikke fløjtet kamp for drill-in'et i hele runden, og er ingen runde
+  // 100 % færdig (typisk midt i en runde), forsvandt muligheden helt uden
+  // forklaring: et tryk gjorde bare ingenting. UserRoundPredictions viser i
+  // forvejen kun de spillede kampe, og `state.rounds` er præcis den liste,
+  // data.js allerede bygger efter samme regel (og som "Point pr. runde" bruger).
+  const playedRounds = state?.rounds || [];
+  const hasPlayed = playedRounds.length > 0;
+  const openUser = (uid, playerName, initialKey = null) => { if (hasPlayed) setViewUser({ userId: uid, playerName, initialKey }); };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -131,11 +136,11 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
                 // er usynligt på touch. Navnet ligger ovenpå og stopper propagationen
                 // (PlayerName), så det stadig fører til karrieren.
                 <tr key={r.player} className="rowline"
-                  onClick={hasCompleted ? () => openUser(r.userId, r.player) : undefined}
-                  title={hasCompleted ? `Se ${r.player}s tips runde for runde` : undefined}
+                  onClick={hasPlayed ? () => openUser(r.userId, r.player) : undefined}
+                  title={hasPlayed ? `Se ${r.player}s tips runde for runde` : undefined}
                   style={{
                     background: r.userId === userId ? "rgba(34,197,94,0.06)" : "transparent",
-                    cursor: hasCompleted ? "pointer" : "default",
+                    cursor: hasPlayed ? "pointer" : "default",
                   }}>
                   <td style={{ color: i === 0 ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display, padding: "8px 2px" }}>
                     {i === 0 && state.isComplete ? "🏆" : i + 1}
@@ -166,7 +171,9 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
         {!loading && state && state.rows.length > 0 && (
           <p style={{ ...muted, marginTop: 8, marginBottom: 0, fontSize: 11 }}>
             🎯 = præcise resultater · Form = point seneste 3 runder · ▲▼ = ændring efter seneste runde
-            {hasCompleted ? " · tryk på en række for spillerens tips runde for runde, på navnet for karrieren" : ""}
+            {hasPlayed
+              ? " · tryk på en række for spillerens tips runde for runde, på navnet for karrieren"
+              : " · tryk på et navn for karrieren — spillernes tips kan ses, så snart den første kamp er fløjtet af"}
           </p>
         )}
         {!loading && state && state.rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen deltagere endnu.</p>}
@@ -194,7 +201,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
                       {state.rows.map((row) => {
                         const v = row.perRound[r.key];
                         const isBest = v !== undefined && v === best && v > 0;
-                        const clickable = v !== undefined && completedRounds.some((cr) => cr.key === r.key);
+                        const clickable = v !== undefined && playedRounds.some((cr) => cr.key === r.key);
                         return (
                           <td key={row.player} style={{ textAlign: "center", color: isBest ? C.gold : C.text, fontWeight: isBest ? 700 : 400 }}>
                             {clickable
@@ -220,7 +227,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
 
       {viewUser && state && (
         <UserRoundPredictions playerName={viewUser.playerName} userId={viewUser.userId}
-          completedRounds={completedRounds} predsByKey={state.predsByKey}
+          completedRounds={playedRounds} predsByKey={state.predsByKey}
           rules={comp?.rules || { exact: 3, outcome: 1 }} initialKey={viewUser.initialKey}
           onClose={() => setViewUser(null)} onOpenProfile={openProfile} />
       )}
