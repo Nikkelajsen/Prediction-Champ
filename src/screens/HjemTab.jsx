@@ -6,7 +6,7 @@ import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadMyGroups, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { enablePush, getExistingSubscription, isPushSupported } from "../lib/push.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
-import { Card, Eyebrow, H, LiveBadge, Move } from "../ui/components.jsx";
+import { Card, Eyebrow, H, LiveBadge, Move, PointsPill } from "../ui/components.jsx";
 
 const PUSH_DISMISS_KEY = "pc_push_dismissed";
 
@@ -87,19 +87,6 @@ function StoryCard({ story, onDismiss }) {
       <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.5, marginTop: 6 }}>{story.body}</div>
       <button style={{ ...btnGhost, marginTop: 12, borderColor: C.gold, color: C.gold }} onClick={share}><Share2 size={14} /> Del</button>
     </Card>
-  );
-}
-
-// lille point-pille til runde-oversigten: grøn +3 · guld +1 · dæmpet 0 · "–" hvis intet tip
-function PointsPill({ pts }) {
-  if (pts == null) return <span style={{ color: C.muted, fontSize: 12 }}>–</span>;
-  const col = pts >= 3 ? C.green : pts >= 1 ? C.gold : C.muted;
-  const bg = pts >= 3 ? "rgba(34,197,94,0.15)" : pts >= 1 ? "rgba(240,180,41,0.15)" : "transparent";
-  const border = pts >= 1 ? "none" : `1px solid ${C.line}`;
-  return (
-    <span style={{ background: bg, color: col, border, fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "2px 8px", minWidth: 30, textAlign: "center" }}>
-      {pts > 0 ? `+${pts}` : "0"}
-    </span>
   );
 }
 

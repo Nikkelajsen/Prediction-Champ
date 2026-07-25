@@ -67,6 +67,19 @@ const FinalBadge = () => (
     textTransform: "uppercase", whiteSpace: "nowrap",
   }}>Slut</span>
 );
+// lille point-pille: grøn +3 · guld +1 · dæmpet 0 · "–" hvis intet tip.
+// Bruges både i Hjem's runde-oversigt og på Tip-skærmen, så point ser ens ud overalt.
+const PointsPill = ({ pts }) => {
+  if (pts == null) return <span style={{ color: C.muted, fontSize: 12 }}>–</span>;
+  const col = pts >= 3 ? C.green : pts >= 1 ? C.gold : C.muted;
+  const bg = pts >= 3 ? "rgba(34,197,94,0.15)" : pts >= 1 ? "rgba(240,180,41,0.15)" : "transparent";
+  const border = pts >= 1 ? "none" : `1px solid ${C.line}`;
+  return (
+    <span style={{ background: bg, color: col, border, fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "2px 8px", minWidth: 30, textAlign: "center" }}>
+      {pts > 0 ? `+${pts}` : "0"}
+    </span>
+  );
+};
 const Move = ({ d }) => {
   if (d > 0) return <span style={{ color: C.green, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 2 }}><ArrowUp size={12} />{d}</span>;
   if (d < 0) return <span style={{ color: C.red, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 2 }}><ArrowDown size={12} />{Math.abs(d)}</span>;
@@ -229,4 +242,4 @@ function UserRoundPredictions({ playerName, userId, completedRounds, predsByKey,
   );
 }
 
-export { Card, Eyebrow, H, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge };
+export { Card, Eyebrow, H, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill };
