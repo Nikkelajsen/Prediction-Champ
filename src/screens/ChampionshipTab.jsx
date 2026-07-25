@@ -11,41 +11,48 @@ import { Card, Eyebrow, H, InfoDot, Modal } from "../ui/components.jsx";
 // stå på hver række. `offset` giver den korrekte placering ved paginering.
 function StandingsTable({ rows, userId, isComplete, ratingMap, offset = 0 }) {
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table>
-        <thead><tr className="rowline">
-          <th style={thStyle}>#</th>
-          <th style={thStyle}>Spiller</th>
-          <th style={{ ...thStyle, textAlign: "center" }} title="Prediction Champ Rating">Rating</th>
-          <th style={{ ...thStyle, textAlign: "center" }} title="Antal præcise resultater">🎯</th>
-          <th style={{ ...thStyle, textAlign: "right" }}>Point</th>
-        </tr></thead>
-        <tbody>
-          {rows.map((r, i) => {
-            const rank = offset + i;
-            const you = r.userId === userId;
-            const rt = ratingMap?.get(r.userId);
-            return (
-              <tr key={r.userId} className="rowline" style={{ background: you ? "rgba(34,197,94,0.06)" : "transparent" }}>
-                <td style={{ color: rank === 0 ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display }}>
-                  {rank === 0 && isComplete ? "🏆" : rank + 1}
-                </td>
-                <td style={{ color: C.text, fontWeight: you ? 700 : 600 }}>{r.player}{you ? " (dig)" : ""}</td>
-                <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
-                  {rt
-                    ? <span style={{ color: C.gold, fontWeight: 700, fontSize: 13 }}>{rt.rating}{rt.provisional ? <span style={{ color: C.muted, fontWeight: 400 }} title="Foreløbig">*</span> : ""}</span>
-                    : <span style={{ color: C.muted, fontSize: 13 }}>–</span>}
-                </td>
-                <td style={{ textAlign: "center", color: C.text, fontSize: 13 }}>{r.exactCount}</td>
-                <td style={{ textAlign: "right" }}>
-                  <span style={{ background: rank === 0 ? "rgba(240,180,41,0.15)" : C.surface2, color: rank === 0 ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 10px" }}>{r.total}</span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <table style={{ tableLayout: "fixed", width: "100%" }}>
+      <colgroup>
+        <col style={{ width: 26 }} />
+        <col />
+        <col style={{ width: 50 }} />
+        <col style={{ width: 30 }} />
+        <col style={{ width: 52 }} />
+      </colgroup>
+      <thead><tr className="rowline">
+        <th style={{ ...thStyle, padding: "8px 2px" }}>#</th>
+        <th style={{ ...thStyle, padding: "8px 4px" }}>Spiller</th>
+        <th style={{ ...thStyle, textAlign: "center", padding: "8px 2px" }} title="Prediction Champ Rating">Rating</th>
+        <th style={{ ...thStyle, textAlign: "center", padding: "8px 2px" }} title="Antal præcise resultater">🎯</th>
+        <th style={{ ...thStyle, textAlign: "right", padding: "8px 2px" }}>Point</th>
+      </tr></thead>
+      <tbody>
+        {rows.map((r, i) => {
+          const rank = offset + i;
+          const you = r.userId === userId;
+          const rt = ratingMap?.get(r.userId);
+          return (
+            <tr key={r.userId} className="rowline" style={{ background: you ? "rgba(34,197,94,0.06)" : "transparent" }}>
+              <td style={{ color: rank === 0 ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display, padding: "8px 2px" }}>
+                {rank === 0 && isComplete ? "🏆" : rank + 1}
+              </td>
+              <td style={{ color: C.text, fontWeight: you ? 700 : 600, padding: "8px 4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {r.player}{you ? " (dig)" : ""}
+              </td>
+              <td style={{ textAlign: "center", whiteSpace: "nowrap", padding: "8px 2px" }}>
+                {rt
+                  ? <span style={{ color: C.gold, fontWeight: 700, fontSize: 13 }}>{rt.rating}{rt.provisional ? <span style={{ color: C.muted, fontWeight: 400 }} title="Foreløbig">*</span> : ""}</span>
+                  : <span style={{ color: C.muted, fontSize: 13 }}>–</span>}
+              </td>
+              <td style={{ textAlign: "center", color: C.text, fontSize: 13, padding: "8px 2px" }}>{r.exactCount}</td>
+              <td style={{ textAlign: "right", padding: "8px 2px" }}>
+                <span style={{ background: rank === 0 ? "rgba(240,180,41,0.15)" : C.surface2, color: rank === 0 ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 8px" }}>{r.total}</span>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 
