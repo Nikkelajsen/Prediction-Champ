@@ -1,6 +1,6 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { db, restFetch } from "./supabase.js";
-import { currentRoundIndex, groupIntoRounds, isLocked, outcome, pointsFor, roundLabel, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS } from "./scoring.js";
+import { currentRoundIndex, groupIntoRounds, isLocked, liveInfo, outcome, pointsFor, roundLabel, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS } from "./scoring.js";
 
 // henter deltagere + kampe + forudsigelser for én konkurrence og beregner stilling + status
 async function computeCompetitionState(token, competitionId, rules) {
@@ -272,18 +272,24 @@ async function computeCurrentRound(token, userId, competitions) {
     const pred = predByMatch.get(m.id) || null;
     const points = played ? pointsFor(pred, m, rules) : null;
     if (played) { playedCount++; if (points != null) myPoints += points; }
-    const inProgress = !played && m.kickoff_at && new Date(m.kickoff_at).getTime() <= Date.now();
+    // Live-stilling (live_*-kolonnerne, skrevet af api/sync-live.js hvert minut).
+    // Den tæller ikke point — kun det endelige resultat gør. inProgress er fallback:
+    // kickoff er passeret, men vi har ingen live-data (fx uden for Sportmonks-planen).
+    const live = liveInfo(m);
+    const inProgress = !played && !live && m.kickoff_at && new Date(m.kickoff_at).getTime() <= Date.now();
     return {
       id: m.id,
       home: teamName.get(m.home_team_id) || "?",
       away: teamName.get(m.away_team_id) || "?",
       homeScore: m.home_score, awayScore: m.away_score,
-      kickoff: m.kickoff_at, played, inProgress, pred, points,
+      kickoff: m.kickoff_at, played, live, inProgress, pred, points,
     };
   });
   return {
     roundKey: round.key, roundLabelText: round.label,
     matches, myPoints, playedCount, totalCount: round.matches.length,
+    // antal kampe der spilles LIGE NU — bruges til LIVE-mærket på det foldede kort
+    liveCount: matches.filter((m) => m.live).length,
     isComplete: playedCount === round.matches.length,
   };
 }

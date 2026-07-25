@@ -6,7 +6,7 @@ import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadMyGroups, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { enablePush, getExistingSubscription, isPushSupported } from "../lib/push.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
-import { Card, Eyebrow, H, Move } from "../ui/components.jsx";
+import { Card, Eyebrow, H, LiveBadge, Move } from "../ui/components.jsx";
 
 const PUSH_DISMISS_KEY = "pc_push_dismissed";
 
@@ -362,7 +362,9 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           <div onClick={() => setRoundOpen((v) => !v)} style={{ cursor: "pointer" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
               <Eyebrow>Indeværende runde</Eyebrow>
-              <span style={{ color: C.muted, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ color: C.muted, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {/* Er der kampe i gang, siges det allerede på det FOLDEDE kort */}
+                {round.liveCount > 0 && <LiveBadge text={round.liveCount > 1 ? `${round.liveCount} kampe` : ""} />}
                 {round.playedCount}/{round.totalCount} spillet
                 <ChevronDown size={14} style={{ transform: roundOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
               </span>
@@ -383,11 +385,18 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
                       <div style={{ fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.home} – {m.away}</div>
                       <div style={{ color: C.muted, fontSize: 11, marginTop: 1 }}>{m.pred ? `Dit tip: ${m.pred.pred_home}-${m.pred.pred_away}` : "Intet tip"}</div>
                     </div>
+                    {/* Tre tilstande: færdigspillet (resultat + point) · i gang (nuværende
+                        stilling + LIVE-mærke, ingen point endnu) · kommende (kickoff-tid). */}
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                       {m.played ? (
                         <>
                           <span style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700 }}>{m.homeScore}-{m.awayScore}</span>
                           <PointsPill pts={m.points} />
+                        </>
+                      ) : m.live ? (
+                        <>
+                          <span style={{ fontFamily: font.display, fontSize: 16, fontWeight: 700, color: C.red }}>{m.live.homeScore}-{m.live.awayScore}</span>
+                          <LiveBadge text={m.live.label} />
                         </>
                       ) : m.inProgress ? (
                         <span style={{ color: C.green, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>I gang</span>

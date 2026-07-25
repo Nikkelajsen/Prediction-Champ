@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, buildRoundLockMap, roundLockKey, stageOptionLabel, stageBadgeLabel, filterByStages } from "./scoring.js";
+import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, buildRoundLockMap, roundLockKey, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo } from "./scoring.js";
 
 const RULES = { exact: 3, outcome: 1 };
 
@@ -175,5 +175,43 @@ describe("currentRoundIndex", () => {
     expect(currentRoundIndex(rounds)).toBe(1);
     expect(currentRoundIndex([{ key: "2026-06-01" }])).toBe(0);
     expect(currentRoundIndex([])).toBe(0);
+  });
+});
+
+describe("liveInfo", () => {
+  const live = { home_score: null, away_score: null, live_home_score: 2, live_away_score: 1, live_state: "INPLAY_2ND_HALF", live_minute: 63 };
+
+  it("giver nuværende stilling og spilleminut for en kamp i gang", () => {
+    expect(liveInfo(live)).toEqual({ homeScore: 2, awayScore: 1, state: "INPLAY_2ND_HALF", minute: 63, label: "63′" });
+  });
+
+  it("viser Pause i halvlegen og skjuler minuttet", () => {
+    const ht = liveInfo({ ...live, live_state: "HT", live_minute: 45 });
+    expect(ht.label).toBe("Pause");
+    expect(ht.minute).toBeNull();
+  });
+
+  it("falder tilbage til 'Live' når minuttet er ukendt", () => {
+    expect(liveInfo({ ...live, live_minute: null }).label).toBe("Live");
+  });
+
+  it("giver 0-0 når live-scoren endnu ikke er sat", () => {
+    const l = liveInfo({ ...live, live_home_score: null, live_away_score: null });
+    expect([l.homeScore, l.awayScore]).toEqual([0, 0]);
+  });
+
+  it("returnerer null når kampen ikke er i gang", () => {
+    expect(liveInfo({ home_score: null, live_state: null })).toBeNull();
+    expect(liveInfo(null)).toBeNull();
+  });
+
+  it("et endeligt resultat slår altid live — en færdig kamp kan aldrig blive live igen", () => {
+    expect(liveInfo({ ...live, home_score: 3, away_score: 1 })).toBeNull();
+  });
+
+  it("live-stilling giver ingen point (kun home_score tæller)", () => {
+    expect(pointsFor({ pred_home: 2, pred_away: 1 }, live, RULES)).toBeNull();
+    expect(isPlayed(live)).toBe(false);
+    expect(isPlayed({ home_score: 0, away_score: 0 })).toBe(true);
   });
 });

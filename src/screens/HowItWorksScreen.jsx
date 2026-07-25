@@ -33,6 +33,9 @@ function HowItWorksScreen({ onBack }) {
       <Section title="Rating">
         Parvis multiplayer-Elo. Alle starter på <b>1000</b>. Du stiger, hvis du rammer bedre end de andre i runden, og falder, hvis du rammer dårligere — det tæller ekstra at slå spillere med høj rating. Beregnes én gang pr. runde ud fra dine gennemsnitspoint pr. kamp. De første 5 runder er foreløbige (<b>NY</b>-badge).
       </Section>
+      <Section title="Live-resultater">
+        Mens en kamp spilles, viser vi den <b>nuværende stilling</b> med et rødt <b>LIVE</b>-mærke og spilleminut — den opdateres cirka hvert minut. En færdigspillet kamp er markeret <b>Slut</b>. Live-stillingen giver <b>ingen point</b>: point, stillinger og rating opdateres først, når kampen er fløjtet af. Så kan et sent mål stadig vende dine point, uden at tabellen har lovet noget forkert undervejs.
+      </Section>
       <Section title="Månedsliga & Championship">
         <b>Championship</b> er officielle konkurrencer, hvor alle automatisk er med. <b>Månedsligaen</b> samler dine samlede point for månedens kampe (tiebreak: flest præcise). Månedens bedste kåres som <b>Månedens Prediction Champ</b>, og stillingen nulstilles den 1.
       </Section>
