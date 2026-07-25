@@ -1,7 +1,7 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
 import { Trophy, Copy, Check, ClipboardList } from "lucide-react";
-import { outcome } from "../lib/scoring.js";
+import { outcome, lockedRoundsOf } from "../lib/scoring.js";
 import { db } from "../lib/supabase.js";
 import { computeCompetitionState, loadRatingMap } from "../lib/data.js";
 import { C, btnGhost, btnGold, font, muted, thStyle } from "../ui/theme.js";
@@ -78,11 +78,16 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
 
   const roundsDesc = state?.rounds ? state.rounds.slice().reverse() : [];
   const shownRounds = showAllRounds ? roundsDesc : roundsDesc.slice(0, 3);
-  const completedRounds = (state?.allRounds || []).filter(
-    (r) => r.matches.length > 0 && r.matches.every((m) => m.home_score !== null && m.home_score !== undefined)
-  );
-  const hasCompleted = completedRounds.length > 0;
-  const openUser = (uid, playerName, initialKey = null) => { if (hasCompleted) setViewUser({ userId: uid, playerName, initialKey }); };
+  // En spillers tips vises, så snart runden er LÅST — fra låsen (1 time før
+  // rundens tidligste kickoff) kan ingen rette sit gæt, så der er intet at
+  // beskytte. Samme regel som "Alles gæt" på Tip-skærmen (`canExpand = locked`).
+  // Kravet var før, at hele runden var færdigspillet, hvilket gjorde drill-in'et
+  // utilgængeligt i en sæson uden en eneste helt afsluttet runde — et tryk gjorde
+  // ingenting, uden at noget forklarede hvorfor.
+  // Kun de låste kampe sendes videre, så et gæt aldrig kan ses før deadline.
+  const lockedRounds = lockedRoundsOf(state?.allRounds || []);
+  const hasLocked = lockedRounds.length > 0;
+  const openUser = (uid, playerName, initialKey = null) => { if (hasLocked) setViewUser({ userId: uid, playerName, initialKey }); };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -131,11 +136,11 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
                 // er usynligt på touch. Navnet ligger ovenpå og stopper propagationen
                 // (PlayerName), så det stadig fører til karrieren.
                 <tr key={r.player} className="rowline"
-                  onClick={hasCompleted ? () => openUser(r.userId, r.player) : undefined}
-                  title={hasCompleted ? `Se ${r.player}s tips runde for runde` : undefined}
+                  onClick={hasLocked ? () => openUser(r.userId, r.player) : undefined}
+                  title={hasLocked ? `Se ${r.player}s tips runde for runde` : undefined}
                   style={{
                     background: r.userId === userId ? "rgba(34,197,94,0.06)" : "transparent",
-                    cursor: hasCompleted ? "pointer" : "default",
+                    cursor: hasLocked ? "pointer" : "default",
                   }}>
                   <td style={{ color: i === 0 ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display, padding: "8px 2px" }}>
                     {i === 0 && state.isComplete ? "🏆" : i + 1}
@@ -166,7 +171,9 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
         {!loading && state && state.rows.length > 0 && (
           <p style={{ ...muted, marginTop: 8, marginBottom: 0, fontSize: 11 }}>
             🎯 = præcise resultater · Form = point seneste 3 runder · ▲▼ = ændring efter seneste runde
-            {hasCompleted ? " · tryk på en række for spillerens tips runde for runde, på navnet for karrieren" : ""}
+            {hasLocked
+              ? " · tryk på en række for spillerens tips runde for runde, på navnet for karrieren"
+              : " · tryk på et navn for karrieren — spillernes tips kan ses, når runden låser (1 time før første kamp)"}
           </p>
         )}
         {!loading && state && state.rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen deltagere endnu.</p>}
@@ -194,7 +201,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
                       {state.rows.map((row) => {
                         const v = row.perRound[r.key];
                         const isBest = v !== undefined && v === best && v > 0;
-                        const clickable = v !== undefined && completedRounds.some((cr) => cr.key === r.key);
+                        const clickable = v !== undefined && lockedRounds.some((cr) => cr.key === r.key);
                         return (
                           <td key={row.player} style={{ textAlign: "center", color: isBest ? C.gold : C.text, fontWeight: isBest ? 700 : 400 }}>
                             {clickable
@@ -220,7 +227,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
 
       {viewUser && state && (
         <UserRoundPredictions playerName={viewUser.playerName} userId={viewUser.userId}
-          completedRounds={completedRounds} predsByKey={state.predsByKey}
+          lockedRounds={lockedRounds} predsByKey={state.predsByKey}
           rules={comp?.rules || { exact: 3, outcome: 1 }} initialKey={viewUser.initialKey}
           onClose={() => setViewUser(null)} onOpenProfile={openProfile} />
       )}
