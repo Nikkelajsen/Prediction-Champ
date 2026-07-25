@@ -7,6 +7,9 @@ const C = {
   text: "#EDF3F8",
   muted: "#8CA0B3",
   green: "#22C55E",
+  // Blød grøn = +1 / korrekt udfald. Grøn familie, men tydeligt adskilt fra det
+  // præcise hit (C.green), så nuancen alene fortæller hvor godt gættet var.
+  greenSoft: "#7fd48a",
   gold: "#F0B429",
   red: "#EF5B5B",
 };

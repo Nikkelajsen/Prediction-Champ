@@ -67,12 +67,14 @@ const FinalBadge = () => (
     textTransform: "uppercase", whiteSpace: "nowrap",
   }}>Slut</span>
 );
-// lille point-pille: grøn +3 · guld +1 · dæmpet 0 · "–" hvis intet tip.
-// Bruges både i Hjem's runde-oversigt og på Tip-skærmen, så point ser ens ud overalt.
+// lille point-pille: grøn +3 · blød grøn +1 · dæmpet 0 · "–" hvis intet tip.
+// Nuancerne er de samme som i "Sådan virker det" → Pointsystem (HowItWorksScreen),
+// så beskrivelsen og alle visninger af point taler samme farvesprog.
+// Bruges både i Hjem's runde-oversigt og på Tip-skærmen.
 const PointsPill = ({ pts }) => {
   if (pts == null) return <span style={{ color: C.muted, fontSize: 12 }}>–</span>;
-  const col = pts >= 3 ? C.green : pts >= 1 ? C.gold : C.muted;
-  const bg = pts >= 3 ? "rgba(34,197,94,0.15)" : pts >= 1 ? "rgba(240,180,41,0.15)" : "transparent";
+  const col = pts >= 3 ? C.green : pts >= 1 ? C.greenSoft : C.muted;
+  const bg = pts >= 3 ? "rgba(34,197,94,0.18)" : pts >= 1 ? "rgba(127,212,138,0.12)" : "transparent";
   const border = pts >= 1 ? "none" : `1px solid ${C.line}`;
   return (
     <span style={{ background: bg, color: col, border, fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "2px 8px", minWidth: 30, textAlign: "center" }}>
@@ -214,7 +216,7 @@ function UserRoundPredictions({ playerName, userId, completedRounds, predsByKey,
             const pts = pointsFor(pred, m, rules);
             if (pts !== null) roundTotal += pts;
             const has = pred && pred.pred_home !== null && pred.pred_home !== undefined;
-            const ptColor = pts === (rules?.exact ?? 3) ? C.green : pts === (rules?.outcome ?? 1) ? "#7fd48a" : C.muted;
+            const ptColor = pts === (rules?.exact ?? 3) ? C.green : pts === (rules?.outcome ?? 1) ? C.greenSoft : C.muted;
             return (
               <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, background: C.surface2, borderRadius: 8, padding: "8px 10px" }}>
                 <span style={{ flex: 1, color: C.muted, fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

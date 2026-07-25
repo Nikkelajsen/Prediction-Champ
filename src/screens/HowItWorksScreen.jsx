@@ -23,7 +23,7 @@ function HowItWorksScreen({ onBack }) {
       <Section title="Pointsystem">
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <div><span style={{ color: C.green, fontWeight: 700 }}>+3</span> for præcist resultat (fx gættet 2-1, endte 2-1).</div>
-          <div><span style={{ color: "#7fd48a", fontWeight: 700 }}>+1</span> for korrekt udfald (rigtig vinder/uafgjort, forkert resultat).</div>
+          <div><span style={{ color: C.greenSoft, fontWeight: 700 }}>+1</span> for korrekt udfald (rigtig vinder/uafgjort, forkert resultat).</div>
           <div><span style={{ color: C.muted, fontWeight: 700 }}>0</span> ellers. Ingen minuspoint — du kan aldrig gå i minus.</div>
         </div>
       </Section>

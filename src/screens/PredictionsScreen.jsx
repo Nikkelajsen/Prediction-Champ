@@ -113,44 +113,16 @@ function MatchRow({
 
   return (
     <div style={{ padding: "9px 0", borderBottom: last ? "none" : `1px solid ${C.line}` }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 10, minHeight: 40 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{hhmm(m.kickoff_at) || "–"}</span>
-            {/* Ombryder frem for at trunkere: et afkortet holdnavn er skjult information. */}
-            <span style={{ color: C.text, fontWeight: 600, fontSize: 14, lineHeight: 1.25, minWidth: 0 }}>
-              {homeName} – {awayName}
-            </span>
-          </div>
-          {hasMeta && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-              {/* Kampens tilstand: LIVE (i gang) · Slut (færdigspillet). "Låst" står i
-                  rundehovedet — på rækken er de deaktiverede felter signalet. */}
-              {live && <LiveBadge text={live.label} />}
-              {played && showFinal && <FinalBadge />}
-              {stage && (
-                <span style={{ background: C.surface2, color: C.gold, fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 999, whiteSpace: "nowrap" }}>
-                  {stage}
-                </span>
-              )}
-              {/* Kun ved flere lås-grupper i samme runde (flere turneringer): så gælder
-                  rundehovedets tid ikke alle kampe, og rækken må selv sige det. */}
-              {countdown && <span style={{ color: C.gold, fontSize: 11 }}>{countdown}</span>}
-              {openLabel && <span style={{ color: C.muted, fontSize: 11 }}>{openLabel}</span>}
-              {canExpand && (
-                <button onClick={onToggleExpanded} aria-expanded={expanded}
-                  aria-label={expanded ? "Skjul alles gæt" : `Vis alles gæt for ${homeName} mod ${awayName}`}
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 4, background: "none", border: "none",
-                    cursor: "pointer", color: C.gold, fontSize: 11, fontWeight: 700, padding: "2px 0", fontFamily: font.body,
-                  }}>
-                  <Users size={13} />{expanded ? "Skjul gæt" : "Alles gæt"}
-                  {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                </button>
-              )}
-              {err && <span style={{ fontSize: 11, color: C.red }}>Kunne ikke slette</span>}
-            </div>
-          )}
+      {/* Linje 1: klokkeslæt + hold til venstre, eget tip / facit / point til højre.
+          Højre klump ligger i SAMME flexrække som holdnavnene, så tallene flugter med
+          den kamp de hører til — ikke centreret ned over mærke-linjen nedenfor. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 40 }}>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{hhmm(m.kickoff_at) || "–"}</span>
+          {/* Ombryder frem for at trunkere: et afkortet holdnavn er skjult information. */}
+          <span style={{ color: C.text, fontWeight: 600, fontSize: 14, lineHeight: 1.25, minWidth: 0 }}>
+            {homeName} – {awayName}
+          </span>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
@@ -181,9 +153,12 @@ function MatchRow({
           )}
           {played && (
             <>
+              {/* Facit følger samme nuance som pointpillen (og "Sådan virker det"):
+                  præcist hit = fuld grøn + guldkant, korrekt udfald = blød grøn,
+                  forkert = rød. Så har hele rækken ÉN farve, der siger hvor godt det gik. */}
               <span style={scoreChip({
-                background: !hasPred ? C.surface2 : correctOutcome ? "rgba(34,197,94,0.18)" : "rgba(239,91,91,0.18)",
-                color: !hasPred ? C.muted : correctOutcome ? C.green : C.red,
+                background: !hasPred ? C.surface2 : exact ? "rgba(34,197,94,0.18)" : correctOutcome ? "rgba(127,212,138,0.12)" : "rgba(239,91,91,0.18)",
+                color: !hasPred ? C.muted : exact ? C.green : correctOutcome ? C.greenSoft : C.red,
                 border: exact ? `2px solid ${C.gold}` : "1px solid transparent",
               })}>{m.home_score}-{m.away_score}</span>
               {hasPred && <PointsPill pts={pts} />}
@@ -198,6 +173,37 @@ function MatchRow({
           )}
         </div>
       </div>
+
+      {/* Linje 2: kampens mærker, i fuld rækkebredde under linje 1. */}
+      {hasMeta && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 2 }}>
+          {/* Kampens tilstand: LIVE (i gang) · Slut (færdigspillet). "Låst" står i
+              rundehovedet — på rækken er de deaktiverede felter signalet. */}
+          {live && <LiveBadge text={live.label} />}
+          {played && showFinal && <FinalBadge />}
+          {stage && (
+            <span style={{ background: C.surface2, color: C.gold, fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 999, whiteSpace: "nowrap" }}>
+              {stage}
+            </span>
+          )}
+          {/* Kun ved flere lås-grupper i samme runde (flere turneringer): så gælder
+              rundehovedets tid ikke alle kampe, og rækken må selv sige det. */}
+          {countdown && <span style={{ color: C.gold, fontSize: 11 }}>{countdown}</span>}
+          {openLabel && <span style={{ color: C.muted, fontSize: 11 }}>{openLabel}</span>}
+          {canExpand && (
+            <button onClick={onToggleExpanded} aria-expanded={expanded}
+              aria-label={expanded ? "Skjul alles gæt" : `Vis alles gæt for ${homeName} mod ${awayName}`}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 4, background: "none", border: "none",
+                cursor: "pointer", color: C.gold, fontSize: 11, fontWeight: 700, padding: "2px 0", fontFamily: font.body,
+              }}>
+              <Users size={13} />{expanded ? "Skjul gæt" : "Alles gæt"}
+              {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+          )}
+          {err && <span style={{ fontSize: 11, color: C.red }}>Kunne ikke slette</span>}
+        </div>
+      )}
 
       {expanded && (
         <div style={{ marginTop: 8, padding: "8px 10px", background: C.surface2, borderRadius: 10 }}>
