@@ -196,6 +196,15 @@ function RoundPager({ rounds, index, setIndex }) {
   );
 }
 
+// Kolonner i forudsigelses-overlayet: holdnavnet er den eneste elastiske
+// kolonne, resten er faste og smalle nok til, at rækken passer på en 320 px
+// telefon (fast 38+38+36 + 3×6 gap = 130 px, resten til navnet).
+const predCols = { display: "grid", gridTemplateColumns: "1fr 38px 38px 36px", gap: 6, alignItems: "center" };
+const predLabel = {
+  color: C.muted, fontSize: 10, fontFamily: font.display, textTransform: "uppercase",
+  letterSpacing: "0.06em", textAlign: "center",
+};
+
 // én brugers forudsigelser pr. LÅST runde (kalderen filtrerer til låste kampe)
 function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, rules, initialKey, onClose, onOpenProfile }) {
   const startIdx = (() => {
@@ -228,9 +237,11 @@ function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, ru
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 1000,
       display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
     }}>
+      {/* maxWidth følger appens telefonramme (theme.phone = 430), og overflowX
+          er låst: intet i overlayet må kunne fremtvinge vandret scroll. */}
       <div onClick={(e) => e.stopPropagation()} style={{
         background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, width: "100%",
-        maxWidth: 460, maxHeight: "85vh", overflowY: "auto", padding: 18,
+        maxWidth: 430, maxHeight: "85vh", overflowY: "auto", overflowX: "hidden", padding: 18,
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
           <span style={{ fontSize: 12, letterSpacing: 1, color: C.muted, fontFamily: font.display }}>FORUDSIGELSER</span>
@@ -239,7 +250,7 @@ function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, ru
         <div style={{ fontFamily: font.display, textTransform: "uppercase", fontWeight: 700, fontSize: 22 }}>
           {/* Navnet er også herfra vejen til karrieren — overlayet lukkes først,
               ellers ville profilen ligge bag den mørke baggrund. */}
-          <PlayerName userId={userId} name={playerName}
+          <PlayerName userId={userId} name={playerName} truncate
             onOpenProfile={onOpenProfile ? (uid) => { onClose(); onOpenProfile(uid); } : undefined} />
         </div>
 
@@ -247,6 +258,18 @@ function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, ru
           <button disabled={!canPrev} onClick={() => setIdx((v) => v - 1)} style={pagerBtn(canPrev)}><ChevronLeft size={16} /></button>
           <span style={{ color: C.text, fontSize: 13, fontWeight: 700, textAlign: "center" }}>Runde {round.label}</span>
           <button disabled={!canNext} onClick={() => setIdx((v) => v + 1)} style={pagerBtn(canNext)}><ChevronRight size={16} /></button>
+        </div>
+
+        {/* Fælles kolonner for både labels og rækker, så tallene flugter. Ordet
+            "facit" stod før inde i hver række og kostede ~38 px af en bredde,
+            der ikke var til overs på en smal telefon — nu står det som label
+            ét sted. Holdnavnet er den eneste elastiske kolonne (minWidth 0 +
+            ellipsis), så rækken kan klemmes ned uden at flyde ud i bredden. */}
+        <div style={{ ...predCols, padding: "0 10px", marginBottom: 4 }}>
+          <span />
+          <span style={predLabel}>Gæt</span>
+          <span style={predLabel}>Facit</span>
+          <span style={predLabel}>Point</span>
         </div>
 
         <div style={{ display: "grid", gap: 6 }}>
@@ -258,18 +281,17 @@ function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, ru
             const played = m.home_score !== null && m.home_score !== undefined;
             const ptColor = pts === (rules?.exact ?? 3) ? C.green : pts === (rules?.outcome ?? 1) ? C.greenSoft : C.muted;
             return (
-              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, background: C.surface2, borderRadius: 8, padding: "8px 10px" }}>
-                <span style={{ flex: 1, color: C.muted, fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div key={m.id} style={{ ...predCols, background: C.surface2, borderRadius: 8, padding: "8px 10px" }}>
+                <span style={{ color: C.muted, fontSize: 12, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {m._home || m.home_team_id} – {m._away || m.away_team_id}
                 </span>
-                <span style={{ color: C.text, fontSize: 13, fontWeight: 700, minWidth: 34, textAlign: "center" }}>
+                <span style={{ color: C.text, fontSize: 13, fontWeight: 700, textAlign: "center" }}>
                   {has ? `${pred.pred_home}-${pred.pred_away}` : "–"}
                 </span>
-                <span style={{ color: C.muted, fontSize: 12 }}>facit</span>
-                <span style={{ color: played ? C.text : C.muted, fontSize: 13, fontWeight: 700, minWidth: 34, textAlign: "center" }}>
+                <span style={{ color: played ? C.text : C.muted, fontSize: 13, fontWeight: 700, textAlign: "center" }}>
                   {played ? `${m.home_score}-${m.away_score}` : "–"}
                 </span>
-                <span style={{ background: C.surface, color: ptColor, fontSize: 12, fontWeight: 700, minWidth: 30, textAlign: "center", borderRadius: 999, padding: "2px 8px" }}>
+                <span style={{ background: C.surface, color: ptColor, fontSize: 12, fontWeight: 700, textAlign: "center", borderRadius: 999, padding: "2px 4px" }}>
                   {pts === null ? "–" : `+${pts}`}
                 </span>
               </div>
