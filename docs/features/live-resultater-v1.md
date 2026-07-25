@@ -78,8 +78,89 @@ Tre visuelt adskilte tilstande:
 - **Live-notifikationer ved mål.** Push-strategien er bevidst "få, relevante beskeder" (to typer). Målnotifikationer ville tredoble støjen.
 - **Målscorere, kort, statistik.** Kræver flere Sportmonks-includes pr. kald; giver ikke mere til tippekonkurrencen.
 
-## 7. Engangsopsætning
+## 7. Engangsopsætning (udførlig)
 
-1. Kør `sql/live_scores.sql` i Supabase ("Run without RLS").
-2. Opret ét cron-job på cron-job.org: hvert minut, `https://<app>/api/sync-live`, med headeren `x-sync-secret`. Ingen query-parametre.
-3. Verificér med `?dryRun=true` under en kamp: svaret viser `live`, `finished` og `cleared` uden at skrive noget.
+### Trin 0 — forudsætninger
+
+Tre ting skal være på plads, **i denne rækkefølge**, før cron-jobbet giver mening:
+
+1. **Koden skal være deployet.** `/api/sync-live` findes først, når branchen er merget til `main` (eller du bruger branchens preview-URL). Tjek det ved at åbne `https://<app>/api/sync-live` i browseren — du skal få `{"error":"Ikke autoriseret"}`. Får du Vercels 404-side, er funktionen ikke deployet endnu.
+2. **Databasen skal have live-kolonnerne.** Kør `sql/live_scores.sql` i Supabase → SQL Editor → **"Run without RLS"**. Scriptet er idempotent. Gør du ikke det, fejler hver kørsel med `column "live_state" does not exist`.
+3. **Du skal kende to værdier:**
+   - **App-URL:** din Vercel-produktions-URL (Vercel → projektet → Domains).
+   - **`SYNC_SECRET`:** Vercel → projektet → Settings → Environment Variables. Den findes allerede — det er den samme, dine `sync-matches`-jobs bruger.
+
+### Trin 1 — test funktionen manuelt, før du automatiserer
+
+Kør én gang fra din egen maskine med `dryRun`, så intet skrives:
+
+```bash
+curl -s -H "x-sync-secret: DIN_SYNC_SECRET" \
+  "https://<app>/api/sync-live?dryRun=true"
+```
+
+Forventet svar uden kampe i gang:
+
+```json
+{"checked":0,"live":0,"finished":0,"cleared":0,"note":"Ingen kampe i tidsvinduet"}
+```
+
+Det er det **rigtige** svar uden for kamptid — det betyder, at funktionen slog op i din egen database, ikke fandt noget, og sprang Sportmonks-kaldet helt over. Gentag testen under en kamp for at se `live`-tallet stige.
+
+> Har du ikke `curl`, virker `https://<app>/api/sync-live?dryRun=true&secret=DIN_SYNC_SECRET` i en browser. Brug kun den form til en enkelt test — hemmeligheden havner i request-logs. Cron-jobbet skal bruge headeren.
+
+### Trin 2 — opret cron-jobbet på cron-job.org
+
+Log ind på [cron-job.org](https://cron-job.org) → **Cronjobs** → **Create cronjob**.
+
+| Felt | Værdi |
+|---|---|
+| **Title** | `Prediction Champ — live-resultater` |
+| **URL** | `https://<app>/api/sync-live` |
+| **Schedule** | **Every 1 minute** — vælg "Every minute" i dropdownen, eller sæt alle felter (minut/time/dag/måned/ugedag) til "every" |
+| **Request method** | `GET` |
+
+Åbn derefter **Advanced** (eller fanen "Advanced settings"):
+
+| Felt | Værdi |
+|---|---|
+| **Headers** | Tilføj én: navn `x-sync-secret`, værdi = din `SYNC_SECRET` |
+| **Treat redirects as success** | fra |
+| **Enable job** | til |
+
+**Ingen query-parametre.** Funktionen finder selv de relevante kampe på tværs af alle ligaer — modsat `sync-matches`, der skal have `?leagueId=`.
+
+Gem med **Create**.
+
+### Trin 3 — verificér de første kørsler
+
+Åbn jobbet → **History** / **Execution log**. Efter et par minutter skal du se:
+
+- **Status 200** på hver kørsel.
+- Svarteksten `{"checked":0,...,"note":"Ingen kampe i tidsvinduet"}` uden for kamptid.
+- Under en kamp: `{"checked":3,"live":3,"finished":0,"cleared":0,"written":3}`.
+
+Den endelige test er appen: åbn Hjem-fanen under en kamp — "Indeværende runde" skal vise den nuværende stilling og et rødt **LIVE**-mærke, og tallet skal opdatere af sig selv cirka hvert minut.
+
+### Trin 4 — skru `sync-matches` ned (anbefalet)
+
+`sync-matches`-jobbene kørte hvert 10.-15. minut for at fange resultater hurtigt. **Den grund er væk** — `sync-live` færdigmelder nu kampe inden for et minut efter slutfløjt. Tilbage har `sync-matches` kun langsomme opgaver: nye kampe i programmet, flyttede kickoff-tider og nye hold.
+
+Sæt dem til **hver 6. time**. På Sportmonks' gratis-plan (180 kald i timen pr. entitet) falder det konstante forbrug fra ~24 kald/time til ~0,7, og hele budgettet er frit til live-syncens 60 kald/time på kampdage. Ren indstillingsændring hos cron-job.org — ingen kodeændring.
+
+### Fejlfinding
+
+| Svar | Årsag | Løsning |
+|---|---|---|
+| `401 {"error":"Ikke autoriseret"}` | Header mangler, er stavet forkert, eller `SYNC_SECRET` er ikke sat i Vercels **Production**-miljø | Tjek headernavnet er præcis `x-sync-secret`, og at værdien matcher Vercel-variablen |
+| `500 "Miljøvariabler mangler …"` | `SPORTMONKS_TOKEN`, `SUPABASE_URL` eller `SUPABASE_SERVICE_ROLE_KEY` mangler i Vercel | Sæt dem, og redeploy |
+| `500 Supabase …: 42703 column "live_state" does not exist` | `sql/live_scores.sql` er ikke kørt | Kør scriptet ("Run without RLS") |
+| `500 Sportmonks (live): 429` | Rate limit ramt | Skru `sync-matches` ned (trin 4) |
+| `404` fra Vercel | Funktionen er ikke deployet | Merge branchen til `main`, eller peg jobbet på preview-URL'en |
+| `200`, men `checked` er altid `0` under en kamp | Kampen mangler `api_fixture_id`, eller `kickoff_at` er forkert | Kør `sync-matches` for ligaen og tjek kampen i Admin |
+| Kampen vises live uden minuttal | `periods`-include er ikke i dit abonnement — funktionen prøver automatisk igen uden | Ingen handling; stillingen er korrekt, kun minuttet mangler |
+
+### Hold øje med
+
+- **Vercel-invokationer:** 1.440 kørsler i døgnet ≈ 43.800 om måneden. Det er langt under Hobby-planens grænse i dag, men tjek Vercel → Usage efter den første måned.
+- **cron-job.org's fejlnotifikationer:** slå "notify on failure" til, men vær opmærksom på, at et job, der fejler vedvarende, kan blive deaktiveret automatisk. Ser du live-stillingen fryse, så tjek jobbets status først.
