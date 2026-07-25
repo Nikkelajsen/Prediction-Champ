@@ -189,7 +189,7 @@ Ikke alle ønsker at tippe alle turneringer. Nogle følger kun Superligaen, andr
 
 ### Den globale spillerunde
 
-En af de mest markante beslutninger i produktets design var at indføre en global spillerunde. I stedet for at lade hver turnering leve sit eget liv, samles alle ugens kampe i én fælles spillerunde, der altid løber fra tirsdag til mandag. Når mandag er slut, afsluttes spillerunden, og derefter sker fire ting i præcis samme rækkefølge: Først beregnes pointene. Dernæst opdateres konkurrencernes stillinger. Herefter genereres historierne. Til sidst beregnes spillernes Elo-rating.
+En af de mest markante beslutninger i produktets design var at indføre en global spillerunde. I stedet for at lade hver turnering leve sit eget liv, samles alle ugens kampe i én fælles spillerunde, der altid løber fra tirsdag til mandag. Runden er regnestykkets enhed: Point, stillinger og rating hører til runden, ikke til den enkelte kamp — men de opdateres løbende, efterhånden som ugens kampe fløjtes af, så brugeren aldrig sidder og venter på at se, hvordan det gik. Når mandag er slut, står rundens tal endeligt fast, og fire ting er gjort i præcis samme rækkefølge: Først pointene. Dernæst konkurrencernes stillinger. Så spillernes Elo-rating. Til sidst historierne, som er de eneste, der først kan skrives, når rundens sidste kamp er spillet.
 
 Denne rytme er bevidst. Prediction Hub skal have sin egen ugentlige puls: Brugerne skal vide, at mandag aften afsluttes ugen — tirsdag begynder en ny.
 
@@ -197,7 +197,9 @@ Denne rytme er bevidst. Prediction Hub skal have sin egen ugentlige puls: Bruger
 
 I mange tippekonkurrencer nulstilles alt, når en sæson slutter. Prediction Hub gør det modsatte: En spillers rating følger vedkommende gennem hele produktets levetid. Den fortæller ikke, hvem der vandt sidste års Superliga — den fortæller, hvor dygtig spilleren har været over flere år.
 
-Hver globale spillerunde resulterer i én ratingopdatering. Ikke én pr. konkurrence, ikke én pr. kamp — én. Den beregnes ud fra alle de kampe, spilleren har deltaget i i løbet af ugen. Dermed belønnes den samlede præstation frem for enkelte højdepunkter.
+Hver globale spillerunde resulterer i ét ratingskridt. Ikke ét pr. konkurrence, ikke ét pr. kamp — ét. Det beregnes ud fra alle de kampe, spilleren har deltaget i i løbet af ugen. Dermed belønnes den samlede præstation frem for enkelte højdepunkter.
+
+Skridtet regnes ud løbende. Så snart en kamp er fløjtet af, opdateres rundens ratingændring med det, der er spillet indtil videre — den er altså foreløbig hen over ugen og står endeligt fast, når rundens sidste kamp er slut. Det er stadig ét skridt: en god lørdag lægges ikke oven i en god søndag, den regnes ind i det samme skridt. Vi viser det løbende, fordi ventetid ikke gør tallet rigtigere, men gør ugen kedeligere.
 
 ### Simpelt på overfladen
 
@@ -238,8 +240,8 @@ Prediction Hub skal have en rytme — ikke en tilfældig rytme, men en rytme, so
 - **Tirsdag:** En ny global spillerunde starter. Brugerne begynder at afgive deres tips.
 - **Onsdag og torsdag:** Der kommer måske nye kampe til. Nogle ændrer deres tips. Andre følger med i, hvem der allerede har tippet.
 - **Fredag:** De første kampe starter. Tips låses automatisk.
-- **Lørdag og søndag:** Kampene afgør ikke kun resultater. De afgør relationer. Placeringer ændrer sig. Historier opstår.
-- **Mandag:** Spillerunden afsluttes. Point beregnes, stillinger opdateres, rating ændres, og Story Engine finder ugens vigtigste fortælling.
+- **Lørdag og søndag:** Kampene afgør ikke kun resultater. De afgør relationer. Point tikker ind, placeringer ændrer sig, rating rykker sig for hver kamp, der fløjtes af. Historier opstår.
+- **Mandag:** Spillerunden afsluttes. Rundens point, stillinger og rating står endeligt fast, og Story Engine finder ugens vigtigste fortælling.
 
 Først derefter begynder en ny uge. Denne rytme skal være så tydelig, at brugerne næsten kan mærke den.
 

@@ -195,7 +195,7 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
           </div>
           <Sparkline curve={curve} />
           <p style={{ color: C.muted, fontSize: 11, marginTop: 8, marginBottom: 0 }}>
-            Rating efter hver runde. ● grå/stiplet = foreløbig periode (under 5 runder).
+            Rating efter hver runde — den nyeste prik kan stadig flytte sig, indtil runden er slut. ● grå/stiplet = foreløbig periode (under 5 runder).
           </p>
         </Card>
       )}
