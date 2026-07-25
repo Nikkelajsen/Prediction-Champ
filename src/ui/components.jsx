@@ -46,6 +46,27 @@ const FormDots = ({ form }) => (
     ))}
   </span>
 );
+// LIVE-mærke: rød, pulserende prik + kort tekst (spilleminut eller "Pause").
+// Bruges alle steder, hvor en kamp kan være i gang, så "live" og "færdigspillet"
+// aldrig kan forveksles. Prikkens puls slås fra ved prefers-reduced-motion.
+const LiveBadge = ({ text = "Live" }) => (
+  <span style={{
+    display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap",
+    background: "rgba(239,91,91,0.14)", color: C.red, border: `1px solid ${C.red}`,
+    borderRadius: 999, padding: "1px 8px", fontSize: 11, fontWeight: 800,
+    letterSpacing: "0.06em", textTransform: "uppercase",
+  }}>
+    <span className="livedot" style={{ width: 6, height: 6, borderRadius: "50%", background: C.red }} />
+    Live{text && text !== "Live" ? ` ${text}` : ""}
+  </span>
+);
+// Dæmpet "Slut"-mærke, så en færdigspillet kamp er umiskendeligt forskellig fra en live kamp.
+const FinalBadge = () => (
+  <span style={{
+    color: C.muted, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em",
+    textTransform: "uppercase", whiteSpace: "nowrap",
+  }}>Slut</span>
+);
 const Move = ({ d }) => {
   if (d > 0) return <span style={{ color: C.green, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 2 }}><ArrowUp size={12} />{d}</span>;
   if (d < 0) return <span style={{ color: C.red, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 2 }}><ArrowDown size={12} />{Math.abs(d)}</span>;
@@ -208,4 +229,4 @@ function UserRoundPredictions({ playerName, userId, completedRounds, predsByKey,
   );
 }
 
-export { Card, Eyebrow, H, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions };
+export { Card, Eyebrow, H, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge };

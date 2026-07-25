@@ -62,6 +62,9 @@ const globalCss = `
   .rowline { border-bottom: 1px solid ${C.line}; }
   .spin { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .livedot { animation: livepulse 1.4s ease-in-out infinite; }
+  @keyframes livepulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+  @media (prefers-reduced-motion: reduce) { .livedot { animation: none; } }
   button:focus-visible { outline: 2px solid ${C.green}; outline-offset: 2px; }
 `;
 

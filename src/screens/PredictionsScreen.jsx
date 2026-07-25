@@ -1,10 +1,10 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Check } from "lucide-react";
 import { db } from "../lib/supabase.js";
-import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, outcome, pointsFor, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS, stageBadgeLabel } from "../lib/scoring.js";
+import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, liveInfo, outcome, pointsFor, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS, stageBadgeLabel } from "../lib/scoring.js";
 import { C, muted } from "../ui/theme.js";
-import { BackBar, Card, H, RoundPager, ScoreInput } from "../ui/components.jsx";
+import { BackBar, Card, FinalBadge, H, LiveBadge, RoundPager, ScoreInput } from "../ui/components.jsx";
 
 function PredictionsScreen({ token, userId, competitions, leagues = [], initialFilter, initialRoundKey, onBack }) {
   const [compFilter, setCompFilter] = useState(initialFilter || "all");
@@ -92,11 +92,41 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
 
   // Reager på en ny ønsket runde (fx et nyt "Se tips"/"Tip nu"-klik fra Hjem, hvor
   // kampene ikke genindlæses fordi konkurrence-filteret er uændret).
+  // appliedRoundKey sikrer, at vi kun springer ÉN gang pr. ønsket runde — ellers ville
+  // live-genindlæsningen nedenfor (som laver et nyt rounds-array hvert minut) hive
+  // brugeren tilbage til startrunden, hver gang live-stillingen tikker.
+  const appliedRoundKey = useRef(null);
   useEffect(() => {
     if (!initialRoundKey || !rounds.length) return;
+    if (appliedRoundKey.current === initialRoundKey) return;
     const idx = rounds.findIndex((r) => r.key === initialRoundKey);
-    if (idx >= 0) setRoundIndex(idx);
+    if (idx >= 0) { setRoundIndex(idx); appliedRoundKey.current = initialRoundKey; }
   }, [initialRoundKey, rounds]);
+
+  // Live-opdatering: så længe mindst én hentet kamp er i gang (eller kunne være det —
+  // kickoff passeret uden endeligt resultat), genhentes kampene hvert minut, så
+  // live-stillingen tikker med uden at brugeren skal genindlæse. Er ingen kampe i
+  // vinduet, kører der ingen polling.
+  useEffect(() => {
+    const inLiveWindow = allMatches.some((m) => {
+      if (m.home_score !== null && m.home_score !== undefined) return false;
+      if (m.live_state != null) return true;
+      if (!m.kickoff_at) return false;
+      const since = Date.now() - new Date(m.kickoff_at).getTime();
+      return since >= 0 && since < 6 * 3600 * 1000;
+    });
+    if (!inLiveWindow) return;
+    let cancelled = false;
+    const id = setTimeout(async () => {
+      const ids = allMatches.map((m) => m.id);
+      if (!ids.length) return;
+      try {
+        const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
+        if (!cancelled) setAllMatches(ms);
+      } catch (e) { /* prøver igen om et minut */ }
+    }, 60000);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, [allMatches, token]);
 
   async function save(matchId, field, val) {
     const cur = preds[matchId] || { pred_home: null, pred_away: null };
@@ -182,6 +212,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
                   const pred = preds[m.id] || { pred_home: null, pred_away: null };
                   const locked = isLocked(m, roundLockMap);
                   const played = m.home_score !== null && m.home_score !== undefined;
+                  const live = liveInfo(m); // nuværende stilling — giver ALDRIG point
                   const hasPred = pred.pred_home !== null && pred.pred_away !== null;
                   const pts = played ? pointsFor(pred, m, rules) : null;
                   const exact = played && hasPred && pred.pred_home === m.home_score && pred.pred_away === m.away_score;
@@ -201,11 +232,14 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
                           </span>
                         )}
                       </div>
-                      <div style={{ color: C.muted, fontSize: 12, marginTop: 2, marginBottom: 10 }}>
-                        {formatKickoff(m.kickoff_at)}
-                        {!played && locked && <span style={{ color: C.red, marginLeft: 8 }}>· Låst</span>}
-                        {countdown && !notOpenUntil && <span style={{ color: C.gold, marginLeft: 8 }}>· {countdown}</span>}
-                        {notOpenUntil && <span style={{ color: C.muted, marginLeft: 8 }}>· Åbner {formatKickoff(notOpenUntil.toISOString())}</span>}
+                      <div style={{ color: C.muted, fontSize: 12, marginTop: 2, marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span>{formatKickoff(m.kickoff_at)}</span>
+                        {/* Kampens tilstand: LIVE (i gang) · Slut (færdigspillet) · Låst (venter på kickoff) */}
+                        {live && <LiveBadge text={live.label} />}
+                        {played && <FinalBadge />}
+                        {!played && !live && locked && <span style={{ color: C.red }}>· Låst</span>}
+                        {countdown && !notOpenUntil && <span style={{ color: C.gold }}>· {countdown}</span>}
+                        {notOpenUntil && <span style={{ color: C.muted }}>· Åbner {formatKickoff(notOpenUntil.toISOString())}</span>}
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
                         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -225,6 +259,17 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
                                 fontSize: 15, fontWeight: 700, padding: "6px 12px", whiteSpace: "nowrap", borderRadius: 8,
                               }}>{m.home_score} - {m.away_score}</span>
                               {hasPred && <span style={{ fontSize: 12, color: C.muted, whiteSpace: "nowrap" }}>{pts > 0 ? `+${pts}` : pts} point</span>}
+                            </>
+                          )}
+                          {/* Live: nuværende stilling i neutral (rød-kantet) ramme — bevidst UDEN
+                              point/farvekodning, for point afgøres først ved slutfløjt. */}
+                          {!played && live && (
+                            <>
+                              <span style={{
+                                background: "rgba(239,91,91,0.10)", color: C.text, border: `1px solid ${C.red}`,
+                                fontSize: 15, fontWeight: 700, padding: "6px 12px", whiteSpace: "nowrap", borderRadius: 8,
+                              }}>{live.homeScore} - {live.awayScore}</span>
+                              <span style={{ fontSize: 12, color: C.muted, whiteSpace: "nowrap" }}>undervejs</span>
                             </>
                           )}
                           {locked && participants.length > 1 && (

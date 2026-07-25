@@ -112,4 +112,32 @@ function isLocked(match, roundLockMap) {
   return Date.now() >= earliest - LOCK_LEAD_MS;
 }
 
-export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageOptionLabel, stageBadgeLabel, filterByStages };
+// ---------- live-resultater ----------
+// Live-stillingen bor i SEPARATE kolonner (live_*) og tæller ALDRIG point: en kamp
+// er først "spillet", når home_score er sat. Derfor kan stillinger, rating og point
+// aldrig bevæge sig midt i en kamp — de venter på slutfløjt. Se sql/live_scores.sql.
+//
+// Kampens tre tilstande i UI'et:
+//   færdigspillet → isPlayed(m) === true (resultat + point)
+//   i gang        → liveInfo(m) !== null (nuværende stilling + LIVE-mærke)
+//   kommende      → ingen af delene (kickoff-tidspunkt)
+const LIVE_BREAK_STATES = ["HT", "BREAK", "EXTRA_TIME_BREAK", "PEN_BREAK"];
+
+function isPlayed(m) { return !!m && m.home_score !== null && m.home_score !== undefined; }
+
+// Returnerer null hvis kampen ikke er i gang. Et endeligt resultat slår altid live,
+// så en kamp aldrig kan "gå tilbage" til live efter at være meldt færdig.
+function liveInfo(m) {
+  if (!m || isPlayed(m) || m.live_state == null) return null;
+  const paused = LIVE_BREAK_STATES.includes(m.live_state);
+  return {
+    homeScore: m.live_home_score ?? 0,
+    awayScore: m.live_away_score ?? 0,
+    state: m.live_state,
+    minute: paused ? null : (m.live_minute ?? null),
+    // kort label ved siden af LIVE-mærket: spilleminut, eller "Pause" i pauserne
+    label: paused ? "Pause" : (m.live_minute != null ? `${m.live_minute}′` : "Live"),
+  };
+}
+
+export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo };
