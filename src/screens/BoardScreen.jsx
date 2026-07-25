@@ -107,47 +107,53 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
         </div>
         {loading && <p style={{ ...muted, margin: 0 }}>Beregner…</p>}
         {!loading && state && state.rows.length > 0 && (
-          <div style={{ overflowX: "auto" }}>
-            <table>
-              <thead><tr className="rowline">
-                <th style={thStyle}>#</th>
-                <th style={thStyle}>Spiller</th>
-                <th style={{ ...thStyle, textAlign: "center" }} title="Prediction Champ Rating">Rating</th>
-                <th style={{ ...thStyle, textAlign: "center" }} title="Antal præcise resultater">🎯</th>
-                <th style={{ ...thStyle, textAlign: "center" }} title="Point i de seneste 3 runder">Form</th>
-                <th style={{ ...thStyle, textAlign: "right" }}>Point</th>
-              </tr></thead>
-              <tbody>
-                {state.rows.map((r, i) => (
-                  <tr key={r.player} className="rowline" style={{ background: r.userId === userId ? "rgba(34,197,94,0.06)" : "transparent" }}>
-                    <td style={{ color: i === 0 ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display }}>
-                      {i === 0 && state.isComplete ? "🏆" : i + 1}
-                      {r.rankDelta !== undefined && r.rankDelta !== 0 && (
-                        <span style={{ fontSize: 11, marginLeft: 4, color: r.rankDelta > 0 ? C.green : C.red }}>
-                          {r.rankDelta > 0 ? `▲${r.rankDelta}` : `▼${Math.abs(r.rankDelta)}`}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ color: C.text, fontWeight: r.userId === userId ? 700 : 600 }}>
-                      {hasCompleted
-                        ? <span onClick={() => openUser(r.userId, r.player)} style={{ cursor: "pointer", textDecoration: "underline", textDecorationColor: C.line }}>{r.player}</span>
-                        : r.player}
-                    </td>
-                    <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
-                      {r.rating != null
-                        ? <span style={{ color: C.gold, fontWeight: 700, fontSize: 13 }}>{r.rating}{r.provisional ? <span style={{ color: C.muted, fontWeight: 400 }} title="Foreløbig">*</span> : ""}</span>
-                        : <span style={{ color: C.muted, fontSize: 13 }}>–</span>}
-                    </td>
-                    <td style={{ textAlign: "center", color: C.text, fontSize: 13 }}>{r.exactCount}</td>
-                    <td style={{ textAlign: "center", color: C.muted, fontSize: 13 }}>{r.form3}</td>
-                    <td style={{ textAlign: "right" }}>
-                      <span style={{ background: i === 0 ? "rgba(240,180,41,0.15)" : C.surface2, color: i === 0 ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 10px" }}>{r.total}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <table style={{ tableLayout: "fixed", width: "100%" }}>
+            <colgroup>
+              <col style={{ width: 40 }} />
+              <col />
+              <col style={{ width: 46 }} />
+              <col style={{ width: 26 }} />
+              <col style={{ width: 30 }} />
+              <col style={{ width: 46 }} />
+            </colgroup>
+            <thead><tr className="rowline">
+              <th style={{ ...thStyle, padding: "8px 2px" }}>#</th>
+              <th style={{ ...thStyle, padding: "8px 4px" }}>Spiller</th>
+              <th style={{ ...thStyle, textAlign: "center", padding: "8px 2px" }} title="Prediction Champ Rating">Rating</th>
+              <th style={{ ...thStyle, textAlign: "center", padding: "8px 2px" }} title="Antal præcise resultater">🎯</th>
+              <th style={{ ...thStyle, textAlign: "center", padding: "8px 2px" }} title="Point i de seneste 3 runder">Form</th>
+              <th style={{ ...thStyle, textAlign: "right", padding: "8px 2px" }}>Point</th>
+            </tr></thead>
+            <tbody>
+              {state.rows.map((r, i) => (
+                <tr key={r.player} className="rowline" style={{ background: r.userId === userId ? "rgba(34,197,94,0.06)" : "transparent" }}>
+                  <td style={{ color: i === 0 ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display, padding: "8px 2px" }}>
+                    {i === 0 && state.isComplete ? "🏆" : i + 1}
+                    {r.rankDelta !== undefined && r.rankDelta !== 0 && (
+                      <span style={{ fontSize: 11, marginLeft: 4, color: r.rankDelta > 0 ? C.green : C.red }}>
+                        {r.rankDelta > 0 ? `▲${r.rankDelta}` : `▼${Math.abs(r.rankDelta)}`}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ color: C.text, fontWeight: r.userId === userId ? 700 : 600, padding: "8px 4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {hasCompleted
+                      ? <span onClick={() => openUser(r.userId, r.player)} style={{ cursor: "pointer", textDecoration: "underline", textDecorationColor: C.line }}>{r.player}</span>
+                      : r.player}
+                  </td>
+                  <td style={{ textAlign: "center", whiteSpace: "nowrap", padding: "8px 2px" }}>
+                    {r.rating != null
+                      ? <span style={{ color: C.gold, fontWeight: 700, fontSize: 13 }}>{r.rating}{r.provisional ? <span style={{ color: C.muted, fontWeight: 400 }} title="Foreløbig">*</span> : ""}</span>
+                      : <span style={{ color: C.muted, fontSize: 13 }}>–</span>}
+                  </td>
+                  <td style={{ textAlign: "center", color: C.text, fontSize: 13, padding: "8px 2px" }}>{r.exactCount}</td>
+                  <td style={{ textAlign: "center", color: C.muted, fontSize: 13, padding: "8px 2px" }}>{r.form3}</td>
+                  <td style={{ textAlign: "right", padding: "8px 2px" }}>
+                    <span style={{ background: i === 0 ? "rgba(240,180,41,0.15)" : C.surface2, color: i === 0 ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 8px" }}>{r.total}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
         {!loading && state && state.rows.length > 0 && (
           <p style={{ ...muted, marginTop: 8, marginBottom: 0, fontSize: 11 }}>🎯 = præcise resultater · Form = point seneste 3 runder · ▲▼ = ændring efter seneste runde</p>
