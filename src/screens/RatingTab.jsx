@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { loadRatingBoard, loadRatingHistory } from "../lib/data.js";
 import { C, font, muted } from "../ui/theme.js";
-import { Card, Eyebrow, FormDots, H, InfoDot, Move } from "../ui/components.jsx";
+import { Card, Eyebrow, FormDots, H, InfoDot, Move, PlayerName } from "../ui/components.jsx";
 
 function RatingTab({ token, userId, openProfile }) {
   const [rows, setRows] = useState(null);
@@ -46,10 +46,7 @@ function RatingTab({ token, userId, openProfile }) {
                 <span style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, color: i === 0 ? C.gold : C.muted }}>{i + 1}</span>
                 <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                   <span style={{ fontSize: 14, fontWeight: you ? 700 : 500 }}>
-                    <span onClick={() => openProfile?.(r.userId)}
-                      style={{ cursor: openProfile ? "pointer" : "default", textDecoration: openProfile ? "underline" : "none", textDecorationColor: C.line }}>
-                      {r.player}{you ? " (dig)" : ""}
-                    </span>
+                    <PlayerName userId={r.userId} name={r.player} you={you} onOpenProfile={openProfile} />
                     {r.provisional && <span style={{
                       marginLeft: 6, fontSize: 10, color: C.gold, border: `1px solid ${C.gold}`,
                       borderRadius: 4, padding: "1px 4px", verticalAlign: "middle",

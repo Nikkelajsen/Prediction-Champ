@@ -5,9 +5,9 @@ import { outcome } from "../lib/scoring.js";
 import { db } from "../lib/supabase.js";
 import { computeCompetitionState, loadRatingMap } from "../lib/data.js";
 import { C, btnGhost, btnGold, font, muted, thStyle } from "../ui/theme.js";
-import { BackBar, Card, UserRoundPredictions } from "../ui/components.jsx";
+import { BackBar, Card, PlayerName, UserRoundPredictions } from "../ui/components.jsx";
 
-function BoardScreen({ token, userId, competitions, initialCompId, inviterName, onBack, goToPredictions }) {
+function BoardScreen({ token, userId, competitions, initialCompId, inviterName, onBack, goToPredictions, openProfile }) {
   const [selectedCompId, setSelectedCompId] = useState(initialCompId || competitions[0]?.id || null);
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -135,10 +135,10 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
                       </span>
                     )}
                   </td>
+                  {/* Navnet er personen (→ karriere); pointtallet er pointene
+                      (→ spillerens tips runde for runde). */}
                   <td style={{ color: C.text, fontWeight: r.userId === userId ? 700 : 600, padding: "8px 4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {hasCompleted
-                      ? <span onClick={() => openUser(r.userId, r.player)} style={{ cursor: "pointer", textDecoration: "underline", textDecorationColor: C.line }}>{r.player}</span>
-                      : r.player}
+                    <PlayerName userId={r.userId} name={r.player} onOpenProfile={openProfile} truncate />
                   </td>
                   <td style={{ textAlign: "center", whiteSpace: "nowrap", padding: "8px 2px" }}>
                     {r.rating != null
@@ -148,7 +148,13 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
                   <td style={{ textAlign: "center", color: C.text, fontSize: 13, padding: "8px 2px" }}>{r.exactCount}</td>
                   <td style={{ textAlign: "center", color: C.muted, fontSize: 13, padding: "8px 2px" }}>{r.form3}</td>
                   <td style={{ textAlign: "right", padding: "8px 2px" }}>
-                    <span style={{ background: i === 0 ? "rgba(240,180,41,0.15)" : C.surface2, color: i === 0 ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 8px" }}>{r.total}</span>
+                    <span onClick={hasCompleted ? () => openUser(r.userId, r.player) : undefined}
+                      title={hasCompleted ? `Se ${r.player}s tips runde for runde` : undefined}
+                      style={{
+                        background: i === 0 ? "rgba(240,180,41,0.15)" : C.surface2, color: i === 0 ? C.gold : C.text,
+                        fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 8px",
+                        cursor: hasCompleted ? "pointer" : "default",
+                      }}>{r.total}</span>
                   </td>
                 </tr>
               ))}
@@ -156,7 +162,10 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
           </table>
         )}
         {!loading && state && state.rows.length > 0 && (
-          <p style={{ ...muted, marginTop: 8, marginBottom: 0, fontSize: 11 }}>🎯 = præcise resultater · Form = point seneste 3 runder · ▲▼ = ændring efter seneste runde</p>
+          <p style={{ ...muted, marginTop: 8, marginBottom: 0, fontSize: 11 }}>
+            🎯 = præcise resultater · Form = point seneste 3 runder · ▲▼ = ændring efter seneste runde
+            {hasCompleted ? " · tryk på et navn for karrieren, på point for tips runde for runde" : ""}
+          </p>
         )}
         {!loading && state && state.rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen deltagere endnu.</p>}
       </Card>
@@ -168,7 +177,11 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
             <table>
               <thead><tr className="rowline">
                 <th style={thStyle}>Runde</th>
-                {state.rows.map((row) => <th key={row.player} style={{ ...thStyle, textAlign: "center", whiteSpace: "nowrap" }}>{row.player}</th>)}
+                {state.rows.map((row) => (
+                  <th key={row.player} style={{ ...thStyle, textAlign: "center", whiteSpace: "nowrap" }}>
+                    <PlayerName userId={row.userId} name={row.player} onOpenProfile={openProfile} />
+                  </th>
+                ))}
               </tr></thead>
               <tbody>
                 {shownRounds.map((r) => {
@@ -207,7 +220,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
         <UserRoundPredictions playerName={viewUser.playerName} userId={viewUser.userId}
           completedRounds={completedRounds} predsByKey={state.predsByKey}
           rules={comp?.rules || { exact: 3, outcome: 1 }} initialKey={viewUser.initialKey}
-          onClose={() => setViewUser(null)} />
+          onClose={() => setViewUser(null)} onOpenProfile={openProfile} />
       )}
     </div>
   );

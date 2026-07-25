@@ -6,11 +6,11 @@ import { Trophy, ChevronRight, Plus, Archive, Trash2, Users, Info } from "lucide
 import { db } from "../lib/supabase.js";
 import { computeCompetitionState, loadMyGroups, loadGroupByCode, createGroup, joinGroup } from "../lib/data.js";
 import { C, btnGhost, btnGold, btnGreen, font } from "../ui/theme.js";
-import { Card, Eyebrow, H, InfoDot } from "../ui/components.jsx";
+import { Card, Eyebrow, H, InfoDot, PlayerName } from "../ui/components.jsx";
 
 const NUDGE_KEY = "pc_liga_nudge_dismissed";
 
-function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGroup, reload }) {
+function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGroup, reload, openProfile }) {
   const [groups, setGroups] = useState(null);
   const [statusMap, setStatusMap] = useState({});
   const [showArchived, setShowArchived] = useState(false);
@@ -116,7 +116,9 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
               {s && !s.isComplete && s.totalMatches > 0 ? ` · ${s.playedMatches}/${s.totalMatches} spillet` : ""}
             </div>
             {s?.isComplete && s.winner && (
-              <div style={{ color: C.gold, fontSize: 12, fontWeight: 700, marginTop: 3 }}>🏆 {s.winner.player} ({s.winner.total} point)</div>
+              <div style={{ color: C.gold, fontSize: 12, fontWeight: 700, marginTop: 3 }}>
+                🏆 <PlayerName userId={s.winner.userId} name={s.winner.player} onOpenProfile={openProfile} /> ({s.winner.total} point)
+              </div>
             )}
           </div>
           <div style={{ textAlign: "right", display: "flex", alignItems: "center", gap: 8 }}>

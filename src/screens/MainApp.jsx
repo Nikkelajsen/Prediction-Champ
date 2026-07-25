@@ -203,14 +203,16 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     );
   } else if (screen?.type === "board") {
     body = <BoardScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
-      initialCompId={screen.compId} inviterName={profile?.display_name} onBack={() => setScreen(null)} goToPredictions={openPredictions} />;
+      initialCompId={screen.compId} inviterName={profile?.display_name} onBack={() => setScreen(null)}
+      goToPredictions={openPredictions} openProfile={openProfile} />;
   } else if (screen?.type === "predictions") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
-      leagues={visibleLeagues} initialFilter={screen.compFilter} initialRoundKey={screen.roundKey} onBack={() => setScreen(null)} />;
+      leagues={visibleLeagues} initialFilter={screen.compFilter} initialRoundKey={screen.roundKey}
+      onBack={() => setScreen(null)} openProfile={openProfile} />;
   } else if (screen?.type === "group") {
     body = <GroupScreen token={token} userId={userId} groupId={screen.groupId}
       myCompetitions={competitions} onBack={() => setScreen(null)} openBoard={openBoard}
-      openCreate={openCreate} reloadGroups={async () => { await loadCompetitions(); }} />;
+      openCreate={openCreate} reloadGroups={async () => { await loadCompetitions(); }} openProfile={openProfile} />;
   } else if (screen?.type === "create") {
     body = <CreateCompetitionScreen token={token} userId={userId} leagues={visibleLeagues}
       initialGroupId={screen.groupId} onBack={() => setScreen(null)}
@@ -226,12 +228,12 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} openGroup={openGroup} openProfile={openProfile} />;
   } else if (tab === "tip") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
-      leagues={visibleLeagues} initialFilter="all" />;
+      leagues={visibleLeagues} initialFilter="all" openProfile={openProfile} />;
   } else if (tab === "ligaer") {
     body = <LigaerTab token={token} userId={userId} competitions={competitions}
-      openBoard={openBoard} openCreate={openCreate} openGroup={openGroup} reload={loadAll} />;
+      openBoard={openBoard} openCreate={openCreate} openGroup={openGroup} reload={loadAll} openProfile={openProfile} />;
   } else if (tab === "championship") {
-    body = <ChampionshipTab token={token} userId={userId} leagues={visibleLeagues} />;
+    body = <ChampionshipTab token={token} userId={userId} leagues={visibleLeagues} openProfile={openProfile} />;
   } else if (tab === "rating") {
     body = <RatingTab token={token} userId={userId} openProfile={openProfile} />;
   }

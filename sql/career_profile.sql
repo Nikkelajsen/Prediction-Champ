@@ -5,11 +5,14 @@
 -- Spec: docs/features/karriereprofil-v1.md.
 --
 -- Ét RPC samler hele profil-læsningen i databasen (mønster som admin_user_stats()
--- i sql/user_stats.sql), men gated på K1-relationen i stedet for admin:
---   * egen profil, ELLER
---   * en profil man deler en liga (groups/group_members) eller en konkurrence
---     (competition_participants) med.
--- Ellers 'forbidden'.
+-- i sql/user_stats.sql). Adgang kræver kun, at man er logget ind (K1 udvidet,
+-- juli 2026): på Championship er ALLE automatisk med, og navn, rating, point og
+-- præcise hits er i forvejen offentlige på Rating-/Championship-fanerne — den
+-- gamle delt-liga/konkurrence-gate afviste derfor folk, man reelt konkurrerer med,
+-- og beskyttede intet, der ikke allerede stod på en rangliste.
+--
+-- Det personlige er stadig privat: milepæle (stories, RLS) og rivaler returneres
+-- kun for ens egen profil.
 --
 -- Basistal og titler bygger på det SAMME 3/1-udtryk som round_standings/
 -- season_standings (F2: 3-1-0 er fastfrosset overalt), så profilens tal altid
@@ -26,7 +29,6 @@
 --   predictions(user_id, match_id, pred_home, pred_away),
 --   view monthly_standings(month, scope, user_id, total_points, matches, exact_count),
 --   view round_standings(round_key, user_id, matches, total_points, exact_count),
---   group_members(group_id, user_id), competition_participants(competition_id, user_id),
 --   stories(user_id, rule, payload).
 
 create or replace function public.career_profile(profile_user_id uuid)
@@ -38,7 +40,6 @@ as $fn$
 declare
   v_uid   uuid := auth.uid();
   v_own   boolean := (profile_user_id = auth.uid());
-  v_allowed boolean;
   v_rivals jsonb := '[]'::jsonb;
   months text[] := array['januar','februar','marts','april','maj','juni','juli','august','september','oktober','november','december'];
   result jsonb;
@@ -47,21 +48,11 @@ begin
     raise exception 'not authenticated';
   end if;
 
-  -- ---------- K1: adgangs-gate ----------
-  v_allowed := v_own
-    or exists (
-      select 1 from public.group_members g1
-      join public.group_members g2 on g2.group_id = g1.group_id
-      where g1.user_id = v_uid and g2.user_id = profile_user_id
-    )
-    or exists (
-      select 1 from public.competition_participants c1
-      join public.competition_participants c2 on c2.competition_id = c1.competition_id
-      where c1.user_id = v_uid and c2.user_id = profile_user_id
-    );
-
-  if not v_allowed then
-    raise exception 'forbidden';
+  -- ---------- K1: adgang ----------
+  -- Enhver indlogget bruger må se enhver karriere (hoved, titler, kurve, basistal).
+  -- Kun et ukendt id afvises — ellers ville svaret være et hoved uden navn.
+  if not exists (select 1 from public.profiles where id = profile_user_id) then
+    raise exception 'not found';
   end if;
 
   -- ---------- Rivaler (kun egen profil — private, jf. K1) ----------

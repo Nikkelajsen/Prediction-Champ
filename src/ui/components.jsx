@@ -35,6 +35,38 @@ const H = ({ children, size = 26 }) => (
     {children}
   </div>
 );
+// Brugernavn, der åbner karriereprofilen. Ét sted for udseende, tastaturadgang og
+// "(dig)"-suffikset, så et navn opfører sig ens i ranglister, medlemslister og
+// gæt-lister. Uden `onOpenProfile`/`userId` renderes navnet som ren tekst — så kan
+// et kald-sted fravælge klik uden at ændre layoutet.
+// `stopPropagation` er nødvendig, fordi flere navne bor inde i klikbare kort.
+// `truncate` bruges i stillingstabellerne, hvor kolonnen har fast bredde: en knap
+// er et atomart element, så cellens eget text-overflow ville klippe uden "…" —
+// knappen må derfor selv trunkere. Uden `truncate` beholder knappen sin
+// tekst-baseline, så navnet flugter med teksten omkring det ("Hej Nikolaj",
+// "🏆 Nikolaj (42 point)").
+const PlayerName = ({ userId, name, you = false, onOpenProfile, truncate = false, style }) => {
+  const label = `${name || "—"}${you ? " (dig)" : ""}`;
+  if (!onOpenProfile || !userId) return <>{label}</>;
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onOpenProfile(userId); }}
+      aria-label={you ? "Din karriereprofil" : `Karriereprofil for ${name}`}
+      style={{
+        background: "none", border: "none", padding: 0, margin: 0,
+        font: "inherit", color: "inherit", textAlign: "left", cursor: "pointer",
+        textDecoration: "underline", textDecorationColor: C.line, textUnderlineOffset: 3,
+        ...(truncate
+          ? { maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }
+          : { verticalAlign: "baseline" }),
+        ...style,
+      }}
+    >
+      {label}
+    </button>
+  );
+};
 // Form guide dots — grønne = stærk runde, gul = middel, grå = svag
 const FormDots = ({ form }) => (
   <span style={{ display: "inline-flex", gap: 3 }}>
@@ -165,7 +197,7 @@ function RoundPager({ rounds, index, setIndex }) {
 }
 
 // én brugers forudsigelser pr. færdigspillet runde
-function UserRoundPredictions({ playerName, userId, completedRounds, predsByKey, rules, initialKey, onClose }) {
+function UserRoundPredictions({ playerName, userId, completedRounds, predsByKey, rules, initialKey, onClose, onOpenProfile }) {
   const startIdx = (() => {
     if (initialKey) { const i = completedRounds.findIndex((r) => r.key === initialKey); if (i >= 0) return i; }
     return completedRounds.length - 1;
@@ -202,7 +234,12 @@ function UserRoundPredictions({ playerName, userId, completedRounds, predsByKey,
           <span style={{ fontSize: 12, letterSpacing: 1, color: C.muted, fontFamily: font.display }}>FORUDSIGELSER</span>
           <button onClick={onClose} style={{ background: "transparent", border: "none", color: C.muted, cursor: "pointer", padding: 0 }}><X size={20} /></button>
         </div>
-        <div style={{ fontFamily: font.display, textTransform: "uppercase", fontWeight: 700, fontSize: 22 }}>{playerName}</div>
+        <div style={{ fontFamily: font.display, textTransform: "uppercase", fontWeight: 700, fontSize: 22 }}>
+          {/* Navnet er også herfra vejen til karrieren — overlayet lukkes først,
+              ellers ville profilen ligge bag den mørke baggrund. */}
+          <PlayerName userId={userId} name={playerName}
+            onOpenProfile={onOpenProfile ? (uid) => { onClose(); onOpenProfile(uid); } : undefined} />
+        </div>
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, margin: "10px 0 14px" }}>
           <button disabled={!canPrev} onClick={() => setIdx((v) => v - 1)} style={pagerBtn(canPrev)}><ChevronLeft size={16} /></button>
@@ -244,4 +281,4 @@ function UserRoundPredictions({ playerName, userId, completedRounds, predsByKey,
   );
 }
 
-export { Card, Eyebrow, H, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill };
+export { Card, Eyebrow, H, PlayerName, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill };

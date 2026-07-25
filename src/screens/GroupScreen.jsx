@@ -5,11 +5,11 @@ import { useState, useEffect, useCallback } from "react";
 import { ChevronRight, Copy, Check, Plus, Crown, LogOut, Loader2, MoveRight } from "lucide-react";
 import { loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, deleteGroup, moveCompetitionToGroup } from "../lib/data.js";
 import { C, btnGhost, btnGold, btnGreen, font, muted } from "../ui/theme.js";
-import { BackBar, Card, Eyebrow } from "../ui/components.jsx";
+import { BackBar, Card, Eyebrow, PlayerName } from "../ui/components.jsx";
 
 const modeLabel = (m) => m === "full_season" ? "Hel sæson" : m === "team" ? "Enkelt hold" : m === "time_range" ? "Datointerval" : m === "custom" ? "Håndplukket" : "Tilfældig kupon";
 
-function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard, openCreate, reloadGroups }) {
+function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard, openCreate, reloadGroups, openProfile }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -175,7 +175,7 @@ function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard
             <div key={m.userId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: m.userId === userId ? 700 : 500 }}>
                 {m.role === "admin" && <Crown size={13} color={C.gold} />}
-                {m.name}{m.userId === userId ? " (dig)" : ""}
+                <PlayerName userId={m.userId} name={m.name} you={m.userId === userId} onOpenProfile={openProfile} />
               </span>
               <span style={{ color: C.muted, fontSize: 12 }}>{m.role === "admin" ? "Admin" : "Medlem"}</span>
             </div>
