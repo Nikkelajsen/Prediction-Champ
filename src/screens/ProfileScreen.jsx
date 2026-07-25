@@ -65,11 +65,9 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
       } catch (e) {
         if (cancelled) return;
         const msg = String(e?.message || e).toLowerCase();
-        // 'forbidden' kan kun opstå, indtil den udvidede sql/career_profile.sql
-        // er kørt i Supabase — beholdt som forståelig besked i mellemtiden.
-        if (msg.includes("not found")) setError("Profilen findes ikke længere.");
-        else if (msg.includes("forbidden")) setError("Du kan kun se profiler for brugere, du deler en liga eller konkurrence med.");
-        else setError("Kunne ikke hente profilen lige nu. Prøv igen om lidt.");
+        setError(msg.includes("not found")
+          ? "Profilen findes ikke længere."
+          : "Kunne ikke hente profilen lige nu. Prøv igen om lidt.");
       } finally {
         if (!cancelled) setLoading(false);
       }
