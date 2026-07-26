@@ -518,9 +518,15 @@ async function joinGroup(token, userId, groupId) {
   if (!existing.length) await db.insert(token, "group_members", [{ group_id: groupId, user_id: userId, role: "member" }]);
 }
 
-// Forlad en liga (fjern egen medlemsrække). Ligaens konkurrence-deltagelser røres ikke.
+// Forlad en liga (fjern egen medlemsrække). RLS blokerer, hvis man stadig deltager
+// i en af ligaens konkurrencer — ellers ville man stå tilbage som deltager uden
+// liga-medlemskab, den forældreløse tilstand invarianten forbyder
+// (sql/group_membership_invariant.sql). Returnerer false ved blokering, så UI kan
+// forklare hvorfor, i stedet for tavst at navigere brugeren væk fra en liga, de
+// stadig er medlem af. Samme mønster som leaveCompetition.
 async function leaveGroup(token, userId, groupId) {
-  await db.del(token, "group_members", `group_id=eq.${groupId}&user_id=eq.${userId}`);
+  const res = await db.del(token, "group_members", `group_id=eq.${groupId}&user_id=eq.${userId}`);
+  return Array.isArray(res) ? res.length > 0 : true;
 }
 
 // Slet en tom liga (RLS: kun admin + ingen konkurrencer). Returnerer true hvis slettet.

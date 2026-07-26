@@ -64,8 +64,19 @@ function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard
   async function onLeaveGroup() {
     if (!window.confirm(`Forlad ligaen "${detail.group.name}"? Dine tips og historik bevares.`)) return;
     setLeaving(true);
-    try { await leaveGroup(token, userId, groupId); await reloadGroups?.(); onBack(); }
-    catch (e) { setNote(e.message || "Kunne ikke forlade ligaen."); setLeaving(false); }
+    try {
+      const ok = await leaveGroup(token, userId, groupId);
+      if (!ok) {
+        // RLS blokerede: man deltager stadig i mindst én af ligaens konkurrencer.
+        // Uden denne besked ville brugeren blive sendt tilbage og tro, de var ude.
+        setNote("Du deltager stadig i en af ligaens konkurrencer. Frameld dig dem først — så kan du forlade ligaen.");
+        setLeaving(false);
+        await load();
+        return;
+      }
+      await reloadGroups?.();
+      onBack();
+    } catch (e) { setNote(e.message || "Kunne ikke forlade ligaen."); setLeaving(false); }
   }
   async function onDeleteGroup() {
     if (!window.confirm(`Slet ligaen "${detail.group.name}"? Dette kan ikke fortrydes.`)) return;

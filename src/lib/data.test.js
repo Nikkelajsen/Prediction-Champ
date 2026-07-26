@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // db mockes, så loaderne kan testes uden netværk/Supabase
 vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn(), insert: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
-import { computeCompetitionState, loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, moveCompetitionToGroup } from "./data.js";
+import { computeCompetitionState, loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup } from "./data.js";
 
 // mock-svar pr. tabel/view
 function mockTables(tables) {
@@ -301,6 +301,13 @@ describe("liga-laget (grupper)", () => {
 
     await expect(joinCompetition("token", "u1", "c1", "g1")).rejects.toThrow("RLS");
     expect(db.insert).toHaveBeenCalledTimes(1); // nåede aldrig competition_participants
+  });
+
+  it("leaveGroup returnerer false, når RLS blokerer (deltager stadig i en konkurrence)", async () => {
+    db.del.mockResolvedValueOnce([{ group_id: "g1", user_id: "u1" }]);
+    expect(await leaveGroup("token", "u1", "g1")).toBe(true);
+    db.del.mockResolvedValueOnce([]); // blokeret
+    expect(await leaveGroup("token", "u1", "g1")).toBe(false);
   });
 
   it("moveCompetitionToGroup kalder RPC med rigtige parametre", async () => {
