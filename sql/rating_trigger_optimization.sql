@@ -24,11 +24,16 @@ returns trigger
 language plpgsql
 as $fn$
 declare
-  v_round text;
+  -- date, ikke text: matches.round_key er en genereret date-kolonne, og Postgres
+  -- har ingen `date = text`-operator. Med text her fejlede opslaget nedenfor
+  -- (m.round_key = v_round) inde i exception-guarden — altså tavst, hvorved
+  -- generate_stories aldrig blev kaldt. generate_stories tager text og får
+  -- derfor et eksplicit ::text.
+  v_round date;
 begin
   -- saml berørte round_keys, afhængigt af operationen (kun når et resultat reelt ændres)
   drop table if exists _se_changed_rounds;
-  create temporary table _se_changed_rounds (round_key text);
+  create temporary table _se_changed_rounds (round_key date);
 
   if tg_op = 'INSERT' then
     insert into _se_changed_rounds
@@ -59,11 +64,14 @@ begin
              where m.round_key = v_round and (m.home_score is null or m.away_score is null)
            )
         then
-          perform public.generate_stories(v_round);
+          perform public.generate_stories(v_round::text);
         end if;
       end loop;
     exception when others then
-      raise notice 'generate_stories fejlede (ignoreret, resultater/rating er uberørte): %', sqlerrm;
+      -- warning, ikke notice: guarden skal blive ved med at beskytte resultat-
+      -- lagringen, men en fejl må ikke være usynlig igen (jf. A9, juli 2026).
+      -- warning når Postgres-loggen som standard; notice gjorde ikke.
+      raise warning 'generate_stories fejlede (ignoreret, resultater/rating er uberørte): %', sqlerrm;
     end;
   end if;
 
