@@ -283,7 +283,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
             style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", cursor: "pointer", flexShrink: 0 }}>
             <Eyebrow>Rating</Eyebrow>
             <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-              <span style={{ fontFamily: font.display, fontSize: 26, fontWeight: 700 }}>{snapshot.rating}{snapshot.provisional ? <span style={{ color: C.muted, fontSize: 15 }}>*</span> : ""}</span>
+              <span style={{ fontFamily: font.display, fontSize: 26, fontWeight: 700 }}>{snapshot.rating}{snapshot.provisional ? <span style={{ color: C.muted, fontSize: 15 }} title="Foreløbig — under 5 runder">*</span> : ""}</span>
               <Move d={snapshot.move} />
             </div>
           </div>
@@ -311,7 +311,35 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       {tips && !tips.hasComps && groups && groups.length === 0 && (
         <Card style={{ borderStyle: "dashed", background: "transparent" }}>
           <div style={{ color: C.muted, fontSize: 14, textAlign: "center" }}>
-            Du er ikke med i nogen ligaer endnu. <span onClick={() => goTab("ligaer")} style={{ color: C.green, cursor: "pointer", fontWeight: 700 }}>Opret eller join én →</span>
+            Du er ikke med i nogen ligaer endnu. <span onClick={() => goTab("ligaer")} style={{ color: C.green, cursor: "pointer", fontWeight: 700 }}>Opret eller deltag i én →</span>
+          </div>
+        </Card>
+      )}
+      {/* Intet at tippe lige nu — IKKE det samme som "alle tips er inde". Runden er
+          låst eller spillet, eller det rullende vindue har ikke åbnet endnu. */}
+      {tips && tips.hasComps && tips.nothingToTip && (
+        <Card>
+          <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Intet at tippe lige nu</div>
+          <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
+            {tips.nextOpen ? `Næste kamp: ${formatKickoff(tips.nextOpen)}` : "Der er ingen kommende kampe i dine konkurrencer."}
+          </div>
+          {tips.roundKey && (
+            <button style={{ ...btnGhost, marginTop: 12 }} onClick={() => openPredictions("all", tips.roundKey)}>Se runden</button>
+          )}
+        </Card>
+      )}
+      {/* Konkurrencer uden kampe endnu (fx en stage-konkurrence før kampene er udgivet). */}
+      {tips && tips.hasComps && tips.noMatches && (
+        <Card style={{ borderStyle: "dashed", background: "transparent" }}>
+          <div style={{ color: C.muted, fontSize: 14, textAlign: "center" }}>
+            Der er ingen kampe i dine konkurrencer endnu. De dukker op, så snart kampprogrammet er lagt.
+          </div>
+        </Card>
+      )}
+      {tips && tips.hasComps && tips.error && (
+        <Card style={{ borderColor: C.red }}>
+          <div style={{ color: C.red, fontSize: 13 }}>
+            Kunne ikke hente din næste deadline lige nu. Prøv igen om lidt.
           </div>
         </Card>
       )}
@@ -329,7 +357,9 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           )}
         </Card>
       )}
-      {tips && tips.hasComps && !tips.allTipped && !tips.noMatches && !tips.error && (
+      {/* Manglende tips: kun når vi HAR set en tipbar runde med utippede kampe
+          (allTipped === false). De øvrige tilstande har hver sit kort ovenfor. */}
+      {tips && tips.hasComps && tips.allTipped === false && (
         <Card style={{ borderColor: C.red, background: "linear-gradient(135deg, #14212F 0%, #2E1620 100%)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, color: C.red, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>
             <Clock size={13} /> Deadline om {fmtCountdown(tips.deadline)}

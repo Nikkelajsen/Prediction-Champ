@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { RefreshCw, Loader2 } from "lucide-react";
 import { db, restFetch } from "../lib/supabase.js";
 import { loadUserStats } from "../lib/data.js";
-import { currentRoundIndex, formatKickoff, groupIntoRounds } from "../lib/scoring.js";
+import { currentRoundIndex, formatKickoff, groupIntoRounds, modeLabel } from "../lib/scoring.js";
 import { C, btnGhost, btnGold, chip, font, muted } from "../ui/theme.js";
 import { BackBar, Card, RoundPager, ScoreInput } from "../ui/components.jsx";
 
@@ -171,7 +171,7 @@ function ResultsPanel({ token, leagues }) {
         </select>
       )}
       {rounds.length === 0 ? (
-        <p style={muted}>Ingen kampe endnu — tilføj under "Kampe".</p>
+        <p style={muted}>Ingen kampe endnu — hent dem fra Sportmonks under "Kampe".</p>
       ) : (
         <Card>
           <p style={{ ...muted, marginTop: 0 }}>Indtast faktiske resultater. Stillingen opdateres automatisk.</p>
@@ -201,14 +201,6 @@ function ResultsPanel({ token, leagues }) {
 
 // ---------- Statistik ----------
 // Danske labels for konkurrence-modes (matcher CreateCompetitionScreen).
-const MODE_LABELS = {
-  full_season: "Hel sæson",
-  team: "Et hold",
-  time_range: "Tidsperiode",
-  custom: "Håndplukkede",
-  random: "Tilfældig kupon",
-};
-
 // Kategorisk fordeling som vandrette magnitude-søjler: label + antal + procent.
 // Enkelt hue (identitet bæres af label, ikke farve) → ingen CVD-adjacens-problem.
 function ModeBars({ data, total }) {
@@ -220,7 +212,7 @@ function ModeBars({ data, total }) {
         return (
           <div key={d.mode}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-              <span style={{ color: C.text }}>{MODE_LABELS[d.mode] || d.mode}</span>
+              <span style={{ color: C.text }}>{modeLabel(d.mode)}</span>
               <span style={{ color: C.muted }}>{d.count} · {pct}%</span>
             </div>
             <div style={{ height: 8, background: C.surface2, borderRadius: 999, overflow: "hidden" }}>
@@ -312,7 +304,9 @@ function StatsPanel({ token }) {
         <StatTile label="Aktive i dag" value={s.dau} />
         <StatTile label="Aktive seneste 7 dage" value={s.wau} />
         <StatTile label="Aktive seneste 30 dage" value={s.mau} />
-        <StatTile label="Fastholdelse (DAU/MAU)" value={`${stickiness}%`} hint={`gns. ${s.avg_active_days_30d} aktive dage/bruger`} />
+        {/* DAU/MAU er stickiness ("hvor stor en del af månedens brugere er her i dag"),
+            ikke fastholdelse. Variablen hed rigtigt hele tiden — kun etiketten var forkert. */}
+        <StatTile label="Stickiness (DAU/MAU)" value={`${stickiness}%`} hint={`gns. ${s.avg_active_days_30d} aktive dage/bruger`} />
       </StatGroup>
 
       <StatGroup title="Engagement">

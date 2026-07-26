@@ -5,6 +5,8 @@ import { useState, useEffect } from "react";
 import { Trophy, ChevronRight, Plus, Archive, Trash2, Users, Info } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { computeCompetitionState, loadMyGroups, loadGroupByCode, createGroup, joinGroup, joinCompetition } from "../lib/data.js";
+import { leaders } from "../lib/standings.js";
+import { modeLabel } from "../lib/scoring.js";
 import { C, btnGhost, btnGold, btnGreen, font } from "../ui/theme.js";
 import { Card, Eyebrow, H, InfoDot, PlayerName } from "../ui/components.jsx";
 
@@ -35,9 +37,13 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
       const entries = await Promise.all(loose.map(async (c) => {
         try {
           const state = await computeCompetitionState(token, c.id, c.rules || { exact: 3, outcome: 1 });
-          const myIdx = state.rows.findIndex((r) => r.userId === userId);
-          const winner = state.isComplete && state.rows.length ? state.rows[0] : null;
-          return [c.id, { isComplete: state.isComplete, playedMatches: state.playedMatches, totalMatches: state.totalMatches, participants: state.rows.length, myPos: myIdx >= 0 ? myIdx + 1 : null, winner }];
+          // Placeringen er rækkens ÆGTE rang (sat af assignRanks i computeCompetitionState),
+          // ikke listeindekset: to spillere, der står ægte lige, er begge nr. 2 — ikke 2 og 3.
+          const me = state.rows.find((r) => r.userId === userId);
+          // Vinderen kan være delt. `leaders` giver alle på 1. pladsen, som Championship-
+          // fanens kåring allerede gør — en skjult nøgle må ikke udpege én af to lige.
+          const winners = state.isComplete ? leaders(state.rows) : [];
+          return [c.id, { isComplete: state.isComplete, playedMatches: state.playedMatches, totalMatches: state.totalMatches, participants: state.rows.length, myPos: me ? me.rank : null, myShared: !!me?.shared, winners }];
         } catch (e) { return [c.id, null]; }
       }));
       if (!cancelled) setStatusMap(Object.fromEntries(entries));
@@ -56,7 +62,11 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
   }
 
   async function createNewGroup() {
-    if (!newName.trim()) return;
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    // Samme grænse som check-constrainten på groups.name (sql/groups.sql): 2-40 tegn.
+    // Uden tjekket her lækkede databasens rå fejltekst ud i catch-blokken nedenfor.
+    if (trimmed.length < 2) { setJoinErr("Ligaens navn skal være mindst 2 tegn."); return; }
     setCreating(true); setJoinErr("");
     try {
       const g = await createGroup(token, userId, newName);
@@ -82,16 +92,14 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
       }
       // konkurrence-kode — joinCompetition melder også ind i ligaen, hvis konkurrencen har en (A8)
       const found = await db.select(token, "competitions", `invite_code=eq.${code}&select=*`);
-      if (!found.length) { setJoinErr("Ingen liga eller konkurrence fundet med den kode"); setBusy(false); return; }
+      if (!found.length) { setJoinErr("Ingen liga eller konkurrence fundet med den kode."); setBusy(false); return; }
       const comp = found[0];
       await joinCompetition(token, userId, comp.id, comp.group_id);
       setInviteCode("");
       await reload();
       if (comp.group_id) { await reloadGroups(); openGroup(comp.group_id); }
-    } catch (e) { setJoinErr(e.message); } finally { setBusy(false); }
+    } catch (e) { setJoinErr(e.message || "Kunne ikke bruge koden lige nu. Prøv igen om lidt."); } finally { setBusy(false); }
   }
-
-  const modeLabel = (m) => m === "full_season" ? "Hel sæson" : m === "team" ? "Enkelt hold" : m === "time_range" ? "Datointerval" : m === "custom" ? "Håndplukket" : "Tilfældig kupon";
 
   const visible = loose.filter((c) => !c._hidden);
   const archived = loose.filter((c) => c._hidden);
@@ -114,9 +122,14 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
               {modeLabel(c.mode)}{s?.participants != null ? ` · ${s.participants} deltager${s.participants === 1 ? "" : "e"}` : ""}
               {s && !s.isComplete && s.totalMatches > 0 ? ` · ${s.playedMatches}/${s.totalMatches} spillet` : ""}
             </div>
-            {s?.isComplete && s.winner && (
+            {s?.isComplete && s.winners?.length > 0 && (
               <div style={{ color: C.gold, fontSize: 12, fontWeight: 700, marginTop: 3 }}>
-                🏆 <PlayerName userId={s.winner.userId} name={s.winner.player} onOpenProfile={openProfile} /> ({s.winner.total} point)
+                🏆 {s.winners.map((w, i) => (
+                  <span key={w.userId}>
+                    {i > 0 && (i === s.winners.length - 1 ? " og " : ", ")}
+                    <PlayerName userId={w.userId} name={w.player} onOpenProfile={openProfile} />
+                  </span>
+                ))} ({s.winners[0].total} point{s.winners.length > 1 ? " — delt" : ""})
               </div>
             )}
           </div>
@@ -124,7 +137,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
             {s?.myPos != null && (
               <div>
                 <div style={{ fontFamily: font.display, fontSize: 24, fontWeight: 700, color: s.myPos === 1 ? C.gold : C.text }}>{s.myPos}.</div>
-                <div style={{ color: C.muted, fontSize: 11 }}>din plads</div>
+                <div style={{ color: C.muted, fontSize: 11 }}>{s.myShared ? "delt plads" : "din plads"}</div>
               </div>
             )}
             <ChevronRight size={18} color={C.muted} />
@@ -177,7 +190,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
       <Card>
         <Eyebrow>Opret en liga</Eyebrow>
         <div style={{ display: "flex", gap: 8 }}>
-          <input className="field" style={{ flex: 1 }} placeholder="Navn på liga…" value={newName} maxLength={40}
+          <input className="field" style={{ flex: 1 }} placeholder="Navn på liga (2–40 tegn)…" value={newName} maxLength={40}
             onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && createNewGroup()} />
           <button style={{ ...btnGreen, width: "auto", padding: "8px 14px", opacity: creating || !newName.trim() ? 0.5 : 1 }}
             disabled={creating || !newName.trim()} onClick={createNewGroup}><Plus size={15} /> Opret</button>
@@ -186,10 +199,10 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
 
       {/* Join med kode (liga eller konkurrence) */}
       <Card>
-        <Eyebrow>Join med kode</Eyebrow>
+        <Eyebrow>Deltag med kode</Eyebrow>
         <div style={{ display: "flex", gap: 8 }}>
           <input className="field" style={{ flex: 1 }} placeholder="Invitationskode…" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && joinByCode()} />
-          <button style={{ ...btnGold, opacity: busy || !inviteCode ? 0.5 : 1 }} onClick={joinByCode} disabled={busy || !inviteCode}>Join</button>
+          <button style={{ ...btnGold, opacity: busy || !inviteCode ? 0.5 : 1 }} onClick={joinByCode} disabled={busy || !inviteCode}>Deltag</button>
         </div>
         {joinErr && <p style={{ color: C.red, fontSize: 13, margin: "8px 0 0" }}>{joinErr}</p>}
       </Card>
@@ -199,7 +212,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
       {groups && groups.length === 0 && loose.length === 0 && (
         <Card style={{ borderStyle: "dashed", background: "transparent" }}>
           <div style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>
-            Ingen ligaer endnu — opret en ovenfor, eller join med en kode.
+            Ingen ligaer endnu — opret en ovenfor, eller deltag med en kode.
           </div>
         </Card>
       )}

@@ -47,19 +47,19 @@ function ResetPasswordScreen({ accessToken, onDone }) {
 
   return (
     <AuthShell>
-      <p style={muted}>Vælg et nyt kodeord til din konto.</p>
+      <p style={muted}>Vælg en ny adgangskode til din konto.</p>
       {done ? (
         <>
-          <p style={{ color: C.green, fontSize: 14 }}>Kodeord opdateret! Du kan nu logge ind.</p>
+          <p style={{ color: C.green, fontSize: 14 }}>Adgangskoden er opdateret! Du kan nu logge ind.</p>
           <button style={btnGreen} onClick={onDone}>Til login</button>
         </>
       ) : (
         <>
-          <input className="field" style={fieldFull} type="password" placeholder="Nyt kodeord" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <input className="field" style={fieldFull} type="password" placeholder="Gentag kodeord" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          <input className="field" style={fieldFull} type="password" placeholder="Ny adgangskode" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input className="field" style={fieldFull} type="password" placeholder="Gentag adgangskode" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           {error && <p style={{ color: C.red, fontSize: 13 }}>{error}</p>}
           <button style={btnGreen} onClick={submit} disabled={loading}>
-            {loading ? <Loader2 size={16} className="spin" /> : "Gem nyt kodeord"}
+            {loading ? <Loader2 size={16} className="spin" /> : "Gem ny adgangskode"}
           </button>
         </>
       )}
@@ -87,11 +87,11 @@ function AuthScreen({ onAuthed, booting }) {
         if (!available) { setError("Brugernavnet er allerede taget. Vælg et andet."); setLoading(false); return; }
         const res = await auth.signUp(email, password);
         if (res.access_token) { await onAuthed(res, uname); return; }
-        setInfo("Konto oprettet. Tjek om der kræves e-mail-bekræftelse i Supabase-projektet, log derefter ind.");
+        setInfo("Konto oprettet. Har du fået en bekræftelses-mail, skal du følge linket i den — log derefter ind.");
         setMode("signin");
       } else if (mode === "forgot") {
         await auth.recover(email);
-        setInfo("Hvis e-mailen findes, er der sendt et link til at nulstille kodeordet.");
+        setInfo("Hvis e-mailen findes, er der sendt et link til at nulstille adgangskoden.");
       } else {
         const res = await auth.signIn(email, password);
         await onAuthed(res);
@@ -105,7 +105,7 @@ function AuthScreen({ onAuthed, booting }) {
 
   return (
     <AuthShell>
-      <p style={muted}>{mode === "signin" ? "Log ind" : mode === "signup" ? "Opret konto" : "Nulstil kodeord"}</p>
+      <p style={muted}>{mode === "signin" ? "Log ind" : mode === "signup" ? "Opret konto" : "Nulstil adgangskode"}</p>
       {mode === "signup" && (
         <input className="field" style={fieldFull} maxLength={20} placeholder="Brugernavn (vises for andre)" value={username} onChange={(e) => setUsername(e.target.value)} />
       )}
@@ -121,7 +121,7 @@ function AuthScreen({ onAuthed, booting }) {
       {mode === "signin" && (
         <p style={{ ...muted, marginTop: 12, textAlign: "center", cursor: "pointer" }}
           onClick={() => { setMode("forgot"); setError(""); setInfo(""); }}>
-          Glemt kodeord?
+          Glemt adgangskode?
         </p>
       )}
       <p style={{ ...muted, marginTop: 6, marginBottom: 0, textAlign: "center", cursor: "pointer" }}

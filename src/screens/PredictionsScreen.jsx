@@ -563,7 +563,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {onBack ? <BackBar title="Tip" onBack={onBack} /> : <div style={{ marginBottom: 16 }}><H>Tip</H></div>}
       {!competitions.length ? (
-        <p style={muted}>Opret eller join en konkurrence først.</p>
+        <p style={muted}>Opret eller deltag i en konkurrence først.</p>
       ) : (
         <>
           {(showLeagueFilter || showCompFilter) && (
@@ -586,7 +586,15 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
           )}
 
           {loading && <p style={muted}>Henter kampe…</p>}
-          {!loading && rounds.length === 0 && <p style={muted}>Ingen kampe i det valgte filter endnu.</p>}
+          {/* Nævn kun filteret, hvis der FINDES et filter at skrue på — ellers får
+              brugeren skylden for et valg, skærmen ikke engang viser. */}
+          {!loading && rounds.length === 0 && (
+            <p style={muted}>
+              {leagueFilter !== "all" || compFilter !== "all"
+                ? "Ingen kampe i det valgte filter endnu."
+                : "Ingen kampe i dine konkurrencer endnu."}
+            </p>
+          )}
           {!loading && rounds.length > 0 && (
             <Card style={{ padding: "14px 14px 8px" }}>
               <RoundHeader rounds={rounds} index={safeIndex} setIndex={setRoundIndex} status={roundInfo?.status}

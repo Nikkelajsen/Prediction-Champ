@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockedRoundsOf, buildRoundLockMap, roundLockKey, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo } from "./scoring.js";
+import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockedRoundsOf, buildRoundLockMap, roundLockKey, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 const RULES = { exact: 3, outcome: 1 };
 
@@ -254,5 +254,28 @@ describe("liveInfo", () => {
     expect(pointsFor({ pred_home: 2, pred_away: 1 }, live, RULES)).toBeNull();
     expect(isPlayed(live)).toBe(false);
     expect(isPlayed({ home_score: 0, away_score: 0 })).toBe(true);
+  });
+});
+
+// Mode-navnene stod før fire steder i tre varianter (samme konkurrence hed
+// "Enkelt hold" på Ligaer-kortet og "Et hold" i opret-dropdownen). Testen holder
+// de fire kaldesteder på ét sæt navne.
+describe("modeLabel", () => {
+  it("dækker alle fem modes fra competitions.mode", () => {
+    expect(Object.keys(MODE_LABELS).sort())
+      .toEqual(["custom", "full_season", "random", "team", "time_range"]);
+  });
+
+  it("giver det danske navn for hver mode", () => {
+    expect(modeLabel("full_season")).toBe("Hel sæson");
+    expect(modeLabel("team")).toBe("Et hold");
+    expect(modeLabel("time_range")).toBe("Tidsperiode");
+    expect(modeLabel("custom")).toBe("Håndplukkede kampe");
+    expect(modeLabel("random")).toBe("Tilfældig kupon");
+  });
+
+  // en ny mode må aldrig blive til en tom celle i UI'et
+  it("falder tilbage til den rå værdi for en ukendt mode", () => {
+    expect(modeLabel("knockout")).toBe("knockout");
   });
 });

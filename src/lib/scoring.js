@@ -73,6 +73,21 @@ function filterByStages(matches, stages) {
   return matches.filter((m) => stages.includes(m.stage_name));
 }
 
+// ---------- konkurrence-modes ----------
+// ÉN kilde til sandhed for, hvad en mode hedder på dansk. Navnene stod før fire
+// steder i tre forskellige varianter (samme konkurrence hed "Enkelt hold" på
+// Ligaer-kortet, "Et hold" i opret-dropdownen og "Et hold" i admin-statistikken).
+// Kanoniske navne = dem brugeren møder først, i opret-flowet.
+const MODE_LABELS = {
+  full_season: "Hel sæson",
+  team: "Et hold",
+  time_range: "Tidsperiode",
+  custom: "Håndplukkede kampe",
+  random: "Tilfældig kupon",
+};
+// Ukendt mode vises råt frem for tomt — så en ny mode aldrig forsvinder i UI'et.
+function modeLabel(mode) { return MODE_LABELS[mode] || mode; }
+
 function formatKickoff(iso) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -153,4 +168,4 @@ function liveInfo(m) {
   };
 }
 
-export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockedRoundsOf, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo };
+export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockedRoundsOf, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo, MODE_LABELS, modeLabel };

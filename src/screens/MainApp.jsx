@@ -131,7 +131,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
           setJoinError("Ingen konkurrence fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
         }
       } catch (e) {
-        setJoinError("Kunne ikke tilslutte konkurrencen lige nu. Prøv igen om lidt.");
+        setJoinError("Kunne ikke tilmelde dig konkurrencen lige nu. Prøv igen om lidt.");
       }
       clearPendingJoinCode();
       const url = new URL(window.location.href);
@@ -155,7 +155,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
           setJoinError("Ingen liga fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
         }
       } catch (e) {
-        setJoinError("Kunne ikke tilslutte ligaen lige nu. Prøv igen om lidt.");
+        setJoinError("Kunne ikke tilmelde dig ligaen lige nu. Prøv igen om lidt.");
       }
       clearPendingLigaCode();
       const url = new URL(window.location.href);
@@ -174,7 +174,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       setScreen({ type: "group", groupId: g.id });
     } catch (e) {
       setPendingGroupJoin(null);
-      setJoinError("Kunne ikke tilslutte ligaen lige nu. Prøv igen om lidt.");
+      setJoinError("Kunne ikke tilmelde dig ligaen lige nu. Prøv igen om lidt.");
     }
   }
 
@@ -192,7 +192,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       setScreen({ type: "predictions", compFilter: comp.id });
     } catch (e) {
       setPendingJoin(null);
-      setJoinError("Kunne ikke tilslutte konkurrencen lige nu. Prøv igen om lidt.");
+      setJoinError("Kunne ikke tilmelde dig konkurrencen lige nu. Prøv igen om lidt.");
     }
   }
 
@@ -323,7 +323,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       </div>
 
       {pendingJoin && (
-        <Modal title="Join konkurrence?" onClose={() => setPendingJoin(null)}>
+        <Modal title="Deltag i konkurrencen?" onClose={() => setPendingJoin(null)}>
           <p style={{ margin: "0 0 4px" }}>
             {pendingJoin.inviterName ? <><b>{pendingJoin.inviterName}</b> har inviteret dig til </> : "Du er inviteret til "}
             konkurrencen <b>{pendingJoin.competition.name}</b>. Vil du være med?
@@ -334,19 +334,19 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
             </p>
           )}
           <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            <button style={{ ...btnGreen, flex: 1, width: "auto" }} onClick={confirmJoin}>Ja, join</button>
+            <button style={{ ...btnGreen, flex: 1, width: "auto" }} onClick={confirmJoin}>Ja, deltag</button>
             <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={() => setPendingJoin(null)}>Annullér</button>
           </div>
         </Modal>
       )}
 
       {pendingGroupJoin && (
-        <Modal title="Join liga?" onClose={() => setPendingGroupJoin(null)}>
+        <Modal title="Deltag i ligaen?" onClose={() => setPendingGroupJoin(null)}>
           <p style={{ margin: "0 0 4px" }}>
             Du er inviteret til ligaen <b>{pendingGroupJoin.group.name}</b>. Vil du være med?
           </p>
           <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            <button style={{ ...btnGreen, flex: 1, width: "auto" }} onClick={confirmGroupJoin}>Ja, join</button>
+            <button style={{ ...btnGreen, flex: 1, width: "auto" }} onClick={confirmGroupJoin}>Ja, deltag</button>
             <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={() => setPendingGroupJoin(null)}>Annullér</button>
           </div>
         </Modal>

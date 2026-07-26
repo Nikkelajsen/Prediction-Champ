@@ -282,20 +282,29 @@ async function computeHomeTips(token, userId, competitions) {
 
   const tippable = ms.filter((m) => !played(m) && !isLocked(m, lockMap) && !opensAt(m) && m.kickoff_at);
   const isTipped = (m) => { const p = predByMatch.get(m.id); return !!(p && p.pred_home != null && p.pred_away != null); };
-  const allOk = () => {
+  // Fælles hale til de to "der er intet at gøre lige nu"-tilstande: nærmeste
+  // kommende kamp + dens runde, så kortets knap kan åbne Tip landet det rigtige
+  // sted (samme sted som "Tip nu" ved manglende tips).
+  const nextUp = (extra) => {
     const future = ms.filter((m) => !played(m) && m.kickoff_at && new Date(m.kickoff_at).getTime() > now)
       .sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));
-    // roundKey for den nærmeste kommende runde, så "Se tips" på det grønne kort
-    // kan åbne Tip landet på den runde (samme sted som "Tip nu" ved manglende tips).
-    return { hasComps: true, allTipped: true, nextOpen: future[0]?.kickoff_at || null, roundKey: future[0]?.round_key || null };
+    return { hasComps: true, ...extra, nextOpen: future[0]?.kickoff_at || null, roundKey: future[0]?.round_key || null };
   };
+  // "Alle tips er inde" er en påstand om BRUGERENS tips og må kun bruges, når vi
+  // faktisk har set, at rundens tipbare kampe er tippet.
+  const allOk = () => nextUp({ allTipped: true });
+  // "Intet at tippe lige nu" er noget andet: der er ingen tipbare kampe overhovedet
+  // (runden er låst/spillet, eller det rullende vindue har ikke åbnet endnu). Før
+  // returnerede begge tilfælde allTipped, så en bruger med NUL tips fik at vide,
+  // at alle tips var inde.
+  const nothingToTip = () => nextUp({ nothingToTip: true });
 
   // "Næste runde" = den TIDLIGSTE runde, der stadig har kampe man kan tippe. Vi viser
   // KUN status for den runde: er den fuldt tippet, er alt ok (grøn) — også selvom senere
   // runder mangler tips (de bliver "næste runde" i tur, efterhånden som runderne spilles).
   // (Før valgte vi den tidligste UTIPPEDE kamp, så en runde langt ude kunne fejlagtigt
   // vise rødt, selvom de nærmeste runder var tippet.)
-  if (!tippable.length) return allOk();
+  if (!tippable.length) return nothingToTip();
   const nextRoundKey = tippable.reduce((min, m) => (m.round_key < min ? m.round_key : min), tippable[0].round_key);
   const roundUntipped = tippable.filter((m) => m.round_key === nextRoundKey && !isTipped(m))
     .sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));

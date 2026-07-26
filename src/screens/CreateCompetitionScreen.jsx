@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { db } from "../lib/supabase.js";
 import { loadMyGroups } from "../lib/data.js";
-import { filterByStages, filterFromNextUnfinishedRound, formatKickoff, groupIntoRounds, outcome, stageOptionLabel } from "../lib/scoring.js";
+import { filterByStages, filterFromNextUnfinishedRound, formatKickoff, groupIntoRounds, MODE_LABELS, outcome, stageOptionLabel } from "../lib/scoring.js";
 import { C, btnGreen, chip, muted } from "../ui/theme.js";
 import { BackBar, Card, H } from "../ui/components.jsx";
 
@@ -257,12 +257,12 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
               </select>
             </label>
           )}
+          {/* Navnene kommer fra MODE_LABELS (scoring.js), så opret-skærmen, Ligaer-kortet,
+              liga-siden og admin-statistikken altid kalder den samme mode det samme. */}
           <select className="field" value={mode} onChange={(e) => setMode(e.target.value)}>
-            <option value="full_season">Hel sæson</option>
-            <option value="team">Et hold</option>
-            <option value="time_range">Tidsperiode (fx 3 uger)</option>
-            <option value="custom">Håndplukkede kampe</option>
-            <option value="random">Tilfældig kupon</option>
+            {Object.entries(MODE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
           </select>
 
           {mode === "full_season" && (
