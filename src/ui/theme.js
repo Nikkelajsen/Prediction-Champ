@@ -65,6 +65,9 @@ const globalCss = `
   .rowline { border-bottom: 1px solid ${C.line}; }
   .spin { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  /* Tip-skærmens låste kamprække: hele rækken er tryk-fladen for "alles gæt",
+     så affordancen skal kunne mærkes. Inline styles kan ikke :hover/:active. */
+  .tiprow:hover, .tiprow:active { background: ${C.surface2}; }
   .livedot { animation: livepulse 1.4s ease-in-out infinite; }
   @keyframes livepulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
   @media (prefers-reduced-motion: reduce) { .livedot { animation: none; } }
