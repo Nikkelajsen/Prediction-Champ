@@ -43,7 +43,7 @@ function RatingTab({ token, userId, openProfile }) {
                 padding: "12px 16px", borderTop: i ? `1px solid ${C.line}` : "none",
                 background: you ? "rgba(34,197,94,0.07)" : "transparent",
               }}>
-                <span style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, color: i === 0 ? C.gold : C.muted }}>{i + 1}</span>
+                <span style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, color: r.rank === 1 ? C.gold : C.muted }}>{r.rank}</span>
                 <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                   <span style={{ fontSize: 14, fontWeight: you ? 700 : 500 }}>
                     <PlayerName userId={r.userId} name={r.player} you={you} onOpenProfile={openProfile} />

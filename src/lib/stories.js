@@ -45,8 +45,8 @@ export function renderStory(rule, payload = {}) {
   switch (rule) {
     case "MONTH_CHAMP":
       return {
-        headline: `👑 Du er Månedens Prediction Champ — ${p.month}`,
-        body: `${p.points} point — flest af alle i ${p.month}.` +
+        headline: `👑 Du er ${p.shared ? "delt " : ""}Månedens Prediction Champ — ${p.month}`,
+        body: `${p.points} point — flest af alle i ${p.month}${p.shared ? " (delt)" : ""}.` +
           (p.gap != null && p.gap > 0 ? ` Nr. 2 var ${p.gap} point efter.` : ""),
       };
     case "LEAD_TAKEN":
@@ -83,7 +83,9 @@ export function renderStory(rule, payload = {}) {
       return {
         headline: `🥇 Du vandt runden ${L} i ${p.league}`,
         body: `${p.points} point — flest af alle i ${p.league}` +
-          (p.shared ? " (delt)." : "."),
+          (!p.shared ? "."
+            : p.others > 1 ? ` (delt med ${p.others} andre).`
+            : " (delt med 1 anden)."),
       };
     case "SHARP":
       return {

@@ -130,7 +130,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
               <th style={{ ...thStyle, textAlign: "right", padding: "8px 2px" }}>Point</th>
             </tr></thead>
             <tbody>
-              {state.rows.map((r, i) => (
+              {state.rows.map((r) => (
                 // Hele rækken er tryk-fladen til spillerens tips runde for runde.
                 // Et enkelt tal er et for lille mål på en telefon, og cursor:pointer
                 // er usynligt på touch. Navnet ligger ovenpå og stopper propagationen
@@ -142,8 +142,8 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
                     background: r.userId === userId ? "rgba(34,197,94,0.06)" : "transparent",
                     cursor: hasLocked ? "pointer" : "default",
                   }}>
-                  <td style={{ color: i === 0 ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display, padding: "8px 2px" }}>
-                    {i === 0 && state.isComplete ? "🏆" : i + 1}
+                  <td style={{ color: r.rank === 1 ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display, padding: "8px 2px" }}>
+                    {r.rank === 1 && state.isComplete ? "🏆" : r.rank}
                     {r.rankDelta !== undefined && r.rankDelta !== 0 && (
                       <span style={{ fontSize: 11, marginLeft: 4, color: r.rankDelta > 0 ? C.green : C.red }}>
                         {r.rankDelta > 0 ? `▲${r.rankDelta}` : `▼${Math.abs(r.rankDelta)}`}
@@ -161,7 +161,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
                   <td style={{ textAlign: "center", color: C.text, fontSize: 13, padding: "8px 2px" }}>{r.exactCount}</td>
                   <td style={{ textAlign: "center", color: C.muted, fontSize: 13, padding: "8px 2px" }}>{r.form3}</td>
                   <td style={{ textAlign: "right", padding: "8px 2px" }}>
-                    <span style={{ background: i === 0 ? "rgba(240,180,41,0.15)" : C.surface2, color: i === 0 ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 8px" }}>{r.total}</span>
+                    <span style={{ background: r.rank === 1 ? "rgba(240,180,41,0.15)" : C.surface2, color: r.rank === 1 ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 8px" }}>{r.total}</span>
                   </td>
                 </tr>
               ))}
@@ -171,6 +171,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
         {!loading && state && state.rows.length > 0 && (
           <p style={{ ...muted, marginTop: 8, marginBottom: 0, fontSize: 11 }}>
             🎯 = præcise resultater · Form = point seneste 3 runder · ▲▼ = ændring efter seneste runde
+            {state.rows.some((r) => r.shared) && " · ens placering = delt"}
             {hasLocked
               ? " · tryk på en række for spillerens tips runde for runde, på navnet for karrieren"
               : " · tryk på et navn for karrieren — spillernes tips kan ses, når runden låser (1 time før første kamp)"}

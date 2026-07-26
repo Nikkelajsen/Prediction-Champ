@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // db mockes, så loaderne kan testes uden netværk/Supabase
 vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
-import { loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, leaveCompetition, moveCompetitionToGroup } from "./data.js";
+import { computeCompetitionState, loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, leaveCompetition, moveCompetitionToGroup } from "./data.js";
 
 // mock-svar pr. tabel/view
 function mockTables(tables) {
@@ -25,8 +25,8 @@ describe("loadRoundBoard (round_standings-view)", () => {
         { id: "m2", home_score: null, away_score: null },
       ],
       round_standings: [
-        { user_id: "u1", total_points: 4, matches: 2, exact_count: 1 },
-        { user_id: "u2", total_points: 1, matches: 2, exact_count: 0 },
+        { user_id: "u1", total_points: 4, matches: 2, exact_count: 1, outcome_count: 1, avg_goal_error: "1.5000" },
+        { user_id: "u2", total_points: 1, matches: 2, exact_count: 0, outcome_count: 1, avg_goal_error: "2.0000" },
       ],
       profiles: [
         { id: "u1", display_name: "Anna" },
@@ -35,8 +35,8 @@ describe("loadRoundBoard (round_standings-view)", () => {
     });
     const board = await loadRoundBoard("token", "2026-07-14");
     expect(board.rows).toEqual([
-      { userId: "u1", player: "Anna", total: 4, exactCount: 1, matches: 2 },
-      { userId: "u2", player: "Bo", total: 1, exactCount: 0, matches: 2 },
+      { userId: "u1", player: "Anna", total: 4, exactCount: 1, outcomeCount: 1, roundWins: 0, avgGoalError: 1.5, matches: 2, rank: 1, shared: false },
+      { userId: "u2", player: "Bo", total: 1, exactCount: 0, outcomeCount: 1, roundWins: 0, avgGoalError: 2, matches: 2, rank: 2, shared: false },
     ]);
     expect(board.totalMatches).toBe(2);
     expect(board.playedMatches).toBe(1);
@@ -75,15 +75,87 @@ describe("loadSeasonBoard (season_standings-view)", () => {
         { id: "m2", home_score: 2, away_score: 2 },
         { id: "m3", home_score: null, away_score: null },
       ],
-      season_standings: [{ user_id: "u1", total_points: 6, matches: 2, exact_count: 2 }],
+      season_standings: [{ user_id: "u1", total_points: 6, matches: 2, exact_count: 2, outcome_count: 0, round_wins: 1, avg_goal_error: "0.0000" }],
       profiles: [{ id: "u1", display_name: "Anna" }],
     });
     const board = await loadSeasonBoard("token", "liga-1");
     expect(board.season.id).toBe("s1");
-    expect(board.rows[0]).toEqual({ userId: "u1", player: "Anna", total: 6, exactCount: 2, matches: 2 });
+    expect(board.rows[0]).toEqual({ userId: "u1", player: "Anna", total: 6, exactCount: 2, outcomeCount: 0, roundWins: 1, avgGoalError: 0, matches: 2, rank: 1, shared: false });
     expect(board.playedMatches).toBe(2);
     expect(board.totalMatches).toBe(3);
     expect(board.isComplete).toBe(false);
+  });
+});
+
+describe("computeCompetitionState (konkurrence-stillingen)", () => {
+  const RULES = { exact: 3, outcome: 1 };
+  // To runder à to kampe. Kickoff styrer round_key via groupIntoRounds.
+  const MATCHES = [
+    { id: "m1", kickoff_at: "2026-07-06T18:00:00Z", round_key: "2026-07-06", home_score: 2, away_score: 1 },
+    { id: "m2", kickoff_at: "2026-07-07T18:00:00Z", round_key: "2026-07-06", home_score: 0, away_score: 0 },
+    { id: "m3", kickoff_at: "2026-07-13T18:00:00Z", round_key: "2026-07-13", home_score: 1, away_score: 1 },
+    { id: "m4", kickoff_at: "2026-07-14T18:00:00Z", round_key: "2026-07-13", home_score: 3, away_score: 0 },
+  ];
+  const mockComp = (predictions, profiles) => mockTables({
+    competition_participants: profiles.map((p) => ({ user_id: p.id })),
+    profiles,
+    competition_matches: MATCHES.map((m) => ({ match_id: m.id })),
+    matches: MATCHES,
+    predictions,
+    teams: [],
+  });
+
+  it("bruger hele stigen: rundesejre slår en bedre målafvigelse", async () => {
+    // Anna: 2-1(3) · 1-0(0) | 5-5(1) · 0-3(0)  ⇒ 4 point, 1 præcis, 1 udfald, afvigelse 15/4
+    // Bo:   1-0(1) · 0-0(3) | 2-0(0) · 0-2(0)  ⇒ 4 point, 1 præcis, 1 udfald, afvigelse 9/4
+    // Runde 1: Bo 4 > Anna 3. Runde 2: Anna 1 > Bo 0. Én rundesejr hver ⇒ Bos
+    // lavere afvigelse afgør. Giver vi Anna en rundesejr mere, vender det.
+    await mockComp([
+      { match_id: "m1", user_id: "u1", pred_home: 2, pred_away: 1 },
+      { match_id: "m2", user_id: "u1", pred_home: 1, pred_away: 0 },
+      { match_id: "m3", user_id: "u1", pred_home: 5, pred_away: 5 },
+      { match_id: "m4", user_id: "u1", pred_home: 0, pred_away: 3 },
+      { match_id: "m1", user_id: "u2", pred_home: 1, pred_away: 0 },
+      { match_id: "m2", user_id: "u2", pred_home: 0, pred_away: 0 },
+      { match_id: "m3", user_id: "u2", pred_home: 2, pred_away: 0 },
+      { match_id: "m4", user_id: "u2", pred_home: 0, pred_away: 2 },
+    ], [{ id: "u1", display_name: "Anna" }, { id: "u2", display_name: "Bo" }]);
+    const { rows } = await computeCompetitionState("token", "c1", RULES);
+    expect(rows.map((r) => r.player)).toEqual(["Bo", "Anna"]);
+    expect(rows.map((r) => r.total)).toEqual([4, 4]);
+    expect(rows.map((r) => r.exactCount)).toEqual([1, 1]);
+    expect(rows.map((r) => r.outcomeCount)).toEqual([1, 1]);
+    expect(rows.map((r) => r.roundWins)).toEqual([1, 1]);
+    expect(rows.map((r) => r.avgGoalError)).toEqual([2.25, 3.75]);
+    expect(rows.map((r) => r.rank)).toEqual([1, 2]);
+  });
+
+  it("giver delt placering og delt rundesejr ved fuldstændig lighed", async () => {
+    // Identiske gæt ⇒ ægte lige hele vejen ned, og rundesejren tæller for begge.
+    const preds = (uid) => [
+      { match_id: "m1", user_id: uid, pred_home: 2, pred_away: 1 },
+      { match_id: "m2", user_id: uid, pred_home: 0, pred_away: 0 },
+      { match_id: "m3", user_id: uid, pred_home: 1, pred_away: 1 },
+      { match_id: "m4", user_id: uid, pred_home: 3, pred_away: 0 },
+    ];
+    await mockComp([...preds("u1"), ...preds("u2"), { match_id: "m1", user_id: "u3", pred_home: 0, pred_away: 5 }],
+      [{ id: "u1", display_name: "Anna" }, { id: "u2", display_name: "Bo" }, { id: "u3", display_name: "Carl" }]);
+    const { rows } = await computeCompetitionState("token", "c1", RULES);
+    expect(rows.map((r) => r.rank)).toEqual([1, 1, 3]); // delt 1. plads ⇒ næste er nr. 3
+    expect(rows.map((r) => r.shared)).toEqual([true, true, false]);
+    expect(rows.slice(0, 2).map((r) => r.roundWins)).toEqual([2, 2]); // delt sejr i begge runder
+  });
+
+  it("sorterer stabilt på userId ved ægte lighed, uanset rækkefølgen fra DB", async () => {
+    const preds = (uid) => [{ match_id: "m1", user_id: uid, pred_home: 2, pred_away: 1 }];
+    const profiles = [{ id: "u9", display_name: "Zeta" }, { id: "u1", display_name: "Alpha" }];
+    await mockComp([...preds("u9"), ...preds("u1")], profiles);
+    const first = await computeCompetitionState("token", "c1", RULES);
+    await mockComp([...preds("u1"), ...preds("u9")], profiles.slice().reverse());
+    const second = await computeCompetitionState("token", "c1", RULES);
+    expect(first.rows.map((r) => r.userId)).toEqual(["u1", "u9"]);
+    expect(second.rows.map((r) => r.userId)).toEqual(["u1", "u9"]);
+    expect(first.rows.map((r) => r.rank)).toEqual([1, 1]); // rækkefølgen er stabil, placeringen delt
   });
 });
 

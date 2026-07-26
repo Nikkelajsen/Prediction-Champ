@@ -90,6 +90,9 @@ begin
     -- ---------- Titler ----------
     'titles', jsonb_build_object(
       -- Månedstitler: afsluttede måneder (alle kampe spillet) hvor brugeren er nr. 1.
+      -- rank() frem for distinct on: en delt titel er en titel for BEGGE — samme
+      -- regel som kåringen på Championship-fanen. Rangen bruger hele tiebreaker-
+      -- stigen (sql/standings_tiebreakers.sql, src/lib/standings.js).
       'monthly', (
         select coalesce(jsonb_agg(jsonb_build_object(
                  'month',      mw.month,
@@ -97,7 +100,10 @@ begin
                  'points',     mw.total_points
                ) order by mw.month desc), '[]'::jsonb)
         from (
-          select distinct on (ms.month) ms.month, ms.user_id, ms.total_points
+          select ms.month, ms.user_id, ms.total_points,
+            rank() over (partition by ms.month
+                         order by ms.total_points desc, ms.exact_count desc, ms.outcome_count desc,
+                                  ms.round_wins desc, ms.avg_goal_error asc) as rnk
           from public.monthly_standings ms
           join (
             select to_char(date_trunc('month', kickoff_at), 'YYYY-MM') as month
@@ -106,17 +112,19 @@ begin
             having bool_and(home_score is not null and away_score is not null)
           ) mc on mc.month = ms.month
           where ms.scope = 'ALL'
-          order by ms.month, ms.total_points desc, ms.exact_count desc
         ) mw
-        where mw.user_id = profile_user_id
+        where mw.user_id = profile_user_id and mw.rnk = 1
       ),
       -- Rundesejre: antal afsluttede runder (alle kampe spillet) hvor brugeren er nr. 1.
+      -- Én runde har ingen rundesejre at bryde lighed med, så stigen stopper ved
+      -- målafvigelsen. Delt sejr tæller for alle.
       'round_wins', (
         select count(*)::int
         from (
           select rs.round_key, rs.user_id,
             rank() over (partition by rs.round_key
-                         order by rs.total_points desc, rs.exact_count desc) as rnk
+                         order by rs.total_points desc, rs.exact_count desc, rs.outcome_count desc,
+                                  rs.avg_goal_error asc) as rnk
           from public.round_standings rs
           join (
             select round_key

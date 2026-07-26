@@ -1,6 +1,36 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { db, restFetch } from "./supabase.js";
 import { currentRoundIndex, groupIntoRounds, isLocked, liveInfo, outcome, pointsFor, roundLabel, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS } from "./scoring.js";
+import { assignRanks, avgGoalError, compareStandings, sortStandings } from "./standings.js";
+
+// Tiebreaker-stigen som PostgREST-order: point → præcise → udfald → rundesejre →
+// målafvigelse, og til sidst user_id som skjult, stabil nøgle (afgør aldrig en
+// placering — den sikrer bare, at rækker ikke bytter plads mellem to hentninger).
+// Stigen selv bor i src/lib/standings.js; kolonnerne i sql/standings_tiebreakers.sql.
+const TIEBREAK_ORDER = "total_points.desc,exact_count.desc,outcome_count.desc,round_wins.desc,avg_goal_error.asc,user_id.asc";
+// Rundeligaen ér én runde og har derfor ingen rundesejre at bryde lighed med.
+const TIEBREAK_ORDER_ROUND = "total_points.desc,exact_count.desc,outcome_count.desc,avg_goal_error.asc,user_id.asc";
+
+// Én rundes tal i stigens feltnavne (uden rundesejre — inde i én runde findes de ikke).
+function roundRow(rs) {
+  return { total: rs.total, exactCount: rs.exact, outcomeCount: rs.outcome, avgGoalError: avgGoalError(rs.goalError, rs.matches) };
+}
+
+// Stillingen som den så ud FØR runden `key` — samme felter, så stigen kan bruges igen.
+function without(r, key) {
+  const rs = r.perRoundStats[key];
+  if (!rs) return r;
+  const matches = r.matches - rs.matches;
+  const goalError = r.goalError - rs.goalError;
+  return {
+    userId: r.userId,
+    total: r.total - rs.total,
+    exactCount: r.exactCount - rs.exact,
+    outcomeCount: r.outcomeCount - rs.outcome,
+    roundWins: r.roundWins - (r.wonRounds.has(key) ? 1 : 0),
+    avgGoalError: avgGoalError(goalError, matches),
+  };
+}
 
 // henter deltagere + kampe + forudsigelser for én konkurrence og beregner stilling + status
 async function computeCompetitionState(token, competitionId, rules) {
@@ -24,58 +54,90 @@ async function computeCompetitionState(token, competitionId, rules) {
   const playedKeys = playedRounds.map((r) => r.key);
   const lastKey = playedKeys[playedKeys.length - 1];
 
+  // Alt hvad tiebreaker-stigen har brug for, opgjort i én gennemgang pr. spiller.
+  // `perRoundStats` bruges bagefter til rundesejre og til stillingen FØR seneste runde.
   const rows = profiles.map((p) => {
     let total = 0;
     let exactCount = 0;
     let outcomeCount = 0;
+    let goalError = 0;
+    let matches = 0;
     const perRound = {};
+    const perRoundStats = {};
     for (const round of rounds) {
-      let rTotal = 0;
+      const rs = { total: 0, exact: 0, outcome: 0, goalError: 0, matches: 0 };
       let rPlayed = false;
       for (const m of round.matches) {
         const pred = predsByKey.get(`${m.id}:${p.id}`);
         const pts = pointsFor(pred, m, rules);
         if (pts !== null) {
-          rTotal += pts; rPlayed = true;
-          if (pred && pred.pred_home === m.home_score && pred.pred_away === m.away_score) exactCount++;
-          else if (pts === rules.outcome) outcomeCount++;
+          rs.total += pts; rs.matches++; rPlayed = true;
+          rs.goalError += Math.abs(pred.pred_home - m.home_score) + Math.abs(pred.pred_away - m.away_score);
+          if (pred.pred_home === m.home_score && pred.pred_away === m.away_score) rs.exact++;
+          else if (pts === rules.outcome) rs.outcome++;
         }
       }
-      if (rPlayed) perRound[round.key] = rTotal;
-      total += rTotal;
+      if (rPlayed) { perRound[round.key] = rs.total; perRoundStats[round.key] = rs; }
+      total += rs.total; exactCount += rs.exact; outcomeCount += rs.outcome;
+      goalError += rs.goalError; matches += rs.matches;
     }
     const form3 = playedKeys.slice(-3).reduce((s, k) => s + (perRound[k] ?? 0), 0);
-    const prevTotal = lastKey !== undefined ? total - (perRound[lastKey] ?? 0) : total;
-    return { userId: p.id, player: p.display_name, total, perRound, exactCount, outcomeCount, form3, prevTotal };
-  }).sort((a, b) => b.total - a.total || b.exactCount - a.exactCount || b.outcomeCount - a.outcomeCount);
+    return {
+      userId: p.id, player: p.display_name, total, perRound, perRoundStats,
+      exactCount, outcomeCount, matches, goalError,
+      avgGoalError: avgGoalError(goalError, matches), form3,
+    };
+  });
 
+  // Rundesejre: nr. 1 i den enkelte runde efter samme stige uden rundesejr-trinnet.
+  // En delt rundesejr tæller for alle — samme regel som Story Engines rundevinder.
+  rows.forEach((r) => { r.roundWins = 0; r.wonRounds = new Set(); });
+  for (const key of playedKeys) {
+    const inRound = rows
+      .filter((r) => r.perRoundStats[key])
+      .map((r) => ({ row: r, ...roundRow(r.perRoundStats[key]) }));
+    if (!inRound.length) continue;
+    const best = inRound.slice().sort(compareStandings)[0];
+    inRound.forEach((c) => {
+      if (compareStandings(c, best) === 0) { c.row.roundWins++; c.row.wonRounds.add(key); }
+    });
+  }
+
+  const ranked = assignRanks(sortStandings(rows));
+
+  // ▲/▼: sammenlign med stillingen FØR seneste spillede runde — med hele stigen,
+  // så pilen ikke påstår en bevægelse, der kun skyldes en manglende tiebreak.
   if (playedKeys.length >= 2) {
-    const prevOrder = rows.slice().sort((a, b) => b.prevTotal - a.prevTotal);
-    const prevRank = new Map(prevOrder.map((r, i) => [r.player, i]));
-    rows.forEach((r, i) => { r.rankDelta = (prevRank.get(r.player) ?? i) - i; });
+    const prev = assignRanks(sortStandings(ranked.map((r) => without(r, lastKey))));
+    const prevRank = new Map(prev.map((r) => [r.userId, r.rank]));
+    ranked.forEach((r) => { r.rankDelta = (prevRank.get(r.userId) ?? r.rank) - r.rank; });
   }
 
   const totalMatches = ms.length;
   const playedMatches = ms.filter((m) => m.home_score !== null && m.home_score !== undefined).length;
   const isComplete = totalMatches > 0 && playedMatches === totalMatches;
 
-  return { userId: undefined, rows, rounds: playedRounds, allRounds: rounds, predsByKey, totalMatches, playedMatches, isComplete };
+  return { userId: undefined, rows: ranked, rounds: playedRounds, allRounds: rounds, predsByKey, totalMatches, playedMatches, isComplete };
 }
 
 // ---------- global rating + monthly league (scope 'ALL') ----------
 async function loadRatingBoard(token) {
-  const ratings = await db.select(token, "ratings", `scope=eq.ALL&select=user_id,rating,rounds_played,provisional&order=rating.desc`);
+  // user_id.asc er den stabile sidste nøgle — ratings er numeric, så to ens tal er
+  // sjældne, men når de sker, skal ranglisten ikke bytte om mellem to hentninger.
+  const ratings = await db.select(token, "ratings", `scope=eq.ALL&select=user_id,rating,rounds_played,provisional&order=rating.desc,user_id.asc`);
   if (!ratings.length) return [];
   const ids = ratings.map((r) => r.user_id);
   const profiles = await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`);
   const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
-  return ratings.map((r) => ({
+  const rows = ratings.map((r) => ({
     userId: r.user_id,
     player: nameById.get(r.user_id) || "—",
     rating: Math.round(Number(r.rating)),
     roundsPlayed: r.rounds_played,
     provisional: r.provisional,
   }));
+  // Ranglisten er ikke en pointstilling: her deles placeringen ved samme viste rating.
+  return assignRanks(rows, (a, b) => b.rating - a.rating);
 }
 
 // map of user_id -> rating, for showing rating next to names in any standings
@@ -115,18 +177,28 @@ async function loadRatingHistory(token) {
 
 function currentMonthKey() { return new Date().toISOString().slice(0, 7); }
 
+// Fælles kort fra et stillings-views række til stigens feltnavne.
+function standingsRow(r, nameById) {
+  return {
+    userId: r.user_id,
+    player: nameById.get(r.user_id) || "—",
+    total: r.total_points,
+    matches: r.matches,
+    exactCount: r.exact_count,
+    outcomeCount: r.outcome_count ?? 0,
+    roundWins: r.round_wins ?? 0, // findes ikke i rundeligaen — 0 gør trinnet neutralt
+    avgGoalError: Number(r.avg_goal_error ?? 0), // numeric kommer som streng over REST
+  };
+}
+
 async function loadMonthlyBoard(token, month) {
   const rows = await db.select(token, "monthly_standings",
-    `month=eq.${month}&scope=eq.ALL&select=user_id,total_points,matches,exact_count&order=total_points.desc,exact_count.desc`);
+    `month=eq.${month}&scope=eq.ALL&select=user_id,total_points,matches,exact_count,outcome_count,round_wins,avg_goal_error&order=${TIEBREAK_ORDER}`);
   if (!rows.length) return [];
   const ids = rows.map((r) => r.user_id);
   const profiles = await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`);
   const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
-  return rows.map((r) => ({
-    userId: r.user_id,
-    player: nameById.get(r.user_id) || "—",
-    total: r.total_points, matches: r.matches, exactCount: r.exact_count,
-  }));
+  return assignRanks(rows.map((r) => standingsRow(r, nameById)));
 }
 
 async function loadMonthsAvailable(token) {
@@ -146,14 +218,11 @@ async function loadRoundBoard(token, roundKey) {
   const ms = await db.select(token, "matches", `round_key=eq.${roundKey}&select=id,home_score,away_score`);
   if (!ms.length) return { rows: [], totalMatches: 0, playedMatches: 0, isComplete: false };
   const board = await db.select(token, "round_standings",
-    `round_key=eq.${roundKey}&select=user_id,total_points,matches,exact_count&order=total_points.desc,exact_count.desc`);
+    `round_key=eq.${roundKey}&select=user_id,total_points,matches,exact_count,outcome_count,avg_goal_error&order=${TIEBREAK_ORDER_ROUND}`);
   const ids = board.map((r) => r.user_id);
   const profiles = ids.length ? await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`) : [];
   const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
-  const rows = board.map((r) => ({
-    userId: r.user_id, player: nameById.get(r.user_id) || "—",
-    total: r.total_points, exactCount: r.exact_count, matches: r.matches,
-  }));
+  const rows = assignRanks(board.map((r) => standingsRow(r, nameById)));
   const playedMatches = ms.filter((m) => m.home_score != null && m.away_score != null).length;
   return { rows, totalMatches: ms.length, playedMatches, isComplete: ms.length > 0 && playedMatches === ms.length };
 }
@@ -169,14 +238,11 @@ async function loadSeasonBoard(token, leagueId) {
   const ms = await db.select(token, "matches", `season_id=eq.${season.id}&select=id,home_score,away_score`);
   if (!ms.length) return { season, rows: [], totalMatches: 0, playedMatches: 0, isComplete: false };
   const board = await db.select(token, "season_standings",
-    `season_id=eq.${season.id}&select=user_id,total_points,matches,exact_count&order=total_points.desc,exact_count.desc`);
+    `season_id=eq.${season.id}&select=user_id,total_points,matches,exact_count,outcome_count,round_wins,avg_goal_error&order=${TIEBREAK_ORDER}`);
   const ids = board.map((r) => r.user_id);
   const profiles = ids.length ? await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`) : [];
   const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
-  const rows = board.map((r) => ({
-    userId: r.user_id, player: nameById.get(r.user_id) || "—",
-    total: r.total_points, exactCount: r.exact_count, matches: r.matches,
-  }));
+  const rows = assignRanks(board.map((r) => standingsRow(r, nameById)));
   const playedMatches = ms.filter((m) => m.home_score != null && m.away_score != null).length;
   const totalMatches = ms.length;
   return { season, rows, totalMatches, playedMatches, isComplete: totalMatches > 0 && playedMatches === totalMatches };

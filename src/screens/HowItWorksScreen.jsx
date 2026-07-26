@@ -28,7 +28,17 @@ function HowItWorksScreen({ onBack }) {
         </div>
       </Section>
       <Section title="Tiebreak">
-        Ved pointlighed afgør flest <b>præcise resultater</b> først, dernæst flest <b>korrekte udfald</b>.
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div>Står to spillere lige på point, afgøres det i denne rækkefølge:</div>
+          <div><b>1.</b> Flest <b>præcise resultater</b>.</div>
+          <div><b>2.</b> Flest <b>korrekte udfald</b>.</div>
+          <div><b>3.</b> Flest <b>rundesejre</b> — spillerunder, hvor du var nr. 1.</div>
+          <div><b>4.</b> <b>Tættest på</b> — den mindste gennemsnitlige afvigelse fra de rigtige resultater.</div>
+          <div style={{ marginTop: 4 }}>
+            Er alt lige hele vejen ned, er I <b>ægte lige</b>: I deler placeringen (to delte 2'ere betyder, at den næste er nr. 4)
+            og en eventuel titel. En enkelt spillerunde har ingen rundesejre at afgøre noget med, så dér springes trin 3 over.
+          </div>
+        </div>
       </Section>
       <Section title="Rating">
         Parvis multiplayer-Elo. Alle starter på <b>1000</b>. Du stiger, hvis du rammer bedre end de andre i runden, og falder, hvis du rammer dårligere — det tæller ekstra at slå spillere med høj rating. Hver runde giver <b>én</b> ratingændring — ikke én pr. turnering og ikke én pr. kamp — beregnet ud fra dine gennemsnitspoint pr. kamp i runden. Den regnes om, hver gang en af rundens kampe er fløjtet af, så den er foreløbig hen over ugen og står endeligt fast, når rundens sidste kamp er slut. De første 5 runder er foreløbige (<b>NY</b>-badge).
@@ -37,7 +47,7 @@ function HowItWorksScreen({ onBack }) {
         Mens en kamp spilles, viser vi den <b>nuværende stilling</b> med et rødt <b>LIVE</b>-mærke og spilleminut — den opdateres cirka hvert minut. En færdigspillet kamp er markeret <b>Slut</b>. Live-stillingen giver <b>ingen point</b>: point, stillinger og rating opdateres først, når kampen er fløjtet af. Så kan et sent mål stadig vende dine point, uden at tabellen har lovet noget forkert undervejs.
       </Section>
       <Section title="Månedsliga & Championship">
-        <b>Championship</b> er officielle konkurrencer, hvor alle automatisk er med. <b>Månedsligaen</b> samler dine samlede point for månedens kampe (tiebreak: flest præcise). Månedens bedste kåres som <b>Månedens Prediction Champ</b>, og stillingen nulstilles den 1.
+        <b>Championship</b> er officielle konkurrencer, hvor alle automatisk er med. <b>Månedsligaen</b> samler dine samlede point for månedens kampe (uafgjort afgøres af tiebreak-stigen ovenfor). Månedens bedste kåres som <b>Månedens Prediction Champ</b> — er to helt lige, deles titlen. Stillingen nulstilles den 1.
       </Section>
       <Section title="Tips-synlighed">
         Du kan først se andres tips, når runden er låst — ingen kan se dine tips inden da. Alle kampe i en runde låses samtidig, 1 time før rundens første kamp. Så tipper alle på samme grundlag og ingen kan spekulere i resultater undervejs.

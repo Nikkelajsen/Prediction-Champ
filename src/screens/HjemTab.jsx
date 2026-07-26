@@ -112,7 +112,9 @@ function Placements({ placements, goTab, openBoard }) {
       padding: "10px 0", borderTop: top ? `1px solid ${C.line}` : "none", cursor: "pointer",
     }}>
       <span style={{ fontSize: 14 }}>{r.label}</span>
-      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <span style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        {/* "delt" siges kun her, hvor der er plads til ord — tabellerne nøjes med tallet */}
+        {r.shared && <span style={{ fontSize: 11, color: C.muted }}>delt</span>}
         <span style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, color: r.pos === "1." ? C.gold : C.text }}>{r.pos}</span>
         <ChevronRight size={15} color={C.muted} />
       </span>
@@ -219,12 +221,12 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       // rating-snapshot
       try {
         const [board, hist] = await Promise.all([loadRatingBoard(token), loadRatingHistory(token)]);
-        const idx = board.findIndex((r) => r.userId === userId);
+        const me = board.find((r) => r.userId === userId);
         if (!cancelled) {
-          if (idx >= 0) {
-            const me = board[idx];
+          if (me) {
             const h = hist.get(userId) || {};
-            setSnapshot({ rating: me.rating, move: h.move || 0, form: h.form || [], rank: idx + 1, total: board.length, provisional: me.provisional });
+            // rank er ranglistens ægte placering (delt ved samme rating), ikke listeindekset
+            setSnapshot({ rating: me.rating, move: h.move || 0, form: h.form || [], rank: me.rank, total: board.length, provisional: me.provisional });
           } else {
             setSnapshot({ none: true });
           }
@@ -249,13 +251,14 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         ]);
         const groupNameById = new Map(groupRows.map((g) => [g.id, g.name]));
         const list = [];
-        const mIdx = monthly.findIndex((r) => r.userId === userId);
-        if (mIdx >= 0) list.push({ label: "Månedsliga · " + monthName(currentMonthKey()), pos: `${mIdx + 1}.`, tab: "championship" });
+        // Placeringen er rækkens ægte rank (delt ved lighed) — ikke dens plads i listen.
+        const mine = monthly.find((r) => r.userId === userId);
+        if (mine) list.push({ label: "Månedsliga · " + monthName(currentMonthKey()), pos: `${mine.rank}.`, shared: mine.shared, tab: "championship" });
         comps.forEach((c, i) => {
           const state = compStates[i];
           if (!state) return; // fejlede — spring over
-          const rIdx = state.rows.findIndex((r) => r.userId === userId);
-          if (rIdx >= 0 && state.rows.length) list.push({ label: c.name, pos: `${rIdx + 1}.`, compId: c.id, groupId: c.group_id || null, groupName: c.group_id ? (groupNameById.get(c.group_id) || "Liga") : null });
+          const row = state.rows.find((r) => r.userId === userId);
+          if (row) list.push({ label: c.name, pos: `${row.rank}.`, shared: row.shared, compId: c.id, groupId: c.group_id || null, groupName: c.group_id ? (groupNameById.get(c.group_id) || "Liga") : null });
         });
         if (!cancelled) setPlacements(list);
       } catch (e) { if (!cancelled) setPlacements([]); }
