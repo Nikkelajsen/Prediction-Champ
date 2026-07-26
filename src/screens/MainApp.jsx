@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";
-import { loadGroupByCode, joinGroup } from "../lib/data.js";
+import { loadGroupByCode, joinGroup, joinCompetition } from "../lib/data.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
 import { Modal } from "../ui/components.jsx";
 import HjemTab from "./HjemTab.jsx";
@@ -93,7 +93,16 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
           const comp = found[0];
           const already = await db.select(token, "competition_participants", `competition_id=eq.${comp.id}&user_id=eq.${userId}&select=competition_id`);
           if (already.length) {
-            // allerede medlem — ingen bekræftelse nødvendig, gå direkte til ligaen
+            // Allerede deltager — ingen bekræftelse nødvendig, gå direkte til stillingen.
+            // Men sikr liga-medlemskabet først: en deltager UDEN liga-medlemskab er
+            // netop den halve tilstand, A8-hullet efterlod (deltager i stillingen,
+            // men usynlig på medlemslisten og uden adgang til ligaens side). At
+            // trykke på invitationslinket igen er den naturlige måde at forsøge at
+            // rette det på, så det skal faktisk rette det. joinGroup er idempotent.
+            if (comp.group_id) {
+              try { await joinGroup(token, userId, comp.group_id); }
+              catch (e) { /* deltagelsen er intakt — bloker ikke navigationen */ }
+            }
             await loadCompetitions();
             setTab("ligaer");
             setScreen({ type: "board", compId: comp.id });
@@ -106,7 +115,17 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
                 inviterName = prof[0]?.display_name || "";
               } catch (e) { /* inviter-navn er valgfrit */ }
             }
-            setPendingJoin({ competition: comp, inviterName });
+            // Ligger konkurrencen i en liga, melder join én ind i BEGGE (A8) —
+            // ligaens navn hentes, så bekræftelsen kan sige det højt i stedet
+            // for at gøre det bag om ryggen på brugeren.
+            let groupName = "";
+            if (comp.group_id) {
+              try {
+                const g = await db.select(token, "groups", `id=eq.${comp.group_id}&select=name`);
+                groupName = g[0]?.name || "";
+              } catch (e) { /* liga-navn er valgfrit */ }
+            }
+            setPendingJoin({ competition: comp, inviterName, groupName });
           }
         } else {
           setJoinError("Ingen konkurrence fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
@@ -163,7 +182,10 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     if (!pendingJoin) return;
     const comp = pendingJoin.competition;
     try {
-      await db.insert(token, "competition_participants", [{ competition_id: comp.id, user_id: userId }]);
+      // A8: ligger konkurrencen i en liga, melder join én ind i BEGGE. Reglen bor
+      // i joinCompetition, så denne sti og LigaerTabs indsatte-kode-sti ikke kan
+      // divergere igen (det var netop, hvad der var sket — se A7).
+      await joinCompetition(token, userId, comp.id, comp.group_id);
       await loadCompetitions();
       setPendingJoin(null);
       setTab("ligaer");
@@ -301,11 +323,16 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       </div>
 
       {pendingJoin && (
-        <Modal title="Join liga?" onClose={() => setPendingJoin(null)}>
+        <Modal title="Join konkurrence?" onClose={() => setPendingJoin(null)}>
           <p style={{ margin: "0 0 4px" }}>
             {pendingJoin.inviterName ? <><b>{pendingJoin.inviterName}</b> har inviteret dig til </> : "Du er inviteret til "}
-            ligaen <b>{pendingJoin.competition.name}</b>. Vil du være med?
+            konkurrencen <b>{pendingJoin.competition.name}</b>. Vil du være med?
           </p>
+          {pendingJoin.groupName && (
+            <p style={{ ...muted, margin: "8px 0 0" }}>
+              Konkurrencen hører til ligaen <b>{pendingJoin.groupName}</b> — du bliver samtidig medlem af ligaen.
+            </p>
+          )}
           <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
             <button style={{ ...btnGreen, flex: 1, width: "auto" }} onClick={confirmJoin}>Ja, join</button>
             <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={() => setPendingJoin(null)}>Annullér</button>

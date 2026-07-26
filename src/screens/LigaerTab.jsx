@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { Trophy, ChevronRight, Plus, Archive, Trash2, Users, Info } from "lucide-react";
 import { db } from "../lib/supabase.js";
-import { computeCompetitionState, loadMyGroups, loadGroupByCode, createGroup, joinGroup } from "../lib/data.js";
+import { computeCompetitionState, loadMyGroups, loadGroupByCode, createGroup, joinGroup, joinCompetition } from "../lib/data.js";
 import { C, btnGhost, btnGold, btnGreen, font } from "../ui/theme.js";
 import { Card, Eyebrow, H, InfoDot, PlayerName } from "../ui/components.jsx";
 
@@ -80,12 +80,11 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
         openGroup(g.id);
         return;
       }
-      // konkurrence-kode (gammelt flow) — meld også ind i ligaen, hvis konkurrencen har en
+      // konkurrence-kode — joinCompetition melder også ind i ligaen, hvis konkurrencen har en (A8)
       const found = await db.select(token, "competitions", `invite_code=eq.${code}&select=*`);
       if (!found.length) { setJoinErr("Ingen liga eller konkurrence fundet med den kode"); setBusy(false); return; }
       const comp = found[0];
-      if (comp.group_id) await joinGroup(token, userId, comp.group_id);
-      await db.insert(token, "competition_participants", [{ competition_id: comp.id, user_id: userId }]);
+      await joinCompetition(token, userId, comp.id, comp.group_id);
       setInviteCode("");
       await reload();
       if (comp.group_id) { await reloadGroups(); openGroup(comp.group_id); }

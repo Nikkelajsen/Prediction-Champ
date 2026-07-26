@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // db mockes, så loaderne kan testes uden netværk/Supabase
-vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn() }, restFetch: vi.fn() }));
+vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn(), insert: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
-import { computeCompetitionState, loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, leaveCompetition, moveCompetitionToGroup } from "./data.js";
+import { computeCompetitionState, loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup } from "./data.js";
 
 // mock-svar pr. tabel/view
 function mockTables(tables) {
@@ -15,7 +15,7 @@ function mockTables(tables) {
 
 // bloksyntaks er vigtig: mockReset() returnerer mocken, og en returneret
 // funktion ville blive kørt af vitest som cleanup-hook (uden argumenter)
-beforeEach(() => { db.select.mockReset(); db.del.mockReset(); restFetch.mockReset(); });
+beforeEach(() => { db.select.mockReset(); db.del.mockReset(); db.insert.mockReset(); restFetch.mockReset(); });
 
 describe("loadRoundBoard (round_standings-view)", () => {
   it("mapper viewets rækker til stillingsrækker med navne", async () => {
@@ -257,6 +257,57 @@ describe("liga-laget (grupper)", () => {
     expect(await leaveCompetition("token", "u1", "c1")).toBe(true);
     db.del.mockResolvedValueOnce([]); // blokeret (tips på låst runde)
     expect(await leaveCompetition("token", "u1", "c1")).toBe(false);
+  });
+
+  // A8 (og A7, juli 2026): join via konkurrence-link skal melde én ind i BEGGE.
+  // Reglen lå tidligere som en kopi i hver af de to join-stier, og kun den ene
+  // huskede ligaen — derfor bor den nu ét sted og testes her.
+  it("joinCompetition melder ind i ligaen FØR konkurrencen, når konkurrencen har en liga", async () => {
+    const calls = [];
+    db.select.mockImplementation(async (token, table) => {
+      calls.push(`select:${table}`);
+      return table === "group_members" ? [] : []; // endnu ikke medlem
+    });
+    db.insert.mockImplementation(async (token, table) => { calls.push(`insert:${table}`); });
+
+    await joinCompetition("token", "u1", "c1", "g1");
+
+    expect(calls).toEqual(["select:group_members", "insert:group_members", "insert:competition_participants"]);
+  });
+
+  it("joinCompetition springer liga-medlemskabet over, når man allerede er medlem", async () => {
+    db.select.mockResolvedValueOnce([{ user_id: "u1" }]); // allerede medlem
+    db.insert.mockResolvedValue(undefined);
+
+    await joinCompetition("token", "u1", "c1", "g1");
+
+    expect(db.insert).toHaveBeenCalledTimes(1);
+    expect(db.insert).toHaveBeenCalledWith("token", "competition_participants", [{ competition_id: "c1", user_id: "u1" }]);
+  });
+
+  it("joinCompetition rører ikke group_members for en liga-løs konkurrence", async () => {
+    db.insert.mockResolvedValue(undefined);
+
+    await joinCompetition("token", "u1", "c1");
+
+    expect(db.select).not.toHaveBeenCalled();
+    expect(db.insert).toHaveBeenCalledTimes(1);
+    expect(db.insert).toHaveBeenCalledWith("token", "competition_participants", [{ competition_id: "c1", user_id: "u1" }]);
+  });
+
+  it("joinCompetition tilmelder IKKE konkurrencen, hvis liga-indmeldingen fejler", async () => {
+    db.select.mockResolvedValueOnce([]);          // ikke medlem
+    db.insert.mockRejectedValueOnce(new Error("RLS")); // group_members fejler
+
+    await expect(joinCompetition("token", "u1", "c1", "g1")).rejects.toThrow("RLS");
+    expect(db.insert).toHaveBeenCalledTimes(1); // nåede aldrig competition_participants
+  });
+
+  it("leaveGroup returnerer false, når RLS blokerer (deltager stadig i en konkurrence)", async () => {
+    db.del.mockResolvedValueOnce([{ group_id: "g1", user_id: "u1" }]);
+    expect(await leaveGroup("token", "u1", "g1")).toBe(true);
+    db.del.mockResolvedValueOnce([]); // blokeret
+    expect(await leaveGroup("token", "u1", "g1")).toBe(false);
   });
 
   it("moveCompetitionToGroup kalder RPC med rigtige parametre", async () => {
