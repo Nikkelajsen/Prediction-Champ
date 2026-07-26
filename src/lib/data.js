@@ -530,7 +530,17 @@ async function deleteGroup(token, groupId) {
 }
 
 // Deltag i en konkurrence (tilmelding pr. konkurrence).
-async function joinCompetition(token, userId, compId) {
+// Deltag i en konkurrence. Hører den til en liga, meldes man samtidig ind i ligaen
+// (A8: ingen gæste-deltagelse) — liga-medlemskabet FØRST, så en fejl undervejs ikke
+// efterlader en deltager uden liga: usynlig på medlemslisten og uden adgang til
+// ligaens side. `joinGroup` er idempotent, så det er gratis at kalde for et
+// eksisterende medlem (fx når man melder sig til fra liga-siden).
+//
+// Reglen bor HER, fordi de to veje ind i en konkurrence — deep-link (?join=) og
+// indsat invitationskode — havde hver sin kopi, og kun den ene huskede ligaen
+// (A7, juli 2026).
+async function joinCompetition(token, userId, compId, groupId = null) {
+  if (groupId) await joinGroup(token, userId, groupId);
   await db.insert(token, "competition_participants", [{ competition_id: compId, user_id: userId }]);
 }
 

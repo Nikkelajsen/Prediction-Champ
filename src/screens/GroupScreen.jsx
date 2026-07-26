@@ -40,7 +40,9 @@ function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard
 
   async function onJoin(compId) {
     setBusyId(compId); setNote("");
-    try { await joinCompetition(token, userId, compId); await load(); }
+    // groupId med: idempotent for et eksisterende medlem, men gør kaldet ens
+    // alle steder, så ingen sti kan glemme liga-medlemskabet (A8).
+    try { await joinCompetition(token, userId, compId, groupId); await load(); }
     catch (e) { setNote(e.message || "Kunne ikke deltage — prøv igen."); }
     finally { setBusyId(null); }
   }
