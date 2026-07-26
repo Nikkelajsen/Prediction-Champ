@@ -80,12 +80,21 @@ declare
   v_month_name text;
   v_month_last boolean;
   v_rating_total int;
+  -- VIGTIGT — round_key har TO typer i skemaet, og de må ikke blandes:
+  --   date: matches.round_key (genereret kolonne) og alt afledt af den
+  --         (round_standings, _se_rp, _se_pair).
+  --   text: stories.round_key og rating_history.round_key.
+  -- Postgres har ingen `date <= text`-operator, så en usammenlignet blanding
+  -- fejler HELE funktionen — og da matches-triggeren er exception-guarded, sker
+  -- det tavst (et tomt historie-kort kan ikke skelnes fra en stille uge).
+  -- Derfor: brug v_round mod date-kolonnerne, p_round_key mod text-kolonnerne.
+  v_round date := p_round_key::date;
   months text[] := array['januar','februar','marts','april','maj','juni','juli','august','september','oktober','november','december'];
 begin
-  -- idempotent: fjern rundens historier og genberegn
+  -- idempotent: fjern rundens historier og genberegn (stories.round_key er text)
   delete from public.stories where round_key = p_round_key;
 
-  v_label := to_char(p_round_key::date, 'DD.MM') || ' – ' || to_char(p_round_key::date + 6, 'DD.MM');
+  v_label := to_char(v_round, 'DD.MM') || ' – ' || to_char(v_round + 6, 'DD.MM');
 
   -- ---- point pr. konkurrence/bruger/runde (kun spillede kampe, t.o.m. denne runde) ----
   -- Ud over point og præcise hits opgøres alt, tiebreaker-stigen har brug for:
@@ -105,7 +114,7 @@ begin
     join public.predictions pr on pr.match_id = m.id
     where m.home_score is not null and m.away_score is not null
       and pr.pred_home is not null and pr.pred_away is not null
-      and m.round_key <= p_round_key
+      and m.round_key <= v_round
   ),
   agg as (
     select competition_id, user_id, round_key,
@@ -145,12 +154,12 @@ begin
     rank() over (partition by competition_id
                  order by sum(rpts) desc, sum(rexact) desc, sum(routcome) desc, sum(round_won) desc,
                           round(sum(rgoalerr)::numeric / sum(rmatches), 4) asc)::int as rnk
-  from _se_rp where round_key < p_round_key group by competition_id, user_id;
+  from _se_rp where round_key < v_round group by competition_id, user_id;
 
   -- denne rundes point pr. konkurrence/bruger
   drop table if exists _se_this;
   create temporary table _se_this as
-  select competition_id, user_id, rpts, rexact, round_won from _se_rp where round_key = p_round_key;
+  select competition_id, user_id, rpts, rexact, round_won from _se_rp where round_key = v_round;
 
   -- ======== Regel 70 · Rundens vinder (pr. konkurrence) ========
   insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
@@ -260,7 +269,7 @@ begin
       coalesce(min(p.rn) filter (where not p.won) - 1, count(*))::int as streak,
       max(p.mine) filter (where p.rn = 1) as mine,
       max(p.deres) filter (where p.rn = 1) as deres,
-      bool_or(p.rn = 1 and p.round_key = p_round_key) as current
+      bool_or(p.rn = 1 and p.round_key = v_round) as current
     from (
       select competition_id, user_id, rival_id, round_key, won, mine, deres,
         row_number() over (partition by competition_id, user_id, rival_id order by round_key desc) as rn
@@ -296,11 +305,11 @@ begin
     and prev.old is not null and rh.rating_after > prev.old;
 
   -- ======== Regel 10 · Månedens Champ (global, når runden lukker måneden) ========
-  v_month := to_char(p_round_key::date, 'YYYY-MM');
-  v_month_name := months[cast(to_char(p_round_key::date, 'MM') as int)];
+  v_month := to_char(v_round, 'YYYY-MM');
+  v_month_name := months[cast(to_char(v_round, 'MM') as int)];
   select not exists (
     select 1 from public.matches m
-    where m.round_key > p_round_key and to_char(m.round_key::date, 'YYYY-MM') = v_month
+    where m.round_key > v_round and to_char(m.round_key, 'YYYY-MM') = v_month
       and m.home_score is not null
   ) into v_month_last;
 
@@ -345,7 +354,7 @@ begin
     'Du ramte ' || rs.exact_count || ' kampe præcist i runden ' || v_label ||
       ' — ' || rs.total_points || ' point i alt.'
   from public.round_standings rs
-  where rs.round_key = p_round_key and rs.exact_count >= 3;
+  where rs.round_key = v_round and rs.exact_count >= 3;
 
   drop table if exists _se_rp;
   drop table if exists _se_size;
