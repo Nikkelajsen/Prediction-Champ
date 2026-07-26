@@ -1,10 +1,10 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
-import { useState, useEffect, useMemo, useRef } from "react";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Users } from "lucide-react";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Check, ChevronLeft, ChevronRight, ChevronUp, Users } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, isPlayed, liveInfo, pointsFor, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS, stageBadgeLabel } from "../lib/scoring.js";
-import { C, chip, font, muted, pagerBtn } from "../ui/theme.js";
-import { BackBar, Card, FinalBadge, H, LiveBadge, PlayerName, PointsPill, ScoreInput } from "../ui/components.jsx";
+import { C, chip, font, muted, pagerBtn, thStyle } from "../ui/theme.js";
+import { BackBar, Card, FinalBadge, H, PlayerName, PointsPill, ScoreInput } from "../ui/components.jsx";
 
 // ---------- tid: datoen står i dagens overskrift, rækken viser kun klokkeslæt ----------
 function hhmm(iso) {
@@ -64,7 +64,7 @@ function lockLabel(deadlineMs, prefix = "Låser") {
 // tippet-tæller, point) på én dæmpet linje under. Deadline hører til runden — ikke
 // til hver enkelt kamp — så den står KUN her.
 // (Bevidst ikke den delte RoundPager: den bruges uændret af AdminScreen.)
-function RoundHeader({ rounds, index, setIndex, status }) {
+function RoundHeader({ rounds, index, setIndex, status, hint }) {
   const round = rounds[index];
   const canPrev = index > 0;
   const canNext = index < rounds.length - 1;
@@ -84,6 +84,15 @@ function RoundHeader({ rounds, index, setIndex, status }) {
           aria-label="Næste runde" onClick={() => setIndex(index + 1)}><ChevronRight size={16} /></button>
       </div>
       {status && <div style={{ color: C.muted, fontSize: 12, marginTop: 4, lineHeight: 1.4 }}>{status}</div>}
+      {/* Forklaringslinjen står ÉT sted for hele runden i stedet for en "Alles gæt"-knap
+          på hver eneste række. Samme greb som under stillingstabellen i BoardScreen:
+          sig hvad der kan trykkes på, frem for at håbe rækken selv afslører det. */}
+      {hint && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, color: C.muted, fontSize: 11.5, marginTop: 5, lineHeight: 1.3 }}>
+          <Users size={13} style={{ flexShrink: 0 }} />
+          {hint}
+        </div>
+      )}
     </div>
   );
 }
@@ -92,6 +101,68 @@ const scoreChip = (extra) => ({
   fontSize: 14, fontWeight: 700, padding: "4px 9px", borderRadius: 8,
   whiteSpace: "nowrap", fontFamily: "ui-monospace, monospace", ...extra,
 });
+
+// ---------- den låste rækkes kolonner ----------
+// Tid/status · holdnavn (elastisk) · gæt · facit · point · chevron. Bredderne er
+// målt til det, tallene faktisk fylder — hvert sparet pixel går til holdnavnet,
+// som er det eneste, der kan blive for langt. Overskrifterne (GÆT/FACIT/P) står
+// én gang øverst i runden, så de tre tal ikke længere skal gættes fra hukommelsen.
+const ROW_COLS = "36px minmax(0,1fr) 25px 38px 26px 14px";
+const ROW_GAP = 4;
+const rowGrid = {
+  display: "grid", gridTemplateColumns: ROW_COLS, gap: ROW_GAP,
+  alignItems: "center", minHeight: 42, width: "calc(100% + 12px)",
+  padding: "8px 6px", margin: "0 -6px", borderRadius: 8, textAlign: "left",
+};
+const cellCenter = { textAlign: "center", fontSize: 13, fontFamily: "ui-monospace, monospace" };
+
+// Holdnavnene sættes i appens condensed display-skrift: den fylder ~25 % mindre end
+// brødskriften, hvilket er præcis det, der får kampen til at rummes på ÉN linje.
+// Passer navnet alligevel ikke, falder skriften ét trin ad gangen — og først når
+// trinene er brugt op, ombrydes der. Der trunkeres aldrig: et afkortet holdnavn er
+// skjult information (samme regel som før kompakteringen).
+const NAME_STEPS = [15, 13.5, 12.5];
+function TeamNames({ home, away }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.whiteSpace = "nowrap";
+      let i = 0;
+      for (; i < NAME_STEPS.length; i++) {
+        el.style.fontSize = `${NAME_STEPS[i]}px`;
+        if (el.scrollWidth <= el.clientWidth + 0.5) break;
+      }
+      el.style.whiteSpace = i < NAME_STEPS.length ? "nowrap" : "normal";
+    };
+    fit();
+    // Kun bredde-ændringer må udløse en ny måling: fit() ændrer selv højden, så et
+    // ubetinget kald her ville løbe i ring.
+    let lastW = -1;
+    const ro = new ResizeObserver((entries) => {
+      const w = Math.round(entries[0].contentRect.width);
+      if (w === lastW) return;
+      lastW = w;
+      fit();
+    });
+    ro.observe(el);
+    // Skriften hentes asynkront; uden dette måles fallback-skriftens bredde, som er
+    // bredere — så en række ville ombryde unødigt indtil næste render.
+    if (document.fonts?.ready) document.fonts.ready.then(fit).catch(() => {});
+    return () => ro.disconnect();
+  });
+  return (
+    <span ref={ref} style={{
+      fontFamily: font.display, fontWeight: 600, color: C.text,
+      // Marginen (ikke padding) gør selve boksen smallere, så måleren ovenfor regner
+      // luften med og navnet aldrig lander klods op ad gæt-tallet.
+      minWidth: 0, overflow: "hidden", lineHeight: 1.2, marginRight: 4,
+    }}>
+      {home} – {away}
+    </span>
+  );
+}
 
 // Én kamp på to linjer (én, hvis der intet mærke er at vise): klokkeslæt + hold til
 // venstre, tip-felter og resultat til højre. Ligger bevidst på MODUL-niveau: defineret
@@ -108,79 +179,98 @@ function MatchRow({
   const correctOutcome = played && pts !== null && pts > 0;
   const stage = stageBadgeLabel(m.stage_name);
   const canExpand = locked && participants.length > 1;
-  // Anden linje vises kun, hvis der faktisk er noget at vise dér.
-  const hasMeta = !!(stage || live || (played && showFinal) || countdown || openLabel || canExpand || err);
+  // Anden linje vises nu kun til det, der IKKE kan bo i en kolonne: stage-mærket,
+  // rækkens egen deadline (kun ved flere turneringer i samme runde) og slettefejl.
+  // "Slut", "Live" og "Alles gæt" er flyttet ind i rækken selv.
+  const hasMeta = !!(stage || countdown || openLabel || err);
+
+  // Tid/status-kolonnen bærer kampens tilstand: en færdigspillet kamps kickoff er
+  // lav værdi, når facit står i samme række, og et spilleminut er lige så tydeligt
+  // her som i en badge på en linje for sig.
+  const status = played && showFinal ? <FinalBadge />
+    : live && live.label === "Pause" ? <span style={{ color: C.red, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>Pause</span>
+    : live ? (
+      <span style={{ color: C.red, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}>
+        <span className="livedot" style={{ width: 6, height: 6, borderRadius: "50%", background: C.red, flexShrink: 0 }} />
+        {live.label}
+      </span>
+    ) : <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{played ? "" : hhmm(m.kickoff_at) || "–"}</span>;
+
+  // Den låste række: seks kolonner, én linje. Hele rækken er tryk-fladen for
+  // "alles gæt" — en låst række har ingen indtastningsfelter at komme i vejen for,
+  // og et 14 px chevron ville være alt for lille et mål for en finger (jf. den
+  // samme fejl i stillingens drill-in). Chevronet er kun det synlige tegn.
+  const lockedCells = (
+    <>
+      {status}
+      <TeamNames home={homeName} away={awayName} />
+      <span style={{ ...cellCenter, color: C.muted }}>{hasPred ? `${pred.pred_home}-${pred.pred_away}` : "–"}</span>
+      <span style={{ textAlign: "center" }}>
+        {played ? (
+          // Facit følger samme nuance som pointpillen (og "Sådan virker det"):
+          // præcist hit = fuld grøn + guldkant, korrekt udfald = blød grøn,
+          // forkert = rød. Så har hele rækken ÉN farve, der siger hvor godt det gik.
+          <span style={scoreChip({
+            fontSize: 13, padding: "3px 5px",
+            background: !hasPred ? C.surface2 : exact ? "rgba(34,197,94,0.18)" : correctOutcome ? "rgba(127,212,138,0.12)" : "rgba(239,91,91,0.18)",
+            color: !hasPred ? C.muted : exact ? C.green : correctOutcome ? C.greenSoft : C.red,
+            border: exact ? `2px solid ${C.gold}` : "1px solid transparent",
+          })}>{m.home_score}-{m.away_score}</span>
+        ) : live ? (
+          // Live: nuværende stilling i neutral (rød-kantet) ramme — bevidst UDEN
+          // point/farvekodning, for point afgøres først ved slutfløjt.
+          <span style={scoreChip({
+            fontSize: 13, padding: "3px 5px",
+            background: "rgba(239,91,91,0.10)", color: C.text, border: `1px solid ${C.red}`,
+          })}>{live.homeScore}-{live.awayScore}</span>
+        ) : null}
+      </span>
+      <span style={{ textAlign: "center" }}>{played && hasPred && <PointsPill pts={pts} />}</span>
+      <span style={{ color: C.gold, display: "inline-flex", justifyContent: "flex-end" }}>
+        {canExpand && (expanded ? <ChevronUp size={14} /> : <ChevronRight size={14} />)}
+      </span>
+    </>
+  );
 
   return (
-    <div style={{ padding: "9px 0", borderBottom: last ? "none" : `1px solid ${C.line}` }}>
-      {/* Linje 1: klokkeslæt + hold til venstre, eget tip / facit / point til højre.
-          Højre klump ligger i SAMME flexrække som holdnavnene, så tallene flugter med
-          den kamp de hører til — ikke centreret ned over mærke-linjen nedenfor. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 40 }}>
-        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 8 }}>
-          <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{hhmm(m.kickoff_at) || "–"}</span>
-          {/* Ombryder frem for at trunkere: et afkortet holdnavn er skjult information. */}
-          <span style={{ color: C.text, fontWeight: 600, fontSize: 14, lineHeight: 1.25, minWidth: 0 }}>
-            {homeName} – {awayName}
-          </span>
+    <div style={{ borderBottom: last ? "none" : `1px solid ${C.line}` }}>
+      {locked ? (
+        canExpand ? (
+          <button type="button" className="tiprow" onClick={onToggleExpanded} aria-expanded={expanded}
+            aria-label={expanded ? "Skjul alles gæt" : `Vis alles gæt for ${homeName} mod ${awayName}`}
+            style={{ ...rowGrid, background: "none", border: "none", cursor: "pointer", fontFamily: font.body, color: C.text }}>
+            {lockedCells}
+          </button>
+        ) : (
+          <div style={rowGrid}>{lockedCells}</div>
+        )
+      ) : (
+        /* Åben runde: rækken skal rumme to indtastningsfelter, så den beholder sin
+           flex-form. Kolonne-hovedet vises kun for låste runder, hvor der er noget
+           at stille op i kolonner. */
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 40, padding: "7px 0" }}>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{hhmm(m.kickoff_at) || "–"}</span>
+            {/* Ombryder frem for at trunkere: et afkortet holdnavn er skjult information. */}
+            <span style={{ color: C.text, fontWeight: 600, fontSize: 14, lineHeight: 1.25, minWidth: 0 }}>
+              {homeName} – {awayName}
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            <ScoreInput value={pred.pred_home} onChange={(v) => onSave(m.id, "pred_home", v)} disabled={!!notOpenUntil} />
+            <span style={{ color: C.muted, fontSize: 12 }}>-</span>
+            <ScoreInput value={pred.pred_away} onChange={(v) => onSave(m.id, "pred_away", v)} disabled={!!notOpenUntil} />
+            {/* Fast slot, så felterne ikke hopper når ✓ kommer og går. */}
+            <span style={{ width: 16, display: "inline-flex", justifyContent: "center" }}>
+              {saved && <Check size={15} style={{ color: C.green }} />}
+            </span>
+          </div>
         </div>
+      )}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          {/* Eget tip. Kan der ikke længere rettes, vises det som tal i stedet for to
-              deaktiverede input — samme information, ~60 px mindre. Står der også en
-              stilling ved siden af, gøres tippet dæmpet og rammeløst: så er der ét
-              roligt tal (mit gæt) og ét fremhævet (facit), i stedet for to ens felter. */}
-          {locked && (played || live) ? (
-            <span style={{
-              color: C.muted, fontSize: 13, fontFamily: "ui-monospace, monospace",
-              minWidth: 32, textAlign: "right", whiteSpace: "nowrap",
-            }}>{hasPred ? `${pred.pred_home}-${pred.pred_away}` : "–"}</span>
-          ) : locked ? (
-            <span style={scoreChip({
-              background: C.surface, color: hasPred ? C.text : C.muted,
-              border: `1px solid ${C.line}`, minWidth: 48, textAlign: "center",
-            })}>{hasPred ? `${pred.pred_home}-${pred.pred_away}` : "–"}</span>
-          ) : (
-            <>
-              <ScoreInput value={pred.pred_home} onChange={(v) => onSave(m.id, "pred_home", v)} disabled={!!notOpenUntil} />
-              <span style={{ color: C.muted, fontSize: 12 }}>-</span>
-              <ScoreInput value={pred.pred_away} onChange={(v) => onSave(m.id, "pred_away", v)} disabled={!!notOpenUntil} />
-              {/* Fast slot, så felterne ikke hopper når ✓ kommer og går. */}
-              <span style={{ width: 16, display: "inline-flex", justifyContent: "center" }}>
-                {saved && <Check size={15} style={{ color: C.green }} />}
-              </span>
-            </>
-          )}
-          {played && (
-            <>
-              {/* Facit følger samme nuance som pointpillen (og "Sådan virker det"):
-                  præcist hit = fuld grøn + guldkant, korrekt udfald = blød grøn,
-                  forkert = rød. Så har hele rækken ÉN farve, der siger hvor godt det gik. */}
-              <span style={scoreChip({
-                background: !hasPred ? C.surface2 : exact ? "rgba(34,197,94,0.18)" : correctOutcome ? "rgba(127,212,138,0.12)" : "rgba(239,91,91,0.18)",
-                color: !hasPred ? C.muted : exact ? C.green : correctOutcome ? C.greenSoft : C.red,
-                border: exact ? `2px solid ${C.gold}` : "1px solid transparent",
-              })}>{m.home_score}-{m.away_score}</span>
-              {hasPred && <PointsPill pts={pts} />}
-            </>
-          )}
-          {/* Live: nuværende stilling i neutral (rød-kantet) ramme — bevidst UDEN
-              point/farvekodning, for point afgøres først ved slutfløjt. */}
-          {!played && live && (
-            <span style={scoreChip({
-              background: "rgba(239,91,91,0.10)", color: C.text, border: `1px solid ${C.red}`,
-            })}>{live.homeScore}-{live.awayScore}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Linje 2: kampens mærker, i fuld rækkebredde under linje 1. */}
+      {/* Linje 2: kun det, der ikke kan bo i en kolonne. Renderes derfor sjældent. */}
       {hasMeta && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 2 }}>
-          {/* Kampens tilstand: LIVE (i gang) · Slut (færdigspillet). "Låst" står i
-              rundehovedet — på rækken er de deaktiverede felter signalet. */}
-          {live && <LiveBadge text={live.label} />}
-          {played && showFinal && <FinalBadge />}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
           {stage && (
             <span style={{ background: C.surface2, color: C.gold, fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 999, whiteSpace: "nowrap" }}>
               {stage}
@@ -190,23 +280,12 @@ function MatchRow({
               rundehovedets tid ikke alle kampe, og rækken må selv sige det. */}
           {countdown && <span style={{ color: C.gold, fontSize: 11 }}>{countdown}</span>}
           {openLabel && <span style={{ color: C.muted, fontSize: 11 }}>{openLabel}</span>}
-          {canExpand && (
-            <button onClick={onToggleExpanded} aria-expanded={expanded}
-              aria-label={expanded ? "Skjul alles gæt" : `Vis alles gæt for ${homeName} mod ${awayName}`}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 4, background: "none", border: "none",
-                cursor: "pointer", color: C.gold, fontSize: 11, fontWeight: 700, padding: "2px 0", fontFamily: font.body,
-              }}>
-              <Users size={13} />{expanded ? "Skjul gæt" : "Alles gæt"}
-              {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </button>
-          )}
           {err && <span style={{ fontSize: 11, color: C.red }}>Kunne ikke slette</span>}
         </div>
       )}
 
       {expanded && (
-        <div style={{ marginTop: 8, padding: "8px 10px", background: C.surface2, borderRadius: 10 }}>
+        <div style={{ margin: "2px 0 8px", padding: "8px 10px", background: C.surface2, borderRadius: 10 }}>
           {participants.map((p) => {
             const pp = matchPreds.find((x) => x.user_id === p.id);
             const ppts = played && pp ? pointsFor(pp, m, rules) : null;
@@ -465,6 +544,12 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
 
   const days = useMemo(() => (round ? groupIntoDays(round.matches) : []), [round]);
 
+  // Kolonne-hovedet og forklaringslinjen hører til den LÅSTE runde: først dér findes
+  // der et facit og et point at stille op i kolonner, og først dér kan man se andres
+  // gæt (canExpand = locked). En åben runde er ren indtastning og får hverken.
+  const anyLocked = !!round && round.matches.some((m) => isLocked(m, roundLockMap));
+  const canSeeOthers = anyLocked && participants.length > 1;
+
   // Filtre vises kun, når der reelt er noget at vælge imellem — ELLER når et filter
   // faktisk ER sat (Tip kan åbnes filtreret fra stillingen, jf. BoardScreen). Ellers
   // ville skærmen være filtreret uden at vise det, og uden vej ud af filteret igen.
@@ -504,7 +589,20 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
           {!loading && rounds.length === 0 && <p style={muted}>Ingen kampe i det valgte filter endnu.</p>}
           {!loading && rounds.length > 0 && (
             <Card style={{ padding: "14px 14px 8px" }}>
-              <RoundHeader rounds={rounds} index={safeIndex} setIndex={setRoundIndex} status={roundInfo?.status} />
+              <RoundHeader rounds={rounds} index={safeIndex} setIndex={setRoundIndex} status={roundInfo?.status}
+                hint={canSeeOthers ? "Tryk på en kamp for at se alles gæt" : null} />
+              {anyLocked && (
+                <div style={{
+                  display: "grid", gridTemplateColumns: ROW_COLS, gap: ROW_GAP, alignItems: "center",
+                  padding: "2px 0 6px", borderBottom: `1px solid ${C.line}`,
+                }}>
+                  <span /><span />
+                  {["Gæt", "Facit", "P"].map((h) => (
+                    <span key={h} style={{ ...thStyle, textAlign: "center", fontSize: 11 }}>{h}</span>
+                  ))}
+                  <span />
+                </div>
+              )}
               {days.map((day, di) => (
                 <div key={day.key}>
                   <div style={{
@@ -564,3 +662,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
 }
 
 export default PredictionsScreen;
+// Navngivne eksporter til test/måling: rækken og rundehovedet skal kunne renderes
+// isoleret i en rigtig browser, fordi bredde-fejl tre gange er sluppet igennem, når
+// de blev skønnet ud fra koden i stedet for målt (jf. beslutningsloggen).
+export { MatchRow, RoundHeader, TeamNames, ROW_COLS, ROW_GAP };
