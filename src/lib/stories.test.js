@@ -55,6 +55,14 @@ describe("pickStory (deterministisk udvælgelse)", () => {
 });
 
 describe("renderStory (tekst-skabeloner)", () => {
+  it("ROUND_WON siger, hvor mange sejren deles med — i grammatisk dansk", () => {
+    expect(renderStory("ROUND_WON", { points: 9, league: "Kontoret", label: "L" }).body).toContain("Kontoret.");
+    expect(renderStory("ROUND_WON", { points: 9, league: "Kontoret", label: "L", shared: true, others: 1 }).body)
+      .toContain("(delt med 1 anden).");
+    expect(renderStory("ROUND_WON", { points: 9, league: "Kontoret", label: "L", shared: true, others: 3 }).body)
+      .toContain("(delt med 3 andre).");
+  });
+
   it("Månedens Champ angiver samlede point (aldrig gennemsnit) — acceptkriterie", () => {
     const { headline, body } = renderStory("MONTH_CHAMP", { month: "juli", points: 31, gap: 3 });
     expect(headline).toContain("Månedens Prediction Champ");

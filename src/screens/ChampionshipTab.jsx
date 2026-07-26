@@ -3,13 +3,22 @@ import { useState, useEffect, useMemo } from "react";
 import { Crown, ChevronLeft, ChevronRight } from "lucide-react";
 import { currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRatingMap, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, monthName } from "../lib/data.js";
 import { roundLabel } from "../lib/scoring.js";
+import { leaders } from "../lib/standings.js";
 import { C, font, muted, pagerBtn, thStyle } from "../ui/theme.js";
 import { Card, Eyebrow, H, InfoDot, Modal, PlayerName } from "../ui/components.jsx";
 
+// Kolonne-forklaringen under stillingerne. Hele tiebreaker-stigen står i InfoDot'en
+// og på "Sådan virker det" — her nævnes kun det, tabellen faktisk viser, og først
+// når der rent faktisk ér en delt placering at forklare.
+const TIEBREAK_HINT = (rows) =>
+  "🎯 = præcise resultater" + (rows.some((r) => r.shared) ? " · ens placering = delt" : "");
+
 // Stilling i samme format som liga (BoardScreen): en rigtig tabel med kolonne-
 // overskrifter, så 🎯 (præcise resultater) er en kolonne-header i stedet for at
-// stå på hver række. `offset` giver den korrekte placering ved paginering.
-function StandingsTable({ rows, userId, isComplete, ratingMap, offset = 0, openProfile }) {
+// stå på hver række. Placeringen kommer fra rækkens `rank` (ægte, delt placering
+// sat af assignRanks) — ikke fra listeindekset, som ville vise to lige spillere
+// som "3." og "4.".
+export function StandingsTable({ rows, userId, isComplete, ratingMap, openProfile }) {
   return (
     <table style={{ tableLayout: "fixed", width: "100%" }}>
       <colgroup>
@@ -27,14 +36,14 @@ function StandingsTable({ rows, userId, isComplete, ratingMap, offset = 0, openP
         <th style={{ ...thStyle, textAlign: "right", padding: "8px 2px" }}>Point</th>
       </tr></thead>
       <tbody>
-        {rows.map((r, i) => {
-          const rank = offset + i;
+        {rows.map((r) => {
           const you = r.userId === userId;
           const rt = ratingMap?.get(r.userId);
+          const top = r.rank === 1;
           return (
             <tr key={r.userId} className="rowline" style={{ background: you ? "rgba(34,197,94,0.06)" : "transparent" }}>
-              <td style={{ color: rank === 0 ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display, padding: "8px 2px" }}>
-                {rank === 0 && isComplete ? "🏆" : rank + 1}
+              <td style={{ color: top ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display, padding: "8px 2px" }}>
+                {top && isComplete ? "🏆" : r.rank}
               </td>
               <td style={{ color: C.text, fontWeight: you ? 700 : 600, padding: "8px 4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 <PlayerName userId={r.userId} name={r.player} you={you} onOpenProfile={openProfile} truncate />
@@ -46,7 +55,7 @@ function StandingsTable({ rows, userId, isComplete, ratingMap, offset = 0, openP
               </td>
               <td style={{ textAlign: "center", color: C.text, fontSize: 13, padding: "8px 2px" }}>{r.exactCount}</td>
               <td style={{ textAlign: "right", padding: "8px 2px" }}>
-                <span style={{ background: rank === 0 ? "rgba(240,180,41,0.15)" : C.surface2, color: rank === 0 ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 8px" }}>{r.total}</span>
+                <span style={{ background: top ? "rgba(240,180,41,0.15)" : C.surface2, color: top ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 8px" }}>{r.total}</span>
               </td>
             </tr>
           );
@@ -65,7 +74,7 @@ function FullStandingsModal({ title, rows, userId, isComplete, ratingMap, onClos
   const slice = rows.slice(start, start + perPage);
   return (
     <Modal title={title} onClose={onClose}>
-      <StandingsTable rows={slice} offset={start} userId={userId} isComplete={isComplete} ratingMap={ratingMap} openProfile={openProfile} />
+      <StandingsTable rows={slice} userId={userId} isComplete={isComplete} ratingMap={ratingMap} openProfile={openProfile} />
       {pages > 1 && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
           <button style={pagerBtn(page > 0)} disabled={page <= 0} onClick={() => setPage((p) => Math.max(0, p - 1))}><ChevronLeft size={16} /></button>
@@ -73,8 +82,37 @@ function FullStandingsModal({ title, rows, userId, isComplete, ratingMap, onClos
           <button style={pagerBtn(page < pages - 1)} disabled={page >= pages - 1} onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}><ChevronRight size={16} /></button>
         </div>
       )}
-      <p style={{ ...muted, marginTop: 10, marginBottom: 0, fontSize: 11 }}>🎯 = præcise resultater · uafgjort afgøres på flest præcise resultater</p>
+      <p style={{ ...muted, marginTop: 10, marginBottom: 0, fontSize: 11 }}>{TIEBREAK_HINT(rows)}</p>
     </Modal>
+  );
+}
+
+// Kåringen øverst på hvert kort. Titlen kan deles: er to spillere ægte lige hele
+// tiebreaker-stigen ned, er de begge champ — så nævner banneret dem begge frem for
+// at lade en skjult nøgle udpege en vinder, tabellen ikke kan forklare.
+export function Champions({ rows, title, isComplete, openProfile }) {
+  const top = leaders(rows);
+  if (!top.length) return null;
+  const shared = top.length > 1;
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8, background: "rgba(240,180,41,0.1)",
+      border: `1px solid rgba(240,180,41,0.35)`, borderRadius: 10, padding: "8px 12px", marginBottom: 10,
+    }}>
+      <Crown size={16} color={C.gold} />
+      <span style={{ fontSize: 13 }}>
+        {top.map((r, i) => (
+          <span key={r.userId}>
+            {i > 0 && (i === top.length - 1 ? " og " : ", ")}
+            <b><PlayerName userId={r.userId} name={r.player} onOpenProfile={openProfile} /></b>
+          </span>
+        ))}
+        {" "}
+        {isComplete
+          ? (shared ? `er delt ${title}` : `er ${title}`)
+          : (shared ? "deler føringen lige nu" : "fører lige nu")}
+      </span>
+    </div>
   );
 }
 
@@ -89,7 +127,7 @@ function Standings({ rows, userId, isComplete, ratingMap, title, onOpenFull, ope
           Vis hele stillingen ({rows.length}) →
         </p>
       )}
-      <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>🎯 = præcise resultater · uafgjort afgøres på flest præcise resultater</div>
+      <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>{TIEBREAK_HINT(rows)}</div>
     </>
   );
 }
@@ -169,7 +207,6 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
     setRoundBoard(await loadRoundBoard(token, k));
   }
 
-  const champ = rows && rows.length ? rows[0] : null;
   const isPast = month < currentMonthKey();
 
   return (
@@ -184,7 +221,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
             Rundens Prediction Champ
-            <InfoDot title="Rundens Prediction Champ">Dine samlede point for én enkelt spillerunde (på tværs af alle turneringer, hver kamp én gang). Alle er automatisk med. Uafgjort afgøres på flest præcise resultater, og rundens bedste kåres som Rundens Prediction Champ. Vælg en runde i dropdownen.</InfoDot>
+            <InfoDot title="Rundens Prediction Champ">Dine samlede point for én enkelt spillerunde (på tværs af alle turneringer, hver kamp én gang). Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, og til sidst hvem der var tættest på. Rundens bedste kåres som Rundens Prediction Champ — er to helt lige, deles titlen. Vælg en runde i dropdownen.</InfoDot>
           </div>
           {rounds.length > 0 && (
             <select className="field" value={roundKey || ""} onChange={(e) => changeRound(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
@@ -199,16 +236,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
 
         {roundBoard && roundBoard.rows.length > 0 && (
           <>
-            <div style={{
-              display: "flex", alignItems: "center", gap: 8, background: "rgba(240,180,41,0.1)",
-              border: `1px solid rgba(240,180,41,0.35)`, borderRadius: 10, padding: "8px 12px", marginBottom: 10,
-            }}>
-              <Crown size={16} color={C.gold} />
-              <span style={{ fontSize: 13 }}>
-                <b><PlayerName userId={roundBoard.rows[0].userId} name={roundBoard.rows[0].player} onOpenProfile={openProfile} /></b>
-                {" "}{roundBoard.isComplete ? "er Rundens Prediction Champ" : "fører lige nu"}
-              </span>
-            </div>
+            <Champions rows={roundBoard.rows} title="Rundens Prediction Champ" isComplete={roundBoard.isComplete} openProfile={openProfile} />
             <Standings rows={roundBoard.rows} userId={userId} isComplete={roundBoard.isComplete} ratingMap={ratingMap}
               title={`Rundeliga · runde ${roundKey ? roundLabel(roundKey) : ""}`} onOpenFull={setFull} openProfile={openProfile} />
           </>
@@ -220,25 +248,14 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
             Månedens Prediction Champ
-            <InfoDot title="Månedens Prediction Champ">Dine samlede point for alle månedens kampe (hver kamp tælles én gang på tværs af turneringer). Uafgjort afgøres på flest præcise resultater. Månedens vinder kåres som Månedens Prediction Champ. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</InfoDot>
+            <InfoDot title="Månedens Prediction Champ">Dine samlede point for alle månedens kampe (hver kamp tælles én gang på tværs af turneringer). Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Månedens vinder kåres som Månedens Prediction Champ — er to helt lige, deles titlen. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</InfoDot>
           </div>
           <select className="field" value={month} onChange={(e) => changeMonth(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
             {months.map((m) => <option key={m} value={m}>{monthName(m)}</option>)}
           </select>
         </div>
 
-        {champ && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8, background: "rgba(240,180,41,0.1)",
-            border: `1px solid rgba(240,180,41,0.35)`, borderRadius: 10, padding: "8px 12px", marginBottom: 10,
-          }}>
-            <Crown size={16} color={C.gold} />
-            <span style={{ fontSize: 13 }}>
-              <b><PlayerName userId={champ.userId} name={champ.player} onOpenProfile={openProfile} /></b>
-              {" "}{isPast ? "er Månedens Prediction Champ" : "fører lige nu"}
-            </span>
-          </div>
-        )}
+        {rows && <Champions rows={rows} title="Månedens Prediction Champ" isComplete={isPast} openProfile={openProfile} />}
 
         {loading && <p style={{ ...muted, margin: 0 }}>Henter…</p>}
         {!loading && rows && rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen point i denne måned endnu.</p>}
@@ -253,7 +270,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
             Sæsonens Prediction Champ
-            <InfoDot title="Sæsonens Prediction Champ">Dine samlede point for alle {superliga?.name || "Superligaens"} kampe i hele sæsonen. Alle er automatisk med. Uafgjort afgøres på flest præcise resultater, og sæsonens bedste kåres som Sæsonens Prediction Champ.</InfoDot>
+            <InfoDot title="Sæsonens Prediction Champ">Dine samlede point for alle {superliga?.name || "Superligaens"} kampe i hele sæsonen. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Sæsonens bedste kåres som Sæsonens Prediction Champ — er to helt lige, deles titlen.</InfoDot>
           </div>
           {season && season.rows && season.totalMatches > 0 && (
             <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{season.playedMatches}/{season.totalMatches} spillet</span>
@@ -269,16 +286,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
 
         {season && season.rows && season.rows.length > 0 && (
           <>
-            <div style={{
-              display: "flex", alignItems: "center", gap: 8, background: "rgba(240,180,41,0.1)",
-              border: `1px solid rgba(240,180,41,0.35)`, borderRadius: 10, padding: "8px 12px", marginBottom: 10,
-            }}>
-              <Crown size={16} color={C.gold} />
-              <span style={{ fontSize: 13 }}>
-                <b><PlayerName userId={season.rows[0].userId} name={season.rows[0].player} onOpenProfile={openProfile} /></b>
-                {" "}{season.isComplete ? "er Sæsonens Prediction Champ" : "fører lige nu"}
-              </span>
-            </div>
+            <Champions rows={season.rows} title="Sæsonens Prediction Champ" isComplete={season.isComplete} openProfile={openProfile} />
             <Standings rows={season.rows} userId={userId} isComplete={season.isComplete} ratingMap={ratingMap}
               title={`Sæsonchampionship · ${superliga?.name || "Superligaen"}`} onOpenFull={setFull} openProfile={openProfile} />
           </>

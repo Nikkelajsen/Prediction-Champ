@@ -88,20 +88,40 @@ begin
   v_label := to_char(p_round_key::date, 'DD.MM') || ' – ' || to_char(p_round_key::date + 6, 'DD.MM');
 
   -- ---- point pr. konkurrence/bruger/runde (kun spillede kampe, t.o.m. denne runde) ----
+  -- Ud over point og præcise hits opgøres alt, tiebreaker-stigen har brug for:
+  -- korrekte udfald, målafvigelse og om runden blev vundet. Stigen er den samme
+  -- som i stillingerne (sql/standings_tiebreakers.sql, src/lib/standings.js), så
+  -- en historie aldrig kan påstå en placering, tabellen modsiger.
+  -- `round_won` = nr. 1 i runden efter stigen uden rundesejr-trinnet; delt sejr
+  -- tæller for alle, hvilket regel 70 nedenfor bruger direkte.
   drop table if exists _se_rp;
   create temporary table _se_rp as
-  select cm.competition_id, pr.user_id, m.round_key,
-    sum(case when pr.pred_home = m.home_score and pr.pred_away = m.away_score then 3
-             when sign(pr.pred_home - pr.pred_away) = sign(m.home_score - m.away_score) then 1
-             else 0 end)::int as rpts,
-    sum(case when pr.pred_home = m.home_score and pr.pred_away = m.away_score then 1 else 0 end)::int as rexact
-  from public.competition_matches cm
-  join public.matches m on m.id = cm.match_id
-  join public.predictions pr on pr.match_id = m.id
-  where m.home_score is not null and m.away_score is not null
-    and pr.pred_home is not null and pr.pred_away is not null
-    and m.round_key <= p_round_key
-  group by cm.competition_id, pr.user_id, m.round_key;
+  with scored as (
+    select cm.competition_id, pr.user_id, m.round_key,
+      public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) as pts,
+      abs(pr.pred_home - m.home_score) + abs(pr.pred_away - m.away_score) as goal_err
+    from public.competition_matches cm
+    join public.matches m on m.id = cm.match_id
+    join public.predictions pr on pr.match_id = m.id
+    where m.home_score is not null and m.away_score is not null
+      and pr.pred_home is not null and pr.pred_away is not null
+      and m.round_key <= p_round_key
+  ),
+  agg as (
+    select competition_id, user_id, round_key,
+      sum(pts)::int                          as rpts,
+      (count(*) filter (where pts = 3))::int as rexact,
+      (count(*) filter (where pts = 1))::int as routcome,
+      sum(goal_err)::int                     as rgoalerr,
+      count(*)::int                          as rmatches
+    from scored
+    group by competition_id, user_id, round_key
+  )
+  select agg.*,
+    (rank() over (partition by competition_id, round_key
+                  order by rpts desc, rexact desc, routcome desc,
+                           round(rgoalerr::numeric / rmatches, 4) asc) = 1)::int as round_won
+  from agg;
 
   -- deltagerantal pr. konkurrence (league_size-snapshot)
   drop table if exists _se_size;
@@ -109,40 +129,45 @@ begin
   select competition_id, count(*)::int as n
   from public.competition_participants group by competition_id;
 
-  -- kumulativ stilling EFTER runden (t.o.m. p_round_key) + rang
+  -- kumulativ stilling EFTER runden (t.o.m. p_round_key) + rang efter hele stigen
   drop table if exists _se_after;
   create temporary table _se_after as
   select competition_id, user_id, sum(rpts)::int as pts, sum(rexact)::int as ex,
-    rank() over (partition by competition_id order by sum(rpts) desc, sum(rexact) desc)::int as rnk
+    rank() over (partition by competition_id
+                 order by sum(rpts) desc, sum(rexact) desc, sum(routcome) desc, sum(round_won) desc,
+                          round(sum(rgoalerr)::numeric / sum(rmatches), 4) asc)::int as rnk
   from _se_rp group by competition_id, user_id;
 
-  -- kumulativ stilling FØR runden (< p_round_key) + rang
+  -- kumulativ stilling FØR runden (< p_round_key) + rang efter hele stigen
   drop table if exists _se_before;
   create temporary table _se_before as
   select competition_id, user_id, sum(rpts)::int as pts, sum(rexact)::int as ex,
-    rank() over (partition by competition_id order by sum(rpts) desc, sum(rexact) desc)::int as rnk
+    rank() over (partition by competition_id
+                 order by sum(rpts) desc, sum(rexact) desc, sum(routcome) desc, sum(round_won) desc,
+                          round(sum(rgoalerr)::numeric / sum(rmatches), 4) asc)::int as rnk
   from _se_rp where round_key < p_round_key group by competition_id, user_id;
 
   -- denne rundes point pr. konkurrence/bruger
   drop table if exists _se_this;
   create temporary table _se_this as
-  select competition_id, user_id, rpts, rexact from _se_rp where round_key = p_round_key;
+  select competition_id, user_id, rpts, rexact, round_won from _se_rp where round_key = p_round_key;
 
   -- ======== Regel 70 · Rundens vinder (pr. konkurrence) ========
   insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
   select p_round_key, t.user_id, t.competition_id, 'ROUND_WON', 70, sz.n,
-    jsonb_build_object('points', t.rpts, 'shared', cnt.n_winners > 1),
+    jsonb_build_object('points', t.rpts, 'shared', cnt.n_winners > 1, 'others', cnt.n_winners - 1),
     '🥇 Du vandt runden ' || v_label || ' i ' || c.name,
     t.rpts || ' point — flest af alle i ' || c.name ||
-      case when cnt.n_winners > 1 then ' (delt med ' || (cnt.n_winners - 1) || ' andre).' else '.' end
+      case when cnt.n_winners > 2 then ' (delt med ' || (cnt.n_winners - 1) || ' andre).'
+           when cnt.n_winners = 2 then ' (delt med 1 anden).'
+           else '.' end
   from _se_this t
-  join (select competition_id, max(rpts) as top from _se_this group by competition_id) mx
-    on mx.competition_id = t.competition_id and t.rpts = mx.top and t.rpts > 0
-  join (select competition_id, max(rpts) as top, count(*) as n_winners
+  join (select competition_id, sum(round_won)::int as n_winners
         from _se_this group by competition_id) cnt
-    on cnt.competition_id = t.competition_id and cnt.top = t.rpts
+    on cnt.competition_id = t.competition_id
   join _se_size sz on sz.competition_id = t.competition_id and sz.n >= 2
-  join public.competitions c on c.id = t.competition_id;
+  join public.competitions c on c.id = t.competition_id
+  where t.round_won = 1 and t.rpts > 0;
 
   -- ======== Regel 20 · Førsteplads overtaget (pr. konkurrence) ========
   insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
@@ -279,22 +304,36 @@ begin
       and m.home_score is not null
   ) into v_month_last;
 
+  -- Månedstitlen afgøres af hele tiebreaker-stigen, og den kan DELES: er to
+  -- spillere ægte lige hele vejen ned, får de begge historien — samme regel som
+  -- kåringen på Championship-fanen og titlerne i karriereprofilen.
   if v_month_last then
     insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
     select p_round_key, w.user_id, null, 'MONTH_CHAMP', 10, null,
-      jsonb_build_object('month', v_month_name, 'points', w.total_points, 'gap', w.total_points - coalesce(sec.total_points, 0)),
-      '👑 Du er Månedens Prediction Champ — ' || v_month_name,
+      jsonb_build_object('month', v_month_name, 'points', w.total_points,
+                         'gap', w.total_points - coalesce(sec.total_points, w.total_points),
+                         'shared', w.n_top > 1),
+      '👑 Du er ' || case when w.n_top > 1 then 'delt ' else '' end
+        || 'Månedens Prediction Champ — ' || v_month_name,
       w.total_points || ' point — flest af alle i ' || v_month_name ||
-        case when sec.total_points is not null then '. Nr. 2 var ' || (w.total_points - sec.total_points) || ' point efter.' else '.' end
+        case when w.n_top > 1 then ' (delt).' else '.' end ||
+        case when sec.total_points is not null and sec.total_points < w.total_points
+             then ' Nr. 2 var ' || (w.total_points - sec.total_points) || ' point efter.' else '' end
     from (
-      select user_id, total_points, exact_count
-      from public.monthly_standings where month = v_month and scope = 'ALL'
-      order by total_points desc, exact_count desc limit 1
+      select user_id, total_points, count(*) over () as n_top
+      from (
+        select user_id, total_points,
+          rank() over (order by total_points desc, exact_count desc, outcome_count desc,
+                                round_wins desc, avg_goal_error asc) as rnk
+        from public.monthly_standings where month = v_month and scope = 'ALL'
+      ) r
+      where r.rnk = 1
     ) w
     left join lateral (
       select total_points from public.monthly_standings
       where month = v_month and scope = 'ALL' and user_id <> w.user_id
-      order by total_points desc, exact_count desc limit 1
+      order by total_points desc, exact_count desc, outcome_count desc,
+               round_wins desc, avg_goal_error asc limit 1
     ) sec on true;
   end if;
 

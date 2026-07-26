@@ -29,6 +29,25 @@ function roundLabel(key) {
   const fmt = (x) => x.toLocaleDateString("da-DK", { day: "2-digit", month: "2-digit" });
   return `${fmt(start)} – ${fmt(end)}`;
 }
+// Delt placering på rundens stilling. Samme regel som src/lib/standings.js, som er
+// den kanoniske kilde — den duplikeres her, fordi api/ ikke importerer fra src/
+// (samme grund som roundLabel ovenfor). Rækkerne kommer allerede sorteret fra
+// databasen, så det er nok at sammenligne med naboen.
+function assignRanks(board) {
+  const tied = (a, b) => a.total_points === b.total_points
+    && a.exact_count === b.exact_count
+    && (a.outcome_count ?? 0) === (b.outcome_count ?? 0)
+    && Number(a.avg_goal_error ?? 0) === Number(b.avg_goal_error ?? 0);
+  let rank = 0;
+  board.forEach((r, i) => {
+    const tiedWithPrev = i > 0 && tied(board[i - 1], r);
+    if (!tiedWithPrev) rank = i + 1;
+    r.rank = rank;
+    r.shared = tiedWithPrev;
+  });
+  for (let i = 0; i < board.length - 1; i++) if (board[i + 1].shared) board[i].shared = true;
+  return board;
+}
 function fmtUntil(ts) {
   let s = Math.max(0, Math.floor((ts - Date.now()) / 1000));
   const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60);
@@ -179,18 +198,23 @@ export default async function handler(req, res) {
         .filter(([, list]) => list.length > 0 && list.every((m) => m.home_score != null && m.away_score != null));
 
       for (const [roundKey] of finishedRounds) {
-        // samme kilde som Championship-fanen: DB-viewet round_standings (sql/standings_views.sql)
-        const board = await sb(`/rest/v1/round_standings?round_key=eq.${roundKey}&select=user_id,total_points,exact_count&order=total_points.desc,exact_count.desc`);
-        board.forEach((r, i) => { r.rank = i + 1; });
+        // samme kilde og samme tiebreaker-stige som Championship-fanens rundeliga
+        // (sql/standings_tiebreakers.sql). En runde har ingen rundesejre at bryde
+        // lighed med, så stigen er point → præcise → udfald → målafvigelse.
+        const board = await sb(`/rest/v1/round_standings?round_key=eq.${roundKey}&select=user_id,total_points,exact_count,outcome_count,avg_goal_error&order=total_points.desc,exact_count.desc,outcome_count.desc,avg_goal_error.asc,user_id.asc`);
+        assignRanks(board);
 
         for (const r of board) {
           if (!subsByUser[r.user_id]) continue;
           const champ = r.rank === 1;
+          const pos = r.shared ? `delt nr. ${r.rank}` : `nr. ${r.rank}`;
           outbox.push({
             userId: r.user_id,
             key: `result:${roundKey}`,
-            title: champ ? "Du er Rundens Prediction Champ! 🏆" : "Runden er slut ⚽",
-            body: `Runden ${roundLabel(roundKey)}: du fik ${r.total_points} point og blev nr. ${r.rank} af ${board.length}.`,
+            title: champ
+              ? (r.shared ? "Du er delt Rundens Prediction Champ! 🏆" : "Du er Rundens Prediction Champ! 🏆")
+              : "Runden er slut ⚽",
+            body: `Runden ${roundLabel(roundKey)}: du fik ${r.total_points} point og blev ${pos} af ${board.length}.`,
             tag: `result-${roundKey}`,
           });
         }
