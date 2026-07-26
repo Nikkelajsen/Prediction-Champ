@@ -93,7 +93,16 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
           const comp = found[0];
           const already = await db.select(token, "competition_participants", `competition_id=eq.${comp.id}&user_id=eq.${userId}&select=competition_id`);
           if (already.length) {
-            // allerede medlem — ingen bekræftelse nødvendig, gå direkte til ligaen
+            // Allerede deltager — ingen bekræftelse nødvendig, gå direkte til stillingen.
+            // Men sikr liga-medlemskabet først: en deltager UDEN liga-medlemskab er
+            // netop den halve tilstand, A8-hullet efterlod (deltager i stillingen,
+            // men usynlig på medlemslisten og uden adgang til ligaens side). At
+            // trykke på invitationslinket igen er den naturlige måde at forsøge at
+            // rette det på, så det skal faktisk rette det. joinGroup er idempotent.
+            if (comp.group_id) {
+              try { await joinGroup(token, userId, comp.group_id); }
+              catch (e) { /* deltagelsen er intakt — bloker ikke navigationen */ }
+            }
             await loadCompetitions();
             setTab("ligaer");
             setScreen({ type: "board", compId: comp.id });
