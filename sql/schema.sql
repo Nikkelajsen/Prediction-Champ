@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 3hwxK912SFbdSyXyLuf6h9evpqRRuQLIYS0dPU9FlfwCBje4SwTDPiEQU0OfuwS
+\restrict uilf7EdKT4NvJgt6YVwZo5BmH1hWQ2ZDRQzCEjhaMLAckeoGe2dYoY3OcfzHgkZ
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
@@ -109,6 +109,186 @@ $$;
 
 
 --
+-- Name: career_profile(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.career_profile(profile_user_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_uid   uuid := auth.uid();
+  v_own   boolean := (profile_user_id = auth.uid());
+  v_rivals jsonb := '[]'::jsonb;
+  months text[] := array['januar','februar','marts','april','maj','juni','juli','august','september','oktober','november','december'];
+  result jsonb;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  -- ---------- K1: adgang ----------
+  -- Enhver indlogget bruger må se enhver karriere (hoved, titler, kurve, basistal).
+  -- Kun et ukendt id afvises — ellers ville svaret være et hoved uden navn.
+  if not exists (select 1 from public.profiles where id = profile_user_id) then
+    raise exception 'not found';
+  end if;
+
+  -- ---------- Rivaler (kun egen profil — private, jf. K1) ----------
+  -- Ren stories-optælling (K3): tæl rival-navn i head-to-head- og stime-historier.
+  if v_own then
+    select coalesce(jsonb_agg(jsonb_build_object('rival', rival, 'count', c) order by c desc), '[]'::jsonb)
+    into v_rivals
+    from (
+      select payload->>'rival' as rival, count(*)::int as c
+      from public.stories
+      where user_id = profile_user_id
+        and rule in ('H2H_PASS', 'STREAK')
+        and payload->>'rival' is not null
+      group by payload->>'rival'
+      order by c desc
+      limit 3
+    ) t;
+  end if;
+
+  select jsonb_build_object(
+
+    -- ---------- Hoved ----------
+    'head', jsonb_build_object(
+      'user_id',      profile_user_id,
+      'display_name', (select display_name from public.profiles where id = profile_user_id),
+      'created_at',   (select created_at   from public.profiles where id = profile_user_id),
+      'rating',       (select round(rating)::int from public.ratings where user_id = profile_user_id and scope = 'ALL'),
+      'provisional',  (select provisional  from public.ratings where user_id = profile_user_id and scope = 'ALL'),
+      'rounds_played',(select rounds_played from public.ratings where user_id = profile_user_id and scope = 'ALL'),
+      'move', (select round(delta)::int from public.rating_history
+               where user_id = profile_user_id and scope = 'ALL'
+               order by round_key desc limit 1)
+    ),
+
+    -- ---------- Titler ----------
+    'titles', jsonb_build_object(
+      -- Månedstitler: afsluttede måneder (alle kampe spillet) hvor brugeren er nr. 1.
+      -- rank() frem for distinct on: en delt titel er en titel for BEGGE — samme
+      -- regel som kåringen på Championship-fanen. Rangen bruger hele tiebreaker-
+      -- stigen (sql/standings_tiebreakers.sql, src/lib/standings.js).
+      'monthly', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+                 'month',      mw.month,
+                 'month_name', months[cast(substring(mw.month from 6 for 2) as int)] || ' ' || substring(mw.month from 1 for 4),
+                 'points',     mw.total_points
+               ) order by mw.month desc), '[]'::jsonb)
+        from (
+          select ms.month, ms.user_id, ms.total_points,
+            rank() over (partition by ms.month
+                         order by ms.total_points desc, ms.exact_count desc, ms.outcome_count desc,
+                                  ms.round_wins desc, ms.avg_goal_error asc) as rnk
+          from public.monthly_standings ms
+          join (
+            select to_char(date_trunc('month', kickoff_at), 'YYYY-MM') as month
+            from public.matches
+            group by 1
+            having bool_and(home_score is not null and away_score is not null)
+          ) mc on mc.month = ms.month
+          where ms.scope = 'ALL'
+        ) mw
+        where mw.user_id = profile_user_id and mw.rnk = 1
+      ),
+      -- Rundesejre: antal afsluttede runder (alle kampe spillet) hvor brugeren er nr. 1.
+      -- Én runde har ingen rundesejre at bryde lighed med, så stigen stopper ved
+      -- målafvigelsen. Delt sejr tæller for alle.
+      'round_wins', (
+        select count(*)::int
+        from (
+          select rs.round_key, rs.user_id,
+            rank() over (partition by rs.round_key
+                         order by rs.total_points desc, rs.exact_count desc, rs.outcome_count desc,
+                                  rs.avg_goal_error asc) as rnk
+          from public.round_standings rs
+          join (
+            select round_key
+            from public.matches
+            group by round_key
+            having bool_and(home_score is not null and away_score is not null)
+          ) rc on rc.round_key = rs.round_key
+        ) rr
+        where rr.user_id = profile_user_id and rr.rnk = 1
+      )
+    ),
+
+    -- ---------- Ratingkurve (én prik pr. runde) ----------
+    -- Provisorisk periode (de første <5 runder) markeres frontend-side.
+    'curve', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+               'round_key',    round_key,
+               'rating_after', round(rating_after)::int
+             ) order by round_key), '[]'::jsonb)
+      from public.rating_history
+      where user_id = profile_user_id and scope = 'ALL'
+    ),
+
+    -- ---------- Basistal (samme 3/1-kilde som stillingerne) ----------
+    'base', (
+      select jsonb_build_object(
+        'total_points', coalesce(sum(case
+              when pr.pred_home = m.home_score and pr.pred_away = m.away_score then 3
+              when sign((pr.pred_home - pr.pred_away)::double precision) = sign((m.home_score - m.away_score)::double precision) then 1
+              else 0 end), 0)::int,
+        'exact_count', coalesce(sum(case
+              when pr.pred_home = m.home_score and pr.pred_away = m.away_score then 1
+              else 0 end), 0)::int,
+        'outcome_count', coalesce(sum(case
+              when not (pr.pred_home = m.home_score and pr.pred_away = m.away_score)
+                   and sign((pr.pred_home - pr.pred_away)::double precision) = sign((m.home_score - m.away_score)::double precision) then 1
+              else 0 end), 0)::int,
+        'matches', count(*)::int
+      )
+      from public.predictions pr
+      join public.matches m on m.id = pr.match_id
+      where m.home_score is not null and m.away_score is not null
+        and pr.pred_home is not null and pr.pred_away is not null
+        and pr.user_id = profile_user_id
+    ),
+
+    -- ---------- Rivaler ----------
+    'rivals', v_rivals,
+
+    'is_own', v_own
+
+  ) into result;
+
+  return result;
+end;
+$$;
+
+
+--
+-- Name: ensure_group_membership_for_participant(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.ensure_group_membership_for_participant() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_group_id uuid;
+begin
+  select group_id into v_group_id
+  from public.competitions
+  where id = new.competition_id;
+
+  if v_group_id is not null then
+    insert into public.group_members (group_id, user_id, role)
+    values (v_group_id, new.user_id, 'member')
+    on conflict (group_id, user_id) do nothing;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+--
 -- Name: generate_stories(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -122,28 +302,57 @@ declare
   v_month_name text;
   v_month_last boolean;
   v_rating_total int;
+  -- VIGTIGT — round_key har TO typer i skemaet, og de må ikke blandes:
+  --   date: matches.round_key (genereret kolonne) og alt afledt af den
+  --         (round_standings, _se_rp, _se_pair).
+  --   text: stories.round_key og rating_history.round_key.
+  -- Postgres har ingen `date <= text`-operator, så en usammenlignet blanding
+  -- fejler HELE funktionen — og da matches-triggeren er exception-guarded, sker
+  -- det tavst (et tomt historie-kort kan ikke skelnes fra en stille uge).
+  -- Derfor: brug v_round mod date-kolonnerne, p_round_key mod text-kolonnerne.
+  v_round date := p_round_key::date;
   months text[] := array['januar','februar','marts','april','maj','juni','juli','august','september','oktober','november','december'];
 begin
-  -- idempotent: fjern rundens historier og genberegn
+  -- idempotent: fjern rundens historier og genberegn (stories.round_key er text)
   delete from public.stories where round_key = p_round_key;
 
-  v_label := to_char(p_round_key::date, 'DD.MM') || ' – ' || to_char(p_round_key::date + 6, 'DD.MM');
+  v_label := to_char(v_round, 'DD.MM') || ' – ' || to_char(v_round + 6, 'DD.MM');
 
   -- ---- point pr. konkurrence/bruger/runde (kun spillede kampe, t.o.m. denne runde) ----
+  -- Ud over point og præcise hits opgøres alt, tiebreaker-stigen har brug for:
+  -- korrekte udfald, målafvigelse og om runden blev vundet. Stigen er den samme
+  -- som i stillingerne (sql/standings_tiebreakers.sql, src/lib/standings.js), så
+  -- en historie aldrig kan påstå en placering, tabellen modsiger.
+  -- `round_won` = nr. 1 i runden efter stigen uden rundesejr-trinnet; delt sejr
+  -- tæller for alle, hvilket regel 70 nedenfor bruger direkte.
   drop table if exists _se_rp;
   create temporary table _se_rp as
-  select cm.competition_id, pr.user_id, m.round_key,
-    sum(case when pr.pred_home = m.home_score and pr.pred_away = m.away_score then 3
-             when sign(pr.pred_home - pr.pred_away) = sign(m.home_score - m.away_score) then 1
-             else 0 end)::int as rpts,
-    sum(case when pr.pred_home = m.home_score and pr.pred_away = m.away_score then 1 else 0 end)::int as rexact
-  from public.competition_matches cm
-  join public.matches m on m.id = cm.match_id
-  join public.predictions pr on pr.match_id = m.id
-  where m.home_score is not null and m.away_score is not null
-    and pr.pred_home is not null and pr.pred_away is not null
-    and m.round_key <= p_round_key
-  group by cm.competition_id, pr.user_id, m.round_key;
+  with scored as (
+    select cm.competition_id, pr.user_id, m.round_key,
+      public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) as pts,
+      abs(pr.pred_home - m.home_score) + abs(pr.pred_away - m.away_score) as goal_err
+    from public.competition_matches cm
+    join public.matches m on m.id = cm.match_id
+    join public.predictions pr on pr.match_id = m.id
+    where m.home_score is not null and m.away_score is not null
+      and pr.pred_home is not null and pr.pred_away is not null
+      and m.round_key <= v_round
+  ),
+  agg as (
+    select competition_id, user_id, round_key,
+      sum(pts)::int                          as rpts,
+      (count(*) filter (where pts = 3))::int as rexact,
+      (count(*) filter (where pts = 1))::int as routcome,
+      sum(goal_err)::int                     as rgoalerr,
+      count(*)::int                          as rmatches
+    from scored
+    group by competition_id, user_id, round_key
+  )
+  select agg.*,
+    (rank() over (partition by competition_id, round_key
+                  order by rpts desc, rexact desc, routcome desc,
+                           round(rgoalerr::numeric / rmatches, 4) asc) = 1)::int as round_won
+  from agg;
 
   -- deltagerantal pr. konkurrence (league_size-snapshot)
   drop table if exists _se_size;
@@ -151,40 +360,45 @@ begin
   select competition_id, count(*)::int as n
   from public.competition_participants group by competition_id;
 
-  -- kumulativ stilling EFTER runden (t.o.m. p_round_key) + rang
+  -- kumulativ stilling EFTER runden (t.o.m. p_round_key) + rang efter hele stigen
   drop table if exists _se_after;
   create temporary table _se_after as
   select competition_id, user_id, sum(rpts)::int as pts, sum(rexact)::int as ex,
-    rank() over (partition by competition_id order by sum(rpts) desc, sum(rexact) desc)::int as rnk
+    rank() over (partition by competition_id
+                 order by sum(rpts) desc, sum(rexact) desc, sum(routcome) desc, sum(round_won) desc,
+                          round(sum(rgoalerr)::numeric / sum(rmatches), 4) asc)::int as rnk
   from _se_rp group by competition_id, user_id;
 
-  -- kumulativ stilling FØR runden (< p_round_key) + rang
+  -- kumulativ stilling FØR runden (< p_round_key) + rang efter hele stigen
   drop table if exists _se_before;
   create temporary table _se_before as
   select competition_id, user_id, sum(rpts)::int as pts, sum(rexact)::int as ex,
-    rank() over (partition by competition_id order by sum(rpts) desc, sum(rexact) desc)::int as rnk
-  from _se_rp where round_key < p_round_key group by competition_id, user_id;
+    rank() over (partition by competition_id
+                 order by sum(rpts) desc, sum(rexact) desc, sum(routcome) desc, sum(round_won) desc,
+                          round(sum(rgoalerr)::numeric / sum(rmatches), 4) asc)::int as rnk
+  from _se_rp where round_key < v_round group by competition_id, user_id;
 
   -- denne rundes point pr. konkurrence/bruger
   drop table if exists _se_this;
   create temporary table _se_this as
-  select competition_id, user_id, rpts, rexact from _se_rp where round_key = p_round_key;
+  select competition_id, user_id, rpts, rexact, round_won from _se_rp where round_key = v_round;
 
   -- ======== Regel 70 · Rundens vinder (pr. konkurrence) ========
   insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
   select p_round_key, t.user_id, t.competition_id, 'ROUND_WON', 70, sz.n,
-    jsonb_build_object('points', t.rpts, 'shared', cnt.n_winners > 1),
+    jsonb_build_object('points', t.rpts, 'shared', cnt.n_winners > 1, 'others', cnt.n_winners - 1),
     '🥇 Du vandt runden ' || v_label || ' i ' || c.name,
     t.rpts || ' point — flest af alle i ' || c.name ||
-      case when cnt.n_winners > 1 then ' (delt med ' || (cnt.n_winners - 1) || ' andre).' else '.' end
+      case when cnt.n_winners > 2 then ' (delt med ' || (cnt.n_winners - 1) || ' andre).'
+           when cnt.n_winners = 2 then ' (delt med 1 anden).'
+           else '.' end
   from _se_this t
-  join (select competition_id, max(rpts) as top from _se_this group by competition_id) mx
-    on mx.competition_id = t.competition_id and t.rpts = mx.top and t.rpts > 0
-  join (select competition_id, max(rpts) as top, count(*) as n_winners
+  join (select competition_id, sum(round_won)::int as n_winners
         from _se_this group by competition_id) cnt
-    on cnt.competition_id = t.competition_id and cnt.top = t.rpts
+    on cnt.competition_id = t.competition_id
   join _se_size sz on sz.competition_id = t.competition_id and sz.n >= 2
-  join public.competitions c on c.id = t.competition_id;
+  join public.competitions c on c.id = t.competition_id
+  where t.round_won = 1 and t.rpts > 0;
 
   -- ======== Regel 20 · Førsteplads overtaget (pr. konkurrence) ========
   insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
@@ -277,7 +491,7 @@ begin
       coalesce(min(p.rn) filter (where not p.won) - 1, count(*))::int as streak,
       max(p.mine) filter (where p.rn = 1) as mine,
       max(p.deres) filter (where p.rn = 1) as deres,
-      bool_or(p.rn = 1 and p.round_key = p_round_key) as current
+      bool_or(p.rn = 1 and p.round_key = v_round) as current
     from (
       select competition_id, user_id, rival_id, round_key, won, mine, deres,
         row_number() over (partition by competition_id, user_id, rival_id order by round_key desc) as rn
@@ -313,30 +527,44 @@ begin
     and prev.old is not null and rh.rating_after > prev.old;
 
   -- ======== Regel 10 · Månedens Champ (global, når runden lukker måneden) ========
-  v_month := to_char(p_round_key::date, 'YYYY-MM');
-  v_month_name := months[cast(to_char(p_round_key::date, 'MM') as int)];
+  v_month := to_char(v_round, 'YYYY-MM');
+  v_month_name := months[cast(to_char(v_round, 'MM') as int)];
   select not exists (
     select 1 from public.matches m
-    where m.round_key > p_round_key and to_char(m.round_key::date, 'YYYY-MM') = v_month
+    where m.round_key > v_round and to_char(m.round_key, 'YYYY-MM') = v_month
       and m.home_score is not null
   ) into v_month_last;
 
+  -- Månedstitlen afgøres af hele tiebreaker-stigen, og den kan DELES: er to
+  -- spillere ægte lige hele vejen ned, får de begge historien — samme regel som
+  -- kåringen på Championship-fanen og titlerne i karriereprofilen.
   if v_month_last then
     insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
     select p_round_key, w.user_id, null, 'MONTH_CHAMP', 10, null,
-      jsonb_build_object('month', v_month_name, 'points', w.total_points, 'gap', w.total_points - coalesce(sec.total_points, 0)),
-      '👑 Du er Månedens Prediction Champ — ' || v_month_name,
+      jsonb_build_object('month', v_month_name, 'points', w.total_points,
+                         'gap', w.total_points - coalesce(sec.total_points, w.total_points),
+                         'shared', w.n_top > 1),
+      '👑 Du er ' || case when w.n_top > 1 then 'delt ' else '' end
+        || 'Månedens Prediction Champ — ' || v_month_name,
       w.total_points || ' point — flest af alle i ' || v_month_name ||
-        case when sec.total_points is not null then '. Nr. 2 var ' || (w.total_points - sec.total_points) || ' point efter.' else '.' end
+        case when w.n_top > 1 then ' (delt).' else '.' end ||
+        case when sec.total_points is not null and sec.total_points < w.total_points
+             then ' Nr. 2 var ' || (w.total_points - sec.total_points) || ' point efter.' else '' end
     from (
-      select user_id, total_points, exact_count
-      from public.monthly_standings where month = v_month and scope = 'ALL'
-      order by total_points desc, exact_count desc limit 1
+      select user_id, total_points, count(*) over () as n_top
+      from (
+        select user_id, total_points,
+          rank() over (order by total_points desc, exact_count desc, outcome_count desc,
+                                round_wins desc, avg_goal_error asc) as rnk
+        from public.monthly_standings where month = v_month and scope = 'ALL'
+      ) r
+      where r.rnk = 1
     ) w
     left join lateral (
       select total_points from public.monthly_standings
       where month = v_month and scope = 'ALL' and user_id <> w.user_id
-      order by total_points desc, exact_count desc limit 1
+      order by total_points desc, exact_count desc, outcome_count desc,
+               round_wins desc, avg_goal_error asc limit 1
     ) sec on true;
   end if;
 
@@ -348,7 +576,7 @@ begin
     'Du ramte ' || rs.exact_count || ' kampe præcist i runden ' || v_label ||
       ' — ' || rs.total_points || ' point i alt.'
   from public.round_standings rs
-  where rs.round_key = p_round_key and rs.exact_count >= 3;
+  where rs.round_key = v_round and rs.exact_count >= 3;
 
   drop table if exists _se_rp;
   drop table if exists _se_size;
@@ -536,11 +764,16 @@ CREATE FUNCTION public.recompute_ratings_if_scores_changed() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 declare
-  v_round text;
+  -- date, ikke text: matches.round_key er en genereret date-kolonne, og Postgres
+  -- har ingen `date = text`-operator. Med text her fejlede opslaget nedenfor
+  -- (m.round_key = v_round) inde i exception-guarden — altså tavst, hvorved
+  -- generate_stories aldrig blev kaldt. generate_stories tager text og får
+  -- derfor et eksplicit ::text.
+  v_round date;
 begin
   -- saml berørte round_keys, afhængigt af operationen (kun når et resultat reelt ændres)
   drop table if exists _se_changed_rounds;
-  create temporary table _se_changed_rounds (round_key text);
+  create temporary table _se_changed_rounds (round_key date);
 
   if tg_op = 'INSERT' then
     insert into _se_changed_rounds
@@ -571,11 +804,14 @@ begin
              where m.round_key = v_round and (m.home_score is null or m.away_score is null)
            )
         then
-          perform public.generate_stories(v_round);
+          perform public.generate_stories(v_round::text);
         end if;
       end loop;
     exception when others then
-      raise notice 'generate_stories fejlede (ignoreret, resultater/rating er uberørte): %', sqlerrm;
+      -- warning, ikke notice: guarden skal blive ved med at beskytte resultat-
+      -- lagringen, men en fejl må ikke være usynlig igen (jf. A9, juli 2026).
+      -- warning når Postgres-loggen som standard; notice gjorde ikke.
+      raise warning 'generate_stories fejlede (ignoreret, resultater/rating er uberørte): %', sqlerrm;
     end;
   end if;
 
@@ -798,8 +1034,48 @@ CREATE TABLE public.matches (
     status text DEFAULT 'scheduled'::text NOT NULL,
     api_fixture_id text,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    stage_name text
+    stage_name text,
+    live_home_score integer,
+    live_away_score integer,
+    live_state text,
+    live_minute integer,
+    live_updated_at timestamp with time zone
 );
+
+
+--
+-- Name: COLUMN matches.live_home_score; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.matches.live_home_score IS 'Nuværende mål (hjemme) mens kampen spilles. Null når kampen ikke er i gang. Tæller ALDRIG point.';
+
+
+--
+-- Name: COLUMN matches.live_away_score; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.matches.live_away_score IS 'Nuværende mål (ude) mens kampen spilles. Null når kampen ikke er i gang. Tæller ALDRIG point.';
+
+
+--
+-- Name: COLUMN matches.live_state; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.matches.live_state IS 'Sportmonks-state (developer_name), fx INPLAY_1ST_HALF, HT, INPLAY_2ND_HALF. Null = ikke i gang.';
+
+
+--
+-- Name: COLUMN matches.live_minute; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.matches.live_minute IS 'Spilleminut fra den tickende periode. Null i pauser og når minuttet er ukendt.';
+
+
+--
+-- Name: COLUMN matches.live_updated_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.matches.live_updated_at IS 'Hvornår live-felterne sidst blev opdateret af api/sync-live.js.';
 
 
 --
@@ -820,20 +1096,41 @@ CREATE TABLE public.predictions (
 --
 
 CREATE VIEW public.monthly_standings AS
- SELECT to_char(date_trunc('month'::text, m.kickoff_at), 'YYYY-MM'::text) AS month,
+ WITH scored AS (
+         SELECT to_char(date_trunc('month'::text, m.kickoff_at), 'YYYY-MM'::text) AS month,
+            m.round_key,
+            p.user_id,
+            public.pc_points(p.pred_home, p.pred_away, m.home_score, m.away_score) AS pts,
+            (abs((p.pred_home - m.home_score)) + abs((p.pred_away - m.away_score))) AS goal_err
+           FROM (public.predictions p
+             JOIN public.matches m ON ((m.id = p.match_id)))
+          WHERE ((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL) AND (p.pred_home IS NOT NULL) AND (p.pred_away IS NOT NULL))
+        ), per_round AS (
+         SELECT scored.month,
+            scored.user_id,
+            rank() OVER (PARTITION BY scored.month, scored.round_key ORDER BY (sum(scored.pts)) DESC, (count(*) FILTER (WHERE (scored.pts = 3))) DESC, (count(*) FILTER (WHERE (scored.pts = 1))) DESC, (round(((sum(scored.goal_err))::numeric / (count(*))::numeric), 4))) AS rnk
+           FROM scored
+          GROUP BY scored.month, scored.round_key, scored.user_id
+        ), wins AS (
+         SELECT per_round.month,
+            per_round.user_id,
+            (count(*))::integer AS round_wins
+           FROM per_round
+          WHERE (per_round.rnk = 1)
+          GROUP BY per_round.month, per_round.user_id
+        )
+ SELECT s.month,
     'ALL'::text AS scope,
-    p.user_id,
-    sum(public.pc_points(p.pred_home, p.pred_away, m.home_score, m.away_score)) AS total_points,
-    count(*) AS matches,
-    sum(
-        CASE
-            WHEN ((p.pred_home = m.home_score) AND (p.pred_away = m.away_score)) THEN 1
-            ELSE 0
-        END) AS exact_count
-   FROM (public.predictions p
-     JOIN public.matches m ON ((m.id = p.match_id)))
-  WHERE ((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL) AND (p.pred_home IS NOT NULL) AND (p.pred_away IS NOT NULL))
-  GROUP BY (to_char(date_trunc('month'::text, m.kickoff_at), 'YYYY-MM'::text)), 'ALL'::text, p.user_id;
+    s.user_id,
+    (sum(s.pts))::integer AS total_points,
+    (count(*))::integer AS matches,
+    (count(*) FILTER (WHERE (s.pts = 3)))::integer AS exact_count,
+    (count(*) FILTER (WHERE (s.pts = 1)))::integer AS outcome_count,
+    round(((sum(s.goal_err))::numeric / (count(*))::numeric), 4) AS avg_goal_error,
+    COALESCE(w.round_wins, 0) AS round_wins
+   FROM (scored s
+     LEFT JOIN wins w ON (((NOT (w.month IS DISTINCT FROM s.month)) AND (w.user_id = s.user_id))))
+  GROUP BY s.month, s.user_id, w.round_wins;
 
 
 --
@@ -909,20 +1206,24 @@ CREATE TABLE public.ratings (
 --
 
 CREATE VIEW public.round_standings WITH (security_invoker='on') AS
- SELECT m.round_key,
-    pr.user_id,
+ WITH scored AS (
+         SELECT m.round_key,
+            pr.user_id,
+            public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) AS pts,
+            (abs((pr.pred_home - m.home_score)) + abs((pr.pred_away - m.away_score))) AS goal_err
+           FROM (public.predictions pr
+             JOIN public.matches m ON ((m.id = pr.match_id)))
+          WHERE ((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL) AND (pr.pred_home IS NOT NULL) AND (pr.pred_away IS NOT NULL))
+        )
+ SELECT round_key,
+    user_id,
     (count(*))::integer AS matches,
-    (sum(
-        CASE
-            WHEN ((pr.pred_home = m.home_score) AND (pr.pred_away = m.away_score)) THEN 3
-            WHEN (sign(((pr.pred_home - pr.pred_away))::double precision) = sign(((m.home_score - m.away_score))::double precision)) THEN 1
-            ELSE 0
-        END))::integer AS total_points,
-    (count(*) FILTER (WHERE ((pr.pred_home = m.home_score) AND (pr.pred_away = m.away_score))))::integer AS exact_count
-   FROM (public.predictions pr
-     JOIN public.matches m ON ((m.id = pr.match_id)))
-  WHERE ((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL) AND (pr.pred_home IS NOT NULL) AND (pr.pred_away IS NOT NULL))
-  GROUP BY m.round_key, pr.user_id;
+    (sum(pts))::integer AS total_points,
+    (count(*) FILTER (WHERE (pts = 3)))::integer AS exact_count,
+    (count(*) FILTER (WHERE (pts = 1)))::integer AS outcome_count,
+    round(((sum(goal_err))::numeric / (count(*))::numeric), 4) AS avg_goal_error
+   FROM scored
+  GROUP BY round_key, user_id;
 
 
 --
@@ -930,20 +1231,40 @@ CREATE VIEW public.round_standings WITH (security_invoker='on') AS
 --
 
 CREATE VIEW public.season_standings WITH (security_invoker='on') AS
- SELECT m.season_id,
-    pr.user_id,
+ WITH scored AS (
+         SELECT m.season_id,
+            m.round_key,
+            pr.user_id,
+            public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) AS pts,
+            (abs((pr.pred_home - m.home_score)) + abs((pr.pred_away - m.away_score))) AS goal_err
+           FROM (public.predictions pr
+             JOIN public.matches m ON ((m.id = pr.match_id)))
+          WHERE ((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL) AND (pr.pred_home IS NOT NULL) AND (pr.pred_away IS NOT NULL))
+        ), per_round AS (
+         SELECT scored.season_id,
+            scored.user_id,
+            rank() OVER (PARTITION BY scored.season_id, scored.round_key ORDER BY (sum(scored.pts)) DESC, (count(*) FILTER (WHERE (scored.pts = 3))) DESC, (count(*) FILTER (WHERE (scored.pts = 1))) DESC, (round(((sum(scored.goal_err))::numeric / (count(*))::numeric), 4))) AS rnk
+           FROM scored
+          GROUP BY scored.season_id, scored.round_key, scored.user_id
+        ), wins AS (
+         SELECT per_round.season_id,
+            per_round.user_id,
+            (count(*))::integer AS round_wins
+           FROM per_round
+          WHERE (per_round.rnk = 1)
+          GROUP BY per_round.season_id, per_round.user_id
+        )
+ SELECT s.season_id,
+    s.user_id,
     (count(*))::integer AS matches,
-    (sum(
-        CASE
-            WHEN ((pr.pred_home = m.home_score) AND (pr.pred_away = m.away_score)) THEN 3
-            WHEN (sign(((pr.pred_home - pr.pred_away))::double precision) = sign(((m.home_score - m.away_score))::double precision)) THEN 1
-            ELSE 0
-        END))::integer AS total_points,
-    (count(*) FILTER (WHERE ((pr.pred_home = m.home_score) AND (pr.pred_away = m.away_score))))::integer AS exact_count
-   FROM (public.predictions pr
-     JOIN public.matches m ON ((m.id = pr.match_id)))
-  WHERE ((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL) AND (pr.pred_home IS NOT NULL) AND (pr.pred_away IS NOT NULL))
-  GROUP BY m.season_id, pr.user_id;
+    (sum(s.pts))::integer AS total_points,
+    (count(*) FILTER (WHERE (s.pts = 3)))::integer AS exact_count,
+    (count(*) FILTER (WHERE (s.pts = 1)))::integer AS outcome_count,
+    round(((sum(s.goal_err))::numeric / (count(*))::numeric), 4) AS avg_goal_error,
+    COALESCE(w.round_wins, 0) AS round_wins
+   FROM (scored s
+     LEFT JOIN wins w ON (((NOT (w.season_id IS DISTINCT FROM s.season_id)) AND (w.user_id = s.user_id))))
+  GROUP BY s.season_id, s.user_id, w.round_wins;
 
 
 --
@@ -1221,6 +1542,20 @@ CREATE INDEX matches_home_team_id_idx ON public.matches USING btree (home_team_i
 
 
 --
+-- Name: matches_live_state_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX matches_live_state_idx ON public.matches USING btree (live_state) WHERE (live_state IS NOT NULL);
+
+
+--
+-- Name: matches_live_window_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX matches_live_window_idx ON public.matches USING btree (kickoff_at) WHERE (home_score IS NULL);
+
+
+--
 -- Name: matches_season_id_round_key_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1246,6 +1581,13 @@ CREATE INDEX push_subscriptions_user_idx ON public.push_subscriptions USING btre
 --
 
 CREATE INDEX stories_user_round_idx ON public.stories USING btree (user_id, round_key);
+
+
+--
+-- Name: competition_participants competition_participants_ensure_group; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER competition_participants_ensure_group BEFORE INSERT ON public.competition_participants FOR EACH ROW EXECUTE FUNCTION public.ensure_group_membership_for_participant();
 
 
 --
@@ -1481,13 +1823,16 @@ ALTER TABLE ONLY public.user_activity_days
 -- Name: competition_participants comp_participants_delete_own_unlocked; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY comp_participants_delete_own_unlocked ON public.competition_participants FOR DELETE TO authenticated USING (((user_id = auth.uid()) AND (NOT (EXISTS ( SELECT 1
+CREATE POLICY comp_participants_delete_own_unlocked ON public.competition_participants FOR DELETE TO authenticated USING (((user_id = auth.uid()) AND ((NOT (EXISTS ( SELECT 1
+   FROM (public.competition_matches cm
+     JOIN public.matches m ON ((m.id = cm.match_id)))
+  WHERE ((cm.competition_id = competition_participants.competition_id) AND ((m.home_score IS NULL) OR (m.away_score IS NULL)))))) OR (NOT (EXISTS ( SELECT 1
    FROM ((public.competition_matches cm
      JOIN public.matches m ON ((m.id = cm.match_id)))
      JOIN public.predictions p ON (((p.match_id = m.id) AND (p.user_id = auth.uid()))))
   WHERE ((cm.competition_id = competition_participants.competition_id) AND ((m.home_score IS NOT NULL) OR (EXISTS ( SELECT 1
            FROM public.matches m2
-          WHERE ((m2.round_key = m.round_key) AND (NOT (m2.season_id IS DISTINCT FROM m.season_id)) AND (m2.kickoff_at IS NOT NULL) AND (m2.kickoff_at <= (now() + '01:00:00'::interval))))))))))));
+          WHERE ((m2.round_key = m.round_key) AND (NOT (m2.season_id IS DISTINCT FROM m.season_id)) AND (m2.kickoff_at IS NOT NULL) AND (m2.kickoff_at <= (now() + '01:00:00'::interval)))))))))))));
 
 
 --
@@ -1541,7 +1886,10 @@ ALTER TABLE public.group_members ENABLE ROW LEVEL SECURITY;
 -- Name: group_members group_members_delete_self; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY group_members_delete_self ON public.group_members FOR DELETE TO authenticated USING ((user_id = auth.uid()));
+CREATE POLICY group_members_delete_self ON public.group_members FOR DELETE TO authenticated USING (((user_id = auth.uid()) AND (NOT (EXISTS ( SELECT 1
+   FROM (public.competition_participants cp
+     JOIN public.competitions c ON ((c.id = cp.competition_id)))
+  WHERE ((cp.user_id = auth.uid()) AND (c.group_id = group_members.group_id)))))));
 
 
 --
@@ -1604,13 +1952,6 @@ CREATE POLICY "insert matches" ON public.matches FOR INSERT WITH CHECK ((auth.ro
 
 
 --
--- Name: predictions insert own predictions; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "insert own predictions" ON public.predictions FOR INSERT WITH CHECK ((user_id = auth.uid()));
-
-
---
 -- Name: profiles insert own profile; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1660,12 +2001,38 @@ CREATE POLICY predictions_delete_own_unlocked ON public.predictions FOR DELETE T
 
 
 --
+-- Name: predictions predictions_insert_own_unlocked; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY predictions_insert_own_unlocked ON public.predictions FOR INSERT TO authenticated WITH CHECK (((user_id = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM public.matches m
+  WHERE ((m.id = predictions.match_id) AND (m.home_score IS NULL) AND (NOT (EXISTS ( SELECT 1
+           FROM public.matches m2
+          WHERE ((m2.round_key = m.round_key) AND (NOT (m2.season_id IS DISTINCT FROM m.season_id)) AND (m2.kickoff_at IS NOT NULL) AND (m2.kickoff_at <= (now() + '01:00:00'::interval)))))))))));
+
+
+--
 -- Name: predictions predictions_select_visible; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY predictions_select_visible ON public.predictions FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR (EXISTS ( SELECT 1
    FROM public.matches m
   WHERE ((m.id = predictions.match_id) AND ((m.home_score IS NOT NULL) OR (EXISTS ( SELECT 1
+           FROM public.matches m2
+          WHERE ((m2.round_key = m.round_key) AND (NOT (m2.season_id IS DISTINCT FROM m.season_id)) AND (m2.kickoff_at IS NOT NULL) AND (m2.kickoff_at <= (now() + '01:00:00'::interval)))))))))));
+
+
+--
+-- Name: predictions predictions_update_own_unlocked; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY predictions_update_own_unlocked ON public.predictions FOR UPDATE TO authenticated USING (((user_id = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM public.matches m
+  WHERE ((m.id = predictions.match_id) AND (m.home_score IS NULL) AND (NOT (EXISTS ( SELECT 1
+           FROM public.matches m2
+          WHERE ((m2.round_key = m.round_key) AND (NOT (m2.season_id IS DISTINCT FROM m.season_id)) AND (m2.kickoff_at IS NOT NULL) AND (m2.kickoff_at <= (now() + '01:00:00'::interval))))))))))) WITH CHECK (((user_id = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM public.matches m
+  WHERE ((m.id = predictions.match_id) AND (m.home_score IS NULL) AND (NOT (EXISTS ( SELECT 1
            FROM public.matches m2
           WHERE ((m2.round_key = m.round_key) AND (NOT (m2.season_id IS DISTINCT FROM m.season_id)) AND (m2.kickoff_at IS NOT NULL) AND (m2.kickoff_at <= (now() + '01:00:00'::interval)))))))))));
 
@@ -1753,15 +2120,6 @@ CREATE POLICY "read matches" ON public.matches FOR SELECT USING ((auth.role() = 
 
 
 --
--- Name: predictions read predictions; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "read predictions" ON public.predictions FOR SELECT USING (((user_id = auth.uid()) OR (EXISTS ( SELECT 1
-   FROM public.matches m
-  WHERE ((m.id = predictions.match_id) AND ((m.home_score IS NOT NULL) OR (now() >= (m.kickoff_at - '01:00:00'::interval))))))));
-
-
---
 -- Name: profiles read profiles; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1829,13 +2187,6 @@ CREATE POLICY "update own participation" ON public.competition_participants FOR 
 
 
 --
--- Name: predictions update own predictions; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "update own predictions" ON public.predictions FOR UPDATE USING ((user_id = auth.uid()));
-
-
---
 -- Name: profiles update own profile; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1865,6 +2216,24 @@ GRANT USAGE ON SCHEMA public TO service_role;
 GRANT ALL ON FUNCTION public.admin_user_stats() TO anon;
 GRANT ALL ON FUNCTION public.admin_user_stats() TO authenticated;
 GRANT ALL ON FUNCTION public.admin_user_stats() TO service_role;
+
+
+--
+-- Name: FUNCTION career_profile(profile_user_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.career_profile(profile_user_id uuid) TO anon;
+GRANT ALL ON FUNCTION public.career_profile(profile_user_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.career_profile(profile_user_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION ensure_group_membership_for_participant(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.ensure_group_membership_for_participant() TO anon;
+GRANT ALL ON FUNCTION public.ensure_group_membership_for_participant() TO authenticated;
+GRANT ALL ON FUNCTION public.ensure_group_membership_for_participant() TO service_role;
 
 
 --
@@ -2219,5 +2588,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 3hwxK912SFbdSyXyLuf6h9evpqRRuQLIYS0dPU9FlfwCBje4SwTDPiEQU0OfuwS
+\unrestrict uilf7EdKT4NvJgt6YVwZo5BmH1hWQ2ZDRQzCEjhaMLAckeoGe2dYoY3OcfzHgkZ
 
