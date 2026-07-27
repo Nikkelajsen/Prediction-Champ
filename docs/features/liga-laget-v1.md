@@ -1,6 +1,6 @@
 # Feature: Liga-laget v1 (permanente fællesskaber)
 
-**Status: ✅ Leveret og live (juli 2026)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 4–5 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 3*
+**Status: ✅ Leveret og live (juli 2026).** *Afsnit markeret med kursiv i parentes er rettet efter levering — udkastet beskrev noget andet end det, der står i koden i dag (A7/A8, juli 2026). Teknisk sandhed: `DOCUMENTATION.md` afsnit 18.* · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 4–5 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 3*
 
 *Bogens vigtigste strukturelle princip: ligaen (fællesskabet) er produktets centrum. Konkurrencer er kapitler i ligaens historie. Denne plan indfører liga-laget oven på det eksisterende — uden at rive noget ned.*
 
@@ -49,19 +49,19 @@ Ordet "liga" er i dag brugt om **to forskellige ting** (fodboldligaer og private
 Fra Ligaer-fanen: "Opret liga" → navn (2–40 tegn) → færdig. Opretteren bliver liga-admin. Under ét minut, ingen andre felter i v1 (ingen ikoner/farver/beskrivelser — identitet kan komme senere).
 
 ### Invitér
-Ét delbart link pr. liga: `?liga=<kode>` (samme mønster som dagens `?join=<kode>`, ny parameter så de to kodetyper ikke blandes). Modtageren ser bekræftelses-modalen ("{navn} har inviteret dig til ligaen {liga}") og lander efter join på liga-siden. "Join med kode"-kortet på Ligaer-fanen accepterer begge kodetyper (slår først liga-koder op, dernæst konkurrence-koder).
+Ét delbart link pr. liga: `?liga=<kode>` (samme mønster som dagens `?join=<kode>`, ny parameter så de to kodetyper ikke blandes). Modtageren ser bekræftelses-modalen ("Du er inviteret til ligaen {liga}. Vil du være med?" — *leveret uden inviter-navn; det står i den delte tekst, ikke i modalen*) og lander efter join på liga-siden. "Join med kode"-kortet på Ligaer-fanen accepterer begge kodetyper (slår først liga-koder op, dernæst konkurrence-koder).
 
 ### Liga-siden (ny drill-in-skærm)
 Klik på et liga-kort på Ligaer-fanen → liga-siden:
 
 - **Konkurrencer** i ligaen, delt i aktive/afsluttede (samme kort-stil som i dag: navn, type, deltagere, egen placering, klik → Stilling).
-- **Deltag/Forlad** pr. konkurrence: står man udenfor, viser kortet en "Deltag"-knap (insert i `competition_participants`); er man med, kan man framelde sig via kortmenuen (delete af egen række — kun så længe man ikke har låste/spillede tips i konkurrencen, ellers arkivér som i dag). Det er her, bogens "frivillig tilmelding pr. konkurrence" endelig får et hjem.
-- **Medlemmer**: navneliste med admin-markering og "medlem siden".
+- **Deltag/Frameld dig** pr. konkurrence: står man udenfor, viser kortet en "Deltag"-knap (insert i `competition_participants`); er man med, kan man framelde sig med linket under kortet. Det er her, bogens "frivillig tilmelding pr. konkurrence" endelig får et hjem. **Framelding er tilladt, når enten alle konkurrencens kampe har resultat (forløbet er forbi), eller man ingen tips har på låste kampe** — se afsnit 4 og `sql/group_membership_invariant.sql`. *(Leveret: den oprindelige regel var kun den sidste gren og var derfor i praksis permanent, fordi en spillet kamp aldrig bliver uspillet igen.)*
+- **Medlemmer**: navneliste med admin-markering (krone + "Admin"/"Medlem"); hvert navn åbner den pågældendes karriereprofil. *("Medlem siden" er ikke bygget i v1 — `group_members.joined_at` findes, men vises ikke.)*
 - **Invitér**-knap (kopierer liga-linket) og **"Opret konkurrence"** (åbner det eksisterende opret-flow med ligaen forvalgt).
-- **Forlad liga** (nederst, diskret): fjerner medlemskab; egne konkurrence-deltagelser i ligaen frameldes ikke automatisk (man kan være gæst i en enkelt konkurrence — se A8 i åbne beslutninger).
+- **Forlad liga** (nederst, diskret): fjerner medlemskab. **Blokeres, så længe man deltager i en af ligaens konkurrencer** (`group_members_delete_self` i `sql/group_membership_invariant.sql`); skærmen forklarer "Frameld dig dem først". *(Ændret ved leveringen af A8: udkastet her lod én være gæst i en enkelt konkurrence, men det er præcis den forældreløse tilstand, A8 forbyder — deltageren ville stå i konkurrencens stilling og mangle på ligaens medlemsliste. Nettoreglen er nu: mens en konkurrence kører, er man bundet til ligaen; når dens kampe er spillet, kan man melde sig ud af begge.)*
 
 ### Opret konkurrence
-Det eksisterende flow får ét nyt felt øverst: **"Liga"** (dropdown over ligaer, man er medlem af, + "Ingen liga"). Kommer man fra liga-siden, er ligaen forvalgt. En konkurrence i en liga får intet eget invite-link i UI — medlemmerne finder og tilmelder sig den på liga-siden. Opretteren tilmeldes selv automatisk (som i dag).
+Det eksisterende flow får ét nyt felt øverst: **"Liga"** (dropdown over ligaer, man er medlem af, + "Ingen liga"). Kommer man fra liga-siden, er ligaen forvalgt. *(Rullet tilbage ved A7, juli 2026: udkastet skjulte konkurrence-invite-linket for liga-konkurrencer. Begge link-typer er nu permanente, og **stedet afgør** — konkurrence-siden deler altid `?join=`, liga-siden altid `?liga=`. Et join via konkurrence-linket melder én ind i BEGGE, jf. A8.)* Opretteren tilmeldes selv automatisk (som i dag).
 
 ### Ligaer-fanen (omstruktureret)
 1. Brugerens **ligaer** som kort (navn, antal medlemmer, antal aktive konkurrencer, evt. egen bedste placering).
@@ -106,8 +106,8 @@ alter table competitions add column if not exists group_id uuid references group
 | `groups` UPDATE/DELETE | kun liga-admin (via hjælpefunktion, se nedenfor). DELETE kaskaderer til `group_members`; konkurrencer får `group_id = null` (bliver liga-løse, slettes IKKE) |
 | `group_members` SELECT | egne rækker + rækker i ligaer, man selv er medlem af — **via `security definer`-hjælpefunktionen `is_group_member(gid uuid)`**, aldrig ved at policy'en slår op i `group_members` direkte (kendt "infinite recursion"-fælde, jf. fejlfindingsloggen) |
 | `group_members` INSERT | `user_id = auth.uid()` (man melder sig selv ind — koden er adgangsbilletten) |
-| `group_members` DELETE | `user_id = auth.uid()` (forlad liga). Admin-fjernelse af andre er bevidst udskudt (afsnit 8) |
-| `competition_participants` DELETE | **ny policy**: egen række, og kun hvis brugeren ingen forudsigelser har på konkurrencens allerede låste kampe (samme runde-lås-udtryk som `sql/predictions_round_lock_policies.sql`) — så framelding ikke kan bruges til at slette en dårlig, synlig historik midt i et forløb |
+| `group_members` DELETE | `user_id = auth.uid()` **og** man deltager ikke i nogen af ligaens konkurrencer (`sql/group_membership_invariant.sql`, A8). Admin-fjernelse af andre er bevidst udskudt (afsnit 8) |
+| `competition_participants` DELETE | **ny policy**: egen række, og **enten** har alle konkurrencens kampe resultat (forløbet er forbi), **eller** brugeren har ingen forudsigelser på allerede låste kampe (samme runde-lås-udtryk som `sql/predictions_round_lock_policies.sql`) — så framelding ikke kan bruges til at slette en dårlig, synlig historik midt i et forløb. Første gren kom til i `sql/group_membership_invariant.sql`, fordi den oprindelige regel var permanent og ikke "midt i et forløb" |
 
 Opretteren indsættes som `role='admin'` i samme flow som liga-oprettelsen (frontend laver to inserts; rækkefølgen er ufarlig, da INSERT-policyen kun kræver eget `user_id`).
 
@@ -119,14 +119,14 @@ Opretteren indsættes som `role='admin'` i samme flow som liga-oprettelsen (fron
 
 | Fil | Ændring | Omfang |
 |---|---|---|
-| `src/lib/data.js` | Nye helpers: `loadMyGroups` (ligaer + medlemstal + aktive konkurrencer i ét kald pr. liste), `loadGroupDetail` (medlemmer + ligaens konkurrencer + egne deltagelser), `createGroup`, `joinGroupByCode`, `leaveGroup`, `joinCompetitionInGroup`, `leaveCompetition`, `moveCompetitionToGroup` | Mellem |
+| `src/lib/data.js` | Nye helpers — leveret som `loadMyGroups`, `loadGroupDetail`, `createGroup`, `loadGroupByCode`, `joinGroup`, `leaveGroup`, `deleteGroup`, `joinCompetition`, `leaveCompetition`, `moveCompetitionToGroup`. *(Udkastets `joinGroupByCode`/`joinCompetitionInGroup` blev til `loadGroupByCode` + `joinGroup` og et fælles `joinCompetition(token, userId, compId, groupId)`, så begge veje ind i en konkurrence bruger samme funktion — A7 viste, hvad der sker, når de ikke gør.)* | Mellem |
 | `src/screens/LigaerTab.jsx` | Omstruktureres: liga-kort øverst, "Øvrige konkurrencer" nedenunder (genbruger `LeagueCard`), "Opret liga", fælles join-felt | Mellem |
 | `src/screens/GroupScreen.jsx` (**ny**) | Liga-siden: konkurrencer med Deltag/Forlad, medlemsliste, Invitér, Opret konkurrence, Forlad liga, "Flyt konkurrence hertil" (kun for konkurrence-oprettere, afsnit 6) | Stor |
 | `src/screens/MainApp.jsx` | `?liga=<kode>`-deep-link (parallelt med `?join=`), ny screen-type `group`, navigation Ligaer → liga-side | Lille |
-| `src/screens/CreateCompetitionScreen.jsx` | Liga-dropdown (forvalgt fra liga-siden), skriver `group_id`; invite-link-visning skjules for liga-konkurrencer | Lille |
+| `src/screens/CreateCompetitionScreen.jsx` | Liga-dropdown (forvalgt fra liga-siden), skriver `group_id` | Lille |
 | `src/screens/HjemTab.jsx` | "Dine placeringer" grupperet pr. liga | Lille |
-| `src/screens/BoardScreen.jsx` | "Invitér"-knappen viser liga-linket, når konkurrencen har en liga (ellers uændret konkurrence-link) | Lille |
-| `src/screens/HowItWorksScreen.jsx` | Nyt afsnit: liga vs. konkurrence, til-/framelding | Lille |
+| `src/screens/BoardScreen.jsx` | "Invitér"-knappen deler **altid** konkurrence-linket (`?join=`). *(Udkastet lod den vise liga-linket for liga-konkurrencer; det blev leveret sådan og siden rullet tilbage ved A7, fordi man så slet ikke kunne invitere til én bestemt liga-konkurrence.)* | Lille |
+| `src/screens/HowItWorksScreen.jsx` | Nyt afsnit: liga vs. turnering vs. konkurrence. *(Til-/framelding er ikke beskrevet dér i v1 — reglen forklares, hvor den rammer: på liga-siden.)* | Lille |
 | `src/App.jsx` | Læs `?liga=`-parameteren ved boot (samme mønster som `pendingJoinCode`) | Lille |
 | Terminologi-fejning | Fodboldliga → "turnering" i al UI-tekst (afsnit 2: PredictionsScreen, CreateCompetitionScreen, AdminScreen, HowItWorks, Championship-/Rating-InfoDots) | Lille |
 | `src/lib/*.test.js` | Tests af de nye helpers med mocket database (samme stil som `data.test.js`) | Lille |
@@ -175,7 +175,7 @@ Rækkefølgen respekterer roadmappens tommelfingerregel: Story Engine-kalibrerin
 
 - En bruger kan oprette en liga, dele ét link, og en modtager kan joine og se liga-siden — uden at nogen konkurrence findes endnu.
 - En konkurrence oprettet i en liga er synlig for alle liga-medlemmer på liga-siden; kun de, der aktivt har trykket "Deltag", optræder i dens stilling.
-- Et medlem kan framelde sig en konkurrence, det ikke er begyndt i — men ikke en, hvor det har tips på låste kampe (RLS håndhæver, ikke kun UI).
+- Et medlem kan framelde sig en konkurrence, det ikke er begyndt i — men ikke en, hvor det har tips på låste kampe, **så længe konkurrencen stadig har uspillede kampe** (RLS håndhæver, ikke kun UI). Er alle kampe spillet, er framelding tilladt igen.
 - Alle eksisterende konkurrencer virker uændret uden liga; gamle `?join=`-links virker fortsat.
 - Flytning af en konkurrence til en liga bevarer stilling, tips og deltagere 1:1, og deltagerne bliver liga-medlemmer.
 - En bruger, der ikke er medlem af en liga, kan ikke læse dens medlemsliste (RLS), men kan slå navnet op via invite-koden.
@@ -202,8 +202,8 @@ Godkendt sammen med planen; ført i roadmappens beslutningslog:
 | # | Spørgsmål | Beslutning |
 |---|---|---|
 | A6 | Hvem må oprette konkurrencer i en liga — kun liga-admin eller alle medlemmer? | **Alle medlemmer.** Bogen gør admin til vært, ikke gatekeeper; mindst friktion i små vennegrupper. Kan strammes senere uden datamodel-ændring. |
-| A7 | Skal konkurrence-invite-links udfases, når liga-laget er i drift? | **Behold som fallback i v1**, skjul dem blot i UI for liga-konkurrencer. Udfasning besluttes, når "Øvrige konkurrencer" er tom i praksis. |
-| A8 | Kan man deltage i en enkelt konkurrence uden at være liga-medlem ("gæst")? | **Nej i v1** — deltagelse i en liga-konkurrence kræver medlemskab (join via konkurrence-link melder én ind i begge, afsnit 6). Én regel, ingen kant-tilfælde. |
+| A7 | Skal konkurrence-invite-links udfases, når liga-laget er i drift? | **Lukket (juli 2026): nej — de bliver.** Udkastets "skjul dem i UI for liga-konkurrencer" blev leveret og siden rullet tilbage: det gjorde det umuligt at invitere til én bestemt liga-konkurrence. **Stedet afgør** — konkurrence-siden deler `?join=`, liga-siden `?liga=`. Konkurrence-linket melder ind i begge (A8). |
+| A8 | Kan man deltage i en enkelt konkurrence uden at være liga-medlem ("gæst")? | **Nej** — deltagelse i en liga-konkurrence kræver medlemskab (join via konkurrence-link melder én ind i begge, afsnit 6). Én regel, ingen kant-tilfælde. **Håndhæves i databasen** siden juli 2026 (`sql/group_membership_invariant.sql`: backfill + auto-indmeldende trigger + spærret liga-exit) — en regel, der kun findes i klienten, er ikke en regel. |
 | — | UI-terminologi for fodboldligaer | **"Turnering"** i al brugervendt tekst; "liga" betyder herefter kun fællesskabet (afsnit 2). DB-navne uændrede. |
 
 ---

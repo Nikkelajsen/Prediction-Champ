@@ -185,11 +185,11 @@ Når en ny sæson begynder, oprettes blot en ny konkurrence i den samme liga. Hi
 
 ### Konkurrencer er valgfrie
 
-Ikke alle ønsker at tippe alle turneringer. Nogle følger kun Superligaen, andre vil også spille Premier League, og nogle interesserer sig kun for Champions League. Prediction Champ tvinger derfor ingen til at deltage: Administrator kan oprette så mange konkurrencer, som ligaen ønsker, men hvert medlem vælger selv, hvilke konkurrencer vedkommende vil være med i. På den måde kan én liga rumme mange forskellige interesser uden at splitte fællesskabet.
+Ikke alle ønsker at tippe alle turneringer. Nogle følger kun Superligaen, andre vil også spille Premier League, og nogle interesserer sig kun for Champions League. Prediction Champ tvinger derfor ingen til at deltage: Ligaen kan rumme så mange konkurrencer, som medlemmerne ønsker — enhver i ligaen kan oprette en — men hvert medlem vælger selv, hvilke konkurrencer vedkommende vil være med i. På den måde kan én liga rumme mange forskellige interesser uden at splitte fællesskabet.
 
 ### Den globale spillerunde
 
-En af de mest markante beslutninger i produktets design var at indføre en global spillerunde. I stedet for at lade hver turnering leve sit eget liv, samles alle ugens kampe i én fælles spillerunde, der altid løber fra tirsdag til mandag. Runden er regnestykkets enhed: Point, stillinger og rating hører til runden, ikke til den enkelte kamp — men de opdateres løbende, efterhånden som ugens kampe fløjtes af, så brugeren aldrig sidder og venter på at se, hvordan det gik. Når mandag er slut, står rundens tal endeligt fast, og fire ting er gjort i præcis samme rækkefølge: Først pointene. Dernæst konkurrencernes stillinger. Så spillernes Elo-rating. Til sidst historierne, som er de eneste, der først kan skrives, når rundens sidste kamp er spillet.
+En af de mest markante beslutninger i produktets design var at indføre en global spillerunde. I stedet for at lade hver turnering leve sit eget liv, skal alle ugens kampe samles i én fælles spillerunde, der altid løber fra tirsdag til mandag. *(Endnu ikke bygget: appen regner i dag pr. turneringsrunde, hvilket med Superligaen alene reelt er det samme. Ombygningen venter, til flere turneringer er i drift — se "Kendte afvigelser" i [`ROADMAP.md`](./ROADMAP.md).)* Runden er regnestykkets enhed: Point, stillinger og rating hører til runden, ikke til den enkelte kamp — men de opdateres løbende, efterhånden som ugens kampe fløjtes af, så brugeren aldrig sidder og venter på at se, hvordan det gik. Når mandag er slut, står rundens tal endeligt fast, og fire ting er gjort i præcis samme rækkefølge: Først pointene. Dernæst konkurrencernes stillinger. Så spillernes Elo-rating. Til sidst historierne, som er de eneste, der først kan skrives, når rundens sidste kamp er spillet.
 
 Denne rytme er bevidst. Prediction Champ skal have sin egen ugentlige puls: Brugerne skal vide, at mandag aften afsluttes ugen — tirsdag begynder en ny.
 
@@ -231,11 +231,11 @@ Administrator skal ikke være systemadministrator. Administrator skal være vær
 
 ### Frihed til at vælge
 
-Ikke alle følger de samme turneringer. Derfor kan administrator godt oprette både Superliga, Premier League og Champions League — men ingen bliver tvunget til at deltage. Hvert medlem vælger selv sine konkurrencer. To medlemmer kan være i samme liga, men deltage i forskellige konkurrencer, og stadig være en del af det samme fællesskab. Det er en væsentlig forskel fra mange eksisterende løsninger.
+Ikke alle følger de samme turneringer. Derfor kan ligaen godt rumme både Superliga, Premier League og Champions League — ethvert medlem kan oprette en konkurrence, ikke kun administrator — men ingen bliver tvunget til at deltage. Hvert medlem vælger selv sine konkurrencer. To medlemmer kan være i samme liga, men deltage i forskellige konkurrencer, og stadig være en del af det samme fællesskab. Det er en væsentlig forskel fra mange eksisterende løsninger.
 
 ### En fast ugerytme
 
-Prediction Champ skal have en rytme — ikke en tilfældig rytme, men en rytme, som brugerne lærer at kende:
+Prediction Champ skal have en rytme — ikke en tilfældig rytme, men en rytme, som brugerne lærer at kende. Rytmen herunder beskriver den globale spillerunde og er derfor et **mål**, ikke nuværende adfærd (se afsnittet ovenfor):
 
 - **Tirsdag:** En ny global spillerunde starter. Brugerne begynder at afgive deres tips.
 - **Onsdag og torsdag:** Der kommer måske nye kampe til. Nogle ændrer deres tips. Andre følger med i, hvem der allerede har tippet.
