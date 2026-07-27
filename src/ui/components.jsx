@@ -292,7 +292,8 @@ function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, ru
                   {played ? `${m.home_score}-${m.away_score}` : "–"}
                 </span>
                 <span style={{ background: C.surface, color: ptColor, fontSize: 12, fontWeight: 700, textAlign: "center", borderRadius: 999, padding: "2px 4px" }}>
-                  {pts === null ? "–" : `+${pts}`}
+                  {/* Samme regel som PointsPill: 0 er ikke "+0". Ingen tip = "–". */}
+                  {pts === null ? "–" : pts > 0 ? `+${pts}` : "0"}
                 </span>
               </div>
             );

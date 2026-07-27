@@ -4,10 +4,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { ChevronRight, Copy, Check, Plus, Crown, LogOut, Loader2, MoveRight } from "lucide-react";
 import { loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, deleteGroup, moveCompetitionToGroup } from "../lib/data.js";
+import { modeLabel } from "../lib/scoring.js";
 import { C, btnGhost, btnGold, btnGreen, font, muted } from "../ui/theme.js";
 import { BackBar, Card, Eyebrow, PlayerName } from "../ui/components.jsx";
-
-const modeLabel = (m) => m === "full_season" ? "Hel sæson" : m === "team" ? "Enkelt hold" : m === "time_range" ? "Datointerval" : m === "custom" ? "Håndplukket" : "Tilfældig kupon";
 
 function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard, openCreate, reloadGroups, openProfile }) {
   const [detail, setDetail] = useState(null);
@@ -50,7 +49,10 @@ function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard
     setBusyId(compId); setNote("");
     try {
       const ok = await leaveCompetition(token, userId, compId);
-      if (!ok) { setNote("Du kan ikke framelde dig en konkurrence, hvor du allerede har tips på låste kampe."); }
+      // To grene i RLS-policyen (sql/group_membership_invariant.sql): framelding er
+      // tilladt, når ALLE konkurrencens kampe har resultat — ellers spærrer tips på
+      // låste kampe. Beskeden skal sige begge dele, ellers ligner spærren permanent.
+      if (!ok) { setNote("Du kan ikke framelde dig midt i en konkurrence, hvor du har tips på låste kampe. Når alle konkurrencens kampe er spillet, kan du frameldes."); }
       await load();
     } catch (e) { setNote(e.message || "Kunne ikke framelde — prøv igen."); }
     finally { setBusyId(null); }
@@ -151,7 +153,7 @@ function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard
               {c.joined && (
                 <div style={{ marginTop: 8 }}>
                   <span onClick={() => onLeave(c.id)} style={{ color: C.muted, fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>
-                    Framelding
+                    Frameld dig
                   </span>
                 </div>
               )}

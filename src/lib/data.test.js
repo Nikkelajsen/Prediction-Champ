@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // db mockes, så loaderne kan testes uden netværk/Supabase
 vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn(), insert: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
-import { computeCompetitionState, loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup } from "./data.js";
+import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup } from "./data.js";
 
 // mock-svar pr. tabel/view
 function mockTables(tables) {
@@ -351,5 +351,63 @@ describe("dato-helpers", () => {
 
   it("currentMonthKey har formatet YYYY-MM", () => {
     expect(currentMonthKey()).toMatch(/^\d{4}-\d{2}$/);
+  });
+});
+
+// "Alle tips er inde" er en påstand om brugerens tips og må kun bruges, når vi
+// faktisk har set, at rundens tipbare kampe er tippet. Før returnerede
+// computeHomeTips allTipped, hver gang der bare ikke var noget TIPBART — så en
+// bruger med nul tips fik det grønne "Alt ok"-kort, mens runden lå låst eller
+// endnu ikke havde åbnet.
+describe("computeHomeTips: allTipped vs. nothingToTip", () => {
+  const HOUR = 3600 * 1000;
+  const comp = (rules) => ({ id: "c1", rules });
+  const setup = ({ matches, predictions = [] }) =>
+    mockTables({
+      competition_matches: matches.map((m) => ({ competition_id: "c1", match_id: m.id })),
+      matches,
+      teams: [{ id: "t1", name: "Hjemme" }, { id: "t2", name: "Ude" }],
+      predictions,
+    });
+  const match = (over) => ({
+    id: "m1", season_id: "s1", round_key: "2026-07-14",
+    home_team_id: "t1", away_team_id: "t2", home_score: null, away_score: null, ...over,
+  });
+
+  it("siger allTipped, når rundens tipbare kampe FAKTISK er tippet", async () => {
+    const kickoff = new Date(Date.now() + 48 * HOUR).toISOString();
+    setup({
+      matches: [match({ kickoff_at: kickoff })],
+      predictions: [{ match_id: "m1", pred_home: 2, pred_away: 1 }],
+    });
+    const tips = await computeHomeTips("token", "u1", [comp(null)]);
+    expect(tips.allTipped).toBe(true);
+    expect(tips.nothingToTip).toBeUndefined();
+  });
+
+  it("siger nothingToTip — ikke allTipped — når runden er låst uden tips", async () => {
+    // kickoff om 30 min ⇒ runden låste for en halv time siden (lås = kickoff − 1 t)
+    const kickoff = new Date(Date.now() + 0.5 * HOUR).toISOString();
+    setup({ matches: [match({ kickoff_at: kickoff })] });
+    const tips = await computeHomeTips("token", "u1", [comp(null)]);
+    expect(tips.nothingToTip).toBe(true);
+    expect(tips.allTipped).toBeUndefined();
+  });
+
+  it("siger nothingToTip, når det rullende vindue ikke har åbnet endnu", async () => {
+    // vindue på 7 dage, kickoff om 30 dage ⇒ runden kan ikke tippes endnu
+    const kickoff = new Date(Date.now() + 30 * 24 * HOUR).toISOString();
+    setup({ matches: [match({ kickoff_at: kickoff })] });
+    const tips = await computeHomeTips("token", "u1", [comp({ openDaysBefore: 7 })]);
+    expect(tips.nothingToTip).toBe(true);
+    expect(tips.allTipped).toBeUndefined();
+  });
+
+  it("siger allTipped: false, når en tipbar kamp mangler tips", async () => {
+    const kickoff = new Date(Date.now() + 48 * HOUR).toISOString();
+    setup({ matches: [match({ kickoff_at: kickoff })] });
+    const tips = await computeHomeTips("token", "u1", [comp(null)]);
+    expect(tips.allTipped).toBe(false);
+    expect(tips.missingCount).toBe(1);
   });
 });

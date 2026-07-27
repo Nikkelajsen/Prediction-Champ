@@ -19,7 +19,8 @@ export const RULES = {
   SHARP: 80,
 };
 
-// Tærskler (spec afsnit 3) — gæt, kalibreres efter skyggetilstand (åben beslutning A4).
+// Tærskler (spec afsnit 3) — rene gæt, der kalibreres på live-data (åben beslutning A4).
+// Skyggetilstanden, de oprindeligt skulle vurderes i, blev fjernet i juli 2026.
 export const THRESHOLDS = { comebackPlaces: 3, streakRounds: 3, sharpExact: 3, comebackMinPlayers: 5 };
 
 // Deterministisk udvælgelse: præcis én historie pr. bruger pr. runde.

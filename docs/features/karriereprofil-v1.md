@@ -1,6 +1,6 @@
 # Feature: Karriereprofil v1
 
-**Status: ✅ Leveret (juli 2026) — `sql/career_profile.sql` + `src/screens/ProfileScreen.jsx`. K1 med fra start (andres profiler for delt liga/konkurrence).** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 5–6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 4*
+**Status: ✅ Leveret (juli 2026) — `sql/career_profile.sql` + `src/screens/ProfileScreen.jsx`. K1 med fra start og siden udvidet: enhver indlogget bruger kan se enhver karriere (afsnit 8).** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 5–6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 4*
 
 *Brugerens karriere som fortælling — milepæle, titler og rivaliseringer. Ikke en statistikside. Bygget på data, der allerede findes i databasen.*
 
@@ -64,7 +64,7 @@ Oppefra og ned på profilsiden:
 ## 6. Acceptkriterier
 
 - Profilen viser aldrig negativt vinklet indhold (ingen bundplaceringer, ingen "dårligste …").
-- Basistal matcher altid Championship-fanens tal for samme bruger (samme kilde).
+- Basistal matcher Championship-fanens tal for samme bruger (samme 3/1-udtryk, F2). **Forbehold:** profilens basistal er karriere-brede (alle tippede kampe), mens `season_standings` er scopet til én sæson og `monthly_standings` til én måned. Med kun én turnering i drift er tallene identiske; det ophører den dag turnering #2 tændes ([`turnering-2.md`](./turnering-2.md)), hvor profilen skal have samme scope-valg som Championship.
 - Milepæle fra `stories` kan kun ses af brugeren selv (RLS uændret).
 - En bruger uden data ser en meningsfuld tom tilstand, ikke nuller.
 - Ratingkurven matcher Rating-fanens historik (`rating_history`), inkl. provisorisk markering.
@@ -74,7 +74,7 @@ Oppefra og ned på profilsiden:
 
 | # | Forudsætning | Hvorfor |
 |---|---|---|
-| **F1** | ~~Kerneskemaet eksporteres til repoet~~ **✅ Lukket (juli 2026):** `sql/schema.sql` er i repoet og holdes opdateret af det ugentlige workflow `.github/workflows/schema-export.yml` (guide: `sql/README.md`). | Ny SQL kan nu skrives og verificeres mod den faktiske DDL. |
+| **F1** | ~~Kerneskemaet eksporteres til repoet~~ **✅ Lukket (juli 2026):** `sql/schema.sql` er i repoet, med workflowet `.github/workflows/schema-export.yml` (manuelt + hver mandag; guide: `sql/README.md`). | Ny SQL kan nu skrives og verificeres mod den faktiske DDL. **Men eksporten er kun så frisk som sidste kørsel** — pr. juli 2026 er filen flere migreringer bagud (den mangler bl.a. `career_profile` selv). Kør workflowen efter hver migrering, og verificér mod databasen ved tvivl. |
 | **F2** | ~~Én pointkilde~~ **✅ Besluttet (juli 2026): 3-1-0 fastfryses overalt.** `rules`-feltet er historisk; alle opgørelser er altid 3/1 (DB'ens `pc_points` er kilden). Karriereprofilens tal bygger direkte på `pc_points`/stillings-views'ene. | Bekræftet mod `sql/schema.sql`: `pc_points()` hardkoder 3/1 og ignorerer `rules` — beslutningen matcher den faktiske adfærd. Frontendens `rules`-læsning kan afvikles som separat oprydning. |
 
 ## 8. Åbne beslutninger
@@ -93,10 +93,10 @@ Oppefra og ned på profilsiden:
 4. Bruger A åbner Bruger B's profil (deler liga) → hoved/titler/kurve/basistal synlige, ingen milepæle og ingen rivaler.
 5. Bruger A åbner Bruger C's profil (ingen delt liga/konkurrence, fx fra Championship-tabellen) → samme visning som testcase 4, ingen afvisning.
 8. Et navn trykkes hvert sted, det optræder (Hjem, Rating, Stilling, Point pr. runde, Championship top 5 + fuld stilling + kåringer, liga-medlemsliste, Alles gæt, konkurrence-vinder, runde-tips-overlay) → karriereskærmen åbnes for den rigtige bruger.
-9. Navnet i konkurrence-stillingen åbner karrieren, mens pointtallet i samme række åbner spillerens tips runde for runde.
+9. Navnet i konkurrence-stillingen åbner karrieren, mens **resten af rækken** åbner spillerens tips runde for runde. *(Leveret som hele rækken frem for kun pointtallet: et tal i en 46 px-kolonne er ca. 30×22 px mod de ~44 px, en finger kræver.)*
 6. Provisorisk spiller (< 5 runder) → kurve med provisorisk markering, "NY"-badge i hovedet.
 7. Resultat rettes af admin → profilens tal følger med efter trigger-genberegning (samme flow som stillinger/ratings).
 
 ---
 
-*Næste skridt: Alle forudsætninger og blokerende beslutninger er lukket — implementér som feature-branch (SQL verificeres mod `sql/schema.sql`).*
+*Leveret. SQL blev verificeret mod `sql/schema.sql` — husk, at den fil kun er gyldig som reference, når skema-eksporten er kørt efter seneste migrering (F1).*

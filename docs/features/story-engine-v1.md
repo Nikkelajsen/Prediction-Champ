@@ -33,7 +33,7 @@ Historier genereres, når en runde afsluttes — dvs. når alle rundens kampe ha
 - Kortet har en "Del"-knap, der deler historien som tekst (`navigator.share`, fallback til udklipsholder). Det er ambassadør-princippet fra kapitel 3: giv den person, der taler mest om konkurrencen, noget at sende i gruppens beskedtråd.
 
 **Hvad hvis intet skete?**
-Så vises **intet kort** — ikke et "status quo"-kort, bare stilhed. Det gør de ægte historier mere værd. (Åben beslutning A3 i roadmappen: revurderes efter skyggetilstand.)
+Så vises **intet kort** — ikke et "status quo"-kort, bare stilhed. Det gør de ægte historier mere værd. (Åben beslutning A3 i roadmappen: revurderes på rigtige data. Skyggetilstanden, som A3 oprindeligt skulle vurderes efter, blev fjernet i juli 2026 — kortet er live for alle.)
 
 ---
 
@@ -60,66 +60,29 @@ Hver regel har et prioritetstal. Pr. bruger pr. runde vælges historien med lave
 
 ## 4. Teksterne
 
-Skabelon pr. regel med felter i `{klammer}`, plus renderingseksempel. Hver body indeholder præcis ét tal-anker (forspring, afstand, placering), så historien føles konkret uden at blive en statistikside. Emojis er åben beslutning A5.
+**Dette afsnit er rettet til de faktisk leverede tekster (juli 2026).** Udkastet herunder var før-implementering og lovede mere, end motoren har data til: hver body havde et udløser-anker ("Dit præcise tip på FCM–AGF (2-1) gav +3"), et startpunkt ("siden runde 2") og et rundenummer. De leverede tekster er kortere, har ét tal-anker og bruger **rundens dato-interval** frem for et rundenummer — `round_key` er en dato, ikke et løbenummer, så "runde 4" findes ikke som begreb i databasen.
 
-### 10 · Månedens Champ
-> 👑 **Du er Månedens Prediction Champ — {måned}**
-> "{point} point over {n} runder — flest af alle i {måned}. {evt: {navn} var tættest på med {gap} point færre.}"
+Teksterne bor to steder og **skal holdes i sync**: `sql/story_engine.sql` skriver færdig `headline`/`body` ved genereringen, og `src/lib/stories.js` (`renderStory`) spejler skabelonerne til fallback-rendering og enhedstest. Ændrer du en tekst, så ændr begge.
 
-*Eksempel: "31 point over 4 runder — flest af alle i juli. Jimmy var tættest på med 3 point færre."*
+`{L}` = rundens dato-interval, fx `21.07 – 27.07`. Emojis er åben beslutning A5.
 
-### 20 · Førsteplads overtaget
-> 🏆 **Du overtog førstepladsen i {liga}**
-> "{udløser} gav dig {point} point i runde {r} — nok til at vippe {navn} af tronen efter {n} runder. Forspring: {gap} point."
+| Prio | Regel | Headline | Body |
+|---|---|---|---|
+| 10 | `MONTH_CHAMP` | 👑 Du er {delt }Månedens Prediction Champ — {month} | {points} point — flest af alle i {month}{ (delt)}. {evt: Nr. 2 var {gap} point efter.} |
+| 20 | `LEAD_TAKEN` | 🏆 Du overtog førstepladsen i {league} | Efter runden {L} fører du {league}. Forspring til nr. 2: {gap} point. |
+| 21 | `LEAD_LOST` | ⚡ {rival} vippede dig af førstepladsen i {league} | Du førte {league}, men {rival} gik forbi i runden {L}. Afstand op: {gap} point. |
+| 30 | `RATING_HIGH` | 📈 Ny personlig ratingrekord: {rating} | Din runde {L} sendte dig forbi din hidtidige rekord på {old}. Du er nu nr. {rank} af {total} på ranglisten. |
+| 40 | `H2H_PASS` | 🔄 Du er nu foran {rival} i {league} | Efter runden {L} fører du jeres duel i {league} med {gap} point. |
+| 50 | `COMEBACK` | 🚀 Fra nr. {from} til nr. {to} i {league} | Du rykkede {from−to} pladser frem i runden {L}. Toppen er nu {gap} point væk. |
+| 60 | `STREAK` | 🔥 {n}. sejr i træk mod {rival} i {league} | Du slog {rival} igen i runden {L} — {mine} mod {deres} point. |
+| 70 | `ROUND_WON` | 🥇 Du vandt runden {L} i {league} | {points} point — flest af alle i {league}{ (delt med N andre)}. |
+| 80 | `SHARP` | 🎯 {n} præcise resultater i runden | Du ramte {n} kampe præcist i runden {L} — {points} point i alt. |
 
-*Eksempel: "Dit præcise tip på FCM–AGF (2-1) gav +3 i runde 4 — nok til at vippe Jimmy af tronen efter 3 runder. Forspring: 2 point."*
-
-### 21 · Førsteplads mistet
-> ⚡ **{navn} vippede dig af førstepladsen**
-> "Du havde ført {liga} siden runde {start}. {navn} scorede {point} point i runde {r} og overtog. Afstand op: {gap} point."
-
-*Eksempel: "Du havde ført Kontoret siden runde 1. Nikolaj scorede 7 point i runde 4 og overtog. Afstand op: 2 point."*
-
-### 30 · Ny ratingrekord
-> 📈 **Ny personlig ratingrekord: {rating}**
-> "Din stærke runde {r} sendte dig forbi din hidtidige rekord på {gammel}. Du er nu nr. {plads} af {antal} på den globale rangliste."
-
-*Eksempel: "Din stærke runde 7 sendte dig forbi din hidtidige rekord på 1048. Du er nu nr. 3 af 14 på den globale rangliste."*
-
-### 40 · Head-to-head-overhaling
-> 🔄 **Du er nu foran {navn} — for første gang**
-> "Du har været bagud siden runde {start}. Efter runde {r} fører du {liga}-duellen med {gap} point."
-
-*Eksempel: "Du har været bagud siden runde 2. Efter runde 8 fører du Kontoret-duellen med 1 point."*
-
-### 50 · Comeback
-> 🚀 **Fra nr. {a} til nr. {b} på én runde**
-> "{udløser} gav dig rundens højeste score i {liga}. Toppen er nu {gap} point væk."
-
-*Eksempel: "Tre præcise resultater gav dig rundens højeste score i Padelklubben. Toppen er nu 5 point væk."*
-
-### 60 · Stime mod rival
-> 🔥 **{n}. runde i træk bag {navn}** *(eller spejlvendt: foran)*
-> Bagud: "{navn} vandt jeres interne duel igen — {deres} point mod dine {mine}. Runde {næste} er din chance for at bryde stimen."
-> Foran: "Du vandt duellen igen — {mine} point mod {navn}s {deres}. Kan du holde stimen i runde {næste}?"
-
-*Eksempel: "Nikolaj vandt jeres interne duel igen — 7 point mod dine 4. Runde 5 er din chance for at bryde stimen."*
-
-### 70 · Rundens vinder
-> 🥇 **Du vandt runde {r} i {liga}**
-> "{point} point — flest af alle. {evt: Delt med {navn}, men du havde flest præcise resultater.}"
-
-*Eksempel: "9 point — flest af alle i Kontoret."*
-
-### 80 · Perfekt træfsikkerhed
-> 🎯 **{n} præcise resultater i én runde**
-> "Du ramte {kampe} på kornet. Det gav {point} point og din bedste træfprocent i denne sæson."
-
-*Eksempel: "Du ramte FCK–FCM, AGF–OB og Brøndby–Silkeborg på kornet. Det gav 11 point og din bedste træfprocent i denne sæson."*
-
----
+**Regel 60 findes kun i sejrs-varianten.** Udkastet specificerede også en spejlvendt "bagud"-historie ("🔥 {n}. runde i træk bag {navn} … Runde {næste} er din chance for at bryde stimen"). Den er **ikke bygget**: `sql/story_engine.sql` indsætter kun rækker, hvor brugeren har vundet duellen. Det er i tråd med designreglen "historier driller, men ydmyger aldrig" — en stime, man taber, er netop den slags historie, hvor nederlaget bliver sidste ord. Skal den bygges, kræver den sin egen formulering med et fremadrettet slutpunkt; indtil da bør den ikke stå som leveret.
 
 ## 5. Konkrete situationer
+
+> **Bemærk:** eksemplerne nedenfor bruger udkastets tekster og rundenumre og er bevaret som illustration af *hvilke* historier der udløses af samme begivenhed. De faktisk viste tekster står i afsnit 4. Anders' historie i situation A findes desuden ikke i v1 — regel 60 har kun en sejrs-variant.
 
 ### Situation A — Sen scoring flytter førstepladsen
 

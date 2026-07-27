@@ -206,7 +206,10 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
           <Eyebrow>Rivaler</Eyebrow>
           <Card>
             <div style={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
-              Din tætteste rival: <b style={{ color: C.gold }}>{rivals[0].rival}</b> — I har krydset klinger {rivals[0].count} {rivals[0].count === 1 ? "gang" : "gange"}.
+              {/* count er antal rivaliserings-HISTORIER (H2H_PASS/STREAK), ikke antal
+                  møder — sql/career_profile.sql. Teksten sagde før "krydset klinger
+                  N gange", som læses som antal opgør. */}
+              Din tætteste rival: <b style={{ color: C.gold }}>{rivals[0].rival}</b> — {rivals[0].count} {rivals[0].count === 1 ? "historie" : "historier"} handler om jeres indbyrdes opgør.
             </div>
             {rivals.length > 1 && (
               <div style={{ color: C.muted, fontSize: 13, marginTop: 8 }}>
@@ -222,7 +225,10 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", color: C.muted, fontSize: 12 }}>
           <span><b style={{ color: C.text }}>{base.total_points}</b> point</span>
           <span>🎯 <b style={{ color: C.text }}>{base.exact_count}</b> præcise</span>
-          <span><b style={{ color: C.text }}>{hitRate}%</b> træfsikkerhed</span>
+          {/* hitRate = exact_count / matches — altså andelen af PRÆCISE resultater.
+              "Træfsikkerhed" læses som "hvor ofte havde jeg ret", hvor et korrekt
+              udfald (+1) uretfærdigt talte som en fejl. */}
+          <span><b style={{ color: C.text }}>{hitRate}%</b> præcise pr. kamp</span>
           <span><b style={{ color: C.text }}>{base.matches}</b> tippede kampe</span>
         </div>
       </Card>

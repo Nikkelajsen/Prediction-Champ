@@ -270,7 +270,10 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
             Sæsonens Prediction Champ
-            <InfoDot title="Sæsonens Prediction Champ">Dine samlede point for alle {superliga?.name || "Superligaens"} kampe i hele sæsonen. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Sæsonens bedste kåres som Sæsonens Prediction Champ — er to helt lige, deles titlen.</InfoDot>
+            {/* Turneringsnavnet står i sin egen sætningsdel, så teksten holder uanset
+                bøjning — "for alle Superligaen kampe" var resultatet af at sætte
+                værdien ind, hvor kun fallbacken ("Superligaens") passede. */}
+            <InfoDot title="Sæsonens Prediction Champ">Dine samlede point for alle kampe i {superliga?.name || "Superligaen"} i hele sæsonen. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Sæsonens bedste kåres som Sæsonens Prediction Champ — er to helt lige, deles titlen.</InfoDot>
           </div>
           {season && season.rows && season.totalMatches > 0 && (
             <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{season.playedMatches}/{season.totalMatches} spillet</span>

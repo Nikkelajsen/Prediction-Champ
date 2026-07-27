@@ -1,10 +1,65 @@
 # `sql/` — skema, migreringer og eksport
 
 Denne mappe indeholder de SQL-scripts, der definerer og udvider produktionsskemaet
-(`public`) i Supabase. De enkelte `*.sql`-filer er **migreringer** (kørt i rækkefølge
-i produktion, se `docs/ROADMAP.md`s beslutningslog for hvornår). `schema.sql` er en
-**genereret** fuld-skema-eksport — et øjebliksbillede af hele `public`-skemaet, som
-det ser ud lige nu. Den redigeres aldrig i hånden; den regenereres med guiden nedenfor.
+(`public`) i Supabase. De enkelte `*.sql`-filer er **migreringer**, kørt manuelt i
+Supabase SQL-editor med **"Run without RLS"** (scripterne sætter selv RLS på de
+tabeller, der skal have det — jf. `DOCUMENTATION.md` afsnit 13). Alle er idempotente
+og kan køres igen.
+
+`schema.sql` er en **genereret** fuld-skema-eksport — et øjebliksbillede af hele
+`public`-skemaet, som det så ud ved seneste eksport. Den redigeres aldrig i hånden;
+den regenereres med guiden nedenfor.
+
+> ⚠️ **Øjebliksbilledet er kun så friskt som sidste kørsel.** Pr. juli 2026 er
+> `schema.sql` flere migreringer bagud. Kør eksport-workflowen efter hver migrering,
+> og verificér mod databasen — ikke mod filen — hvis der er tvivl. Til gengæld er
+> netop det den hurtigste måde at se, om en migrering faktisk **er** kørt i produktion.
+
+---
+
+## Filoversigt og kørerækkefølge
+
+Rækkefølgen er den, filerne blev kørt i, og den, en frisk database skal bruge.
+Skal et miljø bygges op fra bunden, er `schema.sql` genvejen (den indeholder
+slutresultatet af det hele) — listen her er til at forstå *hvorfor* skemaet ser ud,
+som det gør, og til at undgå at køre en gammel fil oven i en nyere.
+
+| # | Fil | Formål | Status |
+|---|---|---|---|
+| — | `schema.sql` | **Genereret** øjebliksbillede af hele `public`. Kør den i et nyt/staging-projekt i stedet for hele listen | Redigér aldrig i hånden |
+| 1 | `standings_views.sql` | Første udgave af `round_standings` + `season_standings` | ⚠️ **Afløst af `standings_tiebreakers.sql`** — kør den aldrig efter |
+| 2 | `user_stats.sql` | `user_activity_days`, `touch_activity()`, `admin_user_stats()` | Aktiv |
+| 3 | `username_constraints.sql` | Længde-constraint på `profiles.display_name` (2–20), `username_available()` | Aktiv |
+| 4 | `predictions_round_lock_policies.sql` | Runde-baseret lås på `predictions` for **SELECT + DELETE** | Aktiv, men ufuldstændig alene — se #14 |
+| 5 | `rating_trigger_optimization.sql` | Statement-level triggere på `matches`; kalder `recompute_ratings()` + `generate_stories()` | Aktiv |
+| 6 | `matches_stage.sql` | `matches.stage_name` (grundspil/slutspil) | Aktiv |
+| 7 | `push_notifications.sql` | `push_subscriptions` + `notification_log` | Aktiv |
+| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv |
+| 9 | `groups.sql` | Liga-laget: `groups`, `group_members`, `is_group_member()`, `move_competition_to_group()` | ⚠️ Aktiv, men **to af dens policies er afløst** — se advarslen nedenfor |
+| 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv |
+| 11 | `live_scores.sql` | `matches.live_*`-kolonner + live-indekser | Aktiv |
+| 12 | `standings_tiebreakers.sql` | Genskaber alle tre stillings-views med `outcome_count`, `round_wins`, `avg_goal_error` | Aktiv — **afløser #1** |
+| 13 | `group_membership_invariant.sql` | A8 i databasen: backfill, auto-indmeldende trigger, strammet liga-exit + framelding | Aktiv — **afløser to policies fra #9** |
+| 14 | `predictions_write_lock.sql` | Runde-låsen også på **INSERT + UPDATE**; rydder den gamle `"read predictions"` op | Aktiv — **fuldfører #4** |
+
+### ⚠️ To filer må ikke gen-køres blindt
+
+Begge bruger `drop policy … create policy` / `drop view … create view`, så en
+gen-kørsel **erstatter tavst** en nyere definition med en ældre. Der kommer ingen
+fejl — reglen bliver bare den gamle igen.
+
+- **`groups.sql`** genskaber `group_members_delete_self` og
+  `comp_participants_delete_own_unlocked` i deres **oprindelige** form og ruller
+  dermed A8-invarianten tilbage: man kan igen forlade en liga, mens man deltager i
+  dens konkurrencer (forældreløse deltagere), og framelding bliver igen permanent
+  spærret efter første spillede runde. Skal `groups.sql` køres, så kør
+  **`group_membership_invariant.sql` umiddelbart efter**.
+- **`standings_views.sql`** genskaber `round_standings`/`season_standings` **uden**
+  tiebreaker-kolonnerne. Kør `standings_tiebreakers.sql` efter — eller lad være med
+  at røre filen; den er kun bevaret for historikken.
+
+Samme mønster gælder mildere for `predictions_round_lock_policies.sql`: den rører
+kun SELECT/DELETE, så den kan gen-køres uden at ødelægge skrive-låsen fra #14.
 
 ---
 
@@ -74,8 +129,8 @@ tjeklisten og committer `sql/schema.sql`, hvis noget er ændret.
 
 Engangsopsætning: læg forbindelsesstrengen ind som repo-secret `SUPABASE_DB_URL`
 (*Settings → Secrets and variables → Actions → New repository secret*). Kør derefter
-workflowen manuelt via **Actions → Skema-eksport → Run workflow** (eller slå den
-udkommenterede `schedule` til for fast kadence).
+workflowen manuelt via **Actions → Skema-eksport → Run workflow**. Den kører desuden
+automatisk **hver mandag kl. 06:00 UTC** som sikkerhedsnet mod skema-drift.
 
 ---
 

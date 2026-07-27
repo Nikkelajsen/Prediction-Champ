@@ -41,10 +41,10 @@ function HowItWorksScreen({ onBack }) {
         </div>
       </Section>
       <Section title="Rating">
-        Parvis multiplayer-Elo. Alle starter på <b>1000</b>. Du stiger, hvis du rammer bedre end de andre i runden, og falder, hvis du rammer dårligere — det tæller ekstra at slå spillere med høj rating. Hver runde giver <b>én</b> ratingændring — ikke én pr. turnering og ikke én pr. kamp — beregnet ud fra dine gennemsnitspoint pr. kamp i runden. Den regnes om, hver gang en af rundens kampe er fløjtet af, så den er foreløbig hen over ugen og står endeligt fast, når rundens sidste kamp er slut. De første 5 runder er foreløbige (<b>NY</b>-badge).
+        Parvis multiplayer-Elo. Alle starter på <b>1000</b>. Du stiger, hvis du rammer bedre end de andre i runden, og falder, hvis du rammer dårligere — det tæller ekstra at slå spillere med høj rating. Hver runde giver <b>én</b> ratingændring — ikke én pr. turnering og ikke én pr. kamp — beregnet ud fra dine gennemsnitspoint pr. kamp i runden. Den regnes om, hver gang en af rundens kampe er fløjtet af, så den er foreløbig hen over ugen og står endeligt fast, når rundens sidste kamp er slut. De første 5 runder er foreløbige: det vises som et <b>NY</b>-mærke på Rating og Karriere, og som en lille <b>*</b> efter ratingtallet på Hjem, i Championship og i konkurrencestillingen.
       </Section>
       <Section title="Live-resultater">
-        Mens en kamp spilles, viser vi den <b>nuværende stilling</b> med et rødt <b>LIVE</b>-mærke og spilleminut — den opdateres cirka hvert minut. En færdigspillet kamp er markeret <b>Slut</b>. Live-stillingen giver <b>ingen point</b>: point, stillinger og rating opdateres først, når kampen er fløjtet af. Så kan et sent mål stadig vende dine point, uden at tabellen har lovet noget forkert undervejs.
+        Mens en kamp spilles, viser vi den <b>nuværende stilling</b> med et rødt <b>LIVE</b>-mærke og spilleminut — den opdateres cirka hvert minut. Er nogle af rundens kampe færdige og andre ikke, markeres de færdige <b>Slut</b>; er hele runden spillet, siger rundehovedet det, og mærket udgår. Live-stillingen giver <b>ingen point</b>: point, stillinger og rating opdateres først, når kampen er fløjtet af. Så kan et sent mål stadig vende dine point, uden at tabellen har lovet noget forkert undervejs.
       </Section>
       <Section title="Månedsliga & Championship">
         <b>Championship</b> er officielle konkurrencer, hvor alle automatisk er med. <b>Månedsligaen</b> samler dine samlede point for månedens kampe (uafgjort afgøres af tiebreak-stigen ovenfor). Månedens bedste kåres som <b>Månedens Prediction Champ</b> — er to helt lige, deles titlen. Stillingen nulstilles den 1.
@@ -53,7 +53,7 @@ function HowItWorksScreen({ onBack }) {
         Du kan først se andres tips, når runden er låst — ingen kan se dine tips inden da. Alle kampe i en runde låses samtidig, 1 time før rundens første kamp. Så tipper alle på samme grundlag og ingen kan spekulere i resultater undervejs.
       </Section>
       <Section title="Rullende gætte-vindue">
-        Nogle konkurrencer bruger et rullende vindue: en runde kan først tippes et bestemt antal dage før rundens første kamp (typisk 7). Så tipper alle med nogenlunde samme viden. Det vælges, når konkurrencen oprettes.
+        Nogle konkurrencer bruger et rullende vindue: en runde kan først tippes <b>7 dage</b> før rundens første kamp. Så tipper alle med nogenlunde samme viden. Vinduet slås til eller fra, når konkurrencen oprettes — og gælder derefter hele konkurrencen.
       </Section>
       <Section title="Installér som app">
         <InstallGuide />

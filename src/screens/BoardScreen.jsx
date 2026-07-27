@@ -60,7 +60,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
   }
 
   if (!competitions.length) {
-    return (<div><BackBar title="Stilling" onBack={onBack} /><p style={muted}>Opret eller join en konkurrence først.</p></div>);
+    return (<div><BackBar title="Stilling" onBack={onBack} /><p style={muted}>Opret eller deltag i en konkurrence først.</p></div>);
   }
 
   const roundsDesc = state?.rounds ? state.rounds.slice().reverse() : [];
