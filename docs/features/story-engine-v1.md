@@ -307,12 +307,11 @@ Desuden verificeret: 13 af de 14 regler udløses på datasættet (`RATING_HIGH` 
 
 Gen-kør `sql/story_engine.sql` i Supabase ("Run without RLS"). Scriptet er idempotent og ændrer hverken tabellen eller viewet — kun `generate_stories()`. Triggeren behøver **ikke** gen-køres (`sql/rating_trigger_optimization.sql` er uændret).
 
-Historier for **allerede afsluttede** runder får ikke de nye regler af sig selv: `generate_stories` kaldes kun, når et resultat ændres. Vil man have de nye kort med tilbagevirkende kraft, kaldes funktionen manuelt pr. runde:
+Historier for **allerede afsluttede** runder får ikke de nye regler af sig selv: `generate_stories` kaldes kun, når et resultat ændres. Vil man have de nye kort med tilbagevirkende kraft, køres `sql/story_engine_backfill.sql` ("Run without RLS"), som kalder funktionen én gang pr. afsluttet runde.
 
-```sql
-select generate_stories(round_key::text)
-from (select distinct round_key from matches where home_score is not null order by 1) r;
-```
+> **Rettelse (juli 2026):** dette afsnit indeholdt oprindeligt et kald, der filtrerede på `where home_score is not null`. Det var forkert — filteret rammer den *enkelte kamp* og ville derfor også kalde `generate_stories` på **delvist spillede** runder, hvor motoren ville skrive historier ("du vandt runden") ud fra en halv stilling. Backfill-scriptet bruger i stedet nøjagtig samme komplethedsfilter som matches-triggeren: kun runder, hvor ingen kamp mangler resultat.
+
+Bemærk, at en genberegning nulstiller `dismissed_at` for de berørte runder — et kort, brugeren havde afvist, kan dukke op igen.
 
 ---
 
