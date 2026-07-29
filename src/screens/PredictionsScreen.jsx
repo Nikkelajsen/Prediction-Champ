@@ -4,7 +4,7 @@ import { Check, ChevronLeft, ChevronRight, ChevronUp, Users } from "lucide-react
 import { db } from "../lib/supabase.js";
 import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, isPlayed, liveInfo, pointsFor, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS, stageBadgeLabel } from "../lib/scoring.js";
 import { C, chip, font, muted, pagerBtn, thStyle } from "../ui/theme.js";
-import { BackBar, Card, FinalBadge, H, PlayerName, PointsPill, ScoreInput } from "../ui/components.jsx";
+import { BackBar, Card, EmptyCompetitions, FinalBadge, H, InfoDot, PlayerName, PointsPill, ScoreInput } from "../ui/components.jsx";
 
 // ---------- tid: datoen står i dagens overskrift, rækken viser kun klokkeslæt ----------
 function hhmm(iso) {
@@ -75,7 +75,18 @@ function RoundHeader({ rounds, index, setIndex, status, hint }) {
           flex: 1, minWidth: 0, fontFamily: font.display, textTransform: "uppercase",
           fontWeight: 700, fontSize: 18, lineHeight: 1.1, color: C.text,
         }}>
-          Runde {round.label}
+          Runde {round.label}{" "}
+          {/* Tip-skærmen havde ingen forklaring overhovedet. Reglerne, en ny bruger
+              undrer sig over præcis her — hvad giver point, hvornår kan jeg ikke
+              rette mere, og hvornår må jeg se de andres — står nu ved runden selv. */}
+          <InfoDot title="Runden">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div><b>Point:</b> <span style={{ color: C.green, fontWeight: 700 }}>+3</span> for det præcise resultat,{" "}
+                <span style={{ color: C.greenSoft, fontWeight: 700 }}>+1</span> for den rigtige vinder (eller uafgjort). Aldrig minuspoint.</div>
+              <div><b>Lås:</b> hele runden låser samtidig, 1 time før rundens første kamp. Indtil da kan du rette dine gæt frit.</div>
+              <div><b>Andres gæt:</b> først synlige, når runden er låst — så tipper alle på samme grundlag. Fra låsen kan du trykke på en kamp og se alles gæt.</div>
+            </div>
+          </InfoDot>
         </div>
         <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{index + 1}/{rounds.length}</span>
         <button style={{ ...pagerBtn(canPrev), padding: "4px 8px" }} disabled={!canPrev}
@@ -307,7 +318,7 @@ function MatchRow({
   );
 }
 
-function PredictionsScreen({ token, userId, competitions, leagues = [], initialFilter, initialRoundKey, onBack, openProfile }) {
+function PredictionsScreen({ token, userId, competitions, leagues = [], initialFilter, initialRoundKey, onBack, openProfile, onCreate, goTab }) {
   const [compFilter, setCompFilter] = useState(initialFilter || "all");
   const [leagueFilter, setLeagueFilter] = useState("all");
   const [seasonLeague, setSeasonLeague] = useState({}); // season_id -> league_id
@@ -563,7 +574,8 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {onBack ? <BackBar title="Tip" onBack={onBack} /> : <div style={{ marginBottom: 16 }}><H>Tip</H></div>}
       {!competitions.length ? (
-        <p style={muted}>Opret eller deltag i en konkurrence først.</p>
+        <EmptyCompetitions onCreate={onCreate ? () => onCreate(null) : undefined}
+          onJoin={goTab ? () => goTab("ligaer") : undefined} />
       ) : (
         <>
           {(showLeagueFilter || showCompFilter) && (

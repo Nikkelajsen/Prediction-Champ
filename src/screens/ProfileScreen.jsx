@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { loadCareerProfile, loadCareerMilestones, monthName } from "../lib/data.js";
 import { C, font } from "../ui/theme.js";
-import { BackBar, Card, Eyebrow, Move } from "../ui/components.jsx";
+import { BackBar, Card, Eyebrow, InfoDot, Move } from "../ui/components.jsx";
 
 // Letvægts ratingkurve (ingen chart-bibliotek, jf. spec). Én prik pr. runde.
 // De første <5 runder (provisorisk K-faktor) tegnes dæmpet/stiplet.
@@ -124,7 +124,13 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
 
       {/* Hoved */}
       <Card>
-        <Eyebrow>{isOwn ? "Din karriere" : "Karriere"}</Eyebrow>
+        <Eyebrow>{isOwn ? "Din karriere" : "Karriere"} <InfoDot title="Karriere">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div>Din karriere <b>nulstilles aldrig</b> — den følger dig på tværs af sæsoner, ligaer og turneringer.</div>
+            <div>Her samles rating over tid, titler fra Championship, dine milepæle og dine tætteste rivaler.</div>
+            <div>Du kan åbne alle andres karriere ved at trykke på deres navn — hvor som helst i appen.</div>
+          </div>
+        </InfoDot></Eyebrow>
         <div style={{ fontFamily: font.display, textTransform: "uppercase", fontWeight: 700, fontSize: 28, lineHeight: 1.1 }}>
           {head.display_name || "—"}{isOwn ? <span style={{ color: C.muted, fontSize: 16 }}> (dig)</span> : ""}
         </div>

@@ -3,47 +3,21 @@ import { useState, useEffect } from "react";
 import { Bell, ChevronRight, ChevronDown, Clock, Check, X, Share2 } from "lucide-react";
 import { formatKickoff, outcome } from "../lib/scoring.js";
 import { db } from "../lib/supabase.js";
-import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadMyGroups, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
-import { enablePush, getExistingSubscription, isPushSupported } from "../lib/push.js";
+import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { isQuiet } from "../lib/stories.js";
+import { readFlag, writeFlag, CARD_KEY } from "../lib/onboarding.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
-import { Card, Eyebrow, H, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
-
-const PUSH_DISMISS_KEY = "pc_push_dismissed";
+import { usePushOptIn } from "../ui/usePushOptIn.js";
+import { Card, Eyebrow, H, InfoDot, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
+import GetStartedCard from "./GetStartedCard.jsx";
 
 // Opt-in-kort til push-notifikationer. Vises kun hvor det giver mening:
-// browseren understøtter push, brugeren har ikke sagt nej, og er ikke tilmeldt endnu.
-function PushOptInCard({ token, userId }) {
-  const [state, setState] = useState(null); // null | "available" | "hidden"
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        if (!isPushSupported() || Notification.permission === "denied" || localStorage.getItem(PUSH_DISMISS_KEY)) {
-          if (!cancelled) setState("hidden");
-          return;
-        }
-        const sub = await getExistingSubscription();
-        if (!cancelled) setState(sub ? "hidden" : "available");
-      } catch (e) { if (!cancelled) setState("hidden"); }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  if (state !== "available") return null;
-
-  async function onEnable() {
-    setBusy(true); setError("");
-    try {
-      await enablePush(token, userId);
-      setState("hidden");
-    } catch (e) {
-      setError(e.message || "Noget gik galt — prøv igen.");
-    } finally { setBusy(false); }
-  }
+// browseren understøtter push, brugeren har ikke sagt nej, og er ikke tilmeldt
+// endnu. Tilgængeligheden afgøres af `usePushOptIn`, som "Kom godt i gang"-
+// checklisten bruger det samme — så de to aldrig kan spørge om det samme
+// samtidig eller være uenige om, hvornår spørgsmålet giver mening.
+function PushOptInCard({ push }) {
+  if (!push.available) return null;
 
   return (
     <Card>
@@ -52,16 +26,14 @@ function PushOptInCard({ token, userId }) {
           <Bell size={15} color={C.gold} />
           <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, textTransform: "uppercase" }}>Få besked før deadline</div>
         </div>
-        <button style={iconBtn} aria-label="Skjul" onClick={() => { try { localStorage.setItem(PUSH_DISMISS_KEY, "1"); } catch (e) {} setState("hidden"); }}>
-          <X size={16} />
-        </button>
+        <button style={iconBtn} aria-label="Skjul" onClick={push.dismiss}><X size={16} /></button>
       </div>
       <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
         Vi minder dig om at tippe, inden runden låser — og fortæller, hvordan den gik.
       </div>
-      {error && <div style={{ color: C.red, fontSize: 13, marginTop: 8 }}>{error}</div>}
-      <button style={{ ...btnGreen, marginTop: 12, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={onEnable}>
-        {busy ? "Slår til …" : "Slå notifikationer til"}
+      {push.error && <div style={{ color: C.red, fontSize: 13, marginTop: 8 }}>{push.error}</div>}
+      <button style={{ ...btnGreen, marginTop: 12, opacity: push.busy ? 0.6 : 1 }} disabled={push.busy} onClick={push.enable}>
+        {push.busy ? "Slår til …" : "Slå notifikationer til"}
       </button>
     </Card>
   );
@@ -162,27 +134,19 @@ function Placements({ placements, goTab, openBoard }) {
   );
 }
 
-function HjemTab({ token, userId, profile, competitions, goTab, openPredictions, openBoard, openGroup, openProfile }) {
+function HjemTab({ token, userId, profile, competitions, goTab, openPredictions, openBoard, openGroup, openProfile, onboarding }) {
   const [tips, setTips] = useState(null);
   const [round, setRound] = useState(null); // live-oversigt over indeværende runde
   const [roundOpen, setRoundOpen] = useState(false); // foldet som standard: viser kun X/Y + point
   const [snapshot, setSnapshot] = useState(null); // { rating, move, form, rank, total }
   const [placements, setPlacements] = useState(null); // [{ label, pos, gold, onClick }]
   const [story, setStory] = useState(null); // Story Engine — seneste historie (live for alle)
-  const [groups, setGroups] = useState(null); // brugerens ligaer (grupper) — til tom-tilstand
   const [, setTick] = useState(0);
-
-  // Ligaer (grupper): hentes for at kunne skelne "helt uden fællesskab" fra "med i en liga,
-  // men endnu ikke tilmeldt en konkurrence" i tom-tilstanden. Uden dette fik et liga-medlem
-  // uden aktiv konkurrence fejlagtigt beskeden "Du er ikke med i nogen ligaer endnu".
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try { const g = await loadMyGroups(token, userId); if (!cancelled) setGroups(g); }
-      catch (e) { if (!cancelled) setGroups([]); }
-    })();
-    return () => { cancelled = true; };
-  }, [token, userId]);
+  // Kortet kan skjules permanent; onboarding-tilstanden selv kommer fra MainApp,
+  // så Hjem ikke skal hente brugerens ligaer en ekstra gang.
+  const [cardHidden, setCardHidden] = useState(() => readFlag(CARD_KEY) === "1");
+  const push = usePushOptIn(token, userId);
+  const showChecklist = !!onboarding && !onboarding.complete && !cardHidden;
 
   // Historie-kort: hentes for alle brugere (Story Engine er live, jf. ROADMAP juli 2026).
   useEffect(() => {
@@ -292,7 +256,14 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         {snapshot && !snapshot.none && (
           <div onClick={() => (openProfile ? openProfile(userId) : goTab("rating"))}
             style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", cursor: "pointer", flexShrink: 0 }}>
-            <Eyebrow>Rating</Eyebrow>
+            <Eyebrow>Rating <InfoDot title="Rating">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div>Din langsigtede dygtighed på tværs af alle turneringer. Alle starter på <b>1000</b>.</div>
+                <div>Hver spillerunde giver <b>én</b> ratingændring — ikke én pr. kamp og ikke én pr. konkurrence.</div>
+                <div>En <b>*</b> betyder foreløbig: de første 5 runder tæller ekstra, mens tallet finder sit leje.</div>
+                <div>Championship er dét, man vinder — rating er dét, man <i>er</i>. Tryk på tallet for at åbne din karriere.</div>
+              </div>
+            </InfoDot></Eyebrow>
             <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
               <span style={{ fontFamily: font.display, fontSize: 26, fontWeight: 700 }}>{snapshot.rating}{snapshot.provisional ? <span style={{ color: C.muted, fontSize: 15 }} title="Foreløbig — under 5 runder">*</span> : ""}</span>
               <Move d={snapshot.move} />
@@ -301,31 +272,27 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         )}
       </div>
 
+      {/* "Kom godt i gang": erstatter de tidligere dashed tom-tilstande. De sagde
+          hver især ÉN ting ("du har ingen liga" / "du har ingen konkurrence");
+          checklisten viser hele vejen på én gang, så brugeren kan se, hvor de er,
+          og hvad der mangler — også efter en afbrydelse. */}
+      {showChecklist && (
+        <GetStartedCard
+          onboarding={onboarding}
+          push={push}
+          onDismiss={() => { writeFlag(CARD_KEY, "1"); setCardHidden(true); }}
+          actions={{
+            liga: () => goTab("ligaer"),
+            konkurrence: () => (onboarding.groups.length === 1 ? openGroup?.(onboarding.groups[0].id) : goTab("ligaer")),
+            tip: () => openPredictions("all", tips?.roundKey || null),
+            // Invitér-knappen bor på liga-siden — dér, hvor linket deles.
+            invitér: () => (onboarding.groups[0] ? openGroup?.(onboarding.groups[0].id) : goTab("ligaer")),
+          }}
+        />
+      )}
+
       {/* Signatur: næste deadline */}
       {tips === null && <Card><span style={{ color: C.muted, fontSize: 13 }}>Henter din næste deadline…</span></Card>}
-      {/* Tom-tilstand: skeln mellem "helt uden fællesskab" og "med i en liga, men uden
-          aktiv konkurrence". Vent på ligaerne (groups !== null), så vi ikke først viser den
-          forkerte besked og bagefter retter den. */}
-      {tips && !tips.hasComps && groups === null && (
-        <Card><span style={{ color: C.muted, fontSize: 13 }}>Henter dine ligaer…</span></Card>
-      )}
-      {tips && !tips.hasComps && groups && groups.length > 0 && (
-        <Card style={{ borderStyle: "dashed", background: "transparent" }}>
-          <div style={{ color: C.muted, fontSize: 14, textAlign: "center" }}>
-            Du er med i {groups.length === 1 ? <>ligaen <b style={{ color: C.text }}>{groups[0].name}</b></> : `${groups.length} ligaer`}, men har ikke tilmeldt dig en konkurrence endnu.{" "}
-            <span onClick={() => (groups.length === 1 ? openGroup?.(groups[0].id) : goTab("ligaer"))} style={{ color: C.green, cursor: "pointer", fontWeight: 700 }}>
-              {groups.length === 1 ? "Åbn ligaen og deltag →" : "Vælg en konkurrence →"}
-            </span>
-          </div>
-        </Card>
-      )}
-      {tips && !tips.hasComps && groups && groups.length === 0 && (
-        <Card style={{ borderStyle: "dashed", background: "transparent" }}>
-          <div style={{ color: C.muted, fontSize: 14, textAlign: "center" }}>
-            Du er ikke med i nogen ligaer endnu. <span onClick={() => goTab("ligaer")} style={{ color: C.green, cursor: "pointer", fontWeight: 700 }}>Opret eller deltag i én →</span>
-          </div>
-        </Card>
-      )}
       {/* Intet at tippe lige nu — IKKE det samme som "alle tips er inde". Runden er
           låst eller spillet, eller det rullende vindue har ikke åbnet endnu. */}
       {tips && tips.hasComps && tips.nothingToTip && (
@@ -448,13 +415,19 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       {/* Placeringer — konkurrencer grupperet pr. liga (liga-laget) */}
       {placements && placements.length > 0 && (
         <Card>
-          <Eyebrow>Dine placeringer</Eyebrow>
+          <Eyebrow>Dine placeringer <InfoDot title="Dine placeringer">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div>Hvor du ligger lige nu — i månedsligaen og i hver af dine konkurrencer.</div>
+              <div>Konkurrencerne er grupperet under den liga, de hører til. Tryk på en række for at se hele stillingen.</div>
+            </div>
+          </InfoDot></Eyebrow>
           <Placements placements={placements} goTab={goTab} openBoard={openBoard} />
         </Card>
       )}
 
-      {/* Push-notifikationer: opt-in */}
-      <PushOptInCard token={token} userId={userId} />
+      {/* Push-notifikationer: opt-in. Mens checklisten står, er notifikationer et
+          trin dér — to kort må ikke bede om det samme på samme skærm. */}
+      {!showChecklist && <PushOptInCard push={push} />}
     </div>
   );
 }

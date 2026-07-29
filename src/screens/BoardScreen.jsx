@@ -4,9 +4,9 @@ import { Trophy, Copy, Check, ClipboardList } from "lucide-react";
 import { outcome, lockedRoundsOf } from "../lib/scoring.js";
 import { computeCompetitionState, loadRatingMap } from "../lib/data.js";
 import { C, btnGhost, btnGold, font, muted, thStyle } from "../ui/theme.js";
-import { BackBar, Card, PlayerName, UserRoundPredictions } from "../ui/components.jsx";
+import { BackBar, Card, EmptyCompetitions, PlayerName, UserRoundPredictions } from "../ui/components.jsx";
 
-function BoardScreen({ token, userId, competitions, initialCompId, inviterName, onBack, goToPredictions, openProfile }) {
+function BoardScreen({ token, userId, competitions, initialCompId, inviterName, onBack, goToPredictions, openProfile, onCreate, goTab }) {
   const [selectedCompId, setSelectedCompId] = useState(initialCompId || competitions[0]?.id || null);
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -60,7 +60,13 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
   }
 
   if (!competitions.length) {
-    return (<div><BackBar title="Stilling" onBack={onBack} /><p style={muted}>Opret eller deltag i en konkurrence først.</p></div>);
+    return (
+      <div>
+        <BackBar title="Stilling" onBack={onBack} />
+        <EmptyCompetitions onCreate={onCreate ? () => onCreate(null) : undefined}
+          onJoin={goTab ? () => goTab("ligaer") : undefined} />
+      </div>
+    );
   }
 
   const roundsDesc = state?.rounds ? state.rounds.slice().reverse() : [];

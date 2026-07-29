@@ -212,7 +212,16 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
-        <Eyebrow>Officielle konkurrencer · alle er med <InfoDot title="Championship">Officielle konkurrencer, hvor alle brugere automatisk er med — ingen tilmelding.</InfoDot></Eyebrow>
+        {/* Forskellen på Championship og "en konkurrence" er den hyppigste
+            forveksling: det ene er noget, man automatisk ER med i, det andet
+            noget, man selv opretter. Sig begge dele samme sted. */}
+        <Eyebrow>Officielle konkurrencer · alle er med <InfoDot title="Championship">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div>Officielle konkurrencer, hvor <b>alle brugere automatisk er med</b> — ingen tilmelding og ingen invitation.</div>
+            <div>En <b>konkurrence</b> er noget andet: den opretter du selv i din liga og inviterer dine venner til.</div>
+            <div>Dine tips tæller <b>begge steder</b> på én gang — du tipper kun én gang pr. kamp.</div>
+          </div>
+        </InfoDot></Eyebrow>
         <H>Championship</H>
       </div>
 

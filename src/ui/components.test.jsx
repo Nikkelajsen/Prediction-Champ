@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 // renderToStaticMarkup frem for en jsdom-opsætning: PlayerName er ren markup,
 // og projektet skal ikke have et komponent-testbibliotek for den ene komponents skyld.
 import { renderToStaticMarkup } from "react-dom/server";
-import { PlayerName, UserRoundPredictions } from "./components.jsx";
+import { PlayerName, UserRoundPredictions, EmptyCompetitions } from "./components.jsx";
 
 describe("PlayerName", () => {
   it("renderes som ren tekst uden onOpenProfile", () => {
@@ -74,5 +74,23 @@ describe("UserRoundPredictions: pointvisning", () => {
   // en låst, endnu ikke spillet kamp har hverken facit eller point
   it("viser – for en kamp uden resultat", () => {
     expect(html()).toContain("–");
+  });
+});
+
+describe("EmptyCompetitions", () => {
+  // Tip-skærmen og stillingen havde hver sin blindgyde: en sætning uden en eneste
+  // knap. Komponenten deles, så de to ikke kan divergere igen.
+  it("forklarer hvad en konkurrence er, og viser begge veje ind", () => {
+    const html = renderToStaticMarkup(<EmptyCompetitions onCreate={() => {}} onJoin={() => {}} />);
+    expect(html).toContain("Opret konkurrence");
+    expect(html).toContain("Deltag med kode");
+    expect((html.match(/<button/g) || []).length).toBe(2);
+    expect(html).toContain("det, du og din liga dyster i");
+  });
+
+  it("udelader en knap, kalderen ikke kan honorere", () => {
+    const html = renderToStaticMarkup(<EmptyCompetitions onJoin={() => {}} />);
+    expect(html).not.toContain("Opret konkurrence");
+    expect((html.match(/<button/g) || []).length).toBe(1);
   });
 });

@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { ChevronRight, ChevronLeft, ArrowUp, ArrowDown, Minus, Info, X } from "lucide-react";
 import { outcome, pointsFor } from "../lib/scoring.js";
-import { C, font, iconBtn, muted, pagerBtn } from "./theme.js";
+import { C, btnGhost, btnGreen, font, iconBtn, muted, pagerBtn } from "./theme.js";
 
 const Card = ({ children, style, onClick }) => (
   <div
@@ -161,6 +161,28 @@ function InfoDot({ title, children }) {
   );
 }
 
+// "Du er ikke med i en konkurrence endnu" — ét sted.
+//
+// Tip-skærmen og stillingen havde hver sin blindgyde: sætningen "Opret eller
+// deltag i en konkurrence først." uden en eneste knap. Brugeren fik at vide, at
+// de manglede noget, men ikke hvor de skulle hen. Nu forklarer den, hvad en
+// konkurrence ER, og peger på begge veje ind.
+const EmptyCompetitions = ({ onCreate, onJoin }) => (
+  <Card style={{ borderStyle: "dashed", background: "transparent" }}>
+    <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, textTransform: "uppercase" }}>
+      Ingen konkurrence endnu
+    </div>
+    <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>
+      En konkurrence er det, du og din liga dyster i — fx en hel Superliga-sæson
+      eller bare næste weekend. Du skal være med i én for at kunne tippe.
+    </div>
+    <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+      {onCreate && <button style={{ ...btnGreen, width: "auto", padding: "8px 14px" }} onClick={onCreate}>Opret konkurrence</button>}
+      {onJoin && <button style={btnGhost} onClick={onJoin}>Deltag med kode</button>}
+    </div>
+  </Card>
+);
+
 const BackBar = ({ title, onBack, right }) => (
   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
     <button onClick={onBack} aria-label="Tilbage" style={{ ...iconBtn, color: C.text }}><ChevronLeft size={22} /></button>
@@ -309,4 +331,4 @@ function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, ru
   );
 }
 
-export { Card, Eyebrow, H, PlayerName, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill };
+export { Card, Eyebrow, H, PlayerName, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill, EmptyCompetitions };
