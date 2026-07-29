@@ -122,6 +122,17 @@ begin
   -- en historie aldrig kan påstå en placering, tabellen modsiger.
   -- `round_won` = nr. 1 i runden efter stigen uden rundesejr-trinnet; delt sejr
   -- tæller for alle, hvilket regel 70 nedenfor bruger direkte.
+  --
+  -- DELTAGER-AFGRÆNSNINGEN ER IKKE VALGFRI. `predictions` er global pr. (bruger,
+  -- kamp) — den ved intet om konkurrencer. Uden joinet til competition_participants
+  -- tælles ENHVER, der har tippet den samme kamp i en anden konkurrence, med i
+  -- denne konkurrences stilling. To konkurrencer på samme turnering deler alle
+  -- deres kampe, så det er reglen, ikke undtagelsen. Konsekvenserne var alvorlige:
+  -- en fremmed kunne stå som rundens vinder i en konkurrence, vedkommende ikke
+  -- deltager i, rangnumre kunne overstige league_size ("nr. 9 af 8"), og en
+  -- historie kunne nævne en person ved navn, som brugeren aldrig har mødt.
+  -- Appens egen stilling (computeCompetitionState i src/lib/data.js) har altid
+  -- bygget på deltagerlisten — denne join er det, der gør de to enige.
   drop table if exists _se_rp;
   create temporary table _se_rp as
   with scored as (
@@ -131,6 +142,8 @@ begin
     from public.competition_matches cm
     join public.matches m on m.id = cm.match_id
     join public.predictions pr on pr.match_id = m.id
+    join public.competition_participants cp
+      on cp.competition_id = cm.competition_id and cp.user_id = pr.user_id
     where m.home_score is not null and m.away_score is not null
       and pr.pred_home is not null and pr.pred_away is not null
       and m.round_key <= v_round
