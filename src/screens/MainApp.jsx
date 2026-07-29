@@ -1,8 +1,9 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { loadGroupByCode, joinGroup, joinCompetition } from "../lib/data.js";
+import { deriveOnboarding, loadOnboardingSignals, readFlag, writeFlag, COMPLETE_KEY } from "../lib/onboarding.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
 import { Modal } from "../ui/components.jsx";
 import HjemTab from "./HjemTab.jsx";
@@ -33,7 +34,28 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   const [joinError, setJoinError] = useState(""); // fejl fra invite-join-deeplink (?join=kode)
   const [pendingJoin, setPendingJoin] = useState(null); // { competition, inviterName } — bekræftelse før join
   const [pendingGroupJoin, setPendingGroupJoin] = useState(null); // { group } — bekræftelse før liga-join
-  const [showInstall, setShowInstall] = useState(false); // første-login "føj til hjemmeskærm"-vejledning
+  const [showInstall, setShowInstall] = useState(false); // "føj til hjemmeskærm"-vejledning (efter første tip)
+  // Onboarding-tilstand. `null` betyder "skal ikke bruges" — enten fordi den
+  // endnu ikke er hentet, eller fordi brugeren for længst er færdig (se nedenfor).
+  const [onboarding, setOnboarding] = useState(null);
+  // Tilstanden bor HER og ikke i HjemTab, fordi tre ting skal bruge den: kortet
+  // på Hjem, gaten for det guidede flow og gaten for installations-modalen.
+  // Er brugeren først færdig, huskes det lokalt, og proben køres aldrig igen —
+  // så en etableret bruger betaler ingen ekstra netværkskald ved hver opstart.
+  const onboardingDone = useRef(readFlag(COMPLETE_KEY) === "1");
+
+  // `comps` sendes med fra kalderen, når konkurrencerne lige er hentet: state er
+  // endnu ikke opdateret på det tidspunkt, og en forældet liste ville få
+  // checklisten til at hakke ét trin bagud.
+  async function refreshOnboarding(comps) {
+    if (onboardingDone.current) return;
+    try {
+      const signals = await loadOnboardingSignals(token, userId);
+      const state = deriveOnboarding({ ...signals, competitions: comps || competitions });
+      if (state.complete) { onboardingDone.current = true; writeFlag(COMPLETE_KEY, "1"); }
+      setOnboarding(state);
+    } catch (e) { /* onboarding må aldrig blokere appen — kortet udebliver bare */ }
+  }
 
   async function loadLeagues() {
     const ls = await db.select(token, "leagues", "select=*&order=name");
@@ -64,22 +86,28 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   async function loadAll() {
     setLoading(true);
     await loadLeagues();
-    await loadCompetitions();
+    const comps = await loadCompetitions();
     setLoading(false);
+    await refreshOnboarding(comps);
   }
 
   useEffect(() => { loadAll(); }, []); // eslint-disable-line
 
-  // Første login: vis "føj til hjemmeskærm"-vejledning én gang (ikke hvis appen
-  // allerede er installeret, eller hvis vi er midt i et invite-join-flow).
+  // "Føj til hjemmeskærm" vises FØRST, når brugeren har afgivet sit første tip.
+  // Før lå den som det allerførste, en ny bruger mødte — en installations-
+  // opfordring til en app, de endnu ikke vidste hvad var. Nu rammer den, når de
+  // har en grund til at beholde den. Modalen må aldrig lægge sig oven på det
+  // guidede flow eller en invitations-bekræftelse.
   useEffect(() => {
-    try {
-      const seen = localStorage.getItem(PWA_ONBOARDED_KEY);
-      if (!seen && !isStandalone() && !pendingJoinCode) setShowInstall(true);
-    } catch (e) { /* localStorage utilgængelig — spring over */ }
-  }, []); // eslint-disable-line
+    if (readFlag(PWA_ONBOARDED_KEY)) return;
+    if (isStandalone()) return;
+    if (pendingJoinCode || pendingLigaCode || pendingJoin || pendingGroupJoin) return;
+    // onboardingDone: en etableret bruger (som aldrig prober) har for længst tippet.
+    if (!onboarding?.hasPrediction && !onboardingDone.current) return;
+    setShowInstall(true);
+  }, [onboarding, pendingJoinCode, pendingLigaCode, pendingJoin, pendingGroupJoin]);
   function dismissInstall() {
-    try { localStorage.setItem(PWA_ONBOARDED_KEY, "1"); } catch (e) {}
+    writeFlag(PWA_ONBOARDED_KEY, "1");
     setShowInstall(false);
   }
 
@@ -169,6 +197,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     const g = pendingGroupJoin.group;
     try {
       await joinGroup(token, userId, g.id);
+      await refreshOnboarding();
       setPendingGroupJoin(null);
       setTab("ligaer");
       setScreen({ type: "group", groupId: g.id });
@@ -186,7 +215,8 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       // i joinCompetition, så denne sti og LigaerTabs indsatte-kode-sti ikke kan
       // divergere igen (det var netop, hvad der var sket — se A7).
       await joinCompetition(token, userId, comp.id, comp.group_id);
-      await loadCompetitions();
+      const comps = await loadCompetitions();
+      await refreshOnboarding(comps);
       setPendingJoin(null);
       setTab("ligaer");
       setScreen({ type: "predictions", compFilter: comp.id });
@@ -199,7 +229,13 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   const visibleLeagues = leagues.filter((l) => l.is_visible !== false);
 
   // navigations-hjælpere
-  const goTab = (t) => { setScreen(null); setTab(t); };
+  // At vende tilbage til Hjem er præcis det øjeblik, hvor et netop afgivet tip
+  // skal kunne ses på checklisten — derfor gen-hentes tilstanden dér, og kun
+  // så længe onboardingen er uafsluttet.
+  const goTab = (t) => {
+    setScreen(null); setTab(t);
+    if (t === "hjem" && !onboardingDone.current) refreshOnboarding();
+  };
   const openBoard = (compId) => setScreen({ type: "board", compId });
   const openPredictions = (compFilter = "all", roundKey = null) => setScreen({ type: "predictions", compFilter, roundKey });
   const openCreate = (groupId = null) => setScreen({ type: "create", groupId });
@@ -247,7 +283,8 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     body = <HowItWorksScreen onBack={() => setScreen(null)} />;
   } else if (tab === "hjem") {
     body = <HjemTab token={token} userId={userId} profile={profile} competitions={competitions.filter((c) => !c._hidden)}
-      goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} openGroup={openGroup} openProfile={openProfile} />;
+      goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} openGroup={openGroup} openProfile={openProfile}
+      onboarding={onboarding} />;
   } else if (tab === "tip") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
       leagues={visibleLeagues} initialFilter="all" openProfile={openProfile} />;
