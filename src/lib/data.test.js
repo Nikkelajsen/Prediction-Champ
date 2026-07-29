@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // db mockes, så loaderne kan testes uden netværk/Supabase
 vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn(), insert: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
-import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup } from "./data.js";
+import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data.js";
 import { QUIET_TIER_MIN } from "./stories.js";
 
 // mock-svar pr. tabel/view
@@ -417,5 +417,188 @@ describe("computeHomeTips: allTipped vs. nothingToTip", () => {
     const tips = await computeHomeTips("token", "u1", [comp(null)]);
     expect(tips.allTipped).toBe(false);
     expect(tips.missingCount).toBe(1);
+  });
+});
+
+// ---------- createCompetition (udtrukket fra CreateCompetitionScreen) ----------
+// Skriveren har nu to kaldesteder (opret-skærmen og onboarding-guiden), så
+// rækkeformen og rækkefølgen testes her frem for inde i en af skærmene.
+describe("createCompetition", () => {
+  // Én sæson: runde 1 er færdigspillet, runde 2 og 3 er ikke. En ny konkurrence
+  // skal starte på 0 point, så kun runde 2 og 3 må komme med.
+  const seasonMatches = [
+    { id: "m1", round_key: "2026-08-04", home_score: 1, stage_name: "Grundspil" },
+    { id: "m2", round_key: "2026-08-04", home_score: 0, stage_name: "Grundspil" },
+    { id: "m3", round_key: "2026-08-11", home_score: null, stage_name: "Grundspil" },
+    { id: "m4", round_key: "2026-08-18", home_score: null, stage_name: "Mesterskabsspil" },
+  ];
+  const insertedRow = (table) => db.insert.mock.calls.find((c) => c[1] === table)?.[2][0];
+  const matchRows = () => db.insert.mock.calls.find((c) => c[1] === "competition_matches")?.[2] || [];
+
+  function setup(matches = seasonMatches) {
+    db.select.mockResolvedValue(matches);
+    db.insert.mockImplementation(async (token, table, rows) =>
+      (table === "competitions" ? [{ id: "c1", ...rows[0] }] : undefined));
+  }
+
+  it("full sæson med én turnering bevarer den bundne form og tager kun ikke-spillede runder med", async () => {
+    setup();
+    const res = await createCompetition("token", "u1", {
+      name: "Superligaen 2026/27", groupId: "g1", mode: "full_season",
+      tournaments: [{ leagueId: "L1", seasonId: "S1", availableStages: ["Grundspil", "Mesterskabsspil"], selectedStages: ["Grundspil", "Mesterskabsspil"] }],
+    });
+
+    expect(insertedRow("competitions")).toMatchObject({
+      name: "Superligaen 2026/27", league_id: "L1", season_id: "S1", group_id: "g1",
+      mode: "full_season", mode_params: {}, rules: { exact: 3, outcome: 1 }, created_by: "u1",
+    });
+    expect(matchRows().map((r) => r.match_id)).toEqual(["m3", "m4"]);
+    expect(res.matchCount).toBe(2);
+  });
+
+  it("et ægte stage-delmængdevalg gemmes i mode_params og filtrerer kampene", async () => {
+    setup();
+    await createCompetition("token", "u1", {
+      name: "Kun grundspil", mode: "full_season",
+      tournaments: [{ leagueId: "L1", seasonId: "S1", availableStages: ["Grundspil", "Mesterskabsspil"], selectedStages: ["Grundspil"] }],
+    });
+
+    expect(insertedRow("competitions").mode_params).toEqual({ stages: ["Grundspil"] });
+    expect(matchRows().map((r) => r.match_id)).toEqual(["m3"]); // m4 er mesterskabsspil
+  });
+
+  it("dækker stage-valget ALLE stages, filtreres der ikke", async () => {
+    // Ellers ville kampe uden stage_name fra ældre sync tavst blive droppet.
+    setup();
+    await createCompetition("token", "u1", {
+      name: "Alt", mode: "full_season",
+      tournaments: [{ leagueId: "L1", seasonId: "S1", availableStages: ["Grundspil", "Mesterskabsspil"], selectedStages: ["Grundspil", "Mesterskabsspil"] }],
+    });
+    expect(insertedRow("competitions").mode_params).toEqual({});
+  });
+
+  it("flere turneringer gør konkurrencen turneringsløs og gemmer dem i mode_params", async () => {
+    setup();
+    await createCompetition("token", "u1", {
+      name: "Dobbelt", mode: "full_season",
+      tournaments: [
+        { leagueId: "L1", seasonId: "S1", availableStages: [], selectedStages: [] },
+        { leagueId: "L2", seasonId: "S2", availableStages: [], selectedStages: [] },
+      ],
+    });
+
+    const row = insertedRow("competitions");
+    expect(row.league_id).toBeNull();
+    expect(row.season_id).toBeNull();
+    expect(row.mode_params).toEqual({ tournaments: [{ league_id: "L1", season_id: "S1" }, { league_id: "L2", season_id: "S2" }] });
+  });
+
+  it("en færdigspillet sæson giver matchCount 0 og INTET competition_matches-insert", async () => {
+    setup([{ id: "m1", round_key: "2026-08-04", home_score: 1, stage_name: null }]);
+    const res = await createCompetition("token", "u1", {
+      name: "For sent", mode: "full_season",
+      tournaments: [{ leagueId: "L1", seasonId: "S1", availableStages: [], selectedStages: [] }],
+    });
+
+    expect(res.matchCount).toBe(0);
+    expect(db.insert.mock.calls.some((c) => c[1] === "competition_matches")).toBe(false);
+    // konkurrencen og deltageren oprettes stadig — den fyldes, når kampprogrammet er lagt
+    expect(insertedRow("competition_participants")).toEqual({ competition_id: "c1", user_id: "u1" });
+  });
+
+  it("rullende vindue lægges i rules, og udelades når det er slået fra", async () => {
+    setup();
+    const t = [{ leagueId: "L1", seasonId: "S1", availableStages: [], selectedStages: [] }];
+    await createCompetition("token", "u1", { name: "A", mode: "full_season", tournaments: t, openDaysBefore: 7 });
+    expect(insertedRow("competitions").rules).toEqual({ exact: 3, outcome: 1, openDaysBefore: 7 });
+
+    db.insert.mockClear();
+    await createCompetition("token", "u1", { name: "B", mode: "full_season", tournaments: t, openDaysBefore: 0 });
+    expect(insertedRow("competitions").rules).toEqual({ exact: 3, outcome: 1 });
+  });
+
+  it("custom bruger de valgte kampe og er turneringsløs", async () => {
+    setup();
+    const res = await createCompetition("token", "u1", {
+      name: "Håndplukket", mode: "custom", matchIds: ["x1", "x2"],
+    });
+
+    expect(insertedRow("competitions")).toMatchObject({ league_id: null, season_id: null, mode: "custom", mode_params: {} });
+    expect(matchRows().map((r) => r.match_id)).toEqual(["x1", "x2"]);
+    expect(res.matchCount).toBe(2);
+  });
+
+  it("afviser full sæson uden turnering og custom uden kampe — uden at skrive noget", async () => {
+    setup();
+    await expect(createCompetition("token", "u1", { name: "A", mode: "full_season", tournaments: [] }))
+      .rejects.toThrow("Vælg mindst én turnering");
+    await expect(createCompetition("token", "u1", { name: "A", mode: "custom", matchIds: [] }))
+      .rejects.toThrow("Vælg mindst én kamp");
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+});
+
+// ---------- joinByInviteCode (udtrukket fra LigaerTab) ----------
+describe("joinByInviteCode", () => {
+  it("trækker koden ud af et helt indsat link — og lader en rå kode passere", () => {
+    // Nye brugere indsætter det, de fik i beskedtråden, ikke en renskrevet kode.
+    expect(inviteCodeFrom("https://app.dk/?liga=ABC123")).toBe("ABC123");
+    expect(inviteCodeFrom("https://app.dk/?join=XYZ789&x=1")).toBe("XYZ789");
+    expect(inviteCodeFrom("  ABC123  ")).toBe("ABC123");
+    expect(inviteCodeFrom("")).toBe("");
+  });
+
+  it("prøver liga-koden først og melder ind i ligaen", async () => {
+    db.select.mockImplementation(async (token, table) =>
+      (table === "groups" ? [{ id: "g1", name: "Vennerne" }] : []));
+    db.insert.mockResolvedValue(undefined);
+
+    const res = await joinByInviteCode("token", "u1", "ABC123");
+
+    expect(res).toMatchObject({ kind: "group", group: { id: "g1" } });
+    expect(db.insert).toHaveBeenCalledWith("token", "group_members", [{ group_id: "g1", user_id: "u1", role: "member" }]);
+  });
+
+  it("en ukendt kode giver kind 'none' og skriver INTET", async () => {
+    db.select.mockResolvedValue([]);
+    expect(await joinByInviteCode("token", "u1", "FORKERT")).toEqual({ kind: "none" });
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it("konkurrence-kode melder ind i ligaen FØR deltager-rækken (A8-garantien)", async () => {
+    const calls = [];
+    db.select.mockImplementation(async (token, table) => {
+      calls.push(`select:${table}`);
+      if (table === "groups") return [];                                   // ikke en liga-kode
+      if (table === "competitions") return [{ id: "c1", group_id: "g1" }];
+      return []; // group_members / competition_participants: endnu ikke med
+    });
+    db.insert.mockImplementation(async (token, table) => { calls.push(`insert:${table}`); });
+
+    const res = await joinByInviteCode("token", "u1", "KODE");
+
+    expect(res).toMatchObject({ kind: "competition", alreadyJoined: false });
+    expect(calls).toEqual([
+      "select:groups", "select:competitions", "select:competition_participants",
+      "select:group_members", "insert:group_members", "insert:competition_participants",
+    ]);
+  });
+
+  it("er idempotent: allerede tilmeldt giver ingen dublet, men liga-medlemskabet repareres", async () => {
+    // Netop A8-halvtilstanden: deltager uden liga-medlemskab. At bruge invitationen
+    // igen er den naturlige måde at forsøge at rette den på, så det skal virke.
+    db.select.mockImplementation(async (token, table) => {
+      if (table === "groups") return [];
+      if (table === "competitions") return [{ id: "c1", group_id: "g1" }];
+      if (table === "competition_participants") return [{ competition_id: "c1" }];
+      return []; // group_members: mangler
+    });
+    db.insert.mockResolvedValue(undefined);
+
+    const res = await joinByInviteCode("token", "u1", "KODE");
+
+    expect(res.alreadyJoined).toBe(true);
+    expect(db.insert).toHaveBeenCalledTimes(1);
+    expect(db.insert).toHaveBeenCalledWith("token", "group_members", [{ group_id: "g1", user_id: "u1", role: "member" }]);
   });
 });

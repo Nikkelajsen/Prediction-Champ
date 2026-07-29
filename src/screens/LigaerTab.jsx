@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { Trophy, ChevronRight, Plus, Archive, Trash2, Users, Info } from "lucide-react";
 import { db } from "../lib/supabase.js";
-import { computeCompetitionState, loadMyGroups, loadGroupByCode, createGroup, joinGroup, joinCompetition } from "../lib/data.js";
+import { computeCompetitionState, loadMyGroups, createGroup, joinByInviteCode } from "../lib/data.js";
 import { leaders } from "../lib/standings.js";
 import { modeLabel } from "../lib/scoring.js";
 import { C, btnGhost, btnGold, btnGreen, font } from "../ui/theme.js";
@@ -77,27 +77,18 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
   }
 
   // Samlet join: prøv liga-kode først, dernæst konkurrence-kode (bagudkompatibelt).
+  // Selve opslaget og skrivningen bor i `joinByInviteCode` (data.js), så denne vej
+  // og deep-link-vejen (?join=/?liga=) ikke kan divergere igen — jf. A7.
   async function joinByCode() {
-    const code = inviteCode.trim();
-    if (!code) return;
+    if (!inviteCode.trim()) return;
     setBusy(true); setJoinErr("");
     try {
-      const g = await loadGroupByCode(token, code);
-      if (g) {
-        await joinGroup(token, userId, g.id);
-        setInviteCode("");
-        await reloadGroups();
-        openGroup(g.id);
-        return;
-      }
-      // konkurrence-kode — joinCompetition melder også ind i ligaen, hvis konkurrencen har en (A8)
-      const found = await db.select(token, "competitions", `invite_code=eq.${code}&select=*`);
-      if (!found.length) { setJoinErr("Ingen liga eller konkurrence fundet med den kode."); setBusy(false); return; }
-      const comp = found[0];
-      await joinCompetition(token, userId, comp.id, comp.group_id);
+      const res = await joinByInviteCode(token, userId, inviteCode);
+      if (res.kind === "none") { setJoinErr("Ingen liga eller konkurrence fundet med den kode."); setBusy(false); return; }
       setInviteCode("");
+      if (res.kind === "group") { await reloadGroups(); openGroup(res.group.id); return; }
       await reload();
-      if (comp.group_id) { await reloadGroups(); openGroup(comp.group_id); }
+      if (res.competition.group_id) { await reloadGroups(); openGroup(res.competition.group_id); }
     } catch (e) { setJoinErr(e.message || "Kunne ikke bruge koden lige nu. Prøv igen om lidt."); } finally { setBusy(false); }
   }
 

@@ -1,8 +1,8 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect, useMemo } from "react";
 import { db } from "../lib/supabase.js";
-import { loadMyGroups } from "../lib/data.js";
-import { filterByStages, filterFromNextUnfinishedRound, formatKickoff, groupIntoRounds, MODE_LABELS, outcome, stageOptionLabel } from "../lib/scoring.js";
+import { loadMyGroups, createCompetition } from "../lib/data.js";
+import { formatKickoff, groupIntoRounds, MODE_LABELS, stageOptionLabel } from "../lib/scoring.js";
 import { C, btnGreen, chip, muted } from "../ui/theme.js";
 import { BackBar, Card, H } from "../ui/components.jsx";
 
@@ -120,108 +120,51 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     })();
   }, [mode, leagues]); // eslint-disable-line
 
-  async function createCompetition() {
+  // Den tilfældige udvælgelse bliver HER: den trækker fra `upcoming`, som er
+  // skærmens egen UI-state. Skriveren i data.js får de færdige kamp-id'er.
+  function pickRandomMatchIds() {
+    const allowedLeagues = randomLeagueIds || leagues.map((l) => l.id);
+    const pool = upcoming.filter((m) => allowedLeagues.includes(m._leagueId));
+    if (!pool.length) return [];
+    const firstRound = pool.reduce((min, m) => (m.round_key < min ? m.round_key : min), pool[0].round_key);
+    const roundPool = pool.filter((m) => m.round_key === firstRound);
+    const shuffled = roundPool.slice().sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, Math.max(1, Number(randomCount) || 6)).map((m) => m.id);
+  }
+
+  // Skærmen bygger kun `spec` ud fra sin UI-state; selve skrivningen bor i
+  // data.js, så onboarding-guiden og denne skærm ikke kan divergere.
+  function buildSpec() {
+    const shared = { name, groupId, mode, openDaysBefore: rollingWindow ? 7 : 0 };
+    if (mode === "full_season") {
+      return {
+        ...shared,
+        tournaments: fsLeagueIds.filter((id) => seasonByLeague[id]).map((lid) => ({
+          leagueId: lid,
+          seasonId: seasonByLeague[lid].id,
+          availableStages: stagesByLeague[lid] || [],
+          selectedStages: fsStages[lid] ?? (stagesByLeague[lid] || []),
+        })),
+      };
+    }
+    if (mode === "custom") return { ...shared, matchIds: pickedIds };
+    if (mode === "random") return { ...shared, matchIds: pickRandomMatchIds(), randomCount };
+    return {
+      ...shared,
+      leagueId: createLeagueId,
+      seasonId: createSeason?.id || null,
+      teamId, startDate, endDate,
+      availableStages, selectedStages,
+    };
+  }
+
+  async function submit() {
     if (!name) return;
     setBusy(true); setErr("");
     try {
-      // Full sæson: kan spænde over én eller flere turneringer (fx Superliga
-      // grundspil + Premier League). Kampene materialiseres i competition_matches
-      // pr. turnering — med den turnerings egne stage-valg — så læse-stierne
-      // (stilling, tips) virker uændret via competition_matches.
-      if (mode === "full_season") {
-        const selIds = fsLeagueIds.filter((id) => seasonByLeague[id]);
-        if (!selIds.length) { setErr("Vælg mindst én turnering"); setBusy(false); return; }
-        const multi = selIds.length > 1;
-        const tournaments = [];
-        const matchIds = [];
-        for (const lid of selIds) {
-          const season = seasonByLeague[lid];
-          const avail = stagesByLeague[lid] || [];
-          const sel = fsStages[lid] ?? avail;
-          const isSubset = avail.length > 1 && sel.length > 0 && sel.length < avail.length;
-          const stageFilter = isSubset ? sel : [];
-          let ms = await db.select(token, "matches", `season_id=eq.${season.id}&select=id,round_key,home_score,stage_name`);
-          ms = filterByStages(ms, stageFilter);
-          ms = filterFromNextUnfinishedRound(ms);
-          for (const m of ms) matchIds.push(m.id);
-          tournaments.push({ league_id: lid, season_id: season.id, ...(isSubset ? { stages: sel } : {}) });
-        }
-        const rules = { exact: 3, outcome: 1, ...(rollingWindow ? { openDaysBefore: 7 } : {}) };
-        const only = tournaments[0];
-        // Én turnering: bevar den bundne form (league_id/season_id sat, evt. stages).
-        // Flere turneringer: liga-løs som custom/random (null), turneringer gemt i mode_params.
-        const mode_params = multi ? { tournaments } : (only.stages ? { stages: only.stages } : {});
-        const [comp] = await db.insert(token, "competitions", [{
-          name,
-          league_id: multi ? null : only.league_id,
-          season_id: multi ? null : only.season_id,
-          group_id: groupId || null,
-          mode: "full_season", mode_params, rules, created_by: userId,
-        }]);
-        await db.insert(token, "competition_participants", [{ competition_id: comp.id, user_id: userId }]);
-        if (matchIds.length) {
-          await db.insert(token, "competition_matches", matchIds.map((id) => ({ competition_id: comp.id, match_id: id })));
-        }
-        await onCreated();
-        openBoard(comp.id);
-        return;
-      }
-
-      const crossLeague = mode === "custom" || mode === "random";
-      if (!crossLeague && (!createLeagueId || !createSeason)) { setBusy(false); return; }
-
-      let matchIds = [];
-      if (mode === "custom") {
-        matchIds = pickedIds;
-        if (!matchIds.length) { setErr("Vælg mindst én kamp"); setBusy(false); return; }
-      } else if (mode === "random") {
-        const allowedLeagues = randomLeagueIds || leagues.map((l) => l.id);
-        const pool = upcoming.filter((m) => allowedLeagues.includes(m._leagueId));
-        if (!pool.length) { setErr("Ingen kommende kampe i de valgte turneringer"); setBusy(false); return; }
-        const firstRound = pool.reduce((min, m) => (m.round_key < min ? m.round_key : min), pool[0].round_key);
-        const roundPool = pool.filter((m) => m.round_key === firstRound);
-        const shuffled = roundPool.slice().sort(() => Math.random() - 0.5);
-        matchIds = shuffled.slice(0, Math.max(1, Number(randomCount) || 6)).map((m) => m.id);
-      }
-
-      // Stage-filter gælder kun sæson-baserede modes. Kun et ægte delmængde-valg
-      // filtrerer — dækker valget alle stages (eller er der kun én), tages alt med
-      // (så kampe uden stage_name fra ældre sync ikke utilsigtet droppes).
-      const isStageSubset = !crossLeague && availableStages.length > 1
-        && selectedStages.length > 0 && selectedStages.length < availableStages.length;
-      const stageFilter = isStageSubset ? selectedStages : [];
-
-      const mode_params = {
-        ...(mode === "team" ? { team_id: teamId }
-          : mode === "time_range" ? { start_date: startDate, end_date: endDate }
-          : mode === "random" ? { count: Number(randomCount) || 6 } : {}),
-        ...(isStageSubset ? { stages: selectedStages } : {}),
-      };
-      const rules = { exact: 3, outcome: 1, ...(rollingWindow ? { openDaysBefore: 7 } : {}) };
-      const [comp] = await db.insert(token, "competitions", [{
-        name,
-        league_id: crossLeague ? null : createLeagueId,
-        season_id: crossLeague ? null : createSeason.id,
-        group_id: groupId || null,
-        mode, mode_params, rules, created_by: userId,
-      }]);
-      await db.insert(token, "competition_participants", [{ competition_id: comp.id, user_id: userId }]);
-
-      if (crossLeague) {
-        await db.insert(token, "competition_matches", matchIds.map((id) => ({ competition_id: comp.id, match_id: id })));
-      } else {
-        let query = `season_id=eq.${createSeason.id}&select=id,round_key,home_score,stage_name`;
-        if (mode === "team" && teamId) query += `&or=(home_team_id.eq.${teamId},away_team_id.eq.${teamId})`;
-        if (mode === "time_range" && startDate && endDate) query += `&kickoff_at=gte.${startDate}&kickoff_at=lte.${endDate}T23:59:59`;
-        let matchedMatches = await db.select(token, "matches", query);
-        matchedMatches = filterByStages(matchedMatches, stageFilter);
-        matchedMatches = filterFromNextUnfinishedRound(matchedMatches);
-        if (matchedMatches.length) {
-          await db.insert(token, "competition_matches", matchedMatches.map((m) => ({ competition_id: comp.id, match_id: m.id })));
-        }
-      }
+      const { competition } = await createCompetition(token, userId, buildSpec());
       await onCreated();
-      openBoard(comp.id);
+      openBoard(competition.id);
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -407,7 +350,7 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
           </label>
 
           {err && <p style={{ color: C.red, fontSize: 13, margin: 0 }}>{err}</p>}
-          <button style={{ ...btnGreen, opacity: busy || !name ? 0.5 : 1 }} onClick={createCompetition} disabled={busy || !name}>
+          <button style={{ ...btnGreen, opacity: busy || !name ? 0.5 : 1 }} onClick={submit} disabled={busy || !name}>
             {busy ? "Opretter…" : "Opret konkurrence"}
           </button>
         </div>
