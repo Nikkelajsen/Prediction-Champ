@@ -315,4 +315,66 @@ Bemærk, at en genberegning nulstiller `dismissed_at` for de berørte runder —
 
 ---
 
+## 11. Rettelse: en historie må kun nævne folk, man deler konkurrence med (juli 2026)
+
+**Status: ✅ Rettet.** Brugerrapport: *"min viser 2 point op til Bang i Superliga Grundspil, men Bang er ikke med i den, eller nogle andre af mine ligaer."*
+
+### 11.1 Fejlen
+
+`generate_stories` byggede konkurrencens stilling (`_se_rp`) sådan:
+
+```sql
+from competition_matches cm
+join matches m on m.id = cm.match_id
+join predictions pr on pr.match_id = m.id   -- ← ingen afgrænsning til deltagere
+```
+
+`predictions` er global pr. `(bruger, kamp)` og ved intet om konkurrencer. Uden et join til `competition_participants` blev **enhver, der havde tippet den samme kamp i en anden konkurrence**, talt med i denne konkurrences stilling. To konkurrencer på samme turnering deler alle deres kampe, så det var reglen, ikke undtagelsen.
+
+Fejlen er fra v1 og har altid været der. Den var bare usynlig, indtil v1.1's `CLOSING_IN` begyndte at **nævne føreren ved navn**. Konsekvenserne var værre end det synlige symptom:
+
+- En fremmed kunne stå som **rundens vinder i en konkurrence, vedkommende ikke deltager i** (og få historien tilsendt).
+- Rangnumre blev udregnet over en større population end `league_size`, så en tekst kunne sige "nr. 9 af 8".
+- Alle afstande ("toppen er X point væk", "forspring til nr. 2") blev målt mod en stilling, brugeren ikke kan se nogen steder i appen.
+
+Appens egen konkurrence-stilling (`computeCompetitionState` i `src/lib/data.js`) har altid bygget på deltagerlisten. Historierne og tabellen kunne derfor sige to forskellige ting om samme runde — præcis det, tiebreaker-leverancen i juli 2026 rettede et andet sted.
+
+### 11.2 Rettelsen
+
+Ét join i `_se_rp`:
+
+```sql
+join competition_participants cp
+  on cp.competition_id = cm.competition_id and cp.user_id = pr.user_id
+```
+
+Alt andet følger med, fordi hver eneste regel læser sin stilling og sine navne fra `_se_rp` (via `_se_after`/`_se_before`/`_se_this`/`_se_pair`). Der skulle ikke rettes ét sted pr. regel.
+
+### 11.3 Designreglen (ny, ufravigelig)
+
+> **En historie må kun nævne personer, modtageren deler konkurrence med.**
+
+Reglen er strukturel, ikke en tekstkonvention: alle fire regler, der nævner et navn — 21 `LEAD_LOST`, 40 `H2H_PASS`, 45 `CLOSING_IN`, 60 `STREAK` — henter personen fra tabeller, der er afgrænset til konkurrencens deltagere. De globale regler (10 Månedens Champ, 30 Ny ratingrekord, 80 Perfekt træfsikkerhed) nævner ingen ved navn; 30 nævner en placering på den globale rangliste, som i forvejen står offentligt på Rating-fanen.
+
+Skal en fremtidig regel nævne et navn, skal navnet komme fra `_se_*`-tabellerne. Gør det ikke det, er reglen forkert.
+
+### 11.4 Nye acceptkriterier
+
+- En historie kan aldrig nævne en person, modtageren ikke deler konkurrence med.
+- En bruger kan aldrig modtage en historie om en konkurrence, vedkommende ikke deltager i.
+- En nævnt placering kan aldrig overstige konkurrencens `league_size`.
+
+### 11.5 Verifikation
+
+Reproduceret mod PostgreSQL 16 med produktionsskemaet: to konkurrencer på **samme** kampe, hvor "Bang" kun deltager i den ene og tipper alt præcist. Før rettelsen fik alle fire deltagere i den anden konkurrence teksten *"3 point op til Bang i Kontoret"*, og Bang fik selv *"🥇 Du vandt runden … i Kontoret"* — en konkurrence, Bang ikke er med i. Efter rettelsen: nul rækker.
+
+Regressionskørsel på 8 deltagere / 3 runder med to fremmede i en parallel konkurrence, der tipper alt præcist: dækningen er fortsat **8 af 8** i hver runde, ingen fremmed nævnes eller modtager en historie, ingen rang overstiger `league_size`, hver nævnt rival deler konkurrence med modtageren, og backfill-scriptet er fortsat idempotent (md5 uændret).
+
+### 11.6 Engangsopsætning
+
+1. Gen-kør `sql/story_engine.sql` ("Run without RLS").
+2. Kør `sql/story_engine_backfill.sql` igen — de allerede genererede historier er beregnet på den forkerte stilling og skal skrives om.
+
+---
+
 *Status: v1.1 live (juli 2026). A3 (stille runder) og A4 (tærskler) er lukket med denne leverance; A5 (emojis) er delvist besvaret — emoji er nu et signal, der adskiller de to tiers, frem for et spørgsmål om til/fra.*
