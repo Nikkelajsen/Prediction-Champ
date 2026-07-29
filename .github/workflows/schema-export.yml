@@ -25,7 +25,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          # Tjek branchens SPIDS ud, ikke den SHA der var gældende ved dispatch.
+          # Uden dette arbejder en kørsel, der har ventet i kø (concurrency), videre
+          # på en forældet base — og dens push afvises som non-fast-forward, selvom
+          # eksporten i sig selv lykkedes.
+          ref: ${{ github.ref_name }}
 
       - name: Installér pg_dump (PostgreSQL 17-klient)
         run: |
@@ -91,11 +97,33 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add sql/schema.sql
-          if git diff --cached --quiet; then
+
+          if git diff --quiet -- sql/schema.sql; then
             echo "Ingen ændringer i sql/schema.sql — intet at committe."
-          else
-            git commit -m "chore(sql): opdatér skema-eksport (schema.sql)"
-            git push origin HEAD:${{ github.ref_name }}
-            echo "Committede og pushede opdateret sql/schema.sql."
+            exit 0
           fi
+
+          # Dumpet er autoritativt: filen er netop genereret ud fra produktions-
+          # databasen. Skubber nogen til branchen imens (fx en overlappende kørsel
+          # eller en merge), afvises vores push. Så henter vi den nyeste ref, lægger
+          # vores friske dump ovenpå og prøver igen — der er intet at flette, fordi
+          # filen er genereret og ikke redigeret.
+          cp sql/schema.sql /tmp/schema.sql
+          for forsog in 1 2 3; do
+            git add sql/schema.sql
+            git commit -m "chore(sql): opdatér skema-eksport (schema.sql)" --quiet || true
+            if git push origin HEAD:${{ github.ref_name }}; then
+              echo "Committede og pushede opdateret sql/schema.sql."
+              exit 0
+            fi
+            echo "Push afvist (forsøg $forsog/3) — henter nyeste ref og lægger dumpet ovenpå."
+            git fetch origin ${{ github.ref_name }}
+            git reset --hard --quiet "origin/${{ github.ref_name }}"
+            cp /tmp/schema.sql sql/schema.sql
+            if git diff --quiet -- sql/schema.sql; then
+              echo "Nyeste ref indeholder allerede præcis dette skema — intet at gøre."
+              exit 0
+            fi
+          done
+          echo "::error::Kunne ikke pushe sql/schema.sql efter 3 forsøg."
+          exit 1
