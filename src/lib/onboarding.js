@@ -113,6 +113,33 @@ function validateGroupName(name) {
   return null;
 }
 
+// ---------- turneringer, man kan starte på ----------
+
+// Hvilke turneringer kan der overhovedet oprettes en konkurrence på — og har de
+// kampe tilbage at tippe?
+//
+// Guiden skal kunne vælge rigtigt UDEN at gætte på navne: turneringen findes
+// via data (nyeste sæson med kampe uden resultat), ikke via et regex på "Superliga".
+// Uden `hasUpcoming` kunne guiden love et tip på en sæson, der er spillet
+// færdig — `filterFromNextUnfinishedRound` ville da give en helt tom konkurrence.
+async function loadStarterTournaments(token, leagues) {
+  const ids = (leagues || []).map((l) => l.id);
+  if (!ids.length) return [];
+
+  const seasons = await db.select(token, "seasons", `league_id=in.(${ids.join(",")})&select=id,league_id&order=start_date.desc`);
+  const newest = {};
+  for (const s of seasons) if (!newest[s.league_id]) newest[s.league_id] = s;
+  const seasonIds = Object.values(newest).map((s) => s.id);
+  if (!seasonIds.length) return [];
+
+  const rows = await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&home_score=is.null&select=season_id`);
+  const withUpcoming = new Set(rows.map((r) => r.season_id));
+
+  return leagues
+    .filter((l) => newest[l.id])
+    .map((l) => ({ id: l.id, name: l.name, seasonId: newest[l.id].id, hasUpcoming: withUpcoming.has(newest[l.id].id) }));
+}
+
 // ---------- ét-tryks start ----------
 
 // Opret liga OG den første konkurrence i den, i én handling.
@@ -153,6 +180,6 @@ async function createStarterLeague(token, userId, { groupName, competitionName, 
 
 export {
   deriveOnboarding, loadOnboardingSignals, loadHasPrediction,
-  defaultLeagueName, validateGroupName, createStarterLeague,
+  defaultLeagueName, validateGroupName, createStarterLeague, loadStarterTournaments,
   readFlag, writeFlag, FLOW_KEY, CARD_KEY, COMPLETE_KEY,
 };

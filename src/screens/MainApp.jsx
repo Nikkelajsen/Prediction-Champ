@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { loadGroupByCode, joinGroup, joinCompetition } from "../lib/data.js";
-import { deriveOnboarding, loadOnboardingSignals, readFlag, writeFlag, COMPLETE_KEY } from "../lib/onboarding.js";
+import { deriveOnboarding, loadOnboardingSignals, readFlag, writeFlag, COMPLETE_KEY, FLOW_KEY } from "../lib/onboarding.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
 import { Modal } from "../ui/components.jsx";
 import HjemTab from "./HjemTab.jsx";
@@ -17,6 +17,7 @@ import CreateCompetitionScreen from "./CreateCompetitionScreen.jsx";
 import AdminScreen from "./AdminScreen.jsx";
 import ProfileScreen from "./ProfileScreen.jsx";
 import HowItWorksScreen from "./HowItWorksScreen.jsx";
+import OnboardingFlow from "./OnboardingFlow.jsx";
 import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
 
 const PWA_ONBOARDED_KEY = "pc_pwa_onboarded";
@@ -43,6 +44,8 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   // Er brugeren først færdig, huskes det lokalt, og proben køres aldrig igen —
   // så en etableret bruger betaler ingen ekstra netværkskald ved hver opstart.
   const onboardingDone = useRef(readFlag(COMPLETE_KEY) === "1");
+  const [showFlow, setShowFlow] = useState(false);
+  const flowOpened = useRef(false); // guiden åbner højst én gang pr. session
 
   // `comps` sendes med fra kalderen, når konkurrencerne lige er hentet: state er
   // endnu ikke opdateret på det tidspunkt, og en forældet liste ville få
@@ -93,6 +96,50 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
 
   useEffect(() => { loadAll(); }, []); // eslint-disable-line
 
+  // Guiden åbnes for en bruger, der hverken har en liga eller en konkurrence.
+  //
+  // Gaten hænger på `hasCompetition` og ikke kun på deep-link-state: en inviteret
+  // bruger kan INDSÆTTE en kode i stedet for at klikke et link, og ville ellers
+  // ryge i selvstarter-flowet. Effekten gen-evalueres (frem for kun at køre ved
+  // mount), fordi pendingJoinCode ryddes asynkront — var koden ugyldig, sættes
+  // joinError, brugeren lukker banneret, og FØRST derefter åbner guiden. Så er
+  // de også reelt en kold selvstarter.
+  useEffect(() => {
+    if (flowOpened.current || loading) return;
+    if (readFlag(FLOW_KEY)) return;
+    if (pendingJoinCode || pendingLigaCode || pendingJoin || pendingGroupJoin || joinError) return;
+    if (!onboarding || onboarding.hasCompetition || onboarding.hasGroup) return;
+    flowOpened.current = true;
+    setShowFlow(true);
+  }, [loading, onboarding, pendingJoinCode, pendingLigaCode, pendingJoin, pendingGroupJoin, joinError]);
+
+  function closeFlow(mark) {
+    writeFlag(FLOW_KEY, mark);
+    setShowFlow(false);
+  }
+
+  // Guiden endte i en invitation — samme landing som deep-link-vejen giver.
+  async function onFlowJoined(res) {
+    const comps = await loadCompetitions();
+    await refreshOnboarding(comps);
+    closeFlow("done");
+    setTab("ligaer");
+    if (res.kind === "group") setScreen({ type: "group", groupId: res.group.id });
+    else setScreen({ type: "predictions", compFilter: res.competition.id });
+  }
+
+  // Guiden oprettede liga (og som regel en konkurrence). Er der kampe at tippe,
+  // landes der direkte på Tip — ellers på ligaens side, hvor der faktisk er
+  // noget at gøre. Vi lover aldrig et tip, der ikke findes.
+  async function onFlowCreated({ group, competition, matchCount }) {
+    const comps = await loadCompetitions();
+    await refreshOnboarding(comps);
+    closeFlow("done");
+    setTab("hjem");
+    if (competition && matchCount > 0) setScreen({ type: "predictions", compFilter: competition.id });
+    else setScreen({ type: "group", groupId: group.id });
+  }
+
   // "Føj til hjemmeskærm" vises FØRST, når brugeren har afgivet sit første tip.
   // Før lå den som det allerførste, en ny bruger mødte — en installations-
   // opfordring til en app, de endnu ikke vidste hvad var. Nu rammer den, når de
@@ -101,11 +148,11 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   useEffect(() => {
     if (readFlag(PWA_ONBOARDED_KEY)) return;
     if (isStandalone()) return;
-    if (pendingJoinCode || pendingLigaCode || pendingJoin || pendingGroupJoin) return;
+    if (pendingJoinCode || pendingLigaCode || pendingJoin || pendingGroupJoin || showFlow) return;
     // onboardingDone: en etableret bruger (som aldrig prober) har for længst tippet.
     if (!onboarding?.hasPrediction && !onboardingDone.current) return;
     setShowInstall(true);
-  }, [onboarding, pendingJoinCode, pendingLigaCode, pendingJoin, pendingGroupJoin]);
+  }, [onboarding, pendingJoinCode, pendingLigaCode, pendingJoin, pendingGroupJoin, showFlow]);
   function dismissInstall() {
     writeFlag(PWA_ONBOARDED_KEY, "1");
     setShowInstall(false);
@@ -389,7 +436,12 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
         </Modal>
       )}
 
-      {showInstall && !pendingJoin && !pendingGroupJoin && (
+      {showFlow && (
+        <OnboardingFlow token={token} userId={userId} profile={profile} leagues={visibleLeagues}
+          onJoined={onFlowJoined} onCreated={onFlowCreated} onSkip={() => closeFlow("skipped")} />
+      )}
+
+      {showInstall && !pendingJoin && !pendingGroupJoin && !showFlow && (
         <Modal title="Føj til hjemmeskærm" onClose={dismissInstall}>
           <InstallGuide />
           <button style={{ ...btnGreen, marginTop: 16 }} onClick={dismissInstall}>Forstået</button>
