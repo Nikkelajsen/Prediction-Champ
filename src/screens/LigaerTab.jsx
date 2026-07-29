@@ -172,9 +172,20 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div>
-        <Eyebrow>Dine ligaer <InfoDot title="Ligaer">En liga er dit permanente fællesskab — en vennegruppe, et kontor, en familie. Konkurrencer lever inde i ligaen, og hvert medlem vælger selv, hvilke det er med i. Del ét invite-link, så alle er med.</InfoDot></Eyebrow>
-        <H>Ligaer</H>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <Eyebrow>Dine ligaer <InfoDot title="Ligaer">En liga er dit permanente fællesskab — en vennegruppe, et kontor, en familie. Konkurrencer lever inde i ligaen, og hvert medlem vælger selv, hvilke det er med i. Del ét invite-link, så alle er med.</InfoDot></Eyebrow>
+          <H>Ligaer</H>
+        </div>
+        {/* Knappen lå før inde i "Øvrige konkurrencer"-blokken, som kun renderes,
+            når man HAR liga-løse konkurrencer. En bruger uden nogen havde dermed
+            slet ingen vej til at oprette en — præcis den bruger, der havde brug
+            for den. Ligger nu fast øverst. */}
+        {groups && groups.length > 0 && (
+          <button style={btnGhost} onClick={() => openCreate(groups.length === 1 ? groups[0].id : null)}>
+            <Plus size={14} /> Ny konkurrence
+          </button>
+        )}
       </div>
 
       {/* Opret liga */}
@@ -213,7 +224,6 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 4 }}>
             <Eyebrow>Øvrige konkurrencer <InfoDot title="Øvrige konkurrencer">Konkurrencer uden liga. De virker som hidtil. Saml dem i en liga for at få ét fælles sted med medlemmer og invite-link — opret en liga og flyt dem ind på liga-siden.</InfoDot></Eyebrow>
-            <button style={btnGhost} onClick={() => openCreate(null)}><Plus size={14} /> Ny</button>
           </div>
 
           {canNudge && (

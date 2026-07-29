@@ -16,6 +16,10 @@ function AuthShell({ children }) {
               Prediction Champ
             </span>
           </div>
+          {/* Hvad er det her? — besvaret FØR der bedes om en e-mail. */}
+          <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.45, margin: "0 0 14px" }}>
+            Gæt resultater mod dine venner. Opret en liga, tip ugens kampe, og se hvem der er bedst.
+          </p>
           {children}
         </Card>
       </div>

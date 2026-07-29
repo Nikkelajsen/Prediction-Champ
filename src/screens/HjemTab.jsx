@@ -8,7 +8,7 @@ import { isQuiet } from "../lib/stories.js";
 import { readFlag, writeFlag, CARD_KEY } from "../lib/onboarding.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
 import { usePushOptIn } from "../ui/usePushOptIn.js";
-import { Card, Eyebrow, H, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
+import { Card, Eyebrow, H, InfoDot, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
 import GetStartedCard from "./GetStartedCard.jsx";
 
 // Opt-in-kort til push-notifikationer. Vises kun hvor det giver mening:
@@ -256,7 +256,14 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         {snapshot && !snapshot.none && (
           <div onClick={() => (openProfile ? openProfile(userId) : goTab("rating"))}
             style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", cursor: "pointer", flexShrink: 0 }}>
-            <Eyebrow>Rating</Eyebrow>
+            <Eyebrow>Rating <InfoDot title="Rating">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div>Din langsigtede dygtighed på tværs af alle turneringer. Alle starter på <b>1000</b>.</div>
+                <div>Hver spillerunde giver <b>én</b> ratingændring — ikke én pr. kamp og ikke én pr. konkurrence.</div>
+                <div>En <b>*</b> betyder foreløbig: de første 5 runder tæller ekstra, mens tallet finder sit leje.</div>
+                <div>Championship er dét, man vinder — rating er dét, man <i>er</i>. Tryk på tallet for at åbne din karriere.</div>
+              </div>
+            </InfoDot></Eyebrow>
             <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
               <span style={{ fontFamily: font.display, fontSize: 26, fontWeight: 700 }}>{snapshot.rating}{snapshot.provisional ? <span style={{ color: C.muted, fontSize: 15 }} title="Foreløbig — under 5 runder">*</span> : ""}</span>
               <Move d={snapshot.move} />
@@ -408,7 +415,12 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       {/* Placeringer — konkurrencer grupperet pr. liga (liga-laget) */}
       {placements && placements.length > 0 && (
         <Card>
-          <Eyebrow>Dine placeringer</Eyebrow>
+          <Eyebrow>Dine placeringer <InfoDot title="Dine placeringer">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div>Hvor du ligger lige nu — i månedsligaen og i hver af dine konkurrencer.</div>
+              <div>Konkurrencerne er grupperet under den liga, de hører til. Tryk på en række for at se hele stillingen.</div>
+            </div>
+          </InfoDot></Eyebrow>
           <Placements placements={placements} goTab={goTab} openBoard={openBoard} />
         </Card>
       )}

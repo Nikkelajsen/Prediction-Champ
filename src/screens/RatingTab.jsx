@@ -1,10 +1,10 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
 import { loadRatingBoard, loadRatingHistory } from "../lib/data.js";
-import { C, font, muted } from "../ui/theme.js";
+import { C, btnGhost, font, muted } from "../ui/theme.js";
 import { Card, Eyebrow, FormDots, H, InfoDot, Move, PlayerName } from "../ui/components.jsx";
 
-function RatingTab({ token, userId, openProfile }) {
+function RatingTab({ token, userId, openProfile, openPredictions, hasCompetitions }) {
   const [rows, setRows] = useState(null);
   const [hist, setHist] = useState(new Map());
   const [loading, setLoading] = useState(true);
@@ -31,6 +31,22 @@ function RatingTab({ token, userId, openProfile }) {
       {loading && <Card><span style={{ color: C.muted, fontSize: 13 }}>Henter…</span></Card>}
       {!loading && rows && rows.length === 0 && (
         <Card><span style={{ color: C.muted, fontSize: 13 }}>Ingen ratings endnu — de beregnes, når der er spillet runder med resultater.</span></Card>
+      )}
+      {/* En ny bruger ser en rangliste, de ikke selv står på, uden at få at vide
+          hvorfor. Uden denne linje ligner det en fejl. */}
+      {!loading && rows && rows.length > 0 && !rows.some((r) => r.userId === userId) && (
+        <Card style={{ borderStyle: "dashed", background: "transparent" }}>
+          <div style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700, textTransform: "uppercase" }}>
+            Hvorfor står jeg her ikke?
+          </div>
+          <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>
+            Du får din rating, første gang du har tippet en runde, hvor kampene er spillet færdig.
+            Alle starter på <b style={{ color: C.text }}>1000</b>.
+          </div>
+          {hasCompetitions && openPredictions && (
+            <button style={{ ...btnGhost, marginTop: 12 }} onClick={() => openPredictions("all")}>Tip nu</button>
+          )}
+        </Card>
       )}
       {!loading && rows && rows.length > 0 && (
         <Card style={{ padding: 0 }}>

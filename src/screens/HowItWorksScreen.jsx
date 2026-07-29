@@ -18,6 +18,9 @@ function HowItWorksScreen({ onBack }) {
           <div><b>Liga</b> = dit permanente fællesskab (venner, kontor, familie). Del ét invite-link, så er alle med.</div>
           <div><b>Konkurrence</b> = en tippekonkurrence inde i ligaen. Du vælger selv, hvilke af ligaens konkurrencer du er med i.</div>
           <div><b>Turnering</b> = den rigtige fodboldturnering (fx Superligaen), som kampene kommer fra.</div>
+          <div style={{ marginTop: 6, color: C.muted }}>
+            Kort sagt: turneringen leverer kampene, ligaen er menneskene, konkurrencen er dysten.
+          </div>
         </div>
       </Section>
       <Section title="Pointsystem">
@@ -43,11 +46,20 @@ function HowItWorksScreen({ onBack }) {
       <Section title="Rating">
         Parvis multiplayer-Elo. Alle starter på <b>1000</b>. Du stiger, hvis du rammer bedre end de andre i runden, og falder, hvis du rammer dårligere — det tæller ekstra at slå spillere med høj rating. Hver runde giver <b>én</b> ratingændring — ikke én pr. turnering og ikke én pr. kamp — beregnet ud fra dine gennemsnitspoint pr. kamp i runden. Den regnes om, hver gang en af rundens kampe er fløjtet af, så den er foreløbig hen over ugen og står endeligt fast, når rundens sidste kamp er slut. De første 5 runder er foreløbige: det vises som et <b>NY</b>-mærke på Rating og Karriere, og som en lille <b>*</b> efter ratingtallet på Hjem, i Championship og i konkurrencestillingen.
       </Section>
+      <Section title="Karriere">
+        Din <b>karriere</b> er alt det, du har samlet i produktet — og den <b>nulstilles aldrig</b>. Når en sæson slutter,
+        starter du ikke forfra: karrieren følger dig på tværs af sæsoner, ligaer og turneringer. Her står din rating over
+        tid, dine titler fra Championship (månedens og rundens), dine milepæle undervejs og dine tætteste rivaler.
+        Du åbner din egen fra person-ikonet øverst — og alle andres ved at trykke på deres navn, hvor som helst i appen.
+        Milepæle og rivaler er kun dine egne; resten kan alle se.
+      </Section>
       <Section title="Live-resultater">
         Mens en kamp spilles, viser vi den <b>nuværende stilling</b> med et rødt <b>LIVE</b>-mærke og spilleminut — den opdateres cirka hvert minut. Er nogle af rundens kampe færdige og andre ikke, markeres de færdige <b>Slut</b>; er hele runden spillet, siger rundehovedet det, og mærket udgår. Live-stillingen giver <b>ingen point</b>: point, stillinger og rating opdateres først, når kampen er fløjtet af. Så kan et sent mål stadig vende dine point, uden at tabellen har lovet noget forkert undervejs.
       </Section>
-      <Section title="Månedsliga & Championship">
-        <b>Championship</b> er officielle konkurrencer, hvor alle automatisk er med. <b>Månedsligaen</b> samler dine samlede point for månedens kampe (uafgjort afgøres af tiebreak-stigen ovenfor). Månedens bedste kåres som <b>Månedens Prediction Champ</b> — er to helt lige, deles titlen. Stillingen nulstilles den 1.
+      <Section title="Championship (officielle konkurrencer)">
+        <b>Championship</b> er officielle konkurrencer, hvor alle automatisk er med — ingen tilmelding og ingen invitation.
+        Det er ikke det samme som en <b>konkurrence</b>: den opretter du selv i din liga. Dine tips tæller begge steder
+        på én gang, så du tipper kun én gang pr. kamp.{" "} <b>Månedsligaen</b> samler dine samlede point for månedens kampe (uafgjort afgøres af tiebreak-stigen ovenfor). Månedens bedste kåres som <b>Månedens Prediction Champ</b> — er to helt lige, deles titlen. Stillingen nulstilles den 1.
       </Section>
       <Section title="Tips-synlighed">
         Du kan først se andres tips, når runden er låst — ingen kan se dine tips inden da. Alle kampe i en runde låses samtidig, 1 time før rundens første kamp. Så tipper alle på samme grundlag og ingen kan spekulere i resultater undervejs.

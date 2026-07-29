@@ -309,11 +309,11 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   } else if (screen?.type === "board") {
     body = <BoardScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
       initialCompId={screen.compId} inviterName={profile?.display_name} onBack={() => setScreen(null)}
-      goToPredictions={openPredictions} openProfile={openProfile} />;
+      goToPredictions={openPredictions} openProfile={openProfile} onCreate={openCreate} goTab={goTab} />;
   } else if (screen?.type === "predictions") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
       leagues={visibleLeagues} initialFilter={screen.compFilter} initialRoundKey={screen.roundKey}
-      onBack={() => setScreen(null)} openProfile={openProfile} />;
+      onBack={() => setScreen(null)} openProfile={openProfile} onCreate={openCreate} goTab={goTab} />;
   } else if (screen?.type === "group") {
     body = <GroupScreen token={token} userId={userId} groupId={screen.groupId}
       myCompetitions={competitions} onBack={() => setScreen(null)} openBoard={openBoard}
@@ -334,14 +334,14 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       onboarding={onboarding} />;
   } else if (tab === "tip") {
     body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
-      leagues={visibleLeagues} initialFilter="all" openProfile={openProfile} />;
+      leagues={visibleLeagues} initialFilter="all" openProfile={openProfile} onCreate={openCreate} goTab={goTab} />;
   } else if (tab === "ligaer") {
     body = <LigaerTab token={token} userId={userId} competitions={competitions}
       openBoard={openBoard} openCreate={openCreate} openGroup={openGroup} reload={loadAll} openProfile={openProfile} />;
   } else if (tab === "championship") {
     body = <ChampionshipTab token={token} userId={userId} leagues={visibleLeagues} openProfile={openProfile} />;
   } else if (tab === "rating") {
-    body = <RatingTab token={token} userId={userId} openProfile={openProfile} />;
+    body = <RatingTab token={token} userId={userId} openProfile={openProfile} openPredictions={openPredictions} hasCompetitions={competitions.length > 0} />;
   }
 
   return (
