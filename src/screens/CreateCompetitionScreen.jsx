@@ -5,7 +5,7 @@ import { loadMyGroups, createCompetition } from "../lib/data.js";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { formatKickoff, groupIntoRounds, MODE_LABELS, MODE_HINTS, stageOptionLabel } from "../lib/scoring.js";
 import { C, btnGhost, btnGreen, chip, muted } from "../ui/theme.js";
-import { BackBar, Card, H } from "../ui/components.jsx";
+import { BackBar, Card } from "../ui/components.jsx";
 
 function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null, onBack, onCreated, openBoard }) {
   const [createLeagueId, setCreateLeagueId] = useState(leagues[0]?.id || "");
