@@ -34,7 +34,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 5 | `rating_trigger_optimization.sql` | Statement-level triggere på `matches`; kalder `recompute_ratings()` + `generate_stories()` | Aktiv |
 | 6 | `matches_stage.sql` | `matches.stage_name` (grundspil/slutspil) | Aktiv |
 | 7 | `push_notifications.sql` | `push_subscriptions` + `notification_log` | Aktiv |
-| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv |
+| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — **v1.1 (juli 2026) skal gen-køres i produktion**; kun funktionen ændres, tabel og view er uændrede |
 | 9 | `groups.sql` | Liga-laget: `groups`, `group_members`, `is_group_member()`, `move_competition_to_group()` | ⚠️ Aktiv, men **to af dens policies er afløst** — se advarslen nedenfor |
 | 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv |
 | 11 | `live_scores.sql` | `matches.live_*`-kolonner + live-indekser | Aktiv |

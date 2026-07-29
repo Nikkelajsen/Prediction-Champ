@@ -5,6 +5,7 @@ import { formatKickoff, outcome } from "../lib/scoring.js";
 import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadMyGroups, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { enablePush, getExistingSubscription, isPushSupported } from "../lib/push.js";
+import { isQuiet } from "../lib/stories.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
 import { Card, Eyebrow, H, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
 
@@ -66,10 +67,18 @@ function PushOptInCard({ token, userId }) {
   );
 }
 
-// Historie-kort (Story Engine v1). Guld-fremhævet, vises direkte under tips-status.
-// Live for alle brugere. Del deler headline+body;
+// Historie-kort (Story Engine v1.1). Vises direkte under tips-status, live for alle.
 // Afvis sætter dismissed_at og skjuler kortet.
+//
+// TO UDGAVER, styret af prioriteten (`isQuiet`, jf. src/lib/stories.js):
+//  · Højdepunkt (prioritet < 90): guld-kant, ravgul gradient, emoji i headline og
+//    en Del-knap — ugens højdepunkt, noget man sender i gruppens beskedtråd.
+//  · Dæmpet (prioritet ≥ 90): almindeligt kort, mindre headline, ingen emoji og
+//    INGEN Del-knap. Det er den stille runde, produktbogens kapitel 6 beder om
+//    ("status quo") — den skal kunne ses uden at ligne en sejr, og der er intet
+//    at prale af. Genereres kun, når brugeren ellers ville stå helt uden kort.
 function StoryCard({ story, onDismiss }) {
+  const quiet = isQuiet(story.priority);
   async function share() {
     const text = `${story.headline}\n${story.body}`;
     try {
@@ -78,14 +87,16 @@ function StoryCard({ story, onDismiss }) {
     } catch (e) { /* bruger annullerede — ignorér */ }
   }
   return (
-    <Card style={{ borderColor: C.gold, background: "linear-gradient(135deg, #14212F 0%, #221E14 100%)" }}>
+    <Card style={quiet ? undefined : { borderColor: C.gold, background: "linear-gradient(135deg, #14212F 0%, #221E14 100%)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <Eyebrow>Rundens historie</Eyebrow>
+        <Eyebrow>{quiet ? "Runden kort" : "Rundens historie"}</Eyebrow>
         <button style={iconBtn} aria-label="Afvis" onClick={onDismiss}><X size={16} /></button>
       </div>
-      <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, lineHeight: 1.15 }}>{story.headline}</div>
+      <div style={{ fontFamily: font.display, fontSize: quiet ? 17 : 20, fontWeight: 700, lineHeight: 1.15 }}>{story.headline}</div>
       <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.5, marginTop: 6 }}>{story.body}</div>
-      <button style={{ ...btnGhost, marginTop: 12, borderColor: C.gold, color: C.gold }} onClick={share}><Share2 size={14} /> Del</button>
+      {!quiet && (
+        <button style={{ ...btnGhost, marginTop: 12, borderColor: C.gold, color: C.gold }} onClick={share}><Share2 size={14} /> Del</button>
+      )}
     </Card>
   );
 }
