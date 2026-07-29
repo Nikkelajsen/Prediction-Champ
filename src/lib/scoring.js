@@ -85,6 +85,17 @@ const MODE_LABELS = {
   custom: "Håndplukkede kampe",
   random: "Tilfældig kupon",
 };
+// Én linje pr. mode, der siger hvad valget BETYDER. Etiketten alene ("Tidsperiode",
+// "Håndplukkede kampe") forudsætter, at man allerede kender systemet — hintet
+// bor her ved siden af etiketten, så opret-skærmen og onboarding-guiden ikke kan
+// beskrive den samme mode forskelligt.
+const MODE_HINTS = {
+  full_season: "Alle resterende kampe i turneringen. Den klassiske — I følges ad hele sæsonen.",
+  team: "Kun ét holds kampe resten af sæsonen.",
+  time_range: "Alle kampe mellem to datoer — fx en enkelt måned.",
+  custom: "Du vælger selv præcis hvilke kampe, der skal med.",
+  random: "Et tilfældigt udpluk fra den nærmeste runde. Hurtig at gå til.",
+};
 // Ukendt mode vises råt frem for tomt — så en ny mode aldrig forsvinder i UI'et.
 function modeLabel(mode) { return MODE_LABELS[mode] || mode; }
 
@@ -168,4 +179,4 @@ function liveInfo(m) {
   };
 }
 
-export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockedRoundsOf, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo, MODE_LABELS, modeLabel };
+export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockedRoundsOf, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo, MODE_LABELS, MODE_HINTS, modeLabel };

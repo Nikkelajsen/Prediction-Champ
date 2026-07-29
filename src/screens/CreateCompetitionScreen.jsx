@@ -1,9 +1,10 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { db } from "../lib/supabase.js";
 import { loadMyGroups, createCompetition } from "../lib/data.js";
-import { formatKickoff, groupIntoRounds, MODE_LABELS, stageOptionLabel } from "../lib/scoring.js";
-import { C, btnGreen, chip, muted } from "../ui/theme.js";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { formatKickoff, groupIntoRounds, MODE_LABELS, MODE_HINTS, stageOptionLabel } from "../lib/scoring.js";
+import { C, btnGhost, btnGreen, chip, muted } from "../ui/theme.js";
 import { BackBar, Card, H } from "../ui/components.jsx";
 
 function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null, onBack, onCreated, openBoard }) {
@@ -26,6 +27,7 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   const [randomCount, setRandomCount] = useState(6);
   const [randomLeagueIds, setRandomLeagueIds] = useState(null);
   const [rollingWindow, setRollingWindow] = useState(false);
+  const [advanced, setAdvanced] = useState(false); // "Flere valg" — foldet ind som standard
   const [availableStages, setAvailableStages] = useState([]);
   const [selectedStages, setSelectedStages] = useState([]);
   // Full sæson kan spænde over flere turneringer på én gang (fx Superliga + Premier League).
@@ -36,6 +38,25 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
 
   useEffect(() => { if (!createLeagueId && leagues.length) setCreateLeagueId(leagues[0].id); }, [leagues]); // eslint-disable-line
   useEffect(() => { (async () => { try { setGroups(await loadMyGroups(token, userId)); } catch (e) { setGroups([]); } })(); }, [token, userId]); // eslint-disable-line
+
+  // Liga defaulter til brugerens FØRSTE liga, ikke til "Ingen liga".
+  //
+  // Før var tom-værdien defaulten, så en konkurrence oprettet uden at røre
+  // feltet blev liga-løs: ingen medlemsliste, intet permanent invite-link, og
+  // intet der består, når sæsonen slutter. Det er overgangstilstanden, hele
+  // liga-laget handlede om at komme væk fra — den skal ikke være standardvalget.
+  useEffect(() => {
+    if (!groupId && !initialGroupId && groups.length) setGroupId(groups[0].id);
+  }, [groups]); // eslint-disable-line
+
+  // Navnet forudfyldes fra turneringen, så feltet kan accepteres uden at tænke.
+  // `nameTouched` sikrer, at forudfyldningen aldrig overskriver indtastet tekst.
+  const nameTouched = useRef(false);
+  useEffect(() => {
+    if (nameTouched.current || mode !== "full_season") return;
+    const first = leagues.find((l) => l.id === fsLeagueIds[0]);
+    if (first) setName(first.name);
+  }, [fsLeagueIds, leagues]); // eslint-disable-line
 
   useEffect(() => {
     if (!createLeagueId) return;
@@ -190,37 +211,74 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
       <BackBar title="Opret konkurrence" onBack={onBack} />
       <Card>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <input className="field" placeholder="Navn på konkurrence…" value={name} onChange={(e) => setName(e.target.value)} />
-          {groups.length > 0 && (
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ color: C.muted, fontSize: 12 }}>Navn</span>
+            <input className="field" placeholder="Navn på konkurrence…" value={name}
+              onChange={(e) => { nameTouched.current = true; setName(e.target.value); }} />
+          </label>
+
+          {/* Liga er en del af hurtig-stien og må ALDRIG være skjult: uden den
+              ville en konkurrence oprettet på to felter tavst blive liga-løs. */}
+          {groups.length > 0 ? (
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ color: C.muted, fontSize: 12 }}>Liga</span>
               <select className="field" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
-                <option value="">Ingen liga</option>
                 {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                <option value="">Ingen liga</option>
               </select>
             </label>
+          ) : (
+            <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.45 }}>
+              Du har ingen liga endnu, så konkurrencen bliver <b>liga-løs</b>. Opret en liga på
+              Ligaer-fanen for at samle medlemmer, historik og ét fælles invite-link.
+            </div>
           )}
-          {/* Navnene kommer fra MODE_LABELS (scoring.js), så opret-skærmen, Ligaer-kortet,
-              liga-siden og admin-statistikken altid kalder den samme mode det samme. */}
-          <select className="field" value={mode} onChange={(e) => setMode(e.target.value)}>
-            {Object.entries(MODE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
 
+          {/* Ikke en <label>: der er ingen enkelt formularkontrol at mærke, og
+              label-teksten ville smitte af på hver chips tilgængelige navn, så
+              en skærmlæser (og enhver test) ville høre "Turnering Superligaen
+              Premier League" på den første knap. */}
           {mode === "full_season" && (
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ color: C.muted, fontSize: 12 }}>Turneringer{fsLeagueIds.length > 1 ? " — flere valgt" : ""}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ color: C.muted, fontSize: 12 }}>Turnering{fsLeagueIds.length > 1 ? "er — flere valgt" : ""}</span>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {leagues.map((l) => {
                   const sel = fsLeagueIds.includes(l.id);
                   return (
-                    <button key={l.id} type="button" onClick={() => toggleFsLeague(l.id)} style={chip(sel)}>
+                    <button key={l.id} type="button" aria-pressed={sel} onClick={() => toggleFsLeague(l.id)} style={chip(sel)}>
                       {sel ? "✓ " : ""}{l.name}
                     </button>
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* Alt herunder er "Flere valg". Hurtig-stien er navn + liga + turnering:
+              en ny bruger mødte før ti valg på én gang — modes, stages og et
+              rullende vindue — uden at vide, hvad nogen af dem betød. Intet er
+              fjernet; det er kun foldet ind, indtil man beder om det. */}
+          <button type="button" onClick={() => setAdvanced((v) => !v)} style={{
+            ...btnGhost, alignSelf: "flex-start", marginTop: 2,
+          }}>
+            {advanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Flere valg
+          </button>
+
+          {advanced && (<>
+          {/* Navnene kommer fra MODE_LABELS (scoring.js), så opret-skærmen, Ligaer-kortet,
+              liga-siden og admin-statistikken altid kalder den samme mode det samme. */}
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ color: C.muted, fontSize: 12 }}>Hvilke kampe?</span>
+            <select className="field" value={mode} onChange={(e) => setMode(e.target.value)}>
+              {Object.entries(MODE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <span style={{ color: C.muted, fontSize: 11.5, lineHeight: 1.4 }}>{MODE_HINTS[mode]}</span>
+          </label>
+
+          {mode === "full_season" && (
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {fsLeagueIds.map((lid) => {
                 const avail = stagesByLeague[lid] || [];
                 if (avail.length <= 1) return null;
@@ -348,6 +406,7 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
             <input type="checkbox" checked={rollingWindow} onChange={(e) => setRollingWindow(e.target.checked)} />
             Rullende gætte-vindue — runden kan først tippes 7 dage før rundens første kamp
           </label>
+          </>)}
 
           {err && <p style={{ color: C.red, fontSize: 13, margin: 0 }}>{err}</p>}
           <button style={{ ...btnGreen, opacity: busy || !name ? 0.5 : 1 }} onClick={submit} disabled={busy || !name}>
