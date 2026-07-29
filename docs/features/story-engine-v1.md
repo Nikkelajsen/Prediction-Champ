@@ -1,8 +1,10 @@
 # Feature: Story Engine v1
 
-**Status: ✅ Leveret — live for alle brugere (juli 2026)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 1*
+**Status: ✅ Leveret — live for alle brugere (juli 2026) · udvidet til v1.1 (juli 2026, se afsnit 10)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 1*
 
 *Regelbaseret første version. Ingen AI. Bygget på data, der allerede findes i databasen.*
+
+> **Læsevejledning.** Dokumentet beskriver v1 som leveret. Afsnit 10 er **v1.1**, som blev bygget efter den første rigtige runde, hvor stort set ingen fik en historie. v1.1 tilføjer regler, sænker tærskler og indfører et **dæmpet tier** — dvs. den ændrer afsnit 3, 4 og 8. Hvor afsnittene modsiger hinanden, gælder afsnit 10.
 
 ---
 
@@ -35,9 +37,13 @@ Historier genereres, når en runde afsluttes — dvs. når alle rundens kampe ha
 **Hvad hvis intet skete?**
 Så vises **intet kort** — ikke et "status quo"-kort, bare stilhed. Det gør de ægte historier mere værd. (Åben beslutning A3 i roadmappen: revurderes på rigtige data. Skyggetilstanden, som A3 oprindeligt skulle vurderes efter, blev fjernet i juli 2026 — kortet er live for alle.)
 
+> **Rettet efter levering (v1.1, juli 2026):** A3 er lukket i den modsatte retning af v1-udkastet. De rigtige data viste, at "intet kort" i praksis betød *intet kort for næsten alle* — i premiereugen 1 af 8 brugere. Der vises nu et **dæmpet** kort (prioritet ≥ 90) til de brugere, der ellers ville stå uden, mens kortet forbliver stille i formen: ingen guldkant, ingen emoji, ingen Del-knap. Se afsnit 10.2.
+
 ---
 
 ## 3. Regelkataloget (prioriteret)
+
+> **Rettet efter levering (v1.1, afsnit 10):** kataloget er udvidet til 14 regler, tre tærskler er sænket, og "stilhed" er erstattet af et dæmpet tier. Tabellen nedenfor er v1 som leveret.
 
 Hver regel har et prioritetstal. Pr. bruger pr. runde vælges historien med lavest tal; ved lighed vinder historien fra den største liga (flest deltagere). Er en bruger med i flere ligaer, udløses typisk flere kandidater (én eller flere pr. liga + de globale) — alle gemmes, men kun én vises. Den fulde, deterministiske udvælgelses­regel (og hvorfor global-vs-liga aldrig kan gå lige op) står i afsnit 6.
 
@@ -179,6 +185,8 @@ Sletter og genberegner rundens rækker (idempotent, ligesom `recompute_ratings`)
 
 ## 8. Acceptkriterier
 
+> **Rettet efter levering (v1.1):** kriteriet "en runde uden udløste regler viser intet historie-kort" gælder ikke længere — en sådan runde viser nu et **dæmpet** kort (afsnit 10.2). Kriteriet er erstattet af afsnit 10.5's liste; resten står ved magt.
+
 - Der vises højst én historie pr. bruger pr. runde.
 - To brugere i samme liga kan se forskellige historier om samme runde.
 - En runde uden udløste regler viser intet historie-kort.
@@ -199,4 +207,113 @@ Sletter og genberegner rundens rækker (idempotent, ligesom `recompute_ratings`)
 
 ---
 
-*Status: Live for alle brugere (juli 2026). Næste skridt: kalibrér tærskler og tone på live-data (åbne beslutninger A3/A4/A5 i roadmappen: stille runder, tærskler, emojis).*
+## 10. v1.1 — dækningsgrad og dæmpet tier (juli 2026)
+
+**Status: ✅ Leveret.** Dette afsnit ændrer afsnit 3 (regelkataloget), 4 (teksterne) og 8 (acceptkriterierne). v1-teksten ovenfor er bevaret, så det fremgår, hvad der var planlagt, og hvad der blev rettet efter levering.
+
+### 10.1 Anledningen
+
+Efter den første runde, hvor motoren rent faktisk kørte (A9 var netop lukket), fik **stort set ingen** en historie. Årsagen er strukturel og ikke en fejl:
+
+| Regel | Hvorfor den ikke kunne udløses i en konkurrences første runde |
+|---|---|
+| 20, 21, 40, 50, 60 | Læser alle på stillingen **før** runden. Den findes ikke endnu. |
+| 30 (ratingrekord) | Kræver en ikke-provisorisk rating, dvs. mindst 5 spillede runder. |
+| 10 (Månedens Champ) | Kræver, at runden lukker en måned. |
+| 70 (rundens vinder) | Udløses per definition for én spiller (evt. et par ved delt sejr). |
+| 80 (≥3 præcise) | Sjælden. |
+
+Reproduceret mod en rigtig PostgreSQL 16 med produktionsskemaet (`sql/schema.sql`) og 8 spillere over 3 runder: **1 af 8 brugere** fik et kort i runde 1 — og teksten var den forkerte "🏆 Du overtog førstepladsen", fordi regel 20 udløses på `coalesce(før-placering, 999) > 1`, når der ingen "før" er. Ingen havde haft en førsteplads at overtage.
+
+### 10.2 Tre svar, i den rækkefølge de virker
+
+**1) Tre nye regler**, hvoraf to virker uden historik:
+
+| Prio | Regel | Udløses når | Virker uden historik |
+|---|---|---|---|
+| 22 | `PODIUM_ENTER` | Fra nr. ≥4 til top 3 (konkurrencer med ≥6 deltagere) | nej |
+| 45 | `CLOSING_IN` | Ikke nr. 1, 1–3 point op til føringen, og afstanden er ikke vokset i runden | **ja** |
+| 55 | `PERSONAL_BEST` | Rundens point er brugerens højeste hidtil i konkurrencen | **ja** (fra runde 2) |
+
+`PODIUM_ENTER` findes, fordi comeback måler **bevægelse** og derfor misser det skift, der føles størst i en tabel: 4. → 3. plads. Top-3 er en tærskel, ikke en distance.
+`CLOSING_IN` er bevidst formuleret fremadrettet og er en af de få rigtige historier, en premiereuge kan producere.
+`PERSONAL_BEST` sammenligner kun brugeren med brugeren selv og kan derfor udløses af en spiller i bunden, uden at historien nogensinde nævner en placering.
+
+**2) Sænkede tærskler med dynamisk prioritet (lukker A4).** Princippet er:
+
+> **Tærsklen afgør, om historien findes. Prioriteten afgør, om den vises.**
+
+| Regel | Tærskel før | Tærskel nu | Prioritet |
+|---|---|---|---|
+| Comeback | ≥3 pladser, ≥5 deltagere | **≥2 pladser, ≥4 deltagere** | 50 ved ≥3 pladser, ellers **75** |
+| Stime mod rival | ≥3 sejre i træk | **≥2 sejre i træk** | 60 ved ≥3 sejre, ellers **75** |
+| Præcise resultater | ≥3 præcise | **≥2 præcise** | 80 ved ≥3, ellers **85** |
+
+75 ligger **under** rundens vinder (70). Derfor kan "🔥 2. sejr i træk mod Jimmy" aldrig fortrænge "🥇 Du vandt runden" — dækningen stiger, uden at de store øjeblikke fortyndes. Alternativet (bare at sænke tærsklen) ville have gjort præcis det.
+
+**3) Dæmpet tier (lukker A3).** To regler med prioritet ≥ 90, som **kun genereres for brugere, der ellers ville stå helt uden en række i runden**:
+
+| Prio | Regel | Udløses når |
+|---|---|---|
+| 90 | `SEASON_OPENER` | Konkurrencens første afsluttede runde |
+| 100 | `QUIET_ROUND` | Alle andre stille runder |
+
+Produktbogens kapitel 6 ("Stilhed er også en funktion") beder selv Story Engine om at turde sige *"Status quo."* v1 læste det som **intet kort**; v1.1 læser det som **et stille kort**. Forskellen skal kunne ses: kortet renderes uden guldkant, uden emoji i overskriften, med mindre typografi og **uden Del-knap** — der er intet at sende i gruppens beskedtråd. Det kan afvises som ethvert andet kort.
+
+Kortet knyttes til brugerens største liga (deterministisk tiebreak på `competition_id`) og genereres kun for brugere, der faktisk tippede i runden. Har man ikke spillet, er stilheden fortsat total.
+
+### 10.3 Teksterne (v1.1)
+
+Emoji i overskriften er nu et **signal**: den findes kun i højdepunkt-tieret. Teksterne bor fortsat to steder og skal holdes i sync (`sql/story_engine.sql` og `renderStory` i `src/lib/stories.js`).
+
+| Prio | Regel | Headline | Body |
+|---|---|---|---|
+| 22 | `PODIUM_ENTER` | 🏅 Du er inde i top 3 i {league} | Efter runden {L} ligger du nr. {rank} af {total} i {league}. Toppen er {gap} point væk. |
+| 45 | `CLOSING_IN` | 👀 Kun {gap} point op til føringen i {league} | Efter runden {L} er der {gap} point op til {rival} i {league}. |
+| 55 | `PERSONAL_BEST` | 📊 Din bedste runde hidtil: {points} point | Runden {L} er din stærkeste i {league} — din forrige rekord var {old} point. |
+| 90 | `SEASON_OPENER` | Første runde i {league} er i hus | *øverste halvdel:* {points} point — du starter som nr. {rank} af {total}.{ Toppen er {gap} point væk.} · *nederste halvdel:* {points} point i den første runde. Toppen er {gap} point væk — der er lang vej endnu. |
+| 100 | `QUIET_ROUND` | Din runde: {points} point | *nr. 1:* Du fører fortsat {league} efter runden {L}. · *øverste halvdel:* Du holder nr. {rank} af {total} i {league} — {gap} point op til toppen. · *nederste halvdel:* {gap} point op til toppen i {league}. Næste runde er en ny chance. |
+
+**Tonereglen er kodet ind, ikke kun beskrevet:** i det dæmpede tier nævnes placeringen **kun i den øverste halvdel af tabellen** (`rank * 2 <= total`). Ligger man i den nederste, står afstanden op til toppen og en fremadrettet slutning i stedet. Der står aldrig "du er nr. 9 af 10". Det er dækket af en enhedstest.
+
+### 10.4 Rettelse i regel 20
+
+Regel 20 (`LEAD_TAKEN`) kræver nu, at konkurrencen **har** en runde før denne. Uden den betingelse påstod den i en premiereuge, at nr. 1 havde overtaget en førsteplads, ingen havde haft. Premiereugen dækkes i stedet af `SEASON_OPENER`.
+
+Samtidig er de laterale opslag på "hvem fører" gjort deterministiske (`order by user_id`). Ved en **delt** førsteplads kunne to gen-kørsler af samme runde ellers nævne hver sin rival i regel 21 — idempotens gælder også de navne, teksten nævner.
+
+### 10.5 Nye acceptkriterier
+
+- Et dæmpet kort genereres **kun**, når brugeren ikke har nogen anden historie i runden. Ingen bruger har både et dæmpet og et rigtigt kort i samme runde.
+- Et dæmpet kort kan aldrig vinde over en rigtig historie i `latest_story`.
+- Dæmpede kort optræder **ikke** som milepæle i karriereprofilen (`loadCareerMilestones` henter kun `priority < 90`). Ellers ville arkivet blive en rundelog med de ægte øjeblikke gemt inde i.
+- Emoji i overskriften findes kun i højdepunkt-tieret.
+- En svag variant (comeback på 2 pladser, stime på 2 sejre, 2 præcise) kan aldrig fortrænge rundens vinder.
+- Regel 20 udløses ikke i en konkurrences første runde.
+
+### 10.6 Verifikation
+
+Kørt mod en rigtig **PostgreSQL 16** med produktionsskemaet indlæst (`sql/schema.sql`) og et datasæt på 8 spillere / 3 runder / 18 kampe:
+
+| Runde | Brugere med kort — v1 | Brugere med kort — v1.1 |
+|---|---|---|
+| 1 (premiere) | **1 af 8** | **8 af 8** |
+| 2 | 6 af 8 | 8 af 8 |
+| 3 | 5 af 8 | 8 af 8 |
+
+Desuden verificeret: 13 af de 14 regler udløses på datasættet (`RATING_HIGH` kræver en ikke-provisorisk rating, dvs. ≥5 runder, og kan ikke rammes af et 3-runders datasæt), gen-kørsel af `generate_stories` for samme runde giver **byte-identiske** rækker (md5 over alle rækker før/efter), præcis én `latest_story` pr. `(user_id, round_key)`, ingen bruger har både dæmpet og rigtigt kort, ingen `LEAD_TAKEN` i første runde — og historierne skabes fortsat ad **triggerstien** (`sql/rating_trigger_optimization.sql`), ikke kun ved direkte kald.
+
+### 10.7 Engangsopsætning
+
+Gen-kør `sql/story_engine.sql` i Supabase ("Run without RLS"). Scriptet er idempotent og ændrer hverken tabellen eller viewet — kun `generate_stories()`. Triggeren behøver **ikke** gen-køres (`sql/rating_trigger_optimization.sql` er uændret).
+
+Historier for **allerede afsluttede** runder får ikke de nye regler af sig selv: `generate_stories` kaldes kun, når et resultat ændres. Vil man have de nye kort med tilbagevirkende kraft, kaldes funktionen manuelt pr. runde:
+
+```sql
+select generate_stories(round_key::text)
+from (select distinct round_key from matches where home_score is not null order by 1) r;
+```
+
+---
+
+*Status: v1.1 live (juli 2026). A3 (stille runder) og A4 (tærskler) er lukket med denne leverance; A5 (emojis) er delvist besvaret — emoji er nu et signal, der adskiller de to tiers, frem for et spørgsmål om til/fra.*

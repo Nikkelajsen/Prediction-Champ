@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn(), insert: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
 import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup } from "./data.js";
+import { QUIET_TIER_MIN } from "./stories.js";
 
 // mock-svar pr. tabel/view
 function mockTables(tables) {
@@ -203,6 +204,13 @@ describe("karriereprofil", () => {
       { id: "s1", roundKey: "2026-07-21", rule: "MONTH_CHAMP", headline: "👑 Månedens", body: "B1", createdAt: "2026-07-22" },
       { id: "s2", roundKey: "2026-07-14", rule: "STREAK", headline: "🔥 Stime", body: "B2", createdAt: "2026-07-15" },
     ]);
+  });
+
+  it("loadCareerMilestones henter kun højdepunkt-tieret (dæmpede kort er ikke milepæle)", async () => {
+    let query = "";
+    db.select.mockImplementation(async (t, table, q) => { query = q; return []; });
+    await loadCareerMilestones("token", "u1", true);
+    expect(query).toContain(`priority=lt.${QUIET_TIER_MIN}`);
   });
 
   it("loadCareerMilestones degraderer stille til [] ved fejl", async () => {

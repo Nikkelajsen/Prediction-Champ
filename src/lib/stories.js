@@ -5,23 +5,67 @@
 // reglen og tekst-skabelonerne, så logikken kan enhedstestes (vitest, jf.
 // docs/features/story-engine-v1.md afsnit 9) og genbruges i frontend (fallback-
 // rendering fra payload). Skabelonerne SKAL holdes i sync med SQL'ens tekster.
+//
+// v1.1 (juli 2026): tre nye regler (PODIUM_ENTER, CLOSING_IN, PERSONAL_BEST),
+// sænkede tærskler med svag prioritet (SOFT_PRIORITY) og et dæmpet tier
+// (SEASON_OPENER, QUIET_ROUND), der kun genereres, når intet andet udløses.
 
 // Prioritetsstige (lavere tal = vigtigere). Én kilde til sandhed for regel-metadata.
+// Værdien her er reglens STÆRKE prioritet; tre regler har også en svag variant,
+// se SOFT_PRIORITY og priorityFor() nedenfor.
 export const RULES = {
   MONTH_CHAMP: 10,
   LEAD_TAKEN: 20,
   LEAD_LOST: 21,
+  PODIUM_ENTER: 22,
   RATING_HIGH: 30,
   H2H_PASS: 40,
+  CLOSING_IN: 45,
   COMEBACK: 50,
+  PERSONAL_BEST: 55,
   STREAK: 60,
   ROUND_WON: 70,
   SHARP: 80,
+  // Dæmpet tier (≥ QUIET_TIER_MIN): genereres KUN for brugere, der ellers ville
+  // stå helt uden historie i runden. Renderes uden guld, uden emoji og uden Del.
+  SEASON_OPENER: 90,
+  QUIET_ROUND: 100,
 };
 
-// Tærskler (spec afsnit 3) — rene gæt, der kalibreres på live-data (åben beslutning A4).
-// Skyggetilstanden, de oprindeligt skulle vurderes i, blev fjernet i juli 2026.
-export const THRESHOLDS = { comebackPlaces: 3, streakRounds: 3, sharpExact: 3, comebackMinPlayers: 5 };
+// Svage varianter (v1.1). Tærsklen for tre regler er sænket, så de udløses oftere,
+// men den svage udgave får et højere prioritetstal og kan derfor kun vises, når der
+// ikke er noget bedre. Princippet: **tærsklen afgør, om historien findes;
+// prioriteten afgør, om den vises.** 75 ligger under rundens vinder (70), så
+// "2. sejr i træk mod Jimmy" aldrig fortrænger "du vandt runden".
+export const SOFT_PRIORITY = { COMEBACK: 75, STREAK: 75, SHARP: 85 };
+
+// Grænsen mellem højdepunkt og dæmpet tier. Bruges af frontenden (kort-stil) og af
+// karriereprofilens milepæle, som kun må vise rigtige historier.
+export const QUIET_TIER_MIN = 90;
+export function isQuiet(priority) {
+  return (priority ?? 0) >= QUIET_TIER_MIN;
+}
+
+// Tærskler (spec afsnit 3). Kalibreret på live-data juli 2026 (beslutning A4):
+// comeback 3→2 pladser og 5→4 deltagere, stime 3→2 runder, præcise 3→2 — alle med
+// en svag variant, jf. SOFT_PRIORITY. `*Strong` er grænsen for den stærke prioritet.
+export const THRESHOLDS = {
+  comebackPlaces: 2, comebackStrongPlaces: 3, comebackMinPlayers: 4,
+  streakRounds: 2, streakStrongRounds: 3,
+  sharpExact: 2, sharpStrongExact: 3,
+  podiumMinPlayers: 6, closingInMaxGap: 3,
+};
+
+// Prioriteten for en udløst regel. Spejler `case`-udtrykkene i sql/story_engine.sql:
+// `strength` er antallet, der afgør styrken (rykkede pladser / sejre i træk / præcise).
+export function priorityFor(rule, strength) {
+  switch (rule) {
+    case "COMEBACK": return strength >= THRESHOLDS.comebackStrongPlaces ? RULES.COMEBACK : SOFT_PRIORITY.COMEBACK;
+    case "STREAK": return strength >= THRESHOLDS.streakStrongRounds ? RULES.STREAK : SOFT_PRIORITY.STREAK;
+    case "SHARP": return strength >= THRESHOLDS.sharpStrongExact ? RULES.SHARP : SOFT_PRIORITY.SHARP;
+    default: return RULES[rule] ?? null;
+  }
+}
 
 // Deterministisk udvælgelse: præcis én historie pr. bruger pr. runde.
 // Laveste priority; ved lighed største liga (league_size); dernæst competition_id
@@ -92,6 +136,41 @@ export function renderStory(rule, payload = {}) {
       return {
         headline: `🎯 ${p.n} præcise resultater i runden`,
         body: `Du ramte ${p.n} kampe præcist i runden ${L} — ${p.points} point i alt.`,
+      };
+    case "PODIUM_ENTER":
+      return {
+        headline: `🏅 Du er inde i top 3 i ${p.league}`,
+        body: `Efter runden ${L} ligger du nr. ${p.rank} af ${p.total} i ${p.league}. Toppen er ${p.gap} point væk.`,
+      };
+    case "CLOSING_IN":
+      return {
+        headline: `👀 Kun ${p.gap} point op til føringen i ${p.league}`,
+        body: `Efter runden ${L} er der ${p.gap} point op til ${p.rival} i ${p.league}.`,
+      };
+    case "PERSONAL_BEST":
+      return {
+        headline: `📊 Din bedste runde hidtil: ${p.points} point`,
+        body: `Runden ${L} er din stærkeste i ${p.league} — din forrige rekord var ${p.old} point.`,
+      };
+    // --- Dæmpet tier: ingen emoji (emoji = højdepunkt), tekst altid fremadrettet.
+    // Placeringen nævnes KUN i den øverste halvdel af tabellen; i den nederste står
+    // afstanden op til toppen i stedet ("driller, men ydmyger aldrig").
+    case "SEASON_OPENER":
+      return {
+        headline: `Første runde i ${p.league} er i hus`,
+        body: p.rank * 2 <= p.total
+          ? `${p.points} point — du starter som nr. ${p.rank} af ${p.total}.` +
+            (p.gap > 0 ? ` Toppen er ${p.gap} point væk.` : "")
+          : `${p.points} point i den første runde. Toppen er ${p.gap} point væk — der er lang vej endnu.`,
+      };
+    case "QUIET_ROUND":
+      return {
+        headline: `Din runde: ${p.points} point`,
+        body: p.rank === 1
+          ? `Du fører fortsat ${p.league} efter runden ${L}.`
+          : p.rank * 2 <= p.total
+            ? `Du holder nr. ${p.rank} af ${p.total} i ${p.league} — ${p.gap} point op til toppen.`
+            : `${p.gap} point op til toppen i ${p.league}. Næste runde er en ny chance.`,
       };
     default:
       return { headline: "", body: "" };

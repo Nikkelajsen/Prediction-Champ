@@ -1,9 +1,28 @@
--- Story Engine v1 — stories-tabel, latest_story-view og generate_stories().
+-- Story Engine v1.1 — stories-tabel, latest_story-view og generate_stories().
 -- Idempotent — kan køres igen når som helst (kør med "Run without RLS";
 -- scriptet sætter selv RLS, jf. DOCUMENTATION.md afsnit 13).
 --
 -- Spec: docs/features/story-engine-v1.md. Beregnes i databasen, én gang pr.
 -- runde, idempotent — samme mønster som recompute_ratings().
+--
+-- v1.1 (juli 2026) — dækningsgrad. Efter den første rigtige runde fik stort set
+-- ingen en historie: reglerne 20/21/40/50/60 læser alle på stillingen FØR runden,
+-- og den findes ikke i en konkurrences første runde; 30 kræver en ikke-provisorisk
+-- rating (≥5 runder), og 10 kræver et månedsskifte. Tilbage stod kun rundens
+-- vinder og ≥3 præcise. Tre svar, i den rækkefølge de virker:
+--   1) TRE NYE REGLER, hvoraf to virker uden historik (22 PODIUM_ENTER,
+--      45 CLOSING_IN, 55 PERSONAL_BEST).
+--   2) SÆNKEDE TÆRSKLER MED DYNAMISK PRIORITET (comeback fra 2 pladser, stime fra
+--      2 sejre, præcise fra 2). Princippet: **tærsklen afgør, om historien findes;
+--      prioriteten afgør, om den vises.** Den svage variant får et højere
+--      prioritetstal og kan derfor kun vinde, når der ikke er noget bedre — så
+--      dækningen stiger uden at fortrænge de store øjeblikke.
+--   3) DÆMPET TIER (prioritet ≥ 90: 90 SEASON_OPENER, 100 QUIET_ROUND), som kun
+--      genereres for brugere, der ellers ville stå uden noget som helst.
+--      Produktbogen kapitel 6 beder selv Story Engine om at turde sige "status
+--      quo"; v1 læste det som "intet kort", v1.1 læser det som "et stille kort".
+--      Frontenden renderer prioritet ≥ 90 uden guld, uden emoji og uden Del-knap,
+--      så et stille kort aldrig kan forveksles med en rigtig historie.
 --
 -- BEMÆRK — kør BAGEFTER (eller gen-kør) sql/rating_trigger_optimization.sql:
 -- den hooker generate_stories() ind sidst i matches-triggeren (efter ratings),
@@ -179,6 +198,10 @@ begin
   where t.round_won = 1 and t.rpts > 0;
 
   -- ======== Regel 20 · Førsteplads overtaget (pr. konkurrence) ========
+  -- Kræver, at konkurrencen HAR en runde før denne. Uden den betingelse udløste
+  -- reglen i en konkurrences første runde (b.rnk er null → coalesce(...,999) > 1)
+  -- og påstod, at nr. 1 havde "overtaget" en førsteplads, ingen havde haft.
+  -- Premiereugen dækkes i stedet af det dæmpede SEASON_OPENER nederst.
   insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
   select p_round_key, a.user_id, a.competition_id, 'LEAD_TAKEN', 20, sz.n,
     jsonb_build_object('gap', a.pts - coalesce(second.pts, 0)),
@@ -193,7 +216,8 @@ begin
     select pts from _se_after a2 where a2.competition_id = a.competition_id and a2.rnk = 2
     order by pts desc limit 1
   ) second on true
-  where a.rnk = 1 and coalesce(b.rnk, 999) > 1;
+  where a.rnk = 1 and coalesce(b.rnk, 999) > 1
+    and exists (select 1 from _se_before b2 where b2.competition_id = a.competition_id);
 
   -- ======== Regel 21 · Førsteplads mistet (pr. konkurrence) ========
   insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
@@ -207,24 +231,97 @@ begin
   join _se_size sz on sz.competition_id = b.competition_id and sz.n >= 2
   join public.competitions c on c.id = b.competition_id
   join lateral (
-    select user_id, pts from _se_after a2 where a2.competition_id = b.competition_id and a2.rnk = 1 limit 1
+    -- delt førsteplads: vælg deterministisk, så teksten ikke skifter rival mellem
+    -- to gen-kørsler af samme runde (idempotens gælder også de nævnte navne)
+    select user_id, pts from _se_after a2 where a2.competition_id = b.competition_id and a2.rnk = 1
+    order by a2.user_id limit 1
   ) lead on true
   join public.profiles pr on pr.id = lead.user_id
   where b.rnk = 1 and a.rnk > 1;
 
-  -- ======== Regel 50 · Comeback (≥3 pladser op, konkurrencer med ≥5 deltagere) ========
+  -- ======== Regel 50/75 · Comeback (≥2 pladser op, konkurrencer med ≥4 deltagere) ========
+  -- A4-kalibrering (v1.1): tærsklen sænket fra 3 til 2 pladser og fra 5 til 4
+  -- deltagere, men et 2-pladers spring får prioritet 75 — altså UNDER rundens
+  -- vinder (70). Et rigtigt comeback (≥3 pladser) beholder 50 og vinder som før.
   insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
-  select p_round_key, a.user_id, a.competition_id, 'COMEBACK', 50, sz.n,
+  select p_round_key, a.user_id, a.competition_id, 'COMEBACK',
+    case when (b.rnk - a.rnk) >= 3 then 50 else 75 end, sz.n,
     jsonb_build_object('from', b.rnk, 'to', a.rnk, 'gap', top.pts - a.pts),
     '🚀 Fra nr. ' || b.rnk || ' til nr. ' || a.rnk || ' i ' || c.name,
     'Du rykkede ' || (b.rnk - a.rnk) || ' pladser frem i runden ' || v_label ||
       '. Toppen er nu ' || (top.pts - a.pts) || ' point væk.'
   from _se_after a
   join _se_before b on b.competition_id = a.competition_id and b.user_id = a.user_id
-  join _se_size sz on sz.competition_id = a.competition_id and sz.n >= 5
+  join _se_size sz on sz.competition_id = a.competition_id and sz.n >= 4
   join public.competitions c on c.id = a.competition_id
-  join lateral (select pts from _se_after a2 where a2.competition_id = a.competition_id and a2.rnk = 1 limit 1) top on true
-  where (b.rnk - a.rnk) >= 3;
+  join lateral (select pts from _se_after a2 where a2.competition_id = a.competition_id and a2.rnk = 1
+                order by a2.user_id limit 1) top on true
+  where (b.rnk - a.rnk) >= 2;
+
+  -- ======== Regel 22 · Ind i top 3 (v1.1, konkurrencer med ≥6 deltagere) ========
+  -- Comeback måler BEVÆGELSE og misser derfor det skift, der føles størst i en
+  -- tabel: 4. → 3. plads. Top-3 er en tærskel, ikke en distance. Kun i ligaer med
+  -- ≥6 deltagere, hvor en top-3 rent faktisk betyder noget.
+  insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
+  select p_round_key, a.user_id, a.competition_id, 'PODIUM_ENTER', 22, sz.n,
+    jsonb_build_object('rank', a.rnk, 'from', b.rnk, 'total', sz.n, 'gap', top.pts - a.pts),
+    '🏅 Du er inde i top 3 i ' || c.name,
+    'Efter runden ' || v_label || ' ligger du nr. ' || a.rnk || ' af ' || sz.n || ' i ' || c.name ||
+      '. Toppen er ' || (top.pts - a.pts) || ' point væk.'
+  from _se_after a
+  join _se_before b on b.competition_id = a.competition_id and b.user_id = a.user_id
+  join _se_size sz on sz.competition_id = a.competition_id and sz.n >= 6
+  join public.competitions c on c.id = a.competition_id
+  join lateral (select pts from _se_after a2 where a2.competition_id = a.competition_id and a2.rnk = 1
+                order by a2.user_id limit 1) top on true
+  where a.rnk <= 3 and b.rnk >= 4;
+
+  -- ======== Regel 45 · Tæt på toppen (v1.1) ========
+  -- Virker UDEN historik og er derfor en af de få rigtige historier, en første
+  -- runde kan producere. Betingelsen er fremadrettet af design: højst 3 point op,
+  -- og afstanden må ikke være vokset i runden (ingen historik ⇒ betingelsen
+  -- springes over). gap = 0 er udeladt — dér er man reelt lige med føringen, og
+  -- teksten "0 point op" ville være forkert.
+  insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
+  select p_round_key, a.user_id, a.competition_id, 'CLOSING_IN', 45, sz.n,
+    jsonb_build_object('rival', pr.display_name, 'gap', top.pts - a.pts, 'rank', a.rnk),
+    '👀 Kun ' || (top.pts - a.pts) || ' point op til føringen i ' || c.name,
+    'Efter runden ' || v_label || ' er der ' || (top.pts - a.pts) || ' point op til ' ||
+      pr.display_name || ' i ' || c.name || '.'
+  from _se_after a
+  join _se_size sz on sz.competition_id = a.competition_id and sz.n >= 3
+  join public.competitions c on c.id = a.competition_id
+  join lateral (select a2.user_id, a2.pts from _se_after a2
+                where a2.competition_id = a.competition_id and a2.rnk = 1
+                order by a2.user_id limit 1) top on true
+  join public.profiles pr on pr.id = top.user_id
+  left join _se_before b on b.competition_id = a.competition_id and b.user_id = a.user_id
+  left join lateral (select b2.pts from _se_before b2
+                     where b2.competition_id = a.competition_id and b2.rnk = 1
+                     order by b2.user_id limit 1) btop on true
+  where a.rnk > 1
+    and (top.pts - a.pts) between 1 and 3
+    and (b.pts is null or btop.pts is null or (top.pts - a.pts) <= (btop.pts - b.pts));
+
+  -- ======== Regel 55 · Personlig runderekord (v1.1) ========
+  -- Kræver kun brugerens EGNE tidligere runder — den kan derfor udløses af en
+  -- spiller, der ligger sidst, uden at historien nogensinde nævner placeringen.
+  -- Ingen deltagergrænse: rekorden er personlig og gælder også en solo-konkurrence.
+  insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
+  select p_round_key, t.user_id, t.competition_id, 'PERSONAL_BEST', 55, sz.n,
+    jsonb_build_object('points', t.rpts, 'old', prev.old, 'league', c.name),
+    '📊 Din bedste runde hidtil: ' || t.rpts || ' point',
+    'Runden ' || v_label || ' er din stærkeste i ' || c.name ||
+      ' — din forrige rekord var ' || prev.old || ' point.'
+  from _se_this t
+  join _se_size sz on sz.competition_id = t.competition_id
+  join public.competitions c on c.id = t.competition_id
+  join lateral (
+    select max(r.rpts)::int as old, count(*)::int as prev_rounds
+    from _se_rp r
+    where r.competition_id = t.competition_id and r.user_id = t.user_id and r.round_key < v_round
+  ) prev on true
+  where prev.prev_rounds >= 1 and t.rpts > prev.old;
 
   -- ======== Regel 40 · Head-to-head-overhaling (pr. konkurrence, én rival) ========
   -- Forenkling v1: "overhalede denne runde" (var bagud/lige før, foran efter).
@@ -249,7 +346,11 @@ begin
   ) q
   order by competition_id, user_id, gap asc;  -- tættest overhaling = mest dramatisk
 
-  -- ======== Regel 60 · Stime mod rival (≥3 sejre i træk, aktuel) ========
+  -- ======== Regel 60/75 · Stime mod rival (≥2 sejre i træk, aktuel) ========
+  -- A4-kalibrering (v1.1): stimen tæller fra 2 sejre i træk, men en 2-stime får
+  -- prioritet 75 (under rundens vinder, 70) — "2. sejr i træk mod Jimmy" er en
+  -- sand og sjov detalje, men den må aldrig fortrænge "du vandt runden".
+  -- Fra 3 sejre er den spec'ens oprindelige historie og beholder prioritet 60.
   drop table if exists _se_pair;
   create temporary table _se_pair as
   select a.competition_id, a.user_id, b.user_id as rival_id, a.round_key,
@@ -259,7 +360,8 @@ begin
 
   insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
   select distinct on (s.competition_id, s.user_id)
-    p_round_key, s.user_id, s.competition_id, 'STREAK', 60, sz.n,
+    p_round_key, s.user_id, s.competition_id, 'STREAK',
+    case when s.streak >= 3 then 60 else 75 end, sz.n,
     jsonb_build_object('rival', pr.display_name, 'n', s.streak, 'mine', s.mine, 'deres', s.deres),
     '🔥 ' || s.streak || '. sejr i træk mod ' || pr.display_name || ' i ' || c.name,
     'Du slog ' || pr.display_name || ' igen i runden ' || v_label || ' — ' ||
@@ -280,7 +382,7 @@ begin
   join _se_size sz on sz.competition_id = s.competition_id
   join public.competitions c on c.id = s.competition_id
   join public.profiles pr on pr.id = s.rival_id
-  where s.current and s.streak >= 3
+  where s.current and s.streak >= 2
   order by s.competition_id, s.user_id, s.streak desc;
 
   -- ======== Regel 30 · Ny ratingrekord (global, efter provisorisk periode) ========
@@ -346,15 +448,80 @@ begin
     ) sec on true;
   end if;
 
-  -- ======== Regel 80 · Perfekt træfsikkerhed (global, ≥3 præcise i runden) ========
+  -- ======== Regel 80/85 · Perfekt træfsikkerhed (global, ≥2 præcise i runden) ========
+  -- A4-kalibrering (v1.1): tælles fra 2 præcise, men 2 giver prioritet 85 — den
+  -- lander dermed under alt andet på højdepunkt-stigen og fungerer som den
+  -- sidste rigtige historie, før det dæmpede tier tager over.
   insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
-  select p_round_key, rs.user_id, null, 'SHARP', 80, null,
+  select p_round_key, rs.user_id, null, 'SHARP',
+    case when rs.exact_count >= 3 then 80 else 85 end, null,
     jsonb_build_object('n', rs.exact_count, 'points', rs.total_points),
     '🎯 ' || rs.exact_count || ' præcise resultater i runden',
     'Du ramte ' || rs.exact_count || ' kampe præcist i runden ' || v_label ||
       ' — ' || rs.total_points || ' point i alt.'
   from public.round_standings rs
-  where rs.round_key = v_round and rs.exact_count >= 3;
+  where rs.round_key = v_round and rs.exact_count >= 2;
+
+  -- ======== Dæmpet tier (v1.1) · kun når INTET andet er i spil ========
+  -- Kandidaterne er de brugere, der tippede i runden og efter alle reglerne
+  -- ovenfor står helt uden en række. De får ét stille kort, knyttet til deres
+  -- største liga (deterministisk tiebreak på competition_id), med prioritet ≥ 90,
+  -- så det aldrig kan vinde over en rigtig historie — og aldrig behøver det,
+  -- eftersom det kun findes, når der ikke er nogen.
+  --
+  -- Tonen er bundet af designreglen "historier driller — de ydmyger aldrig":
+  -- placeringen nævnes KUN i den øverste halvdel af tabellen. Ligger man i den
+  -- nederste, står der afstanden op til toppen og en fremadrettet slutning —
+  -- aldrig "du er nr. 9 af 10".
+  drop table if exists _se_quiet;
+  create temporary table _se_quiet as
+  select distinct on (t.user_id)
+    t.user_id, t.competition_id, c.name as league, sz.n as league_size,
+    t.rpts as points, a.rnk, (top.pts - a.pts) as gap,
+    not exists (
+      select 1 from _se_rp r
+      where r.competition_id = t.competition_id and r.round_key < v_round
+    ) as first_round
+  from _se_this t
+  join _se_size sz on sz.competition_id = t.competition_id and sz.n >= 2
+  join public.competitions c on c.id = t.competition_id
+  join _se_after a on a.competition_id = t.competition_id and a.user_id = t.user_id
+  join lateral (select pts from _se_after a2 where a2.competition_id = t.competition_id and a2.rnk = 1
+                order by a2.user_id limit 1) top on true
+  where not exists (
+    select 1 from public.stories s
+    where s.round_key = p_round_key and s.user_id = t.user_id
+  )
+  order by t.user_id, sz.n desc, t.competition_id asc;
+
+  -- ---- Prioritet 90 · Premiereugen (konkurrencens første afsluttede runde) ----
+  insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
+  select p_round_key, q.user_id, q.competition_id, 'SEASON_OPENER', 90, q.league_size,
+    jsonb_build_object('points', q.points, 'rank', q.rnk, 'total', q.league_size, 'gap', q.gap, 'league', q.league),
+    'Første runde i ' || q.league || ' er i hus',
+    case when q.rnk * 2 <= q.league_size
+      then q.points || ' point — du starter som nr. ' || q.rnk || ' af ' || q.league_size || '.' ||
+           case when q.gap > 0 then ' Toppen er ' || q.gap || ' point væk.' else '' end
+      else q.points || ' point i den første runde. Toppen er ' || q.gap ||
+           ' point væk — der er lang vej endnu.'
+    end
+  from _se_quiet q
+  where q.first_round;
+
+  -- ---- Prioritet 100 · Stille runde ----
+  insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
+  select p_round_key, q.user_id, q.competition_id, 'QUIET_ROUND', 100, q.league_size,
+    jsonb_build_object('points', q.points, 'rank', q.rnk, 'total', q.league_size, 'gap', q.gap, 'league', q.league),
+    'Din runde: ' || q.points || ' point',
+    case
+      when q.rnk = 1 then 'Du fører fortsat ' || q.league || ' efter runden ' || v_label || '.'
+      when q.rnk * 2 <= q.league_size
+        then 'Du holder nr. ' || q.rnk || ' af ' || q.league_size || ' i ' || q.league ||
+             ' — ' || q.gap || ' point op til toppen.'
+      else q.gap || ' point op til toppen i ' || q.league || '. Næste runde er en ny chance.'
+    end
+  from _se_quiet q
+  where not q.first_round;
 
   drop table if exists _se_rp;
   drop table if exists _se_size;
@@ -362,6 +529,7 @@ begin
   drop table if exists _se_before;
   drop table if exists _se_this;
   drop table if exists _se_pair;
+  drop table if exists _se_quiet;
 end;
 $fn$;
 
