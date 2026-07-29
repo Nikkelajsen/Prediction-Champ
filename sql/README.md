@@ -132,6 +132,17 @@ Engangsopsætning: læg forbindelsesstrengen ind som repo-secret `SUPABASE_DB_UR
 workflowen manuelt via **Actions → Skema-eksport → Run workflow**. Den kører desuden
 automatisk **hver mandag kl. 06:00 UTC** som sikkerhedsnet mod skema-drift.
 
+**Overlappende kørsler er håndteret.** To kørsler kan sagtens ramme hinanden — fx en
+manuel oven i den ugentlige, eller to dispatches lige efter hinanden. `concurrency`
+sætter dem i kø frem for at køre dem parallelt, men `actions/checkout` henter som
+standard den SHA, der var gældende ved *dispatch*, så nummer to ellers ville arbejde
+videre på en forældet base og få sit push afvist som non-fast-forward — en rød kørsel,
+selvom eksporten lykkedes. Workflowen tjekker derfor branchens **spids** ud
+(`ref: ${{ github.ref_name }}`), og commit-trinnet henter nyeste ref og lægger sit
+friske dump ovenpå, hvis pushet afvises. Det er sikkert netop for denne fil, fordi den
+er *genereret* og aldrig håndredigeret: der er intet at flette, kun det nyeste dump,
+der gælder. Er skemaet allerede identisk på branchen, laves ingen tom commit.
+
 ---
 
 ## Verifikationstjekliste
