@@ -79,6 +79,139 @@ const loadAnalyticsLeagueHealth = (token, days = 30) =>
 const loadAnalyticsRetention = (token) =>
   restFetch(`/rest/v1/rpc/admin_analytics_retention`, { method: "POST", token, body: {} });
 
+const loadAnalyticsFunnel = (token, days = 30) =>
+  restFetch(`/rest/v1/rpc/admin_analytics_funnel`, { method: "POST", token, body: { p_days: days } });
+
+const loadAnalyticsStories = (token, days = 30) =>
+  restFetch(`/rest/v1/rpc/admin_analytics_stories`, { method: "POST", token, body: { p_days: days } });
+
+// ---------- Tragt for nye brugere ----------
+// RPC'en returnerer én flad `rows`-liste med grouping sets: to scopes
+// (vinduet + alt tid) × (totalen + hver vej ind). Klienten plukker den række,
+// sektionen skal bruge, frem for at RPC'en skal kende UI'ets opdeling.
+//
+// De fire trin er IKKE strengt indlejrede: en konkurrence kan være liga-løs,
+// så en bruger kan nå "konkurrence" og "tip" uden nogensinde at have en liga.
+// Derfor to forskellige tal i sektionen — `steps` tæller, hvem der nåede hvert
+// trin overhovedet, mens `stalled` er en ÆGTE partition af kohorten (hver
+// bruger tælles præcis ét sted), og det er den, der besvarer "hvor mister vi
+// dem". At læse stall-tallene som trin-tal ville dobbelttælle.
+const FUNNEL_STEPS = [
+  { key: "cohort", label: "Oprettede konto", medianKey: null },
+  { key: "reached_league", label: "Kom med i en liga", medianKey: "median_min_league" },
+  { key: "reached_competition", label: "Kom med i en konkurrence", medianKey: "median_min_competition" },
+  { key: "reached_prediction", label: "Afgav sit første tip", medianKey: "median_min_prediction" },
+];
+
+const FUNNEL_STALLS = [
+  { key: "stalled_uden_liga", label: "Står uden liga" },
+  { key: "stalled_uden_konkurrence", label: "Har liga, men ingen konkurrence" },
+  { key: "stalled_uden_tip", label: "Har konkurrence, men intet tip" },
+  { key: "stalled_gennemfoert", label: "Nåede hele vejen" },
+];
+
+// Find én række i svaret. `path` = null giver totalen for scopet.
+function funnelRow(data, scope, path = null) {
+  return (data?.rows || []).find((r) => r.scope === scope && (r.path ?? null) === path) || null;
+}
+
+// Læg trinnene ud med procent af kohorten og faldet fra forrige trin.
+// `drop` er det, sektionen faktisk handler om: hvor stort et spring der
+// forsvandt netop dér — ikke hvor mange der er tilbage.
+function funnelSteps(row) {
+  if (!row || !row.cohort) return [];
+  const cohort = row.cohort;
+  let prev = null;
+  return FUNNEL_STEPS.map((s) => {
+    const users = row[s.key] ?? 0;
+    const step = {
+      key: s.key, label: s.label, users,
+      pct: Math.round((1000 * users) / cohort) / 10,
+      dropFromPrev: prev === null ? null : prev - users,
+      dropPct: prev === null || prev === 0 ? null : Math.round((1000 * (prev - users)) / prev) / 10,
+      medianMinutes: s.medianKey ? row[s.medianKey] : null,
+    };
+    prev = users;
+    return step;
+  });
+}
+
+// Det største fald mellem to på hinanden følgende trin — sektionens overskrift
+// i ét tal. Null, når kohorten er tom eller intet trin tabte nogen.
+function biggestDrop(steps) {
+  let worst = null;
+  for (const s of steps) {
+    if (s.dropFromPrev === null || s.dropFromPrev <= 0) continue;
+    if (!worst || s.dropFromPrev > worst.dropFromPrev) worst = s;
+  }
+  return worst;
+}
+
+// Minutter → læsbar varighed. Medianer i denne sektion spænder fra sekunder
+// (inviteret bruger, der joiner via link) til dage (selvstarter, der vender
+// tilbage senere), så én fast enhed ville gøre halvdelen ulæselig.
+function fmtMinutes(min) {
+  if (min === null || min === undefined) return "—";
+  const m = Number(min);
+  if (m < 1) return `${Math.round(m * 60)} s`;
+  if (m < 90) return `${Math.round(m)} min`;
+  if (m < 60 * 48) return `${Math.round(m / 60)} t`;
+  return `${Math.round(m / 60 / 24)} dage`;
+}
+
+// ---------- Story Engine-regler ----------
+// Katalogen SKAL matche reglerne i sql/story_engine.sql. Den findes her, fordi
+// RPC'en kun kan se regler, der HAR udløst — og det interessante spørgsmål er
+// netop, hvilke der ALDRIG har. Drift fanges af en test, der læser SQL-filen
+// og sammenligner (src/lib/analytics.test.js), så listen ikke stille kan blive
+// forældet, næste gang motoren udvides.
+const STORY_RULES = {
+  RATING_HIGH: "Højeste rating nogensinde",
+  LEAD_TAKEN: "Overtog føringen",
+  ROUND_WON: "Vandt runden",
+  LEAD_LOST: "Mistede føringen",
+  COMEBACK: "Comeback",
+  PODIUM_ENTER: "Ind på podiet",
+  CLOSING_IN: "Haler ind",
+  PERSONAL_BEST: "Personlig rekord",
+  H2H_PASS: "Overhalede en rival",
+  STREAK: "Stime",
+  SHARP: "Skarpe tips",
+  MONTH_CHAMP: "Månedens Prediction Champ",
+  SEASON_OPENER: "Premiereugen",
+  QUIET_ROUND: "Stille runde",
+};
+
+// Flet RPC'ens tal med katalogen, så regler der ALDRIG har udløst kommer med
+// som `never: true` i stedet for slet ikke at være der. En regel, der aldrig
+// udløser, er den dyreste slags død kode: den ser ud til at virke.
+function storyRuleRows(data) {
+  const measured = new Map((data?.rules || []).map((r) => [r.rule, r]));
+  const rows = [];
+  for (const [rule, label] of Object.entries(STORY_RULES)) {
+    const m = measured.get(rule);
+    rows.push({
+      rule, label,
+      generated: m?.generated ?? 0, users: m?.users ?? 0,
+      viewed: m?.viewed ?? 0, shared: m?.shared ?? 0, dismissed: m?.dismissed ?? 0,
+      view_rate: m?.view_rate ?? null, share_rate: m?.share_rate ?? null,
+      dismiss_rate: m?.dismiss_rate ?? null, avg_priority: m?.avg_priority ?? null,
+      // `never` = har aldrig udløst, heller ikke uden for vinduet. `silent` =
+      // har udløst før, men ikke i vinduet. To forskellige ting: den første er
+      // en regel, der måske ikke virker; den anden er bare en stille periode.
+      never: !measured.has(rule),
+      silent: measured.has(rule) && (m?.generated ?? 0) === 0,
+    });
+    measured.delete(rule);
+  }
+  // Regler i databasen, som katalogen ikke kender — sker kun, hvis motoren er
+  // udvidet uden at listen ovenfor er fulgt med. Vises frem for at skjules.
+  for (const [rule, m] of measured) {
+    rows.push({ ...m, rule, label: rule, never: false, silent: (m.generated ?? 0) === 0, unknown: true });
+  }
+  return rows.sort((a, b) => (b.generated - a.generated) || a.rule.localeCompare(b.rule));
+}
+
 // ---------- Liga-diagnose ----------
 // Afløser Liga Health Score (juli 2026). Den gamle score var ét 0-100-tal,
 // vægtet ud fra fem faktorer i SQL. Den var for BRED til at bruge: på de fire
@@ -254,5 +387,8 @@ function summarizeDiagnoses(diagnosed) {
 export {
   logEvent, logEventOnce,
   loadAnalyticsHealth, loadAnalyticsEngagement, loadAnalyticsLeagueHealth, loadAnalyticsRetention,
+  loadAnalyticsFunnel, loadAnalyticsStories,
   diagnoseLeague, diagnoseLeagues, summarizeDiagnoses, LEAGUE_THRESHOLDS, LEAGUE_STATES,
+  funnelRow, funnelSteps, biggestDrop, fmtMinutes, FUNNEL_STEPS, FUNNEL_STALLS,
+  storyRuleRows, STORY_RULES,
 };
