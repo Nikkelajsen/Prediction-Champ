@@ -44,17 +44,31 @@ function Sparkline({ curve }) {
   );
 }
 
+// Feature 1 (K4): narrativ H2H-sætning ved fremmed profil. Vises uanset om
+// viewer fører eller taber — kun tælletal, ingen superlativer ("aldrig",
+// "værst"). Se sql/career_profile.sql for begrundelsen.
+function h2hSentence(h2h, name) {
+  const { meetings, wins, losses, draws } = h2h;
+  const drawNote = draws > 0 ? ` (${draws} uafgjort)` : "";
+  if (wins > losses) return `I har mødt hinanden ${meetings} gange — du fører ${wins}-${losses}${drawNote}.`;
+  if (wins < losses) return `I har mødt hinanden ${meetings} gange — ${name} fører ${losses}-${wins}${drawNote}.`;
+  return `I har mødt hinanden ${meetings} gange — I står lige, ${wins}-${losses}${drawNote}.`;
+}
+
+const MILESTONE_PAGE = 20;
+
 function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
   const isOwn = profileUserId === viewerUserId;
   const [data, setData] = useState(null);
   const [milestones, setMilestones] = useState([]);
+  const [milestoneExpanded, setMilestoneExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setLoading(true); setError("");
+      setLoading(true); setError(""); setMilestoneExpanded(false);
       try {
         const [profile, ms] = await Promise.all([
           loadCareerProfile(token, profileUserId),
@@ -102,15 +116,27 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
   const curve = data?.curve || [];
   const base = data?.base || { total_points: 0, exact_count: 0, outcome_count: 0, matches: 0 };
   const rivals = data?.rivals || [];
+  const records = data?.records || {};
+  const footprint = data?.footprint || { leagues: 0, competitions: 0 };
 
   const memberSince = head.created_at ? monthName(String(head.created_at).slice(0, 7)) : null;
   const hitRate = base.matches > 0 ? Math.round((base.exact_count / base.matches) * 100) : 0;
 
+  const bestRating = records.best_rating ?? null;
+  const bestRatingIsCurrent = bestRating != null && head.rating === bestRating;
+  const bestRoundRank = records.best_round_rank ?? null;
+  const bestRoundRankCount = records.best_round_rank_count || 0;
+  const longestStreak = records.longest_round_streak || 0;
+  const hasRecords = bestRating != null || (bestRoundRank != null && bestRoundRank > 1) || longestStreak >= 2;
+
+  const visibleMilestones = milestoneExpanded ? milestones : milestones.slice(0, MILESTONE_PAGE);
+
   const hasTitles = monthly.length > 0 || roundWins > 0;
   const hasMilestones = isOwn && milestones.length > 0;
   const hasCurve = curve.length >= 2;
-  // "Karriere lige begyndt": ingen titler, ingen milepæle og for lidt kurve.
-  const isEmpty = !hasTitles && !hasMilestones && !hasCurve;
+  const hasH2H = !isOwn && !!data?.h2h;
+  // "Karriere lige begyndt": ingen titler, ingen milepæle, rekorder, H2H og for lidt kurve.
+  const isEmpty = !hasTitles && !hasMilestones && !hasCurve && !hasRecords && !hasH2H;
 
   const badge = {
     display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(240,180,41,0.12)",
@@ -135,6 +161,12 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
           {head.display_name || "—"}{isOwn ? <span style={{ color: C.muted, fontSize: 16 }}> (dig)</span> : ""}
         </div>
         {memberSince && <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>Medlem siden {memberSince}</div>}
+        {(footprint.leagues > 0 || footprint.competitions > 0) && (
+          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
+            Har spillet i {footprint.leagues} {footprint.leagues === 1 ? "liga" : "ligaer"} og{" "}
+            {footprint.competitions} {footprint.competitions === 1 ? "konkurrence" : "konkurrencer"}
+          </div>
+        )}
         {head.rating != null && (
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 12 }}>
             <span style={{ color: C.muted, fontSize: 12, fontFamily: font.display, textTransform: "uppercase", letterSpacing: "0.08em" }}>Rating</span>
@@ -149,6 +181,15 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
           </div>
         )}
       </Card>
+
+      {/* H2H (kun fremmed profil, delt konkurrence) */}
+      {hasH2H && (
+        <Card>
+          <div style={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
+            {h2hSentence(data.h2h, head.display_name)}
+          </div>
+        </Card>
+      )}
 
       {isEmpty && (
         <Card>
@@ -177,18 +218,49 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
         </div>
       )}
 
+      {/* Rekorder ("bedste nogensinde") */}
+      {hasRecords && (
+        <div>
+          <Eyebrow>Rekorder</Eyebrow>
+          <Card>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 14, color: C.text, lineHeight: 1.6 }}>
+              {bestRating != null && (
+                <div>
+                  {bestRatingIsCurrent
+                    ? <>Du er på din <b style={{ color: C.gold }}>højeste rating nogensinde</b> lige nu: {bestRating}.</>
+                    : <>Din højeste rating nogensinde: <b style={{ color: C.gold }}>{bestRating}</b>.</>}
+                </div>
+              )}
+              {bestRoundRank != null && bestRoundRank > 1 && (
+                <div>Din bedste rundeplacering: <b style={{ color: C.gold }}>{bestRoundRank}. plads</b>
+                  {bestRoundRankCount > 1 ? ` (${bestRoundRankCount} gange)` : ""}.</div>
+              )}
+              {longestStreak >= 2 && (
+                <div>Din længste stime af rundesejre i træk: <b style={{ color: C.gold }}>{longestStreak} runder</b>.</div>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* Milepæle (kun egen profil) */}
       {hasMilestones && (
         <div>
           <Eyebrow>Milepæle</Eyebrow>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {milestones.map((m) => (
+            {visibleMilestones.map((m) => (
               <Card key={m.id} style={{ padding: 12 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{m.headline}</div>
                 {m.body && <div style={{ color: C.muted, fontSize: 13, marginTop: 3, lineHeight: 1.45 }}>{m.body}</div>}
               </Card>
             ))}
           </div>
+          {!milestoneExpanded && milestones.length > MILESTONE_PAGE && (
+            <p style={{ color: C.muted, fontSize: 13, marginTop: 8, marginBottom: 0, cursor: "pointer", textDecoration: "underline" }}
+               onClick={() => setMilestoneExpanded(true)}>
+              Vis alle {milestones.length} milepæle
+            </p>
+          )}
         </div>
       )}
 

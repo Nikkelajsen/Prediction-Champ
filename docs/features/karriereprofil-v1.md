@@ -1,6 +1,8 @@
 # Feature: Karriereprofil v1
 
 **Status: ✅ Leveret (juli 2026) — `sql/career_profile.sql` + `src/screens/ProfileScreen.jsx`. K1 med fra start og siden udvidet: enhver indlogget bruger kan se enhver karriere (afsnit 8).** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 5–6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 4*
+>
+> ⚠️ **Rettelse (K4, 30. juli 2026):** karriereprofilen er udvidet med ét narrativt cross-profile H2H-punkt, "bedste nogensinde"-rekorder og et liga/konkurrence-fodaftryk — se afsnit 2 og 8 (K4). Testcase 4/5 nedenfor gælder fortsat uændret for milepæle og rivaler, som forbliver private.
 
 *Brugerens karriere som fortælling — milepæle, titler og rivaliseringer. Ikke en statistikside. Bygget på data, der allerede findes i databasen.*
 
@@ -30,8 +32,11 @@ Oppefra og ned på profilsiden:
 | **Ratingkurve** | Rating over tid (én prik pr. runde), med provisorisk periode markeret | `rating_history` |
 | **Rivaler** | De 2–3 brugere, man oftest har byttet placering/udvekslet H2H-historier med — vist som fortælling ("Din tætteste rival: Jimmy — I har overhalet hinanden 5 gange") | `stories` (regel 40/60) + `rating_history.rnk` |
 | **Basistal (diskret)** | Samlede point, præcise hits (🎯), hit-rate, antal tippede kampe. Én kompakt linje/række nederst — bevidst ikke øverst | samme kilder som stillingerne (se afsnit 4) |
+| **H2H-linje** *(K4, tilføjet 30. juli 2026)* | Ét narrativt punkt, kun ved fremmed profil med delt konkurrencehistorik: "I har mødt hinanden N gange — du fører A-B" | `competition_participants`, `competition_matches`, `predictions`, `pc_points()` |
+| **Rekorder** *(K4)* | "Bedste nogensinde": højeste rating, bedste rundeplacering (kun hvis ikke allerede nr. 1), længste stime af rundesejre i træk | `rating_history`, `round_standings` (samme rank()-stige som Titler) |
+| **Fodaftryk** *(K4)* | Antal ligaer og konkurrencer, som en diskret linje i hovedet | `group_members`, `competition_participants` |
 
-**Ikke i v1:** per-turnering-opdeling (afventer turnering #2 — `ratings.scope` er forberedt), sæsonarkiv på tværs af år (der findes kun én sæson endnu), sammenligning af to profiler side om side (H2H bor i Story Engine).
+**Ikke i v1:** per-turnering-opdeling (afventer turnering #2 — `ratings.scope` er forberedt), sæsonarkiv på tværs af år (der findes kun én sæson endnu), sammenligning af to profiler side om side (H2H bor i Story Engine). **[Delvist rettet, K4, 30. juli 2026]:** ét enkelt narrativt H2H-punkt ("I har mødt hinanden N gange — X fører A-B") vises nu også på tværs af profiler, når de to brugere deler mindst én konkurrence. Dette er IKKE en sammenligningsside — ingen tabel, ingen historik-liste, kun én sætning, kun synlig for viewer selv. Milepæle og rivaler forbliver private og uændrede (testcase 4/5). "Konkurrencer vundet" er bevidst stadig udeladt: `season_standings` er sæson-bred, ikke per konkurrence, og produktet kører kun én sæson — umodent koncept indtil turnering #2.
 
 ---
 
@@ -84,6 +89,7 @@ Oppefra og ned på profilsiden:
 | K1 | ~~Hvem kan se en profil?~~ **✅ Besluttet (juli 2026), udvidet (juli 2026):** oprindeligt "alle, man deler en liga eller konkurrence med". **Nu: enhver indlogget bruger kan se enhver profil** (hoved, titler, kurve, basistal) — milepæle og rivaler forbliver private. | Rivalisering kræver et publikum; historier er personlige. Udvidelsen: på Championship er alle automatisk med, og navn, rating, point og præcise hits står i forvejen offentligt på Rating-/Championship-fanerne — den gamle gate afviste folk, man reelt konkurrerer med, og beskyttede intet, der ikke allerede var på en rangliste. |
 | K2 | **Per-turnering-opdeling fra start?** `ratings.scope` er forberedt til per-liga-rating. | Nej — vent til turnering #2 er i drift ([`turnering-2.md`](./turnering-2.md)), ellers bygges en vælger uden indhold. |
 | K3 | **Rival-definitionen.** Ren `stories`-optælling (regel 40/60) eller også placerings-nabo-analyse fra `rating_history.rnk`? | Start med `stories`-optælling (billigst, allerede fortælle-formet); udvid hvis den giver for få rivaler i små ligaer. |
+| K4 | **Skal karriereprofilen vise ét cross-profile H2H-narrativ, selvom "H2H bor i Story Engine, ikke en sammenligningsside" (juli 2026) er besluttet? Og skal det vises, når viewer taber?** | **Besluttet (30. juli 2026): Ja, som afgrænset undtagelse.** Kun én sætning, kun ved delt konkurrence, aldrig en tabel/liste. Vises uanset om viewer fører eller taber, fordi (a) kun viewer selv ser den, aldrig den anden part eller offentligheden, (b) de samme runde-tal er allerede offentligt synlige for delte konkurrencedeltagere via stillingerne, og (c) Story Engines egen `LEAD_LOST`-regel fortæller allerede den tabende part om nederlag, i neutralt sprog. Ingen superlativer ("aldrig", "værst") — kun tælletal. Samtidig tilføjes `records` og `footprint` som nye **offentlige** jsonb-nøgler i `career_profile()`, på samme synlighedsniveau som hoved/titler/kurve/basistal (K1) — ingen ny privat information, kun tal der allerede er synlige andetsteds (kurve, stillinger) eller strukturelt neutrale (medlemskabstal). |
 
 ## 9. Testcases
 
@@ -96,6 +102,22 @@ Oppefra og ned på profilsiden:
 9. Navnet i konkurrence-stillingen åbner karrieren, mens **resten af rækken** åbner spillerens tips runde for runde. *(Leveret som hele rækken frem for kun pointtallet: et tal i en 46 px-kolonne er ca. 30×22 px mod de ~44 px, en finger kræver.)*
 6. Provisorisk spiller (< 5 runder) → kurve med provisorisk markering, "NY"-badge i hovedet.
 7. Resultat rettes af admin → profilens tal følger med efter trigger-genberegning (samme flow som stillinger/ratings).
+
+*(K4, 30. juli 2026 — fortsætter nummereringen, omnummererer ikke 1–9):*
+
+10. A åbner B's profil, delt konkurrence + fælles tippet runde → H2H-linje med korrekte møde-/sejrs-/nederlagstal (verificeret manuelt mod `round_standings` for den delte konkurrence).
+11. A åbner C's profil uden nogensinde at have delt en konkurrence (fx fundet via Championship-tabellen) → `data.h2h` er `null`, ingen H2H-linje, ingen fejl.
+12. A åbner sin **egen** profil → `h2h` er altid `null`, uanset historik, ingen H2H-linje.
+13. To brugere deler flere konkurrencer samtidig (fx en liga + en liga-løs konkurrence) → alle fælles runder på tværs af begge konkurrencer tælles med i `meetings`.
+14. Fælles historik med uafgjorte runder (samme pointsum) → `draws` er korrekt og talt hverken som sejr eller nederlag.
+15. A og C har begge tippet den samme kamp/runde, men i hver sin, **ikke-delte** konkurrence → tælles ikke med i H2H (samme deltager-afgrænsningslektion som Story Engine).
+16. Bruger uden nogen rundesejr nogensinde → `records.best_round_rank` vises (fx "3. plads"), aldrig udeladt, aldrig med negativ formulering ("sidste plads" o.l. må aldrig forekomme).
+17. Bruger med mindst én rundesejr → `best_round_rank`-linjen udelades (rank=1, redundant med Titler-badgen); `longest_round_streak`-linjen vises hvis ≥2 rundesejre i træk.
+18. Helt ny bruger uden spillede runder → `records`-nøglen giver `null`/`0` på alle felter, Rekorder-sektionen udelades helt, ingen tom "0"-linje.
+19. Højeste rating nogensinde == aktuel rating → teksten bruger "du er på din højeste rating nogensinde"-varianten, ikke to identiske tal.
+20. Bruger med >20 milepæle → kun de nyeste 20 vises som standard, "Vis alle N milepæle" udvider listen; hvilke `stories` der regnes som milepæle er uændret (`priority < 90`).
+21. Footprint-tallet matcher optællingen af brugerens rækker i `group_members`/`competition_participants`; en arkiveret (`hidden=true`) liga-løs konkurrence tæller stadig med.
+22. Footprint-linjen vises identisk uanset om profilen ses af ejeren selv eller en anden bruger (ingen `isOwn`-gate).
 
 ---
 
