@@ -1,7 +1,7 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
 import { ChevronRight, ChevronLeft, ArrowUp, ArrowDown, Minus, Info, X } from "lucide-react";
-import { outcome, pointsFor } from "../lib/scoring.js";
+import { pointsFor } from "../lib/scoring.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, pagerBtn } from "./theme.js";
 
 const Card = ({ children, style, onClick }) => (

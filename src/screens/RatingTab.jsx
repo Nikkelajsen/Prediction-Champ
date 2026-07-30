@@ -1,7 +1,7 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
 import { loadRatingBoard, loadRatingHistory } from "../lib/data.js";
-import { C, btnGhost, font, muted } from "../ui/theme.js";
+import { C, btnGhost, font } from "../ui/theme.js";
 import { Card, Eyebrow, FormDots, H, InfoDot, Move, PlayerName } from "../ui/components.jsx";
 
 function RatingTab({ token, userId, openProfile, openPredictions, hasCompetitions }) {

@@ -1,7 +1,7 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
 import { Trophy, Copy, Check, ClipboardList } from "lucide-react";
-import { outcome, lockedRoundsOf } from "../lib/scoring.js";
+import { lockedRoundsOf } from "../lib/scoring.js";
 import { computeCompetitionState, loadRatingMap } from "../lib/data.js";
 import { logEvent } from "../lib/analytics.js";
 import { C, btnGhost, btnGold, font, muted, thStyle } from "../ui/theme.js";
@@ -29,7 +29,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
           const rt = ratingMap.get(row.userId);
           if (rt) { row.rating = rt.rating; row.provisional = rt.provisional; }
         });
-      } catch (e) { /* ratings optional */ }
+      } catch { /* ratings optional */ }
       setState(result);
       setLoading(false);
     })();
@@ -62,7 +62,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
       // invite-tragten (*_invite_sent → league_invite_accepted) kan følges
       // ende-til-ende for begge link-typer.
       logEvent(token, "league_invite_sent", { competitionId: comp.id, groupId: comp.group_id || null, metadata: { via: "competition_link" } });
-    } catch (e) { /* bruger annullerede deling — ignorér */ }
+    } catch { /* bruger annullerede deling — ignorér */ }
   }
 
   if (!competitions.length) {

@@ -21,10 +21,10 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
   const [joinErr, setJoinErr] = useState("");
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
-  const [nudgeGone, setNudgeGone] = useState(() => { try { return !!localStorage.getItem(NUDGE_KEY); } catch (e) { return false; } });
+  const [nudgeGone, setNudgeGone] = useState(() => { try { return !!localStorage.getItem(NUDGE_KEY); } catch { return false; } });
 
   async function reloadGroups() {
-    try { setGroups(await loadMyGroups(token, userId)); } catch (e) { setGroups([]); }
+    try { setGroups(await loadMyGroups(token, userId)); } catch { setGroups([]); }
   }
   useEffect(() => { reloadGroups(); }, [token, userId]); // eslint-disable-line
 
@@ -44,7 +44,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
           // fanens kåring allerede gør — en skjult nøgle må ikke udpege én af to lige.
           const winners = state.isComplete ? leaders(state.rows) : [];
           return [c.id, { isComplete: state.isComplete, playedMatches: state.playedMatches, totalMatches: state.totalMatches, participants: state.rows.length, myPos: me ? me.rank : null, myShared: !!me?.shared, winners }];
-        } catch (e) { return [c.id, null]; }
+        } catch { return [c.id, null]; }
       }));
       if (!cancelled) setStatusMap(Object.fromEntries(entries));
     })();
@@ -97,7 +97,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
   const active = visible.filter((c) => !statusMap[c.id]?.isComplete);
   const completed = visible.filter((c) => statusMap[c.id]?.isComplete);
   const canNudge = !nudgeGone && groups && groups.length === 0 && loose.some((c) => c.created_by === userId);
-  function dismissNudge() { try { localStorage.setItem(NUDGE_KEY, "1"); } catch (e) {} setNudgeGone(true); }
+  function dismissNudge() { try { localStorage.setItem(NUDGE_KEY, "1"); } catch {} setNudgeGone(true); }
 
   const LeagueCard = ({ c, isArchived }) => {
     const s = statusMap[c.id];

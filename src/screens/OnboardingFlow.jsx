@@ -84,7 +84,7 @@ function OnboardingFlow({ token, userId, profile, leagues, onJoined, onCreated, 
         // Foretræk en turnering, der faktisk har kampe tilbage at tippe.
         const best = list.find((t) => t.hasUpcoming) || list[0];
         if (best) { setPickedId(best.id); setCompName(best.name); }
-      } catch (e) { if (!cancelled) setTournaments([]); }
+      } catch { if (!cancelled) setTournaments([]); }
     })();
     return () => { cancelled = true; };
   }, [step]); // eslint-disable-line

@@ -5,7 +5,7 @@ import { auth, clearSession, db, loadSession, saveSession } from "./lib/supabase
 import { touchActivity } from "./lib/data.js";
 import { logEvent } from "./lib/analytics.js";
 import { disablePush } from "./lib/push.js";
-import { C, globalCss, muted, wrapOuter } from "./ui/theme.js";
+import { C, globalCss, wrapOuter } from "./ui/theme.js";
 import { AuthScreen, ResetPasswordScreen } from "./screens/Auth.jsx";
 import MainApp from "./screens/MainApp.jsx";
 
@@ -31,7 +31,7 @@ export default function App() {
         const rows = await db.select(access_token, "profiles", `id=eq.${user.id}&select=*`);
         setProfile(rows[0] || null);
       }
-    } catch (e) {
+    } catch {
       const rows = await db.select(access_token, "profiles", `id=eq.${user.id}&select=*`);
       setProfile(rows[0] || null);
     }
@@ -70,13 +70,13 @@ export default function App() {
         try {
           const res = await auth.refresh(saved.refresh_token);
           await completeAuth(res, null);
-        } catch (e) {
+        } catch {
           clearSession();
         }
       }
       setBooting(false);
     })();
-  }, []); // eslint-disable-line
+  }, []);  
 
   useEffect(() => {
     if (!session?.refresh_token) return;
@@ -85,7 +85,7 @@ export default function App() {
         const res = await auth.refresh(session.refresh_token);
         setSession((s) => ({ ...s, access_token: res.access_token, refresh_token: res.refresh_token }));
         saveSession({ refresh_token: res.refresh_token, user: session.user });
-      } catch (e) { /* ignorer */ }
+      } catch { /* ignorer */ }
     }, 45 * 60 * 1000);
     return () => clearInterval(id);
   }, [session?.refresh_token]); // eslint-disable-line

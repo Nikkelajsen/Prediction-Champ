@@ -8,7 +8,7 @@ export function isStandalone() {
   try {
     return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches)
       || window.navigator.standalone === true;
-  } catch (e) { return false; }
+  } catch { return false; }
 }
 
 function detectPlatform() {

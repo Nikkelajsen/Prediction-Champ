@@ -51,7 +51,7 @@ export default async function handler(req, res) {
           const user = await userRes.json();
           const profs = await sb(`/rest/v1/profiles?id=eq.${user.id}&select=is_admin`);
           return !!profs[0]?.is_admin;
-        } catch (e) { return false; }
+        } catch { return false; }
       }
       return false;
     }

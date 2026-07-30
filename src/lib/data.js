@@ -1,6 +1,6 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { db, restFetch } from "./supabase.js";
-import { currentRoundIndex, groupIntoRounds, isLocked, liveInfo, outcome, pointsFor, roundLabel, buildRoundLockMap, roundLockKey, filterByStages, filterFromNextUnfinishedRound, LOCK_LEAD_MS } from "./scoring.js";
+import { currentRoundIndex, groupIntoRounds, isLocked, liveInfo, pointsFor, roundLabel, buildRoundLockMap, roundLockKey, filterByStages, filterFromNextUnfinishedRound, LOCK_LEAD_MS } from "./scoring.js";
 import { assignRanks, avgGoalError, compareStandings, sortStandings } from "./standings.js";
 import { QUIET_TIER_MIN } from "./stories.js";
 import { logEvent } from "./analytics.js";
@@ -172,7 +172,7 @@ async function loadRatingHistory(token) {
       map.set(uid, { form, move });
     }
     return map;
-  } catch (e) {
+  } catch {
     return new Map();
   }
 }
@@ -404,7 +404,7 @@ async function touchActivity(token) {
     if (Date.now() - last < 60 * 60 * 1000) return; // maks. 1 ping pr. time
     await restFetch(`/rest/v1/rpc/touch_activity`, { method: "POST", token, body: {} });
     localStorage.setItem(PING_KEY, String(Date.now()));
-  } catch (e) { /* ignorer — sporing er best-effort */ }
+  } catch { /* ignorer — sporing er best-effort */ }
 }
 
 // loadUserStats: henter aggregeret brugerstatistik. RPC'en er admin-kun (security
@@ -424,14 +424,14 @@ async function loadLatestStory(token) {
     const s = rows[0];
     if (s.dismissed_at) return null;
     return s;
-  } catch (e) { return null; }
+  } catch { return null; }
 }
 
 // Afvis en historie (sætter dismissed_at). Best-effort.
 async function dismissStory(token, id) {
   try {
     await db.update(token, "stories", `id=eq.${id}`, { dismissed_at: new Date().toISOString() });
-  } catch (e) { /* best-effort */ }
+  } catch { /* best-effort */ }
 }
 
 // ---------- Karriereprofil ----------
@@ -462,7 +462,7 @@ async function loadCareerMilestones(token, profileUserId, isOwn) {
       id: s.id, roundKey: s.round_key, rule: s.rule,
       headline: s.headline, body: s.body, createdAt: s.created_at,
     }));
-  } catch (e) { return []; }
+  } catch { return []; }
 }
 
 // ---------- Liga-laget: permanente fællesskaber (grupper) ----------
@@ -737,7 +737,7 @@ async function joinByInviteCode(token, userId, rawCode) {
   if (already.length) {
     if (competition.group_id) {
       try { await joinGroup(token, userId, competition.group_id); }
-      catch (e) { /* deltagelsen er intakt — bloker ikke navigationen */ }
+      catch { /* deltagelsen er intakt — bloker ikke navigationen */ }
       logEvent(token, "league_invite_accepted", { groupId: competition.group_id, competitionId: competition.id, metadata: { via: "code" } });
     }
     return { kind: "competition", competition, alreadyJoined: true };

@@ -21,10 +21,10 @@ const COMPLETE_KEY = "pc_onboarding_v1_complete"; // "1" = færdig, spring probe
 // localStorage kan være utilgængelig (privat browsing, blokerede cookies).
 // Onboarding må aldrig fejle på dét, så begge veje er stille.
 function readFlag(key) {
-  try { return localStorage.getItem(key); } catch (e) { return null; }
+  try { return localStorage.getItem(key); } catch { return null; }
 }
 function writeFlag(key, value) {
-  try { localStorage.setItem(key, value); } catch (e) { /* utilgængelig — spring over */ }
+  try { localStorage.setItem(key, value); } catch { /* utilgængelig — spring over */ }
 }
 
 // ---------- den rene tilstandsmaskine ----------
