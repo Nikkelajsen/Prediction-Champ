@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { recordFacts, h2hSentence, Sparkline } from "./ProfileScreen.jsx";
+import { recordFacts, h2hSentence, rivalTally, Sparkline } from "./ProfileScreen.jsx";
 
 // Rekorder-sektionen er GLOBAL (Championship + global rating), ikke en opgørelse
 // pr. brugerens egne konkurrencer. Reglerne for hvad der vises, ligger i
@@ -93,6 +93,36 @@ describe("recordFacts (hvad Rekorder-sektionen viser)", () => {
   it("tæller bedste runde med i hasAny, så sektionen vises selv uden rating/rang", () => {
     const r = recordFacts({ best_round_points: 9, best_round_exact: 1, longest_round_streak: 0 }, null);
     expect(r.hasAny).toBe(true);
+  });
+});
+
+// Rivaler rangeres på jævnbyrdighed fra rigtige møder (K3 lukket), så linjen
+// skal sige mødetal og stilling — ikke antal historier.
+describe("rivalTally", () => {
+  it("siger mødetal og stilling, når man fører", () => {
+    expect(rivalTally({ meetings: 7, wins: 4, losses: 3, draws: 0 }))
+      .toBe("I har mødt hinanden 7 gange — du fører 4-3.");
+  });
+
+  it("siger det neutralt, når man er bagud (kun tælletal, ingen superlativer)", () => {
+    const s = rivalTally({ meetings: 7, wins: 3, losses: 4, draws: 0 });
+    expect(s).toBe("I har mødt hinanden 7 gange — du er bagud 3-4.");
+    expect(s).not.toMatch(/aldrig|værst|dårligst/i);
+  });
+
+  it("fremhæver den helt lige stilling — den mest jævnbyrdige rival", () => {
+    expect(rivalTally({ meetings: 6, wins: 3, losses: 3, draws: 0 }))
+      .toBe("I har mødt hinanden 6 gange — det står lige, 3-3.");
+  });
+
+  it("nævner uafgjorte runder, når der er nogen", () => {
+    expect(rivalTally({ meetings: 7, wins: 3, losses: 3, draws: 1 }))
+      .toBe("I har mødt hinanden 7 gange — det står lige, 3-3 (1 uafgjort).");
+  });
+
+  it("bøjer ét enkelt møde i ental", () => {
+    expect(rivalTally({ meetings: 1, wins: 1, losses: 0, draws: 0 }))
+      .toBe("I har mødt hinanden 1 gang — du fører 1-0.");
   });
 });
 

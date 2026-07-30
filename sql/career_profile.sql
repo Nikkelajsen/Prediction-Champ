@@ -66,6 +66,11 @@ declare
   v_own   boolean := (profile_user_id = auth.uid());
   v_rivals jsonb := '[]'::jsonb;
   v_h2h    jsonb := null;
+  -- Tunbar tærskel, navngivet frem for indlejret — samme princip som Story
+  -- Engines kalibrerede tærskler (v1.1): ét møde gør ingen til en rival, men i
+  -- en ung sæson med få runder vil en høj tærskel give nul rivaler. Hæves, når
+  -- der er runder nok til, at 2 møder ikke længere er meget.
+  v_rival_min_meetings int := 2;
   months text[] := array['januar','februar','marts','april','maj','juni','juli','august','september','oktober','november','december'];
   result jsonb;
 begin
@@ -81,20 +86,123 @@ begin
   end if;
 
   -- ---------- Rivaler (kun egen profil — private, jf. K1) ----------
-  -- Ren stories-optælling (K3): tæl rival-navn i head-to-head- og stime-historier.
+  -- K3 LUKKET (30. juli 2026): rangeres på JÆVNBYRDIGHED fra faktiske møder,
+  -- ikke på antal historier.
+  --
+  -- Før: ren stories-optælling af regel 40 (H2H_PASS) / 60 (STREAK). K3 valgte
+  -- den som det billigste udgangspunkt og forudsagde selv problemet: "udvid hvis
+  -- den giver for få rivaler i små ligaer". Tragten var for smal — kun 2 af 14
+  -- regler skriver et rival-navn, regel 40 kræver en overhaling i netop den
+  -- runde og regel 60 en AKTUEL stime på ≥2 sejre, og begge har
+  -- `distinct on (competition_id, user_id)`, så der gemmes ÉN rival pr.
+  -- konkurrence pr. runde. I en lille liga med stabil rækkefølge sker der
+  -- næsten ingen overhalinger → nul rivaler efter 20 runder mod de samme tre
+  -- personer. Teksten sagde desuden "Din tætteste rival", men rangeringen målte
+  -- ikke tæthed — den målte, hvor dramatisk forholdet havde været.
+  --
+  -- K3's egen foreslåede udvej (`rating_history.rnk`, placerings-nabo) er
+  -- BEVIDST ikke valgt: `rnk` er den globale ratingplacering, så den ville
+  -- kunne udpege folk, man ikke deler konkurrence med — i strid med den
+  -- ufravigelige designregel fra juli 2026 (en historie må kun nævne personer,
+  -- modtageren deler konkurrence med). Denne beregning starter i
+  -- `competition_participants` og kan derfor per konstruktion ikke nævne en
+  -- fremmed.
+  --
+  -- INGEN REGRESSION: en story-rival er altid også en møde-rival. Regel 40
+  -- kræver en stilling FØR runden for begge parter (altså ≥1 tidligere fælles
+  -- runde) og regel 60 kræver ≥2 sejre i træk — begge medfører ≥2 møder, så
+  -- alle, den gamle optælling kunne finde, er med her.
   if v_own then
-    select coalesce(jsonb_agg(jsonb_build_object('rival', rival, 'count', c) order by c desc), '[]'::jsonb)
-    into v_rivals
-    from (
-      select payload->>'rival' as rival, count(*)::int as c
+    with pair_matches as (
+      -- Kampe fra konkurrencer, hvor BÅDE profilens ejer og modstanderen
+      -- deltager. `distinct`: samme kamp kan ligge i flere delte konkurrencer,
+      -- og et møde må kun tælle én gang — samme dedup-regel som h2h
+      -- (K4-rettelsen 30. juli 2026), her blot pr. modstander.
+      select distinct theirs.user_id as rival_id, cm.match_id,
+             m.round_key, m.home_score, m.away_score
+      from public.competition_participants mine
+      join public.competition_participants theirs
+        on theirs.competition_id = mine.competition_id
+       and theirs.user_id <> profile_user_id
+      join public.competition_matches cm on cm.competition_id = mine.competition_id
+      join public.matches m on m.id = cm.match_id
+      where mine.user_id = profile_user_id
+        and m.home_score is not null and m.away_score is not null
+    ),
+    pair_round as (
+      -- Point pr. (modstander, runde, spiller). Hver side tæller de kampe, DEN
+      -- selv har tippet — præcis samme semantik som h2h-blokken nedenfor og som
+      -- round_standings, der heller ikke normaliserer for antal tippede kampe.
+      -- Det er ikke en detalje: samme spørgsmål må ikke få to forskellige svar
+      -- to steder i produktet (jf. tiebreaker- og Story Engine-leverancerne),
+      -- og møde-tallene her skal stemme med H2H-linjen på den andens profil.
+      select pm.rival_id, pm.round_key, pr.user_id,
+        sum(public.pc_points(pr.pred_home, pr.pred_away, pm.home_score, pm.away_score))::int as pts
+      from pair_matches pm
+      join public.predictions pr
+        on pr.match_id = pm.match_id
+       and pr.user_id in (profile_user_id, pm.rival_id)
+      where pr.pred_home is not null and pr.pred_away is not null
+      group by pm.rival_id, pm.round_key, pr.user_id
+    ),
+    paired as (
+      select a.rival_id, a.round_key, a.pts as my_pts, b.pts as their_pts
+      from pair_round a
+      join pair_round b
+        on b.rival_id = a.rival_id and b.round_key = a.round_key
+       and b.user_id = a.rival_id
+      where a.user_id = profile_user_id
+    ),
+    tally as (
+      select rival_id,
+        count(*)::int                                   as meetings,
+        count(*) filter (where my_pts > their_pts)::int  as wins,
+        count(*) filter (where my_pts < their_pts)::int  as losses,
+        count(*) filter (where my_pts = their_pts)::int  as draws
+      from paired
+      group by rival_id
+    ),
+    story_counts as (
+      -- Historier beholdes som FARVE, aldrig som rangering. Joines på
+      -- display_name, fordi det er alt, payloaden gemmer: skifter en bruger
+      -- navn, mister de gamle historier tilknytningen. Acceptabelt for et
+      -- pyntetal — og præcis derfor må rangeringen ikke hvile på det.
+      select payload->>'rival' as name, count(*)::int as c
       from public.stories
       where user_id = profile_user_id
         and rule in ('H2H_PASS', 'STREAK')
         and payload->>'rival' is not null
       group by payload->>'rival'
-      order by c desc
+    )
+    -- Rangering: mindst forskel mellem sejre og nederlag = mest jævnbyrdig.
+    -- Volumen alene ville ikke give rivaler, men blot den ældste medspiller i
+    -- den største konkurrence; en rival er nogen, man veksler slag med. Flest
+    -- møder bryder lighed, og rival_id sikrer et deterministisk svar ved to
+    -- ellers identiske modstandere (samme disciplin som Story Engines laterale
+    -- opslag, juli 2026).
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'user_id',  x.rival_id,
+             'rival',    x.display_name,
+             'meetings', x.meetings,
+             'wins',     x.wins,
+             'losses',   x.losses,
+             'draws',    x.draws,
+             'stories',  x.stories
+           ) order by x.ord), '[]'::jsonb)
+    into v_rivals
+    from (
+      select t.rival_id, p.display_name, t.meetings, t.wins, t.losses, t.draws,
+             coalesce(sc.c, 0) as stories,
+             row_number() over (order by abs(t.wins - t.losses) asc,
+                                         t.meetings desc,
+                                         t.rival_id asc) as ord
+      from tally t
+      join public.profiles p on p.id = t.rival_id
+      left join story_counts sc on sc.name = p.display_name
+      where t.meetings >= v_rival_min_meetings
+      order by ord
       limit 3
-    ) t;
+    ) x;
   end if;
 
   -- ---------- K4: H2H-narrativ (kun ved fremmed profil, delt konkurrence) ----------

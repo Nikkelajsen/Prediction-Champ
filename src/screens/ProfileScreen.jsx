@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 import { loadCareerProfile, loadCareerMilestones, monthName } from "../lib/data.js";
 import { roundLabel } from "../lib/scoring.js";
 import { C, font } from "../ui/theme.js";
-import { BackBar, Card, Eyebrow, InfoDot, Move } from "../ui/components.jsx";
+import { BackBar, Card, Eyebrow, InfoDot, Move, PlayerName } from "../ui/components.jsx";
 
 // Karriereskærmen blander bevidst TO omfang, og det var ikke til at se på den:
 // Titler, Rekorder og basistallene er globale (Championship + global rating —
@@ -160,9 +160,23 @@ export function recordFacts(records, currentRating) {
   };
 }
 
+// Rival-linjens tal. Rivaler rangeres på jævnbyrdighed fra faktiske møder
+// (K3 lukket, 30. juli 2026), så sætningen skal sige mødetallet og stillingen —
+// ikke, hvor mange historier der tilfældigvis er skrevet om personen.
+// Vises kun på egen profil, så samme privathedsargument som K4's H2H gælder:
+// stillingen står også, når man er bagud, men altid som rene tælletal.
+export function rivalTally(r) {
+  const { meetings, wins, losses, draws } = r;
+  const drawNote = draws > 0 ? ` (${draws} uafgjort)` : "";
+  const met = `I har mødt hinanden ${meetings} ${meetings === 1 ? "gang" : "gange"}`;
+  if (wins === losses) return `${met} — det står lige, ${wins}-${losses}${drawNote}.`;
+  if (wins > losses) return `${met} — du fører ${wins}-${losses}${drawNote}.`;
+  return `${met} — du er bagud ${wins}-${losses}${drawNote}.`;
+}
+
 const MILESTONE_PAGE = 20;
 
-function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
+function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile }) {
   const isOwn = profileUserId === viewerUserId;
   const [data, setData] = useState(null);
   const [milestones, setMilestones] = useState([]);
@@ -427,20 +441,45 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
         </Card>
       )}
 
-      {/* Rivaler (kun egen profil) */}
+      {/* Rivaler (kun egen profil). "Tætteste" er nu en påstand, tallene faktisk
+          bakker op: rangeringen er mindst forskel mellem sejre og nederlag blandt
+          rigtige møder, ikke antal historier (K3 lukket — se career_profile.sql).
+          Navnet er tryk-flade som alle andre navne i appen: rivalen kommer med
+          user_id, hvilket den gamle stories-optælling ikke kunne levere. */}
       {isOwn && rivals.length > 0 && (
         <div>
-          <Eyebrow>Rivaler</Eyebrow>
+          <Eyebrow>Rivaler <InfoDot title="Rivaler">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div>Dine rivaler er dem, du har de <b>mest jævnbyrdige</b> opgør med — mindst forskel mellem sejre og nederlag.</div>
+              <div>Et <b>møde</b> er én runde, hvor I begge har tippet i en konkurrence, I deler. Deler I flere konkurrencer, tæller runden stadig kun én gang.</div>
+              <div>Kun du kan se dine rivaler.</div>
+            </div>
+          </InfoDot></Eyebrow>
+          <p style={scopeNote}>Fra de konkurrencer, du deler med dem — runde for runde.</p>
           <Card>
             <div style={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
-              {/* count er antal rivaliserings-HISTORIER (H2H_PASS/STREAK), ikke antal
-                  møder — sql/career_profile.sql. Teksten sagde før "krydset klinger
-                  N gange", som læses som antal opgør. */}
-              Din tætteste rival: <b style={{ color: C.gold }}>{rivals[0].rival}</b> — {rivals[0].count} {rivals[0].count === 1 ? "historie" : "historier"} handler om jeres indbyrdes opgør.
+              {/* Punktum efter navnet frem for tankestreg: rivalTally har selv en
+                  tankestreg inde i sig, og to i samme sætning læses tungt. */}
+              Din tætteste rival:{" "}
+              <b style={{ color: C.gold }}>
+                <PlayerName userId={rivals[0].user_id} name={rivals[0].rival} onOpenProfile={openProfile} />
+              </b>. {rivalTally(rivals[0])}
+              {rivals[0].stories > 0 && (
+                <span style={{ color: C.muted }}>
+                  {" "}{rivals[0].stories} {rivals[0].stories === 1 ? "historie" : "historier"} handler om jeres opgør.
+                </span>
+              )}
             </div>
             {rivals.length > 1 && (
               <div style={{ color: C.muted, fontSize: 13, marginTop: 8 }}>
-                Andre rivaler: {rivals.slice(1).map((r) => `${r.rival} (${r.count})`).join(" · ")}
+                Andre rivaler:{" "}
+                {rivals.slice(1).map((r, i) => (
+                  <span key={r.user_id || r.rival}>
+                    {i > 0 && " · "}
+                    <PlayerName userId={r.user_id} name={r.rival} onOpenProfile={openProfile} />
+                    {" "}({r.wins}-{r.losses} af {r.meetings})
+                  </span>
+                ))}
               </div>
             )}
           </Card>

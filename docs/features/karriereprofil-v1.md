@@ -32,7 +32,7 @@ Oppefra og ned på profilsiden:
 | **Titler** | Sæsontitler ("Sæsonens Prediction Champ — Superligaen 2026/27", *tilføjet 30. juli 2026*), månedstitler ("Månedens Prediction Champ, marts 2027") og rundetitler (antal rundesejre). Vises som badges/trofæer, nyeste først | `season_standings`, `monthly_standings`, `round_standings` (historik) |
 | **Milepæle** | Kronologisk minde-liste fra story-arkivet: comebacks, stimer, ratingrekorder, H2H-overhalinger — genbrug af `headline` fra gemte `stories`-rækker | `stories` (alle kandidater, ikke kun viste) |
 | **Ratingkurve** | Rating over tid (én prik pr. runde), med provisorisk periode markeret. *(30. juli 2026:* toppunktet ringes ind (◎), og kurven har akser — y som neutralt interval, x som første/sidste runde*)* | `rating_history` |
-| **Rivaler** | De 2–3 brugere, man oftest har byttet placering/udvekslet H2H-historier med — vist som fortælling ("Din tætteste rival: Jimmy — I har overhalet hinanden 5 gange") | `stories` (regel 40/60) + `rating_history.rnk` |
+| **Rivaler** | De 2–3 brugere, man har de mest **jævnbyrdige** opgør med — vist som fortælling ("Din tætteste rival: Jimmy. I har mødt hinanden 7 gange — du fører 4-3"). Navnet er tryk-flade. **[Rettet 30. juli 2026, K3 lukket]:** rangeres på `abs(sejre − nederlag)` fra faktiske møder, ikke på antal historier; udkastets `rating_history.rnk` er afvist — se afsnit 12 | `competition_participants` + `predictions` + `pc_points()` (møder) · `stories` (regel 40/60, kun som farve) |
 | **Basistal (diskret)** | Samlede point, præcise hits (🎯), korrekte udfald *(tilføjet 30. juli 2026 — feltet blev hentet uden at blive vist, så halvdelen af pointene var usynlige)*, hit-rate, antal tippede kampe. Én kompakt linje/række nederst — bevidst ikke øverst | samme kilder som stillingerne (se afsnit 4) |
 | **H2H-linje** *(K4, tilføjet 30. juli 2026)* | Ét narrativt punkt, kun ved fremmed profil med delt konkurrencehistorik: "I har mødt hinanden N gange — du fører A-B". Et møde er deduplikeret pr. runde/kamp på tværs af alle delte konkurrencer — deler to brugere fx både en rundebaseret og en full-season-konkurrence for samme turnering, tæller samme spillede runde kun én gang (rettet 30. juli 2026, testcase 13). | `competition_participants`, `competition_matches`, `predictions`, `pc_points()` |
 | **Rekorder** *(K4)* | "Bedste nogensinde": bedste runde (flest point i én runde, *tilføjet 30. juli 2026*), bedste rundeplacering (kun hvis ikke allerede nr. 1, og med feltstørrelse — se afsnit 10), længste stime af rundesejre i træk, højeste rating. **Omfang: globalt** — global rating + Championships rundeliga, ikke brugerens egne konkurrencer | `rating_history` (`scope='ALL'`), `round_standings` (samme rank()-stige som Titler) |
@@ -90,7 +90,7 @@ Oppefra og ned på profilsiden:
 |---|---|---|
 | K1 | ~~Hvem kan se en profil?~~ **✅ Besluttet (juli 2026), udvidet (juli 2026):** oprindeligt "alle, man deler en liga eller konkurrence med". **Nu: enhver indlogget bruger kan se enhver profil** (hoved, titler, kurve, basistal) — milepæle og rivaler forbliver private. | Rivalisering kræver et publikum; historier er personlige. Udvidelsen: på Championship er alle automatisk med, og navn, rating, point og præcise hits står i forvejen offentligt på Rating-/Championship-fanerne — den gamle gate afviste folk, man reelt konkurrerer med, og beskyttede intet, der ikke allerede var på en rangliste. |
 | K2 | **Per-turnering-opdeling fra start?** `ratings.scope` er forberedt til per-liga-rating. | Nej — vent til turnering #2 er i drift ([`turnering-2.md`](./turnering-2.md)), ellers bygges en vælger uden indhold. |
-| K3 | **Rival-definitionen.** Ren `stories`-optælling (regel 40/60) eller også placerings-nabo-analyse fra `rating_history.rnk`? | Start med `stories`-optælling (billigst, allerede fortælle-formet); udvid hvis den giver for få rivaler i små ligaer. |
+| K3 | ~~**Rival-definitionen.** Ren `stories`-optælling (regel 40/60) eller også placerings-nabo-analyse fra `rating_history.rnk`?~~ **✅ Lukket (30. juli 2026): rangeres på jævnbyrdighed fra faktiske møder.** Story-optællingen beholdes som *farve*, ikke som rangering. Placerings-nabo på `rating_history.rnk` er **afvist** — se afsnit 12. | Oprindelig anbefaling: start med `stories`-optælling (billigst, allerede fortælle-formet); **udvid hvis den giver for få rivaler i små ligaer**. Udvidelsen blev nødvendig præcis af den grund, forudsigelsen nævnte. |
 | K4 | **Skal karriereprofilen vise ét cross-profile H2H-narrativ, selvom "H2H bor i Story Engine, ikke en sammenligningsside" (juli 2026) er besluttet? Og skal det vises, når viewer taber?** | **Besluttet (30. juli 2026): Ja, som afgrænset undtagelse.** Kun én sætning, kun ved delt konkurrence, aldrig en tabel/liste. Vises uanset om viewer fører eller taber, fordi (a) kun viewer selv ser den, aldrig den anden part eller offentligheden, (b) de samme runde-tal er allerede offentligt synlige for delte konkurrencedeltagere via stillingerne, og (c) Story Engines egen `LEAD_LOST`-regel fortæller allerede den tabende part om nederlag, i neutralt sprog. Ingen superlativer ("aldrig", "værst") — kun tælletal. Samtidig tilføjes `records` og `footprint` som nye **offentlige** jsonb-nøgler i `career_profile()`, på samme synlighedsniveau som hoved/titler/kurve/basistal (K1) — ingen ny privat information, kun tal der allerede er synlige andetsteds (kurve, stillinger) eller strukturelt neutrale (medlemskabstal). |
 
 ## 9. Testcases
@@ -141,6 +141,17 @@ Oppefra og ned på profilsiden:
 35. Kurven viser "Skala *min*–*max*" og første/sidste rundeetiket. Ordene "laveste"/"dårligste" må ikke forekomme — skalaen er en akse, ikke en bedømmelse.
 36. Rekorder-linjerne står i rækkefølgen bedste runde → placering → stime → rating (mest konkret først).
 
+*(K3 lukket, 30. juli 2026 — fortsætter nummereringen):*
+
+37. To modstandere med **lige mange møder**, den ene jævnbyrdig (2-2) og den anden ensidig (4-0) → den jævnbyrdige står **først**. "Tætteste rival" skal måle tæthed.
+38. Profilens ejer deler **to** konkurrencer med samme modstander, og begge dækker de samme kampe → 4 møder, ikke 8 (samme dedup-regel som H2H, testcase 13).
+39. Modstander med kun **ét** møde → udelades helt (`v_rival_min_meetings` = 2). Ét møde gør ingen til en rival.
+40. To spillere har tippet **præcis de samme kampe**, men i en konkurrence profilens ejer ikke deltager i → de optræder **ikke** som rivaler. Samme afgrænsningslektion som Story Engine-bugfixen (juli 2026); sikret strukturelt, ved at beregningen starter i `competition_participants`.
+41. `rivals`-posten om person X og `h2h`-linjen på X's profil svarer **det samme** på samme spørgsmål (samme mødetal, spejlvendt stilling). Invariant — to steder i produktet må ikke svare forskelligt.
+42. Fremmed profil → `rivals` er tom (uændret privathed, testcase 4/5).
+43. Rivalnavnet er en tryk-flade, der åbner personens karriere (`user_id` følger nu med posten).
+44. To modstandere ægte lige på både `abs(sejre − nederlag)` og antal møder → rækkefølgen er **deterministisk** (`rival_id` som sidste nøgle), så to kald ikke bytter om på dem.
+
 ---
 
 ## 10. Omfang på skærmen (rettelse, 30. juli 2026)
@@ -185,6 +196,28 @@ Leveret samlet efter en gennemgang af karrierestatistikken. Alle fem lå inden f
 **Akse-etiketterne står som HTML uden om SVG'en**, ikke som `<text>` inde i den: `Sparkline` bruger `preserveAspectRatio="none"`, så tekst inde i grafen ville blive strakt vandret på brede skærme. Ringen bruger `vectorEffect="non-scaling-stroke"` af samme grund.
 
 **Verificeret mod PostgreSQL 16.13** med produktionsskemaet, 4 spillere over 3 afsluttede runder med håndregnet facit og en færdigspillet sæson: stillingerne matcher facit række for række, sæsontitlen udløses kun for den faktiske vinder og forsvinder, når ét resultat fjernes, `best_round_points` vælger den ældste runde ved lighed, en ny bruger giver `null`/`0` overalt, og filen er idempotent.
+
+---
+
+## 12. Rivaler: jævnbyrdighed frem for historier (K3 lukket, 30. juli 2026)
+
+**Problemet var ikke, at der var for få rivaler — det var, at ordet "tætteste" var usandt.** Teksten sagde "Din tætteste rival", men rangeringen var antal `H2H_PASS`/`STREAK`-historier, altså hvor *dramatisk* forholdet havde været. På et testdatasæt gav den gamle metode én rival: den modstander, ejeren slår **4-0**. Den mest jævnbyrdige modstander (2-2) var usynlig, fordi der aldrig var skrevet en historie om hende.
+
+**Hvorfor tragten var så smal.** Kun 2 af 14 Story Engine-regler skriver et rival-navn. Regel 40 (`H2H_PASS`) kræver en overhaling i netop den runde (bagud/lige før, foran efter); regel 60/75 (`STREAK`) kræver en **aktuel** stime på ≥2 sejre mod netop den person. Begge har `distinct on (competition_id, user_id)`, så der gemmes **én** rival pr. konkurrence pr. runde — overhaler man fire personer i én runde, findes der én række. I en lille liga med stabil rækkefølge sker der næsten ingen overhalinger. K3 forudsagde selv udfaldet.
+
+**Den nye definition.** En rival er nogen, man *veksler slag med*: rangeret på `abs(sejre − nederlag)` blandt faktiske møder, med flest møder som tiebreak og `rival_id` som deterministisk sidste nøgle. Volumen alene ville ikke give rivaler, men blot den ældste medspiller i den største konkurrence.
+
+**Møde-definitionen er lånt 1:1 fra `h2h`, ikke opfundet igen.** Et møde er én runde, hvor begge har tippet en kamp fra en delt konkurrence, dedupliceret pr. kamp, og hver side tæller de kampe, den selv har tippet — som `round_standings`, der heller ikke normaliserer for antal tippede kampe. Konsekvensen er en invariant, der er verificeret: `rivals`-posten om person X og `h2h`-linjen på X's profil svarer det samme. Det er den disciplin, tiebreaker- og Story Engine-leverancerne begge kostede at lære — to steder i produktet må ikke svare forskelligt på samme spørgsmål.
+
+**`rating_history.rnk` er afvist**, selvom K3 selv foreslog den. `rnk` er den **globale** ratingplacering, så "placerings-nabo" kunne udpege folk, man ikke deler konkurrence med — direkte i strid med den ufravigelige designregel fra juli 2026. Den nye beregning starter i `competition_participants` og kan derfor *per konstruktion* ikke nævne en fremmed. Verificeret med to spillere, der har tippet præcis de samme kampe i en konkurrence uden profilens ejer: de optræder ikke.
+
+**Ingen regression.** En story-rival er altid også en møde-rival: regel 40 kræver en stilling før runden for begge parter (≥1 tidligere fælles runde), regel 60 kræver ≥2 sejre i træk — begge medfører ≥2 møder. Historierne er beholdt som `stories`-feltet, altså farve i sætningen, aldrig rangering.
+
+**To skavanker, der forsvandt undervejs.** `payload->>'rival'` er et `display_name`, ikke et `user_id`: (a) et navneskift kunne splitte én person i to rivaler, og (b) navnet kunne ikke trykkes på, så Rivaler var det ene sted i appen, hvor reglen *"et brugernavn er altid vejen til karrieren"* (afsnit 3) ikke gjaldt. Posten bærer nu `user_id`, så navnet er `PlayerName` som alle andre steder, og `ProfileScreen` tager imod `openProfile`.
+
+**Tærsklen er navngivet, ikke indlejret.** `v_rival_min_meetings` (pt. **2**) står som en deklareret variabel i funktionen — samme princip som Story Engines kalibrerede tærskler: ét møde gør ingen til en rival, men en høj tærskel i en ung sæson med få runder giver nul rivaler. Den hæves, når der er runder nok til, at 2 møder ikke længere er meget.
+
+**Det, der stadig bør måles i produktion:** beregningen er gået fra ét par til alle delte deltagere × runder inde i samme RPC. Med den nuværende brugerbase er det trivielt, men det er ikke målt på produktionsvolumen — det bør times, ikke antages.
 
 ---
 
