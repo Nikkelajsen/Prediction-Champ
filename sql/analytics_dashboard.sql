@@ -3,14 +3,17 @@
 -- Spec: docs/features/analytics-v1.md
 --
 -- Modsat sql/analytics_events.sql (skrive-siden, kør én gang) er DENNE fil
--- SIKKER OG FORVENTET AT BLIVE GEN-KØRT: Health Score-vægtene nedenfor er en
--- v1-heuristik uden empirisk belæg (samme situation som Story Engines
--- tærskler før v1.1-kalibreringen) og skal justeres, når der er nok ligaer
--- med nok historik. Alt herunder er `create or replace` på objekter, denne
--- fil selv ejer — den rører INGEN policy, INGEN eksisterende view og INGEN
--- eksisterende funktion fra sql/groups.sql, sql/standings_views.sql eller
--- nogen af de to lock-policy-filer (predictions_round_lock_policies.sql,
--- predictions_write_lock.sql).
+-- SIKKER OG FORVENTET AT BLIVE GEN-KØRT. Alt herunder er `create or replace`
+-- på objekter, denne fil selv ejer — den rører INGEN policy, INGEN
+-- eksisterende view og INGEN eksisterende funktion fra sql/groups.sql,
+-- sql/standings_views.sql eller nogen af de to lock-policy-filer
+-- (predictions_round_lock_policies.sql, predictions_write_lock.sql).
+--
+-- JULI 2026 — Liga-diagnose erstatter Liga Health Score: RPC 3 returnerer nu
+-- målte signaler pr. liga UDEN sammenvejet 0-100-score, og diagnosen udledes
+-- i src/lib/analytics.js. Gen-kør filen efter frontend-mergen; en gammel
+-- klient mod en ny RPC (eller omvendt) viser en tom Liga-sektion, ikke
+-- forkerte tal. Begrundelsen står i sin helhed over RPC 3.
 --
 -- North Star: Prediction Completion Rate = afgivne tips / mulige tips.
 -- "Mulige tips" defineres PRÆCIST i analytics_completion_facts nedenfor —
@@ -165,11 +168,16 @@ begin
       where c.group_id is not null
         and p.updated_at >= now() - make_interval(days => p_days)
     ),
+    -- VINDUE (rettet juli 2026): dag-granulære vinduer er `today - (p_days-1)`,
+    -- så p_days = 30 betyder 30 kalenderdage inkl. i dag — ikke 31. Før talte
+    -- dette felt (og deadline_miss' nævner) én dag mere end de tidsstempel-
+    -- baserede felter i samme svar, så to tal i samme sektion målte over hver
+    -- sin periode uden at sige det.
     'groups_with_active_member', (
       select count(distinct gm.group_id)
       from public.group_members gm
       join public.user_activity_days d on d.user_id = gm.user_id
-      where d.day >= today - p_days
+      where d.day >= today - (p_days - 1)
     ),
 
     'competitions_total', (select count(*) from public.competitions),
@@ -223,6 +231,22 @@ begin
         else round(100.0 * count(*) filter (where predicted) / count(*), 1) end
       from (select distinct user_id, match_id, predicted from public.analytics_completion_facts) t
     ),
+    -- Det FOREGÅENDE lige så lange vindue, så headline-tallet kan vises med en
+    -- retning. Et dashboard uden retning kan sige "62 %", men ikke om 62 % er
+    -- på vej op eller ned — og retningen er det eneste, en beslutning kan
+    -- hænge på. Nøglen er null, når det foregående vindue ikke havde nok
+    -- mulige tips (< MIN_SLOTS_FOR_TREND) at sammenligne med; UI'et skjuler
+    -- pilen i det tilfælde i stedet for at kalde støj for et fald.
+    'completion_rate_prev', (
+      select case when count(*) < 5 then null
+        else round(100.0 * count(*) filter (where predicted) / count(*), 1) end
+      from (
+        select distinct user_id, match_id, predicted
+        from public.analytics_completion_facts
+        where lock_at >= now() - make_interval(days => 2 * p_days)
+          and lock_at <  now() - make_interval(days => p_days)
+      ) t
+    ),
     'completion_by_week', (
       select coalesce(jsonb_agg(jsonb_build_object(
         'week', week, 'slots', slots, 'done', done,
@@ -270,7 +294,7 @@ begin
         where lock_at >= now() - make_interval(days => p_days)
         group by 1, 2, 3
       ), active as (
-        select count(distinct user_id) as n from public.user_activity_days where day >= today - p_days
+        select count(distinct user_id) as n from public.user_activity_days where day >= today - (p_days - 1)
       )
       select jsonb_build_object(
         'rounds_missed', (select count(*) filter (where not any_predicted) from rounds),
@@ -289,7 +313,9 @@ begin
 
     -- Gennemførte spillerunder: kun runder der faktisk indgår i mindst én
     -- konkurrence (ikke blot Sportmonks-runder ingen tipper på), og hvor
-    -- ALLE kampe har resultat.
+    -- ALLE kampe har resultat. BEMÆRK: dette tal er ALT-TID, ikke p_days —
+    -- derfor står "(alt tid)" i UI-etiketten, så det ikke læses som om
+    -- vinduesvælgeren gælder det.
     'rounds_completed', (
       select count(*) from public.analytics_round_locks rl
       where rl.finished_count = rl.match_count
@@ -446,21 +472,43 @@ $fn$;
 grant execute on function public.admin_analytics_engagement(int) to authenticated;
 
 -- ================= RPC 3: admin_analytics_league_health =================
--- Liga Health Score (0-100). ALLE tunbare tal (vægte + targets) lever i CTE'en
--- `k` herunder — rekalibrering er "redigér disse linjer, gen-kør denne fil".
+-- Liga-diagnose. Returnerer MÅLTE SIGNALER pr. liga — ingen sammenvejet score.
 --
--- KALIBRERINGS-FLAG (samme princip som Story Engine v1→v1.1's tærskel-
--- kalibrering, jf. docs/ROADMAP.md juli 2026): disse vægte er en v1-heuristik
--- UDEN empirisk belæg. Scoren er kun meningsfuld som RELATIV rangering inden
--- for ét snapshot ("hvilke ligaer trænger opmærksomhed lige nu"), ikke som et
--- absolut mål. Rekalibrér når ≥10 ligaer har ≥30 dages historik — se
--- docs/ROADMAP.md's åbne beslutninger.
+-- HVORFOR DEN SAMMENVEJEDE SCORE ER VÆK (omlagt juli 2026, lukker ROADMAP A12):
+-- v1 returnerede ét `health_score` (0-100) som en vægtet blanding af fem
+-- faktorer. Den var for BRED til at bruge til noget:
 --
--- NULL-SIKKER RENORMALISERING: en nyoprettet liga har ingen medlem gammel
--- nok til at måle retention på — at score det som 0 ville stemple enhver ny
--- liga som døende. Manglende faktorer udelades helt, og vægtsummen
--- renormaliseres over de faktorer, der faktisk findes. Er INGEN faktor
--- tilgængelig, er scoren `null` ("For ny" i UI'et), ikke 0.
+--   1) Blandingen søgte mod midten. På de fire første rigtige ligaer gav den
+--      75/77/77/88 — alle fire "SUND", grøn bjælke hele vejen ned. En metrik,
+--      der ikke kan skelne ligaer fra hinanden, kan heller ikke pege på den,
+--      der har brug for hjælp.
+--   2) Den sagde aldrig HVAD der var galt. "77" er ikke en handling. Det, en
+--      admin skal vide, er "denne liga har ingen aktiv konkurrence" eller
+--      "denne liga bæres af én person" — to helt forskellige problemer, som
+--      den vægtede sum kunne give præcis samme tal for.
+--   3) Faktorerne overlappede (antal aktive medlemmer, andel aktive medlemmer
+--      og retention måler alle tre "kommer medlemmerne her"), så tre af de
+--      fem vægte trak i samme streng, mens deltagelse reelt vejede mindre end
+--      de 35 %, tallet lovede.
+--   4) Vægte kan ikke kalibreres på fire ligaer. A12 spurgte "hvornår
+--      rekalibrerer vi?" — det rigtige svar viste sig at være "vi fjerner den
+--      størrelse, der kræver kalibrering".
+--
+-- I stedet: hvert signal står for sig med sin egen enhed og sin egen
+-- definition (UI'et viser definitionen via måle-ordbogen i
+-- src/lib/analyticsMetrics.js), og DIAGNOSEN — hvilken tilstand ligaen er i,
+-- og hvad man gør ved det — udledes i `diagnoseLeague()` i
+-- src/lib/analytics.js.
+--
+-- HVORFOR DIAGNOSEN LIGGER I JS OG IKKE HER: reglerne er produktjudgement, der
+-- skal tunes ofte, og de kan unit-testes i vitest (ingen CI kører SQL). Samme
+-- valg som Onboarding v1, hvor tilstanden bevidst udledes af data i klienten
+-- uden SQL. Denne fil måler; klienten fortolker. Nye tærskler kræver derfor
+-- ikke længere en gen-kørsel i Supabase.
+--
+-- Alle signaler i ét vindue: p_days. Målt over `analytics_completion_facts`
+-- (samme kilde som North Star, så tallene her og i "Produktets sundhed" ikke
+-- kan modsige hinanden) plus user_activity_days, groups og analytics_events.
 create or replace function public.admin_analytics_league_health(p_days int default 30)
 returns jsonb
 language plpgsql
@@ -474,31 +522,70 @@ begin
 
   with k as (
     select
-      0.35::numeric as w_completion,   -- North Star: den vigtigste faktor
-      0.20::numeric as w_retention,    -- kommer de igen?
-      0.20::numeric as w_activity,     -- er de her overhovedet?
-      0.15::numeric as w_members,      -- er de nok til at det føles som en liga?
-      0.10::numeric as w_story,        -- svageste signal, nyeste instrumentering
-      5.0::numeric  as target_active_members,          -- "en liga føles levende ved ~5 aktive"
-      2.0::numeric  as target_story_views_per_member,   -- pr. vindue
-      28            as retention_min_age_days,          -- medlem skal have været med så længe
-      14            as retention_window_days            -- … og aktiv inden for
+      28 as retention_min_age_days,   -- medlem skal have været med så længe …
+      14 as retention_window_days     -- … og været aktiv inden for så længe
   ),
-  member_counts as (
-    select group_id, count(*) as members
-    from public.group_members
+  win as (
+    select
+      now() - make_interval(days => p_days)     as t0,
+      now() - make_interval(days => 2 * p_days) as t0_prev,
+      (now() at time zone 'utc')::date - (p_days - 1) as d0
+  ),
+  -- GRAIN-REGLEN: ét tip kan ligge i flere konkurrencer i samme liga (delt
+  -- predictions-tabel), så alt herunder tælles på distinct (group, user, match).
+  -- `predicted` afhænger kun af (user, match) og duplikerer derfor ikke rækken.
+  facts as (
+    select distinct f.group_id, f.user_id, f.match_id, f.season_id, f.round_key, f.predicted
+    from public.analytics_completion_facts f cross join win w
+    where f.group_id is not null and f.lock_at >= w.t0
+  ),
+  facts_prev as (
+    select distinct f.group_id, f.user_id, f.match_id, f.predicted
+    from public.analytics_completion_facts f cross join win w
+    where f.group_id is not null and f.lock_at >= w.t0_prev and f.lock_at < w.t0
+  ),
+  participation as (
+    select group_id,
+      count(*)                                                    as slots,
+      count(*) filter (where predicted)                           as done,
+      -- BREDDE: hvor mange forskellige medlemmer der faktisk tippede. Det
+      -- signal v1 manglede helt: "andel aktive medlemmer" målte, om folk
+      -- ÅBNEDE appen, ikke om de spillede. En liga hvor én tipper alt og fire
+      -- kigger på, og en liga hvor alle fem tipper, kunne få samme score.
+      count(distinct user_id) filter (where predicted)             as predictors,
+      count(distinct user_id)                                      as exposed_members,
+      -- PULS: spillede runder ÷ runder der var noget at spille i.
+      count(distinct (season_id, round_key))                       as rounds_available,
+      count(distinct (season_id, round_key)) filter (where predicted) as rounds_played
+    from facts group by group_id
+  ),
+  participation_prev as (
+    select group_id, count(*) as slots, count(*) filter (where predicted) as done
+    from facts_prev group by group_id
+  ),
+  -- KONCENTRATION: den mest aktive tippers andel af ligaens afgivne tips.
+  -- Høj koncentration + få tippere = ligaen bæres af én person, det klassiske
+  -- vennegruppe-sammenbrud. Diagnosen bruger `predictors`; dette tal er
+  -- nuancen i drill-in'en.
+  concentration as (
+    select group_id, max(n) as top_n, sum(n) as total_n
+    from (select group_id, user_id, count(*) as n from facts where predicted group by 1, 2) t
     group by group_id
   ),
+  member_counts as (
+    select group_id, count(*) as members from public.group_members group by group_id
+  ),
+  -- Følger nu p_days. FØR var denne CTE hårdkodet til 30 dage, mens etiketten
+  -- fulgte vinduesvælgeren: valgte man "7 dage", viste kolonnen stadig 30
+  -- dages tal uden at sige det.
   active_members as (
-    select gm.group_id, count(distinct gm.user_id) as active_members_30d
+    select gm.group_id, count(distinct gm.user_id) as n
     from public.group_members gm
     join public.user_activity_days d on d.user_id = gm.user_id
-    where d.day >= (now() at time zone 'utc')::date - 29
+    cross join win w
+    where d.day >= w.d0
     group by gm.group_id
   ),
-  -- Retention: andel medlemmer, der har været med i mindst retention_min_age_days
-  -- dage, OG som har en aktivitetsdag inden for de seneste retention_window_days
-  -- dage (regnet fra NU, ikke fra deres tilmeldingsdato).
   retention_eligible as (
     select gm.group_id,
       count(*) as eligible,
@@ -511,20 +598,11 @@ begin
     where gm.joined_at <= now() - make_interval(days => (select retention_min_age_days from k))
     group by gm.group_id
   ),
-  completion as (
-    select f.group_id,
-      count(distinct (f.user_id, f.match_id)) as slots,
-      count(distinct (f.user_id, f.match_id)) filter (where f.predicted) as done
-    from public.analytics_completion_facts f
-    where f.lock_at >= now() - make_interval(days => p_days) and f.group_id is not null
-    group by f.group_id
-  ),
   story_views as (
-    select group_id, count(*) as views
-    from public.analytics_events
-    where event_name = 'story_viewed' and group_id is not null
-      and created_at >= now() - make_interval(days => p_days)
-    group by group_id
+    select e.group_id, count(*) as views
+    from public.analytics_events e cross join win w
+    where e.event_name = 'story_viewed' and e.group_id is not null and e.created_at >= w.t0
+    group by e.group_id
   ),
   last_activity as (
     select g.id as group_id, greatest(
@@ -538,69 +616,65 @@ begin
     ) as last_activity_at
     from public.groups g
   ),
-  factors as (
+  signals as (
     select
-      g.id as group_id, g.name,
-      coalesce(mc.members, 0) as members,
-      coalesce(am.active_members_30d, 0) as active_members_30d,
-      coalesce(sv.views, 0) as story_views_30d,
+      g.id as group_id, g.name, g.created_at,
+      floor(extract(epoch from (now() - g.created_at)) / 86400)::int as age_days,
+      coalesce(mc.members, 0)                as members,
+      coalesce(am.n, 0)                      as active_members,
+      coalesce(pa.predictors, 0)             as predictors,
+      coalesce(pa.exposed_members, 0)        as exposed_members,
+      coalesce(pa.slots, 0)                  as completion_slots,
+      coalesce(pa.done, 0)                   as completion_done,
+      coalesce(pa.rounds_available, 0)       as rounds_available,
+      coalesce(pa.rounds_played, 0)          as rounds_played,
+      coalesce(sv.views, 0)                  as story_views,
       la.last_activity_at,
+      case when la.last_activity_at is null then null
+        else floor(extract(epoch from (now() - la.last_activity_at)) / 86400)::int end as days_since_activity,
       (select count(*) from public.competitions c where c.group_id = g.id) as competitions_total,
       (select count(distinct cm.competition_id) from public.competitions c
         join public.competition_matches cm on cm.competition_id = c.id
         join public.matches m on m.id = cm.match_id
         join public.analytics_round_locks rl on rl.season_id is not distinct from m.season_id and rl.round_key = m.round_key
         where c.group_id = g.id and not rl.is_locked) as competitions_active,
-      case when cf.slots is null or cf.slots = 0 then null else cf.done::numeric / cf.slots end as f_completion,
-      case when re.eligible is null or re.eligible = 0 then null else re.retained::numeric / re.eligible end as f_retention,
-      case when mc.members is null or mc.members = 0 then null else coalesce(am.active_members_30d, 0)::numeric / mc.members end as f_activity,
-      case when mc.members is null or mc.members = 0 then null
-           else least(1.0, coalesce(am.active_members_30d, 0) / (select target_active_members from k)) end as f_members,
-      case when mc.members is null or mc.members = 0 then null
-           else least(1.0, coalesce(sv.views, 0) / (mc.members * (select target_story_views_per_member from k))) end as f_story
+      case when coalesce(pa.slots, 0) = 0 then null
+        else round(100.0 * pa.done / pa.slots, 1) end as completion_rate,
+      -- Trend-nøglen er null, når det foregående vindue havde under 5 mulige
+      -- tips: en enkelt kamp mere eller mindre må ikke kunne læses som "faldende".
+      case when coalesce(pp.slots, 0) < 5 then null
+        else round(100.0 * pp.done / pp.slots, 1) end as completion_rate_prev,
+      case when coalesce(mc.members, 0) = 0 then null
+        else round(100.0 * coalesce(pa.predictors, 0) / mc.members, 1) end as predictor_share,
+      case when coalesce(mc.members, 0) = 0 then null
+        else round(100.0 * coalesce(am.n, 0) / mc.members, 1) end as active_share,
+      case when coalesce(pa.rounds_available, 0) = 0 then null
+        else round(100.0 * pa.rounds_played / pa.rounds_available, 1) end as pulse,
+      case when coalesce(cn.total_n, 0) = 0 then null
+        else round(100.0 * cn.top_n / cn.total_n, 1) end as top_predictor_share,
+      re.eligible as retention_eligible,
+      re.retained as retention_retained,
+      case when coalesce(re.eligible, 0) = 0 then null
+        else round(100.0 * re.retained / re.eligible, 1) end as retention_rate
     from public.groups g
-    left join member_counts mc on mc.group_id = g.id
-    left join active_members am on am.group_id = g.id
-    left join retention_eligible re on re.group_id = g.id
-    left join completion cf on cf.group_id = g.id
-    left join story_views sv on sv.group_id = g.id
-    left join last_activity la on la.group_id = g.id
-  ),
-  weighted as (
-    select f.*,
-      (coalesce(f.f_completion * k.w_completion, 0) + coalesce(f.f_retention * k.w_retention, 0)
-        + coalesce(f.f_activity * k.w_activity, 0) + coalesce(f.f_members * k.w_members, 0)
-        + coalesce(f.f_story * k.w_story, 0)) as weighted_sum,
-      ((case when f.f_completion is null then 0 else k.w_completion end)
-        + (case when f.f_retention is null then 0 else k.w_retention end)
-        + (case when f.f_activity is null then 0 else k.w_activity end)
-        + (case when f.f_members is null then 0 else k.w_members end)
-        + (case when f.f_story is null then 0 else k.w_story end)) as weight_available
-    from factors f cross join k
-  ),
-  scored as (
-    select w.*,
-      case when weight_available = 0 then null else round(100 * weighted_sum / weight_available) end as health_score
-    from weighted w
+    left join member_counts       mc on mc.group_id = g.id
+    left join active_members      am on am.group_id = g.id
+    left join participation       pa on pa.group_id = g.id
+    left join participation_prev  pp on pp.group_id = g.id
+    left join concentration       cn on cn.group_id = g.id
+    left join retention_eligible  re on re.group_id = g.id
+    left join story_views         sv on sv.group_id = g.id
+    left join last_activity       la on la.group_id = g.id
   )
   select jsonb_build_object(
     'window_days', p_days,
-    'leagues', coalesce(jsonb_agg(jsonb_build_object(
-      'group_id', s.group_id,
-      'name', s.name,
-      'health_score', s.health_score,
-      'members', s.members,
-      'active_members_30d', s.active_members_30d,
-      'completion_rate', case when s.f_completion is null then null else round(100 * s.f_completion, 1) end,
-      'retention_rate', case when s.f_retention is null then null else round(100 * s.f_retention, 1) end,
-      'activity_rate', case when s.f_activity is null then null else round(100 * s.f_activity, 1) end,
-      'story_views_30d', s.story_views_30d,
-      'last_activity_at', s.last_activity_at,
-      'competitions_total', s.competitions_total,
-      'competitions_active', s.competitions_active
-    ) order by s.health_score asc nulls last), '[]'::jsonb)
+    'retention_min_age_days', (select retention_min_age_days from k),
+    'retention_window_days', (select retention_window_days from k),
+    -- Usorteret bevidst: rækkefølgen bestemmes af diagnosens alvor i
+    -- klienten (diagnoseLeague), som er det eneste sted, alvor er defineret.
+    'leagues', coalesce(jsonb_agg(to_jsonb(s) order by s.name), '[]'::jsonb)
   ) into result
-  from scored s;
+  from signals s;
 
   return result;
 end;
@@ -761,11 +835,21 @@ grant execute on function public.admin_analytics_retention() to authenticated;
 -- select count(*) slots, count(*) filter (where predicted) done
 -- from public.analytics_completion_facts where competition_id = '<uuid>';
 
--- 6) Health Score i [0,100] eller null. Skal give 0:
+-- 6) Liga-diagnose: alle procent-signaler i [0,100] eller null (afløser den
+--    gamle "health_score i [0,100]"-invariant). Skal give 0:
+-- select count(*) from jsonb_array_elements(
+--   (select public.admin_analytics_league_health(30) -> 'leagues')) e,
+--   lateral (values ('completion_rate'),('predictor_share'),('active_share'),
+--                   ('pulse'),('top_predictor_share'),('retention_rate')) as f(kk)
+-- where (e->>f.kk) is not null
+--   and ((e->>f.kk)::numeric < 0 or (e->>f.kk)::numeric > 100);
+
+-- 6b) Bredde kan aldrig overstige medlemstallet, og spillede runder kan
+--     aldrig overstige tilgængelige runder. Skal give 0:
 -- select count(*) from jsonb_array_elements(
 --   (select public.admin_analytics_league_health(30) -> 'leagues')) e
--- where (e->>'health_score') is not null
---   and ((e->>'health_score')::numeric < 0 or (e->>'health_score')::numeric > 100);
+-- where (e->>'predictors')::int > (e->>'members')::int
+--    or (e->>'rounds_played')::int > (e->>'rounds_available')::int;
 
 -- 7) Retention: se hvor langt tilbage aktivitetsdata reelt findes, før du
 --    stoler på uge-26/52-tallene:
