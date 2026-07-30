@@ -180,6 +180,8 @@ export default async function handler(req, res) {
               title: "Runden låser snart ⏰",
               body: `${missing.length} ${missing.length === 1 ? "kamp mangler" : "kampe mangler"} dine tips — runden låser om ${fmtUntil(lockAt)}.`,
               tag: `deadline-${round_key}`,
+              kind: "deadline",
+              roundKey: round_key,
             });
           }
         }
@@ -216,6 +218,8 @@ export default async function handler(req, res) {
               : "Runden er slut ⚽",
             body: `Runden ${roundLabel(roundKey)}: du fik ${r.total_points} point og blev ${pos} af ${board.length}.`,
             tag: `result-${roundKey}`,
+            kind: "result",
+            roundKey,
           });
         }
       }
@@ -265,7 +269,10 @@ export default async function handler(req, res) {
     let sent = 0;
     const deadSubIds = new Set();
     for (const msg of toSend) {
-      const payload = JSON.stringify({ title: msg.title, body: msg.body, tag: msg.tag, url: "/" });
+      // ?pn=<kind>&rk=<round> lader klienten logge push_opened med kontekst
+      // (analytics v1) — der skrives ingen event her server-side, kun URL'en.
+      const url = `/?pn=${encodeURIComponent(msg.kind || "")}&rk=${encodeURIComponent(msg.roundKey || "")}`;
+      const payload = JSON.stringify({ title: msg.title, body: msg.body, tag: msg.tag, url });
       for (const s of subsByUser[msg.userId] || []) {
         try {
           await webpush.sendNotification(

@@ -90,7 +90,7 @@ function AuthScreen({ onAuthed, booting }) {
         const available = await auth.checkUsername(uname);
         if (!available) { setError("Brugernavnet er allerede taget. Vælg et andet."); setLoading(false); return; }
         const res = await auth.signUp(email, password);
-        if (res.access_token) { await onAuthed(res, uname); return; }
+        if (res.access_token) { await onAuthed(res, uname, "signup"); return; }
         setInfo("Konto oprettet. Har du fået en bekræftelses-mail, skal du følge linket i den — log derefter ind.");
         setMode("signin");
       } else if (mode === "forgot") {
@@ -98,7 +98,7 @@ function AuthScreen({ onAuthed, booting }) {
         setInfo("Hvis e-mailen findes, er der sendt et link til at nulstille adgangskoden.");
       } else {
         const res = await auth.signIn(email, password);
-        await onAuthed(res);
+        await onAuthed(res, undefined, "signin");
       }
     } catch (e) {
       setError(e.message || "Noget gik galt");

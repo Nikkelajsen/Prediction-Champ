@@ -3,6 +3,7 @@ import { db, restFetch } from "./supabase.js";
 import { currentRoundIndex, groupIntoRounds, isLocked, liveInfo, outcome, pointsFor, roundLabel, buildRoundLockMap, roundLockKey, filterByStages, filterFromNextUnfinishedRound, LOCK_LEAD_MS } from "./scoring.js";
 import { assignRanks, avgGoalError, compareStandings, sortStandings } from "./standings.js";
 import { QUIET_TIER_MIN } from "./stories.js";
+import { logEvent } from "./analytics.js";
 
 // Tiebreaker-stigen som PostgREST-order: point → præcise → udfald → rundesejre →
 // målafvigelse, og til sidst user_id som skjult, stabil nøgle (afgør aldrig en
@@ -523,13 +524,17 @@ async function loadGroupByCode(token, code) {
 async function createGroup(token, userId, name) {
   const [g] = await db.insert(token, "groups", [{ name: name.trim(), created_by: userId }]);
   await db.insert(token, "group_members", [{ group_id: g.id, user_id: userId, role: "admin" }]);
+  logEvent(token, "league_created", { groupId: g.id });
   return g;
 }
 
 // Meld sig selv ind i en liga (idempotent — springer over hvis allerede medlem).
 async function joinGroup(token, userId, groupId) {
   const existing = await db.select(token, "group_members", `group_id=eq.${groupId}&user_id=eq.${userId}&select=user_id`);
-  if (!existing.length) await db.insert(token, "group_members", [{ group_id: groupId, user_id: userId, role: "member" }]);
+  if (!existing.length) {
+    await db.insert(token, "group_members", [{ group_id: groupId, user_id: userId, role: "member" }]);
+    logEvent(token, "league_joined", { groupId }); // ikke ved den idempotente early-return — kun ægte nye medlemskaber
+  }
 }
 
 // Forlad en liga (fjern egen medlemsrække). RLS blokerer, hvis man stadig deltager
@@ -562,6 +567,7 @@ async function deleteGroup(token, groupId) {
 async function joinCompetition(token, userId, compId, groupId = null) {
   if (groupId) await joinGroup(token, userId, groupId);
   await db.insert(token, "competition_participants", [{ competition_id: compId, user_id: userId }]);
+  logEvent(token, "competition_joined", { competitionId: compId, groupId });
 }
 
 // Framelding: slet egen deltager-række. RLS blokerer, hvis man har tips på låste
@@ -650,6 +656,7 @@ async function createCompetition(token, userId, spec) {
     if (ids.length) {
       await db.insert(token, "competition_matches", ids.map((id) => ({ competition_id: competition.id, match_id: id })));
     }
+    logEvent(token, "competition_created", { competitionId: competition.id, groupId, metadata: { mode: "full_season", match_count: ids.length } });
     return { competition, matchCount: ids.length };
   }
 
@@ -676,6 +683,7 @@ async function createCompetition(token, userId, spec) {
 
   if (crossLeague) {
     await db.insert(token, "competition_matches", matchIds.map((id) => ({ competition_id: competition.id, match_id: id })));
+    logEvent(token, "competition_created", { competitionId: competition.id, groupId, metadata: { mode, match_count: matchIds.length } });
     return { competition, matchCount: matchIds.length };
   }
 
@@ -688,6 +696,7 @@ async function createCompetition(token, userId, spec) {
   if (matched.length) {
     await db.insert(token, "competition_matches", matched.map((m) => ({ competition_id: competition.id, match_id: m.id })));
   }
+  logEvent(token, "competition_created", { competitionId: competition.id, groupId, metadata: { mode, match_count: matched.length } });
   return { competition, matchCount: matched.length };
 }
 
@@ -716,6 +725,7 @@ async function joinByInviteCode(token, userId, rawCode) {
   const group = await loadGroupByCode(token, code);
   if (group) {
     await joinGroup(token, userId, group.id);
+    logEvent(token, "league_invite_accepted", { groupId: group.id, metadata: { via: "code" } });
     return { kind: "group", group };
   }
 
@@ -728,11 +738,15 @@ async function joinByInviteCode(token, userId, rawCode) {
     if (competition.group_id) {
       try { await joinGroup(token, userId, competition.group_id); }
       catch (e) { /* deltagelsen er intakt — bloker ikke navigationen */ }
+      logEvent(token, "league_invite_accepted", { groupId: competition.group_id, competitionId: competition.id, metadata: { via: "code" } });
     }
     return { kind: "competition", competition, alreadyJoined: true };
   }
 
   await joinCompetition(token, userId, competition.id, competition.group_id);
+  if (competition.group_id) {
+    logEvent(token, "league_invite_accepted", { groupId: competition.group_id, competitionId: competition.id, metadata: { via: "code" } });
+  }
   return { kind: "competition", competition, alreadyJoined: false };
 }
 

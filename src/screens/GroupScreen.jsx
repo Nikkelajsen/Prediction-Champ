@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { ChevronRight, Copy, Check, Plus, Crown, LogOut, Loader2, MoveRight } from "lucide-react";
 import { loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, deleteGroup, moveCompetitionToGroup } from "../lib/data.js";
+import { logEvent } from "../lib/analytics.js";
 import { modeLabel } from "../lib/scoring.js";
 import { C, btnGhost, btnGold, btnGreen, font, muted } from "../ui/theme.js";
 import { BackBar, Card, Eyebrow, PlayerName } from "../ui/components.jsx";
@@ -34,6 +35,7 @@ function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard
     try {
       if (navigator.share) await navigator.share({ title: "Prediction Champ", text });
       else { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+      logEvent(token, "league_invite_sent", { groupId: detail.group.id, metadata: { via: "liga_link" } });
     } catch (e) { /* annulleret — ignorér */ }
   }
 

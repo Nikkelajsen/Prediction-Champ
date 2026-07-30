@@ -4,6 +4,7 @@ import { Bell, ChevronRight, ChevronDown, Clock, Check, X, Share2 } from "lucide
 import { formatKickoff, outcome } from "../lib/scoring.js";
 import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
+import { logEvent, logEventOnce } from "../lib/analytics.js";
 import { isQuiet } from "../lib/stories.js";
 import { readFlag, writeFlag, CARD_KEY } from "../lib/onboarding.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
@@ -49,13 +50,14 @@ function PushOptInCard({ push }) {
 //    INGEN Del-knap. Det er den stille runde, produktbogens kapitel 6 beder om
 //    ("status quo") — den skal kunne ses uden at ligne en sejr, og der er intet
 //    at prale af. Genereres kun, når brugeren ellers ville stå helt uden kort.
-function StoryCard({ story, onDismiss }) {
+function StoryCard({ story, onDismiss, token, groupId }) {
   const quiet = isQuiet(story.priority);
   async function share() {
     const text = `${story.headline}\n${story.body}`;
     try {
       if (navigator.share) await navigator.share({ title: "Prediction Champ", text });
       else await navigator.clipboard.writeText(text);
+      logEvent(token, "story_shared", { competitionId: story.competition_id || null, groupId, metadata: { rule: story.rule } });
     } catch (e) { /* bruger annullerede — ignorér */ }
   }
   return (
@@ -157,6 +159,19 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
     })();
     return () => { cancelled = true; };
   }, [token]);
+
+  // story_viewed: logges højst én gang pr. historie pr. sideliv (logEventOnce),
+  // ellers ville et faneskift frem og tilbage til Hjem tælle den samme visning
+  // flere gange. groupId udledes af historiens konkurrence (allerede i props),
+  // så Liga Health kan attribuere story-views til den rigtige liga.
+  const storyGroupId = story ? (competitions.find((c) => c.id === story.competition_id)?.group_id || null) : null;
+  useEffect(() => {
+    if (!story) return;
+    logEventOnce(token, "story_viewed", story.id, {
+      competitionId: story.competition_id || null, groupId: storyGroupId,
+      metadata: { rule: story.rule, priority: story.priority, quiet: isQuiet(story.priority) },
+    });
+  }, [story, storyGroupId, token]);
 
   async function onDismissStory() {
     const s = story;
@@ -351,7 +366,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       )}
 
       {/* Rundens historie (Story Engine) — direkte under tips-status, altid synlig */}
-      {story && <StoryCard story={story} onDismiss={onDismissStory} />}
+      {story && <StoryCard story={story} onDismiss={onDismissStory} token={token} groupId={storyGroupId} />}
 
       {/* Indeværende runde: live-oversigt der opdaterer løbende.
           Foldet som standard (viser kun X/Y spillet + akkumulerede point);

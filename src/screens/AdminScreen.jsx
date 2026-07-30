@@ -5,7 +5,8 @@ import { db, restFetch } from "../lib/supabase.js";
 import { loadUserStats } from "../lib/data.js";
 import { currentRoundIndex, formatKickoff, groupIntoRounds, modeLabel } from "../lib/scoring.js";
 import { C, btnGhost, btnGold, chip, font, muted } from "../ui/theme.js";
-import { BackBar, Card, RoundPager, ScoreInput } from "../ui/components.jsx";
+import { BackBar, Card, RoundPager, ScoreInput, StatTile, StatGroup, MiniBars } from "../ui/components.jsx";
+import AnalyticsPanel from "./AnalyticsPanel.jsx";
 
 function AdminScreen({ token, leagues, reloadLeagues, onBack }) {
   const [sub, setSub] = useState("matches");
@@ -33,10 +34,12 @@ function AdminScreen({ token, leagues, reloadLeagues, onBack }) {
         <button style={chip(sub === "matches")} onClick={() => setSub("matches")}>Kampe</button>
         <button style={chip(sub === "results")} onClick={() => setSub("results")}>Resultater</button>
         <button style={chip(sub === "stats")} onClick={() => setSub("stats")}>Statistik</button>
+        <button style={chip(sub === "analytics")} onClick={() => setSub("analytics")}>Analytics</button>
       </div>
       {sub === "matches" && <MatchesPanel token={token} leagues={leagues} reloadLeagues={reloadLeagues} />}
       {sub === "results" && <ResultsPanel token={token} leagues={leagues} />}
       {sub === "stats" && <StatsPanel token={token} />}
+      {sub === "analytics" && <AnalyticsPanel token={token} />}
     </div>
   );
 }
@@ -221,49 +224,6 @@ function ModeBars({ data, total }) {
           </div>
         );
       })}
-    </div>
-  );
-}
-
-// Et enkelt nøgletal ("stat tile").
-function StatTile({ label, value, hint }) {
-  return (
-    <div style={{ background: C.surface2, border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px" }}>
-      <div style={{ fontFamily: font.display, fontWeight: 700, fontSize: 28, lineHeight: 1.05, color: C.text }}>{value}</div>
-      <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>{label}</div>
-      {hint && <div style={{ color: C.muted, fontSize: 11, marginTop: 4, opacity: 0.8 }}>{hint}</div>}
-    </div>
-  );
-}
-
-// Overskrift for en gruppe af nøgletal.
-function StatGroup({ title, children }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ fontFamily: font.display, textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 13, color: C.muted }}>{title}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>{children}</div>
-    </div>
-  );
-}
-
-// Enkelt-serie søjlediagram (magnitude over tid). Tynde søjler med afrundet top,
-// 2px mellemrum, diskret baseline. Ingen legend — titlen navngiver serien.
-// Hover viser etikette + værdi via native title. Farve = én temafarve.
-function MiniBars({ data, color, formatLabel }) {
-  if (!data || !data.length) return <p style={{ ...muted, margin: 0 }}>Ingen data endnu.</p>;
-  const max = Math.max(1, ...data.map((d) => d.value));
-  return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 96, borderBottom: `1px solid ${C.line}`, paddingBottom: 0 }}>
-      {data.map((d, i) => (
-        <div key={i} title={`${formatLabel(d.key)}: ${d.value}`}
-          style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", minWidth: 0 }}>
-          <span style={{ color: C.muted, fontSize: 9, lineHeight: 1, marginBottom: 2 }}>{d.value || ""}</span>
-          <div style={{
-            width: "100%", height: `${Math.max(d.value > 0 ? 3 : 0, (d.value / max) * 74)}px`,
-            background: color, borderRadius: "4px 4px 0 0",
-          }} />
-        </div>
-      ))}
     </div>
   );
 }

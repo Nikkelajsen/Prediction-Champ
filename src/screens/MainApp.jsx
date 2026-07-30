@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { loadGroupByCode, joinGroup, joinCompetition } from "../lib/data.js";
+import { logEvent } from "../lib/analytics.js";
 import { deriveOnboarding, loadOnboardingSignals, readFlag, writeFlag, COMPLETE_KEY, FLOW_KEY } from "../lib/onboarding.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
 import { Modal } from "../ui/components.jsx";
@@ -244,6 +245,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     const g = pendingGroupJoin.group;
     try {
       await joinGroup(token, userId, g.id);
+      logEvent(token, "league_invite_accepted", { groupId: g.id, metadata: { via: "link" } });
       await refreshOnboarding();
       setPendingGroupJoin(null);
       setTab("ligaer");
@@ -279,15 +281,38 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   // At vende tilbage til Hjem er præcis det øjeblik, hvor et netop afgivet tip
   // skal kunne ses på checklisten — derfor gen-hentes tilstanden dér, og kun
   // så længe onboardingen er uafsluttet.
+  // Navigation logges HER, ét sted, i stedet for i hver fane/skærm for sig —
+  // goTab/open* er allerede den entydige indgang til enhver navigation.
   const goTab = (t) => {
     setScreen(null); setTab(t);
+    if (t === "hjem") logEvent(token, "opened_home");
+    else if (t === "tip") logEvent(token, "opened_tip", { metadata: { view: "all" } });
+    else if (t === "ligaer") logEvent(token, "opened_league", { metadata: { view: "list" } });
+    else if (t === "championship") logEvent(token, "opened_championship");
+    else if (t === "rating") logEvent(token, "opened_rating");
     if (t === "hjem" && !onboardingDone.current) refreshOnboarding();
   };
-  const openBoard = (compId) => setScreen({ type: "board", compId });
-  const openPredictions = (compFilter = "all", roundKey = null) => setScreen({ type: "predictions", compFilter, roundKey });
+  const openBoard = (compId) => {
+    const comp = competitions.find((c) => c.id === compId);
+    logEvent(token, "opened_standings", { competitionId: compId, groupId: comp?.group_id || null });
+    logEvent(token, "competition_opened", { competitionId: compId, groupId: comp?.group_id || null });
+    setScreen({ type: "board", compId });
+  };
+  const openPredictions = (compFilter = "all", roundKey = null) => {
+    const comp = compFilter !== "all" ? competitions.find((c) => c.id === compFilter) : null;
+    logEvent(token, "opened_tip", { competitionId: comp?.id || null, groupId: comp?.group_id || null, metadata: { round_key: roundKey } });
+    if (comp) logEvent(token, "competition_opened", { competitionId: comp.id, groupId: comp.group_id || null });
+    setScreen({ type: "predictions", compFilter, roundKey });
+  };
   const openCreate = (groupId = null) => setScreen({ type: "create", groupId });
-  const openGroup = (groupId) => setScreen({ type: "group", groupId });
-  const openProfile = (profileUserId) => setScreen({ type: "profile", profileUserId });
+  const openGroup = (groupId) => {
+    logEvent(token, "opened_league", { groupId, metadata: { view: "detail" } });
+    setScreen({ type: "group", groupId });
+  };
+  const openProfile = (profileUserId) => {
+    logEvent(token, "opened_career", { metadata: { own: profileUserId === userId } });
+    setScreen({ type: "profile", profileUserId });
+  };
   const openAdmin = () => setScreen({ type: "admin" });
   const openHow = () => setScreen({ type: "how" });
 

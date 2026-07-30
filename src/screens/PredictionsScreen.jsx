@@ -2,6 +2,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Check, ChevronLeft, ChevronRight, ChevronUp, Users } from "lucide-react";
 import { db } from "../lib/supabase.js";
+import { logEvent } from "../lib/analytics.js";
 import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, isPlayed, liveInfo, pointsFor, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS, stageBadgeLabel } from "../lib/scoring.js";
 import { C, chip, font, muted, pagerBtn, thStyle } from "../ui/theme.js";
 import { BackBar, Card, EmptyCompetitions, FinalBadge, H, InfoDot, PlayerName, PointsPill, ScoreInput } from "../ui/components.jsx";
@@ -334,6 +335,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
   const [expandedId, setExpandedId] = useState(null);
   const [matchComps, setMatchComps] = useState({});
   const [, setTick] = useState(0);
+  const startedRef = useRef(new Set()); // matchIds hvor prediction_started allerede er logget denne sideliv
   const comp = compFilter !== "all" ? competitions.find((c) => c.id === compFilter) : null;
   const rules = comp?.rules || { exact: 3, outcome: 1 };
 
@@ -469,10 +471,25 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
       }
       return;
     }
+    // Var tippet allerede komplet FØR dette gem (begge felter havde en værdi)?
+    // Afgør om gemningen tæller som en opdatering eller det tip, der først nu
+    // gør slottet "afgivet" (prediction_submitted — den handling, der reelt
+    // tæller mod North Star-metrikken, som dog altid beregnes direkte fra
+    // predictions-tabellen, ikke fra denne hændelseslog).
+    const wasComplete = cur.pred_home !== null && cur.pred_home !== undefined
+      && cur.pred_away !== null && cur.pred_away !== undefined;
     try {
       await db.upsert(token, "predictions", [{ user_id: userId, match_id: matchId, pred_home: next.pred_home, pred_away: next.pred_away }], "user_id,match_id");
       setSavedIds((s) => ({ ...s, [matchId]: true }));
       setTimeout(() => setSavedIds((s) => { const c = { ...s }; delete c[matchId]; return c; }), 2000);
+
+      if (!startedRef.current.has(matchId)) {
+        startedRef.current.add(matchId);
+        logEvent(token, "prediction_started", { competitionId: comp?.id || null, metadata: { match_id: matchId } });
+      }
+      const meta = { match_id: matchId, round_key: allMatches.find((m) => m.id === matchId)?.round_key || null, comp_filter: compFilter };
+      logEvent(token, "prediction_saved", { competitionId: comp?.id || null, metadata: meta });
+      logEvent(token, wasComplete ? "prediction_updated" : "prediction_submitted", { competitionId: comp?.id || null, metadata: meta });
     } catch (e) { /* næste forsøg overskriver */ }
   }
 
