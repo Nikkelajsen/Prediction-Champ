@@ -350,7 +350,8 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   } else if (screen?.type === "admin") {
     body = <AdminScreen token={token} leagues={leagues} reloadLeagues={loadLeagues} onBack={() => setScreen(null)} />;
   } else if (screen?.type === "profile") {
-    body = <ProfileScreen token={token} viewerUserId={userId} profileUserId={screen.profileUserId} onBack={() => setScreen(null)} />;
+    body = <ProfileScreen token={token} viewerUserId={userId} profileUserId={screen.profileUserId}
+      onBack={() => setScreen(null)} openProfile={openProfile} />;
   } else if (screen?.type === "how") {
     body = <HowItWorksScreen onBack={() => setScreen(null)} />;
   } else if (tab === "hjem") {
