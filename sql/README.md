@@ -10,12 +10,12 @@ og kan køres igen.
 `public`-skemaet, som det så ud ved seneste eksport. Den redigeres aldrig i hånden;
 den regenereres med guiden nedenfor.
 
-> ⚠️ **Øjebliksbilledet er kun så friskt som sidste kørsel.** Seneste eksport er fra
-> 27. juli 2026 og mangler derfor **hele Analytics v1** (`analytics_events.sql` +
-> `analytics_dashboard.sql`, landet 30. juli) — `grep analytics schema.sql` giver nul
-> hits. Alt andet er med. Kør eksport-workflowen efter hver migrering, og verificér
-> mod databasen — ikke mod filen — hvis der er tvivl. Til gengæld er netop det den
-> hurtigste måde at se, om en migrering faktisk **er** kørt i produktion.
+> ⚠️ **Øjebliksbilledet er kun så friskt som sidste kørsel.** Seneste eksport: **30. juli
+> 2026**, og den dækker alt inkl. Analytics v1. Kør eksport-workflowen efter hver
+> migrering — og opdatér denne dato i samme ombæring, ellers ved næste læser ikke, om
+> filen kan stoles på. Verificér mod databasen — ikke mod filen — hvis der er tvivl.
+> Til gengæld er netop det den hurtigste måde at se, om en migrering faktisk **er**
+> kørt i produktion.
 
 ---
 
