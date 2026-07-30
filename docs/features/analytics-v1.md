@@ -1,6 +1,7 @@
 # Feature: Analytics v1
 
-**Status: ✅ Leveret (juli 2026) — `sql/analytics_events.sql` + `sql/analytics_dashboard.sql` + `src/lib/analytics.js` + `src/screens/AnalyticsPanel.jsx` (Admin → Analytics).** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 3 (fastholdelse før vækst) · Prioritering: [`../ROADMAP.md`](../ROADMAP.md)*
+**Status: ✅ Leveret (juli 2026) — `sql/analytics_events.sql` + `sql/analytics_dashboard.sql` + `src/lib/analytics.js` + `src/screens/AnalyticsPanel.jsx` (Admin → Analytics).**
+**⚠️ Rettet efter levering (30. juli 2026): Liga Health Score er fjernet og erstattet af Liga-diagnose (afsnit 6), og hvert nøgletal har fået en måle-ordbog (afsnit 5B).** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 3 (fastholdelse før vækst) · Prioritering: [`../ROADMAP.md`](../ROADMAP.md)*
 
 *Internt måle-lag til produktforbedring — ikke marketing. Skal besvare fem spørgsmål: bruger folk appen hver uge? glemmer de at tippe? hvilke ligaer er mest aktive? hvilke funktioner bruges faktisk? hvor mister vi brugere? Må aldrig påvirke brugeroplevelsen.*
 
@@ -101,9 +102,9 @@ To views i `sql/analytics_dashboard.sql`, begge revoked fra klienter (kun læst 
 
 ### Dashboard — 4 sektioner (Admin → Analytics, RPC'er i parentes)
 
-1. **Produktets sundhed** (`admin_analytics_health`): aktive brugere (7 dage), aktive ligaer, aktive konkurrencer, Prediction Completion Rate, Deadline Miss Rate, gennemførte spillerunder.
-2. **Engagement** (`admin_analytics_engagement`): Story/Karriere/Rating/Liga/Tip Views, Push Notification Open Rate, gennemsnitlig sessionstid.
-3. **Liga Health** (`admin_analytics_league_health`): Health Score (0-100), aktive medlemmer, seneste aktivitet — se afsnit 6.
+1. **Produktets sundhed** (`admin_analytics_health`): aktive brugere (7 dage), aktive ligaer, aktive konkurrencer, Prediction Completion Rate (med retning mod forrige vindue), Deadline Miss Rate, missede runder, gennemførte spillerunder (alt tid).
+2. **Engagement** (`admin_analytics_engagement`): Story/Karriere/Rating/Liga/Tip Views, Push Notification Open Rate (i alt og pr. type), sessionstid (gennemsnit, median, kun-flere-hændelser og hændelser pr. session).
+3. **Liga-diagnose** (`admin_analytics_league_health`): tilstand + målte signaler pr. liga — se afsnit 6.
 4. **Retention** (`admin_analytics_retention`): uge 1/4/12/26/52, for brugere og for ligaer.
 
 ### Deadline Miss Rate
@@ -115,29 +116,99 @@ Enheden er **runden**, ikke kampen. En bruger "missede deadline i runde R", hvis
 - **Push Open Rate**: `sent` fra `notification_log` (claimet FØR web-push-kaldet — en fejlet levering tæller stadig som sendt, så raten er et gulv, ikke et loft), `opened` fra `push_opened`-events, splittet på type (`deadline`/`result`) via `key`-præfikset.
 - **Sessionstid**: sessionisering med 30-minutters inaktivitetsgrænse. En sessions varighed er FØRSTE hændelse → SIDSTE hændelse, så en session med kun ét event måler 0 sekunder — gennemsnittet er derfor en **nedre grænse**. `avg_seconds_multi` og medianen returneres, så tallet kan læses ærligt.
 
+### Vinduets grænser (rettet 30. juli 2026)
+
+Dag-granulære vinduer (dem der læser `user_activity_days`) er `today - (p_days - 1)`, så `p_days = 30` betyder 30 kalenderdage inklusive i dag. Før talte `groups_with_active_member` og Deadline Miss Rates nævner 31 dage, mens tidsstempel-baserede felter i samme svar talte 30 — to tal i samme sektion målte over hver sin periode uden at sige det. `rounds_completed` er derimod bevidst **alt tid** og hedder det nu også i etiketten.
+
+### Retning frem for niveau (nyt 30. juli 2026)
+
+North Star vises med forskellen i procentpoint mod det lige så lange forrige vindue (`completion_rate_prev`). "62 %" kan ikke bære en beslutning; "62 %, ned fra 71 %" kan. Nøglen er `null` — og pilen skjules — når det forrige vindue havde under 5 mulige tips, så støj aldrig præsenteres som et fald.
+
 ### Retention — ærligheds-felt
 
 `user_activity_days` har kun data fra den dag, `sql/user_stats.sql` blev kørt. Uge-52-retention vil derfor læse som ~0 %, indtil der findes et helt års aktivitetsdata — en **falsk** 0 %, ikke en rigtig. `admin_analytics_retention()` returnerer `activity_since`, og `AnalyticsPanel.jsx` gråtoner og skriver "Ingen data endnu" for ethvert vindue, der åbner før den dato, i stedet for at vise et selvsikkert forkert tal.
 
 ---
 
-## 6. Health Score er en v1-heuristik
+## 5B. Måle-ordbogen (tilføjet 30. juli 2026)
 
-Samme situation som Story Engines tærskler før v1.1-kalibreringen (`docs/features/story-engine-v1.md` afsnit 10): vægtene nedenfor er et velbegrundet **gæt**, ikke et empirisk resultat.
+Hvert nøgletal på dashboardet har en **ⓘ**, der svarer på fire ting i fast rækkefølge:
 
-| Faktor | Vægt | Beregning |
-|---|---|---|
-| Completion rate (North Star) | 0.35 | fra `analytics_completion_facts` for ligaens konkurrencer |
-| Retention | 0.20 | andel medlemmer, ≥28 dage gamle, aktive inden for de seneste 14 dage |
-| Aktivitet sidste 30 dage | 0.20 | andel medlemmer med ≥1 aktivitetsdag |
-| Antal aktive medlemmer | 0.15 | `least(1, active_members_30d / 5)` — "en liga føles levende ved ~5 aktive" |
-| Story views | 0.10 | `least(1, story_views_30d / (members × 2))` |
+| Felt | Svarer på |
+|---|---|
+| **Hvad måles** | hvad tallet er, i én sætning uden formel |
+| **Hvordan** | udregningen, inkl. hvad der tælles med og hvad ikke |
+| **Kilde** | hvilke tabeller/views tallet kommer fra, så det kan efterprøves i Supabase SQL-editoren uden at læse RPC'en |
+| **Forbehold** | hvad tallet **ikke** kan bruges til — medtaget hver gang der findes en kendt faldgrube |
 
-Alle tal (vægte + targets) lever som navngivne konstanter i CTE'en `k` øverst i `admin_analytics_league_health()` (`sql/analytics_dashboard.sql`) — rekalibrering er "redigér disse linjer, gen-kør filen". Modsat `sql/analytics_events.sql` (kør én gang) er `analytics_dashboard.sql` **sikker og forventet at blive gen-kørt**.
+Teksterne lever i `src/lib/analyticsMetrics.js` (27 metrikker) og hentes med `metricInfo(id)`; et ukendt id giver `null` frem for at kaste, så en tastefejl koster ⓘ'en og ikke sektionen. Komponenten `M` i `AnalyticsPanel.jsx` renderer dem i en `InfoDot`.
 
-**Null-sikker renormalisering:** en nyoprettet liga har ingen medlem gammel nok til at måle retention på. At score det som 0 ville stemple enhver ny liga som døende. Manglende faktorer udelades helt, og vægtsummen renormaliseres over de faktorer, der faktisk findes; er INGEN faktor tilgængelig, er scoren `null` ("For ny" i UI'et), ikke 0.
+**Hvorfor det ikke gør etiketterne overflødige.** Reglen fra karriereprofilen (ROADMAP, 30. juli 2026) gælder også her: *et tal skal navngive sit eget omfang i den sætning, det står i; en ⓘ må uddybe, men aldrig alene bære det, der skal til for at læse tallet rigtigt.* Derfor bliver etiketter og hints ved med at sige "seneste 7 dage", "alt tid", "af dem der havde en deadline" — også når forklaringen findes i ordbogen.
 
-**Scoren er kun meningsfuld som relativ rangering inden for ét snapshot** — ikke som et absolut mål. Rekalibrér når ≥10 ligaer har ≥30 dages historik (se `docs/ROADMAP.md`, åbne beslutninger).
+Indtil nu stod svarene kun i SQL-kommentarerne, altså præcis dét sted den, der læser dashboardet, ikke kigger. "Deadline Miss Rate: 12 %" kan betyde mindst tre forskellige ting, og forskellen afgør, om tallet er alarmerende eller ligegyldigt.
+
+---
+
+## 6. Liga-diagnose (afløser Health Score, 30. juli 2026)
+
+**Den sammenvejede Health Score (0-100) er fjernet.** Den var for bred til at bruge til noget, af fire grunde:
+
+1. **Blandingen søgte mod midten.** På de fire første rigtige ligaer gav den 75/77/77/88 — alle fire grønne, alle fire "SUND". En metrik, der ikke kan skelne ligaer fra hinanden, kan heller ikke pege på den, der har brug for hjælp.
+2. **Den sagde aldrig hvad der var galt.** "77" er ikke en handling. Det, en admin skal vide, er *"denne liga har ingen aktiv konkurrence"* eller *"denne liga bæres af én person"* — to helt forskellige problemer, som den vægtede sum kunne give præcis samme tal for.
+3. **Faktorerne overlappede.** Antal aktive medlemmer, andel aktive medlemmer og retention måler alle tre "kommer medlemmerne her". Tre af fem vægte trak i samme streng, så deltagelse reelt vejede mindre end de 35 %, tallet lovede.
+4. **Vægte kan ikke kalibreres på fire ligaer.** A12 spurgte "hvornår rekalibrerer vi?" — svaret viste sig at være "vi fjerner den størrelse, der kræver kalibrering". A12 er dermed lukket, ikke udskudt.
+
+### Erstatningen: signaler + én navngivet tilstand
+
+**RPC'en måler, klienten fortolker.** `admin_analytics_league_health(p_days)` returnerer nu rå signaler pr. liga uden score og uden tilstand; `diagnoseLeague()` i `src/lib/analytics.js` udleder tilstanden.
+
+**Hvorfor reglerne ligger i JS og ikke i SQL:** de er produktjudgement, der skal tunes ofte, og de kan unit-testes i vitest — ingen CI kører SQL. Samme valg som Onboarding v1, hvor tilstanden bevidst udledes af data i klienten uden SQL. Nye tærskler kræver derfor ikke længere en gen-kørsel i Supabase.
+
+**De målte signaler** (alle i ét vindue, `p_days`, alle fra `analytics_completion_facts` — samme kilde som North Star, så liga-tallene og "Produktets sundhed" ikke kan modsige hinanden):
+
+| Signal | Betydning |
+|---|---|
+| **Bredde** | medlemmer med ≥1 afgivet tip ÷ medlemmer |
+| **Deltagelse** | North Star for ligaens konkurrencer |
+| **Retning** | deltagelse mod forrige lige så lange vindue (pp) |
+| **Puls** | runder med ≥1 tip ÷ runder der låste |
+| **Koncentration** | den mest aktive tippers andel af ligaens tips |
+| **Aktive medlemmer** | medlemmer med ≥1 aktivitetsdag ÷ medlemmer |
+| **Fastholdelse** | medlemmer ≥28 dage gamle, aktive inden for 14 dage |
+| **Konkurrencer** | i alt og hvor mange med en ulåst runde tilbage |
+| **Seneste aktivitet** | senest af aktivitetsdag / tip / hændelse |
+| **Story views** | `story_viewed` med ligaen sat |
+
+**Bredde er det signal, v1 manglede helt.** Den gamle "andel aktive medlemmer" målte, om folk *åbnede appen* — ikke om de *spillede*. En liga hvor én tipper alt og fire kigger på, og en liga hvor alle fem tipper, kunne få samme score.
+
+### Regelkataloget
+
+Tilstandene evalueres **oppefra og ned, første regel der passer vinder** — samme mønster som Story Engines regelkatalog. Rækkefølgen er selve designet: **årsag før symptom.** En liga uden aktiv konkurrence skal høre "opret en konkurrence", ikke "for få tipper" — den kan ikke gøre noget ved det sidste.
+
+| # | Tilstand | Udløses af | Alvor |
+|---|---|---|---|
+| 1 | **For ny** | under 14 dage gammel | – |
+| 2 | **Død** | ingen aktivitet nogensinde, eller i over 30 dage | 6 |
+| 3 | **Ingen konkurrence** | ingen konkurrence med en ulåst runde | 5 |
+| 4 | **I dvale** | over 14 dage uden aktivitet | 5 |
+| 5 | **Kun ét medlem** | `members ≤ 1` | 4 |
+| 6 | **Intet at måle på** | ingen låst runde i vinduet | – |
+| 7 | **Ingen tipper** | låste runder, men 0 tippere | 5 |
+| 8 | **Bæres af én** | præcis 1 tipper blandt flere medlemmer | 4 |
+| 9 | **Kun en del tipper** | bredde under 50 % | 3 |
+| 10 | **Deltagelsen falder** | fald på ≥15 pp mod forrige vindue | 3 |
+| 11 | **Lav deltagelse** | under 50 % ved ≥5 mulige tips | 2 |
+| 12 | **Sund** | ingen af ovenstående | 1 |
+
+Hver tilstand giver en **begrundelse med ligaens egne tal** ("Én af 4 medlemmer står for alle ligaens tips") og en **handling** ("Klassisk vennegruppe-sammenbrud: den ene bliver træt, og så er ligaen væk. Få nummer to i gang."). Tabellen sorteres efter alvor, derefter laveste deltagelse (null sidst), derefter navn — samme rækkefølge hver gang, så en liga ikke hopper rundt mellem to opdateringer.
+
+**Tærsklerne står samlet i `LEAGUE_THRESHOLDS`** (`src/lib/analytics.js`) og kan overstyres pr. kald (`diagnoseLeague(l, egneTærskler)`), hvilket er præcis dét, testene gør. De er stadig et velbegrundet gæt — men nu synlige, navngivne og hver især testbare frem for gemt i en vægtet sum.
+
+**"For ny" står først med vilje.** Uden den ville en liga oprettet i går, som endnu ikke har nået at gøre noget, blive stemplet "Død" — nøjagtig den fejl, den gamle scores null-sikre renormalisering fandtes for at undgå. Tilstande uden tone ("For ny", "Intet at måle på") får bevidst **ingen farve**, så "vi ved det ikke" aldrig kan forveksles med "det er fint".
+
+**Story views indgår ikke i diagnosen.** De var 10 % af den gamle score, hvilket gav den nyeste og svageste instrumentering en vægt, den ikke havde fortjent. Tallet vises stadig i drill-in'en med netop den bemærkning.
+
+**Komponenter:** `HealthBar` er fjernet (der er ikke længere en score at tegne en bjælke for) og erstattet af `StateChip` (ordet er signalet, farven kun ekstra) + `SignalRow` (navn, værdi, rå-tal). `healthTone()` er væk sammen med den.
 
 ---
 
@@ -154,7 +225,7 @@ Alle tal (vægte + targets) lever som navngivne konstanter i CTE'en `k` øverst 
 
 | Fil | Ændring |
 |---|---|
-| `src/lib/analytics.js` (ny) | `logEvent`, `logEventOnce`, `healthTone` + 4 dashboard-read-helpers |
+| `src/lib/analytics.js` (ny) | `logEvent`, `logEventOnce` + 4 dashboard-read-helpers. **30. juli 2026:** `healthTone` fjernet, `diagnoseLeague`/`diagnoseLeagues`/`summarizeDiagnoses`/`LEAGUE_THRESHOLDS`/`LEAGUE_STATES` tilføjet |
 | `src/App.jsx` | `completeAuth` får en `source`-parameter ("signup"/"signin"/"restore"); `handleLogout` logger `logout`; ny boot-effekt for `?pn=`/`?rk=` → `push_opened` |
 | `src/screens/Auth.jsx` | sender `source` til `onAuthed` ved signup/signin |
 | `src/lib/data.js` | `createGroup`, `joinGroup`, `joinCompetition`, `createCompetition` (alle 3 veje), `joinByInviteCode` |
@@ -163,16 +234,17 @@ Alle tal (vægte + targets) lever som navngivne konstanter i CTE'en `k` øverst 
 | `src/screens/HjemTab.jsx` | `StoryCard` får `token`/`groupId`-prop; `story_viewed` (once) + `story_shared` |
 | `src/screens/GroupScreen.jsx`, `BoardScreen.jsx` | `shareInvite()` → `league_invite_sent` |
 | `api/send-notifications.js` | beskeder får `kind`/`roundKey`; push-URL'en bliver `/?pn=<kind>&rk=<runde>` (intet server-side event) |
-| `src/ui/components.jsx` | `StatTile`/`StatGroup`/`MiniBars` flyttet fra `AdminScreen.jsx` (nu 2 forbrugere) + nye `HealthBar`/`PctGrid` |
+| `src/ui/components.jsx` | `StatTile`/`StatGroup`/`MiniBars` flyttet fra `AdminScreen.jsx` (nu 2 forbrugere) + `PctGrid`. **30. juli 2026:** `HealthBar` fjernet, `StateChip`/`SignalRow` tilføjet; `StatTile` fik `info`-prop; `MiniBars` skelner nu `null` (ingen måling) fra 0 |
 | `src/screens/AdminScreen.jsx` | fjerde chip "Analytics", render-gren til `AnalyticsPanel` |
-| `src/screens/AnalyticsPanel.jsx` (ny) | 4-sektions dashboard |
+| `src/screens/AnalyticsPanel.jsx` (ny) | 4-sektions dashboard. **30. juli 2026:** ⓘ på hvert nøgletal, North Star med retning, Liga-diagnose i stedet for Health Score, døde felter taget i brug |
+| `src/lib/analyticsMetrics.js` (ny, 30. juli 2026) | måle-ordbogen: 27 metrikker × hvad/hvordan/kilde/forbehold |
 
 ---
 
 ## 9. Udrulning
 
 1. Kør `sql/analytics_events.sql` i Supabase ("Run without RLS"). Verificér: tabellen findes, præcis én policy, en almindelig bruger får 0 rækker ved SELECT.
-2. Kør `sql/analytics_dashboard.sql`. Kør verifikationsblokken nederst i filen — de fleste kan køres FØR nogen events er logget, da de læser `predictions`/`matches`/`user_activity_days` (3 af 4 dashboard-sektioner har derfor reel historik allerede på dag ét; kun Engagement og story-views-faktoren i Liga Health starter tomme).
+2. Kør `sql/analytics_dashboard.sql`. Kør verifikationsblokken nederst i filen — de fleste kan køres FØR nogen events er logget, da de læser `predictions`/`matches`/`user_activity_days` (3 af 4 dashboard-sektioner har derfor reel historik allerede på dag ét; kun Engagement og story-views-signalet i Liga-diagnosen starter tomme).
 3. Merge frontend-branchen (events begynder at strømme ind).
 4. Efter én fuld runde: klik igennem alle instrumenterede flows som en almindelig bruger, og tjek `select event_name, count(*) from analytics_events where created_at > now() - interval '15 minutes' group by 1` — alle navne i kataloget undtagen `opened_story` bør optræde.
 5. Kør skema-eksport-workflowen, så `sql/schema.sql` fanger de nye objekter.
@@ -197,7 +269,10 @@ Ingen af de to lock-policy-filer eller `sql/story_engine.sql`/`sql/groups.sql`/`
 - Blokeres `/rest/v1/analytics_events` i devtools' netværksfane, virker appen uændret — intet synligt fejler, ingen røde konsolfejl.
 - North Star-tallet i dashboardet matcher en uafhængig `select`-forespørgsel mod `analytics_completion_facts` for samme konkurrence/vindue.
 - En ikke-admin får `forbidden` fra alle fire `admin_analytics_*`-RPC'er og 0 rækker ved `select * from analytics_events`.
-- Health Score er altid i `[0,100]` eller `null` — aldrig et tal uden for det interval.
+- Alle procent-signaler i Liga-diagnosen er i `[0,100]` eller `null`; `predictors ≤ members` og `rounds_played ≤ rounds_available` holder altid.
+- Hver liga får præcis ÉN tilstand, og en liga under 14 dage gammel får altid "For ny" — uanset hvor tomme dens øvrige signaler er.
+- En tilstand uden tone ("For ny", "Intet at måle på") renderes ikke i samme farve som "Sund".
+- Hvert nøgletal på skærmen har en ⓘ, og et ukendt metrik-id fjerner kun ⓘ'en, ikke sektionen.
 - Et retention-vindue, hvis start ligger før `activity_since`, vises som "Ingen data endnu", aldrig som `0%`.
 - En sektion, der fejler (fx netværksfejl), viser sin egen fejlbesked og blokerer ikke de tre andre.
 
@@ -208,9 +283,30 @@ Ingen af de to lock-policy-filer eller `sql/story_engine.sql`/`sql/groups.sql`/`
 3. `opened_home` to gange inden for 20 sekunder tæller som ét kald; `prediction_saved` to gange i træk tæller som to (writes throttles aldrig).
 4. `logEventOnce` med samme nøgle logger kun én gang pr. sideliv.
 5. `save()` i `PredictionsScreen`: første komplette gæt på en tom kamp → `prediction_started` + `prediction_saved` + `prediction_submitted`; en efterfølgende ændring → `prediction_saved` + `prediction_updated`; en sletning logger intet.
-6. SQL-verifikation (kørt manuelt mod Supabase, se `sql/analytics_dashboard.sql`'s verifikationsblok): rundelås-udtrykket matcher RLS-policyens, ingen slots i ulåste runder, ingen slots før tilmelding, afgivne tips overstiger aldrig `predictions`, Health Score altid i `[0,100]` eller `null`.
+6. SQL-verifikation (kørt manuelt mod Supabase, se `sql/analytics_dashboard.sql`'s verifikationsblok): rundelås-udtrykket matcher RLS-policyens, ingen slots i ulåste runder, ingen slots før tilmelding, afgivne tips overstiger aldrig `predictions`, alle procent-signaler i `[0,100]` eller `null`, bredde ≤ medlemmer.
 7. En ikke-admin-bruger nægtes adgang til alle fire RPC'er og til rå læsning af `analytics_events`.
+8. `diagnoseLeague` rammer hver af de 12 tilstande, og hver tærskel testes på begge sider af sin grænse (13 vs. 14 dage, 30 vs. 31 dage, 49,9 % vs. 50 % bredde, 14 vs. 15 pp fald).
+9. Rækkefølgen er bindende: "for ny" slår alt andet, og "ingen konkurrence" slår "i dvale" — årsag før symptom.
+10. `diagnoseLeagues` sorterer efter alvor, derefter laveste deltagelse (null sidst), derefter navn; `undefined`/tom liste giver `[]`.
+11. Måle-ordbogen: hver metrik har titel/hvad/hvordan/kilde; hvert id, panelet slår op, findes; `metricInfo("findes_ikke")` giver `null`.
+12. `MiniBars` med `value: null` viser "ingen data", ikke en nulsøjle.
+
+---
+
+## 13. Foreslået, men ikke bygget (30. juli 2026)
+
+Fundet under gennemgangen, bevidst ikke leveret her. Rangeret efter forventet værdi pr. indsats:
+
+| # | Forslag | Hvorfor det er værd at overveje |
+|---|---|---|
+| 1 | **Tragt for nye brugere** (`account_created` → første liga → første konkurrence → første tip, med tid imellem trinnene) | Alle fire hændelser logges allerede. Onboarding v1's centrale påstand — "en ny bruger skal hurtigst muligt oprette eller tilslutte sig en liga" — er stadig **umålt**: dashboardet kan ikke sige, hvor selvstarteren falder fra. Den ene sektion med størst afkast. |
+| 2 | **Sammenlign push-tidspunkt med deltagelse** | Deadline-påmindelsen er produktets eneste aktive fastholdelses-værktøj, og vi måler dens open rate, men ikke dens **effekt**: tippede de, der åbnede, oftere end de, der ikke gjorde? Kræver ingen ny instrumentering. |
+| 3 | **Story Engine-regler pr. visning** | `stories.rule` findes allerede pr. række. En optælling pr. regel (genereret / vist / delt) ville lukke A5 med data i stedet for fornemmelse — og afsløre regler, der aldrig udløses. |
+| 4 | **Eksport-knap ("kopiér som CSV/JSON")** | Spec'en siger, at SQL-editoren *er* eksport-mekanismen. Det passer for ad hoc-analyse, men ikke for "send tallene videre" — og en knap koster ingen ny afhængighed. |
+| 5 | **Diagnose-historik** | Diagnosen er et øjebliksbillede. Uden historik kan man ikke se, at en liga gik fra "Sund" til "Kun en del tipper" for tre uger siden. Kræver dog et sted at gemme snapshottet — første gang noget i Analytics ville have brug for et cron eller en tabel med tidsserier, hvilket arkitekturvalg #3 lukkede døren for. Tages op, hvis behovet melder sig igen. |
+| 6 | **Alarm ved tilstandsskifte** | Naturlig følge af #5: en liga, der skifter til rød, er interessant i det øjeblik det sker, ikke næste gang nogen åbner admin. Afhænger af #5. |
 
 ---
 
 *Leveret. SQL er skrevet mod det dokumenterede skema (`DOCUMENTATION.md` afsnit 2) — verificér mod databasen (`sql/schema.sql` er kun gyldig som reference, når skema-eksporten er kørt efter denne migrering).*
+*Liga-diagnosen og de rettede vinduer er verificeret mod en rigtig PostgreSQL 16.13 med fire konstruerede ligaer (sund / bæres af én / uden konkurrence / helt ny) — alle invarianter i verifikationsblokken gav 0, og de fire ligaer fik hver den tilsigtede diagnose.*

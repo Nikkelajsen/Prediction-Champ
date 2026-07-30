@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 // renderToStaticMarkup frem for en jsdom-opsætning: PlayerName er ren markup,
 // og projektet skal ikke have et komponent-testbibliotek for den ene komponents skyld.
 import { renderToStaticMarkup } from "react-dom/server";
-import { PlayerName, UserRoundPredictions, EmptyCompetitions, StatTile, StatGroup, MiniBars, HealthBar } from "./components.jsx";
+import { PlayerName, UserRoundPredictions, EmptyCompetitions, StatTile, StatGroup, MiniBars, StateChip, SignalRow } from "./components.jsx";
 
 describe("PlayerName", () => {
   it("renderes som ren tekst uden onOpenProfile", () => {
@@ -126,27 +126,56 @@ describe("StatTile/StatGroup/MiniBars (flyttet fra AdminScreen)", () => {
     const html = renderToStaticMarkup(<MiniBars data={data} color="#22C55E" formatLabel={(x) => x} />);
     expect((html.match(/title="/g) || []).length).toBe(2);
   });
-});
 
-// HealthBar: farve er ALDRIG eneste signal — tallet og ordet skal altid stå
-// ved siden af, og en null-score (for ny liga uden nok data) må ikke vises
-// som et vilkårligt 0.
-describe("HealthBar", () => {
-  it("null renderes som 'For ny', ikke som 0", () => {
-    const html = renderToStaticMarkup(<HealthBar score={null} />);
-    expect(html).toContain("For ny");
-    expect(html).not.toContain(">0<");
+  // value: null = INGEN MÅLING (fx en uge uden låste runder). Den må ikke
+  // kunne forveksles med et ægte nul — samme regel som PctGrid følger.
+  it("MiniBars skelner 'ingen data' fra et ægte nul", () => {
+    const html = renderToStaticMarkup(
+      <MiniBars data={[{ key: "a", value: null }, { key: "b", value: 0 }]} color="#22C55E" formatLabel={(x) => x} />
+    );
+    expect(html).toContain("ingen data");
+    expect((html.match(/ingen data/g) || []).length).toBe(1);
   });
 
-  it("viser altid tallet OG ordet — aldrig kun en farvet bjælke", () => {
-    const sund = renderToStaticMarkup(<HealthBar score={85} />);
-    expect(sund).toContain("85");
-    expect(sund).toContain("Sund");
-    const svag = renderToStaticMarkup(<HealthBar score={50} />);
-    expect(svag).toContain("50");
-    expect(svag).toContain("Svag");
-    const kritisk = renderToStaticMarkup(<HealthBar score={10} />);
-    expect(kritisk).toContain("10");
-    expect(kritisk).toContain("Kritisk");
+  it("StatTile viser en valgfri ⓘ ved siden af etiketten", () => {
+    const html = renderToStaticMarkup(<StatTile label="Deltagelse" value="80 %" info={<span>FORKLARING</span>} />);
+    expect(html).toContain("Deltagelse");
+    expect(html).toContain("FORKLARING");
+  });
+});
+
+// StateChip afløser HealthBar (juli 2026): den sammenvejede 0-100-score er
+// fjernet, så der er ikke længere et tal at tegne en bjælke for. ORDET er
+// signalet; farven er kun ekstra — og en tilstand uden tone ("For ny") må ikke
+// se ud som en grøn.
+describe("StateChip", () => {
+  it("viser altid ordet, uanset tone", () => {
+    for (const [label, tone] of [["Sund", "green"], ["Bæres af én", "gold"], ["Død", "red"], ["For ny", null]]) {
+      expect(renderToStaticMarkup(<StateChip label={label} tone={tone} />)).toContain(label);
+    }
+  });
+
+  it("en tilstand uden tone får ikke samme farve som en sund liga", () => {
+    const ukendt = renderToStaticMarkup(<StateChip label="For ny" tone={null} />);
+    const sund = renderToStaticMarkup(<StateChip label="Sund" tone="green" />);
+    const farve = (html) => (html.match(/color:([^;"]+)/) || [])[1];
+    expect(farve(ukendt)).not.toBe(farve(sund));
+  });
+});
+
+// SignalRow bærer liga-diagnosens enkeltsignaler: navn, værdi og rå-tallene
+// bag procenten, så en procent aldrig står alene.
+describe("SignalRow", () => {
+  it("viser label, værdi og detalje", () => {
+    const html = renderToStaticMarkup(<SignalRow label="Bredde" value="33 %" detail="2 af 6 medlemmer tippede" />);
+    expect(html).toContain("Bredde");
+    expect(html).toContain("33 %");
+    expect(html).toContain("2 af 6 medlemmer tippede");
+  });
+
+  it("udelader detaljen, når den ikke er sat", () => {
+    const html = renderToStaticMarkup(<SignalRow label="Puls" value="100 %" />);
+    expect(html).toContain("100 %");
+    expect(html).not.toContain("undefined");
   });
 });

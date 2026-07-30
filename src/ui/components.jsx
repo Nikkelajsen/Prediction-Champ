@@ -335,12 +335,17 @@ function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, ru
 // Flyttet hertil fra AdminScreen.jsx (analytics v1) — nu to forbrugere, samme
 // grænse som resten af denne fils komponenter allerede lever efter.
 
-// Et enkelt nøgletal ("stat tile").
-function StatTile({ label, value, hint }) {
+// Et enkelt nøgletal ("stat tile"). `info` er en valgfri ⓘ ved siden af
+// etiketten — se måle-ordbogen i src/lib/analyticsMetrics.js. Etiketten og
+// hint'et skal fortsat kunne læses ALENE: ⓘ'en uddyber, den bærer aldrig det,
+// der skal til for at forstå tallet.
+function StatTile({ label, value, hint, info }) {
   return (
     <div style={{ background: C.surface2, border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px" }}>
       <div style={{ fontFamily: font.display, fontWeight: 700, fontSize: 28, lineHeight: 1.05, color: C.text }}>{value}</div>
-      <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>{label}</div>
+      <div style={{ color: C.muted, fontSize: 12, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
+        <span>{label}</span>{info}
+      </div>
       {hint && <div style={{ color: C.muted, fontSize: 11, marginTop: 4, opacity: 0.8 }}>{hint}</div>}
     </div>
   );
@@ -359,43 +364,68 @@ function StatGroup({ title, children }) {
 // Enkelt-serie søjlediagram (magnitude over tid). Tynde søjler med afrundet top,
 // 2px mellemrum, diskret baseline. Ingen legend — titlen navngiver serien.
 // Hover viser etikette + værdi via native title. Farve = én temafarve.
-function MiniBars({ data, color, formatLabel }) {
+//
+// `value: null` betyder INGEN MÅLING (fx en uge helt uden låste runder) og
+// tegnes som en gråtonet stump med "–" — aldrig som en nulsøjle, der ikke kan
+// skelnes fra et ægte nul. Samme regel som PctGrid følger for retention.
+// `suffix` sættes, når enheden ikke er et antal (fx "%").
+function MiniBars({ data, color, formatLabel, suffix = "" }) {
   if (!data || !data.length) return <p style={{ ...muted, margin: 0 }}>Ingen data endnu.</p>;
-  const max = Math.max(1, ...data.map((d) => d.value));
+  const max = Math.max(1, ...data.map((d) => (d.value === null || d.value === undefined ? 0 : d.value)));
   return (
     <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 96, borderBottom: `1px solid ${C.line}`, paddingBottom: 0 }}>
-      {data.map((d, i) => (
-        <div key={i} title={`${formatLabel(d.key)}: ${d.value}`}
-          style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", minWidth: 0 }}>
-          <span style={{ color: C.muted, fontSize: 9, lineHeight: 1, marginBottom: 2 }}>{d.value || ""}</span>
-          <div style={{
-            width: "100%", height: `${Math.max(d.value > 0 ? 3 : 0, (d.value / max) * 74)}px`,
-            background: color, borderRadius: "4px 4px 0 0",
-          }} />
-        </div>
-      ))}
+      {data.map((d, i) => {
+        const missing = d.value === null || d.value === undefined;
+        return (
+          <div key={i} title={missing ? `${formatLabel(d.key)}: ingen data` : `${formatLabel(d.key)}: ${d.value}${suffix}`}
+            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", minWidth: 0 }}>
+            <span style={{ color: C.muted, fontSize: 9, lineHeight: 1, marginBottom: 2, opacity: missing ? 0.5 : 1 }}>
+              {missing ? "–" : (d.value || "")}
+            </span>
+            <div style={{
+              width: "100%",
+              height: missing ? "2px" : `${Math.max(d.value > 0 ? 3 : 0, (d.value / max) * 74)}px`,
+              background: missing ? C.line : color,
+              borderRadius: "4px 4px 0 0",
+            }} />
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// Liga Health-bjælke: 0-100 → farve, men ALDRIG farve alene. Tallet og ordet
-// ("Sund"/"Svag"/"Kritisk") står altid ved siden af, samme regel som
-// ModeBars følger for CVD (identitet må ikke kun bæres af farve). `score`
-// null (for ny liga uden nok data til nogen faktor) renderes som "For ny"
-// uden bjælke i stedet for et vilkårligt 0.
-function HealthBar({ score }) {
-  if (score === null || score === undefined) {
-    return <span style={{ color: C.muted, fontSize: 13 }}>For ny</span>;
-  }
-  const color = score >= 70 ? C.green : score >= 40 ? C.gold : C.red;
-  const label = score >= 70 ? "Sund" : score >= 40 ? "Svag" : "Kritisk";
+// Liga-diagnosens tilstands-mærkat. Afløser HealthBar (juli 2026), som tegnede
+// en 0-100-bjælke for en sammenvejet score, der er fjernet — se begrundelsen i
+// diagnoseLeague() i src/lib/analytics.js.
+//
+// ORDET er signalet; farven er kun ekstra (samme regel som ModeBars følger for
+// farveblindhed — identitet må aldrig bæres af farve alene). En tilstand uden
+// tone ("For ny", "Intet at måle på") får bevidst ingen farve i stedet for en
+// neutral grøn, så "vi ved det ikke" ikke kan forveksles med "det er fint".
+function StateChip({ label, tone }) {
+  const color = tone === "green" ? C.green : tone === "gold" ? C.gold : tone === "red" ? C.red : C.muted;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 120 }}>
-      <div style={{ flex: 1, height: 8, background: C.surface2, borderRadius: 999, overflow: "hidden" }}>
-        <div style={{ width: `${score}%`, height: "100%", background: color, borderRadius: 999 }} />
-      </div>
-      <span style={{ fontFamily: font.display, fontWeight: 700, fontSize: 14, color: C.text, minWidth: 24, textAlign: "right" }}>{score}</span>
-      <span style={{ color, fontSize: 11, fontWeight: 600, textTransform: "uppercase" }}>{label}</span>
+    <span style={{
+      display: "inline-block", padding: "3px 9px", borderRadius: 999,
+      border: `1px solid ${color}`, color,
+      background: tone ? "transparent" : "transparent",
+      fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em",
+      whiteSpace: "nowrap",
+    }}>{label}</span>
+  );
+}
+
+// Ét målt signal i liga-drill-in'en: navn (med ⓘ fra måle-ordbogen), værdi og
+// en kort under-linje med rå-tallene bag procenten.
+function SignalRow({ label, value, detail, info }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, padding: "5px 0" }}>
+      <span style={{ color: C.muted, fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>{label}{info}</span>
+      <span style={{ textAlign: "right" }}>
+        <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{value}</span>
+        {detail && <span style={{ color: C.muted, fontSize: 11, marginLeft: 6 }}>{detail}</span>}
+      </span>
     </div>
   );
 }
@@ -438,4 +468,4 @@ function PctGrid({ columns, rows }) {
   );
 }
 
-export { Card, Eyebrow, H, PlayerName, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill, EmptyCompetitions, StatTile, StatGroup, MiniBars, HealthBar, PctGrid };
+export { Card, Eyebrow, H, PlayerName, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill, EmptyCompetitions, StatTile, StatGroup, MiniBars, StateChip, SignalRow, PctGrid };
