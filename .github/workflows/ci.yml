@@ -1,0 +1,58 @@
+name: CI
+
+# Kører linter, tests og produktions-build ved hver pull request og ved push til
+# main. Indtil nu var skema-eksporten repoets eneste workflow, og den validerer
+# ikke kode — så merge-sikkerheden hvilede på, at et menneske huskede at køre
+# `npm test` plus den manuelle tjekliste i DOCUMENTATION.md afsnit 11.
+#
+# Tjeklisten er stadig gyldig: den dækker det, testene IKKE kan se (rigtig
+# browser, push på iOS, RLS mod produktionsdata). Denne workflow afløser den
+# ikke — den fjerner bare de fejl, en maskine kan fange, fra menneskets bord.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Ved gen-push aflyses den forrige kørsel — det er kun det nyeste commit,
+  # der er interessant. (Skema-eksporten gør bevidst det modsatte: den skriver
+  # til repoet og må derfor ikke afbrydes midtvejs.)
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Opsæt Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` frem for `npm install`: den installerer præcis det, der står i
+      # package-lock.json, og fejler hvis lock-filen er ude af trit med
+      # package.json — så CI tester det samme træ, som ligger i repoet.
+      - name: Installér afhængigheder
+        run: npm ci
+
+      # Linteren er det eneste statiske sikkerhedsnet i en utypet kodebase.
+      # --max-warnings er sat til det nuværende antal i package.json, så tallet
+      # kan falde, men aldrig vokse ubemærket.
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      # Build'et fanger det, testene ikke ser: manglende eksporter, brudte
+      # importstier og alt andet, der først viser sig, når hele grafen samles.
+      - name: Build
+        run: npm run build
