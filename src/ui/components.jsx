@@ -331,4 +331,111 @@ function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, ru
   );
 }
 
-export { Card, Eyebrow, H, PlayerName, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill, EmptyCompetitions };
+// ---------- Statistik-byggeklodser (delt af AdminScreen og AnalyticsPanel) ----------
+// Flyttet hertil fra AdminScreen.jsx (analytics v1) — nu to forbrugere, samme
+// grænse som resten af denne fils komponenter allerede lever efter.
+
+// Et enkelt nøgletal ("stat tile").
+function StatTile({ label, value, hint }) {
+  return (
+    <div style={{ background: C.surface2, border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px" }}>
+      <div style={{ fontFamily: font.display, fontWeight: 700, fontSize: 28, lineHeight: 1.05, color: C.text }}>{value}</div>
+      <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>{label}</div>
+      {hint && <div style={{ color: C.muted, fontSize: 11, marginTop: 4, opacity: 0.8 }}>{hint}</div>}
+    </div>
+  );
+}
+
+// Overskrift for en gruppe af nøgletal.
+function StatGroup({ title, children }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontFamily: font.display, textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 13, color: C.muted }}>{title}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>{children}</div>
+    </div>
+  );
+}
+
+// Enkelt-serie søjlediagram (magnitude over tid). Tynde søjler med afrundet top,
+// 2px mellemrum, diskret baseline. Ingen legend — titlen navngiver serien.
+// Hover viser etikette + værdi via native title. Farve = én temafarve.
+function MiniBars({ data, color, formatLabel }) {
+  if (!data || !data.length) return <p style={{ ...muted, margin: 0 }}>Ingen data endnu.</p>;
+  const max = Math.max(1, ...data.map((d) => d.value));
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 96, borderBottom: `1px solid ${C.line}`, paddingBottom: 0 }}>
+      {data.map((d, i) => (
+        <div key={i} title={`${formatLabel(d.key)}: ${d.value}`}
+          style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", minWidth: 0 }}>
+          <span style={{ color: C.muted, fontSize: 9, lineHeight: 1, marginBottom: 2 }}>{d.value || ""}</span>
+          <div style={{
+            width: "100%", height: `${Math.max(d.value > 0 ? 3 : 0, (d.value / max) * 74)}px`,
+            background: color, borderRadius: "4px 4px 0 0",
+          }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Liga Health-bjælke: 0-100 → farve, men ALDRIG farve alene. Tallet og ordet
+// ("Sund"/"Svag"/"Kritisk") står altid ved siden af, samme regel som
+// ModeBars følger for CVD (identitet må ikke kun bæres af farve). `score`
+// null (for ny liga uden nok data til nogen faktor) renderes som "For ny"
+// uden bjælke i stedet for et vilkårligt 0.
+function HealthBar({ score }) {
+  if (score === null || score === undefined) {
+    return <span style={{ color: C.muted, fontSize: 13 }}>For ny</span>;
+  }
+  const color = score >= 70 ? C.green : score >= 40 ? C.gold : C.red;
+  const label = score >= 70 ? "Sund" : score >= 40 ? "Svag" : "Kritisk";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 120 }}>
+      <div style={{ flex: 1, height: 8, background: C.surface2, borderRadius: 999, overflow: "hidden" }}>
+        <div style={{ width: `${score}%`, height: "100%", background: color, borderRadius: 999 }} />
+      </div>
+      <span style={{ fontFamily: font.display, fontWeight: 700, fontSize: 14, color: C.text, minWidth: 24, textAlign: "right" }}>{score}</span>
+      <span style={{ color, fontSize: 11, fontWeight: 600, textTransform: "uppercase" }}>{label}</span>
+    </div>
+  );
+}
+
+// Retention-kohortematrix: rækker × kolonner af procent-celler. En celle uden
+// målbart data (fx uge 52 før der findes et års aktivitetshistorik) er
+// `disabled` og viser "–" med en title, der forklarer hvorfor — ALDRIG et
+// falsk 0%, som ellers ikke kan skelnes fra ægte nul-retention.
+function PctGrid({ columns, rows }) {
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", fontSize: 12 }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: "left", color: C.muted, fontWeight: 600 }}></th>
+            {columns.map((c) => (
+              <th key={c.key} style={{ textAlign: "right", color: C.muted, fontWeight: 600, padding: "4px 6px" }}>{c.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key} className="rowline">
+              <td style={{ color: C.muted, padding: "4px 6px" }}>{r.label}</td>
+              {columns.map((c) => {
+                const cell = r.cells[c.key];
+                const disabled = !cell || cell.disabled;
+                return (
+                  <td key={c.key} title={disabled ? (cell?.reason || "Ingen data") : undefined}
+                    style={{ textAlign: "right", padding: "4px 6px", color: disabled ? C.muted : C.text, opacity: disabled ? 0.5 : 1 }}>
+                    {disabled ? "–" : `${cell.pct}%`}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export { Card, Eyebrow, H, PlayerName, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill, EmptyCompetitions, StatTile, StatGroup, MiniBars, HealthBar, PctGrid };

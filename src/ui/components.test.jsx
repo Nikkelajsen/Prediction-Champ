@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 // renderToStaticMarkup frem for en jsdom-opsætning: PlayerName er ren markup,
 // og projektet skal ikke have et komponent-testbibliotek for den ene komponents skyld.
 import { renderToStaticMarkup } from "react-dom/server";
-import { PlayerName, UserRoundPredictions, EmptyCompetitions } from "./components.jsx";
+import { PlayerName, UserRoundPredictions, EmptyCompetitions, StatTile, StatGroup, MiniBars, HealthBar } from "./components.jsx";
 
 describe("PlayerName", () => {
   it("renderes som ren tekst uden onOpenProfile", () => {
@@ -92,5 +92,61 @@ describe("EmptyCompetitions", () => {
     const html = renderToStaticMarkup(<EmptyCompetitions onJoin={() => {}} />);
     expect(html).not.toContain("Opret konkurrence");
     expect((html.match(/<button/g) || []).length).toBe(1);
+  });
+});
+
+// Flyttet fra AdminScreen.jsx (analytics v1) — nu to forbrugere (StatsPanel +
+// AnalyticsPanel), samme grænse som resten af denne fils komponenter.
+describe("StatTile/StatGroup/MiniBars (flyttet fra AdminScreen)", () => {
+  it("StatTile viser label og value, og hint kun når det er sat", () => {
+    const withHint = renderToStaticMarkup(<StatTile label="Aktive brugere" value={42} hint="seneste 7 dage" />);
+    expect(withHint).toContain("Aktive brugere");
+    expect(withHint).toContain("42");
+    expect(withHint).toContain("seneste 7 dage");
+    const withoutHint = renderToStaticMarkup(<StatTile label="Aktive brugere" value={42} />);
+    expect(withoutHint).not.toContain("seneste 7 dage");
+  });
+
+  it("StatGroup renderer sin titel og alle børn", () => {
+    const html = renderToStaticMarkup(
+      <StatGroup title="Nøgletal"><StatTile label="A" value={1} /><StatTile label="B" value={2} /></StatGroup>
+    );
+    expect(html).toContain("Nøgletal");
+    expect(html).toContain("A");
+    expect(html).toContain("B");
+  });
+
+  it("MiniBars viser 'Ingen data endnu' for et tomt datasæt", () => {
+    const html = renderToStaticMarkup(<MiniBars data={[]} color="#22C55E" formatLabel={(x) => x} />);
+    expect(html).toContain("Ingen data endnu");
+  });
+
+  it("MiniBars renderer én søjle pr. datapunkt", () => {
+    const data = [{ key: "a", value: 3 }, { key: "b", value: 7 }];
+    const html = renderToStaticMarkup(<MiniBars data={data} color="#22C55E" formatLabel={(x) => x} />);
+    expect((html.match(/title="/g) || []).length).toBe(2);
+  });
+});
+
+// HealthBar: farve er ALDRIG eneste signal — tallet og ordet skal altid stå
+// ved siden af, og en null-score (for ny liga uden nok data) må ikke vises
+// som et vilkårligt 0.
+describe("HealthBar", () => {
+  it("null renderes som 'For ny', ikke som 0", () => {
+    const html = renderToStaticMarkup(<HealthBar score={null} />);
+    expect(html).toContain("For ny");
+    expect(html).not.toContain(">0<");
+  });
+
+  it("viser altid tallet OG ordet — aldrig kun en farvet bjælke", () => {
+    const sund = renderToStaticMarkup(<HealthBar score={85} />);
+    expect(sund).toContain("85");
+    expect(sund).toContain("Sund");
+    const svag = renderToStaticMarkup(<HealthBar score={50} />);
+    expect(svag).toContain("50");
+    expect(svag).toContain("Svag");
+    const kritisk = renderToStaticMarkup(<HealthBar score={10} />);
+    expect(kritisk).toContain("10");
+    expect(kritisk).toContain("Kritisk");
   });
 });
