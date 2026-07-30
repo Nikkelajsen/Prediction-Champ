@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { recordFacts, h2hSentence } from "./ProfileScreen.jsx";
+import { renderToStaticMarkup } from "react-dom/server";
+import { recordFacts, h2hSentence, Sparkline } from "./ProfileScreen.jsx";
 
 // Rekorder-sektionen er GLOBAL (Championship + global rating), ikke en opgørelse
 // pr. brugerens egne konkurrencer. Reglerne for hvad der vises, ligger i
@@ -9,6 +10,7 @@ describe("recordFacts (hvad Rekorder-sektionen viser)", () => {
     best_rating: 1240, best_rating_round: "2026-05-12",
     best_round_rank: 4, best_round_rank_count: 2, best_round_rank_field: 31,
     longest_round_streak: 3,
+    best_round_points: 17, best_round_exact: 4, best_round_points_round: "2026-05-19",
   };
 
   it("viser alle tre rekorder, når de findes", () => {
@@ -66,6 +68,72 @@ describe("recordFacts (hvad Rekorder-sektionen viser)", () => {
     const r = recordFacts({ best_rating: null, best_round_rank: null, longest_round_streak: 0 }, null);
     expect(r.hasAny).toBe(false);
     expect(recordFacts(null, null).hasAny).toBe(false);
+  });
+
+  // "Din bedste runde nogensinde" (flest point i én runde)
+  it("viser bedste runde med point, præcise og rundeetiket", () => {
+    const r = recordFacts(full, 1198);
+    expect(r.bestRoundPoints).toBe(17);
+    expect(r.bestRoundExact).toBe(4);
+    expect(r.bestRoundRound).toMatch(/^19[./]05 – 25[./]05$/);
+  });
+
+  // Fundet på rigtige data: en spiller med én runde og nul point ville ellers
+  // få "din bedste runde nogensinde: 0 point".
+  it("udelader bedste runde ved 0 point — en rekord må ikke drille", () => {
+    const r = recordFacts({ ...full, best_round_points: 0, best_round_exact: 0 }, 1198);
+    expect(r.bestRoundPoints).toBeNull();
+    expect(r.bestRoundRound).toBeNull();
+  });
+
+  it("udelader 'heraf N præcise', når runden ikke havde nogen præcise", () => {
+    expect(recordFacts({ ...full, best_round_exact: 0 }, 1198).bestRoundExact).toBe(0);
+  });
+
+  it("tæller bedste runde med i hasAny, så sektionen vises selv uden rating/rang", () => {
+    const r = recordFacts({ best_round_points: 9, best_round_exact: 1, longest_round_streak: 0 }, null);
+    expect(r.hasAny).toBe(true);
+  });
+});
+
+// Ratingkurven: toppunkt-ring (så Rekordernes peak kan genfindes) og akser.
+describe("Sparkline (toppunkt og akser)", () => {
+  const curve = [
+    { round_key: "2026-05-12", rating_after: 1200 },
+    { round_key: "2026-05-19", rating_after: 1240 },
+    { round_key: "2026-05-26", rating_after: 1225 },
+  ];
+  const svg = (props) => renderToStaticMarkup(<Sparkline {...props} />);
+
+  it("ringer den runde ind, RPC'et kalder toppunktet", () => {
+    const html = svg({ curve, peakRoundKey: "2026-05-19" });
+    // ringen er den eneste cirkel uden fyld
+    expect(html).toContain('fill="none"');
+    const rings = [...html.matchAll(/<circle[^>]*fill="none"[^>]*>/g)];
+    expect(rings).toHaveLength(1);
+  });
+
+  it("falder tilbage til kurvens maksimum, hvis peak-nøglen mangler", () => {
+    const rings = [...svg({ curve }).matchAll(/<circle[^>]*fill="none"[^>]*>/g)];
+    expect(rings).toHaveLength(1);
+  });
+
+  it("viser skalaen som et neutralt interval, ikke som 'laveste rating'", () => {
+    const html = svg({ curve, peakRoundKey: "2026-05-19" });
+    expect(html).toContain("Skala 1200–1240");
+    expect(html).not.toMatch(/laveste|dårligste/i);
+  });
+
+  it("viser kun første og sidste runde på x-aksen", () => {
+    const html = svg({ curve, peakRoundKey: "2026-05-19" });
+    expect(html).toMatch(/12[./]05 – 18[./]05/);
+    expect(html).toMatch(/26[./]05 – 01[./]06/);
+    expect(html).not.toMatch(/19[./]05 – 25[./]05/);
+  });
+
+  it("tegner ingenting med under to punkter", () => {
+    expect(svg({ curve: [curve[0]] })).toBe("");
+    expect(svg({ curve: [] })).toBe("");
   });
 });
 

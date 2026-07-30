@@ -29,13 +29,13 @@ Oppefra og ned på profilsiden:
 | Sektion | Indhold | Datakilde |
 |---|---|---|
 | **Hoved** | Navn, "medlem siden", aktuel rating + ▲/▼ og "NY"-badge (samme visning som Rating-fanen) | `profiles`, `ratings`, `rating_history` |
-| **Titler** | Månedstitler ("Månedens Prediction Champ, marts 2027") og rundetitler (antal rundesejre). Vises som badges/trofæer, nyeste først | `monthly_standings`, `round_standings` (historik) |
+| **Titler** | Sæsontitler ("Sæsonens Prediction Champ — Superligaen 2026/27", *tilføjet 30. juli 2026*), månedstitler ("Månedens Prediction Champ, marts 2027") og rundetitler (antal rundesejre). Vises som badges/trofæer, nyeste først | `season_standings`, `monthly_standings`, `round_standings` (historik) |
 | **Milepæle** | Kronologisk minde-liste fra story-arkivet: comebacks, stimer, ratingrekorder, H2H-overhalinger — genbrug af `headline` fra gemte `stories`-rækker | `stories` (alle kandidater, ikke kun viste) |
-| **Ratingkurve** | Rating over tid (én prik pr. runde), med provisorisk periode markeret | `rating_history` |
+| **Ratingkurve** | Rating over tid (én prik pr. runde), med provisorisk periode markeret. *(30. juli 2026:* toppunktet ringes ind (◎), og kurven har akser — y som neutralt interval, x som første/sidste runde*)* | `rating_history` |
 | **Rivaler** | De 2–3 brugere, man oftest har byttet placering/udvekslet H2H-historier med — vist som fortælling ("Din tætteste rival: Jimmy — I har overhalet hinanden 5 gange") | `stories` (regel 40/60) + `rating_history.rnk` |
-| **Basistal (diskret)** | Samlede point, præcise hits (🎯), hit-rate, antal tippede kampe. Én kompakt linje/række nederst — bevidst ikke øverst | samme kilder som stillingerne (se afsnit 4) |
+| **Basistal (diskret)** | Samlede point, præcise hits (🎯), korrekte udfald *(tilføjet 30. juli 2026 — feltet blev hentet uden at blive vist, så halvdelen af pointene var usynlige)*, hit-rate, antal tippede kampe. Én kompakt linje/række nederst — bevidst ikke øverst | samme kilder som stillingerne (se afsnit 4) |
 | **H2H-linje** *(K4, tilføjet 30. juli 2026)* | Ét narrativt punkt, kun ved fremmed profil med delt konkurrencehistorik: "I har mødt hinanden N gange — du fører A-B". Et møde er deduplikeret pr. runde/kamp på tværs af alle delte konkurrencer — deler to brugere fx både en rundebaseret og en full-season-konkurrence for samme turnering, tæller samme spillede runde kun én gang (rettet 30. juli 2026, testcase 13). | `competition_participants`, `competition_matches`, `predictions`, `pc_points()` |
-| **Rekorder** *(K4)* | "Bedste nogensinde": højeste rating, bedste rundeplacering (kun hvis ikke allerede nr. 1, og med feltstørrelse — se afsnit 10), længste stime af rundesejre i træk. **Omfang: globalt** — global rating + Championships rundeliga, ikke brugerens egne konkurrencer | `rating_history` (`scope='ALL'`), `round_standings` (samme rank()-stige som Titler) |
+| **Rekorder** *(K4)* | "Bedste nogensinde": bedste runde (flest point i én runde, *tilføjet 30. juli 2026*), bedste rundeplacering (kun hvis ikke allerede nr. 1, og med feltstørrelse — se afsnit 10), længste stime af rundesejre i træk, højeste rating. **Omfang: globalt** — global rating + Championships rundeliga, ikke brugerens egne konkurrencer | `rating_history` (`scope='ALL'`), `round_standings` (samme rank()-stige som Titler) |
 | **Fodaftryk** *(K4)* | Antal ligaer og konkurrencer, som en diskret linje i hovedet | `group_members`, `competition_participants` |
 
 **Ikke i v1:** per-turnering-opdeling (afventer turnering #2 — `ratings.scope` er forberedt), sæsonarkiv på tværs af år (der findes kun én sæson endnu), sammenligning af to profiler side om side (H2H bor i Story Engine). **[Delvist rettet, K4, 30. juli 2026]:** ét enkelt narrativt H2H-punkt ("I har mødt hinanden N gange — X fører A-B") vises nu også på tværs af profiler, når de to brugere deler mindst én konkurrence. Dette er IKKE en sammenligningsside — ingen tabel, ingen historik-liste, kun én sætning, kun synlig for viewer selv. Milepæle og rivaler forbliver private og uændrede (testcase 4/5). "Konkurrencer vundet" er bevidst stadig udeladt: `season_standings` er sæson-bred, ikke per konkurrence, og produktet kører kun én sæson — umodent koncept indtil turnering #2.
@@ -129,6 +129,18 @@ Oppefra og ned på profilsiden:
 26. `best_round_rank == best_round_rank_field` (bruger var sidst i alle sine runder) → feltstørrelsen **udelades**, så der aldrig står "8. plads af 8". Bundplaceringer vises ikke (afsnit 1, punkt 3).
 27. H2H-sætningen indledes "I jeres fælles konkurrencer …", og `meetings == 1` bøjes "1 gang" (ikke "1 gange").
 
+*(Fem forbedringer, 30. juli 2026 — fortsætter nummereringen):*
+
+28. Bruger vinder en **afsluttet** sæson → "🏆 Sæsonens Prediction Champ — *sæsonnavn*" står **først** blandt titel-badges. To brugere ægte lige hele stigen ned → begge får titlen.
+29. Sæsonen er **ikke** færdigspillet (mindst ét resultat mangler) → ingen sæsontitel, hverken for føreren eller nogen anden. Verificeret ved at fjerne ét resultat: badget forsvinder, og dukker op igen når resultatet er tilbage.
+30. Bruger med spillede runder → "Din bedste runde nogensinde: N point, heraf M 🎯 præcise — runden *dd/mm – dd/mm*". Ved pointlighed mellem to runder vælges den **ældste** (den, rekorden først blev sat i).
+31. Runden havde ingen præcise → "heraf M præcise" udelades helt, ingen "heraf 0 præcise".
+32. **Bruger hvis bedste runde gav 0 point** → linjen udelades helt. Der må ALDRIG stå "din bedste runde nogensinde: 0 point". *(Fundet på rigtige data under verificering mod PostgreSQL 16, ikke i gennemgangen — en spiller med én runde og nul point.)*
+33. Basistallene viser "N korrekte udfald" ved siden af de præcise, så pointsummen kan stemme uden at brugeren selv regner resten ud.
+34. Ratingkurven ringer toppunktet ind (◎) på den runde, `records.best_rating_round` udpeger. Mangler nøglen (gammel funktion), ringes kurvens eget maksimum ind — ringen forsvinder aldrig.
+35. Kurven viser "Skala *min*–*max*" og første/sidste rundeetiket. Ordene "laveste"/"dårligste" må ikke forekomme — skalaen er en akse, ikke en bedømmelse.
+36. Rekorder-linjerne står i rækkefølgen bedste runde → placering → stime → rating (mest konkret først).
+
 ---
 
 ## 10. Omfang på skærmen (rettelse, 30. juli 2026)
@@ -150,6 +162,29 @@ Skærmen viser **to forskellige omfang**, og indtil nu sagde den ikke hvilket er
 **Feltstørrelsen som scope-signal.** "4. plads" siger intet om, hvor stærk placeringen var, og var netop den linje, der blev læst som en egen konkurrence. `records.best_round_rank_field` gør den til "4. plads af 31 spillere" — hvilket samtidig *viser*, at feltet er stort og altså globalt. Den udelades ved `rank >= field`, fordi "8. plads af 8" er en bundplacering, og profilen viser aldrig bundplaceringer (afsnit 1, punkt 3) — sammen med feltet fra en større runde ved gentagne placeringer (`max(field)`) er det den eneste måde tilføjelsen ikke kan komme til at drille.
 
 **Ikke ændret:** hvilke tal der beregnes, og hvordan. Rettelsen er ren visning plus ét nyt, afledt felt — ingen ændring i `records`' eksisterende værdier, ingen ny pointkilde (F2), ingen ændret synlighed (K1).
+
+---
+
+## 11. Fem forbedringer (30. juli 2026)
+
+Leveret samlet efter en gennemgang af karrierestatistikken. Alle fem lå inden for det, skærmen allerede handler om — ingen af dem gør profilen til en statistikside.
+
+| # | Forbedring | Hvorfor den var værd at bygge |
+|---|---|---|
+| 1 | **Sæsontitel** (`titles.season`) | Championship har **tre** kåringer, men karrieren registrerede kun to. Den største af dem ville aldrig stå nogen steder, når sæsonen sluttede — og karrieren er netop det sted, der "nulstilles aldrig". Samme regler som månedstitlen; badget står først. |
+| 2 | **"Din bedste runde nogensinde"** | Den mest konkrete "bedste nogensinde", og den fandtes slet ikke. Sammenligner kun brugeren med brugeren selv (som `PERSONAL_BEST` i Story Engine), så den kan vises uanset placering. |
+| 3 | **Korrekte udfald i basistallene** | `base.outcome_count` blev hentet uden at blive vist. Cirka halvdelen af pointene var dermed usynlige: 14 point kunne ikke stemme med 4 præcise, medmindre brugeren selv regnede resten ud. |
+| 4 | **Toppunkt ringet ind i ratingkurven** | Rekordernes "højeste rating nogensinde" var et løsrevet tal, selvom kurven lige under indeholdt præcis det punkt. Ringen binder de to sammen uden at tilføje data. |
+| 5 | **Akser på ratingkurven** | Kurven havde hverken tid eller værdi på sig og kunne derfor kun læses som "form", ikke som forløb. |
+
+**To designvalg, der fulgte af produktreglerne, ikke af teknikken:**
+
+- **"Skala 1200–1240", ikke "laveste rating".** Y-aksen skal gøre udsvingene læsbare, og en akse er neutral — men ordet "laveste" ville udpege et lavpunkt i brugerens egen historie, hvilket profilen ikke gør (afsnit 1, punkt 3).
+- **Bedste runde vises kun ved > 0 point.** Fundet under verificering mod en rigtig PostgreSQL 16, ikke i gennemgangen: en spiller, hvis eneste runde gav nul point, ville have fået "din bedste runde nogensinde: 0 point". En rekord, der driller, er værre end ingen rekord.
+
+**Akse-etiketterne står som HTML uden om SVG'en**, ikke som `<text>` inde i den: `Sparkline` bruger `preserveAspectRatio="none"`, så tekst inde i grafen ville blive strakt vandret på brede skærme. Ringen bruger `vectorEffect="non-scaling-stroke"` af samme grund.
+
+**Verificeret mod PostgreSQL 16.13** med produktionsskemaet, 4 spillere over 3 afsluttede runder med håndregnet facit og en færdigspillet sæson: stillingerne matcher facit række for række, sæsontitlen udløses kun for den faktiske vinder og forsvinder, når ét resultat fjernes, `best_round_points` vælger den ældste runde ved lighed, en ny bruger giver `null`/`0` overalt, og filen er idempotent.
 
 ---
 

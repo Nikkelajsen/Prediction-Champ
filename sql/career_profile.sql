@@ -29,9 +29,10 @@
 --     docs/features/karriereprofil-v1.md §2/§8 (K4) og docs/ROADMAP.md.
 --     Møder deduplikeres pr. runde/kamp på tværs af delte konkurrencer
 --     (rettelse 30. juli 2026 — se kommentaren ved h2h-blokken nedenfor).
---   - records: bedste rating nogensinde, bedste rundeplacering (kun hvis ikke
---     allerede nr. 1 — redundant med titles.round_wins ellers), længste stime
---     af rundesejre i træk. Genbruger samme rank()-stige som round_wins.
+--   - records: bedste rating nogensinde, bedste runde (flest point i én runde),
+--     bedste rundeplacering (kun hvis ikke allerede nr. 1 — redundant med
+--     titles.round_wins ellers), længste stime af rundesejre i træk.
+--     Genbruger samme rank()-stige som round_wins.
 --     OMFANG (tydeliggjort 30. juli 2026): records er GLOBALT — rating er
 --     scope='ALL' (samme tal som Rating-fanen), og rundeplacering/stime måles i
 --     round_standings, altså Championships rundeliga, hvor ALLE brugere er med.
@@ -47,8 +48,10 @@
 --   competition_matches(competition_id, match_id),
 --   competition_participants(competition_id, user_id, hidden),
 --   group_members(group_id, user_id),
+--   seasons(id, league_id, name, start_date),
 --   view monthly_standings(month, scope, user_id, total_points, matches, exact_count),
 --   view round_standings(round_key, user_id, matches, total_points, exact_count, avg_goal_error),
+--   view season_standings(season_id, user_id, total_points, exact_count, outcome_count, round_wins, avg_goal_error),
 --   pc_points(ph, pa, hs, as_) — kanonisk pointfunktion (F2),
 --   stories(user_id, rule, payload).
 
@@ -195,6 +198,37 @@ begin
         ) mw
         where mw.user_id = profile_user_id and mw.rnk = 1
       ),
+      -- Sæsontitler: Championship har TRE kåringer (runde, måned, sæson), men
+      -- karrieren registrerede kun to — den største af dem ville aldrig stå
+      -- nogen steder, når sæsonen sluttede. Samme regler som månedstitlen:
+      -- kun AFSLUTTEDE sæsoner (alle kampe spillet), rank() frem for distinct on
+      -- (delt titel er en titel for begge), fuld tiebreaker-stige inkl.
+      -- round_wins — season_standings har alle stigens kolonner.
+      -- season_id kan være null på en kamp; join'et til seasons filtrerer dem
+      -- ud, og null matcher aldrig i sc-join'et.
+      'season', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+                 'season_id',   sw.season_id,
+                 'season_name', sw.name,
+                 'points',      sw.total_points
+               ) order by sw.start_date desc nulls last, sw.name desc), '[]'::jsonb)
+        from (
+          select ss.season_id, ss.user_id, ss.total_points, s.name, s.start_date,
+            rank() over (partition by ss.season_id
+                         order by ss.total_points desc, ss.exact_count desc, ss.outcome_count desc,
+                                  ss.round_wins desc, ss.avg_goal_error asc) as rnk
+          from public.season_standings ss
+          join public.seasons s on s.id = ss.season_id
+          join (
+            select season_id
+            from public.matches
+            where season_id is not null
+            group by season_id
+            having bool_and(home_score is not null and away_score is not null)
+          ) sc on sc.season_id = ss.season_id
+        ) sw
+        where sw.user_id = profile_user_id and sw.rnk = 1
+      ),
       -- Rundesejre: antal afsluttede runder (alle kampe spillet) hvor brugeren er nr. 1.
       -- Én runde har ingen rundesejre at bryde lighed med, så stigen stopper ved
       -- målafvigelsen. Delt sejr tæller for alle.
@@ -261,7 +295,7 @@ begin
     -- stige som round_wins ovenfor — ingen parallel pointberegning (F2).
     'records', (
       with rr as (
-        select rs.round_key, rs.user_id,
+        select rs.round_key, rs.user_id, rs.total_points, rs.exact_count,
           rank() over (partition by rs.round_key
                        order by rs.total_points desc, rs.exact_count desc, rs.outcome_count desc,
                                 rs.avg_goal_error asc) as rnk,
@@ -281,8 +315,20 @@ begin
         ) rc on rc.round_key = rs.round_key
       ),
       mine as (
-        select round_key, rnk, field, (rnk = 1) as won
+        select round_key, rnk, field, total_points, exact_count, (rnk = 1) as won
         from rr where user_id = profile_user_id
+      ),
+      -- "Din bedste runde nogensinde": flest point i én enkelt spillerunde.
+      -- Den mest konkrete "bedste nogensinde", og den manglede helt. Kun
+      -- AFSLUTTEDE runder indgår (rr's join), så tallet ikke vokser bagefter og
+      -- gør en påstået rekord forældet, mens brugeren ser på den.
+      -- Sammenligner kun brugeren med brugeren selv — ingen placering, ingen
+      -- andre nævnt, så linjen kan vises uanset hvor i tabellen man står.
+      best_round as (
+        select total_points as pts, exact_count as ex, round_key
+        from mine
+        order by total_points desc, exact_count desc, round_key asc
+        limit 1
       ),
       -- max(field): er samme bedste placering sat i flere runder, tælles den mod
       -- den STØRSTE kreds, spilleren slog den i. Aldrig misvisende — en større
@@ -313,6 +359,9 @@ begin
       select jsonb_build_object(
         'best_rating',           (select round(rating_after)::int from peak_rating),
         'best_rating_round',     (select round_key from peak_rating),
+        'best_round_points',       (select pts from best_round),
+        'best_round_exact',        (select ex from best_round),
+        'best_round_points_round', (select round_key from best_round),
         'best_round_rank',       (select rnk from best_rank),
         'best_round_rank_count', (select cnt from best_rank),
         'best_round_rank_field', (select field from best_rank),

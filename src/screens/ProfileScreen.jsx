@@ -16,9 +16,23 @@ import { BackBar, Card, Eyebrow, InfoDot, Move } from "../ui/components.jsx";
 // ikke kun bag en InfoDot, som skal klikkes for at hjælpe.
 const scopeNote = { color: C.muted, fontSize: 12, lineHeight: 1.45, marginTop: -2, marginBottom: 6 };
 
+// Rundenøgler kommer som tekst fra to kilder (rating_history.round_key er text,
+// matches.round_key er date), så nøglen valideres, før den bliver en etiket —
+// roundLabel på en ikke-dato giver "Invalid Date – Invalid Date".
+function safeRoundLabel(key) {
+  return typeof key === "string" && /^\d{4}-\d{2}-\d{2}$/.test(key) ? roundLabel(key) : null;
+}
+
 // Letvægts ratingkurve (ingen chart-bibliotek, jf. spec). Én prik pr. runde.
 // De første <5 runder (provisorisk K-faktor) tegnes dæmpet/stiplet.
-function Sparkline({ curve }) {
+//
+// `peakRoundKey` ringer toppunktet ind, så Rekordernes "højeste rating
+// nogensinde" kan genfindes i kurven i stedet for at være et løsrevet tal.
+//
+// Akse-etiketterne står som HTML uden om SVG'en, ikke som <text> inde i den:
+// viewBox'en skaleres med preserveAspectRatio="none", så tekst inde i grafen
+// ville blive vandret forvrænget på brede skærme.
+export function Sparkline({ curve, peakRoundKey }) {
   if (!curve || curve.length < 2) return null;
   const W = 300, Hgt = 90, pad = 8;
   const vals = curve.map((p) => p.rating_after);
@@ -35,20 +49,49 @@ function Sparkline({ curve }) {
   const firmStart = Math.max(0, provEnd - 1); // overlap ét punkt så linjen hænger sammen
   const firmPts = curve.slice(firmStart).map((p, i) => `${x(firmStart + i).toFixed(1)},${y(p.rating_after).toFixed(1)}`).join(" ");
 
+  // Toppunktet: brug RPC'ets round_key, så ring og rekord-linje altid peger på
+  // samme runde. Falder tilbage til kurvens egen maksimumsprik, hvis nøglen
+  // mangler (fx før migreringen) — så ringen aldrig bare forsvinder.
+  const peakIdx = peakRoundKey != null
+    ? curve.findIndex((p) => p.round_key === peakRoundKey)
+    : vals.indexOf(max);
+  const peak = peakIdx >= 0 ? peakIdx : vals.indexOf(max);
+
+  const firstLabel = safeRoundLabel(curve[0]?.round_key);
+  const lastLabel = safeRoundLabel(curve[n - 1]?.round_key);
+  const axis = { color: C.muted, fontSize: 11, whiteSpace: "nowrap" };
+
   return (
-    <div style={{ overflowX: "auto" }}>
-      <svg viewBox={`0 0 ${W} ${Hgt}`} width="100%" height={Hgt} preserveAspectRatio="none" style={{ display: "block" }}>
-        {provEnd >= 2 && (
-          <polyline points={provPts} fill="none" stroke={C.muted} strokeWidth="1.6" strokeDasharray="3 3" strokeLinejoin="round" strokeLinecap="round" />
-        )}
-        {n - firmStart >= 2 && (
-          <polyline points={firmPts} fill="none" stroke={C.gold} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        )}
-        {curve.map((p, i) => (
-          <circle key={i} cx={x(i)} cy={y(p.rating_after)} r={i < PROV ? 2 : 2.6}
-            fill={i < PROV ? C.muted : C.gold} />
-        ))}
-      </svg>
+    <div>
+      {/* Y-akse som neutral skala-angivelse frem for "din laveste rating":
+          intervallet gør kurvens udsving læsbare uden at udpege et lavpunkt. */}
+      <div style={{ ...axis, marginBottom: 2 }}>Skala {min}–{max}</div>
+      <div style={{ overflowX: "auto" }}>
+        <svg viewBox={`0 0 ${W} ${Hgt}`} width="100%" height={Hgt} preserveAspectRatio="none" style={{ display: "block" }}>
+          {provEnd >= 2 && (
+            <polyline points={provPts} fill="none" stroke={C.muted} strokeWidth="1.6" strokeDasharray="3 3" strokeLinejoin="round" strokeLinecap="round" />
+          )}
+          {n - firmStart >= 2 && (
+            <polyline points={firmPts} fill="none" stroke={C.gold} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+          )}
+          {curve.map((p, i) => (
+            <circle key={i} cx={x(i)} cy={y(p.rating_after)} r={i < PROV ? 2 : 2.6}
+              fill={i < PROV ? C.muted : C.gold} />
+          ))}
+          {peak >= 0 && (
+            <circle cx={x(peak)} cy={y(curve[peak].rating_after)} r="5.5"
+              fill="none" stroke={C.gold} strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+          )}
+        </svg>
+      </div>
+      {/* X-akse: kun første og sidste runde. Alle etiketter ville ikke kunne
+          læses på en telefon, og kurven skal give et forløb, ikke aflæsninger. */}
+      {(firstLabel || lastLabel) && (
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 4 }}>
+          <span style={axis}>{firstLabel || ""}</span>
+          <span style={axis}>{lastLabel || ""}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -93,19 +136,27 @@ export function recordFacts(records, currentRating) {
   // Ratingtoppen får sin runde med, når round_key ser ud som en rundenøgle
   // (uge-startdato). Feltet fandtes allerede i RPC-svaret uden at blive vist —
   // "1247" alene siger ikke, hvornår toppen blev sat.
-  const round = r.best_rating_round;
-  const bestRatingRound = typeof round === "string" && /^\d{4}-\d{2}-\d{2}$/.test(round)
-    ? roundLabel(round) : null;
+  const bestRatingRound = safeRoundLabel(r.best_rating_round);
+
+  // "Din bedste runde nogensinde" — flest point i én runde. Kun ved MINDST ét
+  // point: en runde uden point er ingen rekord, og "din bedste runde
+  // nogensinde: 0 point" ville drille præcis den bruger, der har mindst brug
+  // for det. Fundet på rigtige data (en spiller med én runde og nul point).
+  const roundPts = r.best_round_points ?? null;
+  const showRoundPts = roundPts != null && roundPts > 0;
 
   return {
     bestRating,
     bestRatingIsCurrent: bestRating != null && currentRating === bestRating,
     bestRatingRound,
+    bestRoundPoints: showRoundPts ? roundPts : null,
+    bestRoundExact: showRoundPts ? (r.best_round_exact || 0) : 0,
+    bestRoundRound: showRoundPts ? safeRoundLabel(r.best_round_points_round) : null,
     rank: showRank ? rank : null,
     rankCount: r.best_round_rank_count || 0,
     rankField: showField ? field : null,
     streak: streak >= 2 ? streak : 0,
-    hasAny: bestRating != null || showRank || streak >= 2,
+    hasAny: bestRating != null || showRank || streak >= 2 || showRoundPts,
   };
 }
 
@@ -164,8 +215,9 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
   }
 
   const head = data?.head || {};
-  const titles = data?.titles || { monthly: [], round_wins: 0 };
+  const titles = data?.titles || { monthly: [], season: [], round_wins: 0 };
   const monthly = titles.monthly || [];
+  const seasonTitles = titles.season || [];
   const roundWins = titles.round_wins || 0;
   const curve = data?.curve || [];
   const base = data?.base || { total_points: 0, exact_count: 0, outcome_count: 0, matches: 0 };
@@ -181,7 +233,7 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
 
   const visibleMilestones = milestoneExpanded ? milestones : milestones.slice(0, MILESTONE_PAGE);
 
-  const hasTitles = monthly.length > 0 || roundWins > 0;
+  const hasTitles = monthly.length > 0 || seasonTitles.length > 0 || roundWins > 0;
   const hasMilestones = isOwn && milestones.length > 0;
   const hasCurve = curve.length >= 2;
   const hasH2H = !isOwn && !!data?.h2h;
@@ -259,9 +311,17 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
         <div>
           <Eyebrow>Titler · Championship</Eyebrow>
           <p style={scopeNote}>
-            Fra Championships måneds- og rundeliga, hvor alle brugere automatisk er med — ikke fra egne konkurrencer.
+            Fra Championships sæson-, måneds- og rundeliga, hvor alle brugere automatisk er med — ikke fra egne konkurrencer.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {/* Sæsontitlen står FØRST: Championship har tre kåringer, og sæsonen
+                er den største af dem. Den manglede helt, så en afsluttet sæson
+                efterlod intet spor i karrieren. */}
+            {seasonTitles.map((t) => (
+              <span key={t.season_id} style={badge} title={`${t.points} point`}>
+                🏆 Sæsonens Prediction Champ — {t.season_name}
+              </span>
+            ))}
             {monthly.map((t) => (
               <span key={t.month} style={badge} title={`${t.points} point`}>
                 👑 Månedens Prediction Champ — {t.month_name}
@@ -297,13 +357,12 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
           </p>
           <Card>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 14, color: C.text, lineHeight: 1.6 }}>
-              {rec.bestRating != null && (
-                <div>
-                  {rec.bestRatingIsCurrent
-                    ? <>Du er på din <b style={{ color: C.gold }}>højeste globale rating nogensinde</b> lige nu: {rec.bestRating}.</>
-                    : <>Din højeste globale rating nogensinde: <b style={{ color: C.gold }}>{rec.bestRating}</b>
-                        {rec.bestRatingRound ? <span style={{ color: C.muted }}> — sat efter runden {rec.bestRatingRound}</span> : null}.</>}
-                </div>
+              {/* Rækkefølgen går fra det mest konkrete til det mest abstrakte:
+                  én runde → placering → stime → det lange ratingtal. */}
+              {rec.bestRoundPoints != null && (
+                <div>Din bedste runde nogensinde: <b style={{ color: C.gold }}>{rec.bestRoundPoints} point</b>
+                  {rec.bestRoundExact > 0 ? `, heraf ${rec.bestRoundExact} 🎯 præcise` : ""}
+                  {rec.bestRoundRound ? <span style={{ color: C.muted }}> — runden {rec.bestRoundRound}</span> : null}.</div>
               )}
               {rec.rank != null && (
                 <div>Din bedste placering i <b>Championships rundeliga</b>:{" "}
@@ -314,6 +373,14 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
               {rec.streak > 0 && (
                 <div>Din længste stime af rundesejre i <b>Championships rundeliga</b>:{" "}
                   <b style={{ color: C.gold }}>{rec.streak} runder</b> i træk.</div>
+              )}
+              {rec.bestRating != null && (
+                <div>
+                  {rec.bestRatingIsCurrent
+                    ? <>Du er på din <b style={{ color: C.gold }}>højeste globale rating nogensinde</b> lige nu: {rec.bestRating}.</>
+                    : <>Din højeste globale rating nogensinde: <b style={{ color: C.gold }}>{rec.bestRating}</b>
+                        {rec.bestRatingRound ? <span style={{ color: C.muted }}> — sat efter runden {rec.bestRatingRound}</span> : null}.</>}
+                </div>
               )}
             </div>
           </Card>
@@ -353,9 +420,9 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
             <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Ratingkurve</div>
             <span style={{ color: C.muted, fontSize: 12 }}>{curve.length} runder</span>
           </div>
-          <Sparkline curve={curve} />
+          <Sparkline curve={curve} peakRoundKey={records.best_rating_round} />
           <p style={{ color: C.muted, fontSize: 11, marginTop: 8, marginBottom: 0 }}>
-            Rating efter hver runde — den nyeste prik kan stadig flytte sig, indtil runden er slut. ● grå/stiplet = foreløbig periode (under 5 runder).
+            Rating efter hver runde — den nyeste prik kan stadig flytte sig, indtil runden er slut. ● grå/stiplet = foreløbig periode (under 5 runder). ◎ = højeste rating nogensinde.
           </p>
         </Card>
       )}
@@ -390,6 +457,10 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", color: C.muted, fontSize: 12 }}>
           <span><b style={{ color: C.text }}>{base.total_points}</b> point</span>
           <span>🎯 <b style={{ color: C.text }}>{base.exact_count}</b> præcise</span>
+          {/* De korrekte udfald (+1) blev hentet i `base` uden nogensinde at blive
+              vist, så cirka halvdelen af pointene var usynlige: 14 point kunne
+              ikke stemme med 4 præcise, uden at man selv regnede resten ud. */}
+          <span><b style={{ color: C.text }}>{base.outcome_count}</b> korrekte udfald</span>
           {/* hitRate = exact_count / matches — altså andelen af PRÆCISE resultater.
               "Træfsikkerhed" læses som "hvor ofte havde jeg ret", hvor et korrekt
               udfald (+1) uretfærdigt talte som en fejl. */}
