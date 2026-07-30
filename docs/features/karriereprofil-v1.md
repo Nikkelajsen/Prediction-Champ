@@ -3,6 +3,8 @@
 **Status: ✅ Leveret (juli 2026) — `sql/career_profile.sql` + `src/screens/ProfileScreen.jsx`. K1 med fra start og siden udvidet: enhver indlogget bruger kan se enhver karriere (afsnit 8).** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 5–6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 4*
 >
 > ⚠️ **Rettelse (K4, 30. juli 2026):** karriereprofilen er udvidet med ét narrativt cross-profile H2H-punkt, "bedste nogensinde"-rekorder og et liga/konkurrence-fodaftryk — se afsnit 2 og 8 (K4). Testcase 4/5 nedenfor gælder fortsat uændret for milepæle og rivaler, som forbliver private.
+>
+> ⚠️ **Rettelse (omfang, 30. juli 2026 — anden runde):** skærmen sagde ikke, hvilke konkurrencer dens tal gælder. Rekorder, Titler og basistal er **globale** (Championship + global rating), Milepæle er **konkurrence-nære** — nu skrevet på skærmen frem for antaget. Se afsnit 10.
 
 *Brugerens karriere som fortælling — milepæle, titler og rivaliseringer. Ikke en statistikside. Bygget på data, der allerede findes i databasen.*
 
@@ -33,7 +35,7 @@ Oppefra og ned på profilsiden:
 | **Rivaler** | De 2–3 brugere, man oftest har byttet placering/udvekslet H2H-historier med — vist som fortælling ("Din tætteste rival: Jimmy — I har overhalet hinanden 5 gange") | `stories` (regel 40/60) + `rating_history.rnk` |
 | **Basistal (diskret)** | Samlede point, præcise hits (🎯), hit-rate, antal tippede kampe. Én kompakt linje/række nederst — bevidst ikke øverst | samme kilder som stillingerne (se afsnit 4) |
 | **H2H-linje** *(K4, tilføjet 30. juli 2026)* | Ét narrativt punkt, kun ved fremmed profil med delt konkurrencehistorik: "I har mødt hinanden N gange — du fører A-B". Et møde er deduplikeret pr. runde/kamp på tværs af alle delte konkurrencer — deler to brugere fx både en rundebaseret og en full-season-konkurrence for samme turnering, tæller samme spillede runde kun én gang (rettet 30. juli 2026, testcase 13). | `competition_participants`, `competition_matches`, `predictions`, `pc_points()` |
-| **Rekorder** *(K4)* | "Bedste nogensinde": højeste rating, bedste rundeplacering (kun hvis ikke allerede nr. 1), længste stime af rundesejre i træk | `rating_history`, `round_standings` (samme rank()-stige som Titler) |
+| **Rekorder** *(K4)* | "Bedste nogensinde": højeste rating, bedste rundeplacering (kun hvis ikke allerede nr. 1, og med feltstørrelse — se afsnit 10), længste stime af rundesejre i træk. **Omfang: globalt** — global rating + Championships rundeliga, ikke brugerens egne konkurrencer | `rating_history` (`scope='ALL'`), `round_standings` (samme rank()-stige som Titler) |
 | **Fodaftryk** *(K4)* | Antal ligaer og konkurrencer, som en diskret linje i hovedet | `group_members`, `competition_participants` |
 
 **Ikke i v1:** per-turnering-opdeling (afventer turnering #2 — `ratings.scope` er forberedt), sæsonarkiv på tværs af år (der findes kun én sæson endnu), sammenligning af to profiler side om side (H2H bor i Story Engine). **[Delvist rettet, K4, 30. juli 2026]:** ét enkelt narrativt H2H-punkt ("I har mødt hinanden N gange — X fører A-B") vises nu også på tværs af profiler, når de to brugere deler mindst én konkurrence. Dette er IKKE en sammenligningsside — ingen tabel, ingen historik-liste, kun én sætning, kun synlig for viewer selv. Milepæle og rivaler forbliver private og uændrede (testcase 4/5). "Konkurrencer vundet" er bevidst stadig udeladt: `season_standings` er sæson-bred, ikke per konkurrence, og produktet kører kun én sæson — umodent koncept indtil turnering #2.
@@ -118,6 +120,36 @@ Oppefra og ned på profilsiden:
 20. Bruger med >20 milepæle → kun de nyeste 20 vises som standard, "Vis alle N milepæle" udvider listen; hvilke `stories` der regnes som milepæle er uændret (`priority < 90`).
 21. Footprint-tallet matcher optællingen af brugerens rækker i `group_members`/`competition_participants`; en arkiveret (`hidden=true`) liga-løs konkurrence tæller stadig med.
 22. Footprint-linjen vises identisk uanset om profilen ses af ejeren selv eller en anden bruger (ingen `isOwn`-gate).
+
+*(Omfang, 30. juli 2026 — fortsætter nummereringen):*
+
+23. Hver af de fire sektioner med tal (Titler, Rekorder, Milepæle, basistal) har en **synlig** scope-linje — ikke kun en `InfoDot`. En bruger skal kunne læse omfanget uden at trykke på noget.
+24. Rekorder-linjerne navngiver kilden i selve sætningen ("Championships rundeliga", "globale rating"). Ordet "konkurrence" må ikke stå i ental om Rekorder, da det inviterer til at læse tallet som én bestemt konkurrence.
+25. `best_round_rank_field` > `best_round_rank` → "4. plads **af 31 spillere**". Feltstørrelsen mangler i svaret (migreringen ikke kørt) → linjen viser stadig "4. plads", ingen fejl, ingen "af null".
+26. `best_round_rank == best_round_rank_field` (bruger var sidst i alle sine runder) → feltstørrelsen **udelades**, så der aldrig står "8. plads af 8". Bundplaceringer vises ikke (afsnit 1, punkt 3).
+27. H2H-sætningen indledes "I jeres fælles konkurrencer …", og `meetings == 1` bøjes "1 gang" (ikke "1 gange").
+
+---
+
+## 10. Omfang på skærmen (rettelse, 30. juli 2026)
+
+Skærmen viser **to forskellige omfang**, og indtil nu sagde den ikke hvilket er hvilket:
+
+| Sektion | Omfang | Kilde |
+|---|---|---|
+| Titler | **Globalt** — Championships måneds- og rundeliga, alle brugere automatisk med | `monthly_standings` (`scope='ALL'`), `round_standings` |
+| Rekorder | **Globalt** — global rating + Championships rundeliga | `rating_history` (`scope='ALL'`), `round_standings` |
+| Basistal | **Globalt/karriere-bredt** — alle tippede kampe, uanset konkurrence (et tip er globalt pr. kamp) | `predictions` × `matches` |
+| Milepæle | **Konkurrence-nært** — konkrete øjeblikke, de fleste i en navngiven konkurrence (`stories.competition_id` er kun `null` for de globale regler: rating og måned) | `stories` |
+| H2H | **Kun delte konkurrencer** — og deduplikeret pr. runde | `competition_participants` + `predictions` |
+
+**Hvorfor det ikke var nok at sætte en `InfoDot` på "Rekorder".** Den første rettelse gjorde netop det, men fejlede på to måder på én gang. Den var **skjult bag et klik**, hvor problemet er en forkert *førstelæsning* — en tvivl, brugeren ikke ved, de har, læser ikke en hjælpetekst. Og den var **upræcis**: teksten lød "på tværs af alle dine konkurrencer og ligaer", hvilket læses som en opgørelse *pr. brugerens egne konkurrencer*, mens `best_round_rank` faktisk er rangen mod **samtlige brugere** med point i den runde. Brugerens egen formulering ("jeg går ud fra at det er de globale konkurrencer og rating") ramte rigtigt — men at have ret ved gætværk er stadig en fejl i visningen.
+
+**Reglen fremover:** et tal på karriereskærmen skal navngive sit eget omfang i den sætning, det står i. Sektionens overskrift og en synlig scope-linje bærer kontrasten; `InfoDot` uddyber, men bærer aldrig alene en oplysning, der er nødvendig for at læse et tal rigtigt. Samme disciplin som Championship-fanens eyebrow ("Officielle konkurrencer · alle er med"), der siger sit omfang på selve kortet.
+
+**Feltstørrelsen som scope-signal.** "4. plads" siger intet om, hvor stærk placeringen var, og var netop den linje, der blev læst som en egen konkurrence. `records.best_round_rank_field` gør den til "4. plads af 31 spillere" — hvilket samtidig *viser*, at feltet er stort og altså globalt. Den udelades ved `rank >= field`, fordi "8. plads af 8" er en bundplacering, og profilen viser aldrig bundplaceringer (afsnit 1, punkt 3) — sammen med feltet fra en større runde ved gentagne placeringer (`max(field)`) er det den eneste måde tilføjelsen ikke kan komme til at drille.
+
+**Ikke ændret:** hvilke tal der beregnes, og hvordan. Rettelsen er ren visning plus ét nyt, afledt felt — ingen ændring i `records`' eksisterende værdier, ingen ny pointkilde (F2), ingen ændret synlighed (K1).
 
 ---
 

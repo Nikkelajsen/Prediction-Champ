@@ -4,8 +4,17 @@
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { loadCareerProfile, loadCareerMilestones, monthName } from "../lib/data.js";
+import { roundLabel } from "../lib/scoring.js";
 import { C, font } from "../ui/theme.js";
 import { BackBar, Card, Eyebrow, InfoDot, Move } from "../ui/components.jsx";
+
+// Karriereskærmen blander bevidst TO omfang, og det var ikke til at se på den:
+// Titler, Rekorder og basistallene er globale (Championship + global rating —
+// alle brugere er med), mens Milepælene er øjeblikke fra brugerens egne
+// konkurrencer. En bruger læste derfor "8. plads" som en placering i én af sine
+// egne konkurrencer. Hvert afsnit siger nu sit omfang med en synlig linje —
+// ikke kun bag en InfoDot, som skal klikkes for at hjælpe.
+const scopeNote = { color: C.muted, fontSize: 12, lineHeight: 1.45, marginTop: -2, marginBottom: 6 };
 
 // Letvægts ratingkurve (ingen chart-bibliotek, jf. spec). Én prik pr. runde.
 // De første <5 runder (provisorisk K-faktor) tegnes dæmpet/stiplet.
@@ -47,12 +56,57 @@ function Sparkline({ curve }) {
 // Feature 1 (K4): narrativ H2H-sætning ved fremmed profil. Vises uanset om
 // viewer fører eller taber — kun tælletal, ingen superlativer ("aldrig",
 // "værst"). Se sql/career_profile.sql for begrundelsen.
-function h2hSentence(h2h, name) {
+//
+// Sætningen navngiver sit eget omfang ("I jeres fælles konkurrencer"): tallet
+// dækker KUN kampe fra konkurrencer, begge er deltager i — ikke hele
+// Championship, og ikke alt hvad de hver især har tippet. Uden den indledning
+// læses "I har mødt hinanden 12 gange" som en global opgørelse.
+export function h2hSentence(h2h, name) {
   const { meetings, wins, losses, draws } = h2h;
   const drawNote = draws > 0 ? ` (${draws} uafgjort)` : "";
-  if (wins > losses) return `I har mødt hinanden ${meetings} gange — du fører ${wins}-${losses}${drawNote}.`;
-  if (wins < losses) return `I har mødt hinanden ${meetings} gange — ${name} fører ${losses}-${wins}${drawNote}.`;
-  return `I har mødt hinanden ${meetings} gange — I står lige, ${wins}-${losses}${drawNote}.`;
+  const lead = `I jeres fælles konkurrencer har I mødt hinanden ${meetings} ${meetings === 1 ? "gang" : "gange"}`;
+  if (wins > losses) return `${lead} — du fører ${wins}-${losses}${drawNote}.`;
+  if (wins < losses) return `${lead} — ${name} fører ${losses}-${wins}${drawNote}.`;
+  return `${lead} — I står lige, ${wins}-${losses}${drawNote}.`;
+}
+
+// Normaliserer `records`-nøglen til præcis det, Rekorder-sektionen skal vise.
+// Ren funktion, så reglerne kan enhedstestes uden at rendere skærmen.
+export function recordFacts(records, currentRating) {
+  const r = records || {};
+  const bestRating = r.best_rating ?? null;
+  const rank = r.best_round_rank ?? null;
+  const field = r.best_round_rank_field ?? null;
+  const streak = r.longest_round_streak || 0;
+
+  // Rundeplaceringen vises kun, når den ikke er 1 — nr. 1 er redundant med
+  // "🥇 N rundesejre"-badget under Titler.
+  const showRank = rank != null && rank > 1;
+
+  // Feltstørrelsen ("af 34") er det, der gør rangen læsbar — men den må ALDRIG
+  // afsløre en sidsteplads: "8. plads af 8" er en bundplacering, og profilen
+  // viser aldrig bundplaceringer (karriereprofil-v1.md §1, punkt 3). Ved
+  // rank >= field falder linjen tilbage til rangen alene. Feltet mangler også,
+  // indtil migreringen er kørt i produktion — samme, tomme udfald.
+  const showField = showRank && field != null && rank < field;
+
+  // Ratingtoppen får sin runde med, når round_key ser ud som en rundenøgle
+  // (uge-startdato). Feltet fandtes allerede i RPC-svaret uden at blive vist —
+  // "1247" alene siger ikke, hvornår toppen blev sat.
+  const round = r.best_rating_round;
+  const bestRatingRound = typeof round === "string" && /^\d{4}-\d{2}-\d{2}$/.test(round)
+    ? roundLabel(round) : null;
+
+  return {
+    bestRating,
+    bestRatingIsCurrent: bestRating != null && currentRating === bestRating,
+    bestRatingRound,
+    rank: showRank ? rank : null,
+    rankCount: r.best_round_rank_count || 0,
+    rankField: showField ? field : null,
+    streak: streak >= 2 ? streak : 0,
+    hasAny: bestRating != null || showRank || streak >= 2,
+  };
 }
 
 const MILESTONE_PAGE = 20;
@@ -122,12 +176,8 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
   const memberSince = head.created_at ? monthName(String(head.created_at).slice(0, 7)) : null;
   const hitRate = base.matches > 0 ? Math.round((base.exact_count / base.matches) * 100) : 0;
 
-  const bestRating = records.best_rating ?? null;
-  const bestRatingIsCurrent = bestRating != null && head.rating === bestRating;
-  const bestRoundRank = records.best_round_rank ?? null;
-  const bestRoundRankCount = records.best_round_rank_count || 0;
-  const longestStreak = records.longest_round_streak || 0;
-  const hasRecords = bestRating != null || (bestRoundRank != null && bestRoundRank > 1) || longestStreak >= 2;
+  const rec = recordFacts(records, head.rating);
+  const hasRecords = rec.hasAny;
 
   const visibleMilestones = milestoneExpanded ? milestones : milestones.slice(0, MILESTONE_PAGE);
 
@@ -188,6 +238,9 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
           <div style={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
             {h2hSentence(data.h2h, head.display_name)}
           </div>
+          <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.45, marginTop: 6 }}>
+            Runde for runde, kun kampe fra konkurrencer I begge er med i — hver runde tæller én gang.
+          </div>
         </Card>
       )}
 
@@ -201,10 +254,13 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
         </Card>
       )}
 
-      {/* Titler */}
+      {/* Titler — globalt omfang, ligesom Rekorder nedenfor */}
       {hasTitles && (
         <div>
-          <Eyebrow>Titler</Eyebrow>
+          <Eyebrow>Titler · Championship</Eyebrow>
+          <p style={scopeNote}>
+            Fra Championships måneds- og rundeliga, hvor alle brugere automatisk er med — ikke fra egne konkurrencer.
+          </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {monthly.map((t) => (
               <span key={t.month} style={badge} title={`${t.points} point`}>
@@ -212,45 +268,67 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
               </span>
             ))}
             {roundWins > 0 && (
-              <span style={badge}>🥇 {roundWins} {roundWins === 1 ? "rundesejr" : "rundesejre"}</span>
+              <span style={badge} title="Runder vundet i Championships rundeliga">
+                🥇 {roundWins} {roundWins === 1 ? "rundesejr" : "rundesejre"} i rundeligaen
+              </span>
             )}
           </div>
         </div>
       )}
 
-      {/* Rekorder ("bedste nogensinde") — globalt omfang, tydeliggjort efter
-          brugerfeedback: uden InfoDot kunne fx "8. plads" fejlagtigt læses
-          som knyttet til én bestemt konkurrence, ligesom Milepælene lige under. */}
+      {/* Rekorder ("bedste nogensinde") — GLOBALT omfang: Championship + global
+          rating, ikke brugerens egne konkurrencer. Første forsøg på at gøre det
+          klart var en InfoDot alene; den var både skjult bag et klik OG upræcis
+          ("på tværs af alle dine konkurrencer og ligaer" læses som en opgørelse
+          PR. egen konkurrence, hvor rangen faktisk måles mod samtlige brugere i
+          rundeligaen). Nu navngiver hver linje sin egen kilde. */}
       {hasRecords && (
         <div>
-          <Eyebrow>Rekorder <InfoDot title="Rekorder">
-            <div>Dine rekorder gælder på tværs af <b>alle</b> dine konkurrencer og ligaer — ikke kun én bestemt. Milepælene nedenfor er derimod konkrete øjeblikke i navngivne konkurrencer.</div>
+          <Eyebrow>Rekorder · Championship <InfoDot title="Rekorder">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div>Rekorderne kommer fra <b>Championship</b> og din <b>globale rating</b> — de to steder, hvor <b>alle brugere</b> automatisk er med.</div>
+              <div>Rundeplacering og stime måles i <b>Championships rundeliga</b>, altså mod samtlige brugere med point i runden — ikke mod deltagerne i én af dine egne konkurrencer.</div>
+              <div>Ratingen er den samme, du ser på <b>Rating-fanen</b> (én global rating på tværs af alle konkurrencer og turneringer).</div>
+              <div><b>Milepælene</b> nedenfor er derimod konkrete øjeblikke, de fleste i en navngiven konkurrence.</div>
+            </div>
           </InfoDot></Eyebrow>
+          <p style={scopeNote}>
+            Championship og global rating — hvor alle brugere er med. Ikke dine egne konkurrencer.
+          </p>
           <Card>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 14, color: C.text, lineHeight: 1.6 }}>
-              {bestRating != null && (
+              {rec.bestRating != null && (
                 <div>
-                  {bestRatingIsCurrent
-                    ? <>Du er på din <b style={{ color: C.gold }}>højeste rating nogensinde</b> lige nu: {bestRating}.</>
-                    : <>Din højeste rating nogensinde: <b style={{ color: C.gold }}>{bestRating}</b>.</>}
+                  {rec.bestRatingIsCurrent
+                    ? <>Du er på din <b style={{ color: C.gold }}>højeste globale rating nogensinde</b> lige nu: {rec.bestRating}.</>
+                    : <>Din højeste globale rating nogensinde: <b style={{ color: C.gold }}>{rec.bestRating}</b>
+                        {rec.bestRatingRound ? <span style={{ color: C.muted }}> — sat efter runden {rec.bestRatingRound}</span> : null}.</>}
                 </div>
               )}
-              {bestRoundRank != null && bestRoundRank > 1 && (
-                <div>Din bedste rundeplacering: <b style={{ color: C.gold }}>{bestRoundRank}. plads</b>
-                  {bestRoundRankCount > 1 ? ` (${bestRoundRankCount} gange)` : ""}.</div>
+              {rec.rank != null && (
+                <div>Din bedste placering i <b>Championships rundeliga</b>:{" "}
+                  <b style={{ color: C.gold }}>{rec.rank}. plads</b>
+                  {rec.rankField != null ? ` af ${rec.rankField} spillere` : ""}
+                  {rec.rankCount > 1 ? ` (${rec.rankCount} gange)` : ""}.</div>
               )}
-              {longestStreak >= 2 && (
-                <div>Din længste stime af rundesejre i træk: <b style={{ color: C.gold }}>{longestStreak} runder</b>.</div>
+              {rec.streak > 0 && (
+                <div>Din længste stime af rundesejre i <b>Championships rundeliga</b>:{" "}
+                  <b style={{ color: C.gold }}>{rec.streak} runder</b> i træk.</div>
               )}
             </div>
           </Card>
         </div>
       )}
 
-      {/* Milepæle (kun egen profil) */}
+      {/* Milepæle (kun egen profil) — det ANDET omfang på skærmen: konkrete
+          øjeblikke, oftest i en navngiven konkurrence (stories.competition_id er
+          kun null for de globale regler: rating og måned). */}
       {hasMilestones && (
         <div>
           <Eyebrow>Milepæle</Eyebrow>
+          <p style={scopeNote}>
+            Øjeblikke fra dine runder — de fleste i en af dine egne konkurrencer, resten fra Championship og din rating.
+          </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {visibleMilestones.map((m) => (
               <Card key={m.id} style={{ padding: 12 }}>
@@ -302,8 +380,13 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
         </div>
       )}
 
-      {/* Basistal (diskret, nederst) */}
+      {/* Basistal (diskret, nederst) — karriere-brede: ALLE tippede kampe,
+          uanset hvilken konkurrence de blev tippet i (et tip er globalt pr.
+          kamp). Samme scope-spørgsmål som Rekorder, så det står også her. */}
       <Card style={{ padding: 12, background: "transparent", borderStyle: "dashed" }}>
+        <div style={{ color: C.muted, fontSize: 11, marginBottom: 6 }}>
+          Hele karrieren · alle kampe du har tippet, uanset konkurrence
+        </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", color: C.muted, fontSize: 12 }}>
           <span><b style={{ color: C.text }}>{base.total_points}</b> point</span>
           <span>🎯 <b style={{ color: C.text }}>{base.exact_count}</b> præcise</span>

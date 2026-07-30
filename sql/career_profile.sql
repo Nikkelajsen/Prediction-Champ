@@ -32,6 +32,10 @@
 --   - records: bedste rating nogensinde, bedste rundeplacering (kun hvis ikke
 --     allerede nr. 1 — redundant med titles.round_wins ellers), længste stime
 --     af rundesejre i træk. Genbruger samme rank()-stige som round_wins.
+--     OMFANG (tydeliggjort 30. juli 2026): records er GLOBALT — rating er
+--     scope='ALL' (samme tal som Rating-fanen), og rundeplacering/stime måles i
+--     round_standings, altså Championships rundeliga, hvor ALLE brugere er med.
+--     Det er IKKE en opgørelse pr. brugerens egne konkurrencer.
 --   - footprint: antal ligaer/konkurrencer (group_members/competition_participants).
 --
 -- SKEMA (verificeret mod sql/schema.sql):
@@ -260,7 +264,14 @@ begin
         select rs.round_key, rs.user_id,
           rank() over (partition by rs.round_key
                        order by rs.total_points desc, rs.exact_count desc, rs.outcome_count desc,
-                                rs.avg_goal_error asc) as rnk
+                                rs.avg_goal_error asc) as rnk,
+          -- Feltstørrelsen for runden: hvor mange spillere placeringen blev sat imod.
+          -- "8. plads" alene siger intet om, hvor stærk præstationen var — og var
+          -- netop den linje, en bruger læste som en placering i én af sine EGNE
+          -- konkurrencer (30. juli 2026). Rundeligaen er global, så feltet er
+          -- alle brugere med mindst ét scoret tip i runden — samme kreds som
+          -- Championship-fanens rundeliga viser.
+          count(*) over (partition by rs.round_key) as field
         from public.round_standings rs
         join (
           select round_key
@@ -270,11 +281,14 @@ begin
         ) rc on rc.round_key = rs.round_key
       ),
       mine as (
-        select round_key, rnk, (rnk = 1) as won
+        select round_key, rnk, field, (rnk = 1) as won
         from rr where user_id = profile_user_id
       ),
+      -- max(field): er samme bedste placering sat i flere runder, tælles den mod
+      -- den STØRSTE kreds, spilleren slog den i. Aldrig misvisende — en større
+      -- feltstørrelse kan kun gøre rangen mere, ikke mindre, imponerende.
       best_rank as (
-        select rnk, count(*)::int as cnt
+        select rnk, count(*)::int as cnt, max(field)::int as field
         from mine group by rnk order by rnk asc limit 1
       ),
       streaks as (
@@ -301,6 +315,7 @@ begin
         'best_rating_round',     (select round_key from peak_rating),
         'best_round_rank',       (select rnk from best_rank),
         'best_round_rank_count', (select cnt from best_rank),
+        'best_round_rank_field', (select field from best_rank),
         'longest_round_streak',  (select longest from best_streak)
       )
     ),
