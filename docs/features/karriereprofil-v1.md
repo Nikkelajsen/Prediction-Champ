@@ -4,7 +4,9 @@
 >
 > ⚠️ **Rettelse (K4, 30. juli 2026):** karriereprofilen er udvidet med ét narrativt cross-profile H2H-punkt, "bedste nogensinde"-rekorder og et liga/konkurrence-fodaftryk — se afsnit 2 og 8 (K4). Testcase 4/5 nedenfor gælder fortsat uændret for milepæle og rivaler, som forbliver private.
 >
-> ⚠️ **Rettelse (omfang, 30. juli 2026 — anden runde):** skærmen sagde ikke, hvilke konkurrencer dens tal gælder. Rekorder, Titler og basistal er **globale** (Championship + global rating), Milepæle er **konkurrence-nære** — nu skrevet på skærmen frem for antaget. Se afsnit 10.
+> ⚠️ **Rettelse (omfang, 30. juli 2026 — anden runde):** skærmen sagde ikke, hvilke konkurrencer dens tal gælder. Rekorder, Titler og basistal er **globale** (Championship + global rating), Milepæle er **konkurrence-nære**. Se afsnit 10.
+>
+> ⚠️ **Rettelse (30. juli 2026 — tredje runde, delvis tilbagerulning af afsnit 10):** de **synlige** scope-linjer er fjernet igen efter brugerfeedback ("det skal ikke stå på forsiden"). Omfanget forklares nu i en `InfoDot` pr. sektion — og hver sektion med tal har fået sin egen. Se afsnit 13. Testcase 23 er erstattet af 45–48.
 
 *Brugerens karriere som fortælling — milepæle, titler og rivaliseringer. Ikke en statistikside. Bygget på data, der allerede findes i databasen.*
 
@@ -123,7 +125,7 @@ Oppefra og ned på profilsiden:
 
 *(Omfang, 30. juli 2026 — fortsætter nummereringen):*
 
-23. Hver af de fire sektioner med tal (Titler, Rekorder, Milepæle, basistal) har en **synlig** scope-linje — ikke kun en `InfoDot`. En bruger skal kunne læse omfanget uden at trykke på noget.
+23. ~~Hver af de fire sektioner med tal (Titler, Rekorder, Milepæle, basistal) har en **synlig** scope-linje — ikke kun en `InfoDot`. En bruger skal kunne læse omfanget uden at trykke på noget.~~ **[Omgjort 30. juli 2026, tredje runde — se afsnit 13]:** den synlige scope-linje er **fjernet igen**. Gældende testcase: **hver sektion med tal har en `InfoDot`, og der står ingen forklarende brødtekst på siden.**
 24. Rekorder-linjerne navngiver kilden i selve sætningen ("Championships rundeliga", "globale rating"). Ordet "konkurrence" må ikke stå i ental om Rekorder, da det inviterer til at læse tallet som én bestemt konkurrence.
 25. `best_round_rank_field` > `best_round_rank` → "4. plads **af 31 spillere**". Feltstørrelsen mangler i svaret (migreringen ikke kørt) → linjen viser stadig "4. plads", ingen fejl, ingen "af null".
 26. `best_round_rank == best_round_rank_field` (bruger var sidst i alle sine runder) → feltstørrelsen **udelades**, så der aldrig står "8. plads af 8". Bundplaceringer vises ikke (afsnit 1, punkt 3).
@@ -152,6 +154,13 @@ Oppefra og ned på profilsiden:
 43. Rivalnavnet er en tryk-flade, der åbner personens karriere (`user_id` følger nu med posten).
 44. To modstandere ægte lige på både `abs(sejre − nederlag)` og antal møder → rækkefølgen er **deterministisk** (`rival_id` som sidste nøgle), så to kald ikke bytter om på dem.
 
+*(Omfanget i info-feltet, 30. juli 2026 — fortsætter nummereringen. Erstatter testcase 23):*
+
+45. **Hver** sektion med tal har en `InfoDot`: Karriere (hoved), H2H, Titler, Rekorder, Milepæle, Rivaler og basistallene. Ingen af dem må mangle.
+46. Der står **ingen** forklarende brødtekst på siden — hverken under en overskrift eller som undertekst på et kort. Undtaget er ratingkurvens legende og aksevisning (afsnit 13).
+47. På kort uden overskrift (H2H, basistal) står ikonet **inline efter** indholdet, aldrig foran det.
+48. Tallene navngiver stadig deres eget omfang i sætningen ("i Championships rundeliga", "globale rating", "af N spillere") — det er dét, der bærer førstelæsningen, når brødteksten er væk. Testcase 24 gælder uændret.
+
 ---
 
 ## 10. Omfang på skærmen (rettelse, 30. juli 2026)
@@ -168,7 +177,7 @@ Skærmen viser **to forskellige omfang**, og indtil nu sagde den ikke hvilket er
 
 **Hvorfor det ikke var nok at sætte en `InfoDot` på "Rekorder".** Den første rettelse gjorde netop det, men fejlede på to måder på én gang. Den var **skjult bag et klik**, hvor problemet er en forkert *førstelæsning* — en tvivl, brugeren ikke ved, de har, læser ikke en hjælpetekst. Og den var **upræcis**: teksten lød "på tværs af alle dine konkurrencer og ligaer", hvilket læses som en opgørelse *pr. brugerens egne konkurrencer*, mens `best_round_rank` faktisk er rangen mod **samtlige brugere** med point i den runde. Brugerens egen formulering ("jeg går ud fra at det er de globale konkurrencer og rating") ramte rigtigt — men at have ret ved gætværk er stadig en fejl i visningen.
 
-**Reglen fremover:** et tal på karriereskærmen skal navngive sit eget omfang i den sætning, det står i. Sektionens overskrift og en synlig scope-linje bærer kontrasten; `InfoDot` uddyber, men bærer aldrig alene en oplysning, der er nødvendig for at læse et tal rigtigt. Samme disciplin som Championship-fanens eyebrow ("Officielle konkurrencer · alle er med"), der siger sit omfang på selve kortet.
+**Reglen fremover:** et tal på karriereskærmen skal navngive sit eget omfang i den sætning, det står i. Sektionens overskrift bærer kontrasten; `InfoDot` uddyber. ~~En synlig scope-linje bærer kontrasten sammen med overskriften; `InfoDot` uddyber, men bærer aldrig alene en oplysning, der er nødvendig for at læse et tal rigtigt.~~ **[Rettet 30. juli 2026, tredje runde — se afsnit 13]:** den synlige scope-linje blev afvist af brugeren og er fjernet. `InfoDot` bærer nu forklaringen alene, og det er tallenes egen formulering ("i Championships rundeliga", "globale rating"), der gør førstelæsningen rigtig.
 
 **Feltstørrelsen som scope-signal.** "4. plads" siger intet om, hvor stærk placeringen var, og var netop den linje, der blev læst som en egen konkurrence. `records.best_round_rank_field` gør den til "4. plads af 31 spillere" — hvilket samtidig *viser*, at feltet er stort og altså globalt. Den udelades ved `rank >= field`, fordi "8. plads af 8" er en bundplacering, og profilen viser aldrig bundplaceringer (afsnit 1, punkt 3) — sammen med feltet fra en større runde ved gentagne placeringer (`max(field)`) er det den eneste måde tilføjelsen ikke kan komme til at drille.
 
@@ -218,6 +227,32 @@ Leveret samlet efter en gennemgang af karrierestatistikken. Alle fem lå inden f
 **Tærsklen er navngivet, ikke indlejret.** `v_rival_min_meetings` (pt. **2**) står som en deklareret variabel i funktionen — samme princip som Story Engines kalibrerede tærskler: ét møde gør ingen til en rival, men en høj tærskel i en ung sæson med få runder giver nul rivaler. Den hæves, når der er runder nok til, at 2 møder ikke længere er meget.
 
 **Det, der stadig bør måles i produktion:** beregningen er gået fra ét par til alle delte deltagere × runder inde i samme RPC. Med den nuværende brugerbase er det trivielt, men det er ikke målt på produktionsvolumen — det bør times, ikke antages.
+
+---
+
+## 13. Omfanget bor i info-feltet, ikke på siden (30. juli 2026, tredje runde)
+
+**Afsnit 10's løsning blev delvist rullet tilbage efter brugerfeedback.** Den gav hver sektion med tal *både* en `InfoDot` og en **synlig** scope-linje under overskriften, med begrundelsen at en hjælpetekst bag et klik ikke fanger en forkert førstelæsning. Med alle sektioner på plads blev der fem forklarende afsnit på én skærm, og brugeren afviste dem: *"jeg vil gerne have den beskrivende tekst flyttet ind under Informations feltet … Det skal ikke stå på forsiden."*
+
+**Hvad der blev fjernet:** scope-linjerne under Titler, Rekorder, Milepæle og Rivaler, den dæmpede undertekst på H2H-kortet og "Hele karrieren · alle kampe du har tippet"-linjen over basistallene. `scopeNote`-stilen findes ikke længere.
+
+**Hvad der blev tilføjet:** en `InfoDot` til **hver** sektion med tal, så forklaringen findes alle de steder, den før kun fandtes ét af dem.
+
+| Sektion | InfoDot | Placering |
+|---|---|---|
+| Karriere (hoved) | fandtes | på overskriften |
+| Jeres indbyrdes opgør (H2H) | **ny** | inline efter sætningen (kortet har ingen overskrift) |
+| Titler | **ny** | på overskriften |
+| Rekorder | fandtes, udvidet med scope-linjens indhold | på overskriften |
+| Milepæle | **ny** | på overskriften |
+| Rivaler | fandtes, udvidet med scope-linjens indhold | på overskriften |
+| Basistal | **ny** | inline **efter** tallene (kortet har bevidst ingen overskrift, afsnit 2) |
+
+**Hvorfor afsnit 10's ræsonnement ikke var forkert, men vejede forkert.** Præmissen holder — en bruger, der ikke *ved*, de har misforstået noget, åbner ikke en hjælpetekst. Men prisen blev betalt af alle på hver visning, mens gevinsten kun tilfaldt den, der læste forkert den første gang. Det, der faktisk fjerner tvivlen billigt, er ikke et ekstra afsnit, men at **tallet navngiver sit eget omfang i selve sætningen** ("Din bedste placering i *Championships rundeliga*", "din højeste *globale* rating", "4. plads *af 31 spillere*"). Det var også med i afsnit 10 og er beholdt uændret — det er den del, der bar løsningen.
+
+**Reglen, som den står nu:** tal navngiver deres omfang i sætningen; `InfoDot` bærer forklaringen; siden har ingen forklarende brødtekst. **Ny sektion med tal ⇒ ny `InfoDot`, ikke ny brødtekst.**
+
+**Bevidst beholdt som brødtekst:** ratingkurvens legende ("● grå/stiplet = foreløbig periode … ◎ = højeste rating nogensinde"). En legende afkoder symboler, man ser på *imens* — den er ikke en forklaring, man kan lægge et klik væk uden at gøre grafen ulæselig. Skala- og rundeetiketterne på kurvens akser er af samme grund heller ikke flyttet: de er aksevisning, ikke prosa.
 
 ---
 
