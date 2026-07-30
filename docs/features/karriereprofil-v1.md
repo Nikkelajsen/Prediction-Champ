@@ -32,7 +32,7 @@ Oppefra og ned på profilsiden:
 | **Ratingkurve** | Rating over tid (én prik pr. runde), med provisorisk periode markeret | `rating_history` |
 | **Rivaler** | De 2–3 brugere, man oftest har byttet placering/udvekslet H2H-historier med — vist som fortælling ("Din tætteste rival: Jimmy — I har overhalet hinanden 5 gange") | `stories` (regel 40/60) + `rating_history.rnk` |
 | **Basistal (diskret)** | Samlede point, præcise hits (🎯), hit-rate, antal tippede kampe. Én kompakt linje/række nederst — bevidst ikke øverst | samme kilder som stillingerne (se afsnit 4) |
-| **H2H-linje** *(K4, tilføjet 30. juli 2026)* | Ét narrativt punkt, kun ved fremmed profil med delt konkurrencehistorik: "I har mødt hinanden N gange — du fører A-B" | `competition_participants`, `competition_matches`, `predictions`, `pc_points()` |
+| **H2H-linje** *(K4, tilføjet 30. juli 2026)* | Ét narrativt punkt, kun ved fremmed profil med delt konkurrencehistorik: "I har mødt hinanden N gange — du fører A-B". Et møde er deduplikeret pr. runde/kamp på tværs af alle delte konkurrencer — deler to brugere fx både en rundebaseret og en full-season-konkurrence for samme turnering, tæller samme spillede runde kun én gang (rettet 30. juli 2026, testcase 13). | `competition_participants`, `competition_matches`, `predictions`, `pc_points()` |
 | **Rekorder** *(K4)* | "Bedste nogensinde": højeste rating, bedste rundeplacering (kun hvis ikke allerede nr. 1), længste stime af rundesejre i træk | `rating_history`, `round_standings` (samme rank()-stige som Titler) |
 | **Fodaftryk** *(K4)* | Antal ligaer og konkurrencer, som en diskret linje i hovedet | `group_members`, `competition_participants` |
 
@@ -108,7 +108,7 @@ Oppefra og ned på profilsiden:
 10. A åbner B's profil, delt konkurrence + fælles tippet runde → H2H-linje med korrekte møde-/sejrs-/nederlagstal (verificeret manuelt mod `round_standings` for den delte konkurrence).
 11. A åbner C's profil uden nogensinde at have delt en konkurrence (fx fundet via Championship-tabellen) → `data.h2h` er `null`, ingen H2H-linje, ingen fejl.
 12. A åbner sin **egen** profil → `h2h` er altid `null`, uanset historik, ingen H2H-linje.
-13. To brugere deler flere konkurrencer samtidig (fx en liga + en liga-løs konkurrence) → alle fælles runder på tværs af begge konkurrencer tælles med i `meetings`.
+13. To brugere deler flere konkurrencer samtidig, som begge dækker den samme runde (fx en rundebaseret + en full-season-konkurrence, der begge følger Superligaen) → rundens møde tælles kun **ÉN** gang i `meetings`, deduplikeret pr. kamp — **ikke** én gang pr. konkurrence. **[Rettet 30. juli 2026]:** denne testcase beskrev oprindeligt fejlagtigt det modsatte (tælling pr. konkurrence-runde-par); en bruger med to delte konkurrencer og kun én spillet runde så "I har mødt hinanden 2 gange". Det var en bug, ikke en tilsigtet regel — `predictions` er ét tip pr. bruger pr. kamp, ikke pr. konkurrence, så et møde skal svare til én kalenderrunde.
 14. Fælles historik med uafgjorte runder (samme pointsum) → `draws` er korrekt og talt hverken som sejr eller nederlag.
 15. A og C har begge tippet den samme kamp/runde, men i hver sin, **ikke-delte** konkurrence → tælles ikke med i H2H (samme deltager-afgrænsningslektion som Story Engine).
 16. Bruger uden nogen rundesejr nogensinde → `records.best_round_rank` vises (fx "3. plads"), aldrig udeladt, aldrig med negativ formulering ("sidste plads" o.l. må aldrig forekomme).

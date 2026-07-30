@@ -27,6 +27,8 @@
 --     — du fører A-B"), ikke en sammenligningsside. Afgrænset, bevidst
 --     undtagelse fra beslutningen "H2H bor i Story Engine" — se
 --     docs/features/karriereprofil-v1.md §2/§8 (K4) og docs/ROADMAP.md.
+--     Møder deduplikeres pr. runde/kamp på tværs af delte konkurrencer
+--     (rettelse 30. juli 2026 — se kommentaren ved h2h-blokken nedenfor).
 --   - records: bedste rating nogensinde, bedste rundeplacering (kun hvis ikke
 --     allerede nr. 1 — redundant med titles.round_wins ellers), længste stime
 --     af rundesejre i træk. Genbruger samme rank()-stige som round_wins.
@@ -91,14 +93,21 @@ begin
   -- ---------- K4: H2H-narrativ (kun ved fremmed profil, delt konkurrence) ----------
   -- Bevidst, afgrænset undtagelse fra "H2H bor i Story Engine, ikke en
   -- sammenligningsside" (karriereprofil-v1.md) — ÉT narrativt punkt, ingen
-  -- tabel, ingen historik-liste. "Et møde" = én runde i en konkurrence begge
-  -- deltager i (competition_participants — ikke valgfrit, jf. Story Engines
-  -- deltager-afgrænsning), hvor begge har mindst ét scoret tip. pc_points()
-  -- kaldes direkte (samme kilde som Story Engine/stillings-views, F2).
+  -- tabel, ingen historik-liste. pc_points() kaldes direkte (samme kilde som
+  -- Story Engine/stillings-views, F2).
   -- Vises uanset om viewer fører eller taber (se K4-begrundelse i specen):
   -- kun viewer selv ser sætningen, tallene er allerede offentlige for delte
   -- konkurrencedeltagere via stillingerne, og Story Engines LEAD_LOST fortæller
   -- allerede den tabende part om nederlag i neutralt sprog.
+  --
+  -- "Et møde" = én runde (round_key), hvor begge har mindst ét scoret tip på
+  -- en kamp fra en konkurrence, de deler (competition_participants — ikke
+  -- valgfrit, jf. Story Engines deltager-afgrænsning). DEDUPLIKERET pr. kamp
+  -- (30. juli 2026-rettelse): predictions er ét tip pr. bruger pr. KAMP, ikke
+  -- pr. konkurrence, så hvis to brugere deler flere konkurrencer, der begge
+  -- dækker samme kamp/runde (fx en rundebaseret + en full-season-konkurrence,
+  -- der begge følger Superligaen), må rundens møde kun tælle ÉN gang — ellers
+  -- viser "I har mødt hinanden 2 gange" efter kun én spillet runde.
   if not v_own then
     with shared_comp as (
       select cp1.competition_id
@@ -107,21 +116,26 @@ begin
         on cp2.competition_id = cp1.competition_id and cp2.user_id = profile_user_id
       where cp1.user_id = v_uid
     ),
-    rp as (
-      select cm.competition_id, m.round_key, pr.user_id,
-        sum(public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score))::int as pts
+    shared_matches as (
+      -- distinct på match_id: samme kamp kan ligge i flere delte konkurrencer.
+      select distinct cm.match_id, m.round_key, m.home_score, m.away_score
       from public.competition_matches cm
       join shared_comp sc on sc.competition_id = cm.competition_id
       join public.matches m on m.id = cm.match_id
-      join public.predictions pr on pr.match_id = m.id and pr.user_id in (v_uid, profile_user_id)
       where m.home_score is not null and m.away_score is not null
-        and pr.pred_home is not null and pr.pred_away is not null
-      group by cm.competition_id, m.round_key, pr.user_id
+    ),
+    rp as (
+      select sm.round_key, pr.user_id,
+        sum(public.pc_points(pr.pred_home, pr.pred_away, sm.home_score, sm.away_score))::int as pts
+      from shared_matches sm
+      join public.predictions pr on pr.match_id = sm.match_id and pr.user_id in (v_uid, profile_user_id)
+      where pr.pred_home is not null and pr.pred_away is not null
+      group by sm.round_key, pr.user_id
     ),
     paired as (
-      select a.competition_id, a.round_key, a.pts as my_pts, b.pts as their_pts
+      select a.round_key, a.pts as my_pts, b.pts as their_pts
       from rp a
-      join rp b on b.competition_id = a.competition_id and b.round_key = a.round_key
+      join rp b on b.round_key = a.round_key
         and a.user_id = v_uid and b.user_id = profile_user_id
     )
     select case when count(*) = 0 then null else jsonb_build_object(

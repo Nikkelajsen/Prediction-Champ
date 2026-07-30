@@ -218,10 +218,14 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack }) {
         </div>
       )}
 
-      {/* Rekorder ("bedste nogensinde") */}
+      {/* Rekorder ("bedste nogensinde") — globalt omfang, tydeliggjort efter
+          brugerfeedback: uden InfoDot kunne fx "8. plads" fejlagtigt læses
+          som knyttet til én bestemt konkurrence, ligesom Milepælene lige under. */}
       {hasRecords && (
         <div>
-          <Eyebrow>Rekorder</Eyebrow>
+          <Eyebrow>Rekorder <InfoDot title="Rekorder">
+            <div>Dine rekorder gælder på tværs af <b>alle</b> dine konkurrencer og ligaer — ikke kun én bestemt. Milepælene nedenfor er derimod konkrete øjeblikke i navngivne konkurrencer.</div>
+          </InfoDot></Eyebrow>
           <Card>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 14, color: C.text, lineHeight: 1.6 }}>
               {bestRating != null && (
