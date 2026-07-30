@@ -18,7 +18,9 @@ import { useState, useEffect, Fragment } from "react";
 import { Loader2, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import {
   loadAnalyticsHealth, loadAnalyticsEngagement, loadAnalyticsLeagueHealth, loadAnalyticsRetention,
+  loadAnalyticsFunnel, loadAnalyticsStories,
   diagnoseLeagues, summarizeDiagnoses,
+  funnelRow, funnelSteps, biggestDrop, fmtMinutes, FUNNEL_STALLS, storyRuleRows,
 } from "../lib/analytics.js";
 import { metricInfo } from "../lib/analyticsMetrics.js";
 import { C, chip, font, muted } from "../ui/theme.js";
@@ -185,6 +187,44 @@ const SERIES = [
 ];
 const PUSH_KIND = { deadline: "Deadline-påmindelse", result: "Runde-resultat" };
 
+// Virkede beskeden? Open rate måler, om den blev åbnet — dette måler, om der
+// blev tippet bagefter. Løftet er det eneste tal, der siger noget om, hvorvidt
+// produktets ene aktive fastholdelses-værktøj gør sit arbejde.
+function PushEffect({ effect }) {
+  const lift = (effect.opened_rate === null || effect.not_opened_rate === null)
+    ? null : Math.round((effect.opened_rate - effect.not_opened_rate) * 10) / 10;
+  return (
+    <div>
+      <SubHead>Virkede deadline-påmindelsen? <M id="push_effect" /></SubHead>
+      <div style={{ background: C.surface2, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
+        <div style={{ fontSize: 13, color: C.text }}>
+          {lift === null
+            ? "Ikke nok modtagere i vinduet til at sammenligne."
+            : <>Af dem der <b>åbnede</b> beskeden, tippede <b>{effect.opened_rate} %</b> i runden. Af dem der <b>ikke</b> åbnede den, tippede <b>{effect.not_opened_rate} %</b>.</>}
+        </div>
+        {lift !== null && (
+          <div style={{ fontSize: 12, color: lift > 0 ? C.green : C.muted, marginTop: 4 }}>
+            Forskel: {lift > 0 ? "+" : ""}{lift} procentpoint — et <b>loft</b> over effekten, ikke et estimat: de, der åbner beskeder, er de engagerede i forvejen.
+          </div>
+        )}
+      </div>
+      <SignalRow label="Åbnede beskeden" value={effect.opened_rate === null ? "—" : `${effect.opened_rate} %`}
+        detail={`${effect.opened_pred} af ${effect.opened_n} tippede`} />
+      <SignalRow label="Åbnede den ikke" value={effect.not_opened_rate === null ? "—" : `${effect.not_opened_rate} %`}
+        detail={`${effect.not_opened_pred} af ${effect.not_opened_n} tippede`} />
+      {(effect.by_lead_time || []).length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <SubHead>Varsel før rundelås <M id="push_lead_time" /></SubHead>
+          {effect.by_lead_time.map((b) => (
+            <SignalRow key={b.bucket} label={b.bucket} value={b.rate === null ? "—" : `${b.rate} %`}
+              detail={`${b.predicted} af ${b.n} tippede`} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EngagementSection({ token, days }) {
   const { data, loading, err } = useSection(() => loadAnalyticsEngagement(token, days), token, [token, days]);
   const [metric, setMetric] = useState("opened_home");
@@ -225,6 +265,7 @@ function EngagementSection({ token, days }) {
               </div>
             </div>
           )}
+          {data.push.effect && data.push.effect.recipients > 0 && <PushEffect effect={data.push.effect} />}
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
               <SubHead>Hændelser pr. dag <M id="event_views" /></SubHead>
@@ -325,6 +366,185 @@ function LigaDiagnoseSection({ token, days }) {
   );
 }
 
+// ---------- 5. Tragt for nye brugere ----------
+// Onboarding v1 blev bygget på påstanden om, at selvstarteren faldt igennem,
+// mens den inviterede klarede sig fint. Denne sektion er første gang, den
+// påstand kan efterprøves — derfor står de to veje ind side om side, og ikke
+// som en samlet total, der ville gemme forskellen.
+function FunnelBar({ step, cohort }) {
+  const width = cohort > 0 ? Math.max(1, (step.users / cohort) * 100) : 0;
+  const bad = step.dropPct !== null && step.dropPct >= 40;
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12, marginBottom: 3 }}>
+        <span style={{ color: C.text }}>{step.label}</span>
+        <span style={{ color: C.muted }}>
+          <b style={{ color: C.text }}>{step.users}</b> · {step.pct} %
+          {step.medianMinutes !== null && step.medianMinutes !== undefined && <> · median {fmtMinutes(step.medianMinutes)}</>}
+        </span>
+      </div>
+      <div style={{ height: 10, background: C.surface2, borderRadius: 999, overflow: "hidden" }}>
+        <div style={{ width: `${width}%`, height: "100%", background: bad ? C.red : C.green, borderRadius: 999 }} />
+      </div>
+      {step.dropFromPrev > 0 && (
+        <div style={{ fontSize: 11, color: bad ? C.red : C.muted, marginTop: 2 }}>
+          −{step.dropFromPrev} her ({step.dropPct} % af dem, der nåede forrige trin)
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FunnelColumn({ title, row, info }) {
+  const steps = funnelSteps(row);
+  if (!row || !row.cohort) {
+    return (
+      <div>
+        <SubHead>{title} {info}</SubHead>
+        <p style={{ ...muted, margin: 0, fontSize: 12 }}>Ingen nye brugere i vinduet.</p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <SubHead>{title} {info}</SubHead>
+      {steps.map((s) => <FunnelBar key={s.key} step={s} cohort={row.cohort} />)}
+    </div>
+  );
+}
+
+function FunnelSection({ token, days }) {
+  const { data, loading, err } = useSection(() => loadAnalyticsFunnel(token, days), token, [token, days]);
+  // Vinduet er sandheden for "hvordan går det NU", men en 7-dages kohorte kan
+  // være to brugere. Alt-tid står ved siden af som volumen, aldrig i stedet for.
+  const [scope, setScope] = useState("window");
+  const total = funnelRow(data, scope);
+  const steps = funnelSteps(total);
+  const worst = biggestDrop(steps);
+
+  return (
+    <Section title="Tragt for nye brugere"
+      subtitle="Konto → liga → konkurrence → første tip. Udledt af rigtige tabeller, ikke af hændelsesloggen."
+      loading={loading} err={err}>
+      {data && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={chip(scope === "window")} onClick={() => setScope("window")}>Nye i vinduet</button>
+            <button style={chip(scope === "all_time")} onClick={() => setScope("all_time")}>Alle brugere</button>
+          </div>
+          {!total || !total.cohort ? (
+            <p style={{ ...muted, margin: 0 }}>Ingen brugere oprettet i perioden — vælg et længere vindue eller "Alle brugere".</p>
+          ) : (
+            <>
+              {worst && (
+                <div style={{ background: "rgba(240,180,41,0.08)", border: `1px solid ${C.gold}`, borderRadius: 12, padding: "12px 14px" }}>
+                  <div style={{ color: C.muted, fontSize: 12, display: "flex", alignItems: "center", gap: 5 }}>
+                    Største frafald <M id="funnel" />
+                  </div>
+                  <div style={{ fontFamily: font.display, fontWeight: 700, fontSize: 18, color: C.gold, lineHeight: 1.2 }}>
+                    {worst.label}
+                  </div>
+                  <div style={{ color: C.muted, fontSize: 12 }}>
+                    {worst.dropFromPrev} af {total.cohort} brugere nåede ikke hertil — {worst.dropPct} % af dem, der klarede forrige trin.
+                  </div>
+                </div>
+              )}
+              <FunnelColumn title="Alle nye" row={total} info={<M id="funnel" />} />
+              {/* Den opdeling, hele sektionen findes for. */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
+                <FunnelColumn title="Selvstartere" row={funnelRow(data, scope, "selvstarter")} info={<M id="funnel_path" />} />
+                <FunnelColumn title="Inviterede" row={funnelRow(data, scope, "inviteret")} info={<M id="funnel_path" />} />
+              </div>
+              <div>
+                <SubHead>Hvor står de nu <M id="funnel_stalled" /></SubHead>
+                {FUNNEL_STALLS.map((s) => (
+                  <SignalRow key={s.key} label={s.label} value={total[s.key] ?? 0}
+                    detail={total.cohort ? `${Math.round((1000 * (total[s.key] ?? 0)) / total.cohort) / 10} % af kohorten` : undefined} />
+                ))}
+                <p style={{ ...muted, margin: "8px 0 0", fontSize: 11 }}>
+                  Disse fire tæller hver bruger præcis én gang og summer til kohorten — modsat trinnene ovenfor,
+                  som ikke er strengt indlejrede (en liga-løs konkurrence kan nås uden en liga). <M id="funnel_time" />
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+// ---------- 6. Story Engine-regler ----------
+function StoriesSection({ token, days }) {
+  const { data, loading, err } = useSection(() => loadAnalyticsStories(token, days), token, [token, days]);
+  const rows = storyRuleRows(data);
+  const never = rows.filter((r) => r.never);
+  const coverage = data && data.users_with_rounds
+    ? Math.round((1000 * data.users_reached) / data.users_with_rounds) / 10 : null;
+  const th = { textAlign: "right", color: C.muted, fontSize: 11, fontWeight: 600, padding: "0 4px 6px" };
+
+  return (
+    <Section title="Story Engine-regler"
+      subtitle="Hvilke regler udløser, og hvordan reagerer folk på dem."
+      loading={loading} err={err}>
+      {data && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <StatGroup title="Samlet">
+            <StatTile label="Historier genereret" value={data.generated_total} hint={`til ${data.users_reached} brugere`} info={<M id="story_rules" />} />
+            <StatTile label="Dækning" value={coverage === null ? "—" : `${coverage} %`}
+              hint={`${data.users_reached} af ${data.users_with_rounds} med en låst runde`} info={<M id="story_coverage" />} />
+          </StatGroup>
+          {never.length > 0 && (
+            <div style={{ background: "rgba(239,68,68,0.07)", border: `1px solid ${C.red}`, borderRadius: 10, padding: "10px 12px" }}>
+              <div style={{ color: C.text, fontSize: 13, display: "flex", alignItems: "center", gap: 5 }}>
+                {never.length} {never.length === 1 ? "regel har" : "regler har"} aldrig udløst <M id="story_never" />
+              </div>
+              <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>
+                {never.map((r) => r.label).join(" · ")} — hverken i vinduet eller nogensinde. Enten er tærsklen for stram, eller reglen virker ikke.
+              </div>
+            </div>
+          )}
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th style={{ ...th, textAlign: "left" }}>Regel</th>
+                  <th style={th}>Genereret</th>
+                  <th style={th}>Vist</th>
+                  <th style={th}>Delt</th>
+                  <th style={th}>Afvist</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.rule} className="rowline" style={{ opacity: r.never ? 0.45 : 1 }}>
+                    <td style={{ padding: "6px 4px", color: C.text }}>
+                      {r.label}
+                      {r.never && <span style={{ color: C.red, fontSize: 10, marginLeft: 6 }}>ALDRIG</span>}
+                      {r.silent && <span style={{ color: C.muted, fontSize: 10, marginLeft: 6 }}>STILLE</span>}
+                      {r.unknown && <span style={{ color: C.gold, fontSize: 10, marginLeft: 6 }}>UKENDT</span>}
+                    </td>
+                    <td style={{ ...th, padding: "6px 4px", color: C.text }}>{r.generated}</td>
+                    <td style={{ ...th, padding: "6px 4px", color: C.muted }}>{r.viewed}{r.view_rate !== null && ` (${r.view_rate} %)`}</td>
+                    <td style={{ ...th, padding: "6px 4px", color: C.muted }}>{r.shared}</td>
+                    <td style={{ ...th, padding: "6px 4px", color: C.muted }}>{r.dismissed}{r.dismiss_rate !== null && ` (${r.dismiss_rate} %)`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p style={{ ...muted, margin: 0, fontSize: 11 }}>
+            <b>Genereret</b> og <b>afvist</b> er rigtige rækker i <code>stories</code> og dermed præcise.
+            <b> Vist</b> og <b>delt</b> kommer fra hændelsesloggen og er et <b>gulv</b> — en lav visningsrate kan
+            lige så godt være tabt logning som en historie, ingen så. Sammenlign regler med hinanden, ikke med et ideal.
+            <b> ALDRIG</b> = har aldrig udløst; <b>STILLE</b> = har udløst før, men ikke i vinduet.
+          </p>
+        </div>
+      )}
+    </Section>
+  );
+}
+
 // ---------- 4. Retention ----------
 const MILESTONES = [1, 4, 12, 26, 52];
 
@@ -410,8 +630,13 @@ function AnalyticsPanel({ token }) {
           <button key={d} style={chip(days === d)} onClick={() => setDays(d)}>{d} dage</button>
         ))}
       </div>
+      {/* Rækkefølgen følger brugerens rejse: kommer de ind (tragt), bliver de
+          (sundhed/engagement), hvad ser de (Story Engine), hvor bor de
+          (liga-diagnose), og bliver de hængende (retention). */}
+      <FunnelSection token={token} days={days} />
       <HealthSection token={token} days={days} />
       <EngagementSection token={token} days={days} />
+      <StoriesSection token={token} days={days} />
       <LigaDiagnoseSection token={token} days={days} />
       <RetentionSection token={token} />
     </div>

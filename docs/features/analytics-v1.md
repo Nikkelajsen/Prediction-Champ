@@ -1,7 +1,8 @@
 # Feature: Analytics v1
 
 **Status: ✅ Leveret (juli 2026) — `sql/analytics_events.sql` + `sql/analytics_dashboard.sql` + `src/lib/analytics.js` + `src/screens/AnalyticsPanel.jsx` (Admin → Analytics).**
-**⚠️ Rettet efter levering (30. juli 2026): Liga Health Score er fjernet og erstattet af Liga-diagnose (afsnit 6), og hvert nøgletal har fået en måle-ordbog (afsnit 5B).** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 3 (fastholdelse før vækst) · Prioritering: [`../ROADMAP.md`](../ROADMAP.md)*
+**⚠️ Rettet efter levering (30. juli 2026): Liga Health Score er fjernet og erstattet af Liga-diagnose (afsnit 6), og hvert nøgletal har fået en måle-ordbog (afsnit 5B).**
+**➕ Udvidet (30. juli 2026): to nye sektioner — Tragt for nye brugere (afsnit 5C, lukker A13) og Story Engine-regler (afsnit 5D, lukker A5's datamangel) — samt push-EFFEKT i Engagement. De tre øverste forslag i afsnit 13 er dermed bygget.** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 3 (fastholdelse før vækst) · Prioritering: [`../ROADMAP.md`](../ROADMAP.md)*
 
 *Internt måle-lag til produktforbedring — ikke marketing. Skal besvare fem spørgsmål: bruger folk appen hver uge? glemmer de at tippe? hvilke ligaer er mest aktive? hvilke funktioner bruges faktisk? hvor mister vi brugere? Må aldrig påvirke brugeroplevelsen.*
 
@@ -106,6 +107,10 @@ To views i `sql/analytics_dashboard.sql`, begge revoked fra klienter (kun læst 
 2. **Engagement** (`admin_analytics_engagement`): Story/Karriere/Rating/Liga/Tip Views, Push Notification Open Rate (i alt og pr. type), sessionstid (gennemsnit, median, kun-flere-hændelser og hændelser pr. session).
 3. **Liga-diagnose** (`admin_analytics_league_health`): tilstand + målte signaler pr. liga — se afsnit 6.
 4. **Retention** (`admin_analytics_retention`): uge 1/4/12/26/52, for brugere og for ligaer.
+5. **Tragt for nye brugere** (`admin_analytics_funnel`): konto → liga → konkurrence → første tip, splittet på selvstarter/inviteret — se afsnit 5C.
+6. **Story Engine-regler** (`admin_analytics_stories`): genereret/vist/delt/afvist pr. regel + dækning — se afsnit 5D.
+
+Sektionerne står i brugerens rejsefølge: kommer de ind (tragt), bliver de (sundhed/engagement), hvad ser de (Story Engine), hvor bor de (liga-diagnose), og bliver de hængende (retention).
 
 ### Deadline Miss Rate
 
@@ -148,6 +153,69 @@ Teksterne lever i `src/lib/analyticsMetrics.js` (27 metrikker) og hentes med `me
 Indtil nu stod svarene kun i SQL-kommentarerne, altså præcis dét sted den, der læser dashboardet, ikke kigger. "Deadline Miss Rate: 12 %" kan betyde mindst tre forskellige ting, og forskellen afgør, om tallet er alarmerende eller ligegyldigt.
 
 ---
+
+## 5C. Tragt for nye brugere (tilføjet 30. juli 2026 — lukker A13)
+
+Onboarding v1 blev bygget på produktbogens stærkeste påstand om nye brugere — *"en ny bruger skal hurtigst muligt oprette eller tilslutte sig en liga"* — og på iagttagelsen, at **selvstarteren faldt igennem** (syv skærme og ti valg før første tip), mens **den inviterede blev onboardet fint**. Ingen af delene var målt. Dashboardet kunne sige, hvor mange der var aktive, men ikke hvor de nye faldt fra.
+
+**Fire trin:** konto → liga → konkurrence → første tip.
+
+**Alt udledes af rigtige tabeller** (`profiles`, `group_members`, `competition_participants`, `predictions`) — **ikke** af hændelsesloggen. `account_created`, `league_joined` og `prediction_saved` findes i kataloget, men loggen er fire-and-forget: en tragt, der undervurderer sit eget første trin, er værre end ingen tragt.
+
+**Selvstarter eller inviteret** afgøres af den *første* liga, brugeren kom med i: oprettede de den selv, eller trådte de ind i en andens? En bruger helt **uden** liga regnes som selvstarter — A8-invarianten indmelder automatisk i ligaen i samme øjeblik, en invitation accepteres, så ingen liga betyder, at der aldrig blev accepteret en invitation.
+
+**To forskellige tal, og forskellen er vigtig:**
+
+| Visning | Hvad den er | Hvornår den er rigtig |
+|---|---|---|
+| **Trin** | hvem der nåede hvert trin overhovedet | til at se, hvor stort et spring der forsvandt |
+| **"Hvor står de nu"** | en ÆGTE partition — hver bruger tælles præcis ét sted | til at svare på "hvor mister vi dem" |
+
+De to er ikke det samme, fordi trinnene **ikke er strengt indlejrede**: en konkurrence kan være liga-løs, så en bruger kan nå "konkurrence" og "tip" uden nogensinde at have haft en liga. At læse stall-tallene som trin-tal ville dobbelttælle.
+
+**Mediantid pr. trin** (median, ikke gennemsnit — ét ekstremt tilfælde ville trække skævt). ⚠️ Tid til første tip er en **øvre grænse**: `predictions` har ingen `created_at`, kun `updated_at`, som flytter sig, når et tip *rettes*. Antallet, der nåede trinnet, er upåvirket — kun tiden kan være for høj.
+
+**Vindue:** kohorten er brugere oprettet i vinduet, med "Alle brugere" som alternativ. En 7-dages kohorte kan være to brugere; alt-tid står ved siden af som volumen, aldrig i stedet for.
+
+---
+
+## 5D. Story Engine-regler (tilføjet 30. juli 2026)
+
+A5 ("emojis i historie-kort: til eller fra?") og hele tone-spørgsmålet har hidtil kun kunnet besvares på fornemmelse, fordi der ikke fandtes ét sted, der viste hvilke regler der faktisk udløser. v1.1 gik fra 9 til 14 regler; om alle 14 nogensinde er blevet vist til et menneske, har ingen kunnet sige.
+
+**To kilder med hver sin pålidelighed — bevidst holdt adskilt i svaret:**
+
+| Tal | Kilde | Pålidelighed |
+|---|---|---|
+| genereret, afvist | `public.stories` | rigtige rækker, **præcise** |
+| vist, delt | `analytics_events` (`metadata->>'rule'`) | fire-and-forget, et **gulv** |
+
+En visningsrate over 100 % er derfor umulig, men en lav rate kan lige så godt betyde tabt logning som manglende visning. Sammenlign regler med hinanden, ikke med et ideal.
+
+**`dismissed_at` er den mest interessante kolonne:** den er brugerens eneste *aktive* afvisning af en historie, og den findes pr. række — ikke som event, og derfor uden gulv-forbeholdet.
+
+**Regler, der aldrig udløser.** RPC'en kan per definition kun se regler, der *har* udløst. Katalogen med de 14 regler holdes derfor i klienten (`STORY_RULES` i `src/lib/analytics.js`), og de to tilstande skelnes:
+
+- **ALDRIG** — har ikke udløst én eneste gang, heller ikke uden for vinduet. Den dyreste slags død kode: den ser ud til at virke.
+- **STILLE** — har udløst før, men ikke i vinduet. Bare en stille periode.
+
+Prisen for at holde katalogen i JS er drift. Den betales af en test, der **læser `sql/story_engine.sql`**, trækker regelnavnene ud og fejler, hvis de to lister ikke er ens — så listen ikke stille kan blive forældet, næste gang motoren udvides.
+
+**Dækning** = brugere med mindst én historie ÷ brugere med mindst ét muligt tip i en låst runde. Det er dét tal, v1.1-leverancen blev målt på ("1 af 8 → 8 af 8 brugere i premiereugen") — nu permanent i stedet for en engangsmåling.
+
+---
+
+## 5E. Push-effekt (tilføjet 30. juli 2026, inde i Engagement)
+
+Open rate siger, om beskeden blev **åbnet**. Den siger intet om, hvorvidt den **virkede**. Deadline-påmindelsen er produktets eneste aktive fastholdelses-værktøj, så det spørgsmål er værd at kunne svare på: *tippede de, der åbnede den, oftere end de, der ikke gjorde?*
+
+**Enheden er (bruger, runde)** — én modtaget deadline-påmindelse for én runde. "Tippede" = mindst ét tip i netop den runde, læst fra `analytics_completion_facts`, altså fra `predictions`.
+
+Modtagerne findes ved at parse `notification_log.key` (`deadline:<season_id>:<round_key>:<dato>`; `season_id` kan være tom, men indeholder aldrig et kolon, så felt 3 er altid runde-nøglen). Parsingen er defensiv med et regex-tjek: en nøgle i uventet format udelades frem for at kaste og tage hele Engagement-sektionen med sig.
+
+> ⚠️ **Korrelation, ikke årsag.** De, der åbner notifikationer, er de engagerede i forvejen. Forskellen er et **loft** over pushets reelle effekt, ikke et estimat af den. Et push, der aldrig blev åbnet, kan desuden godt have virket — beskeden er synlig på låseskærmen, uden at linket bliver trykket.
+
+**Varsel før rundelås** (`sent_at` → `lock_at`, i intervaller) er med, fordi det er den eneste knap, der reelt kan drejes på: cron-tidspunktet. Intervallerne er ikke sammenlignelige uden videre — runder med tidligt kickoff får systematisk kortere varsel.
 
 ## 6. Liga-diagnose (afløser Health Score, 30. juli 2026)
 
@@ -237,12 +305,13 @@ Hver tilstand giver en **begrundelse med ligaens egne tal** ("Én af 4 medlemmer
 | `src/ui/components.jsx` | `StatTile`/`StatGroup`/`MiniBars` flyttet fra `AdminScreen.jsx` (nu 2 forbrugere) + `PctGrid`. **30. juli 2026:** `HealthBar` fjernet, `StateChip`/`SignalRow` tilføjet; `StatTile` fik `info`-prop; `MiniBars` skelner nu `null` (ingen måling) fra 0 |
 | `src/screens/AdminScreen.jsx` | fjerde chip "Analytics", render-gren til `AnalyticsPanel` |
 | `src/screens/AnalyticsPanel.jsx` (ny) | 4-sektions dashboard. **30. juli 2026:** ⓘ på hvert nøgletal, North Star med retning, Liga-diagnose i stedet for Health Score, døde felter taget i brug |
-| `src/lib/analyticsMetrics.js` (ny, 30. juli 2026) | måle-ordbogen: 27 metrikker × hvad/hvordan/kilde/forbehold |
+| `src/lib/analyticsMetrics.js` (ny, 30. juli 2026) | måle-ordbogen: 36 metrikker × hvad/hvordan/kilde/forbehold |
 
 ---
 
 ## 9. Udrulning
 
+0. **Efter 30. juli 2026-udvidelsen:** gen-kør `sql/analytics_dashboard.sql` — den indeholder to nye RPC'er (`admin_analytics_funnel`, `admin_analytics_stories`) og et udvidet `push`-objekt i `admin_analytics_engagement`. Filen er idempotent; ingen anden fil er rørt.
 1. Kør `sql/analytics_events.sql` i Supabase ("Run without RLS"). Verificér: tabellen findes, præcis én policy, en almindelig bruger får 0 rækker ved SELECT.
 2. Kør `sql/analytics_dashboard.sql`. Kør verifikationsblokken nederst i filen — de fleste kan køres FØR nogen events er logget, da de læser `predictions`/`matches`/`user_activity_days` (3 af 4 dashboard-sektioner har derfor reel historik allerede på dag ét; kun Engagement og story-views-signalet i Liga-diagnosen starter tomme).
 3. Merge frontend-branchen (events begynder at strømme ind).
@@ -273,6 +342,10 @@ Ingen af de to lock-policy-filer eller `sql/story_engine.sql`/`sql/groups.sql`/`
 - Hver liga får præcis ÉN tilstand, og en liga under 14 dage gammel får altid "For ny" — uanset hvor tomme dens øvrige signaler er.
 - En tilstand uden tone ("For ny", "Intet at måle på") renderes ikke i samme farve som "Sund".
 - Hvert nøgletal på skærmen har en ⓘ, og et ukendt metrik-id fjerner kun ⓘ'en, ikke sektionen.
+- Tragtens "hvor står de nu" summer altid præcis til kohorten, og selvstarter + inviteret summer til totalen inden for hvert scope.
+- En regel i Story Engine-katalogen, der aldrig har udløst, vises som ALDRIG — ikke som en manglende række. Katalogen kan ikke drive fra `sql/story_engine.sql` uden at en test fejler.
+- Story Engines `viewed` overstiger aldrig `generated` (loggen er et gulv, aldrig et loft).
+- Push-effektens åbnede + ikke-åbnede summer til antallet af modtagere.
 - Et retention-vindue, hvis start ligger før `activity_since`, vises som "Ingen data endnu", aldrig som `0%`.
 - En sektion, der fejler (fx netværksfejl), viser sin egen fejlbesked og blokerer ikke de tre andre.
 
@@ -290,6 +363,12 @@ Ingen af de to lock-policy-filer eller `sql/story_engine.sql`/`sql/groups.sql`/`
 10. `diagnoseLeagues` sorterer efter alvor, derefter laveste deltagelse (null sidst), derefter navn; `undefined`/tom liste giver `[]`.
 11. Måle-ordbogen: hver metrik har titel/hvad/hvordan/kilde; hvert id, panelet slår op, findes; `metricInfo("findes_ikke")` giver `null`.
 12. `MiniBars` med `value: null` viser "ingen data", ikke en nulsøjle.
+13. `funnelRow` plukker den rigtige række ud af grouping sets og blander aldrig scopes; manglende svar giver `null`.
+14. `funnelSteps` regner procent af KOHORTEN og fald af FORRIGE trin — to forskellige nævnere; tom kohorte giver `[]` i stedet for division med nul.
+15. `biggestDrop` ignorerer trin, der VOKSER (en liga-løs konkurrence kan nås uden liga), og giver `null` for en tragt uden frafald.
+16. `fmtMinutes` dækker sekunder → dage i samme felt; `null` bliver til en tankestreg, aldrig til 0.
+17. `storyRuleRows` returnerer hele katalogen (ikke kun det målte), skelner ALDRIG fra STILLE, og markerer en ukendt regel fra databasen frem for at skjule den.
+18. Drift-test: regelnavnene i `sql/story_engine.sql` er præcis dem i `STORY_RULES`.
 
 ---
 
@@ -299,9 +378,9 @@ Fundet under gennemgangen, bevidst ikke leveret her. Rangeret efter forventet v�
 
 | # | Forslag | Hvorfor det er værd at overveje |
 |---|---|---|
-| 1 | **Tragt for nye brugere** (`account_created` → første liga → første konkurrence → første tip, med tid imellem trinnene) | Alle fire hændelser logges allerede. Onboarding v1's centrale påstand — "en ny bruger skal hurtigst muligt oprette eller tilslutte sig en liga" — er stadig **umålt**: dashboardet kan ikke sige, hvor selvstarteren falder fra. Den ene sektion med størst afkast. |
-| 2 | **Sammenlign push-tidspunkt med deltagelse** | Deadline-påmindelsen er produktets eneste aktive fastholdelses-værktøj, og vi måler dens open rate, men ikke dens **effekt**: tippede de, der åbnede, oftere end de, der ikke gjorde? Kræver ingen ny instrumentering. |
-| 3 | **Story Engine-regler pr. visning** | `stories.rule` findes allerede pr. række. En optælling pr. regel (genereret / vist / delt) ville lukke A5 med data i stedet for fornemmelse — og afsløre regler, der aldrig udløses. |
+| ~~1~~ | ~~**Tragt for nye brugere**~~ | ✅ **Bygget 30. juli 2026** — se afsnit 5C. |
+| ~~2~~ | ~~**Sammenlign push-tidspunkt med deltagelse**~~ | ✅ **Bygget 30. juli 2026** — se afsnit 5E. |
+| ~~3~~ | ~~**Story Engine-regler pr. visning**~~ | ✅ **Bygget 30. juli 2026** — se afsnit 5D. |
 | 4 | **Eksport-knap ("kopiér som CSV/JSON")** | Spec'en siger, at SQL-editoren *er* eksport-mekanismen. Det passer for ad hoc-analyse, men ikke for "send tallene videre" — og en knap koster ingen ny afhængighed. |
 | 5 | **Diagnose-historik** | Diagnosen er et øjebliksbillede. Uden historik kan man ikke se, at en liga gik fra "Sund" til "Kun en del tipper" for tre uger siden. Kræver dog et sted at gemme snapshottet — første gang noget i Analytics ville have brug for et cron eller en tabel med tidsserier, hvilket arkitekturvalg #3 lukkede døren for. Tages op, hvis behovet melder sig igen. |
 | 6 | **Alarm ved tilstandsskifte** | Naturlig følge af #5: en liga, der skifter til rød, er interessant i det øjeblik det sker, ikke næste gang nogen åbner admin. Afhænger af #5. |
@@ -309,4 +388,5 @@ Fundet under gennemgangen, bevidst ikke leveret her. Rangeret efter forventet v�
 ---
 
 *Leveret. SQL er skrevet mod det dokumenterede skema (`DOCUMENTATION.md` afsnit 2) — verificér mod databasen (`sql/schema.sql` er kun gyldig som reference, når skema-eksporten er kørt efter denne migrering).*
+*Tragten, push-effekten og Story Engine-statistikken er verificeret mod en rigtig PostgreSQL 16.13 med en fixtur bygget til formålet: 10 brugere fordelt på selvstartere (heraf tre helt uden liga), inviterede, deltagere uden tip og gennemførere, fire deadline-påmindelser hvoraf to blev åbnet, og to udløste story-regler. Alle fire nye invarianter (6c-6f) gav 0, og JS-laget gav den forventede læsning: selvstarteren taber halvdelen på liga-trinnet, den inviterede er i en liga med det samme og taber først ved første tip.*
 *Liga-diagnosen og de rettede vinduer er verificeret mod en rigtig PostgreSQL 16.13 med fire konstruerede ligaer (sund / bæres af én / uden konkurrence / helt ny) — alle invarianter i verifikationsblokken gav 0, og de fire ligaer fik hver den tilsigtede diagnose.*

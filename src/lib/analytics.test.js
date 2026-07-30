@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("./supabase.js", () => ({ restFetch: vi.fn() }));
 import { restFetch } from "./supabase.js";
-import { logEvent, logEventOnce, diagnoseLeague, diagnoseLeagues, summarizeDiagnoses, LEAGUE_THRESHOLDS } from "./analytics.js";
+import { readFileSync } from "node:fs";
+import {
+  logEvent, logEventOnce, diagnoseLeague, diagnoseLeagues, summarizeDiagnoses, LEAGUE_THRESHOLDS,
+  funnelRow, funnelSteps, biggestDrop, fmtMinutes, storyRuleRows, STORY_RULES,
+} from "./analytics.js";
 import { METRICS, metricInfo } from "./analyticsMetrics.js";
 
 beforeEach(() => {
@@ -319,6 +323,8 @@ describe("måle-ordbogen — hvert nøgletal skal kunne forklare sig selv", () =
       "league_state", "league_breadth", "league_pulse", "league_completion", "league_concentration",
       "league_activity", "league_retention", "league_last_activity", "league_competitions",
       "league_story_views", "user_retention", "league_retention_agg", "user_cohorts",
+      "push_effect", "push_lead_time", "funnel", "funnel_path", "funnel_stalled", "funnel_time",
+      "story_rules", "story_never", "story_coverage",
     ];
     for (const id of used) expect(metricInfo(id), id).not.toBeNull();
   });
@@ -327,5 +333,155 @@ describe("måle-ordbogen — hvert nøgletal skal kunne forklare sig selv", () =
     for (const id of ["event_views", "push_open_rate"]) {
       expect(METRICS[id].caveat.toLowerCase()).toContain("gulv");
     }
+  });
+});
+
+// ---------- Tragt for nye brugere (A13) ----------
+// RPC'en leverer én flad rows-liste fra grouping sets: to scopes × (total + vej).
+const funnelData = {
+  window_days: 30,
+  rows: [
+    { scope: "window", path: null, cohort: 20, reached_league: 16, reached_competition: 12, reached_prediction: 6,
+      stalled_uden_liga: 4, stalled_uden_konkurrence: 4, stalled_uden_tip: 6, stalled_gennemfoert: 6,
+      median_min_league: 3.5, median_min_competition: 12, median_min_prediction: 2880 },
+    { scope: "window", path: "selvstarter", cohort: 12, reached_league: 8, reached_competition: 5, reached_prediction: 2,
+      stalled_uden_liga: 4, stalled_uden_konkurrence: 3, stalled_uden_tip: 3, stalled_gennemfoert: 2,
+      median_min_league: 40, median_min_competition: 60, median_min_prediction: 4320 },
+    { scope: "window", path: "inviteret", cohort: 8, reached_league: 8, reached_competition: 7, reached_prediction: 4,
+      stalled_uden_liga: 0, stalled_uden_konkurrence: 1, stalled_uden_tip: 3, stalled_gennemfoert: 4,
+      median_min_league: 0.5, median_min_competition: 2, median_min_prediction: 45 },
+    { scope: "all_time", path: null, cohort: 100, reached_league: 90, reached_competition: 80, reached_prediction: 70,
+      stalled_uden_liga: 10, stalled_uden_konkurrence: 10, stalled_uden_tip: 10, stalled_gennemfoert: 70,
+      median_min_league: 2, median_min_competition: 8, median_min_prediction: 900 },
+  ],
+};
+
+describe("funnelRow — plukker den rigtige række ud af grouping sets", () => {
+  it("henter totalen for et scope, når path udelades", () => {
+    expect(funnelRow(funnelData, "window").cohort).toBe(20);
+    expect(funnelRow(funnelData, "all_time").cohort).toBe(100);
+  });
+  it("henter én vej ind", () => {
+    expect(funnelRow(funnelData, "window", "selvstarter").cohort).toBe(12);
+    expect(funnelRow(funnelData, "window", "inviteret").cohort).toBe(8);
+  });
+  it("blander ikke scopes sammen", () => {
+    expect(funnelRow(funnelData, "all_time", "selvstarter")).toBeNull();
+  });
+  it("tomt eller manglende svar giver null, ikke en fejl", () => {
+    expect(funnelRow(undefined, "window")).toBeNull();
+    expect(funnelRow({ rows: [] }, "window")).toBeNull();
+  });
+});
+
+describe("funnelSteps — trin, procent og fald", () => {
+  const steps = funnelSteps(funnelRow(funnelData, "window"));
+
+  it("første trin er altid hele kohorten ved 100 % og uden fald", () => {
+    expect(steps[0].users).toBe(20);
+    expect(steps[0].pct).toBe(100);
+    expect(steps[0].dropFromPrev).toBeNull();
+  });
+
+  it("procent regnes af KOHORTEN, faldet af FORRIGE trin — to forskellige nævnere", () => {
+    const konk = steps[2]; // 12 af 20 i kohorten, men 4 tabt af de 16 fra forrige trin
+    expect(konk.pct).toBe(60);
+    expect(konk.dropFromPrev).toBe(4);
+    expect(konk.dropPct).toBe(25);
+  });
+
+  it("bærer mediantiden med, undtagen på første trin hvor den ikke findes", () => {
+    expect(steps[0].medianMinutes).toBeNull();
+    expect(steps[1].medianMinutes).toBe(3.5);
+  });
+
+  it("tom kohorte giver ingen trin i stedet for division med nul", () => {
+    expect(funnelSteps({ cohort: 0 })).toEqual([]);
+    expect(funnelSteps(null)).toEqual([]);
+  });
+});
+
+describe("biggestDrop — sektionens overskrift i ét tal", () => {
+  it("finder det trin, der taber flest", () => {
+    const worst = biggestDrop(funnelSteps(funnelRow(funnelData, "window")));
+    expect(worst.key).toBe("reached_prediction"); // 12 → 6, altså 6 tabt
+    expect(worst.dropFromPrev).toBe(6);
+  });
+
+  it("en tragt uden frafald har intet største fald", () => {
+    const perfect = funnelSteps({ cohort: 5, reached_league: 5, reached_competition: 5, reached_prediction: 5 });
+    expect(biggestDrop(perfect)).toBeNull();
+  });
+
+  it("ignorerer trin, der VOKSER (liga-løs konkurrence kan nås uden liga)", () => {
+    const odd = funnelSteps({ cohort: 10, reached_league: 4, reached_competition: 7, reached_prediction: 7 });
+    expect(biggestDrop(odd).key).toBe("reached_league");
+  });
+});
+
+describe("fmtMinutes — samme felt spænder fra sekunder til dage", () => {
+  it("under et minut vises i sekunder", () => { expect(fmtMinutes(0.5)).toBe("30 s"); });
+  it("minutter", () => { expect(fmtMinutes(42)).toBe("42 min"); });
+  it("timer", () => { expect(fmtMinutes(180)).toBe("3 t"); });
+  it("dage", () => { expect(fmtMinutes(60 * 72)).toBe("3 dage"); });
+  it("null bliver til en tankestreg, aldrig til 0", () => {
+    expect(fmtMinutes(null)).toBe("—");
+    expect(fmtMinutes(undefined)).toBe("—");
+  });
+});
+
+// ---------- Story Engine-regler (A5) ----------
+describe("storyRuleRows — katalogen fletter med det målte", () => {
+  const data = {
+    rules: [
+      { rule: "ROUND_WON", generated: 12, users: 5, viewed: 9, shared: 2, dismissed: 1, view_rate: 75, share_rate: 22.2, dismiss_rate: 8.3 },
+      { rule: "STREAK", generated: 0, users: 0, viewed: 0, shared: 0, dismissed: 0, view_rate: null, share_rate: null, dismiss_rate: null },
+    ],
+  };
+  const rows = storyRuleRows(data);
+  const byRule = Object.fromEntries(rows.map((r) => [r.rule, r]));
+
+  it("returnerer hele katalogen, ikke kun de regler databasen kender", () => {
+    expect(rows.length).toBeGreaterThanOrEqual(Object.keys(STORY_RULES).length);
+    for (const rule of Object.keys(STORY_RULES)) expect(byRule[rule]).toBeDefined();
+  });
+
+  it("skelner ALDRIG udløst fra STILLE i vinduet — to forskellige problemer", () => {
+    expect(byRule.STREAK.silent).toBe(true);   // findes i databasen, men 0 i vinduet
+    expect(byRule.STREAK.never).toBe(false);
+    expect(byRule.COMEBACK.never).toBe(true);  // findes slet ikke
+    expect(byRule.COMEBACK.silent).toBe(false);
+  });
+
+  it("nulstiller de regler, der ikke blev målt — aldrig undefined i tabellen", () => {
+    expect(byRule.COMEBACK.generated).toBe(0);
+    expect(byRule.COMEBACK.viewed).toBe(0);
+    expect(byRule.COMEBACK.view_rate).toBeNull();
+  });
+
+  it("sorterer mest genererede først", () => { expect(rows[0].rule).toBe("ROUND_WON"); });
+
+  it("en regel i databasen, katalogen ikke kender, skjules ikke — den markeres", () => {
+    const out = storyRuleRows({ rules: [{ rule: "NY_REGEL", generated: 3, viewed: 1 }] });
+    const ny = out.find((r) => r.rule === "NY_REGEL");
+    expect(ny.unknown).toBe(true);
+  });
+
+  it("tomt svar giver hele katalogen på nul, ikke en tom tabel", () => {
+    const out = storyRuleRows(undefined);
+    expect(out.length).toBe(Object.keys(STORY_RULES).length);
+    expect(out.every((r) => r.never)).toBe(true);
+  });
+
+  // Katalogen findes kun i JS, fordi RPC'en per definition ikke kan se regler,
+  // der aldrig har udløst. Denne test er prisen for det: den fejler, hvis
+  // motoren udvides uden at listen følger med.
+  it("katalogen driver ikke fra sql/story_engine.sql", () => {
+    const sql = readFileSync(new URL("../../sql/story_engine.sql", import.meta.url), "utf8");
+    const NOT_RULES = new Set(["ALL"]);
+    const inSql = new Set(
+      [...sql.matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)].map((m) => m[1]).filter((r) => !NOT_RULES.has(r))
+    );
+    expect([...inSql].sort()).toEqual(Object.keys(STORY_RULES).sort());
   });
 });

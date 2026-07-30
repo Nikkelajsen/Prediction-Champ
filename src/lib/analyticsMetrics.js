@@ -196,6 +196,74 @@ const METRICS = {
     caveat: "Den nyeste og svageste instrumentering på siden. Den indgår bevidst IKKE i diagnosen — den var 10 % af den gamle score, hvilket gav en ny instrumentering vægt, den ikke havde fortjent.",
   },
 
+  push_effect: {
+    title: "Push-effekt",
+    what: "Om de, der åbnede deadline-påmindelsen, rent faktisk tippede oftere end de, der ikke åbnede den.",
+    how: "Enheden er (bruger, runde): én modtaget deadline-påmindelse for én runde. For hver af dem: åbnede brugeren beskeden, og afgav de mindst ét tip i netop dén runde? Tippede-andelen beregnes for de to grupper hver for sig, og forskellen vises i procentpoint.",
+    source: "notification_log (modtagere) + analytics_events (åbninger) + analytics_completion_facts (tips — altså fra predictions, ikke fra hændelsesloggen).",
+    caveat: "KORRELATION, IKKE ÅRSAG. De, der åbner notifikationer, er de engagerede i forvejen — forskellen er derfor et LOFT over pushets reelle effekt, ikke et estimat af den. Et push, der aldrig blev åbnet, kan desuden godt have virket: beskeden er synlig på låseskærmen, uden at linket bliver trykket.",
+  },
+  push_lead_time: {
+    title: "Varsel før rundelås",
+    what: "Hvor lang tid før deadline beskeden blev sendt — og om det gjorde en forskel for, om folk tippede.",
+    how: "Tiden fra beskeden blev sendt til rundens lås (rundens første kickoff minus én time), lagt i intervaller. For hvert interval: andelen af modtagerne, der tippede i den runde.",
+    source: "notification_log.sent_at + analytics_round_locks.lock_at + analytics_completion_facts.",
+    caveat: "Det er den eneste knap, der reelt kan drejes på (cron-tidspunktet), men intervallerne er ikke sammenlignelige uden videre: runder med tidligt kickoff får systematisk kortere varsel. 'Ukendt' dækker beskeder, hvis runde ikke kunne findes, eller som blev sendt efter låsen.",
+  },
+
+  // ---------- Tragt for nye brugere ----------
+  funnel: {
+    title: "Tragt for nye brugere",
+    what: "Hvor mange af de nyoprettede brugere der nåede hvert af de fire trin: konto → liga → konkurrence → første tip.",
+    how: "Kohorten er brugere oprettet i perioden. For hver bruger findes tidligste liga-medlemskab, tidligste konkurrence-deltagelse og tidligste tip. Alt udledes af rigtige tabeller — IKKE af hændelsesloggen, som er lossy og ville undervurdere trinnene.",
+    source: "profiles, group_members, competition_participants, predictions.",
+    caveat: "Trinnene er ikke strengt indlejrede: en konkurrence kan være liga-løs, så en bruger kan nå 'konkurrence' uden nogensinde at have en liga. Brug derfor 'hvor står de nu' nedenunder til at læse frafaldet — dén opdeling tæller hver bruger præcis ét sted.",
+  },
+  funnel_path: {
+    title: "Selvstarter eller inviteret",
+    what: "Hvilken vej brugeren kom ind ad — og dermed hvilken af de to onboarding-oplevelser tallene gælder.",
+    how: "Afgøres af den FØRSTE liga, brugeren kom med i: oprettede de den selv (selvstarter) eller trådte de ind i en andens (inviteret)? En bruger helt uden liga regnes som selvstarter, fordi en accepteret invitation altid giver liga-medlemskab med det samme (A8-invarianten) — ingen liga betyder derfor, at der aldrig blev accepteret en invitation.",
+    source: "group_members + groups.created_by.",
+    caveat: "Dette er den vigtigste opdeling på siden: Onboarding v1 blev bygget på, at selvstarteren faldt igennem, mens den inviterede klarede sig fint. Forskellen mellem de to kolonner er, om den antagelse holder.",
+  },
+  funnel_stalled: {
+    title: "Hvor står de nu",
+    what: "Hvor langt hver bruger i kohorten er nået — og dermed hvor mange der sidder fast hvilket sted.",
+    how: "Hver bruger placeres i præcis én af fire kasser efter det længste, de har nået: uden liga / liga men ingen konkurrence / konkurrence men intet tip / hele vejen. Kasserne summer altid til kohorten.",
+    source: "Samme fire tabeller som tragten.",
+    caveat: "Dette er et øjebliksbillede, ikke en endelig skæbne — en bruger fra i går, der endnu ikke har tippet, tæller som fastlåst. Læs derfor hellere de ældre kohorter, når du vil vurdere, om et trin er en reel forhindring.",
+  },
+  funnel_time: {
+    title: "Tid til trinnet",
+    what: "Mediantiden fra kontoen blev oprettet, til brugeren nåede trinnet.",
+    how: "Median (ikke gennemsnit, som ét ekstremt tilfælde ville trække skævt) af tiden fra oprettelse til trinnets tidsstempel, kun blandt dem der NÅEDE trinnet.",
+    source: "profiles.created_at sammenholdt med de tre trin-tidsstempler.",
+    caveat: "Tid til første tip er en ØVRE grænse: `predictions` har ingen created_at, kun updated_at, som flytter sig når et tip rettes. Retter en bruger sit allerførste tip en uge senere, ser det ud som om, de ventede en uge. Antallet der nåede trinnet er upåvirket — kun tiden kan være for høj.",
+  },
+
+  // ---------- Story Engine ----------
+  story_rules: {
+    title: "Story Engine pr. regel",
+    what: "Hvilke af motorens regler der faktisk udløser, og hvordan folk reagerer på dem.",
+    how: "Genererede historier og afvisninger tælles pr. regel i stories-tabellen. Visninger og delinger kommer fra hændelsesloggen, hvor regelnavnet følger med i metadata.",
+    source: "public.stories (genereret, afvist) + analytics_events (vist, delt).",
+    caveat: "De to kilder har forskellig pålidelighed: genereret og afvist er RIGTIGE rækker og præcise, mens vist og delt er fire-and-forget og derfor et GULV. En lav visningsrate kan lige så godt være tabt logning som en historie, ingen så. Sammenlign regler med hinanden, ikke med et ideal.",
+  },
+  story_never: {
+    title: "Regler der aldrig udløser",
+    what: "Regler i motorens katalog, som ikke har genereret en eneste historie — hverken i perioden eller nogensinde.",
+    how: "Katalogen med de 14 regler holdes i klienten (`STORY_RULES`) og sammenholdes med, hvad databasen faktisk indeholder. En regel, der har udløst før, men ikke i perioden, markeres 'Stille' i stedet — det er to forskellige ting.",
+    source: "src/lib/analytics.js sammenholdt med public.stories. En test læser sql/story_engine.sql og fejler, hvis katalogen driver fra motoren.",
+    caveat: "En regel, der aldrig udløser, er den dyreste slags død kode: den ser ud til at virke. Men en tærskel kan også bare være for stram — se `docs/features/story-engine-v1.md` afsnit 10 før du fjerner noget.",
+  },
+  story_coverage: {
+    title: "Dækning",
+    what: "Hvor stor en del af de brugere, der havde en afsluttet runde, som fik mindst én historie.",
+    how: "Brugere med mindst én genereret historie i perioden ÷ brugere med mindst ét muligt tip i en låst runde i samme periode.",
+    source: "public.stories + analytics_completion_facts.",
+    caveat: "Det er dette tal, v1.1-leverancen blev målt på (1 af 8 → 8 af 8 brugere i premiereugen) — nu permanent i stedet for en engangsmåling. Under 100 % betyder, at nogen fik en runde uden en eneste historie.",
+  },
+
   // ---------- Retention ----------
   user_retention: {
     title: "Bruger-retention",
