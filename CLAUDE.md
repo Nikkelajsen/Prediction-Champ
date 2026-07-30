@@ -14,7 +14,9 @@ Det andet punkt er lige så vigtigt som det første: en spec beskriver, hvad der
 ## Kommandoer
 
 - `npm run dev` — udviklingsserver · `npm run build` — produktions-build
-- `npm test` — Vitest. **Ingen CI kører testene**, så de skal køres i hånden før merge, sammen med "Tjekliste før merge" i `DOCUMENTATION.md` afsnit 11.
+- `npm test` — Vitest · `npm run lint` — ESLint · `npm run format` — Prettier
+- CI (`.github/workflows/ci.yml`) kører lint + test + build ved hver pull request og ved push til `main`. **"Tjekliste før merge" i `DOCUMENTATION.md` afsnit 11 gælder stadig** — den dækker det, en maskine ikke kan se (rigtig browser, push på iOS, RLS mod produktionsdata).
+- `npm run lint` har et loft på antal advarsler, så tallet kan falde, men aldrig vokse ubemærket. Falder det, sænkes loftet i `package.json` tilsvarende.
 
 ## SQL
 
