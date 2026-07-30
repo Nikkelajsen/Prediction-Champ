@@ -266,7 +266,7 @@ begin
       streaks as (
         select count(*)::int as len
         from (
-          select round_key,
+          select round_key, won,
             row_number() over (order by round_key)
             - row_number() over (partition by won order by round_key) as grp
           from mine
