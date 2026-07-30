@@ -29,11 +29,12 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | # | Fil | Formål | Status |
 |---|---|---|---|
 | — | `schema.sql` | **Genereret** øjebliksbillede af hele `public`. Kør den i et nyt/staging-projekt i stedet for hele listen | Redigér aldrig i hånden |
+| 0 | `rating_core.sql` | `pc_points()`, `round_key()`, `recompute_ratings()` + tabellerne `ratings`/`rating_history` | Aktiv — **skal køres før #5**. Tilføjet 30. juli 2026; funktionskroppene er klippet ordret ud af `schema.sql`, så en kørsel ændrer intet |
 | 1 | `standings_views.sql` | Første udgave af `round_standings` + `season_standings` | ⚠️ **Afløst af `standings_tiebreakers.sql`** — kør den aldrig efter |
 | 2 | `user_stats.sql` | `user_activity_days`, `touch_activity()`, `admin_user_stats()` | Aktiv |
 | 3 | `username_constraints.sql` | Længde-constraint på `profiles.display_name` (2–20), `username_available()` | Aktiv |
 | 4 | `predictions_round_lock_policies.sql` | Runde-baseret lås på `predictions` for **SELECT + DELETE** | Aktiv, men ufuldstændig alene — se #14 |
-| 5 | `rating_trigger_optimization.sql` | Statement-level triggere på `matches`; kalder `recompute_ratings()` + `generate_stories()` | Aktiv |
+| 5 | `rating_trigger_optimization.sql` | Statement-level triggere på `matches`; kalder `recompute_ratings()` + `generate_stories()` | Aktiv — forudsætter `rating_core.sql` (#0) |
 | 6 | `matches_stage.sql` | `matches.stage_name` (grundspil/slutspil) | Aktiv |
 | 7 | `push_notifications.sql` | `push_subscriptions` + `notification_log` | Aktiv |
 | 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — **v1.1 (juli 2026) skal gen-køres i produktion**; kun funktionen ændres, tabel og view er uændrede |

@@ -18,6 +18,10 @@ Det andet punkt er lige så vigtigt som det første: en spec beskriver, hvad der
 - CI (`.github/workflows/ci.yml`) kører lint + test + build ved hver pull request og ved push til `main`. **"Tjekliste før merge" i `DOCUMENTATION.md` afsnit 11 gælder stadig** — den dækker det, en maskine ikke kan se (rigtig browser, push på iOS, RLS mod produktionsdata).
 - `npm run lint` har et loft på antal advarsler, så tallet kan falde, men aldrig vokse ubemærket. Falder det, sænkes loftet i `package.json` tilsvarende.
 
+## Planlagte jobs
+
+`docs/CRON.md` er registeret over de planlagte jobs. Jobbene selv kører på cron-job.org uden for repoet, så registeret er kun sandt, hvis det vedligeholdes — opretter eller ændrer du et job, så ret tabellen i samme ombæring.
+
 ## SQL
 
 Migreringerne i `sql/` køres **manuelt** i Supabase SQL-editor med "Run without RLS". De er idempotente, men to af dem ruller tavst nyere regler tilbage, hvis de gen-køres — læs filindekset og advarslen i `sql/README.md`, før du kører noget.
