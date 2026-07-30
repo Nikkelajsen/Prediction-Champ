@@ -29,7 +29,7 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 
 1. Find turneringens Sportmonks-id og indsæt række i `leagues` (`api_league_id`, `is_visible`) + sæson-række i `seasons` (jf. DOCUMENTATION.md afsnit 10).
 2. Kald `/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` første gang (`&dryRun=true` først) — holdene oprettes automatisk.
-3. Opret ét nyt cron-job.org-job for turneringen, med `SYNC_SECRET` i `x-sync-secret`-headeren (jf. ROADMAP-beslutningen — nye jobs skal ikke bruge `?secret=`-fallbacken).
+3. Opret ét nyt cron-job.org-job for turneringen, med `SYNC_SECRET` i `x-sync-secret`-headeren (jf. ROADMAP-beslutningen — nye jobs skal ikke bruge `?secret=`-fallbacken). **Tilføj derefter jobbet i [`docs/CRON.md`](../CRON.md)** — registeret dér er kilden til, hvilke jobs der findes, og det er kun sandt, hvis det vedligeholdes. *(Tilføjet 30. juli 2026: registeret fandtes ikke, da denne spec blev skrevet.)*
 4. Notifikations-jobbet dækker allerede alle turneringer i ét kald — intet nyt job dér.
 
 ### 3.2 Kode (små, afgrænsede ændringer)

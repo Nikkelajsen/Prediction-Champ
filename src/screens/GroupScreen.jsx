@@ -22,7 +22,7 @@ function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard
     try {
       const d = await loadGroupDetail(token, userId, groupId);
       setDetail(d);
-    } catch (e) { setDetail(null); }
+    } catch { setDetail(null); }
     setLoading(false);
   }, [token, userId, groupId]);
 
@@ -36,7 +36,7 @@ function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard
       if (navigator.share) await navigator.share({ title: "Prediction Champ", text });
       else { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }
       logEvent(token, "league_invite_sent", { groupId: detail.group.id, metadata: { via: "liga_link" } });
-    } catch (e) { /* annulleret — ignorér */ }
+    } catch { /* annulleret — ignorér */ }
   }
 
   async function onJoin(compId) {

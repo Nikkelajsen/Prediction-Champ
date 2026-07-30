@@ -1,13 +1,13 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
 import { Bell, ChevronRight, ChevronDown, Clock, Check, X, Share2 } from "lucide-react";
-import { formatKickoff, outcome } from "../lib/scoring.js";
+import { formatKickoff } from "../lib/scoring.js";
 import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { logEvent, logEventOnce } from "../lib/analytics.js";
 import { isQuiet } from "../lib/stories.js";
 import { readFlag, writeFlag, CARD_KEY } from "../lib/onboarding.js";
-import { C, btnGhost, btnGreen, font, iconBtn, muted } from "../ui/theme.js";
+import { C, btnGhost, btnGreen, font, iconBtn } from "../ui/theme.js";
 import { usePushOptIn } from "../ui/usePushOptIn.js";
 import { Card, Eyebrow, H, InfoDot, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
 import GetStartedCard from "./GetStartedCard.jsx";
@@ -58,7 +58,7 @@ function StoryCard({ story, onDismiss, token, groupId }) {
       if (navigator.share) await navigator.share({ title: "Prediction Champ", text });
       else await navigator.clipboard.writeText(text);
       logEvent(token, "story_shared", { competitionId: story.competition_id || null, groupId, metadata: { rule: story.rule } });
-    } catch (e) { /* bruger annullerede — ignorér */ }
+    } catch { /* bruger annullerede — ignorér */ }
   }
   return (
     <Card style={quiet ? undefined : { borderColor: C.gold, background: "linear-gradient(135deg, #14212F 0%, #221E14 100%)" }}>
@@ -192,12 +192,12 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       try {
         const r = await computeCurrentRound(token, userId, competitions);
         if (!cancelled) setRound(r);
-      } catch (e) { if (!cancelled) setRound(null); }
+      } catch { if (!cancelled) setRound(null); }
     };
     load();
     const id = setInterval(load, 60000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [token, userId, competitions]); // eslint-disable-line
+  }, [token, userId, competitions]);  
 
   useEffect(() => {
     let cancelled = false;
@@ -206,7 +206,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       try {
         const t = await computeHomeTips(token, userId, competitions);
         if (!cancelled) setTips(t);
-      } catch (e) { if (!cancelled) setTips({ hasComps: competitions.length > 0, error: true }); }
+      } catch { if (!cancelled) setTips({ hasComps: competitions.length > 0, error: true }); }
 
       // rating-snapshot
       try {
@@ -221,7 +221,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
             setSnapshot({ none: true });
           }
         }
-      } catch (e) { if (!cancelled) setSnapshot({ none: true }); }
+      } catch { if (!cancelled) setSnapshot({ none: true }); }
 
       // placeringer: månedsliga + hver privat konkurrence.
       // Hentes parallelt (månedsliga + alle konkurrencer på én gang); rækkefølgen
@@ -251,10 +251,10 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           if (row) list.push({ label: c.name, pos: `${row.rank}.`, shared: row.shared, compId: c.id, groupId: c.group_id || null, groupName: c.group_id ? (groupNameById.get(c.group_id) || "Liga") : null });
         });
         if (!cancelled) setPlacements(list);
-      } catch (e) { if (!cancelled) setPlacements([]); }
+      } catch { if (!cancelled) setPlacements([]); }
     })();
     return () => { cancelled = true; };
-  }, [token, userId, competitions]); // eslint-disable-line
+  }, [token, userId, competitions]);  
 
   const displayName = profile?.display_name || "";
 

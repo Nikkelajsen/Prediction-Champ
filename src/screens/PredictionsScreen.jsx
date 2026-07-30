@@ -441,7 +441,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
       try {
         const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
         if (!cancelled) setAllMatches(ms);
-      } catch (e) { /* prøver igen om et minut */ }
+      } catch { /* prøver igen om et minut */ }
     }, 60000);
     return () => { cancelled = true; clearTimeout(id); };
   }, [allMatches, token]);
@@ -467,7 +467,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
             setErrIds((s) => { const c = { ...s }; delete c[matchId]; return c; });
             setAllPreds((ap) => ap.filter((p) => !(p.user_id === userId && p.match_id === matchId)));
           }
-        } catch (e) { setErrIds((s) => ({ ...s, [matchId]: true })); }
+        } catch { setErrIds((s) => ({ ...s, [matchId]: true })); }
       }
       return;
     }
@@ -490,7 +490,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
       const meta = { match_id: matchId, round_key: allMatches.find((m) => m.id === matchId)?.round_key || null, comp_filter: compFilter };
       logEvent(token, "prediction_saved", { competitionId: comp?.id || null, metadata: meta });
       logEvent(token, wasComplete ? "prediction_updated" : "prediction_submitted", { competitionId: comp?.id || null, metadata: meta });
-    } catch (e) { /* næste forsøg overskriver */ }
+    } catch { /* næste forsøg overskriver */ }
   }
 
   function opensAt(m) {

@@ -6,7 +6,7 @@ self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim(
 
 self.addEventListener("push", (event) => {
   let data = {};
-  try { data = event.data ? event.data.json() : {}; } catch (e) {}
+  try { data = event.data ? event.data.json() : {}; } catch {}
   const title = data.title || "Prediction Champ";
   event.waitUntil(
     self.registration.showNotification(title, {

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+package-lock.json
+
+# Genereret øjebliksbillede fra pg_dump — må aldrig røres i hånden.
+sql/schema.sql
+
+# Dokumentationen har bevidst meget lange linjer (ét afsnit pr. linje).
+# En ombrydning ville give én enorm diff uden gevinst.
+docs/
+DOCUMENTATION.md

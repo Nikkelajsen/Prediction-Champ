@@ -1,5 +1,5 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
-import { C, font, muted } from "../ui/theme.js";
+import { C, font } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
 import InstallGuide from "./InstallGuide.jsx";
 

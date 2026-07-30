@@ -175,10 +175,10 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
       try {
         const b = await loadSeasonBoard(token, superliga.id);
         if (!cancelled) setSeason(b || undefined);
-      } catch (e) { if (!cancelled) setSeason(undefined); }
+      } catch { if (!cancelled) setSeason(undefined); }
     })();
     return () => { cancelled = true; };
-  }, [token, superliga]); // eslint-disable-line
+  }, [token, superliga]);  
 
   useEffect(() => {
     let cancelled = false;
@@ -195,7 +195,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [token]); // eslint-disable-line
+  }, [token]);  
 
   async function changeMonth(m) {
     setMonth(m); setRows(null);

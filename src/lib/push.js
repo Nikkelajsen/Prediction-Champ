@@ -16,7 +16,7 @@ function needsHomeScreenInstall() {
 
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return null;
-  try { return await navigator.serviceWorker.register("/sw.js"); } catch (e) { return null; }
+  try { return await navigator.serviceWorker.register("/sw.js"); } catch { return null; }
 }
 
 async function getExistingSubscription() {
@@ -66,7 +66,7 @@ async function enablePush(token, userId) {
 async function disablePush(token) {
   const sub = await getExistingSubscription();
   if (!sub) return;
-  try { await db.del(token, "push_subscriptions", `endpoint=eq.${encodeURIComponent(sub.endpoint)}`); } catch (e) {}
+  try { await db.del(token, "push_subscriptions", `endpoint=eq.${encodeURIComponent(sub.endpoint)}`); } catch {}
   await sub.unsubscribe();
 }
 

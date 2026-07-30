@@ -48,7 +48,7 @@ function logEvent(token, name, { groupId = null, competitionId = null, metadata 
       lastFired.set(k, now);
     }
     post(token, name, groupId, competitionId, metadata);
-  } catch (e) { /* sporing må aldrig påvirke brugeren */ }
+  } catch { /* sporing må aldrig påvirke brugeren */ }
 }
 
 // Som logEvent, men kun én gang pr. unik nøgle for hele sidens levetid —
@@ -60,7 +60,7 @@ function logEventOnce(token, name, key, opts) {
     if (firedOnce.has(k)) return;
     firedOnce.add(k);
     logEvent(token, name, opts);
-  } catch (e) { /* sporing må aldrig påvirke brugeren */ }
+  } catch { /* sporing må aldrig påvirke brugeren */ }
 }
 
 // ---------- Dashboard: read-helpers ----------

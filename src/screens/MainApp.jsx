@@ -58,7 +58,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       const state = deriveOnboarding({ ...signals, competitions: comps || competitions });
       if (state.complete) { onboardingDone.current = true; writeFlag(COMPLETE_KEY, "1"); }
       setOnboarding(state);
-    } catch (e) { /* onboarding må aldrig blokere appen — kortet udebliver bare */ }
+    } catch { /* onboarding må aldrig blokere appen — kortet udebliver bare */ }
   }
 
   async function loadLeagues() {
@@ -177,7 +177,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
             // rette det på, så det skal faktisk rette det. joinGroup er idempotent.
             if (comp.group_id) {
               try { await joinGroup(token, userId, comp.group_id); }
-              catch (e) { /* deltagelsen er intakt — bloker ikke navigationen */ }
+              catch { /* deltagelsen er intakt — bloker ikke navigationen */ }
             }
             await loadCompetitions();
             setTab("ligaer");
@@ -189,7 +189,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
               try {
                 const prof = await db.select(token, "profiles", `id=eq.${comp.created_by}&select=display_name`);
                 inviterName = prof[0]?.display_name || "";
-              } catch (e) { /* inviter-navn er valgfrit */ }
+              } catch { /* inviter-navn er valgfrit */ }
             }
             // Ligger konkurrencen i en liga, melder join én ind i BEGGE (A8) —
             // ligaens navn hentes, så bekræftelsen kan sige det højt i stedet
@@ -199,14 +199,14 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
               try {
                 const g = await db.select(token, "groups", `id=eq.${comp.group_id}&select=name`);
                 groupName = g[0]?.name || "";
-              } catch (e) { /* liga-navn er valgfrit */ }
+              } catch { /* liga-navn er valgfrit */ }
             }
             setPendingJoin({ competition: comp, inviterName, groupName });
           }
         } else {
           setJoinError("Ingen konkurrence fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
         }
-      } catch (e) {
+      } catch {
         setJoinError("Kunne ikke tilmelde dig konkurrencen lige nu. Prøv igen om lidt.");
       }
       clearPendingJoinCode();
@@ -230,7 +230,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
         } else {
           setJoinError("Ingen liga fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
         }
-      } catch (e) {
+      } catch {
         setJoinError("Kunne ikke tilmelde dig ligaen lige nu. Prøv igen om lidt.");
       }
       clearPendingLigaCode();
@@ -250,7 +250,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       setPendingGroupJoin(null);
       setTab("ligaer");
       setScreen({ type: "group", groupId: g.id });
-    } catch (e) {
+    } catch {
       setPendingGroupJoin(null);
       setJoinError("Kunne ikke tilmelde dig ligaen lige nu. Prøv igen om lidt.");
     }
@@ -269,7 +269,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       setPendingJoin(null);
       setTab("ligaer");
       setScreen({ type: "predictions", compFilter: comp.id });
-    } catch (e) {
+    } catch {
       setPendingJoin(null);
       setJoinError("Kunne ikke tilmelde dig konkurrencen lige nu. Prøv igen om lidt.");
     }

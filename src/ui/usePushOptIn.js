@@ -27,7 +27,7 @@ function usePushOptIn(token, userId) {
         }
         const sub = await getExistingSubscription();
         if (!cancelled) setState(sub ? "hidden" : "available");
-      } catch (e) { if (!cancelled) setState("hidden"); }
+      } catch { if (!cancelled) setState("hidden"); }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -43,7 +43,7 @@ function usePushOptIn(token, userId) {
   }
 
   function dismiss() {
-    try { localStorage.setItem(PUSH_DISMISS_KEY, "1"); } catch (e) {}
+    try { localStorage.setItem(PUSH_DISMISS_KEY, "1"); } catch {}
     setState("hidden");
   }
 

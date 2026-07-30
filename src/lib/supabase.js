@@ -22,7 +22,7 @@ async function restFetch(path, { method = "GET", body, token, prefer } = {}) {
   });
   if (!res.ok) {
     let msg = res.statusText;
-    try { msg = (await res.json()).message || msg; } catch (e) {}
+    try { msg = (await res.json()).message || msg; } catch {}
     throw new Error(msg);
   }
   if (res.status === 204) return null;
@@ -58,13 +58,13 @@ const auth = {
 };
 const SESSION_KEY = "pc_session";
 function saveSession(session) {
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch (e) {}
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch {}
 }
 function loadSession() {
-  try { const raw = localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+  try { const raw = localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
 }
 function clearSession() {
-  try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+  try { localStorage.removeItem(SESSION_KEY); } catch {}
 }
 
 export { SUPABASE_URL, SUPABASE_KEY, restFetch, db, auth, saveSession, loadSession, clearSession };
