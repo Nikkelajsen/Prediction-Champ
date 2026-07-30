@@ -8,14 +8,19 @@ import { roundLabel } from "../lib/scoring.js";
 import { C, font } from "../ui/theme.js";
 import { BackBar, Card, Eyebrow, InfoDot, Move, PlayerName } from "../ui/components.jsx";
 
-// Karriereskærmen blander bevidst TO omfang, og det var ikke til at se på den:
-// Titler, Rekorder og basistallene er globale (Championship + global rating —
-// alle brugere er med), mens Milepælene er øjeblikke fra brugerens egne
-// konkurrencer. En bruger læste derfor "8. plads" som en placering i én af sine
-// egne konkurrencer. Hvert afsnit siger nu sit omfang med en synlig linje —
-// ikke kun bag en InfoDot, som skal klikkes for at hjælpe.
-const scopeNote = { color: C.muted, fontSize: 12, lineHeight: 1.45, marginTop: -2, marginBottom: 6 };
-
+// Karriereskærmen blander bevidst TO omfang: Titler, Rekorder og basistallene er
+// globale (Championship + global rating — alle brugere er med), mens Milepælene er
+// øjeblikke fra brugerens egne konkurrencer. En bruger læste derfor "8. plads" som
+// en placering i én af sine egne konkurrencer.
+//
+// Omfanget forklares på ÉN måde: en InfoDot pr. sektion. Et mellemtrin havde
+// desuden en synlig brødtekstlinje under hver overskrift, men den løsning blev
+// afvist af brugeren — fem forklarende afsnit gjorde siden tungere at skimme end
+// den tvivl, de skulle fjerne, var værd. Skærmen bærer derfor kun de tal, der
+// navngiver deres eget omfang i selve sætningen ("i Championships rundeliga",
+// "globale rating"), og forklaringen ligger ét klik væk. Ny sektion med tal ⇒ ny
+// InfoDot, ikke ny brødtekst.
+//
 // Rundenøgler kommer som tekst fra to kilder (rating_history.round_key er text,
 // matches.round_key er date), så nøglen valideres, før den bliver en etiket —
 // roundLabel på en ikke-dato giver "Invalid Date – Invalid Date".
@@ -302,10 +307,14 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
       {hasH2H && (
         <Card>
           <div style={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
-            {h2hSentence(data.h2h, head.display_name)}
-          </div>
-          <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.45, marginTop: 6 }}>
-            Runde for runde, kun kampe fra konkurrencer I begge er med i — hver runde tæller én gang.
+            {h2hSentence(data.h2h, head.display_name)}{" "}
+            <InfoDot title="Jeres indbyrdes opgør">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div>Tallene dækker <b>kun</b> kampe fra konkurrencer, I begge er med i — ikke hele Championship, og ikke alt hvad I hver især har tippet.</div>
+                <div>Et <b>møde</b> er én runde. Deler I flere konkurrencer, der dækker de samme kampe, tæller runden stadig kun én gang.</div>
+                <div>Kun du kan se denne linje.</div>
+              </div>
+            </InfoDot>
           </div>
         </Card>
       )}
@@ -323,10 +332,13 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
       {/* Titler — globalt omfang, ligesom Rekorder nedenfor */}
       {hasTitles && (
         <div>
-          <Eyebrow>Titler · Championship</Eyebrow>
-          <p style={scopeNote}>
-            Fra Championships sæson-, måneds- og rundeliga, hvor alle brugere automatisk er med — ikke fra egne konkurrencer.
-          </p>
+          <Eyebrow>Titler · Championship <InfoDot title="Titler">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div>Titler kommer fra <b>Championships</b> sæson-, måneds- og rundeliga, hvor <b>alle brugere</b> automatisk er med.</div>
+              <div>De kommer altså <b>ikke</b> fra dine egne konkurrencer — dem du selv opretter og inviterer til.</div>
+              <div>En titel gives kun for en <b>afsluttet</b> sæson, måned eller runde. Er to spillere helt lige, deles titlen.</div>
+            </div>
+          </InfoDot></Eyebrow>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {/* Sæsontitlen står FØRST: Championship har tre kåringer, og sæsonen
                 er den største af dem. Den manglede helt, så en afsluttet sæson
@@ -351,24 +363,19 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
       )}
 
       {/* Rekorder ("bedste nogensinde") — GLOBALT omfang: Championship + global
-          rating, ikke brugerens egne konkurrencer. Første forsøg på at gøre det
-          klart var en InfoDot alene; den var både skjult bag et klik OG upræcis
-          ("på tværs af alle dine konkurrencer og ligaer" læses som en opgørelse
-          PR. egen konkurrence, hvor rangen faktisk måles mod samtlige brugere i
-          rundeligaen). Nu navngiver hver linje sin egen kilde. */}
+          rating, ikke brugerens egne konkurrencer. Omfanget forklares i InfoDot'en
+          og navngives i hver enkelt linje ("i Championships rundeliga", "globale
+          rating"); der står bevidst INGEN forklarende brødtekst på selve siden. */}
       {hasRecords && (
         <div>
           <Eyebrow>Rekorder · Championship <InfoDot title="Rekorder">
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div>Rekorderne kommer fra <b>Championship</b> og din <b>globale rating</b> — de to steder, hvor <b>alle brugere</b> automatisk er med.</div>
+              <div>Rekorderne gælder <b>Championship</b> og din <b>globale rating</b> — de to steder, hvor <b>alle brugere</b> automatisk er med. Altså <b>ikke</b> dine egne konkurrencer.</div>
               <div>Rundeplacering og stime måles i <b>Championships rundeliga</b>, altså mod samtlige brugere med point i runden — ikke mod deltagerne i én af dine egne konkurrencer.</div>
               <div>Ratingen er den samme, du ser på <b>Rating-fanen</b> (én global rating på tværs af alle konkurrencer og turneringer).</div>
               <div><b>Milepælene</b> nedenfor er derimod konkrete øjeblikke, de fleste i en navngiven konkurrence.</div>
             </div>
           </InfoDot></Eyebrow>
-          <p style={scopeNote}>
-            Championship og global rating — hvor alle brugere er med. Ikke dine egne konkurrencer.
-          </p>
           <Card>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 14, color: C.text, lineHeight: 1.6 }}>
               {/* Rækkefølgen går fra det mest konkrete til det mest abstrakte:
@@ -406,10 +413,14 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
           kun null for de globale regler: rating og måned). */}
       {hasMilestones && (
         <div>
-          <Eyebrow>Milepæle</Eyebrow>
-          <p style={scopeNote}>
-            Øjeblikke fra dine runder — de fleste i en af dine egne konkurrencer, resten fra Championship og din rating.
-          </p>
+          <Eyebrow>Milepæle <InfoDot title="Milepæle">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div>Milepæle er <b>konkrete øjeblikke</b> fra dine runder — de fleste i <b>en af dine egne konkurrencer</b>, som står nævnt i teksten. Resten kommer fra Championship og din rating.</div>
+              <div>Det er dermed et andet omfang end <b>Rekorder</b> ovenfor, som altid gælder Championship og din globale rating.</div>
+              <div>De skrives automatisk, når noget værd at huske sker i en runde. Kun de <b>nyeste 20</b> vises — resten kan foldes ud nederst.</div>
+              <div>Kun du kan se dine milepæle.</div>
+            </div>
+          </InfoDot></Eyebrow>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {visibleMilestones.map((m) => (
               <Card key={m.id} style={{ padding: 12 }}>
@@ -452,10 +463,10 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div>Dine rivaler er dem, du har de <b>mest jævnbyrdige</b> opgør med — mindst forskel mellem sejre og nederlag.</div>
               <div>Et <b>møde</b> er én runde, hvor I begge har tippet i en konkurrence, I deler. Deler I flere konkurrencer, tæller runden stadig kun én gang.</div>
+              <div>Kun kampe fra <b>de konkurrencer, du deler med dem</b>, tælles med — runde for runde.</div>
               <div>Kun du kan se dine rivaler.</div>
             </div>
           </InfoDot></Eyebrow>
-          <p style={scopeNote}>Fra de konkurrencer, du deler med dem — runde for runde.</p>
           <Card>
             <div style={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
               {/* Punktum efter navnet frem for tankestreg: rivalTally har selv en
@@ -488,12 +499,11 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
 
       {/* Basistal (diskret, nederst) — karriere-brede: ALLE tippede kampe,
           uanset hvilken konkurrence de blev tippet i (et tip er globalt pr.
-          kamp). Samme scope-spørgsmål som Rekorder, så det står også her. */}
+          kamp). Kortet har bevidst ingen overskrift (spec afsnit 2: tallene skal
+          være sekundære), så forklaringen hænger på en InfoDot i selve rækken
+          frem for på en overskrift, der ville gøre sektionen tungere. */}
       <Card style={{ padding: 12, background: "transparent", borderStyle: "dashed" }}>
-        <div style={{ color: C.muted, fontSize: 11, marginBottom: 6 }}>
-          Hele karrieren · alle kampe du har tippet, uanset konkurrence
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", color: C.muted, fontSize: 12 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 18px", color: C.muted, fontSize: 12 }}>
           <span><b style={{ color: C.text }}>{base.total_points}</b> point</span>
           <span>🎯 <b style={{ color: C.text }}>{base.exact_count}</b> præcise</span>
           {/* De korrekte udfald (+1) blev hentet i `base` uden nogensinde at blive
@@ -505,6 +515,16 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
               udfald (+1) uretfærdigt talte som en fejl. */}
           <span><b style={{ color: C.text }}>{hitRate}%</b> præcise pr. kamp</span>
           <span><b style={{ color: C.text }}>{base.matches}</b> tippede kampe</span>
+          {/* Tallene først, forklaringen sidst — ikonet må ikke stå foran det,
+              det handler om. */}
+          <InfoDot title="Basistal">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div>Tallene dækker <b>hele din karriere</b> — alle kampe du har tippet, uanset hvilken konkurrence de blev tippet i. Du tipper kun én gang pr. kamp, og tippet tæller alle de steder, kampen er med.</div>
+              <div><b>Point</b> er 3 for et præcist resultat og 1 for et korrekt udfald. Derfor kan pointsummen ikke regnes ud af de præcise alene — de korrekte udfald står med.</div>
+              <div><b>Præcise pr. kamp</b> er andelen af dine tips, der ramte resultatet helt. Et korrekt udfald tæller ikke med her, selvom det gav point.</div>
+              <div>Tallene bruger samme regnestykke som Championship-fanen, så de altid stemmer med stillingerne.</div>
+            </div>
+          </InfoDot>
         </div>
       </Card>
     </div>
