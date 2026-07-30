@@ -8,7 +8,9 @@
 //      læst fra DB-viewet round_standings (samme kilde som Championship-fanen).
 // notification_log sikrer, at samme besked aldrig sendes to gange.
 //
-// Kald med: /api/send-notifications?secret=<SYNC_SECRET>          (ekstern cron)
+// Kald med: /api/send-notifications  med headeren  x-sync-secret: <SYNC_SECRET>  (ekstern cron)
+//   (?secret=<SYNC_SECRET> virker stadig som fallback, men er på vej ud — ROADMAP A11.
+//    Brug ikke den form til nye jobs: hemmeligheden havner i request-logs.)
 //   valgfrit: &hours=3      hvor tæt på rundelåsen deadline-påmindelsen sendes
 //   valgfrit: &dryRun=true  vis hvad der VILLE blive sendt, uden at sende
 // Offentligt: /api/send-notifications?action=vapidKey  (bruges af frontendens tilmelding)
@@ -19,6 +21,7 @@
 //   VAPID_SUBJECT (valgfri, mailto:-adresse til push-tjenesterne)
 
 import webpush from "web-push";
+import { createSb, isAuthorized } from "./_shared.js";
 
 const HOUR = 3600 * 1000;
 const LOCK_LEAD_MS = HOUR; // runden låser 1 time før sin tidligste kickoff
@@ -78,42 +81,17 @@ export default async function handler(req, res) {
     }
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
-    async function sb(path, opts = {}) {
-      const headers = {
-        apikey: SERVICE_KEY,
-        Authorization: `Bearer ${SERVICE_KEY}`,
-        "Content-Type": "application/json",
-        ...(opts.prefer ? { Prefer: opts.prefer } : {}),
-      };
-      const r = await fetch(`${SUPABASE_URL}${path}`, { method: opts.method, headers, body: opts.body });
-      if (!r.ok) throw new Error(`Supabase ${path}: ${r.status} ${await r.text()}`);
-      if (r.status === 204) return null;
-      const t = await r.text();
-      return t ? JSON.parse(t) : null;
-    }
+    const sb = createSb(SUPABASE_URL, SERVICE_KEY);
 
     // ---- autorisation: enten en admin-brugers login, eller den delte hemmelige nøgle (til ekstern cron) ----
-    // Hemmeligheden læses helst fra headeren x-sync-secret (så den ikke havner i
-    // request-logs); query-parameteren ?secret= bevares som fallback for eksisterende cron-jobs.
-    async function isAuthorized() {
-      const providedSecret = req.headers["x-sync-secret"] || req.query.secret;
-      if (SYNC_SECRET && providedSecret === SYNC_SECRET) return true;
-      const authHeader = req.headers.authorization;
-      if (authHeader?.startsWith("Bearer ")) {
-        const userToken = authHeader.slice(7);
-        try {
-          const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-            headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${userToken}` },
-          });
-          if (!userRes.ok) return false;
-          const user = await userRes.json();
-          const profs = await sb(`/rest/v1/profiles?id=eq.${user.id}&select=is_admin`);
-          return !!profs[0]?.is_admin;
-        } catch { return false; }
-      }
-      return false;
-    }
-    if (!(await isAuthorized())) {
+    // Reglerne bor i api/_shared.js, så de er ens for alle tre job-endpoints.
+    const auth = await isAuthorized(req, {
+      sb,
+      supabaseUrl: SUPABASE_URL,
+      serviceKey: SERVICE_KEY,
+      syncSecret: SYNC_SECRET,
+    });
+    if (!auth.ok) {
       return res.status(401).json({ error: "Ikke autoriseret" });
     }
 

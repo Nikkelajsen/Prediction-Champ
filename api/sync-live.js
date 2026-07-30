@@ -22,6 +22,8 @@
 // Miljøvariabler (samme som sync-matches):
 //   SPORTMONKS_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SYNC_SECRET
 
+import { createSb, isAuthorized } from "./_shared.js";
+
 // Hvor langt tilbage/frem vi leder efter kampe, der kan være i gang.
 // 6 timer bagud dækker rigeligt en kamp med forlænget spilletid og forsinkelser.
 const WINDOW_BACK_MS = 6 * 60 * 60 * 1000;
@@ -73,40 +75,16 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Miljøvariabler mangler i Vercel-projektet (SPORTMONKS_TOKEN, SUPABASE_URL eller SUPABASE_SERVICE_ROLE_KEY)" });
     }
 
-    async function sb(path, opts = {}) {
-      const headers = {
-        apikey: SERVICE_KEY,
-        Authorization: `Bearer ${SERVICE_KEY}`,
-        "Content-Type": "application/json",
-        ...(opts.prefer ? { Prefer: opts.prefer } : {}),
-      };
-      const r = await fetch(`${SUPABASE_URL}${path}`, { method: opts.method, headers, body: opts.body });
-      if (!r.ok) throw new Error(`Supabase ${path}: ${r.status} ${await r.text()}`);
-      if (r.status === 204) return null;
-      const t = await r.text();
-      return t ? JSON.parse(t) : null;
-    }
+    const sb = createSb(SUPABASE_URL, SERVICE_KEY);
 
     // ---- autorisation: samme regler som sync-matches (header foretrukket) ----
-    async function isAuthorized() {
-      const providedSecret = req.headers["x-sync-secret"] || req.query.secret;
-      if (SYNC_SECRET && providedSecret === SYNC_SECRET) return true;
-      const authHeader = req.headers.authorization;
-      if (authHeader?.startsWith("Bearer ")) {
-        const userToken = authHeader.slice(7);
-        try {
-          const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-            headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${userToken}` },
-          });
-          if (!userRes.ok) return false;
-          const user = await userRes.json();
-          const profs = await sb(`/rest/v1/profiles?id=eq.${user.id}&select=is_admin`);
-          return !!profs[0]?.is_admin;
-        } catch { return false; }
-      }
-      return false;
-    }
-    if (!(await isAuthorized())) {
+    const auth = await isAuthorized(req, {
+      sb,
+      supabaseUrl: SUPABASE_URL,
+      serviceKey: SERVICE_KEY,
+      syncSecret: SYNC_SECRET,
+    });
+    if (!auth.ok) {
       return res.status(401).json({ error: "Ikke autoriseret" });
     }
 
