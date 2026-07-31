@@ -46,7 +46,7 @@ Der er to måder at sende den, og begge virker i dag:
 | Måde | Status |
 |---|---|
 | Headeren `x-sync-secret: <SYNC_SECRET>` | **Den rigtige.** Brug altid denne til nye jobs. |
-| Query-parameteren `?secret=<SYNC_SECRET>` | Fallback på vej ud (ROADMAP **A11**). Hemmeligheden havner i request-logs. |
+| Query-parameteren `?secret=<SYNC_SECRET>` | Fallback på vej ud (BACKLOG **A11**). Hemmeligheden havner i request-logs. |
 
 Reglerne bor ét sted: `isAuthorized()` i `api/_shared.js`.
 

@@ -13,7 +13,9 @@
 | kampsynkronisering, live-resultater | §8 · `api/sync-matches.js`, `api/sync-live.js` |
 | miljøvariabler, deploy, tjekliste før merge | §9, §11 |
 | ny turnering | §10 · `docs/features/turnering-2.md` |
-| kendte begrænsninger og teknisk gæld | §12 |
+| kendte begrænsninger (vilkår, der ikke laves om) | §12 |
+| noget der ikke er bygget, ryddet op eller besluttet endnu | `docs/BACKLOG.md` |
+| en idé du vil have gemt | `docs/BACKLOG.md` — skriv én rå linje i indbakken øverst |
 | en fejl, der ligner en, du har set før | §13 (fejlfindingslog) |
 | brugerstatistik, aktivitet | §15 |
 | push-notifikationer | §16 · `api/send-notifications.js` |
@@ -27,16 +29,22 @@
 
 Ved produktbeslutninger og nye features læses desuden:
 - `docs/PRODUCT_BOOK.md` — produktfilosofi (hvorfor produktet findes, og hvilke principper der beskytter dets identitet).
-- `docs/ROADMAP.md` — status, prioritering og **åbne** beslutninger. Afgjorte beslutninger ligger i `docs/DECISIONS.md`; slå kun op der, når du skal vide *hvorfor* noget blev, som det blev.
+- `docs/ROADMAP.md` — status og prioritering: hvad er leveret, hvad er næste.
+- `docs/BACKLOG.md` — alt det uafklarede: **åbne** beslutninger, ubyggede opgaver, teknisk gæld og ideer. Hører sammen med ROADMAP'en — status i den ene, det manglende i den anden. Afgjorte beslutninger ligger i `docs/DECISIONS.md`; slå kun op der, når du skal vide *hvorfor* noget blev, som det blev.
 - relevant spec i `docs/features/` — fuld feature-specifikation før implementering.
 
 ## Når noget leveres
 
-Når en feature leveres eller en beslutning træffes, opdatér **både**:
-- `docs/ROADMAP.md` (status + beslutningslog), og
+Når en feature leveres eller en beslutning træffes, opdatér **alle tre**:
+- `docs/ROADMAP.md` (status + beslutningslog),
+- `docs/BACKLOG.md` — **slet** de rækker, leverancen lukker, og ryd indbakken, og
 - den relevante spec i `docs/features/`, hvis den leverede adfærd afviger fra det, spec'en beskriver.
 
-Det andet punkt er lige så vigtigt som det første: en spec beskriver, hvad der var *planlagt*, og bliver forkert i det øjeblik leverancen afviger — eller senere rulles tilbage. Markér rettelser efter levering tydeligt i spec'en frem for at slette udkastet, så det fremgår, at noget blev ændret undervejs.
+Det sidste punkt er lige så vigtigt som det første: en spec beskriver, hvad der var *planlagt*, og bliver forkert i det øjeblik leverancen afviger — eller senere rulles tilbage. Markér rettelser efter levering tydeligt i spec'en frem for at slette udkastet, så det fremgår, at noget blev ændret undervejs.
+
+Backloggen er den ene fil, hvor der **slettes** frem for streges ud: arkivet findes allerede i `DECISIONS.md` og `CHANGELOG.md`, og en liste, der kun vokser, holder op med at kunne skimmes. Undtagelsen er en idé, der forkastes — den får en linje i "Forkastede ideer", fordi den ellers bliver foreslået igen.
+
+Støder du undervejs på noget, der burde bygges, ryddes op eller besluttes, men som ligger uden for opgaven, så skriv én linje i backloggens indbakke frem for kun at nævne det i svaret. **Udvid ikke opgaven — notér den.**
 
 ## Kommandoer
 

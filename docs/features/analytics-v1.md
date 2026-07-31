@@ -374,16 +374,18 @@ Ingen af de to lock-policy-filer eller `sql/story_engine.sql`/`sql/groups.sql`/`
 
 ## 13. Foreslået, men ikke bygget (30. juli 2026)
 
-Fundet under gennemgangen, bevidst ikke leveret her. Rangeret efter forventet værdi pr. indsats:
+Fundet under gennemgangen, bevidst ikke leveret her. Rangeret efter forventet værdi pr. indsats.
+
+**De tre åbne forslag følges nu i [`../BACKLOG.md`](../BACKLOG.md) (31. juli 2026)** som `I1`–`I3`. Tabellen her er bevaret som spec'ens egen optegnelse over, hvad gennemgangen fandt — men en idé, der kun står i en leveret spec, bliver ikke set igen.
 
 | # | Forslag | Hvorfor det er værd at overveje |
 |---|---|---|
 | ~~1~~ | ~~**Tragt for nye brugere**~~ | ✅ **Bygget 30. juli 2026** — se afsnit 5C. |
 | ~~2~~ | ~~**Sammenlign push-tidspunkt med deltagelse**~~ | ✅ **Bygget 30. juli 2026** — se afsnit 5E. |
 | ~~3~~ | ~~**Story Engine-regler pr. visning**~~ | ✅ **Bygget 30. juli 2026** — se afsnit 5D. |
-| 4 | **Eksport-knap ("kopiér som CSV/JSON")** | Spec'en siger, at SQL-editoren *er* eksport-mekanismen. Det passer for ad hoc-analyse, men ikke for "send tallene videre" — og en knap koster ingen ny afhængighed. |
-| 5 | **Diagnose-historik** | Diagnosen er et øjebliksbillede. Uden historik kan man ikke se, at en liga gik fra "Sund" til "Kun en del tipper" for tre uger siden. Kræver dog et sted at gemme snapshottet — første gang noget i Analytics ville have brug for et cron eller en tabel med tidsserier, hvilket arkitekturvalg #3 lukkede døren for. Tages op, hvis behovet melder sig igen. |
-| 6 | **Alarm ved tilstandsskifte** | Naturlig følge af #5: en liga, der skifter til rød, er interessant i det øjeblik det sker, ikke næste gang nogen åbner admin. Afhænger af #5. |
+| 4 | **Eksport-knap ("kopiér som CSV/JSON")** | Spec'en siger, at SQL-editoren *er* eksport-mekanismen. Det passer for ad hoc-analyse, men ikke for "send tallene videre" — og en knap koster ingen ny afhængighed. → **`I1`** i [`../BACKLOG.md`](../BACKLOG.md). |
+| 5 | **Diagnose-historik** | Diagnosen er et øjebliksbillede. Uden historik kan man ikke se, at en liga gik fra "Sund" til "Kun en del tipper" for tre uger siden. Kræver dog et sted at gemme snapshottet — første gang noget i Analytics ville have brug for et cron eller en tabel med tidsserier, hvilket arkitekturvalg #3 lukkede døren for. Tages op, hvis behovet melder sig igen. → **`I2`** i [`../BACKLOG.md`](../BACKLOG.md). |
+| 6 | **Alarm ved tilstandsskifte** | Naturlig følge af #5: en liga, der skifter til rød, er interessant i det øjeblik det sker, ikke næste gang nogen åbner admin. Afhænger af #5. → **`I3`** i [`../BACKLOG.md`](../BACKLOG.md), hvor afhængigheden er bevaret som "afhænger af `I2`". |
 
 ---
 

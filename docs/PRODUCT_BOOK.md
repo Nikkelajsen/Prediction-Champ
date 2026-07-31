@@ -153,7 +153,7 @@ Valget giver én kodebase, hurtige deployments, nem deling via links og stærk s
 
 Udviklingen organiseres én feature ad gangen. Hver feature får et formål, brugerflow, forretningsregler, databaseændringer, acceptkriterier, testcases og en implementeringsprompt til Claude Code. AI-agenten skal implementere – ikke opfinde produktet. Feature-specifikationer lever i [`features/`](./features/).
 
-Produktbeslutninger samles i en beslutningslog ([`ROADMAP.md`](./ROADMAP.md), afsnittet "Åbne beslutninger"), så tidligere spørgsmål ikke stilles igen, og så modstridende løsninger undgås. Dokumentationen og koden skal udvikle sig sammen.
+Produktbeslutninger samles i en beslutningslog — de åbne i [`BACKLOG.md`](./BACKLOG.md), de afgjorte i [`DECISIONS.md`](./DECISIONS.md) — så tidligere spørgsmål ikke stilles igen, og så modstridende løsninger undgås. Dokumentationen og koden skal udvikle sig sammen.
 
 ---
 
