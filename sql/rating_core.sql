@@ -9,9 +9,15 @@
 -- eksporten i stykker, eller blev filen rullet tilbage, var algoritmen væk.
 --
 -- Funktionskroppene er klippet ORDRET ud af sql/schema.sql (eksport af 30. juli
--- 2026) — med ÉN bevidst undtagelse, markeret i recompute_ratings(): logistikken
--- i e_sum regnes nu i double precision i stedet for numeric. Alt andet er
--- uændret, så filen fortsat beskriver det, der kører i produktion.
+-- 2026) — med TO bevidste undtagelser, begge markeret i recompute_ratings():
+--   1. logistikken i e_sum regnes i double precision i stedet for numeric
+--      (30. juli 2026, ren optimering — tallene må IKKE flytte sig);
+--   2. `_rs` joiner nu seasons/leagues og tæller kun **officielle** turneringer
+--      (31. juli 2026, A17 — her SKAL tallene flytte sig).
+-- Forskellen på de to er hele pointen med ækvivalenstesten: den frosne reference
+-- i sql/tests/_reference_recompute.sql fanger #1 og blev bevidst opdateret med
+-- #2. Alt andet er uændret, så filen fortsat beskriver det, der kører i
+-- produktion.
 --
 -- Den ene linje er hele optimeringen: en fuld genberegning af en sæson gik fra
 -- 19 sekunder til 0,1 sekund (31 spillere, 38 runder). Se afsnittet om måling
@@ -129,10 +135,32 @@ end;
 $$;
 
 -- ---------- selve Elo-beregningen ----------
--- Multiplayer-Elo: ét ratingskridt pr. round_key på tværs af alle ligaer.
+-- Multiplayer-Elo: ét ratingskridt pr. round_key på tværs af alle OFFICIELLE
+-- ligaer (`leagues.is_official`, se sql/tournament_scope.sql).
 -- Rundescore = point / antal tippede kampe, tiebreak på antal præcise.
 -- Alle deltagere sammenlignes én mod én. K = 32 de første 5 runder, derefter 24.
 -- Fuld genberegning fra bunden — se bemærkningen øverst i filen.
+--
+-- HVORFOR FILTERET (A17, 31. juli 2026)
+-- Indtil da havde beregningen intet liga-filter: enhver kamp, brugeren kunne
+-- tippe, flyttede ratingen. Da A2 gav Championship to niveauer og lod
+-- `is_official` afgøre titlerne, blev "officiel" to forskellige ting afhængigt
+-- af hvilken skærm man stod på — og en turnering kunne flytte ratingen uden at
+-- kunne vindes. Nu betyder `is_official` det samme overalt: en turnering tæller
+-- enten alle officielle steder eller ingen. Din egen konkurrence tæller den
+-- altid.
+--
+-- Bemærk, at problemet IKKE var bredde: rundescoren er `pts / n`, altså et
+-- gennemsnit, så den, der tipper 12 kampe, havde aldrig et forspring på den,
+-- der tipper 6. Det, filteret fjerner, er en systematisk skævhed af en anden
+-- slags — to spillere blev sammenlignet på delvist forskellige kampsæt i samme
+-- runde, og er den ene turnering lettere at forudsige end den anden, følger
+-- rating med.
+--
+-- VILKÅR, ikke en fejl: en spiller, hvis tips ALLE ligger i uofficielle
+-- turneringer, får ingen rating-række overhovedet. Brugerfladen viser "–" i
+-- stillingerne og skjuler rating-feltet på Hjem; botemidlet er at forfremme
+-- turneringen til officiel.
 
 CREATE OR REPLACE FUNCTION public.recompute_ratings() RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
@@ -152,6 +180,8 @@ begin
          sum(case when p.pred_home = m.home_score and p.pred_away = m.away_score then 1 else 0 end) as exacts
   from predictions p
   join matches m on m.id = p.match_id
+  join seasons s on s.id = m.season_id
+  join leagues l on l.id = s.league_id and l.is_official
   where m.home_score is not null and m.away_score is not null
     and p.pred_home is not null and p.pred_away is not null
   group by m.round_key, p.user_id;

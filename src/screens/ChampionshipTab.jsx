@@ -195,11 +195,17 @@ const WHY_NOT_ALL = "En turnering kan tippes, uden at den afgør titler. "
 // juli — et tal skal navngive sit eget omfang i den sætning, det står i, og en
 // InfoDot må uddybe, men aldrig alene bære det, der skal til for at læse tallet
 // rigtigt. Uden officielle turneringer er der ingen stilling at forklare.
+//
+// A17 (31. juli 2026) gjorde sætningen KORTERE: ratingen filtrerer nu også på
+// `is_official`, så en uofficiel turnering tæller ét sted i stedet for to. Den
+// første udgave måtte skrive "…og i din rating, men tæller ikke med her", altså
+// en ledsætning om, at "officiel" betød noget forskelligt på to skærme. At den
+// ledsætning var nødvendig, var i sig selv et af argumenterne for A17.
 export function scopeNote(official, unofficial) {
   if (!official?.length || !unofficial?.length) return null;
   return `Championship afgøres af ${joinNames(official.map((l) => l.name))}. `
-    + `${joinNames(unofficial.map((l) => l.name))} kan tippes og giver point i din konkurrence `
-    + `og i din rating, men tæller ikke med her.`;
+    + `${joinNames(unofficial.map((l) => l.name))} kan tippes og giver point i din konkurrence, `
+    + `men tæller hverken i Championship eller i rating.`;
 }
 
 function ChampionshipTab({ token, userId, leagues = [], openProfile }) {

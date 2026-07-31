@@ -9,6 +9,18 @@
 -- opdateres bevidst — og den opdatering er så selve beslutningen om, at tallene
 -- må flytte sig. Så længe den står urørt, kan ingen optimering ændre resultatet
 -- uden at testen fanger det.
+--
+-- OPDATERET ÉN GANG — 31. juli 2026 (A17). `_rs` joiner nu seasons/leagues og
+-- tæller kun **officielle** turneringer. Det er den slags "meningsfulde ændring",
+-- afsnittet ovenfor beskriver: tallene flytter sig med vilje, fordi en turnering,
+-- der ikke kan vindes, heller ikke skal kunne flytte ratingen. Begrundelsen står
+-- i docs/DECISIONS.md.
+--
+-- Bemærk hvad opdateringen KOSTER: fra nu af kan testen ikke længere selv bevise,
+-- at filteret virker — begge sider har det jo. Beviset er derfor flyttet til en
+-- selvstændig sektion i rating_equivalence.sql, som tilføjer en uofficiel
+-- turnering EFTER sammenligningen og kræver, at intet rykker sig. Rører du
+-- referencen igen, så husk den samme dobbelthed.
 
 CREATE OR REPLACE FUNCTION public.recompute_ratings_reference() RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
@@ -28,6 +40,8 @@ begin
          sum(case when p.pred_home = m.home_score and p.pred_away = m.away_score then 1 else 0 end) as exacts
   from predictions p
   join matches m on m.id = p.match_id
+  join seasons s on s.id = m.season_id
+  join leagues l on l.id = s.league_id and l.is_official
   where m.home_score is not null and m.away_score is not null
     and p.pred_home is not null and p.pred_away is not null
   group by m.round_key, p.user_id;

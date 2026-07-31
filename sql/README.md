@@ -34,7 +34,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | # | Fil | Formål | Status |
 |---|---|---|---|
 | — | `schema.sql` | **Genereret** øjebliksbillede af hele `public`. Kør den i et nyt/staging-projekt i stedet for hele listen | Redigér aldrig i hånden |
-| 0 | `rating_core.sql` | `pc_points()`, `round_key()`, `recompute_ratings()` + tabellerne `ratings`/`rating_history` | Aktiv — **skal køres før #5**. Tilføjet 30. juli 2026. Indeholder optimeringen fra samme dag (logistikken i `double precision`), som gør en fuld genberegning ~175× hurtigere. **Kør den i produktion** — det er den eneste af ændringerne her, der reelt ændrer adfærd |
+| 0 | `rating_core.sql` | `pc_points()`, `round_key()`, `recompute_ratings()` + tabellerne `ratings`/`rating_history` | Aktiv — **skal køres før #5**. Tilføjet 30. juli 2026 med optimeringen fra samme dag (logistikken i `double precision`, ~175× hurtigere). **Skal gen-køres efter #20** (31. juli 2026, A17): `_rs` joiner nu `seasons`/`leagues` og tæller kun **officielle** turneringer. ⚠️ **Gen-kørslen ændrer kun funktionen, ikke tallene** — `ratings` står uændret, til noget kalder `recompute_ratings()`. Tryk "Opdater ratings" i Admin bagefter, ellers ligger de gamle tal og venter på næste kampresultat |
 | 1 | `standings_views.superseded.sql` | Første udgave af `round_standings` + `season_standings` | ⚠️ **Afløst af `standings_tiebreakers.sql`** — kør den aldrig. Omdøbt 30. juli 2026, så filnavnet selv advarer; kun bevaret for historikken |
 | 2 | `user_stats.sql` | `user_activity_days`, `touch_activity()`, `admin_user_stats()` | Aktiv |
 | 3 | `username_constraints.sql` | Længde-constraint på `profiles.display_name` (2–20), `username_available()` | Aktiv |
@@ -83,6 +83,14 @@ mod en frisk PostgreSQL-container og sammenligner `recompute_ratings()` med den
 
 Den frosne reference må kun opdateres, hvis rating-algoritmen ændres *meningsfuldt* —
 og den opdatering er så selve beslutningen om, at tallene må flytte sig.
+
+**Det er sket én gang: 31. juli 2026 (A17)**, hvor ratingen fik samme `is_official`-filter
+som Championships stillinger. Bemærk dobbeltheden, hvis det sker igen: når referencen får
+en ændring med, kan testen ikke længere selv bevise, at ændringen virker — begge sider er
+jo enige. Beviset skal derfor flyttes til en egen sektion, der ændrer *tilstanden* og
+kræver, at intet rykker sig. Sådan en sektion ligger nu nederst i
+`rating_equivalence.sql`, og den er verificeret ved at fjerne filteret igen og se testen
+fejle.
 
 Testen kan køres lokalt mod enhver tom database:
 

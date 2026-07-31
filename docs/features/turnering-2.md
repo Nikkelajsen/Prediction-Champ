@@ -140,6 +140,8 @@ Verificeret mod PostgreSQL 16.13 med en fixture, hvor én spiller tipper begge t
 
 **Rettet efter leveringen (31. juli 2026):** *"Championship er dermed uændret i dag"* holdt i databasen, men ikke på skærmen. Både turneringsvælgeren og "To niveauer"-forklaringen i `ChampionshipTab.jsx` er gated på **mere end én officiel** turnering — så med præcis én officiel (Superligaen) og én uofficiel (Skotland) viste fanen ingen af delene, og de skotske kampe forsvandt ud af stillingen uden ét ord om hvorfor. Den bruger, der tipper Skotland, ser sine point tælle i konkurrencen og i ratingen, og ikke her. `scopeNote()` (samme fil, unit-testet) navngiver derfor begge sider — *"Championship afgøres af Superligaen. Scotland Premiership kan tippes og giver point i din konkurrence og i din rating, men tæller ikke med her."* — som en synlig linje på runde- og månedskortet, med hvorfor'et i InfoDot'en. Sæson-InfoDot'en siger nu tilsvarende, at den uofficielle turnering ingen sæsonstilling har. Reglen bag: et tal skal navngive sit eget omfang i den sætning, det står i (`DECISIONS.md`, 30. juli 2026). Linjen forsvinder af sig selv, den dag alle synlige turneringer er officielle.
 
+**Rettet igen samme dag (A17):** citatet ovenfor er den **første** udgave af sætningen. Ratingen filtrerer nu også på `is_official`, så sætningen lyder *"…kan tippes og giver point i din konkurrence, men tæller hverken i Championship eller i rating."* Ledsætningen om, at Skotland tælle**de** i ratingen, var netop det, der gjorde reglen svær at forklare — og dermed selv et af argumenterne for A17. Den gamle formulering står som citat frem for at blive slettet, fordi rækkefølgen er pointen: fejlen blev først *synlig*, da den skulle skrives ned i én sætning.
+
 ---
 
 ## 4. Forudsætning

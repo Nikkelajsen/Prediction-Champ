@@ -135,13 +135,20 @@ describe("scopeNote (hvad tæller med i Championship)", () => {
     const note = scopeNote([superliga], [skotland]);
     expect(note).toContain("Championship afgøres af Superligaen");
     expect(note).toContain("Scotland Premiership");
-    expect(note).toContain("tæller ikke med her");
+    expect(note).toContain("tæller hverken");
   });
 
   it("siger, hvor pointene så BLIVER af — ellers ligner udeladelsen et tab", () => {
+    expect(scopeNote([superliga], [skotland])).toContain("din konkurrence");
+  });
+
+  // A17 (31. juli 2026): ratingen filtrerer nu også på is_official. Sagde
+  // sætningen fortsat "og i din rating", ville den love point et sted, hvor de
+  // ikke længere lander — den værste slags forkert tekst.
+  it("lover ikke rating for en turnering, der ikke tæller", () => {
     const note = scopeNote([superliga], [skotland]);
-    expect(note).toContain("din konkurrence");
-    expect(note).toContain("din rating");
+    expect(note).toContain("hverken i Championship eller i rating");
+    expect(note).not.toMatch(/og i din rating/);
   });
 
   it("sætter flere navne sammen på dansk i begge ender", () => {
