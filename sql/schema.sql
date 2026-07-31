@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict bW1mVXQKFT0ZczJd0hyaJPWd020KhgFCVgquCnGEF1ubesVEPRRddBUzly91d9t
+\restrict ZGd7NLqWPvdddUFU5ILTXzPIqzTbRKShQKLph7RDLrxAm7Mbow8kYf5GMKiL2Gh
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
@@ -906,6 +906,49 @@ begin
   ) into result;
 
   return result;
+end;
+$$;
+
+
+--
+-- Name: admin_job_health(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admin_job_health() RETURNS TABLE(job text, last_run_at timestamp with time zone, last_ok_at timestamp with time zone, consecutive_failures integer, last_error text, last_detail jsonb)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if not exists (select 1 from public.profiles where id = auth.uid() and is_admin) then
+    raise exception 'forbidden';
+  end if;
+
+  return query
+  with seneste_ok as (
+    select r.job, max(r.started_at) as ok_at
+    from public.job_runs r
+    where r.ok
+    group by r.job
+  ),
+  seneste as (
+    select distinct on (r.job) r.job, r.started_at, r.error, r.detail
+    from public.job_runs r
+    order by r.job, r.started_at desc
+  )
+  select
+    s.job,
+    s.started_at,
+    o.ok_at,
+    (select count(*)::integer
+       from public.job_runs f
+      where f.job = s.job
+        and f.ok is distinct from true
+        and (o.ok_at is null or f.started_at > o.ok_at)),
+    s.error,
+    s.detail
+  from seneste s
+  left join seneste_ok o on o.job = s.job
+  order by s.job;
 end;
 $$;
 
@@ -2014,6 +2057,23 @@ $$;
 
 
 --
+-- Name: prune_job_runs(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prune_job_runs(keep_days integer DEFAULT 30) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare removed integer;
+begin
+  delete from public.job_runs where started_at < now() - (keep_days || ' days')::interval;
+  get diagnostics removed = row_count;
+  return removed;
+end;
+$$;
+
+
+--
 -- Name: recompute_ratings(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2065,7 +2125,15 @@ begin
                         or (u.score = v.score and u.exacts > v.exacts) then 1
                       when u.score = v.score and u.exacts = v.exacts then 0.5
                       else 0 end) as s_sum,
-             sum(1.0 / (1 + power(10, (v.rating - u.rating) / 400.0))) as e_sum
+             -- Logistikken regnes i double precision, ikke numeric. `power(10, numeric)`
+             -- med ikke-heltallig eksponent regner i vilkårlig præcision og koster ~110 µs
+             -- pr. kald; med 31 spillere er det 930 kald pr. runde, og den ene linje stod
+             -- ALENE for 16 af de 19 sekunder, en fuld sæson tog. float8 har ~15
+             -- signifikante cifre — rigelig margin for et tal, der vises med én decimal.
+             -- Målt afvigelse over en hel sæson: 2e-13 på rating, 5e-14 på delta, og
+             -- identisk rangorden i hver eneste runde. Se målingen i DOCUMENTATION.md
+             -- afsnit 12.
+             sum(1.0 / (1 + power(10::float8, ((v.rating - u.rating) / 400.0)::float8)))::numeric as e_sum
       from pt u join pt v on v.user_id <> u.user_id
       group by u.user_id, u.rating, u.rounds_played, u.score, u.n
     ),
@@ -2206,20 +2274,6 @@ begin
   on conflict (user_id, day) do nothing;
 end;
 $$;
-
-
---
--- Name: trg_recompute_ratings(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.trg_recompute_ratings() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-begin
-  perform recompute_ratings();
-  return null;
-end; $$;
 
 
 --
@@ -2440,6 +2494,35 @@ CREATE TABLE public.groups (
 
 
 --
+-- Name: job_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.job_runs (
+    id bigint NOT NULL,
+    job text NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    ok boolean,
+    detail jsonb,
+    error text
+);
+
+
+--
+-- Name: job_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.job_runs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.job_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: stories; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2487,7 +2570,6 @@ CREATE VIEW public.latest_story WITH (security_invoker='on') AS
 CREATE TABLE public.leagues (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,
-    country text,
     api_league_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     is_visible boolean DEFAULT true NOT NULL
@@ -2680,7 +2762,6 @@ CREATE TABLE public.seasons (
     name text NOT NULL,
     api_season_id text,
     start_date date,
-    end_date date,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -2770,6 +2851,14 @@ ALTER TABLE ONLY public.groups
 
 ALTER TABLE ONLY public.groups
     ADD CONSTRAINT groups_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: job_runs job_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.job_runs
+    ADD CONSTRAINT job_runs_pkey PRIMARY KEY (id);
 
 
 --
@@ -2957,6 +3046,20 @@ CREATE INDEX competitions_group_idx ON public.competitions USING btree (group_id
 --
 
 CREATE INDEX group_members_user_idx ON public.group_members USING btree (user_id);
+
+
+--
+-- Name: job_runs_job_started_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX job_runs_job_started_idx ON public.job_runs USING btree (job, started_at DESC);
+
+
+--
+-- Name: job_runs_started_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX job_runs_started_idx ON public.job_runs USING btree (started_at DESC);
 
 
 --
@@ -3428,6 +3531,21 @@ CREATE POLICY "insert own profile" ON public.profiles FOR INSERT WITH CHECK ((au
 
 
 --
+-- Name: job_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.job_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: job_runs job_runs_read_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY job_runs_read_admin ON public.job_runs FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
+   FROM public.profiles
+  WHERE ((profiles.id = auth.uid()) AND profiles.is_admin))));
+
+
+--
 -- Name: competition_participants join competition; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3733,6 +3851,15 @@ GRANT ALL ON FUNCTION public.admin_analytics_stories(p_days integer) TO service_
 
 
 --
+-- Name: FUNCTION admin_job_health(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.admin_job_health() TO anon;
+GRANT ALL ON FUNCTION public.admin_job_health() TO authenticated;
+GRANT ALL ON FUNCTION public.admin_job_health() TO service_role;
+
+
+--
 -- Name: FUNCTION admin_user_stats(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -3814,6 +3941,15 @@ GRANT ALL ON FUNCTION public.pc_points(ph integer, pa integer, hs integer, as_ i
 
 
 --
+-- Name: FUNCTION prune_job_runs(keep_days integer); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.prune_job_runs(keep_days integer) TO anon;
+GRANT ALL ON FUNCTION public.prune_job_runs(keep_days integer) TO authenticated;
+GRANT ALL ON FUNCTION public.prune_job_runs(keep_days integer) TO service_role;
+
+
+--
 -- Name: FUNCTION recompute_ratings(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -3847,15 +3983,6 @@ GRANT ALL ON FUNCTION public.round_key(ts timestamp with time zone) TO service_r
 GRANT ALL ON FUNCTION public.touch_activity() TO anon;
 GRANT ALL ON FUNCTION public.touch_activity() TO authenticated;
 GRANT ALL ON FUNCTION public.touch_activity() TO service_role;
-
-
---
--- Name: FUNCTION trg_recompute_ratings(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.trg_recompute_ratings() TO anon;
-GRANT ALL ON FUNCTION public.trg_recompute_ratings() TO authenticated;
-GRANT ALL ON FUNCTION public.trg_recompute_ratings() TO service_role;
 
 
 --
@@ -3950,6 +4077,24 @@ GRANT ALL ON TABLE public.group_members TO service_role;
 GRANT ALL ON TABLE public.groups TO anon;
 GRANT ALL ON TABLE public.groups TO authenticated;
 GRANT ALL ON TABLE public.groups TO service_role;
+
+
+--
+-- Name: TABLE job_runs; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.job_runs TO anon;
+GRANT ALL ON TABLE public.job_runs TO authenticated;
+GRANT ALL ON TABLE public.job_runs TO service_role;
+
+
+--
+-- Name: SEQUENCE job_runs_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON SEQUENCE public.job_runs_id_seq TO anon;
+GRANT ALL ON SEQUENCE public.job_runs_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.job_runs_id_seq TO service_role;
 
 
 --
@@ -4142,5 +4287,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict bW1mVXQKFT0ZczJd0hyaJPWd020KhgFCVgquCnGEF1ubesVEPRRddBUzly91d9t
+\unrestrict ZGd7NLqWPvdddUFU5ILTXzPIqzTbRKShQKLph7RDLrxAm7Mbow8kYf5GMKiL2Gh
 
