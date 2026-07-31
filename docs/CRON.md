@@ -26,10 +26,11 @@ liga, plus `sync-live` og `send-notifications`, som begge dækker alle ligaer).
 
 | # | Job | Hvor | Skema | Kald | Hemmelighed sendes som | Sidst verificeret |
 |---|---|---|---|---|---|---|
-| 1 | Kampprogram + endelige resultater | cron-job.org | hver 6. time (kan stå på 10–15 min fra før live-syncen) | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | — |
+| 1 | Kampprogram + endelige resultater Superliga | cron-job.org | hver 12. time (kan stå på 10–15 min fra før live-syncen) | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | — |
 | 2 | Live-resultater | cron-job.org | hvert minut | `GET https://<app>/api/sync-live` | ? | — |
 | 3 | Push-notifikationer | cron-job.org | hver 15.–30. minut | `GET https://<app>/api/send-notifications` (valgfrit `&hours=`) | ? | — |
 | 4 | Skema-eksport | GitHub Actions | `0 6 * * 1` (mandag 06:00 UTC) + manuelt | `.github/workflows/schema-export.yml` | — (bruger repo-secret `SUPABASE_DB_URL`) | 30. juli 2026 |
+| 2 | Kampprogram + endelige resultater Scotland | cron-job.org | hver 12. time (kan stå på 10–15 min fra før live-syncen) | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | — |
 
 **Kolonnen "Hemmelighed sendes som" står med `?` med vilje.** Den kan ikke
 udfyldes fra repoet — kun ved at kigge i cron-job.org eller ved at aflæse
