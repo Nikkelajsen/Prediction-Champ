@@ -22,7 +22,7 @@
 // Miljøvariabler (samme som sync-matches):
 //   SPORTMONKS_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SYNC_SECRET
 
-import { createSb, isAuthorized } from "./_shared.js";
+import { createSb, isAuthorized, createRunLogger, failJob } from "./_shared.js";
 
 // Hvor langt tilbage/frem vi leder efter kampe, der kan være i gang.
 // 6 timer bagud dækker rigeligt en kamp med forlænget spilletid og forsinkelser.
@@ -65,6 +65,10 @@ function liveMinute(fx) {
 }
 
 export default async function handler(req, res) {
+  // Sættes så snart autorisationen er i hus. Ligger uden for try'et, fordi
+  // catch'en skal kunne bruge den — en kørsel, der vælter, er netop den, der
+  // skal ende i job_runs.
+  let run = null;
   try {
     const SPORTMONKS_TOKEN = process.env.SPORTMONKS_TOKEN;
     const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -89,6 +93,7 @@ export default async function handler(req, res) {
     }
 
     const dryRun = req.query.dryRun === "true";
+    run = createRunLogger(sb, "sync-live", { skip: dryRun });
 
     // ---- 1) hvilke kampe kan være i gang lige nu? ----
     // (a) kampe uden endeligt resultat, hvis kickoff ligger i tidsvinduet, ELLER
@@ -111,7 +116,7 @@ export default async function handler(req, res) {
     const withFixture = [...byId.values()].filter((m) => m.api_fixture_id);
     if (!withFixture.length) {
       // Ingen kampe i vinduet — spar API-kaldet helt (det er langt de fleste minutter i døgnet).
-      return res.status(200).json({ checked: 0, live: 0, finished: 0, cleared: 0, note: "Ingen kampe i tidsvinduet" });
+      return run.ok(res, { checked: 0, live: 0, finished: 0, cleared: 0, note: "Ingen kampe i tidsvinduet" });
     }
 
     // ---- 2) hent netop de kampe hos Sportmonks (ét kald pr. 40 kampe) ----
@@ -225,7 +230,7 @@ export default async function handler(req, res) {
       });
     }
 
-    res.status(200).json({
+    return run.ok(res, {
       checked: withFixture.length,
       live: liveCount,
       finished: finishedCount,
@@ -233,6 +238,6 @@ export default async function handler(req, res) {
       written: updates.length,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    return failJob(run, res, e, "sync-live");
   }
 }

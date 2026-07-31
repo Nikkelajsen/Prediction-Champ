@@ -29,8 +29,8 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | # | Fil | Formål | Status |
 |---|---|---|---|
 | — | `schema.sql` | **Genereret** øjebliksbillede af hele `public`. Kør den i et nyt/staging-projekt i stedet for hele listen | Redigér aldrig i hånden |
-| 0 | `rating_core.sql` | `pc_points()`, `round_key()`, `recompute_ratings()` + tabellerne `ratings`/`rating_history` | Aktiv — **skal køres før #5**. Tilføjet 30. juli 2026; funktionskroppene er klippet ordret ud af `schema.sql`, så en kørsel ændrer intet |
-| 1 | `standings_views.sql` | Første udgave af `round_standings` + `season_standings` | ⚠️ **Afløst af `standings_tiebreakers.sql`** — kør den aldrig efter |
+| 0 | `rating_core.sql` | `pc_points()`, `round_key()`, `recompute_ratings()` + tabellerne `ratings`/`rating_history` | Aktiv — **skal køres før #5**. Tilføjet 30. juli 2026. Indeholder optimeringen fra samme dag (logistikken i `double precision`), som gør en fuld genberegning ~175× hurtigere. **Kør den i produktion** — det er den eneste af ændringerne her, der reelt ændrer adfærd |
+| 1 | `standings_views.superseded.sql` | Første udgave af `round_standings` + `season_standings` | ⚠️ **Afløst af `standings_tiebreakers.sql`** — kør den aldrig. Omdøbt 30. juli 2026, så filnavnet selv advarer; kun bevaret for historikken |
 | 2 | `user_stats.sql` | `user_activity_days`, `touch_activity()`, `admin_user_stats()` | Aktiv |
 | 3 | `username_constraints.sql` | Længde-constraint på `profiles.display_name` (2–20), `username_available()` | Aktiv |
 | 4 | `predictions_round_lock_policies.sql` | Runde-baseret lås på `predictions` for **SELECT + DELETE** | Aktiv, men ufuldstændig alene — se #14 |
@@ -47,6 +47,8 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 15 | `story_engine_backfill.sql` | Kalder `generate_stories()` for alle fuldt afsluttede runder | **Engangs-/ad hoc-kørsel**, ikke en migrering. Kør efter #8, når nye regler skal gælde bagud |
 | 16 | `analytics_events.sql` | Analytics v1: `analytics_events` (hændelseslog), RLS (kun INSERT, egne rækker), indekser, hændelseskatalog-constraint | Aktiv — kør én gang, gen-kør kun ved ny event i kataloget |
 | 17 | `analytics_dashboard.sql` | Analytics v1: `analytics_round_locks`/`analytics_completion_facts`-views + `admin_analytics_health/engagement/league_health/retention`-RPC'er | Aktiv — **sikker og forventet at blive gen-kørt**. **Gen-kør efter 30. juli 2026-omlægningen** (Liga Health Score fjernet, `admin_analytics_league_health` returnerer nu signaler i stedet for en score) sammen med frontend-mergen; en gammel klient mod en ny RPC — eller omvendt — viser en tom liga-sektion, ikke forkerte tal |
+| 18 | `job_runs.sql` | Overvågning: tabellen `job_runs`, `admin_job_health()` og `prune_job_runs()` | Aktiv — tilføjet 30. juli 2026 |
+| 19 | `cleanup_orphans.sql` | Fjerner `trg_recompute_ratings()`, `leagues.country` og `seasons.end_date` | **Engangs-oprydning**, men idempotent. Filen dokumenterer også, hvad der bevidst IKKE blev fjernet, og hvorfor |
 
 ### ⚠️ To filer må ikke gen-køres blindt
 
@@ -60,9 +62,26 @@ fejl — reglen bliver bare den gamle igen.
   dens konkurrencer (forældreløse deltagere), og framelding bliver igen permanent
   spærret efter første spillede runde. Skal `groups.sql` køres, så kør
   **`group_membership_invariant.sql` umiddelbart efter**.
-- **`standings_views.sql`** genskaber `round_standings`/`season_standings` **uden**
+- **`standings_views.superseded.sql`** genskaber `round_standings`/`season_standings` **uden**
   tiebreaker-kolonnerne. Kør `standings_tiebreakers.sql` efter — eller lad være med
   at røre filen; den er kun bevaret for historikken.
+
+### Tests
+
+`sql/tests/rating_equivalence.sql` kører i CI (jobbet `sql` i `.github/workflows/ci.yml`)
+mod en frisk PostgreSQL-container og sammenligner `recompute_ratings()` med den
+**frosne** før-optimering-udgave i `sql/tests/_reference_recompute.sql`. Rangorden,
+`rnk` og `provisional` skal være identiske; tallene må afvige med højst 1e-9.
+
+Den frosne reference må kun opdateres, hvis rating-algoritmen ændres *meningsfuldt* —
+og den opdatering er så selve beslutningen om, at tallene må flytte sig.
+
+Testen kan køres lokalt mod enhver tom database:
+
+```bash
+createdb ratingtest
+cd sql/tests && psql -d ratingtest -v ON_ERROR_STOP=1 -b -f rating_equivalence.sql
+```
 
 Samme mønster gælder mildere for `predictions_round_lock_policies.sql`: den rører
 kun SELECT/DELETE, så den kan gen-køres uden at ødelægge skrive-låsen fra #14.

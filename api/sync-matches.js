@@ -9,9 +9,13 @@
 //   SUPABASE_URL
 //   SUPABASE_SERVICE_ROLE_KEY
 
-import { createSb, isAuthorized } from "./_shared.js";
+import { createSb, isAuthorized, createRunLogger, failJob } from "./_shared.js";
 
 export default async function handler(req, res) {
+  // Sættes så snart autorisationen er i hus. Ligger uden for try'et, fordi
+  // catch'en skal kunne bruge den — en kørsel, der vælter, er netop den, der
+  // skal ende i job_runs.
+  let run = null;
   try {
     const SPORTMONKS_TOKEN = process.env.SPORTMONKS_TOKEN;
     const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -37,9 +41,17 @@ export default async function handler(req, res) {
     }
 
     const leagueId = req.query.leagueId;
-    const smSeasonName = req.query.smSeason || "2026/2027";
+    // Ingen hårdkodet fallback. Tidligere stod her `|| "2026/2027"`, hvilket
+    // betød, at et job uden &smSeason= tavst ledte efter en sæson, der måske
+    // slet ikke var den rigtige for ligaen. Navnet bruges kun, når ligaen
+    // endnu ikke har et gemt api_season_id — så fejler vi hellere tydeligt
+    // dér end at gætte. (Flagget i docs/features/turnering-2.md §3.2.)
+    const smSeasonName = req.query.smSeason || null;
     const dryRun = req.query.dryRun === "true";
-    if (!leagueId) return res.status(400).json({ error: "Mangler leagueId query-parameter" });
+    run = createRunLogger(sb, "sync-matches", { skip: dryRun });
+    // Et job uden leagueId er et forkert opsat cron-job, ikke en tilfældig fejl —
+    // derfor tælles det som en fejlet kørsel, så det dukker op i fejlserien.
+    if (!leagueId) return run.fail(res, 400, { error: "Mangler leagueId query-parameter" }, "Mangler leagueId query-parameter");
 
     // find ligaen i vores egen database (giver os navn + Sportmonks-liga-id)
     const leagueRows = await sb(`/rest/v1/leagues?id=eq.${leagueId}&select=id,name,api_league_id`);
@@ -68,6 +80,12 @@ export default async function handler(req, res) {
     // fremtidige kørsler (og sæsonskift) ikke afhænger af navne-opslag.
     let smSeasonId = seasons[0].api_season_id;
     if (!smSeasonId) {
+      if (!smSeasonName) {
+        throw new Error(
+          `Ligaen '${dbLeague.name}' har intet gemt api_season_id, og der er ikke angivet &smSeason=. ` +
+          `Kald med fx &smSeason=2026/2027 én gang — id'et gemmes derefter på sæson-rækken.`
+        );
+      }
       const leagueRes = await fetch(
         `https://api.sportmonks.com/v3/football/leagues/${SPORTMONKS_LEAGUE_ID}?include=seasons&api_token=${SPORTMONKS_TOKEN}`
       );
@@ -87,6 +105,10 @@ export default async function handler(req, res) {
     const fixturesById = new Map();
     let page = 1;
     let hasMore = true;
+    // Sikkerhedsnet mod en uendelig løkke, hvis Sportmonks bliver ved med at
+    // sige has_more. 60 sider à 50 kampe = 3.000 kampe, altså rigeligt til en
+    // hel sæson i enhver turnering, vi realistisk tilføjer.
+    const MAX_PAGES = 60;
     while (hasMore) {
       const smUrl = `https://api.sportmonks.com/v3/football/fixtures` +
         `?filters=fixtureSeasons:${smSeasonId}&include=participants;scores;state;stage&per_page=50&page=${page}&api_token=${SPORTMONKS_TOKEN}`;
@@ -96,7 +118,17 @@ export default async function handler(req, res) {
       for (const fx of smData.data || []) fixturesById.set(fx.id, fx);
       hasMore = !!smData.pagination?.has_more;
       page++;
-      if (page > 20) break; // sikkerhedsnet
+      // FEJL frem for at bryde stille. Loftet var før 20 sider med et bart
+      // `break`, så en stor turnering kunne blive trunkeret uden at nogen
+      // opdagede det: svaret var 200, og de manglende kampe fandtes bare ikke.
+      // En kørsel, der ikke nåede alle sider, har ikke gjort sit arbejde.
+      if (page > MAX_PAGES && hasMore) {
+        throw new Error(
+          `Paginering afbrudt: Sportmonks har flere kampe efter side ${MAX_PAGES} for sæson ${smSeasonId}. ` +
+          `Kampprogrammet ville blive ufuldstændigt. Hæv MAX_PAGES i api/sync-matches.js.`
+        );
+      }
+      if (page > MAX_PAGES) break;
     }
     const fixtures = [...fixturesById.values()];
 
@@ -216,6 +248,6 @@ export default async function handler(req, res) {
       unmatched: [...unmatched],
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    return failJob(run, res, e, "sync-matches");
   }
 }

@@ -1,0 +1,111 @@
+name: Job-heartbeat
+
+# Slår alarm, når et planlagt job holder op med at melde sig, eller fejler
+# gentagne gange.
+#
+# HVORFOR DEN LIGGER HER OG IKKE I APPEN
+# job_runs (sql/job_runs.sql) kan kun se de kørsler, der faktisk fandt sted. Et
+# job, cron-job.org har auto-deaktiveret efter gentagne fejl, skriver INGEN
+# rækker — og tavshed ligner ro. Overvågningen skal derfor stå uden for det, den
+# overvåger: kører Supabase eller Vercel ikke, ville en alarm inde i appen dø af
+# præcis samme årsag som jobbet.
+#
+# Alarmkanalen er GitHub selv: fejler denne workflow, sender GitHub en
+# notifikation til repoets ejer. Det kræver ingen ny infrastruktur og er
+# uafhængigt af app'ens egen push-kæde.
+#
+# Krav: repo-secret SUPABASE_DB_URL (samme som skema-eksporten bruger).
+# Jobbene og deres forventede kadence står i docs/CRON.md — hold de to ens.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 */6 * * *" # hver 6. time
+
+permissions:
+  contents: read
+
+concurrency:
+  group: job-heartbeat
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # Runneren har en psql-klient forudinstalleret. Modsat pg_dump er psql
+      # ikke kræsen med serverversionen for almindelige forespørgsler, så her
+      # er der ingen grund til at installere pg17-klienten som i skema-eksporten.
+      - name: Tjek jobbenes helbred
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::error::Secret SUPABASE_DB_URL mangler. Tilføj den under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+          # Tavshedsgrænserne er sat rundhåndet i forhold til kadencen i
+          # docs/CRON.md, så et enkelt sprunget interval ikke larmer:
+          #   sync-live          hvert minut        → alarm efter 30 min
+          #   send-notifications hver 15.-30. minut → alarm efter 3 timer
+          #   sync-matches       hver 6. time       → alarm efter 14 timer
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -F'|' > rapport.txt <<'SQL'
+          with forventet(job, taalt_stilhed) as (
+            values ('sync-live',          interval '30 minutes'),
+                   ('send-notifications', interval '3 hours'),
+                   ('sync-matches',       interval '14 hours')
+          ),
+          seneste as (
+            select f.job,
+                   (select max(r.started_at) from job_runs r where r.job = f.job) as sidst,
+                   (select max(r.started_at) from job_runs r where r.job = f.job and r.ok) as sidst_ok,
+                   f.taalt_stilhed
+            from forventet f
+          )
+          select job,
+                 coalesce(to_char(sidst, 'YYYY-MM-DD HH24:MI'), 'aldrig'),
+                 case
+                   when sidst is null then 'INGEN KOERSLER'
+                   when now() - sidst > taalt_stilhed then 'TAVS'
+                   else 'ok'
+                 end,
+                 (select count(*) from job_runs f2
+                   where f2.job = seneste.job
+                     and f2.ok is distinct from true
+                     and (sidst_ok is null or f2.started_at > sidst_ok))
+          from seneste
+          order by job;
+          SQL
+
+          echo "Job | Sidste kørsel | Tilstand | Fejl i træk"
+          echo "--------------------------------------------"
+          fail=0
+          while IFS='|' read -r job sidst tilstand fejlserie; do
+            [ -z "$job" ] && continue
+            printf '%-20s %-18s %-15s %s\n' "$job" "$sidst" "$tilstand" "$fejlserie"
+
+            if [ "$tilstand" = "TAVS" ]; then
+              echo "::error::$job har ikke meldt sig siden $sidst. Tjek om cron-job.org har deaktiveret jobbet (se docs/CRON.md)."
+              fail=1
+            elif [ "$tilstand" = "INGEN KOERSLER" ]; then
+              # Ikke en fejl i sig selv: sådan ser det ud, indtil sql/job_runs.sql
+              # er kørt i produktion og jobbene har nået at melde sig første gang.
+              echo "::warning::$job har aldrig meldt sig. Er sql/job_runs.sql kørt, og er jobbet oprettet?"
+            fi
+
+            if [ "${fejlserie:-0}" -ge 3 ]; then
+              echo "::error::$job er fejlet $fejlserie gange i træk. Se job_runs.error i Admin → Drift."
+              fail=1
+            fi
+          done < rapport.txt
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Mindst ét planlagt job kræver opmærksomhed."
+            exit 1
+          fi
+          echo "Alle jobs melder sig som forventet."

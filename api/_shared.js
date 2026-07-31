@@ -36,6 +36,80 @@ export function createSb(supabaseUrl, serviceKey) {
   };
 }
 
+// Skriver én række i job_runs pr. kørsel (sql/job_runs.sql).
+//
+// KONTRAKT: må ALDRIG kaste og aldrig ændre jobbets svar. Overvågning, der kan
+// vælte det, den overvåger, er værre end ingen overvågning — så en fejlet
+// logning bliver til en advarsel i Vercels logs og intet andet. Samme princip
+// som logEvent() i src/lib/analytics.js.
+//
+// `detail` er jobbets eget resumé (antal synkede, sendte, sprunget over). Det
+// er dét felt, der gør en tavs delvis fejl synlig: en kørsel kan svare 200 og
+// stadig have lavet ingenting.
+export async function recordRun(sb, job, { ok, startedAt, detail = null, error = null }) {
+  try {
+    await sb("/rest/v1/job_runs", {
+      method: "POST",
+      prefer: "return=minimal",
+      body: JSON.stringify({
+        job,
+        started_at: new Date(startedAt).toISOString(),
+        finished_at: new Date().toISOString(),
+        ok,
+        detail,
+        // Fejlteksten kan indeholde svar-bodies fra Supabase eller Sportmonks.
+        // job_runs er kun læsbar for admins, så den må gerne stå der — men den
+        // klippes, så en enkelt kæmpefejl ikke fylder tabellen.
+        error: error ? String(error).slice(0, 2000) : null,
+      }),
+    });
+  } catch (e) {
+    console.warn(`[job_runs] Kunne ikke logge kørsel af ${job}:`, e?.message ?? e);
+  }
+}
+
+// Bogholderi for én kørsel: måler varigheden og skriver rækken FØR svaret sendes.
+//
+// Rækkefølgen er ikke til forhandling. På Vercel kan funktionen fryses, så snart
+// svaret er afsendt, så en logning efter res.json() ville gå tabt netop når det
+// er mest interessant — ved en fejl.
+//
+// Tørre kørsler (?dryRun=true) logges bevidst IKKE: de laver ikke noget arbejde,
+// og en manuel forhåndsvisning ville ellers nulstille fejlserien i
+// admin_job_health() og skjule et job, der reelt er gået i stå.
+export function createRunLogger(sb, job, { skip = false } = {}) {
+  const startedAt = Date.now();
+  return {
+    async ok(res, body) {
+      if (!skip) await recordRun(sb, job, { ok: true, startedAt, detail: body });
+      return res.status(200).json(body);
+    },
+    // `error` er den fulde tekst til job_runs (kun admin-læsbar); `body` er det,
+    // kalderen får at se. De to er med vilje ikke det samme — se handlernes catch.
+    async fail(res, status, body, error) {
+      if (!skip) await recordRun(sb, job, { ok: false, startedAt, detail: body, error });
+      return res.status(status).json(body);
+    },
+  };
+}
+
+// Fælles afslutning på handlernes catch: fuld fejl i logs og i job_runs,
+// kort fejl til kalderen.
+//
+// Bemærk hvad der IKKE sker her: fejlteksten sløres ikke. Endpointet svarer
+// 401 før nogen fejl kan opstå, så de eneste, der nogensinde ser en fejl, er
+// cron-jobbet (en maskine) og en admin i Admin-skærmen. For admin'en er den
+// præcise tekst hele pointen — "Kørslen fejlede" ville gøre knappen ubrugelig.
+// Hverken sb() eller Sportmonks-kaldene lægger nøgler i deres fejlbeskeder.
+export async function failJob(run, res, e, job) {
+  const full = e?.stack || e?.message || String(e);
+  console.error(`[${job}] Kørslen fejlede:`, full);
+  const body = { error: e?.message ?? String(e) };
+  if (run) return run.fail(res, 500, body, full);
+  // Fejlede vi før autorisationen var i hus, findes der ingen kørsel at logge.
+  return res.status(500).json(body);
+}
+
 // Konstant-tids sammenligning af to hemmeligheder.
 //
 // Begge hashes først, så `timingSafeEqual` altid får to lige lange buffere —
