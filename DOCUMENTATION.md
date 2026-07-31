@@ -330,6 +330,7 @@ Analytics v1 (afsnit 21): hændelsesloggen (`analytics_events`) er fire-and-forg
 ---
 ## 13. Fejlfindingslog
 Symptom	Årsag	Løsning
+`ERROR: P0001: not authenticated` ved kald af `career_profile()` i Supabase SQL-editoren	Funktionen kræver et login (`auth.uid()`), og SQL-editoren har ingen JWT — vagten er altså korrekt, ikke i stykker	Test den i appen (åbn en profil), eller lån den et id først: `select set_config('request.jwt.claims', '{"sub":"<user-id>"}', false);` efterfulgt af kaldet i samme session
 Admin → Drift viste aldrig en grøn `sync-matches`-kørsel, og job-heartbeat meldte "INGEN KOERSLER"	Succes-stien i `api/sync-matches.js` svarede med et bart `res.status(200).json()` i stedet for `run.ok(res, …)`, så kun FEJLENDE kørsler skrev en række i `job_runs`	Kald altid `run.ok(...)` på succes-stien (rettet 31. juli 2026). Tørre kørsler (`?dryRun=true`) logges fortsat bevidst ikke
 "Load failed" i artifact-preview	Claude-artifacts kan ikke lave eksterne netværkskald	Deploy som rigtig webapp på Vercel
 "infinite recursion" i Supabase	To RLS-policies refererede hinanden cirkulært	Forenklet policy
