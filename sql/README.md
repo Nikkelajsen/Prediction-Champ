@@ -11,8 +11,13 @@ og kan køres igen.
 den regenereres med guiden nedenfor.
 
 > ⚠️ **Øjebliksbilledet er kun så friskt som sidste kørsel.** Seneste eksport: **30. juli
-> 2026**, og den dækker alt inkl. Analytics v1. Kør eksport-workflowen efter hver
-> migrering — og opdatér denne dato i samme ombæring, ellers ved næste læser ikke, om
+> 2026** — og den er **forældet siden 31. juli 2026**, hvor `tournament_scope.sql` (#20)
+> blev kørt i produktion: filen mangler `leagues.is_official` og kender
+> `round_standings`/`monthly_standings` i deres udgave **uden `scope`**. Den, der bygger
+> et staging-projekt op fra `schema.sql` alene, får altså et skema, Championship-fanen
+> ikke virker imod. Kør eksport-workflowen (`.github/workflows/schema-export.yml`, kan
+> startes manuelt), og slet denne advarsel i samme ombæring. Reglen er: eksport efter hver
+> migrering, og datoen ovenfor rettet i samme ombæring — ellers ved næste læser ikke, om
 > filen kan stoles på. Verificér mod databasen — ikke mod filen — hvis der er tvivl.
 > Til gengæld er netop det den hurtigste måde at se, om en migrering faktisk **er**
 > kørt i produktion.
@@ -37,9 +42,9 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 5 | `rating_trigger_optimization.sql` | Statement-level triggere på `matches`; kalder `recompute_ratings()` + `generate_stories()` | Aktiv — forudsætter `rating_core.sql` (#0) |
 | 6 | `matches_stage.sql` | `matches.stage_name` (grundspil/slutspil) | Aktiv |
 | 7 | `push_notifications.sql` | `push_subscriptions` + `notification_log` | Aktiv |
-| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — **v1.1 (juli 2026) skal gen-køres i produktion**; kun funktionen ændres, tabel og view er uændrede. **Gen-kør også efter #20** (31. juli 2026): funktionen filtrerer nu `round_standings` på `scope = 'ALL'` |
+| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — ~~v1.1 skal gen-køres i produktion~~ **gen-kørt 31. juli 2026** (både v1.1's 14 regler og `scope = 'ALL'`-filtreringen efter #20). Kun funktionen ændres, tabel og view er uændrede |
 | 9 | `groups.sql` | Liga-laget: `groups`, `group_members`, `is_group_member()`, `move_competition_to_group()` | ⚠️ Aktiv, men **to af dens policies er afløst** — se advarslen nedenfor |
-| 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv — **gen-kør efter #20** (31. juli 2026): rundesejre og "bedste runde" filtrerer nu `scope = 'ALL'`, ellers tælles hver sejr én gang pr. turnering. Samme kørsel tilføjer `titles.by_tournament` (K2) |
+| 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv — ~~gen-kør efter #20~~ **gen-kørt 31. juli 2026**: rundesejre og "bedste runde" filtrerer nu `scope = 'ALL'` (ellers tælles hver sejr én gang pr. turnering), og samme kørsel gav `titles.by_tournament` (K2) |
 | 11 | `live_scores.sql` | `matches.live_*`-kolonner + live-indekser | Aktiv |
 | 12 | `standings_tiebreakers.sql` | Genskaber alle tre stillings-views med `outcome_count`, `round_wins`, `avg_goal_error` | Aktiv — **afløser #1** |
 | 13 | `group_membership_invariant.sql` | A8 i databasen: backfill, auto-indmeldende trigger, strammet liga-exit + framelding | Aktiv — **afløser to policies fra #9** |
@@ -49,8 +54,8 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 17 | `analytics_dashboard.sql` | Analytics v1: `analytics_round_locks`/`analytics_completion_facts`-views + `admin_analytics_health/engagement/league_health/retention`-RPC'er | Aktiv — **sikker og forventet at blive gen-kørt**. **Gen-kør efter 30. juli 2026-omlægningen** (Liga Health Score fjernet, `admin_analytics_league_health` returnerer nu signaler i stedet for en score) sammen med frontend-mergen; en gammel klient mod en ny RPC — eller omvendt — viser en tom liga-sektion, ikke forkerte tal |
 | 18 | `job_runs.sql` | Overvågning: tabellen `job_runs`, `admin_job_health()` og `prune_job_runs()` | Aktiv — tilføjet 30. juli 2026 |
 | 19 | `cleanup_orphans.sql` | Fjerner `trg_recompute_ratings()`, `leagues.country` og `seasons.end_date` | **Engangs-oprydning**, men idempotent. Filen dokumenterer også, hvad der bevidst IKKE blev fjernet, og hvorfor |
-| 20 | `tournament_scope.sql` | `leagues.is_official` + `round_standings`/`monthly_standings` med **scope** (samlet + pr. turnering) | Aktiv — **afløser de to views i #12**. Skal køres FØR eller sammen med gen-kørsel af #8 og #10, som nu filtrerer `scope = 'ALL'` |
-| 21 | `tournament_scotland_premiership.sql` | Turnering #2 (`B2`): `leagues`- + `seasons`-rækken for Scotland Premiership (`501`) | **Data, ikke skema** — ændrer intet i strukturen og indgår derfor ikke i `schema.sql`. Idempotent. Verificér sæsonnavnet i filens hoved, før du kører. Trin 1 af tre; sync-kald og cron-job står i [`../docs/features/turnering-2.md`](../docs/features/turnering-2.md) §3.1 |
+| 20 | `tournament_scope.sql` | `leagues.is_official` + `round_standings`/`monthly_standings` med **scope** (samlet + pr. turnering) | Aktiv — **afløser de to views i #12**. **Kørt 31. juli 2026**, sammen med #8 og #10, som filtrerer `scope = 'ALL'` og derfor ikke må stå tilbage i en ældre udgave |
+| 21 | `tournament_scotland_premiership.sql` | Turnering #2 (`B2`): `leagues`- + `seasons`-rækken for Scotland Premiership (`501`) | **Data, ikke skema** — ændrer intet i strukturen og indgår derfor ikke i `schema.sql`. Idempotent. **Kørt 31. juli 2026**, og cron-jobbet er oprettet (job #5 i [`../docs/CRON.md`](../docs/CRON.md)); tilbage af `B2` står verifikationen — dubletter i hold, fasenavne og testcases 2–6 i [`../docs/features/turnering-2.md`](../docs/features/turnering-2.md) §6 |
 
 ### ⚠️ Tre filer må ikke gen-køres blindt
 

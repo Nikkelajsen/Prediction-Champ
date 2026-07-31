@@ -167,4 +167,11 @@ Verificeret mod PostgreSQL 16.13 med en fixture, hvor én spiller tipper begge t
 
 ---
 
-*Næste skridt (opdateret 31. juli 2026 ved leveringen): ~~Beslut hvilken turnering (Premier League er roadmappens kandidat)~~ → ~~turnering #2 er Scotland Premiership (`501`)~~ → ~~udfør 3.1–3.2 med `is_visible = false`~~ → **§3.2 er leveret; tilbage står §3.1 (kør SQL-scriptet, sync med `&smSeason=`, opret cron-job og skriv det i [`../CRON.md`](../CRON.md)), verifikation af holdmatch og fasenavne, og derefter testcases 2–6.** Turneringen er synlig fra det øjeblik, rækkerne findes — merge derfor koden **først**. Premier League venter på efterspørgsel og €29/md (3.4). A2 er lukket.*
+*Næste skridt (opdateret 31. juli 2026, efter at driften var sat op): ~~Beslut hvilken turnering (Premier League er roadmappens kandidat)~~ → ~~turnering #2 er Scotland Premiership (`501`)~~ → ~~udfør 3.1–3.2 med `is_visible = false`~~ → ~~§3.2 er leveret; tilbage står §3.1~~ → **§3.1 og §3.2 er begge færdige: SQL-scriptet er kørt, og cron-jobbet er oprettet (job #5 i [`../CRON.md`](../CRON.md)). Tilbage står kun **verifikation**, ikke opsætning:*
+
+1. **Hold-dubletter** — den fuzzy holdmatch i `sync-matches` er aldrig afprøvet på skotske klubnavne, og et hold, der oprettes to gange, deler stillingen i to. Dette er acceptkriterie 2 og det mest sandsynlige sted, noget er gået galt.
+2. **Fasenavne** mod `STAGE_LABELS` i `src/lib/scoring.js` — §4 forudsiger `2nd Phase` → "Slutspil"; rammer de fallbacken, står der et råt engelsk navn i brugerfladen.
+3. **Kampantal** mod Sportmonks for sæsonen (acceptkriterie 1) — ingen stille trunkering.
+4. **Testcases 2–6** ovenfor.
+
+*Premier League venter på efterspørgsel og €29/md (3.4). A2 er lukket og afløst (§3.6).*
