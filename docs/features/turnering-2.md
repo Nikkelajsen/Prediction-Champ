@@ -15,7 +15,8 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 ## 2. Hvad der allerede er klar (ingen ændringer nødvendige)
 
 - **`leagues`/`seasons`/`teams` er generiske.** Intet i skemaet er bundet til Superligaen; `MainApp.jsx` indlæser alle synlige turneringer dynamisk, og hold auto-oprettes af syncen ud fra kampenes deltagere.
-- **`full_season` på tværs af turneringer** (juli 2026): multivalg af turneringer + stages pr. turnering (`mode_params.tournaments`), materialiseret i `competition_matches`. `custom`/`random` var allerede turnerings-løse med filter.
+- **`full_season` på tværs af turneringer** (juli 2026): multivalg af turneringer ~~+ stages pr. turnering~~ (`mode_params.tournaments`), materialiseret i `competition_matches`. `custom`/`random` var allerede turnerings-løse med filter.
+  **Rettet efter levering (31. juli 2026, `A20`):** fase-afgrænsning pr. turnering findes ikke længere — en sæson-konkurrence dækker hele sæsonen, og kampe, der skemalægges senere, efterfyldes af `api/backfill.js`. `mode_params.tournaments` er nu `[{ league_id, season_id }]` uden `stages`. Feltet `mode_params.stages` består på gamle rækker som **mærkat**: findes det, efterfyldes konkurrencen aldrig. Se `DECISIONS.md`, 31. juli 2026.
 - **Rundeliga, månedsliga og rating er turnerings-agnostiske by design:** `predictions` er én række pr. bruger pr. kamp, så hver kamp tælles én gang på tværs af alt.
 - **`ratings.scope`** er forberedt til per-turnering-rating senere uden skemaændring (i dag altid `'ALL'`).
 - **`loadSeasonBoard(token, leagueId)`** er fuldt parameteriseret — kun kalderen er hardkodet (se 3.2).
@@ -105,6 +106,8 @@ Antagelsen i §3.4 var, at de skotske navne måske var de samme engelske som Sup
 **Sæson-id'et er samtidig kendt:** `28275`. Det er skrevet direkte ind i `sql/tournament_scotland_premiership.sql`, så første sync ikke behøver `&smSeason=` — og Admin-knappen "Hent nu" virker fra første klik.
 
 **Bemærk, at 2026/2027 kun har én stage endnu.** Det er forventet: opdelingen skemalægges først, når grundspillet er ved at være slut. `2nd Phase` er oversat på forhånd, fordi navnet er set i 2025/2026-sæsonen — ikke gættet.
+
+**Rettet efter levering (31. juli 2026, `A20`):** at slutspillet kommer sent er ikke længere et vilkår, brugeren skal tage højde for. En `full_season`-konkurrence oprettet nu **efterfyldes** med `2nd Phase`-kampene, når Sportmonks skemalægger dem. Fasenavnene bruges stadig til badgen på kamprækken, men ikke længere til at afgrænse en konkurrence — fase-vælgeren er fjernet.
 
 **Premier League koster stadig penge — og det haster ikke.** Billigste plan er **Starter €29/md** (5 selvvalgte turneringer); Growth (€99) og Pro (€249) er irrelevante ved et behov på 2–3 turneringer. Abonnementet tegnes, når nogen reelt vil tippe PL ved en sæsonstart — ikke fordi roadmappen nævner den. Appen er gratis for brugerne, så udgiften er privat (~215 kr./md), og behovet er sæsonbestemt: en opsigelse hen over sommeren er driftsmæssigt ufarlig, fordi data ligger i Supabase og `sync-live` rydder pænt op for kampe, den ikke kan hente, i stedet for at fejle.
 

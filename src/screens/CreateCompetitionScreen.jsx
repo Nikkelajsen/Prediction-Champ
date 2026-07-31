@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { db } from "../lib/supabase.js";
 import { loadMyGroups, createCompetition } from "../lib/data.js";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { formatKickoff, groupIntoRounds, MODE_LABELS, MODE_HINTS, stageOptionLabel } from "../lib/scoring.js";
+import { formatKickoff, groupIntoRounds, MODE_LABELS, MODE_HINTS } from "../lib/scoring.js";
 import { C, btnGhost, btnGreen, chip, muted } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
 
@@ -28,13 +28,10 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   const [randomLeagueIds, setRandomLeagueIds] = useState(null);
   const [rollingWindow, setRollingWindow] = useState(false);
   const [advanced, setAdvanced] = useState(false); // "Flere valg" — foldet ind som standard
-  const [availableStages, setAvailableStages] = useState([]);
-  const [selectedStages, setSelectedStages] = useState([]);
   // Full sæson kan spænde over flere turneringer på én gang (fx Superliga + Premier League).
   const [seasonByLeague, setSeasonByLeague] = useState({}); // league_id -> nyeste sæson
-  const [stagesByLeague, setStagesByLeague] = useState({}); // league_id -> [stage-navne]
+  const [countByLeague, setCountByLeague] = useState({});   // league_id -> antal kampe i sæsonen
   const [fsLeagueIds, setFsLeagueIds] = useState([]);       // valgte turneringer
-  const [fsStages, setFsStages] = useState({});             // league_id -> valgte stages
 
   useEffect(() => { if (!createLeagueId && leagues.length) setCreateLeagueId(leagues[0].id); }, [leagues]); // eslint-disable-line
   useEffect(() => { (async () => { try { setGroups(await loadMyGroups(token, userId)); } catch (e) { setGroups([]); } })(); }, [token, userId]); // eslint-disable-line
@@ -67,21 +64,17 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
       const tms = await db.select(token, "teams", `league_id=eq.${createLeagueId}&select=*&order=name`);
       setCreateTeams(tms);
       setTeamId("");
-      // udled hvilke stages der faktisk har kampe i sæsonen (fx grundspil, mesterskabsspil, nedrykningsspil)
-      if (season) {
-        const rows = await db.select(token, "matches", `season_id=eq.${season.id}&select=stage_name`);
-        const stages = [...new Set(rows.map((r) => r.stage_name).filter(Boolean))];
-        setAvailableStages(stages);
-        setSelectedStages(stages);
-      } else {
-        setAvailableStages([]);
-        setSelectedStages([]);
-      }
     })();
   }, [createLeagueId]); // eslint-disable-line
 
-  // Full sæson: indlæs nyeste sæson + tilgængelige stages for ALLE turneringer,
-  // så hver kan vælges (og stage-scopes) enkeltvis og flere kan kombineres.
+  // Full sæson: indlæs nyeste sæson + KAMPANTAL for ALLE turneringer.
+  //
+  // Antallet er ikke pynt. En konkurrence materialiserer sine kampe én gang ved
+  // oprettelsen, så en turnering uden kampe giver en konkurrence, der er tom for
+  // altid. Champions League har netop nu en sæsonrække og nul kampe, og indtil
+  // dette tal blev vist, var det eneste tegn på det en konkurrence, der aldrig
+  // fik noget at tippe på. Tallet gør den frosne liste synlig præcis dér, hvor
+  // nogen kan nå at reagere på den.
   useEffect(() => {
     if (mode !== "full_season") return;
     (async () => {
@@ -93,30 +86,30 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
       setSeasonByLeague(newestByLeague);
       const seasonIds = Object.values(newestByLeague).map((s) => s.id);
       const seasonToLeague = Object.fromEntries(Object.values(newestByLeague).map((s) => [s.id, s.league_id]));
-      const rows = seasonIds.length ? await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&select=season_id,stage_name`) : [];
-      const bySet = {};
+      const rows = seasonIds.length ? await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&select=season_id`) : [];
+      const counts = {};
+      for (const lid of leagueIds) counts[lid] = 0;
       for (const r of rows) {
-        if (!r.stage_name) continue;
         const lid = seasonToLeague[r.season_id];
-        (bySet[lid] ||= new Set()).add(r.stage_name);
+        if (lid) counts[lid] = (counts[lid] || 0) + 1;
       }
-      const stagesObj = {};
-      for (const lid of leagueIds) stagesObj[lid] = bySet[lid] ? [...bySet[lid]] : [];
-      setStagesByLeague(stagesObj);
-      setFsLeagueIds((prev) => (prev.length ? prev : (leagues[0] ? [leagues[0].id] : [])));
-      setFsStages(stagesObj); // standard: alle stages valgt pr. turnering
+      setCountByLeague(counts);
+      // Forvalget må ikke lande på en tom turnering: den ville se valgt ud og
+      // samtidig være det ene valg, der ikke kan bruges.
+      setFsLeagueIds((prev) => {
+        if (prev.length) return prev;
+        const first = leagues.find((l) => counts[l.id] > 0);
+        return first ? [first.id] : [];
+      });
     })();
   }, [mode, leagues]); // eslint-disable-line
 
   function toggleFsLeague(lid) {
+    // Kun et KENDT nul blokerer. `undefined` betyder "antallet er ikke hentet
+    // endnu" — og dér skal knappen opføre sig, som den ser ud (aktiv), ellers
+    // ville et hurtigt klik tavst intet gøre.
+    if (countByLeague[lid] === 0) return;
     setFsLeagueIds((prev) => (prev.includes(lid) ? prev.filter((x) => x !== lid) : [...prev, lid]));
-  }
-  function toggleFsStage(lid, stage) {
-    setFsStages((prev) => {
-      const cur = prev[lid] ?? (stagesByLeague[lid] || []);
-      const next = cur.includes(stage) ? cur.filter((x) => x !== stage) : [...cur, stage];
-      return { ...prev, [lid]: next.length ? next : cur };
-    });
   }
 
   useEffect(() => {
@@ -160,12 +153,9 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     if (mode === "full_season") {
       return {
         ...shared,
-        tournaments: fsLeagueIds.filter((id) => seasonByLeague[id]).map((lid) => ({
-          leagueId: lid,
-          seasonId: seasonByLeague[lid].id,
-          availableStages: stagesByLeague[lid] || [],
-          selectedStages: fsStages[lid] ?? (stagesByLeague[lid] || []),
-        })),
+        tournaments: fsLeagueIds
+          .filter((id) => seasonByLeague[id] && countByLeague[id] !== 0)
+          .map((lid) => ({ leagueId: lid, seasonId: seasonByLeague[lid].id })),
       };
     }
     if (mode === "custom") return { ...shared, matchIds: pickedIds };
@@ -175,7 +165,6 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
       leagueId: createLeagueId,
       seasonId: createSeason?.id || null,
       teamId, startDate, endDate,
-      availableStages, selectedStages,
     };
   }
 
@@ -244,20 +233,32 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {leagues.map((l) => {
                   const sel = fsLeagueIds.includes(l.id);
+                  const n = countByLeague[l.id];
+                  const empty = n === 0;
                   return (
-                    <button key={l.id} type="button" aria-pressed={sel} onClick={() => toggleFsLeague(l.id)} style={chip(sel)}>
-                      {sel ? "✓ " : ""}{l.name}
+                    <button key={l.id} type="button" aria-pressed={sel} disabled={empty}
+                      title={empty ? "Kampprogrammet er ikke lagt endnu" : undefined}
+                      onClick={() => toggleFsLeague(l.id)}
+                      style={{ ...chip(sel), opacity: empty ? 0.45 : 1, cursor: empty ? "not-allowed" : "pointer" }}>
+                      {sel ? "✓ " : ""}{l.name}{n === undefined ? "" : ` · ${n} kampe`}
                     </button>
                   );
                 })}
               </div>
+              {/* Siger hvorfor en chip er slukket. Uden linjen ligner en tom
+                  turnering en fejl i appen frem for en sæson, der ikke er lagt. */}
+              {leagues.some((l) => countByLeague[l.id] === 0) && (
+                <span style={{ color: C.muted, fontSize: 11.5, lineHeight: 1.4 }}>
+                  Turneringer uden kampe kan ikke vælges endnu — kampprogrammet er ikke lagt.
+                </span>
+              )}
             </div>
           )}
 
           {/* Alt herunder er "Flere valg". Hurtig-stien er navn + liga + turnering:
-              en ny bruger mødte før ti valg på én gang — modes, stages og et
-              rullende vindue — uden at vide, hvad nogen af dem betød. Intet er
-              fjernet; det er kun foldet ind, indtil man beder om det. */}
+              en ny bruger mødte før ti valg på én gang — modes, faser og et
+              rullende vindue — uden at vide, hvad nogen af dem betød. Fase-
+              valget er siden fjernet helt; resten er kun foldet ind. */}
           <button type="button" onClick={() => setAdvanced((v) => !v)} style={{
             ...btnGhost, alignSelf: "flex-start", marginTop: 2,
           }}>
@@ -277,51 +278,10 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
             <span style={{ color: C.muted, fontSize: 11.5, lineHeight: 1.4 }}>{MODE_HINTS[mode]}</span>
           </label>
 
-          {mode === "full_season" && (
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {fsLeagueIds.map((lid) => {
-                const avail = stagesByLeague[lid] || [];
-                if (avail.length <= 1) return null;
-                const league = leagues.find((l) => l.id === lid);
-                const sel = fsStages[lid] ?? avail;
-                return (
-                  <div key={lid} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <span style={{ color: C.muted, fontSize: 11 }}>{league?.name} — grundspil / slutspil</span>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {avail.map((s) => {
-                        const on = sel.includes(s);
-                        return (
-                          <button key={s} type="button" onClick={() => toggleFsStage(lid, s)} style={chip(on)}>
-                            {on ? "✓ " : ""}{stageOptionLabel(s)}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </label>
-          )}
           {(mode === "team" || mode === "time_range") && leagues.length > 1 && (
             <select className="field" value={createLeagueId} onChange={(e) => setCreateLeagueId(e.target.value)}>
               {leagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
-          )}
-          {(mode === "team" || mode === "time_range") && availableStages.length > 1 && (
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ color: C.muted, fontSize: 12 }}>Stages (grundspil / slutspil)</span>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {availableStages.map((s) => {
-                  const sel = selectedStages.includes(s);
-                  return (
-                    <button key={s} type="button" onClick={() => {
-                      const next = sel ? selectedStages.filter((x) => x !== s) : [...selectedStages, s];
-                      setSelectedStages(next.length ? next : selectedStages);
-                    }} style={chip(sel)}>{sel ? "✓ " : ""}{stageOptionLabel(s)}</button>
-                  );
-                })}
-              </div>
-            </label>
           )}
           {mode === "team" && (
             <select className="field" value={teamId} onChange={(e) => setTeamId(e.target.value)}>

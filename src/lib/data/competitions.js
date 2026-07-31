@@ -2,19 +2,22 @@
 // eksisterende: invitationskode og flytning til en liga.
 
 import { db, restFetch } from "../supabase.js";
-import { filterByStages, filterFromNextUnfinishedRound } from "../scoring.js";
+import { filterFromNextUnfinishedRound } from "../scoring.js";
 import { logEvent } from "../analytics.js";
 import { loadGroupByCode, joinGroup, joinCompetition } from "./groups.js";
 
 // ---------- oprettelse af konkurrence ----------
 
-// Et ægte DELMÆNGDE-valg af stages. Dækker valget alle stages (eller er der kun
-// én), filtreres der ikke — så kampe uden stage_name fra ældre sync ikke tavst
-// droppes. Reglen er den samme for `full_season` pr. turnering og for team/
-// time_range, og bor derfor ét sted.
-function isStageSubset(available, selected) {
-  return (available || []).length > 1 && (selected || []).length > 0 && selected.length < available.length;
-}
+// Fase-afgrænsning (grundspil/slutspil) findes IKKE længere ved oprettelsen.
+// En sæson-baseret konkurrence dækker hele sæsonen — også de kampe, der først
+// skemalægges senere, og som efterfyldes af `api/sync-matches.js`. Vil man have
+// et enkelt slutspil for sig, er det en NY konkurrence; det er liga-lagets egen
+// model ("konkurrencer er kapitler i ligaens historie") og ikke et filter.
+//
+// `mode_params.stages` skrives derfor aldrig mere, men feltet læses stadig af
+// efterfyldningen som et MÆRKAT: findes det, er konkurrencen afgrænset i hånden
+// under den gamle ordning og må aldrig vokse. Derfor står de gamle rækker
+// urørte uden en overgangsregel.
 
 // Opret en konkurrence: konkurrence-rækken + opretteren som deltager + de kampe,
 // konkurrencen omfatter.
@@ -28,12 +31,10 @@ function isStageSubset(available, selected) {
 //   name                  påkrævet
 //   groupId               liga-tilhør (null = liga-løs)
 //   mode                  full_season | team | time_range | custom | random
-//   tournaments           full_season: [{ leagueId, seasonId, availableStages, selectedStages }]
+//   tournaments           full_season: [{ leagueId, seasonId }]
 //   leagueId, seasonId    team | time_range
 //   teamId                team
 //   startDate, endDate    time_range
-//   availableStages,
-//   selectedStages        team | time_range
 //   matchIds              custom | random: de eksplicit valgte kampe
 //   randomCount           random: gemmes i mode_params
 //   openDaysBefore        rullende gætte-vindue (0 = fra)
@@ -46,7 +47,6 @@ async function createCompetition(token, userId, spec) {
     name, groupId = null, mode = "full_season",
     tournaments = [], leagueId = null, seasonId = null,
     teamId = null, startDate = null, endDate = null,
-    availableStages = [], selectedStages = [],
     matchIds = [], randomCount = null, openDaysBefore = 0,
   } = spec;
 
@@ -54,9 +54,8 @@ async function createCompetition(token, userId, spec) {
   const base = { name, group_id: groupId || null, rules, created_by: userId };
 
   // Full sæson kan spænde over flere turneringer på én gang (fx Superliga +
-  // Premier League). Kampene materialiseres pr. turnering — med den turnerings
-  // egne stage-valg — så læse-stierne (stilling, tips) virker uændret via
-  // competition_matches.
+  // Premier League). Kampene materialiseres pr. turnering, så læse-stierne
+  // (stilling, tips) virker uændret via competition_matches.
   if (mode === "full_season") {
     const sel = tournaments.filter((t) => t && t.leagueId && t.seasonId);
     if (!sel.length) throw new Error("Vælg mindst én turnering");
@@ -64,22 +63,20 @@ async function createCompetition(token, userId, spec) {
     const picked = [];
     const ids = [];
     for (const t of sel) {
-      const subset = isStageSubset(t.availableStages, t.selectedStages);
-      let ms = await db.select(token, "matches", `season_id=eq.${t.seasonId}&select=id,round_key,home_score,stage_name`);
-      ms = filterByStages(ms, subset ? t.selectedStages : []);
+      let ms = await db.select(token, "matches", `season_id=eq.${t.seasonId}&select=id,round_key,home_score`);
       ms = filterFromNextUnfinishedRound(ms);
       for (const m of ms) ids.push(m.id);
-      picked.push({ league_id: t.leagueId, season_id: t.seasonId, ...(subset ? { stages: t.selectedStages } : {}) });
+      picked.push({ league_id: t.leagueId, season_id: t.seasonId });
     }
     const only = picked[0];
-    // Én turnering: bevar den bundne form (league_id/season_id sat, evt. stages).
+    // Én turnering: bevar den bundne form (league_id/season_id sat).
     // Flere: liga-løs som custom/random (null), turneringerne gemt i mode_params.
     const [competition] = await db.insert(token, "competitions", [{
       ...base,
       league_id: multi ? null : only.league_id,
       season_id: multi ? null : only.season_id,
       mode: "full_season",
-      mode_params: multi ? { tournaments: picked } : (only.stages ? { stages: only.stages } : {}),
+      mode_params: multi ? { tournaments: picked } : {},
     }]);
     await db.insert(token, "competition_participants", [{ competition_id: competition.id, user_id: userId }]);
     if (ids.length) {
@@ -95,18 +92,15 @@ async function createCompetition(token, userId, spec) {
   if (!crossLeague && (!leagueId || !seasonId)) throw new Error("Ingen turnering med et kampprogram — vælg en anden turnering.");
   if (crossLeague && !matchIds.length) throw new Error(mode === "custom" ? "Vælg mindst én kamp" : "Ingen kommende kampe i de valgte turneringer");
 
-  const subset = !crossLeague && isStageSubset(availableStages, selectedStages);
   const [competition] = await db.insert(token, "competitions", [{
     ...base,
     league_id: crossLeague ? null : leagueId,
     season_id: crossLeague ? null : seasonId,
     mode,
-    mode_params: {
-      ...(mode === "team" ? { team_id: teamId }
-        : mode === "time_range" ? { start_date: startDate, end_date: endDate }
-        : mode === "random" ? { count: Number(randomCount) || 6 } : {}),
-      ...(subset ? { stages: selectedStages } : {}),
-    },
+    mode_params:
+      mode === "team" ? { team_id: teamId }
+      : mode === "time_range" ? { start_date: startDate, end_date: endDate }
+      : mode === "random" ? { count: Number(randomCount) || 6 } : {},
   }]);
   await db.insert(token, "competition_participants", [{ competition_id: competition.id, user_id: userId }]);
 
@@ -116,11 +110,10 @@ async function createCompetition(token, userId, spec) {
     return { competition, matchCount: matchIds.length };
   }
 
-  let query = `season_id=eq.${seasonId}&select=id,round_key,home_score,stage_name`;
+  let query = `season_id=eq.${seasonId}&select=id,round_key,home_score`;
   if (mode === "team" && teamId) query += `&or=(home_team_id.eq.${teamId},away_team_id.eq.${teamId})`;
   if (mode === "time_range" && startDate && endDate) query += `&kickoff_at=gte.${startDate}&kickoff_at=lte.${endDate}T23:59:59`;
   let matched = await db.select(token, "matches", query);
-  matched = filterByStages(matched, subset ? selectedStages : []);
   matched = filterFromNextUnfinishedRound(matched);
   if (matched.length) {
     await db.insert(token, "competition_matches", matched.map((m) => ({ competition_id: competition.id, match_id: m.id })));
@@ -187,4 +180,4 @@ async function moveCompetitionToGroup(token, compId, groupId) {
   });
 }
 
-export { isStageSubset, createCompetition, inviteCodeFrom, joinByInviteCode, moveCompetitionToGroup };
+export { createCompetition, inviteCodeFrom, joinByInviteCode, moveCompetitionToGroup };
