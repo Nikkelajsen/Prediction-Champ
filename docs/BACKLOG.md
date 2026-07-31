@@ -35,6 +35,7 @@ pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor
 eller en linje i "Forkastede ideer".
 
 - dokumentationen siger gratis-planen giver 180 kald/time pr. entitet, kontosiden siger 3.000 API-kald — hvilket tal og hvilken enhed gælder?
+- Lav privatlivspolitik og brugervilkår. Er der andet der skal tages hensyn til?
 
 ---
 
