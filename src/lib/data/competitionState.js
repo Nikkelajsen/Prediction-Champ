@@ -1,0 +1,98 @@
+// Én konkurrences fulde tilstand: deltagere, kampe, forudsigelser, stilling og
+// runde-status. Den tungeste enkelt-loader i appen og den, alle drill-ins
+// bygger på.
+
+import { db } from "../supabase.js";
+import { groupIntoRounds, pointsFor } from "../scoring.js";
+import { assignRanks, avgGoalError, compareStandings, sortStandings } from "../standings.js";
+import { roundRow, without } from "./_shared.js";
+
+// henter deltagere + kampe + forudsigelser for én konkurrence og beregner stilling + status
+async function computeCompetitionState(token, competitionId, rules) {
+  const participants = await db.select(token, "competition_participants", `competition_id=eq.${competitionId}&select=user_id`);
+  const userIds = participants.map((p) => p.user_id);
+  const profiles = userIds.length ? await db.select(token, "profiles", `id=in.(${userIds.join(",")})&select=*`) : [];
+  const cms = await db.select(token, "competition_matches", `competition_id=eq.${competitionId}&select=match_id`);
+  const matchIds = cms.map((c) => c.match_id);
+  const ms = matchIds.length ? await db.select(token, "matches", `id=in.(${matchIds.join(",")})&select=*`) : [];
+  const preds = matchIds.length ? await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&select=*`) : [];
+
+  const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]).filter(Boolean))];
+  const teams = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
+  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  ms.forEach((m) => { m._home = teamName.get(m.home_team_id); m._away = teamName.get(m.away_team_id); });
+
+  const rounds = groupIntoRounds(ms);
+  const predsByKey = new Map(preds.map((pr) => [`${pr.match_id}:${pr.user_id}`, pr]));
+
+  const playedRounds = rounds.filter((r) => r.matches.some((m) => m.home_score !== null && m.home_score !== undefined));
+  const playedKeys = playedRounds.map((r) => r.key);
+  const lastKey = playedKeys[playedKeys.length - 1];
+
+  // Alt hvad tiebreaker-stigen har brug for, opgjort i én gennemgang pr. spiller.
+  // `perRoundStats` bruges bagefter til rundesejre og til stillingen FØR seneste runde.
+  const rows = profiles.map((p) => {
+    let total = 0;
+    let exactCount = 0;
+    let outcomeCount = 0;
+    let goalError = 0;
+    let matches = 0;
+    const perRound = {};
+    const perRoundStats = {};
+    for (const round of rounds) {
+      const rs = { total: 0, exact: 0, outcome: 0, goalError: 0, matches: 0 };
+      let rPlayed = false;
+      for (const m of round.matches) {
+        const pred = predsByKey.get(`${m.id}:${p.id}`);
+        const pts = pointsFor(pred, m, rules);
+        if (pts !== null) {
+          rs.total += pts; rs.matches++; rPlayed = true;
+          rs.goalError += Math.abs(pred.pred_home - m.home_score) + Math.abs(pred.pred_away - m.away_score);
+          if (pred.pred_home === m.home_score && pred.pred_away === m.away_score) rs.exact++;
+          else if (pts === rules.outcome) rs.outcome++;
+        }
+      }
+      if (rPlayed) { perRound[round.key] = rs.total; perRoundStats[round.key] = rs; }
+      total += rs.total; exactCount += rs.exact; outcomeCount += rs.outcome;
+      goalError += rs.goalError; matches += rs.matches;
+    }
+    const form3 = playedKeys.slice(-3).reduce((s, k) => s + (perRound[k] ?? 0), 0);
+    return {
+      userId: p.id, player: p.display_name, total, perRound, perRoundStats,
+      exactCount, outcomeCount, matches, goalError,
+      avgGoalError: avgGoalError(goalError, matches), form3,
+    };
+  });
+
+  // Rundesejre: nr. 1 i den enkelte runde efter samme stige uden rundesejr-trinnet.
+  // En delt rundesejr tæller for alle — samme regel som Story Engines rundevinder.
+  rows.forEach((r) => { r.roundWins = 0; r.wonRounds = new Set(); });
+  for (const key of playedKeys) {
+    const inRound = rows
+      .filter((r) => r.perRoundStats[key])
+      .map((r) => ({ row: r, ...roundRow(r.perRoundStats[key]) }));
+    if (!inRound.length) continue;
+    const best = inRound.slice().sort(compareStandings)[0];
+    inRound.forEach((c) => {
+      if (compareStandings(c, best) === 0) { c.row.roundWins++; c.row.wonRounds.add(key); }
+    });
+  }
+
+  const ranked = assignRanks(sortStandings(rows));
+
+  // ▲/▼: sammenlign med stillingen FØR seneste spillede runde — med hele stigen,
+  // så pilen ikke påstår en bevægelse, der kun skyldes en manglende tiebreak.
+  if (playedKeys.length >= 2) {
+    const prev = assignRanks(sortStandings(ranked.map((r) => without(r, lastKey))));
+    const prevRank = new Map(prev.map((r) => [r.userId, r.rank]));
+    ranked.forEach((r) => { r.rankDelta = (prevRank.get(r.userId) ?? r.rank) - r.rank; });
+  }
+
+  const totalMatches = ms.length;
+  const playedMatches = ms.filter((m) => m.home_score !== null && m.home_score !== undefined).length;
+  const isComplete = totalMatches > 0 && playedMatches === totalMatches;
+
+  return { userId: undefined, rows: ranked, rounds: playedRounds, allRounds: rounds, predsByKey, totalMatches, playedMatches, isComplete };
+}
+
+export { computeCompetitionState };
