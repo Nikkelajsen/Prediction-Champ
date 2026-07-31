@@ -37,6 +37,7 @@ eller en linje i "Forkastede ideer".
 - `sql/rating_core.sql`s hoved siger, at funktionskroppene indeholder CRLF og ikke må normaliseres — filen har nul CR-tegn i dag, så enten er advarslen forældet eller også blev de normaliseret ubemærket
 - Mulighed for at kåre Runde og månedsvinder i lokale konkurrencer. Skal kunne tilvælges.
 - Konkurrence opbygning ved flere ligaer:
+
 | Konkurrenceform | Hvem er den til? |
 |-----------------|------------------|
 | **Sæson** | Klassiske ligaer, der følger én eller flere turneringer hele sæsonen. |
