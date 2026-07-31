@@ -27,7 +27,7 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 
 ### 3.1 Drift (ingen kode)
 
-1. Find turneringens Sportmonks-id og indsæt række i `leagues` (`api_league_id`, `is_visible`) + sæson-række i `seasons` (jf. DOCUMENTATION.md afsnit 10).
+1. Indsæt række i `leagues` (`api_league_id`, `is_visible`) + sæson-række i `seasons` (jf. DOCUMENTATION.md afsnit 10). **Turnering #2 er Scotland Premiership, `api_league_id = 501`** — se 3.4 for hele planens indhold. *(Tilføjet 31. juli 2026 med A10:)* **sæt `is_visible = false`** første gang; generalprøven kræver, at turneringen findes i databasen, men ingen brugere skal se den endnu. Skal en anden turnering bruges, så verificér først, at den er i planen — `GET /v3/football/leagues?api_token=…` returnerer netop planens turneringer, og en turnering uden for den er ikke bare "ikke synlig": syncen fejler.
 2. Kald `/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` første gang (`&dryRun=true` først) — holdene oprettes automatisk.
 3. Opret ét nyt cron-job.org-job for turneringen, med `SYNC_SECRET` i `x-sync-secret`-headeren (jf. ROADMAP-beslutningen — nye jobs skal ikke bruge `?secret=`-fallbacken). **Tilføj derefter jobbet i [`docs/CRON.md`](../CRON.md)** — registeret dér er kilden til, hvilke jobs der findes, og det er kun sandt, hvis det vedligeholdes. *(Tilføjet 30. juli 2026: registeret fandtes ikke, da denne spec blev skrevet.)*
 4. Notifikations-jobbet dækker allerede alle turneringer i ét kald — intet nyt job dér.
@@ -45,6 +45,33 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 
 - **A2 — ✅ Lukket (juli 2026):** Månedsligaen tæller **samlede point**, også med flere turneringer (rating dækker præcision via gennemsnit). Ingen kodeændring — `monthly_standings` og "Sådan virker det"-teksten er allerede korrekte.
 - **Trin 5 — global tirsdag–mandag-runde** bliver først reelt anderledes end turneringsrunder, når turnering #2 er i drift. Forbliver bevidst udskudt; dette dokument ændrer ikke på det, men tilføjelsen af turnering #2 er dens forudsætning.
+- **A10 — ✅ Lukket (31. juli 2026):** abonnementet gater ikke længere denne drejebog. Se 3.4 nedenfor.
+
+### 3.4 Turnering #2 er Scotland Premiership — A10, afgjort 31. juli 2026
+
+*Tilføjet efter at drejebogen blev skrevet. Dengang stod A10 åben, og hele §3 forudsatte, at abonnementet skulle afklares først. Slutlinjens "beslut hvilken turnering (Premier League er roadmappens kandidat)" er dermed erstattet: valget er truffet, og det koster ingenting.*
+
+**Gratis-planen indeholder fire turneringer** (verificeret på kontosiden, 31. juli 2026):
+
+| Land | Turnering | Sportmonks-id |
+|---|---|---|
+| Danmark `#320` | Superliga | `271` |
+| Danmark `#320` | Superliga Play-offs | `1659` |
+| Skotland `#1161` | **Premiership** | **`501`** |
+| Skotland `#1161` | Premiership Play-Offs | `513` |
+
+**Turnering #2 = Scotland Premiership (`501`).** Den er rigtig nok til generalprøven på alle de måder, koden er følsom over for: egen sæson med egne runder (samme rytme som Superligaen, aug.–maj), egne holdnavne til at afprøve den fuzzy holdmatch i `sync-matches`, egne fasenavne til `STAGE_LABELS`, og — vigtigst — den gør turnerings-*antallet* til to, hvilket er den variabel, hele §3.2 og testcases 2–6 handler om. Tændes med `is_visible = false`, til §3.2 er verificeret; derefter er det et frit valg, om nogen skal kunne tippe den.
+
+**To ting at være opmærksom på ved netop denne plan:**
+
+- **Play-offs er en selvstændig turnering hos Sportmonks** (`1659`/`513`), ikke en stage. Vores model behandler Superligaens mesterskabs-/nedrykningsspil som *stages i samme sæson* (jf. DOCUMENTATION.md §8), så `271` alene har hidtil dækket hele den danske sæson. Verificér ved sæsonafslutning, om slutspilskampene faktisk kommer med under `271` — gør de ikke, er `1659` en tredje `leagues`-række og ikke en fejl i syncen.
+- **Skotske fasenavne** rammer `STAGE_LABELS`-fallbacken (råt navn) indtil de oversættes. Det er acceptabelt for en usynlig turnering og er netop den løbende tilføjelse, 3.2 beskriver.
+
+**Premier League koster stadig penge — og det haster ikke.** Billigste plan er **Starter €29/md** (5 selvvalgte turneringer); Growth (€99) og Pro (€249) er irrelevante ved et behov på 2–3 turneringer. Abonnementet tegnes, når nogen reelt vil tippe PL ved en sæsonstart — ikke fordi roadmappen nævner den. Appen er gratis for brugerne, så udgiften er privat (~215 kr./md), og behovet er sæsonbestemt: en opsigelse hen over sommeren er driftsmæssigt ufarlig, fordi data ligger i Supabase og `sync-live` rydder pænt op for kampe, den ikke kan hente, i stedet for at fejle.
+
+**Add-on-fælden:** Champions League ligger i **Euro Club Tournaments, +€29/md**, altså *uden for* de 5 selvvalgte turneringer. Roadmappens trin 5 nævner PL og CL i samme sætning, men de koster ikke det samme — CL er en fordobling af regningen og tages som en selvstændig beslutning. Internationale turneringer (+€129/md) er fravalgt.
+
+**Rate limit er ikke det, vi ville betale for:** `sync-live` bruger maks. 60 kald/time på kampdage og nul resten af tiden, `sync-matches` ~4 kald pr. kørsel pr. turnering hver 6. time. To turneringer fordobler kun det sidste tal. Fuld begrundelse i [`../DECISIONS.md`](../DECISIONS.md), 31. juli 2026.
 
 ---
 
@@ -72,4 +99,4 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 
 ---
 
-*Næste skridt: Beslut hvilken turnering (Premier League er roadmappens kandidat) → luk A2 → udfør 3.1–3.2 → QA på preview før `is_visible = true`.*
+*Næste skridt (opdateret 31. juli 2026, efter A10): ~~Beslut hvilken turnering (Premier League er roadmappens kandidat)~~ → **turnering #2 er Scotland Premiership (`501`), som allerede er i gratis-planen** → udfør 3.1–3.2 med `is_visible = false` → kør testcases i afsnit 6 → beslut derefter, om den skal gøres synlig. Premier League venter på efterspørgsel og €29/md (3.4). A2 er lukket.*
