@@ -44,8 +44,8 @@ eller en linje i "Forkastede ideer".
 | **Favorithold** | Brugere, der kun vil tippe på udvalgte klubber på tværs af ligaer. |
 | **Weekly Mix** | En ugentlig, automatisk sammensat konkurrence med de mest interessante kampe ud fra valgte ligaer og regler. |
 | **Custom** | Administratorer, der vil definere præcis periode, turneringer, hold og regler. |
-| **Quick League** | En færdig konkurrence på få sekunder med 8 kampe til de næste 6 spillerunder. |
-| **Quick Pick** | En færdig konkurrence på få sekunder med 8 kampe til næste spillerunde. |
+| **Quick League** | En færdig konkurrence på få sekunder med 8 tilfældige kampe til de næste 6 spillerunder. |
+| **Quick Pick** | En færdig konkurrence på få sekunder med 8 tilfældige kampe til næste spillerunde. |
 
 ---
 
