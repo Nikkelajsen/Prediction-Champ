@@ -34,6 +34,10 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
+- Championship siger ikke, at en synlig ikke-officiel turnering ikke tæller — vælger og "To niveauer"-forklaring er begge gated på `officialLeagues.length > 1`, så med Scotland som eneste ikke-officielle vises ingen af delene
+- Ratingen tæller alle turneringer, stillingerne kun de officielle (`recompute_ratings()` har intet liga-filter) — samme spørgsmål som A2, aldrig afgjort for rating; hænger sammen med det ubesluttede `ratings.scope`
+- B2: cron-jobbet for Scotland står allerede i CRON.md — afklar hvilke drift-trin der reelt mangler, før rækken læses som urørt
+
 ---
 
 ## Åbne beslutninger
