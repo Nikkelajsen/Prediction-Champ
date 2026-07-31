@@ -37,8 +37,25 @@ eller en linje i "Forkastede ideer".
 - dokumentationen siger gratis-planen giver 180 kald/time pr. entitet, kontosiden siger 3.000 API-kald — hvilket tal og hvilken enhed gælder?
 - Lav privatlivspolitik og brugervilkår. Er der andet der skal tages hensyn til?
 - notifikation til ligamedlemmer når der oprettes ny konkurrence i en liga de er medlem af.
-- i en konkurrence med to forskellige ligaer, låser kampene på forskellige tidspunkter. Hvordan har det indvirkning på hvornå man kan se andres tip? Den burde jo egentligt låse en time før første kamp i runden i konkurrencen.
+- i en konkurrence med to forskellige ligaer, låser kampene på forskellige tidspunkter. Hvordan har det indvirkning på hvornår man kan se andres tip? Den burde jo egentligt låse en time før første kamp i runden i konkurrencen.
 - Fjern default navn bår man opretter en konkurrence
+- Mulighed for at dele: Rundevinder, Ratingrekord, Ny rival, Månedsmester, Sæsonvinder. Samt andet relevant.
+- Ambassadør program når man opretter ligaer/konkurrencer. evt også hvor mange deltagere ens ligaer indeholder.
+- Finpuds invitationer. de er vores nøgle til nye brugere og skal være fantastiske.
+- Lav proffesionel hjemmeside. Ikke en stor hjemmeside. Bare 4-6 sider: Forside, Hvordan fungerer det?, Features, Om os, Kontakt, Download app (senere), evt forslag. Formål: Giver troværdighed, Kan vises til virksomheder/brugere, Kan deles, Google kan indeksere den.
+- SEO - sørg for at hjemmesiden kommer frem når der søges på relevante søgeord
+- få Domæne og professionel e-mail
+- LinkedIn side, hvis vi når til wt punkt hvor vi vil prøve at genere indkomst via virksomheder
+- Byg en offentlig side for hver liga.
+Eksempel:
+predictionhub.app/league/padel-legends
+Der kan man se:
+antal sæsoner
+medlemmer
+mestre
+statistik
+Ikke tips.
+Kun historik.
 
 ---
 
