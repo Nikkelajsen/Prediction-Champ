@@ -37,8 +37,6 @@ eller en linje i "Forkastede ideer".
 - `sql/rating_core.sql`s hoved siger, at funktionskroppene indeholder CRLF og ikke må normaliseres — filen har nul CR-tegn i dag, så enten er advarslen forældet eller også blev de normaliseret ubemærket
 - Mulighed for at kåre Runde og månedsvinder i lokale konkurrencer. Skal kunne tilvælges.
 - Konkurrence opbygning ved flere ligaer:
-
-| Konkurrenceform | Hvem er den til? |
 |-----------------|------------------|
 | **Sæson** | Klassiske ligaer, der følger én eller flere turneringer hele sæsonen. |
 | **Favorithold** | Brugere, der kun vil tippe på udvalgte klubber på tværs af ligaer. |
@@ -46,6 +44,7 @@ eller en linje i "Forkastede ideer".
 | **Custom** | Administratorer, der vil definere præcis periode, turneringer, hold og regler. |
 | **Quick League** | En færdig konkurrence på få sekunder med 8 tilfældige kampe til de næste 6 spillerunder. |
 | **Quick Pick** | En færdig konkurrence på få sekunder med 8 tilfældige kampe til næste spillerunde. |
+- Notifikation når en ny turnering bliver tilgængelig.
 
 ---
 
