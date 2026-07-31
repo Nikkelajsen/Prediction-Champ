@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Crown, ChevronLeft, ChevronRight } from "lucide-react";
 import { currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRatingMap, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, monthName } from "../lib/data.js";
 import { roundLabel } from "../lib/scoring.js";
-import { leaders } from "../lib/standings.js";
+import { joinNames, leaders } from "../lib/standings.js";
 import { C, font, muted, pagerBtn, thStyle } from "../ui/theme.js";
 import { Card, Eyebrow, H, InfoDot, Modal, PlayerName } from "../ui/components.jsx";
 
@@ -176,6 +176,32 @@ export function boardTitle(kind, league) {
 // turneringer samlet, ellers turneringens id.
 const ALL_SCOPE = "ALL";
 
+// Hvorfor en turnering kan udelades. Hører hjemme i en InfoDot og ikke på
+// kortet: begrundelsen er A2's egen — et tal, hvis betydning skifter, når
+// produktet vokser, kan ikke sammenlignes med sig selv.
+const WHY_NOT_ALL = "En turnering kan tippes, uden at den afgør titler. "
+  + "Det er derfor en titel betyder det samme, før og efter en ny turnering er kommet til.";
+
+// En turnering kan være synlig og tipbar uden at fodre Championship
+// (`leagues.is_visible = true`, `is_official = false` — se sql/tournament_scope.sql).
+// Den udelades derfor af stillingerne, og indtil nu blev den udeladt *tavst*:
+// vælgeren og "To niveauer"-forklaringen er begge gated på mere end én officiel
+// turnering, så med præcis én officiel og én uofficiel viste fanen ingen af
+// delene. En bruger, der havde tippet den uofficielle turnering, så sine point
+// tælle i konkurrencen og i ratingen — og forsvinde her, uden ét ord om hvorfor.
+//
+// Sætningen navngiver derfor begge sider, og den siger, hvor pointene så bliver
+// af: en udeladelse, der ikke gør det, ligner et tab. Reglen er den fra 30.
+// juli — et tal skal navngive sit eget omfang i den sætning, det står i, og en
+// InfoDot må uddybe, men aldrig alene bære det, der skal til for at læse tallet
+// rigtigt. Uden officielle turneringer er der ingen stilling at forklare.
+export function scopeNote(official, unofficial) {
+  if (!official?.length || !unofficial?.length) return null;
+  return `Championship afgøres af ${joinNames(official.map((l) => l.name))}. `
+    + `${joinNames(unofficial.map((l) => l.name))} kan tippes og giver point i din konkurrence `
+    + `og i din rating, men tæller ikke med her.`;
+}
+
 function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   const [months, setMonths] = useState([]);
   const [month, setMonth] = useState(currentMonthKey());
@@ -193,6 +219,11 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   // bevidst valg pr. turnering, ikke noget der følger med, når den tændes.
   // Filtreringen sker her og ikke i MainApp, så de øvrige skærme er upåvirkede.
   const officialLeagues = useMemo(() => leagues.filter((l) => l.is_official !== false), [leagues]);
+  // Modstykket: de synlige turneringer, der IKKE afgør titler. `leagues` er
+  // allerede filtreret på synlighed i MainApp, så en skjult turnering hverken
+  // tælles eller nævnes — den findes ikke for brugeren.
+  const unofficialLeagues = useMemo(() => leagues.filter((l) => l.is_official === false), [leagues]);
+  const note = useMemo(() => scopeNote(officialLeagues, unofficialLeagues), [officialLeagues, unofficialLeagues]);
 
   const [seasonLeagueId, setSeasonLeagueId] = useState(readSeasonLeagueId);
   const seasonLeague = useMemo(() => pickSeasonLeague(officialLeagues, seasonLeagueId), [officialLeagues, seasonLeagueId]);
@@ -295,6 +326,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
                 {officialLeagues.length > 1 && (
                   <div><b>To niveauer:</b> "Alle turneringer" samler ugens kampe på tværs og kårer <b>Rundens Prediction Champ</b> — den store titel. Vælger du én turnering, ser du stillingen for netop den, hvor alle er målt på de samme kampe; dens vinder er "Rundens bedste i turneringen".</div>
                 )}
+                {note && <div><b>Hvilke turneringer tæller:</b> {note} {WHY_NOT_ALL}</div>}
               </div>
             </InfoDot>
           </div>
@@ -324,6 +356,11 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
               title={`Rundeliga${roundLeague ? ` · ${roundLeague.name}` : ""} · runde ${roundKey ? roundLabel(roundKey) : ""}`} onOpenFull={setFull} openProfile={openProfile} />
           </>
         )}
+        {/* Står uden for stillingen med vilje: den tomme stilling ("Ingen point i
+            denne runde endnu") er præcis den, en bruger med kun uofficielle tips
+            ser — og dermed den, der har mest brug for sætningen. Ved et valgt
+            scope navngiver overskriften allerede turneringen. */}
+        {note && roundScope === ALL_SCOPE && <p style={{ ...muted, margin: "10px 0 0", fontSize: 11 }}>{note}</p>}
       </Card>
 
       {/* Månedsliga */}
@@ -337,6 +374,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
                 {officialLeagues.length > 1 && (
                   <div><b>To niveauer:</b> "Alle turneringer" samler månedens kampe på tværs og kårer <b>Månedens Prediction Champ</b> — den store titel. Vælger du én turnering, ser du stillingen for netop den, hvor alle er målt på de samme kampe.</div>
                 )}
+                {note && <div><b>Hvilke turneringer tæller:</b> {note} {WHY_NOT_ALL}</div>}
               </div>
             </InfoDot>
           </div>
@@ -361,6 +399,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
           <Standings rows={rows} userId={userId} isComplete={isPast} ratingMap={ratingMap}
             title={`Månedsliga${monthLeague ? ` · ${monthLeague.name}` : ""} · ${monthName(month)}`} onOpenFull={setFull} openProfile={openProfile} />
         )}
+        {note && monthScope === ALL_SCOPE && <p style={{ ...muted, margin: "10px 0 0", fontSize: 11 }}>{note}</p>}
       </Card>
 
       {/* Sæsonchampionship (live — samlede point for hele sæsonen) */}
@@ -370,8 +409,11 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
             Sæsonens Prediction Champ
             {/* Turneringsnavnet står i sin egen sætningsdel, så teksten holder uanset
                 bøjning — "for alle Superligaen kampe" var resultatet af at sætte
-                værdien ind, hvor kun fallbacken ("Superligaens") passede. */}
-            <InfoDot title="Sæsonens Prediction Champ">Dine samlede point for alle kampe i {seasonLeague?.name || "turneringen"} i hele sæsonen. Én sæsonstilling pr. turnering — er der flere, vælges de i dropdownen. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Sæsonens bedste kåres som Sæsonens Prediction Champ — er to helt lige, deles titlen.</InfoDot>
+                værdien ind, hvor kun fallbacken ("Superligaens") passede.
+                Sidste sætning: uden den ser vælgeren ud til at mangle en
+                turnering, brugeren kan se og tippe alle andre steder i appen. */}
+            <InfoDot title="Sæsonens Prediction Champ">Dine samlede point for alle kampe i {seasonLeague?.name || "turneringen"} i hele sæsonen. Én sæsonstilling pr. turnering i Championship — er der flere, vælges de i dropdownen. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Sæsonens bedste kåres som Sæsonens Prediction Champ — er to helt lige, deles titlen.
+              {unofficialLeagues.length > 0 && ` ${joinNames(unofficialLeagues.map((l) => l.name))} har ingen sæsonstilling.`}</InfoDot>
           </div>
           {/* Vælgeren dukker først op, når der ér mere end én turnering — med kun
               én ville en dropdown med ét valg være støj. Fremdrifts-tælleren

@@ -138,6 +138,8 @@ To ting fulgte, som er værd at kende, hvis man rører ved det igen:
 
 Verificeret mod PostgreSQL 16.13 med en fixture, hvor én spiller tipper begge turneringer og to kun hver sin: summen af per-turnering-rækker er lig den samlede række (både kampe og point), rundesejre partitioneres pr. niveau, en ikke-officiel turnering påvirker intet, og constraint'en afviser officiel+usynlig.
 
+**Rettet efter leveringen (31. juli 2026):** *"Championship er dermed uændret i dag"* holdt i databasen, men ikke på skærmen. Både turneringsvælgeren og "To niveauer"-forklaringen i `ChampionshipTab.jsx` er gated på **mere end én officiel** turnering — så med præcis én officiel (Superligaen) og én uofficiel (Skotland) viste fanen ingen af delene, og de skotske kampe forsvandt ud af stillingen uden ét ord om hvorfor. Den bruger, der tipper Skotland, ser sine point tælle i konkurrencen og i ratingen, og ikke her. `scopeNote()` (samme fil, unit-testet) navngiver derfor begge sider — *"Championship afgøres af Superligaen. Scotland Premiership kan tippes og giver point i din konkurrence og i din rating, men tæller ikke med her."* — som en synlig linje på runde- og månedskortet, med hvorfor'et i InfoDot'en. Sæson-InfoDot'en siger nu tilsvarende, at den uofficielle turnering ingen sæsonstilling har. Reglen bag: et tal skal navngive sit eget omfang i den sætning, det står i (`DECISIONS.md`, 30. juli 2026). Linjen forsvinder af sig selv, den dag alle synlige turneringer er officielle.
+
 ---
 
 ## 4. Forudsætning
