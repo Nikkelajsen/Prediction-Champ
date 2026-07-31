@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ZGd7NLqWPvdddUFU5ILTXzPIqzTbRKShQKLph7RDLrxAm7Mbow8kYf5GMKiL2Gh
+\restrict ChWEDhHTxkyxlbBM1m0fu48inMBs2Obaw5GyjHVOIyfcUElWNxRNUREAFLbZDR7
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
@@ -1345,8 +1345,88 @@ begin
             group by round_key
             having bool_and(home_score is not null and away_score is not null)
           ) rc on rc.round_key = rs.round_key
+          -- Kun den SAMLEDE rundeliga. round_standings har siden
+          -- sql/tournament_scope.sql også en række pr. turnering, og uden dette
+          -- filter ville én rundesejr tælle to gange (samlet + i sin turnering).
+          -- Per-turnering-titler hører til i titles.by_tournament, ikke her.
+          where rs.scope = 'ALL'
         ) rr
         where rr.user_id = profile_user_id and rr.rnk = 1
+      ),
+
+      -- ---------- Per-turnering-titler (K2, 31. juli 2026) ----------
+      -- Championship kårer på to niveauer (sql/tournament_scope.sql). Grenene
+      -- ovenfor er og forbliver KUN de samlede, så "Månedens Prediction Champ ×5"
+      -- betyder det samme før og efter turnering #3 — et karrieretal, hvis
+      -- betydning skifter, når produktet vokser, kan ikke sammenlignes med sig
+      -- selv. Per-turnering-sejre tælles derfor med, men i deres egen gren, som
+      -- profilskærmen viser som en adskilt gruppe.
+      --
+      -- Kun turneringer, hvor brugeren FAKTISK har vundet noget, kommer med:
+      -- ellers ville hver ny turnering give enhver profil endnu en tom
+      -- overskrift. Rækkefølgen er ældste turnering først — samme regel som
+      -- vælgeren i ChampionshipTab (pickSeasonLeague), så to skærme ikke
+      -- sorterer det samme forskelligt.
+      --
+      -- Bemærk komplethedsjoinene: en måned/runde er afsluttet PR. TURNERING.
+      -- Superligaens månedstitel må ikke afvente en skotsk kamp, der ikke er
+      -- spillet — det ville lade en fremmed turnering holde en titel tilbage.
+      'by_tournament', (
+        select coalesce(jsonb_agg(t.entry order by t.created_at), '[]'::jsonb)
+        from (
+          select l.created_at, jsonb_build_object(
+            'league_id',   l.id,
+            'league_name', l.name,
+            'monthly', (
+              select coalesce(jsonb_agg(jsonb_build_object(
+                       'month',      mw.month,
+                       'month_name', months[cast(substring(mw.month from 6 for 2) as int)] || ' ' || substring(mw.month from 1 for 4),
+                       'points',     mw.total_points
+                     ) order by mw.month desc), '[]'::jsonb)
+              from (
+                select ms.month, ms.user_id, ms.total_points,
+                  rank() over (partition by ms.month
+                               order by ms.total_points desc, ms.exact_count desc, ms.outcome_count desc,
+                                        ms.round_wins desc, ms.avg_goal_error asc) as rnk
+                from public.monthly_standings ms
+                join (
+                  select to_char(date_trunc('month', m.kickoff_at), 'YYYY-MM') as month
+                  from public.matches m
+                  join public.seasons s on s.id = m.season_id
+                  where s.league_id = l.id
+                  group by 1
+                  having bool_and(m.home_score is not null and m.away_score is not null)
+                ) mc on mc.month = ms.month
+                where ms.scope = l.id::text
+              ) mw
+              where mw.user_id = profile_user_id and mw.rnk = 1
+            ),
+            'round_wins', (
+              select count(*)::int
+              from (
+                select rs.round_key, rs.user_id,
+                  rank() over (partition by rs.round_key
+                               order by rs.total_points desc, rs.exact_count desc, rs.outcome_count desc,
+                                        rs.avg_goal_error asc) as rnk
+                from public.round_standings rs
+                join (
+                  select m.round_key
+                  from public.matches m
+                  join public.seasons s on s.id = m.season_id
+                  where s.league_id = l.id
+                  group by m.round_key
+                  having bool_and(m.home_score is not null and m.away_score is not null)
+                ) rc on rc.round_key = rs.round_key
+                where rs.scope = l.id::text
+              ) rr
+              where rr.user_id = profile_user_id and rr.rnk = 1
+            )
+          ) as entry
+          from public.leagues l
+          where l.is_official
+        ) t
+        where jsonb_array_length(t.entry->'monthly') > 0
+           or (t.entry->>'round_wins')::int > 0
       )
     ),
 
@@ -1412,6 +1492,10 @@ begin
           group by round_key
           having bool_and(home_score is not null and away_score is not null)
         ) rc on rc.round_key = rs.round_key
+        -- Kun den samlede rundeliga (sql/tournament_scope.sql). Uden filteret
+        -- ville feltstørrelsen tælle hver spiller én gang pr. turnering, og
+        -- "4. plads af 31" blive til "af 62".
+        where rs.scope = 'ALL'
       ),
       mine as (
         select round_key, rnk, field, total_points, exact_count, (rnk = 1) as won
@@ -1903,7 +1987,9 @@ begin
     'Du ramte ' || rs.exact_count || ' kampe præcist i runden ' || v_label ||
       ' — ' || rs.total_points || ' point i alt.'
   from public.round_standings rs
-  where rs.round_key = v_round and rs.exact_count >= 2;
+  -- Kun den samlede rundeliga (sql/tournament_scope.sql). Uden scope-filteret
+  -- ville hver bruger få ét SHARP-kort pr. turnering med hver sit tal.
+  where rs.round_key = v_round and rs.scope = 'ALL' and rs.exact_count >= 2;
 
   -- ======== Dæmpet tier (v1.1) · kun når INTET andet er i spil ========
   -- Kandidaterne er de brugere, der tippede i runden og efter alle reglerne
@@ -2095,6 +2181,8 @@ begin
          sum(case when p.pred_home = m.home_score and p.pred_away = m.away_score then 1 else 0 end) as exacts
   from predictions p
   join matches m on m.id = p.match_id
+  join seasons s on s.id = m.season_id
+  join leagues l on l.id = s.league_id and l.is_official
   where m.home_score is not null and m.away_score is not null
     and p.pred_home is not null and p.pred_away is not null
   group by m.round_key, p.user_id;
@@ -2572,7 +2660,26 @@ CREATE TABLE public.leagues (
     name text NOT NULL,
     api_league_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    is_visible boolean DEFAULT true NOT NULL
+    is_visible boolean DEFAULT true NOT NULL,
+    is_official boolean DEFAULT true NOT NULL,
+    provider text DEFAULT 'sportmonks'::text NOT NULL,
+    live_enabled boolean DEFAULT true NOT NULL,
+    CONSTRAINT leagues_official_implies_visible CHECK (((NOT is_official) OR is_visible)),
+    CONSTRAINT leagues_provider_check CHECK ((provider = ANY (ARRAY['sportmonks'::text, 'footballdata'::text])))
+);
+
+
+--
+-- Name: seasons; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.seasons (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    league_id uuid NOT NULL,
+    name text NOT NULL,
+    api_season_id text,
+    start_date date,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -2584,28 +2691,42 @@ CREATE VIEW public.monthly_standings AS
  WITH scored AS (
          SELECT to_char(date_trunc('month'::text, m.kickoff_at), 'YYYY-MM'::text) AS month,
             m.round_key,
+            l.id AS league_id,
             p.user_id,
             public.pc_points(p.pred_home, p.pred_away, m.home_score, m.away_score) AS pts,
             (abs((p.pred_home - m.home_score)) + abs((p.pred_away - m.away_score))) AS goal_err
-           FROM (public.predictions p
+           FROM (((public.predictions p
              JOIN public.matches m ON ((m.id = p.match_id)))
+             JOIN public.seasons s_1 ON ((s_1.id = m.season_id)))
+             JOIN public.leagues l ON (((l.id = s_1.league_id) AND l.is_official)))
           WHERE ((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL) AND (p.pred_home IS NOT NULL) AND (p.pred_away IS NOT NULL))
+        ), scoped AS (
+         SELECT sc.month,
+            sc.round_key,
+            sc.user_id,
+            sc.pts,
+            sc.goal_err,
+            x.scope
+           FROM (scored sc
+             CROSS JOIN LATERAL ( VALUES ('ALL'::text), ((sc.league_id)::text)) x(scope))
         ), per_round AS (
-         SELECT scored.month,
-            scored.user_id,
-            rank() OVER (PARTITION BY scored.month, scored.round_key ORDER BY (sum(scored.pts)) DESC, (count(*) FILTER (WHERE (scored.pts = 3))) DESC, (count(*) FILTER (WHERE (scored.pts = 1))) DESC, (round(((sum(scored.goal_err))::numeric / (count(*))::numeric), 4))) AS rnk
-           FROM scored
-          GROUP BY scored.month, scored.round_key, scored.user_id
+         SELECT scoped.scope,
+            scoped.month,
+            scoped.user_id,
+            rank() OVER (PARTITION BY scoped.scope, scoped.month, scoped.round_key ORDER BY (sum(scoped.pts)) DESC, (count(*) FILTER (WHERE (scoped.pts = 3))) DESC, (count(*) FILTER (WHERE (scoped.pts = 1))) DESC, (round(((sum(scoped.goal_err))::numeric / (count(*))::numeric), 4))) AS rnk
+           FROM scoped
+          GROUP BY scoped.scope, scoped.month, scoped.round_key, scoped.user_id
         ), wins AS (
-         SELECT per_round.month,
+         SELECT per_round.scope,
+            per_round.month,
             per_round.user_id,
             (count(*))::integer AS round_wins
            FROM per_round
           WHERE (per_round.rnk = 1)
-          GROUP BY per_round.month, per_round.user_id
+          GROUP BY per_round.scope, per_round.month, per_round.user_id
         )
  SELECT s.month,
-    'ALL'::text AS scope,
+    s.scope,
     s.user_id,
     (sum(s.pts))::integer AS total_points,
     (count(*))::integer AS matches,
@@ -2613,9 +2734,9 @@ CREATE VIEW public.monthly_standings AS
     (count(*) FILTER (WHERE (s.pts = 1)))::integer AS outcome_count,
     round(((sum(s.goal_err))::numeric / (count(*))::numeric), 4) AS avg_goal_error,
     COALESCE(w.round_wins, 0) AS round_wins
-   FROM (scored s
-     LEFT JOIN wins w ON (((NOT (w.month IS DISTINCT FROM s.month)) AND (w.user_id = s.user_id))))
-  GROUP BY s.month, s.user_id, w.round_wins;
+   FROM (scoped s
+     LEFT JOIN wins w ON (((w.scope = s.scope) AND (NOT (w.month IS DISTINCT FROM s.month)) AND (w.user_id = s.user_id))))
+  GROUP BY s.month, s.scope, s.user_id, w.round_wins;
 
 
 --
@@ -2693,22 +2814,34 @@ CREATE TABLE public.ratings (
 CREATE VIEW public.round_standings WITH (security_invoker='on') AS
  WITH scored AS (
          SELECT m.round_key,
+            l.id AS league_id,
             pr.user_id,
             public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) AS pts,
             (abs((pr.pred_home - m.home_score)) + abs((pr.pred_away - m.away_score))) AS goal_err
-           FROM (public.predictions pr
+           FROM (((public.predictions pr
              JOIN public.matches m ON ((m.id = pr.match_id)))
+             JOIN public.seasons s ON ((s.id = m.season_id)))
+             JOIN public.leagues l ON (((l.id = s.league_id) AND l.is_official)))
           WHERE ((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL) AND (pr.pred_home IS NOT NULL) AND (pr.pred_away IS NOT NULL))
+        ), scoped AS (
+         SELECT sc.round_key,
+            sc.user_id,
+            sc.pts,
+            sc.goal_err,
+            x.scope
+           FROM (scored sc
+             CROSS JOIN LATERAL ( VALUES ('ALL'::text), ((sc.league_id)::text)) x(scope))
         )
  SELECT round_key,
+    scope,
     user_id,
     (count(*))::integer AS matches,
     (sum(pts))::integer AS total_points,
     (count(*) FILTER (WHERE (pts = 3)))::integer AS exact_count,
     (count(*) FILTER (WHERE (pts = 1)))::integer AS outcome_count,
     round(((sum(goal_err))::numeric / (count(*))::numeric), 4) AS avg_goal_error
-   FROM scored
-  GROUP BY round_key, user_id;
+   FROM scoped
+  GROUP BY round_key, scope, user_id;
 
 
 --
@@ -2750,20 +2883,6 @@ CREATE VIEW public.season_standings WITH (security_invoker='on') AS
    FROM (scored s
      LEFT JOIN wins w ON (((NOT (w.season_id IS DISTINCT FROM s.season_id)) AND (w.user_id = s.user_id))))
   GROUP BY s.season_id, s.user_id, w.round_wins;
-
-
---
--- Name: seasons; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.seasons (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    league_id uuid NOT NULL,
-    name text NOT NULL,
-    api_season_id text,
-    start_date date,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
-);
 
 
 --
@@ -4125,6 +4244,15 @@ GRANT ALL ON TABLE public.leagues TO service_role;
 
 
 --
+-- Name: TABLE seasons; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.seasons TO anon;
+GRANT ALL ON TABLE public.seasons TO authenticated;
+GRANT ALL ON TABLE public.seasons TO service_role;
+
+
+--
 -- Name: TABLE monthly_standings; Type: ACL; Schema: public; Owner: -
 --
 
@@ -4194,15 +4322,6 @@ GRANT ALL ON TABLE public.round_standings TO service_role;
 GRANT ALL ON TABLE public.season_standings TO anon;
 GRANT ALL ON TABLE public.season_standings TO authenticated;
 GRANT ALL ON TABLE public.season_standings TO service_role;
-
-
---
--- Name: TABLE seasons; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.seasons TO anon;
-GRANT ALL ON TABLE public.seasons TO authenticated;
-GRANT ALL ON TABLE public.seasons TO service_role;
 
 
 --
@@ -4287,5 +4406,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ZGd7NLqWPvdddUFU5ILTXzPIqzTbRKShQKLph7RDLrxAm7Mbow8kYf5GMKiL2Gh
+\unrestrict ChWEDhHTxkyxlbBM1m0fu48inMBs2Obaw5GyjHVOIyfcUElWNxRNUREAFLbZDR7
 
