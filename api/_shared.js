@@ -8,7 +8,7 @@
 // sync-live.js og send-notifications.js. Den vigtigste konsekvens var ikke
 // linjetallet, men at enhver ændring i autorisationen skulle laves tre steder
 // og være ens alle tre — fx den forestående fjernelse af `?secret=`-fallbacken
-// (ROADMAP A11).
+// (BACKLOG A11).
 //
 // api/ importerer bevidst ikke fra src/: funktionerne kører i Node på Vercel,
 // mens src/ bygges til browseren. Denne fil er delingspunktet for api/ alene.
@@ -128,7 +128,7 @@ export function secretsMatch(provided, expected) {
 //
 //   1. Den delte hemmelighed (ekstern cron) — helst i headeren `x-sync-secret`,
 //      så den ikke havner i request-logs. `?secret=` bevares som fallback for
-//      cron-jobs, der endnu ikke er flyttet (ROADMAP A11).
+//      cron-jobs, der endnu ikke er flyttet (BACKLOG A11).
 //   2. En admin-brugers eget login (`Authorization: Bearer <supabase-JWT>`) —
 //      det er kun Admin-skærmens knapper, der bruger den vej.
 //

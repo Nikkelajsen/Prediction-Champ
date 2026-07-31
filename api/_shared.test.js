@@ -1,7 +1,7 @@
 // Tests for api/_shared.js.
 //
 // api/ havde indtil nu ingen testdækning overhovedet. Autorisationen er
-// samtidig det sted, hvor ROADMAP A11 skal skære (`?secret=`-fallbacken
+// samtidig det sted, hvor BACKLOG A11 skal skære (`?secret=`-fallbacken
 // fjernes), så det er præcis den kode, der har brug for et net under sig
 // FØR den ændres — ikke efter.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
