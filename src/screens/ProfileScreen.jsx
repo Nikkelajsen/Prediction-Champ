@@ -238,6 +238,10 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
   const monthly = titles.monthly || [];
   const seasonTitles = titles.season || [];
   const roundWins = titles.round_wins || 0;
+  // Per-turnering-titler (K2). Grenen mangler, indtil career_profile.sql er
+  // gen-kørt i produktion — en tom liste giver samme udfald som "ingen vundet",
+  // altså ingen sektion, ikke en fejl.
+  const byTournament = titles.by_tournament || [];
   const curve = data?.curve || [];
   const base = data?.base || { total_points: 0, exact_count: 0, outcome_count: 0, matches: 0 };
   const rivals = data?.rivals || [];
@@ -253,16 +257,24 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
   const visibleMilestones = milestoneExpanded ? milestones : milestones.slice(0, MILESTONE_PAGE);
 
   const hasTitles = monthly.length > 0 || seasonTitles.length > 0 || roundWins > 0;
+  const hasTournamentTitles = byTournament.length > 0;
   const hasMilestones = isOwn && milestones.length > 0;
   const hasCurve = curve.length >= 2;
   const hasH2H = !isOwn && !!data?.h2h;
   // "Karriere lige begyndt": ingen titler, ingen milepæle, rekorder, H2H og for lidt kurve.
-  const isEmpty = !hasTitles && !hasMilestones && !hasCurve && !hasRecords && !hasH2H;
+  const isEmpty = !hasTitles && !hasTournamentTitles && !hasMilestones && !hasCurve && !hasRecords && !hasH2H;
 
   const badge = {
     display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(240,180,41,0.12)",
     border: `1px solid ${C.gold}`, color: C.gold, borderRadius: 999,
     padding: "6px 12px", fontSize: 13, fontWeight: 700, fontFamily: font.body,
+  };
+  // Per-turnering-titler bærer samme form, men uden guld: rangordenen mellem de
+  // to niveauer skal kunne ses, ikke læses. Samme greb som Story Engines
+  // dæmpede tier, hvor et stille kort tegnes uden guld og uden emoji-vægt.
+  const subBadge = {
+    ...badge, background: C.surface2, border: `1px solid ${C.line}`,
+    color: C.text, fontWeight: 600, fontSize: 12, padding: "5px 10px",
   };
 
   return (
@@ -358,6 +370,44 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
                 🥇 {roundWins} {roundWins === 1 ? "rundesejr" : "rundesejre"} i rundeligaen
               </span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Per-turnering-titler (K2) — ADSKILT fra de samlede med vilje.
+          Championship kårer på to niveauer, og kun det samlede bærer ordet
+          "Prediction Champ". Blandede man dem, ville et karrieretal skifte
+          betydning, hver gang en turnering kom til: "Månedens Prediction Champ
+          ×5" skal betyde det samme før og efter turnering #3. Derfor egen
+          overskrift, egen InfoDot og dæmpede badges — de er titler, men mindre
+          titler, og rangordenen skal kunne ses uden at læse noget. */}
+      {hasTournamentTitles && (
+        <div>
+          <Eyebrow>Titler pr. turnering <InfoDot title="Titler pr. turnering">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div>Championship kårer på <b>to niveauer</b>. Titlerne ovenfor er de <b>samlede</b> — på tværs af alle officielle turneringer — og kun de kaldes <b>Prediction Champ</b>.</div>
+              <div>Her står sejrene i <b>én enkelt turnering</b>, hvor alle er målt på de samme kampe. De tæller som titler, men de er ikke det samme som en samlet titel.</div>
+              <div>En turnering vises kun, hvis du har vundet noget i den.</div>
+            </div>
+          </InfoDot></Eyebrow>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {byTournament.map((t) => (
+              <div key={t.league_id}>
+                <div style={{ color: C.muted, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{t.league_name}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {(t.monthly || []).map((m) => (
+                    <span key={m.month} style={subBadge} title={`${m.points} point`}>
+                      👑 Månedens bedste — {m.month_name}
+                    </span>
+                  ))}
+                  {t.round_wins > 0 && (
+                    <span style={subBadge} title={`Runder vundet i ${t.league_name}`}>
+                      🥇 {t.round_wins} {t.round_wins === 1 ? "rundesejr" : "rundesejre"}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -51,8 +51,10 @@
 --   seasons(id, league_id, name, start_date),
 --   view monthly_standings(month, scope, user_id, total_points, matches, exact_count),
 --   view round_standings(round_key, scope, user_id, matches, total_points, exact_count, avg_goal_error),
---     — scope: 'ALL' = alle officielle turneringer samlet, ellers league_id. Denne
---       funktion læser KUN 'ALL'; per-turnering-titler hører til i by_tournament.
+--     — scope: 'ALL' = alle officielle turneringer samlet, ellers league_id.
+--       titles.monthly/season/round_wins og records læser KUN 'ALL'; de
+--       per-turnering-scopes læses udelukkende i titles.by_tournament (K2).
+--   leagues(id, name, created_at, is_official).
 --   view season_standings(season_id, user_id, total_points, exact_count, outcome_count, round_wins, avg_goal_error),
 --   pc_points(ph, pa, hs, as_) — kanonisk pointfunktion (F2),
 --   stories(user_id, rule, payload).
@@ -363,6 +365,81 @@ begin
           where rs.scope = 'ALL'
         ) rr
         where rr.user_id = profile_user_id and rr.rnk = 1
+      ),
+
+      -- ---------- Per-turnering-titler (K2, 31. juli 2026) ----------
+      -- Championship kårer på to niveauer (sql/tournament_scope.sql). Grenene
+      -- ovenfor er og forbliver KUN de samlede, så "Månedens Prediction Champ ×5"
+      -- betyder det samme før og efter turnering #3 — et karrieretal, hvis
+      -- betydning skifter, når produktet vokser, kan ikke sammenlignes med sig
+      -- selv. Per-turnering-sejre tælles derfor med, men i deres egen gren, som
+      -- profilskærmen viser som en adskilt gruppe.
+      --
+      -- Kun turneringer, hvor brugeren FAKTISK har vundet noget, kommer med:
+      -- ellers ville hver ny turnering give enhver profil endnu en tom
+      -- overskrift. Rækkefølgen er ældste turnering først — samme regel som
+      -- vælgeren i ChampionshipTab (pickSeasonLeague), så to skærme ikke
+      -- sorterer det samme forskelligt.
+      --
+      -- Bemærk komplethedsjoinene: en måned/runde er afsluttet PR. TURNERING.
+      -- Superligaens månedstitel må ikke afvente en skotsk kamp, der ikke er
+      -- spillet — det ville lade en fremmed turnering holde en titel tilbage.
+      'by_tournament', (
+        select coalesce(jsonb_agg(t.entry order by t.created_at), '[]'::jsonb)
+        from (
+          select l.created_at, jsonb_build_object(
+            'league_id',   l.id,
+            'league_name', l.name,
+            'monthly', (
+              select coalesce(jsonb_agg(jsonb_build_object(
+                       'month',      mw.month,
+                       'month_name', months[cast(substring(mw.month from 6 for 2) as int)] || ' ' || substring(mw.month from 1 for 4),
+                       'points',     mw.total_points
+                     ) order by mw.month desc), '[]'::jsonb)
+              from (
+                select ms.month, ms.user_id, ms.total_points,
+                  rank() over (partition by ms.month
+                               order by ms.total_points desc, ms.exact_count desc, ms.outcome_count desc,
+                                        ms.round_wins desc, ms.avg_goal_error asc) as rnk
+                from public.monthly_standings ms
+                join (
+                  select to_char(date_trunc('month', m.kickoff_at), 'YYYY-MM') as month
+                  from public.matches m
+                  join public.seasons s on s.id = m.season_id
+                  where s.league_id = l.id
+                  group by 1
+                  having bool_and(m.home_score is not null and m.away_score is not null)
+                ) mc on mc.month = ms.month
+                where ms.scope = l.id::text
+              ) mw
+              where mw.user_id = profile_user_id and mw.rnk = 1
+            ),
+            'round_wins', (
+              select count(*)::int
+              from (
+                select rs.round_key, rs.user_id,
+                  rank() over (partition by rs.round_key
+                               order by rs.total_points desc, rs.exact_count desc, rs.outcome_count desc,
+                                        rs.avg_goal_error asc) as rnk
+                from public.round_standings rs
+                join (
+                  select m.round_key
+                  from public.matches m
+                  join public.seasons s on s.id = m.season_id
+                  where s.league_id = l.id
+                  group by m.round_key
+                  having bool_and(m.home_score is not null and m.away_score is not null)
+                ) rc on rc.round_key = rs.round_key
+                where rs.scope = l.id::text
+              ) rr
+              where rr.user_id = profile_user_id and rr.rnk = 1
+            )
+          ) as entry
+          from public.leagues l
+          where l.is_official
+        ) t
+        where jsonb_array_length(t.entry->'monthly') > 0
+           or (t.entry->>'round_wins')::int > 0
       )
     ),
 

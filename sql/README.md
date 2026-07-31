@@ -39,7 +39,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 7 | `push_notifications.sql` | `push_subscriptions` + `notification_log` | Aktiv |
 | 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — **v1.1 (juli 2026) skal gen-køres i produktion**; kun funktionen ændres, tabel og view er uændrede. **Gen-kør også efter #20** (31. juli 2026): funktionen filtrerer nu `round_standings` på `scope = 'ALL'` |
 | 9 | `groups.sql` | Liga-laget: `groups`, `group_members`, `is_group_member()`, `move_competition_to_group()` | ⚠️ Aktiv, men **to af dens policies er afløst** — se advarslen nedenfor |
-| 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv — **gen-kør efter #20** (31. juli 2026): rundesejre og "bedste runde" filtrerer nu `scope = 'ALL'`, ellers tælles hver sejr én gang pr. turnering |
+| 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv — **gen-kør efter #20** (31. juli 2026): rundesejre og "bedste runde" filtrerer nu `scope = 'ALL'`, ellers tælles hver sejr én gang pr. turnering. Samme kørsel tilføjer `titles.by_tournament` (K2) |
 | 11 | `live_scores.sql` | `matches.live_*`-kolonner + live-indekser | Aktiv |
 | 12 | `standings_tiebreakers.sql` | Genskaber alle tre stillings-views med `outcome_count`, `round_wins`, `avg_goal_error` | Aktiv — **afløser #1** |
 | 13 | `group_membership_invariant.sql` | A8 i databasen: backfill, auto-indmeldende trigger, strammet liga-exit + framelding | Aktiv — **afløser to policies fra #9** |
