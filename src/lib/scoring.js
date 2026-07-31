@@ -66,13 +66,42 @@ function currentRoundIndex(rounds) {
 // `1st Phase` grundspil, og der er ét fælles ord for det skotske slutspil:
 // Sportmonks giver ikke top-6 og bund-6 hver sin stage, som DBU gør, så en
 // opdeling i mesterskabs-/nedrykningsspil ville påstå noget, dataene ikke siger.
+//
+// Fra 2026 kommer fem turneringer fra en ANDEN datakilde (football-data.org),
+// og den skriver sine faser i VERSALER med understreg: "REGULAR_SEASON",
+// "LAST_16". Det er ikke to konkurrerende konventioner, der skal forenes — det
+// er to leverandørers rå navne, og tabellen her er netop stedet, hvor rå navne
+// bliver til danske. De står adskilt nedenfor, så det er til at se, hvor et nyt
+// navn hører hjemme, når det dukker op.
+//
+// Champions League' ligafase mapper til "Grundspil" med vilje: badge-reglen
+// nedenfor skjuler netop det ord, og en badge på hver eneste ligafase-kamp er
+// præcis den støj, reglen findes for. Knockout-runderne beholder deres badge,
+// og det er dem, der siger noget.
 const STAGE_LABELS = {
+  // Sportmonks (Superliga, Scotland Premiership)
   "Regular Season": "Grundspil",
   "1st Phase": "Grundspil",
   "2nd Phase": "Slutspil",
   "Championship Round": "Mesterskabsspil",
   "Relegation Round": "Nedrykningsspil",
   "Conference League Play-offs – Final": "Conference League-playoff",
+  // football-data.org (Premier League, Champions League, Bundesliga, Serie A, Primera División)
+  REGULAR_SEASON: "Grundspil",
+  LEAGUE_STAGE: "Grundspil",
+  GROUP_STAGE: "Grundspil",
+  PLAYOFFS: "Playoff",
+  PLAYOFF_ROUND: "Playoff",
+  PRELIMINARY_ROUND: "Kvalifikation",
+  FIRST_QUALIFYING_ROUND: "1. kvalifikationsrunde",
+  SECOND_QUALIFYING_ROUND: "2. kvalifikationsrunde",
+  THIRD_QUALIFYING_ROUND: "3. kvalifikationsrunde",
+  LAST_32: "1/16-finale",
+  LAST_16: "Ottendedelsfinale",
+  QUARTER_FINALS: "Kvartfinale",
+  SEMI_FINALS: "Semifinale",
+  THIRD_PLACE: "Bronzekamp",
+  FINAL: "Finale",
 };
 // Chip/valg-label: vis altid (fallback = det rå navn).
 function stageOptionLabel(name) { return STAGE_LABELS[name] || name; }

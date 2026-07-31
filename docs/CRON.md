@@ -24,6 +24,16 @@ Filen erstatter ikke cron-job.org. Den er den liste, man holder kontoen op imod.
 Antallet skalerer med turneringer: **N ligaer → N+2 jobs** (ét `sync-matches` pr.
 liga, plus `sync-live` og `send-notifications`, som begge dækker alle ligaer).
 
+**Minuttallet i job 6–10 er ikke pynt.** football-data.orgs gratis-plan har en
+rate limit på **10 kald/minut**, og de fem jobs bruger ét kald hver. Faldt de
+sammen på samme minut, ville de sammen med `sync-live` bruge 6 af 10 — stadig
+under loftet, men uden luft til et gen-forsøg. Spredt med 6 minutters mellemrum
+bruger intet minut mere end 2. Opret ikke et sjette football-data-job på et af
+de minutter, der allerede er taget.
+
+Bemærk at job 6–10 ikke sender `&smSeason=`: `api_season_id` er sat direkte i
+`sql/tournament_footballdata.sql`, så navne-opslaget aldrig bliver nødvendigt.
+
 | # | Job | Hvor | Skema | Kald | Hemmelighed sendes som | Sidst verificeret |
 |---|---|---|---|---|---|---|
 | 1 | Kampprogram + endelige resultater Superliga | cron-job.org | hver 12. time (kan stå på 10–15 min fra før live-syncen) | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | — |
@@ -31,13 +41,18 @@ liga, plus `sync-live` og `send-notifications`, som begge dækker alle ligaer).
 | 3 | Push-notifikationer | cron-job.org | hver 15.–30. minut | `GET https://<app>/api/send-notifications` (valgfrit `&hours=`) | ? | — |
 | 4 | Skema-eksport | GitHub Actions | `0 6 * * 1` (mandag 06:00 UTC) + manuelt | `.github/workflows/schema-export.yml` | — (bruger repo-secret `SUPABASE_DB_URL`) | 30. juli 2026 |
 | 5 | Kampprogram + endelige resultater Scotland | cron-job.org | hver 12. time (kan stå på 10–15 min fra før live-syncen) | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | 31. juli 2026 (oprettet — bekræftet af ejeren) |
+| 6 | Kampprogram + endelige resultater Premier League | cron-job.org | hver 12. time, ved **minut 05** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` | — (skal oprettes) |
+| 7 | Kampprogram + endelige resultater Champions League | cron-job.org | hver 12. time, ved **minut 11** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` | — (skal oprettes) |
+| 8 | Kampprogram + endelige resultater Bundesliga | cron-job.org | hver 12. time, ved **minut 17** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` | — (skal oprettes) |
+| 9 | Kampprogram + endelige resultater Serie A | cron-job.org | hver 12. time, ved **minut 23** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` | — (skal oprettes) |
+| 10 | Kampprogram + endelige resultater Primera División | cron-job.org | hver 12. time, ved **minut 29** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` | — (skal oprettes) |
 
 **Kolonnen "Hemmelighed sendes som" står med `?` med vilje.** Den kan ikke
 udfyldes fra repoet — kun ved at kigge i cron-job.org eller ved at aflæse
 loggene, se nedenfor. Udfyld den, når du ved det.
 
 Job 4 er det eneste, der er defineret **i** repoet og dermed det eneste, der er
-versioneret. Job 1–3 er beskrevet her, men lever andetsteds.
+versioneret. Resten er beskrevet her, men lever andetsteds.
 
 ## Hemmeligheden: header frem for query
 

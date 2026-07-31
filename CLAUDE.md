@@ -11,6 +11,7 @@
 | brugernavne | §6 |
 | navigation, faner, layout | §7 |
 | kampsynkronisering, live-resultater | §8 · `api/sync-matches.js`, `api/sync-live.js` |
+| datakilder (Sportmonks / football-data.org), API-nøgler, kaldbudget | §8 · `api/providers/` · `docs/features/flere-datakilder-v1.md` |
 | miljøvariabler, deploy, tjekliste før merge | §9, §11 |
 | ny turnering | §10 · `docs/features/turnering-2.md` |
 | kendte begrænsninger (vilkår, der ikke laves om) | §12 |

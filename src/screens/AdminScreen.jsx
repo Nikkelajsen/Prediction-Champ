@@ -97,7 +97,7 @@ function MatchesPanel({ token, leagues, reloadLeagues }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <div>
             <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, textTransform: "uppercase" }}>Hent kampe & resultater</div>
-            <p style={{ ...muted, margin: "4px 0 0" }}>Fra Sportmonks for {league?.name || "denne turnering"}.</p>
+            <p style={{ ...muted, margin: "4px 0 0" }}>Fra turneringens egen datakilde for {league?.name || "denne turnering"}.</p>
           </div>
           <button style={btnGold} onClick={syncFromApi} disabled={syncing}>
             {syncing ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />} Hent nu
@@ -177,7 +177,7 @@ function ResultsPanel({ token, leagues }) {
         </select>
       )}
       {rounds.length === 0 ? (
-        <p style={muted}>Ingen kampe endnu — hent dem fra Sportmonks under "Kampe".</p>
+        <p style={muted}>Ingen kampe endnu — hent dem under "Kampe".</p>
       ) : (
         <Card>
           <p style={{ ...muted, marginTop: 0 }}>Indtast faktiske resultater. Stillingen opdateres automatisk.</p>

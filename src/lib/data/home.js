@@ -106,7 +106,7 @@ async function computeCurrentRound(token, userId, competitions) {
     if (played) { playedCount++; if (points != null) myPoints += points; }
     // Live-stilling (live_*-kolonnerne, skrevet af api/sync-live.js hvert minut).
     // Den tæller ikke point — kun det endelige resultat gør. inProgress er fallback:
-    // kickoff er passeret, men vi har ingen live-data (fx uden for Sportmonks-planen).
+    // kickoff er passeret, men vi har ingen live-data (fx uden for datakildens plan, eller en liga uden live_enabled).
     const live = liveInfo(m);
     const inProgress = !played && !live && m.kickoff_at && new Date(m.kickoff_at).getTime() <= Date.now();
     return {

@@ -1,0 +1,181 @@
+// Tests for api/providers/footballdata.js.
+//
+// Det, der testes, er MAPPINGEN — ikke netværket. En datakilde er kun så god
+// som oversættelsen af dens felter til vores, og det er dér, en stille fejl
+// gør mest skade: en forkert status betyder, at et resultat enten aldrig
+// skrives eller skrives for tidligt, og point flytter sig begge veje.
+import { describe, it, expect, vi } from "vitest";
+import { footballdata, __test } from "./footballdata.js";
+
+const { normalize, PREFIX } = __test;
+
+function match(over = {}) {
+  return {
+    id: 537654,
+    utcDate: "2026-08-15T14:00:00Z",
+    status: "FINISHED",
+    stage: "REGULAR_SEASON",
+    homeTeam: { id: 57, name: "Arsenal FC" },
+    awayTeam: { id: 61, name: "Chelsea FC" },
+    score: { fullTime: { home: 2, away: 1 } },
+    ...over,
+  };
+}
+
+function jsonResponse(body, { ok = true, status = 200, headers = {} } = {}) {
+  return {
+    ok,
+    status,
+    headers: { get: (k) => headers[k] ?? null },
+    text: async () => JSON.stringify(body),
+    json: async () => body,
+  };
+}
+
+describe("normalize", () => {
+  it("oversætter en afsluttet kamp", () => {
+    const n = normalize(match());
+    expect(n).toMatchObject({
+      providerId: "537654",
+      globalId: "fd:537654",
+      kickoffAt: "2026-08-15T14:00:00Z",
+      stageName: "REGULAR_SEASON",
+      status: "finished",
+      score: { home: 2, away: 1 },
+    });
+    expect(n.home).toEqual({ providerId: "57", globalId: "fd:57", name: "Arsenal FC" });
+  });
+
+  it("præfikser id'er, så de ikke kan kollidere med Sportmonks'", () => {
+    // Hele pointen med præfikset: matches.api_fixture_id har en GLOBAL
+    // unique-constraint, og begge leverandører bruger almindelige heltal.
+    expect(normalize(match({ id: 271 })).globalId).toBe("fd:271");
+    expect(PREFIX).toBe("fd:");
+  });
+
+  it.each([
+    ["FINISHED", "finished"],
+    ["AWARDED", "finished"],
+    ["IN_PLAY", "live"],
+    ["PAUSED", "live"],
+    ["SCHEDULED", "scheduled"],
+    ["TIMED", "scheduled"],
+    ["POSTPONED", "scheduled"],
+    ["CANCELLED", "scheduled"],
+  ])("mapper status %s til %s", (raw, expected) => {
+    expect(normalize(match({ status: raw })).status).toBe(expected);
+  });
+
+  it("giver null-score når kampen ikke har et resultat endnu", () => {
+    const n = normalize(match({ status: "TIMED", score: { fullTime: { home: null, away: null } } }));
+    expect(n.score).toEqual({ home: null, away: null });
+  });
+
+  it("bevarer 0-0 som et rigtigt resultat", () => {
+    // Fælden: 0 er falsy. Et `||`-udtryk ville have gjort 0-0 til null-null,
+    // og en målløs kamp ville aldrig være blevet færdigmeldt.
+    const n = normalize(match({ score: { fullTime: { home: 0, away: 0 } } }));
+    expect(n.score).toEqual({ home: 0, away: 0 });
+    expect(n.status).toBe("finished");
+  });
+
+  it("returnerer null-hold for en CL-kamp, der endnu ikke er lodtrukket", () => {
+    const n = normalize(match({
+      stage: "LAST_16",
+      homeTeam: { id: null, name: null },
+      awayTeam: { id: null, name: null },
+    }));
+    expect(n.home).toBeNull();
+    expect(n.away).toBeNull();
+    expect(n.stageName).toBe("LAST_16");
+  });
+
+  it("har intet spilleminut på gratis-planen", () => {
+    expect(normalize(match({ status: "IN_PLAY" })).liveMinute).toBeNull();
+    // …men læser det, hvis abonnementet begynder at levere det.
+    expect(normalize(match({ status: "IN_PLAY", minute: 63 })).liveMinute).toBe(63);
+  });
+});
+
+describe("resolveSeasonId", () => {
+  it("udleder startåret af sæsonnavnet uden et netværkskald", async () => {
+    await expect(footballdata.resolveSeasonId({ seasonName: "2026/2027" })).resolves.toBe("2026");
+  });
+
+  it("fejler tydeligt på et navn uden årstal", async () => {
+    await expect(
+      footballdata.resolveSeasonId({ seasonName: "forår", apiLeagueId: "PL" })
+    ).rejects.toThrow(/sæsonår/);
+  });
+});
+
+describe("fetchSeasonFixtures", () => {
+  it("henter hele sæsonen i ét kald med nøglen i headeren", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ matches: [match(), match({ id: 2 })] }));
+    const out = await footballdata.fetchSeasonFixtures({
+      apiLeagueId: "PL", apiSeasonId: "2026", token: "hemmelig", fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, opts] = fetchImpl.mock.calls[0];
+    expect(url).toBe("https://api.football-data.org/v4/competitions/PL/matches?season=2026");
+    expect(opts.headers["X-Auth-Token"]).toBe("hemmelig");
+    // Nøglen må ikke havne i URL'en, hvor den ville stå i request-logs.
+    expect(url).not.toContain("hemmelig");
+    expect(out).toHaveLength(2);
+  });
+
+  it("oversætter 403 til en besked om planen", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ message: "ikke i planen" }, { ok: false, status: 403 }));
+    await expect(
+      footballdata.fetchSeasonFixtures({ apiLeagueId: "WC", apiSeasonId: "2026", token: "t", fetchImpl })
+    ).rejects.toThrow(/ikke med i planen/);
+  });
+
+  it("prøver igen én gang ved 429", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn()
+        .mockResolvedValueOnce(jsonResponse({}, { ok: false, status: 429, headers: { "X-RequestCounter-Reset": "3" } }))
+        .mockResolvedValueOnce(jsonResponse({ matches: [match()] }));
+      const p = footballdata.fetchSeasonFixtures({ apiLeagueId: "PL", apiSeasonId: "2026", token: "t", fetchImpl });
+      await vi.runAllTimersAsync();
+      await expect(p).resolves.toHaveLength(1);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("fetchLive", () => {
+  it("henter ét datovindue og filtrerer til de ønskede kampe", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ matches: [match({ id: 1, status: "IN_PLAY" }), match({ id: 999 })] })
+    );
+    const out = await footballdata.fetchLive({
+      providerIds: ["1"],
+      kickoffs: ["2026-08-15T14:00:00Z"],
+      token: "t",
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0][0]).toMatch(/\/matches\?dateFrom=\d{4}-\d{2}-\d{2}&dateTo=\d{4}-\d{2}-\d{2}$/);
+    // Ét kald dækker ALLE football-data-turneringer på én gang — derfor
+    // skalerer forbruget ikke med antal turneringer.
+    expect([...out.keys()]).toEqual(["fd:1"]);
+    expect(out.get("fd:1").status).toBe("live");
+  });
+
+  it("sparer kaldet helt, når der ingen kampe er", async () => {
+    const fetchImpl = vi.fn();
+    const out = await footballdata.fetchLive({ providerIds: [], token: "t", fetchImpl });
+    expect(out.size).toBe(0);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("fromGlobalId fjerner præfikset igen", () => {
+    expect(footballdata.fromGlobalId("fd:537654")).toBe("537654");
+  });
+});
