@@ -132,6 +132,36 @@ function Standings({ rows, userId, isComplete, ratingMap, title, onOpenFull, ope
   );
 }
 
+// Hvilken turnering skal sæsonchampionshippet vise, når der er mere end én?
+//
+// Erstatter det gamle `/superliga/i`-regex — den eneste reelle hardkodning i
+// UI'et (drejebogen `docs/features/turnering-2.md` §3.2). Rækkefølgen er:
+// brugerens eget valg, hvis turneringen stadig findes → ellers den turnering
+// appen startede med.
+//
+// `created_at` frem for navn er et bevidst valg: `leagues` kommer sorteret på
+// navn, og alfabetet ville gøre "Scotland Premiership" til forvalg foran
+// "Superligaen" i det øjeblik turnering #2 blev synlig. Den ældste turnering er
+// den, appen blev bygget om — det er et stabilt svar, som ingen skal huske at
+// vedligeholde i en kolonne.
+export function pickSeasonLeague(leagues, savedId) {
+  const list = leagues || [];
+  if (!list.length) return null;
+  return list.find((l) => l.id === savedId)
+    || list.slice().sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))[0];
+}
+
+// Brugerens valg i sæsonvælgeren. localStorage kan være utilgængelig (privat
+// browsing, blokerede cookies), så begge veje er pakket ind — samme greb som
+// LigaerTab's nudge.
+const SEASON_LEAGUE_KEY = "pc_season_league";
+function readSeasonLeagueId() {
+  try { return localStorage.getItem(SEASON_LEAGUE_KEY); } catch { return null; }
+}
+function writeSeasonLeagueId(id) {
+  try { localStorage.setItem(SEASON_LEAGUE_KEY, id); } catch { /* utilgængelig — spring over */ }
+}
+
 function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   const [months, setMonths] = useState([]);
   const [month, setMonth] = useState(currentMonthKey());
@@ -144,11 +174,8 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   const [ratingMap, setRatingMap] = useState(null); // user_id -> { rating, provisional }
   const [full, setFull] = useState(null); // { title, rows, isComplete } — fuld-stilling-modal
 
-  const superliga = useMemo(
-    () => leagues.find((l) => /superliga/i.test(l.name || "") && l.is_visible !== false)
-      || leagues.find((l) => /superliga/i.test(l.name || "")) || null,
-    [leagues]
-  );
+  const [seasonLeagueId, setSeasonLeagueId] = useState(readSeasonLeagueId);
+  const seasonLeague = useMemo(() => pickSeasonLeague(leagues, seasonLeagueId), [leagues, seasonLeagueId]);
 
   useEffect(() => {
     loadRatingMap(token).then(setRatingMap).catch(() => setRatingMap(new Map()));
@@ -168,17 +195,17 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   }, []); // eslint-disable-line
 
   useEffect(() => {
-    if (!superliga) { setSeason(undefined); return; }
+    if (!seasonLeague) { setSeason(undefined); return; }
     let cancelled = false;
     (async () => {
       setSeason(null);
       try {
-        const b = await loadSeasonBoard(token, superliga.id);
+        const b = await loadSeasonBoard(token, seasonLeague.id);
         if (!cancelled) setSeason(b || undefined);
       } catch { if (!cancelled) setSeason(undefined); }
     })();
     return () => { cancelled = true; };
-  }, [token, superliga]);  
+  }, [token, seasonLeague]);
 
   useEffect(() => {
     let cancelled = false;
@@ -205,6 +232,11 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   async function changeRound(k) {
     setRoundKey(k); setRoundBoard(null);
     setRoundBoard(await loadRoundBoard(token, k));
+  }
+
+  function changeSeasonLeague(id) {
+    setSeasonLeagueId(id);
+    writeSeasonLeagueId(id);
   }
 
   const isPast = month < currentMonthKey();
@@ -282,14 +314,25 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
             {/* Turneringsnavnet står i sin egen sætningsdel, så teksten holder uanset
                 bøjning — "for alle Superligaen kampe" var resultatet af at sætte
                 værdien ind, hvor kun fallbacken ("Superligaens") passede. */}
-            <InfoDot title="Sæsonens Prediction Champ">Dine samlede point for alle kampe i {superliga?.name || "Superligaen"} i hele sæsonen. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Sæsonens bedste kåres som Sæsonens Prediction Champ — er to helt lige, deles titlen.</InfoDot>
+            <InfoDot title="Sæsonens Prediction Champ">Dine samlede point for alle kampe i {seasonLeague?.name || "turneringen"} i hele sæsonen. Én sæsonstilling pr. turnering — er der flere, vælges de i dropdownen. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Sæsonens bedste kåres som Sæsonens Prediction Champ — er to helt lige, deles titlen.</InfoDot>
           </div>
-          {season && season.rows && season.totalMatches > 0 && (
-            <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{season.playedMatches}/{season.totalMatches} spillet</span>
-          )}
+          {/* Vælgeren dukker først op, når der ér mere end én turnering — med kun
+              én ville en dropdown med ét valg være støj. Fremdrifts-tælleren
+              deler plads med den, så den flytter ned i underlinjen i stedet for
+              at forsvinde. */}
+          {leagues.length > 1
+            ? (
+              <select className="field" value={seasonLeague?.id || ""} onChange={(e) => changeSeasonLeague(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
+                {leagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            )
+            : season && season.rows && season.totalMatches > 0 && (
+              <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{season.playedMatches}/{season.totalMatches} spillet</span>
+            )}
         </div>
         <div style={{ color: C.muted, fontSize: 12, marginTop: -4, marginBottom: 8 }}>
-          {superliga?.name || "Superligaen"} · løber over hele sæsonen
+          {leagues.length > 1 ? "Løber over hele sæsonen" : `${seasonLeague?.name || "Turneringen"} · løber over hele sæsonen`}
+          {leagues.length > 1 && season && season.rows && season.totalMatches > 0 && ` · ${season.playedMatches}/${season.totalMatches} spillet`}
         </div>
 
         {season === null && <p style={{ ...muted, margin: 0 }}>Henter…</p>}
@@ -300,7 +343,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
           <>
             <Champions rows={season.rows} title="Sæsonens Prediction Champ" isComplete={season.isComplete} openProfile={openProfile} />
             <Standings rows={season.rows} userId={userId} isComplete={season.isComplete} ratingMap={ratingMap}
-              title={`Sæsonchampionship · ${superliga?.name || "Superligaen"}`} onOpenFull={setFull} openProfile={openProfile} />
+              title={`Sæsonchampionship · ${seasonLeague?.name || "Turneringen"}`} onOpenFull={setFull} openProfile={openProfile} />
           </>
         )}
       </Card>

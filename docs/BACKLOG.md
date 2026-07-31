@@ -36,6 +36,7 @@ eller en linje i "Forkastede ideer".
 
 - dokumentationen siger gratis-planen giver 180 kald/time pr. entitet, kontosiden siger 3.000 API-kald — hvilket tal og hvilken enhed gælder?
 - Lav privatlivspolitik og brugervilkår. Er der andet der skal tages hensyn til?
+- Admins "Hent nu" sender ikke &smSeason=, så en ny turnerings FØRSTE sync skal køres via URL — skal knappen kunne det selv?
 
 ---
 
@@ -57,7 +58,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | # | Hvad | Hvorfor / hvad den venter på | Omfang |
 |---|---|---|---|
 | B3 | **Gen-kør `sql/story_engine.sql` i produktion** | Story Engine v1.1 (A3/A4-leverancen) er i repoet, men migreringen er en manuel kørsel i Supabase SQL-editor, og den er ikke bekræftet kørt. Triggeren er uændret siden A9-rettelsen. Forudsætning for at kunne læse tonen på kortene og dermed for `A5`. | Lille |
-| B2 | **Turnering #2 (flere fodboldturneringer)** | Skemaet er forberedt; få kodeændringer udestår. Drejebog: [`features/turnering-2.md`](./features/turnering-2.md). **Ikke gated af abonnementet** (`A10`, afgjort 31. juli 2026): turnering #2 bliver **Scotland Premiership** (`501`), som allerede er i gratis-planen — tændes med `is_visible = false`, til §3.2 er verificeret. Premier League koster €29/md og venter på efterspørgsel. Gater `B1`. | Mellem |
+| B2 | **Turnering #2: sæt Scotland Premiership i drift** | **Koden er leveret 31. juli 2026** (turneringsvælger, synligheds-korrekt rundeliga, SQL-script) — tilbage står de trin, der kræver produktionsadgang: kør [`sql/tournament_scotland_premiership.sql`](../sql/tournament_scotland_premiership.sql) (verificér sæsonnavnet først), kald `/api/sync-matches?leagueId=…&smSeason=…` (`&dryRun=true` først), kontrollér holdene for dubletter, aflæs de skotske `stage_name` og oversæt dem i `STAGE_LABELS`, opret cron-jobbet og skriv det i [`CRON.md`](./CRON.md), og kør testcases 2–6 i [`features/turnering-2.md`](./features/turnering-2.md) §6. Turneringen tændes **synlig** med det samme (fravigelse af `A10`). Gater `B1`. | Lille (drift) |
 | B1 | **Global tirsdag–mandag-runde** | Produktbogens kapitel 4–5 beskriver den som gældende; appen regner i dag pr. turneringsrunde, hvilket med Superligaen alene reelt er det samme. Udskydes bevidst, til flere turneringer er i drift — først dér adskiller den sig. Står som trin 5 i [`ROADMAP.md`](./ROADMAP.md) og som kendt afvigelse mellem bog og app. | Mellem |
 
 ## Teknisk gæld

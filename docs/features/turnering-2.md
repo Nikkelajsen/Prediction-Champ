@@ -1,6 +1,6 @@
 # Feature: Turnering #2 (flere fodboldturneringer)
 
-**Status: Drejebog — skemaet er forberedt, få kodeændringer udestår** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 4 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), forudsætning for trin 5*
+**Status: Koden er leveret (31. juli 2026) — drift-trinnene i §3.1 udestår** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 4 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), forudsætning for trin 5*
 
 *Mere drejebog end klassisk spec: infrastrukturen til flere turneringer er allerede bygget. Dette dokument samler, hvad der er klar, og præcis hvad der mangler, før fx Premier League kan tændes.*
 
@@ -27,19 +27,22 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 
 ### 3.1 Drift (ingen kode)
 
-1. Indsæt række i `leagues` (`api_league_id`, `is_visible`) + sæson-række i `seasons` (jf. DOCUMENTATION.md afsnit 10). **Turnering #2 er Scotland Premiership, `api_league_id = 501`** — se 3.4 for hele planens indhold. *(Tilføjet 31. juli 2026 med A10:)* **sæt `is_visible = false`** første gang; generalprøven kræver, at turneringen findes i databasen, men ingen brugere skal se den endnu. Skal en anden turnering bruges, så verificér først, at den er i planen — `GET /v3/football/leagues?api_token=…` returnerer netop planens turneringer, og en turnering uden for den er ikke bare "ikke synlig": syncen fejler.
-2. Kald `/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` første gang (`&dryRun=true` først) — holdene oprettes automatisk.
+1. Indsæt række i `leagues` (`api_league_id`, `is_visible`) + sæson-række i `seasons` (jf. DOCUMENTATION.md afsnit 10). **Turnering #2 er Scotland Premiership, `api_league_id = 501`** — se 3.4 for hele planens indhold. *(Tilføjet ved leveringen, 31. juli 2026:)* rækkerne findes som et idempotent script, [`sql/tournament_scotland_premiership.sql`](../../sql/tournament_scotland_premiership.sql) — **verificér sæsonnavnet i filens hoved først**. ~~*(Tilføjet 31. juli 2026 med A10:)* **sæt `is_visible = false`** første gang; generalprøven kræver, at turneringen findes i databasen, men ingen brugere skal se den endnu.~~ **Rettet ved leveringen samme dag: turneringen tændes med `is_visible = true` med det samme.** A10's `false` var en forsigtighedsregel; ejeren vurderede, at brugerskaren er lille nok, og at alle ved, der stadig testes. Generalprøven køres altså i åbent land. Den gamle formulering er streget over frem for slettet, fordi §3.4 og A10 fortsat siger `false` — så det fremgår, at noget blev ændret undervejs. Skal en anden turnering bruges, så verificér først, at den er i planen — `GET /v3/football/leagues?api_token=…` returnerer netop planens turneringer, og en turnering uden for den er ikke bare "ikke synlig": syncen fejler.
+2. Kald `/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` første gang (`&dryRun=true` først) — holdene oprettes automatisk. **Bemærk:** Admin-knappen "Hent nu" sender *ikke* `&smSeason=`, så netop det første kald skal ske via URL; derefter er `api_season_id` gemt, og knappen virker.
 3. Opret ét nyt cron-job.org-job for turneringen, med `SYNC_SECRET` i `x-sync-secret`-headeren (jf. ROADMAP-beslutningen — nye jobs skal ikke bruge `?secret=`-fallbacken). **Tilføj derefter jobbet i [`docs/CRON.md`](../CRON.md)** — registeret dér er kilden til, hvilke jobs der findes, og det er kun sandt, hvis det vedligeholdes. *(Tilføjet 30. juli 2026: registeret fandtes ikke, da denne spec blev skrevet.)*
 4. Notifikations-jobbet dækker allerede alle turneringer i ét kald — intet nyt job dér.
 
-### 3.2 Kode (små, afgrænsede ændringer)
+### 3.2 Kode — ✅ leveret 31. juli 2026
 
-| Sted | Ændring |
-|---|---|
-| `src/screens/ChampionshipTab.jsx` (linje ~19–23) | **Den eneste reelle hardkodning i UI'et:** Sæsonchampionship finder turneringen via navne-regex `/superliga/i`. Erstat med en turnerings-vælger (dropdown over synlige turneringer, samme mønster som runde-/månedsvælgeren) — `loadSeasonBoard` tager allerede `leagueId`. Én sæsonstilling pr. turnering; en samlet på tværs af turneringer er bevidst fravalgt (den rolle har månedsligaen/ratingen). |
-| `src/lib/scoring.js` (linje ~57–62) | `STAGE_LABELS` oversætter kun Superligaens stages til dansk (grundspil/mesterskabsspil/…). Tilføj den nye turnerings fasenavne; ukendte stages falder allerede pænt tilbage til råt navn, så dette kan ske løbende. |
-| `api/sync-matches.js` (linje ~63, ~122) | (a) Sæson-navn-fallbacken er hardkodet `"2026/2027"` — harmløs så længe `smSeason`/gemt `api_season_id` bruges, men bør fjernes eller gøres påkrævet, når flere turneringer med forskellige sæsonnavne er i drift. (b) Paginationen stopper hårdt ved side 20 — en stor turnering kan blive **stille trunkeret**; hæv loftet eller log/fejl ved afbrudt pagination. |
-| `api/sync-matches.js` (holdmatch) | Holdopslag matcher på normaliserede navne (fuzzy). Verificér efter første sync, at den nye turnerings hold ikke er fejl-linket til eksisterende hold (kendt faldgrube, jf. fejlfindingsloggens holdnavne-sager). |
+*Tabellen er opdateret ved leveringen. To af de fire rækker var allerede lukket, før `B2` blev taget op — drejebogen var bagud med sig selv.*
+
+| Sted | Ændring | Status |
+|---|---|---|
+| `src/screens/ChampionshipTab.jsx` | **Den eneste reelle hardkodning i UI'et:** Sæsonchampionship fandt turneringen via navne-regex `/superliga/i`. Erstattet af en turnerings-vælger (dropdown, samme mønster som runde-/månedsvælgeren) — `loadSeasonBoard` tog allerede `leagueId`. Én sæsonstilling pr. turnering; en samlet på tværs af turneringer er bevidst fravalgt (den rolle har månedsligaen/ratingen). | ✅ **Leveret.** Vælgeren vises først ved mere end én turnering. Forvalget er `pickSeasonLeague()`: brugerens eget valg (husket i `localStorage`), ellers den **ældste** turnering — `created_at` og ikke navn, fordi listen er navnesorteret, og alfabetet ellers ville sætte "Scotland Premiership" foran "Superligaen" |
+| `src/lib/scoring.js` | `STAGE_LABELS` oversætter kun Superligaens stages til dansk (grundspil/mesterskabsspil/…). Tilføj den nye turnerings fasenavne; ukendte stages falder allerede pænt tilbage til råt navn. | ⏳ **Flyttet til drift.** De skotske navne er ikke verificeret, og et gæt er værre end fallbacken. Aflæs dem efter første sync (kommandoen i 3.4) og tilføj dem da |
+| `api/sync-matches.js` (linje ~63, ~122) | (a) Sæson-navn-fallbacken er hardkodet `"2026/2027"`. (b) Paginationen stopper hårdt ved side 20 — en stor turnering kan blive **stille trunkeret**. | ✅ **Var allerede lukket før `B2`.** (a) Fallbacken er væk: uden `smSeason` og uden gemt `api_season_id` fejler kaldet nu tydeligt. (b) Loftet er 60 sider, og en afbrudt paginering **kaster** i stedet for at bryde stille |
+| `api/sync-matches.js` (holdmatch) | Holdopslag matcher på normaliserede navne (fuzzy). Verificér efter første sync, at den nye turnerings hold ikke er fejl-linket til eksisterende hold. | ⏳ **Drift-verifikation, ikke en kodeændring.** `teams` hentes med `league_id=eq.<liga>`, så den fuzzy match kun ser turneringens egne hold — fejl-link *på tværs af turneringer* kan ikke ske. Dubletter *inden for* den nye turnering skal stadig kontrolleres |
+| `src/lib/data/standings.js` | **Ikke forudset af drejebogen.** `loadRoundBoard`/`loadRoundsAvailable` læste *alle* kampe i en `round_key`, uanset turnering og uanset `is_visible`. Kampantallet afgør `isComplete` og dermed, om 🏆 og "er Rundens Prediction Champ" vises — en skjult turnering ville altså holde runden åben, indtil kampe, ingen kan se eller tippe, var spillet. | ✅ **Leveret.** Begge loadere filtrerer nu på sæsoner under synlige turneringer. Med alt synligt er det en no-op; det er et værn mod den dag, `is_visible` slås fra igen. **Grænse:** selve pointene kommer fra viewet `round_standings` og kan ikke filtreres fra klienten — skjules en turnering, *efter* der er tippet på den, tæller de tips fortsat med i stillingen |
 
 ### 3.3 Beslutninger, der udløses (fra roadmappens åbne beslutninger)
 
@@ -60,7 +63,7 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 | Skotland `#1161` | **Premiership** | **`501`** |
 | Skotland `#1161` | Premiership Play-Offs | `513` |
 
-**Turnering #2 = Scotland Premiership (`501`).** Den er rigtig nok til generalprøven på alle de måder, koden er følsom over for: egen sæson med egne runder (samme rytme som Superligaen, aug.–maj), egne holdnavne til at afprøve den fuzzy holdmatch i `sync-matches`, egne fasenavne til `STAGE_LABELS`, og — vigtigst — den gør turnerings-*antallet* til to, hvilket er den variabel, hele §3.2 og testcases 2–6 handler om. Tændes med `is_visible = false`, til §3.2 er verificeret; derefter er det et frit valg, om nogen skal kunne tippe den.
+**Turnering #2 = Scotland Premiership (`501`).** Den er rigtig nok til generalprøven på alle de måder, koden er følsom over for: egen sæson med egne runder (samme rytme som Superligaen, aug.–maj), egne holdnavne til at afprøve den fuzzy holdmatch i `sync-matches`, egne fasenavne til `STAGE_LABELS`, og — vigtigst — den gør turnerings-*antallet* til to, hvilket er den variabel, hele §3.2 og testcases 2–6 handler om. ~~Tændes med `is_visible = false`, til §3.2 er verificeret; derefter er det et frit valg, om nogen skal kunne tippe den.~~ **Rettet ved leveringen 31. juli 2026: den tændes synlig med det samme** — se §3.1, trin 1.
 
 **To ting at være opmærksom på ved netop denne plan:**
 
@@ -98,6 +101,7 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 - Championship-fanen kan vise sæsonstilling for begge turneringer via vælgeren; dyb-links/eksisterende adfærd for Superligaen er uændret.
 - Tip-skærmens turnerings-filter og opret-flowets multivalg viser den nye turnering uden kodeændring.
 - Runde-/månedsliga og rating tæller fortsat hver kamp én gang (ingen dobbelt-tælling ved kampe i flere konkurrencer på tværs af turneringer).
+- En runde markeres som færdig, når dens kampe i **synlige** turneringer er spillet — en skjult turnering må ikke holde 🏆 tilbage. *(Tilføjet ved leveringen; se §3.2's sidste række.)*
 - A2 er afgjort og logget i ROADMAP, og "Sådan virker det"-teksten matcher.
 
 ## 6. Testcases
@@ -111,4 +115,4 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 
 ---
 
-*Næste skridt (opdateret 31. juli 2026, efter A10): ~~Beslut hvilken turnering (Premier League er roadmappens kandidat)~~ → **turnering #2 er Scotland Premiership (`501`), som allerede er i gratis-planen** → udfør 3.1–3.2 med `is_visible = false` → kør testcases i afsnit 6 → beslut derefter, om den skal gøres synlig. Premier League venter på efterspørgsel og €29/md (3.4). A2 er lukket.*
+*Næste skridt (opdateret 31. juli 2026 ved leveringen): ~~Beslut hvilken turnering (Premier League er roadmappens kandidat)~~ → ~~turnering #2 er Scotland Premiership (`501`)~~ → ~~udfør 3.1–3.2 med `is_visible = false`~~ → **§3.2 er leveret; tilbage står §3.1 (kør SQL-scriptet, sync med `&smSeason=`, opret cron-job og skriv det i [`../CRON.md`](../CRON.md)), verifikation af holdmatch og fasenavne, og derefter testcases 2–6.** Turneringen er synlig fra det øjeblik, rækkerne findes — merge derfor koden **først**. Premier League venter på efterspørgsel og €29/md (3.4). A2 er lukket.*

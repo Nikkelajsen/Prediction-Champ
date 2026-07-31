@@ -96,12 +96,35 @@ async function loadMonthsAvailable(token) {
 // Samme princip som månedsligaen: alle er automatisk med, på tværs af alle ligaer,
 // hver kamp tælles én gang. Stillingen læses fra DB-viewet round_standings
 // (sql/standings_views.sql) — kun spillede (låste) kampe indgår i viewet.
+//
+// Kun kampe i SYNLIGE turneringer tæller med. Rundens kampantal afgør
+// `isComplete`, og dermed om pokalen og "er Rundens Prediction Champ" vises —
+// en skjult turnering (`leagues.is_visible = false`) ville ellers holde runden
+// åben, indtil kampe, ingen kan se eller tippe, var spillet. Filteret er en
+// no-op, så længe alt er synligt; det er et værn mod den dag, flaget slås fra
+// igen, og skal derfor ikke fjernes som "overflødigt". To trins-opslaget er
+// samme mønster som loadStarterTournaments i src/lib/onboarding.js.
+//
+// Grænsen: selve pointene kommer fra viewet `round_standings` og kan ikke
+// filtreres herfra. Skjules en turnering, EFTER der er tippet på den, tæller de
+// tips fortsat med i stillingen — kun kampantallet følger synligheden.
+async function visibleSeasonIds(token) {
+  const leagues = await db.select(token, "leagues", `is_visible=is.true&select=id`);
+  if (!leagues.length) return [];
+  const seasons = await db.select(token, "seasons", `league_id=in.(${leagues.map((l) => l.id).join(",")})&select=id`);
+  return seasons.map((s) => s.id);
+}
 async function loadRoundsAvailable(token) {
-  const rows = await db.select(token, "matches", `home_score=not.is.null&select=round_key`);
+  const seasonIds = await visibleSeasonIds(token);
+  if (!seasonIds.length) return [];
+  const rows = await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&home_score=not.is.null&select=round_key`);
   return [...new Set(rows.map((r) => r.round_key))].sort().reverse();
 }
 async function loadRoundBoard(token, roundKey) {
-  const ms = await db.select(token, "matches", `round_key=eq.${roundKey}&select=id,home_score,away_score`);
+  const seasonIds = await visibleSeasonIds(token);
+  const ms = seasonIds.length
+    ? await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&round_key=eq.${roundKey}&select=id,home_score,away_score`)
+    : [];
   if (!ms.length) return { rows: [], totalMatches: 0, playedMatches: 0, isComplete: false };
   const board = await db.select(token, "round_standings",
     `round_key=eq.${roundKey}&select=user_id,total_points,matches,exact_count,outcome_count,avg_goal_error&order=${TIEBREAK_ORDER_ROUND}`);
