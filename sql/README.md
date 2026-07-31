@@ -10,17 +10,15 @@ og kan køres igen.
 `public`-skemaet, som det så ud ved seneste eksport. Den redigeres aldrig i hånden;
 den regenereres med guiden nedenfor.
 
-> ⚠️ **Øjebliksbilledet er kun så friskt som sidste kørsel.** Seneste eksport: **30. juli
-> 2026** — og den er **forældet siden 31. juli 2026**, hvor `tournament_scope.sql` (#20)
-> blev kørt i produktion — og siden 31. juli 2026, hvor `multi_provider.sql` (#22) tilføjede `leagues.provider` og `leagues.live_enabled`: filen mangler alle tre kolonner og kender
-> `round_standings`/`monthly_standings` i deres udgave **uden `scope`**. Den, der bygger
-> et staging-projekt op fra `schema.sql` alene, får altså et skema, Championship-fanen
-> ikke virker imod. Kør eksport-workflowen (`.github/workflows/schema-export.yml`, kan
-> startes manuelt), og slet denne advarsel i samme ombæring. Reglen er: eksport efter hver
-> migrering, og datoen ovenfor rettet i samme ombæring — ellers ved næste læser ikke, om
-> filen kan stoles på. Verificér mod databasen — ikke mod filen — hvis der er tvivl.
-> Til gengæld er netop det den hurtigste måde at se, om en migrering faktisk **er**
-> kørt i produktion.
+> **Øjebliksbilledet er friskt pr. 31. juli 2026** — eksporten er kørt efter
+> `multi_provider.sql` (#22) og indeholder `leagues.provider`, `leagues.live_enabled`
+> og `leagues.is_official`. Et staging-projekt bygget op fra `schema.sql` alene får
+> altså det skema, koden faktisk kører imod.
+>
+> Reglen er uændret: **eksport efter hver migrering, og datoen ovenfor rettet i
+> samme ombæring** — ellers ved næste læser ikke, om filen kan stoles på.
+> Verificér mod databasen, ikke mod filen, hvis der er tvivl; til gengæld er netop
+> det den hurtigste måde at se, om en migrering faktisk **er** kørt i produktion.
 
 ---
 
@@ -58,6 +56,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 21 | `tournament_scotland_premiership.sql` | Turnering #2 (`B2`): `leagues`- + `seasons`-rækken for Scotland Premiership (`501`) | **Data, ikke skema** — ændrer intet i strukturen og indgår derfor ikke i `schema.sql`. Idempotent. **Kørt 31. juli 2026**, og cron-jobbet er oprettet (job #5 i [`../docs/CRON.md`](../docs/CRON.md)); tilbage af `B2` står verifikationen — dubletter i hold, fasenavne og testcases 2–6 i [`../docs/features/turnering-2.md`](../docs/features/turnering-2.md) §6 |
 | 22 | `multi_provider.sql` | Flere datakilder: `leagues.provider` + `leagues.live_enabled` + check-constraint | Aktiv — tilføjet 31. juli 2026. **Ændrer ingen eksisterende rækkers adfærd**: begge kolonner har en default (`'sportmonks'`, `true`), der beskriver verden før migreringen. Skal køres FØR #23 |
 | 23 | `tournament_footballdata.sql` | De fem football-data.org-turneringer: `leagues`- + `seasons`-rækker for Premier League (`PL`), Champions League (`CL`), Bundesliga (`BL1`), Serie A (`SA`), Primera División (`PD`) | **Data, ikke skema** — indgår derfor ikke i `schema.sql`. Idempotent, og en gen-kørsel rører hverken `is_visible` eller `is_official`, så en turnering, der er tændt manuelt, ikke slukkes igen. Forudsætter #22 |
+| 24 | `tournament_footballdata_promote.sql` | Sætter `is_visible` + `is_official` = true på de fem football-data-turneringer (A19) | **Data, ikke skema.** Idempotent. **Kørt 31. juli 2026.** Begge kolonner sættes i SAMME update med vilje — check-constrainten `leagues_official_implies_visible` afviser en officiel turnering, ingen kan se, så to adskilte sætninger ville fejle på den første. Scotland Premiership er bevidst ikke med; den forfremmes, når dens igangværende spillerunde er talt op |
 
 ### ⚠️ Tre filer må ikke gen-køres blindt
 
