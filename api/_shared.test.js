@@ -5,7 +5,14 @@
 // fjernes), så det er præcis den kode, der har brug for et net under sig
 // FØR den ændres — ikke efter.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createSb, secretsMatch, isAuthorized } from "./_shared.js";
+import {
+  createSb,
+  secretsMatch,
+  isAuthorized,
+  recordRun,
+  createRunLogger,
+  failJob,
+} from "./_shared.js";
 
 const URL_BASE = "https://db.example.test";
 const SERVICE_KEY = "service-key";
@@ -191,5 +198,169 @@ describe("isAuthorized", () => {
 
   it("afviser en anmodning helt uden legitimation", async () => {
     expect(await isAuthorized(reqWith(), deps())).toEqual({ ok: false, via: null });
+  });
+});
+
+describe("recordRun", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("skriver én række i job_runs med varighed og detaljer", async () => {
+    const sb = vi.fn(async () => null);
+    const startedAt = Date.now() - 1500;
+    await recordRun(sb, "sync-live", { ok: true, startedAt, detail: { written: 3 } });
+
+    expect(sb).toHaveBeenCalledOnce();
+    const [path, opts] = sb.mock.calls[0];
+    expect(path).toBe("/rest/v1/job_runs");
+    expect(opts.method).toBe("POST");
+    const row = JSON.parse(opts.body);
+    expect(row.job).toBe("sync-live");
+    expect(row.ok).toBe(true);
+    expect(row.detail).toEqual({ written: 3 });
+    expect(row.error).toBeNull();
+    expect(new Date(row.finished_at) - new Date(row.started_at)).toBeGreaterThanOrEqual(1400);
+  });
+
+  it("klipper meget lange fejltekster", async () => {
+    const sb = vi.fn(async () => null);
+    await recordRun(sb, "sync-live", { ok: false, startedAt: Date.now(), error: "x".repeat(5000) });
+    expect(JSON.parse(sb.mock.calls[0][1].body).error).toHaveLength(2000);
+  });
+
+  // Kontrakten: overvågning må aldrig vælte det, den overvåger.
+  it("kaster aldrig, heller ikke når skrivningen fejler", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const sb = vi.fn(async () => {
+      throw new Error("job_runs findes ikke");
+    });
+    await expect(
+      recordRun(sb, "sync-live", { ok: true, startedAt: Date.now() })
+    ).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledOnce();
+  });
+});
+
+describe("createRunLogger", () => {
+  const mkRes = () => {
+    const res = {
+      statusCode: null,
+      body: null,
+      status(c) {
+        res.statusCode = c;
+        return res;
+      },
+      json(b) {
+        res.body = b;
+        return res;
+      },
+    };
+    return res;
+  };
+
+  it("logger og svarer 200 ved ok()", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    await createRunLogger(sb, "sync-live").ok(res, { written: 2 });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ written: 2 });
+    expect(JSON.parse(sb.mock.calls[0][1].body).ok).toBe(true);
+  });
+
+  it("logger fejlen fuldt ud, men svarer kalderen det korte", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    await createRunLogger(sb, "sync-matches").fail(
+      res,
+      400,
+      { error: "kort" },
+      "lang tekst til driften"
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: "kort" });
+    const row = JSON.parse(sb.mock.calls[0][1].body);
+    expect(row.ok).toBe(false);
+    expect(row.error).toBe("lang tekst til driften");
+  });
+
+  // En tør kørsel laver ikke noget arbejde. Blev den logget som vellykket,
+  // ville en manuel forhåndsvisning nulstille fejlserien i admin_job_health()
+  // og skjule et job, der reelt er gået i stå.
+  it("logger ikke tørre kørsler, men svarer stadig", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    const run = createRunLogger(sb, "sync-live", { skip: true });
+
+    await run.ok(res, { dryRun: true });
+    await run.fail(res, 500, { error: "x" }, "x");
+
+    expect(sb).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(500);
+  });
+
+  // Rækkefølgen er ikke til forhandling: på Vercel kan funktionen fryses, så
+  // snart svaret er sendt, så en logning bagefter går tabt netop ved en fejl.
+  it("skriver rækken FØR svaret sendes", async () => {
+    const order = [];
+    const sb = vi.fn(async () => {
+      order.push("log");
+      return null;
+    });
+    const res = mkRes();
+    res.json = () => {
+      order.push("svar");
+      return res;
+    };
+    await createRunLogger(sb, "sync-live").ok(res, {});
+    expect(order).toEqual(["log", "svar"]);
+  });
+});
+
+describe("failJob", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("giver kalderen den præcise fejl og driften det fulde stakspor", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const sb = vi.fn(async () => null);
+    const res = {
+      statusCode: null,
+      body: null,
+      status(c) {
+        this.statusCode = c;
+        return this;
+      },
+      json(b) {
+        this.body = b;
+        return this;
+      },
+    };
+    const e = new Error("Supabase /rest/v1/matches: 500 boom");
+    await failJob(createRunLogger(sb, "sync-live"), res, e, "sync-live");
+
+    // Endpointet svarer 401 før nogen fejl kan opstå, så kun cron og admins ser
+    // dette — og for admin'en i Admin-skærmen er den præcise tekst hele pointen.
+    expect(res.statusCode).toBe(500);
+    expect(res.body.error).toBe("Supabase /rest/v1/matches: 500 boom");
+    expect(JSON.parse(sb.mock.calls[0][1].body).error).toContain("Error: Supabase");
+  });
+
+  it("svarer stadig, når fejlen kom før autorisationen var i hus", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = {
+      statusCode: null,
+      body: null,
+      status(c) {
+        this.statusCode = c;
+        return this;
+      },
+      json(b) {
+        this.body = b;
+        return this;
+      },
+    };
+    await failJob(null, res, new Error("miljøvariabel mangler"), "sync-live");
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toEqual({ error: "miljøvariabel mangler" });
   });
 });

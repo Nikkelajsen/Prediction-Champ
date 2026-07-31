@@ -21,7 +21,7 @@
 //   VAPID_SUBJECT (valgfri, mailto:-adresse til push-tjenesterne)
 
 import webpush from "web-push";
-import { createSb, isAuthorized } from "./_shared.js";
+import { createSb, isAuthorized, createRunLogger, failJob } from "./_shared.js";
 
 const HOUR = 3600 * 1000;
 const LOCK_LEAD_MS = HOUR; // runden låser 1 time før sin tidligste kickoff
@@ -58,6 +58,10 @@ function fmtUntil(ts) {
 }
 
 export default async function handler(req, res) {
+  // Sættes så snart autorisationen er i hus. Ligger uden for try'et, fordi
+  // catch'en skal kunne bruge den — en kørsel, der vælter, er netop den, der
+  // skal ende i job_runs.
+  let run = null;
   try {
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -97,10 +101,11 @@ export default async function handler(req, res) {
 
     const dryRun = req.query.dryRun === "true";
     const horizonHours = Math.min(24, Math.max(1, Number(req.query.hours) || 3));
+    run = createRunLogger(sb, "send-notifications", { skip: dryRun });
 
     // tilmeldte enheder, grupperet pr. bruger — er ingen tilmeldt, er der intet at gøre
     const subs = await sb(`/rest/v1/push_subscriptions?select=id,user_id,endpoint,p256dh,auth`);
-    if (!subs.length) return res.status(200).json({ sent: 0, note: "Ingen tilmeldte enheder" });
+    if (!subs.length) return run.ok(res, { sent: 0, note: "Ingen tilmeldte enheder" });
     const subsByUser = {};
     for (const s of subs) (subsByUser[s.user_id] ||= []).push(s);
     const subscribedUsers = Object.keys(subsByUser);
@@ -203,7 +208,7 @@ export default async function handler(req, res) {
       }
     }
 
-    if (!outbox.length) return res.status(200).json({ sent: 0, note: "Intet at sende lige nu" });
+    if (!outbox.length) return run.ok(res, { sent: 0, note: "Intet at sende lige nu" });
 
     // ---- dedup mod notification_log ----
     // Dette første filter er kun en optimering (spring beskeder over, en tidligere
@@ -220,13 +225,13 @@ export default async function handler(req, res) {
     const candidates = outbox.filter((o) => !alreadySent.has(`${o.userId}:${o.key}`));
 
     if (dryRun) {
-      return res.status(200).json({
+      return run.ok(res, {
         dryRun: true,
         note: "Intet er sendt eller logget — dette er kun en forhåndsvisning.",
         wouldSend: candidates.map(({ userId, key, title, body }) => ({ userId, key, title, body })),
       });
     }
-    if (!candidates.length) return res.status(200).json({ sent: 0, note: "Alt er allerede sendt" });
+    if (!candidates.length) return run.ok(res, { sent: 0, note: "Alt er allerede sendt" });
 
     // ---- claim: reservér beskederne i notification_log FØR de sendes ----
     // resolution=ignore-duplicates ⇒ rækker, som en anden (samtidig eller tidligere)
@@ -241,11 +246,17 @@ export default async function handler(req, res) {
     })) || [];
     const claimedSet = new Set(claimed.map((r) => `${r.user_id}:${r.key}`));
     const toSend = candidates.filter((o) => claimedSet.has(`${o.userId}:${o.key}`));
-    if (!toSend.length) return res.status(200).json({ sent: 0, note: "Alt er allerede sendt (taget af en anden kørsel)" });
+    if (!toSend.length) return run.ok(res, { sent: 0, note: "Alt er allerede sendt (taget af en anden kørsel)" });
 
     // ---- send + ryd døde abonnementer op ----
     let sent = 0;
     const deadSubIds = new Set();
+    // Beskeder, der er "claimet" i notification_log men fejlede ved afsendelse,
+    // er PERMANENT tabt: claim-rækken forhindrer, at en senere kørsel prøver
+    // igen. Det er prisen for race-sikkerheden (se claim-trinnet ovenfor), og
+    // den er bevidst — men indtil nu blev tabet slugt uden at blive talt.
+    let failed = 0;
+    const failureSamples = [];
     for (const msg of toSend) {
       // ?pn=<kind>&rk=<round> lader klienten logge push_opened med kontekst
       // (analytics v1) — der skrives ingen event her server-side, kun URL'en.
@@ -259,7 +270,20 @@ export default async function handler(req, res) {
           );
           sent++;
         } catch (e) {
-          if (e.statusCode === 404 || e.statusCode === 410) deadSubIds.add(s.id); // enheden er afmeldt
+          if (e.statusCode === 404 || e.statusCode === 410) {
+            deadSubIds.add(s.id); // enheden er afmeldt — normal oprydning, ikke en fejl
+          } else {
+            // Alt andet (netværksfejl, 5xx fra push-tjenesten) betyder en tabt besked.
+            failed++;
+            if (failureSamples.length < 5) {
+              failureSamples.push(`${e.statusCode ?? "?"}: ${String(e.message ?? e).slice(0, 200)}`);
+            }
+            console.error(
+              `[send-notifications] Besked tabt for bruger ${msg.userId} (${msg.key}):`,
+              e.statusCode ?? "",
+              e.message ?? e
+            );
+          }
         }
       }
     }
@@ -267,8 +291,22 @@ export default async function handler(req, res) {
       await sb(`/rest/v1/push_subscriptions?id=in.(${[...deadSubIds].join(",")})`, { method: "DELETE", prefer: "return=minimal" });
     }
 
-    res.status(200).json({ sent, messages: toSend.length, removedSubscriptions: deadSubIds.size });
+    // Delvist tab holder kørslen "vellykket": jobbet gjorde sit arbejde, og en
+    // enkelt push-tjeneste, der hikker, skal ikke udløse alarm. Slap INTET
+    // igennem, selvom der var noget at sende, er kørslen derimod mislykket —
+    // det er signaturen på udløbne VAPID-nøgler eller en nede push-tjeneste.
+    const detail = {
+      sent,
+      messages: toSend.length,
+      removedSubscriptions: deadSubIds.size,
+      failed,
+      ...(failureSamples.length ? { failureSamples } : {}),
+    };
+    if (failed > 0 && sent === 0) {
+      return run.fail(res, 200, detail, `Alle ${failed} afsendelser fejlede. ${failureSamples.join(" | ")}`);
+    }
+    return run.ok(res, detail);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    return failJob(run, res, e, "send-notifications");
   }
 }

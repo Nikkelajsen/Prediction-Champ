@@ -71,15 +71,43 @@ og syncen står stille. Fremgangsmåden er derfor:
 4. **Er der linjer**, fortæller de, hvilket endpoint der stadig kalder forkert.
    Ret jobbet i cron-job.org først, og start punkt 2 forfra.
 
-## Hvad registeret ikke kan
+## Overvågning
 
-Et job, som cron-job.org har **auto-deaktiveret** efter gentagne fejl, skriver
-ingenting nogen steder. Tavshed ligner "alt er roligt". Derfor er registeret her
-også listen, en kommende overvågning skal holde sig op imod: den skal kunne sige
-"job 2 har ikke meldt sig i 30 minutter", ikke kun "job 2 fejlede".
+Der er to lag, og de dækker hver sin slags fejl.
 
-Indtil den findes, er kontrollen manuel — se `docs/features/live-resultater-v1.md`
-afsnit 9 om cron-job.org's egen fejlnotifikation og om Vercels invocation-forbrug.
+**1. `job_runs` — hvad der skete.** Hver kørsel af job 1–3 skriver én række
+(`sql/job_runs.sql`, skrevet af `recordRun()` i `api/_shared.js`). Rækken
+indeholder varighed, om det gik godt, jobbets eget resumé og fejlteksten.
+Aflæses i **Admin → Drift**. Tørre kørsler (`?dryRun=true`) logges bevidst
+ikke — de laver ikke noget arbejde, og ville ellers nulstille fejlserien.
+
+**2. `job-heartbeat.yml` — hvad der IKKE skete.** `job_runs` kan per definition
+kun se de kørsler, der fandt sted. Et job, cron-job.org har auto-deaktiveret,
+skriver ingen rækker, og tavshed ligner ro. Derfor kører en workflow hver 6.
+time, som slår alarm, hvis et job har været tavst for længe eller er fejlet
+mindst 3 gange i træk.
+
+Alarmen ligger med vilje **uden for appen**: kører Supabase eller Vercel ikke,
+ville en alarm inde i appen dø af præcis samme årsag som jobbet. Kanalen er
+GitHubs egen notifikation, når workflowen fejler.
+
+Tavshedsgrænserne er rundhåndede i forhold til kadencen, så et enkelt sprunget
+interval ikke larmer:
+
+| Job | Kadence | Alarm efter |
+|---|---|---|
+| `sync-live` | hvert minut | 30 minutter |
+| `send-notifications` | hver 15.–30. minut | 3 timer |
+| `sync-matches` | hver 6. time | 14 timer |
+
+> Grænserne står **tre** steder og skal ændres samlet: tabellen her,
+> `.github/workflows/job-heartbeat.yml` og `JOBS` i `src/lib/ops.js`.
+
+`job_runs` ryddes med `prune_job_runs(30)` — uden en grænse ville `sync-live`
+alene lægge 1.440 rækker i tabellen i døgnet.
+
+Ud over dette findes stadig cron-job.orgs egen fejlnotifikation og Vercels
+invocation-forbrug — se `docs/features/live-resultater-v1.md` afsnit 9.
 
 ## Når du opretter et nyt job
 
