@@ -266,6 +266,7 @@ Kald sync-funktionen: `/api/sync-matches?leagueId=<uuid>` (`&dryRun=true` først
 # 1) headeren (renest — samme vej som cron-jobbene)
 curl -s -H "x-sync-secret: $SYNC_SECRET" "https://<app>/api/sync-matches?leagueId=<uuid>&dryRun=true"
 ```
+Alt på ÉN linje, og hele URL'en i anførselstegn — `&` skiller ellers kommandoen. På Windows `cmd.exe` gælder desuden, at `\` ikke er linjefortsættelse (det er `^`), og i PowerShell skal der stå `curl.exe`, da `curl` dér er et alias for `Invoke-WebRequest` med helt andre argumenter.
 ```js
 // 2) devtools-konsollen i appen, logget ind som admin
 const s = JSON.parse(localStorage.getItem("pc_session"));
