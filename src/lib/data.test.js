@@ -3,14 +3,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // db mockes, så loaderne kan testes uden netværk/Supabase
 vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn(), insert: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
-import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data.js";
+import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadRoundsAvailable, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data.js";
 import { QUIET_TIER_MIN } from "./stories.js";
 
-// mock-svar pr. tabel/view
+// mock-svar pr. tabel/view. En værdi må være en funktion, når svaret afhænger
+// af selve forespørgslen (fx et filter, testen vil holde loaderen op på).
 function mockTables(tables) {
-  db.select.mockImplementation(async (token, table) => {
+  db.select.mockImplementation(async (token, table, query) => {
     if (!(table in tables)) throw new Error(`uventet tabel i test: ${table}`);
-    return tables[table];
+    const rows = tables[table];
+    return typeof rows === "function" ? rows(query) : rows;
   });
 }
 
@@ -18,9 +20,14 @@ function mockTables(tables) {
 // funktion ville blive kørt af vitest som cleanup-hook (uden argumenter)
 beforeEach(() => { db.select.mockReset(); db.del.mockReset(); db.insert.mockReset(); restFetch.mockReset(); });
 
+// Rundeligaen slår først synlige turneringer op (leagues → seasons), så begge
+// tabeller skal med i mocken, selv når testen handler om noget andet.
+const VISIBLE = { leagues: [{ id: "L1" }], seasons: [{ id: "s1" }] };
+
 describe("loadRoundBoard (round_standings-view)", () => {
   it("mapper viewets rækker til stillingsrækker med navne", async () => {
     mockTables({
+      ...VISIBLE,
       matches: [
         { id: "m1", home_score: 2, away_score: 1 },
         { id: "m2", home_score: null, away_score: null },
@@ -46,6 +53,7 @@ describe("loadRoundBoard (round_standings-view)", () => {
 
   it("markerer runden som komplet når alle kampe har resultat", async () => {
     mockTables({
+      ...VISIBLE,
       matches: [{ id: "m1", home_score: 0, away_score: 0 }],
       round_standings: [],
       profiles: [],
@@ -56,9 +64,58 @@ describe("loadRoundBoard (round_standings-view)", () => {
   });
 
   it("giver tom stilling uden kampe i runden", async () => {
-    mockTables({ matches: [] });
+    mockTables({ ...VISIBLE, matches: [] });
     const board = await loadRoundBoard("token", "2026-07-14");
     expect(board).toEqual({ rows: [], totalMatches: 0, playedMatches: 0, isComplete: false });
+  });
+
+  // En skjult turnerings kampe må ikke holde runden åben: kampantallet afgør
+  // isComplete, og dermed om pokalen vises for kampe, ingen kan se eller tippe.
+  it("henter kun kampe fra sæsoner under synlige turneringer", async () => {
+    const queries = [];
+    mockTables({
+      leagues: [{ id: "L1" }],
+      seasons: [{ id: "s1" }],
+      matches: (q) => { queries.push(q); return [{ id: "m1", home_score: 2, away_score: 0 }]; },
+      round_standings: [],
+      profiles: [],
+    });
+    const board = await loadRoundBoard("token", "2026-07-14");
+    expect(queries[0]).toContain("season_id=in.(s1)");
+    expect(board.totalMatches).toBe(1);
+    expect(board.isComplete).toBe(true);
+  });
+
+  it("giver tomt board, når ingen turnering er synlig", async () => {
+    mockTables({ leagues: [] });
+    const board = await loadRoundBoard("token", "2026-07-14");
+    expect(board).toEqual({ rows: [], totalMatches: 0, playedMatches: 0, isComplete: false });
+  });
+});
+
+describe("loadRoundsAvailable (runde-dropdownen)", () => {
+  it("giver runder med spillede kampe, nyeste først", async () => {
+    mockTables({
+      ...VISIBLE,
+      matches: [{ round_key: "2026-07-07" }, { round_key: "2026-07-14" }, { round_key: "2026-07-07" }],
+    });
+    expect(await loadRoundsAvailable("token")).toEqual(["2026-07-14", "2026-07-07"]);
+  });
+
+  it("spørger kun efter sæsoner under synlige turneringer", async () => {
+    const queries = [];
+    mockTables({
+      leagues: [{ id: "L1" }, { id: "L2" }],
+      seasons: [{ id: "s1" }, { id: "s2" }],
+      matches: (q) => { queries.push(q); return []; },
+    });
+    await loadRoundsAvailable("token");
+    expect(queries[0]).toContain("season_id=in.(s1,s2)");
+  });
+
+  it("giver ingen runder, når ingen turnering er synlig", async () => {
+    mockTables({ leagues: [] });
+    expect(await loadRoundsAvailable("token")).toEqual([]);
   });
 });
 

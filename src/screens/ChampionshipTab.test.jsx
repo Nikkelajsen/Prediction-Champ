@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 // begge komponenter er ren markup, og projektet skal ikke have et komponent-
 // testbibliotek for deres skyld.
 import { renderToStaticMarkup } from "react-dom/server";
-import { StandingsTable, Champions } from "./ChampionshipTab.jsx";
+import { StandingsTable, Champions, pickSeasonLeague } from "./ChampionshipTab.jsx";
 import { assignRanks, sortStandings } from "../lib/standings.js";
 
 // Basisrække: alle trin i stigen lige, så testene kun ændrer ét ad gangen.
@@ -66,5 +66,33 @@ describe("Champions (kåringen)", () => {
 
   it("renderer intet uden rækker", () => {
     expect(renderToStaticMarkup(<Champions rows={[]} title="X" isComplete />)).toBe("");
+  });
+});
+
+// Forvalget på sæsonkortet. Erstattede /superliga/i-regexet, da turnering #2
+// (Scotland Premiership) kom til — og skal netop IKKE lade alfabetet bestemme.
+describe("pickSeasonLeague (hvilken turnering vises)", () => {
+  const superliga = { id: "L1", name: "Superligaen", created_at: "2026-01-01T00:00:00Z" };
+  const skotland = { id: "L2", name: "Scotland Premiership", created_at: "2026-07-31T00:00:00Z" };
+
+  it("vælger den ældste turnering, ikke den første i alfabetet", () => {
+    expect(pickSeasonLeague([skotland, superliga], null).id).toBe("L1");
+  });
+
+  it("lader brugerens gemte valg vinde", () => {
+    expect(pickSeasonLeague([superliga, skotland], "L2").id).toBe("L2");
+  });
+
+  it("falder tilbage til forvalget, når det gemte id ikke findes længere", () => {
+    expect(pickSeasonLeague([superliga, skotland], "slettet").id).toBe("L1");
+  });
+
+  it("giver null uden turneringer", () => {
+    expect(pickSeasonLeague([], null)).toBeNull();
+    expect(pickSeasonLeague(undefined, "L1")).toBeNull();
+  });
+
+  it("vælger stadig noget, når created_at mangler", () => {
+    expect(pickSeasonLeague([{ id: "L9", name: "Uden dato" }], null).id).toBe("L9");
   });
 });

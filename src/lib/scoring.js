@@ -54,6 +54,9 @@ function currentRoundIndex(rounds) {
 }
 // ---------- stages (grundspil / mesterskabsspil / nedrykningsspil) ----------
 // Sportmonks leverer stage-navne på engelsk; vi oversætter til dansk i UI'et.
+// Navnene her er dem, syncen faktisk har leveret for Superligaen. En ny
+// turnerings fasenavne tilføjes, når første sync har vist, hvad de HEDDER — et
+// gæt er værre end fallbacken nedenfor, som viser det rå navn pænt.
 const STAGE_LABELS = {
   "Regular Season": "Grundspil",
   "Championship Round": "Mesterskabsspil",
