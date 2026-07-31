@@ -36,6 +36,8 @@ eller en linje i "Forkastede ideer".
 
 - dokumentationen siger gratis-planen giver 180 kald/time pr. entitet, kontosiden siger 3.000 API-kald — hvilket tal og hvilken enhed gælder?
 - Lav privatlivspolitik og brugervilkår. Er der andet der skal tages hensyn til?
+- notifikation til ligamedlemmer når der oprettes ny konkurrence i en liga de er medlem af.
+- i en konkurrence med to forskellige ligaer, låser kampene på forskellige tidspunkter. Hvordan har det indvirkning på hvornå man kan se andres tip? Den burde jo egentligt låse en time før første kamp i runden i konkurrencen.
 
 ---
 
