@@ -261,16 +261,16 @@ Find ligaens Sportmonks-id — og verificér, at den er i abonnementets plan. `G
 Slå sæsonens navn op: `GET /v3/football/leagues/<id>?include=seasons`. Navnet skal matche nøjagtigt i næste trin.
 Indsæt en ny række i `leagues` (+ `api_league_id`, `is_visible`) og en sæson-række i `seasons`. **Sæt `api_season_id` med det samme** (id'et står som "Current Season ID" på Sportmonks' ligaside): så er første sync et almindeligt kald, og Admin-knappen "Hent nu" virker fra første klik. Skabelon: `sql/tournament_scotland_premiership.sql`.
 Kald sync-funktionen: `/api/sync-matches?leagueId=<uuid>` (`&dryRun=true` først). **`leagueId` er vores egen `leagues.id`-uuid — ikke Sportmonks' id**, som står i `api_league_id`. Den opretter selv holdene. Er `api_season_id` IKKE sat, skal første kald i stedet have `&smSeason=<sæsonnavn>` — navnet skal matche Sportmonks nøjagtigt, id'et slås så op og gemmes. Admin-knappen sender ikke `&smSeason=`, så netop dét kald skal ske via URL.
-**Kaldet SKAL autoriseres, og det kan en adresselinje ikke.** `isAuthorized()` (`api/_shared.js`) kræver enten sync-hemmeligheden eller et admin-login som `Authorization: Bearer <supabase-JWT>`. Appens session ligger i `localStorage` og ikke i en cookie, så det hjælper ikke at være logget ind i browseren — en almindelig navigation sender ingen af delene og får `{"error":"Ikke autoriseret"}` (401). Brug én af disse:
+**Kaldet SKAL autoriseres, og det kan en adresselinje ikke.** `isAuthorized()` (`api/_shared.js`) kræver enten sync-hemmeligheden eller et admin-login som `Authorization: Bearer <supabase-JWT>`. Appens session ligger i `localStorage` og ikke i en cookie, så det hjælper ikke at være logget ind i browseren — en almindelig navigation sender ingen af delene og får `{"error":"Ikke autoriseret"}` (401). Der er tre veje ind, og de har hver sin pris:
+**1) `curl` med hemmeligheden — den eneste, der kan køre `dryRun` uden bøvl.** Kræver `SYNC_SECRET` fra Vercels miljøvariabler.
 ```bash
-# 1) headeren (renest — samme vej som cron-jobbene)
 curl -s -H "x-sync-secret: $SYNC_SECRET" "https://<app>/api/sync-matches?leagueId=<uuid>&dryRun=true"
 ```
 Alt på ÉN linje, og hele URL'en i anførselstegn — `&` skiller ellers kommandoen. På Windows `cmd.exe` gælder desuden, at `\` ikke er linjefortsættelse (det er `^`), og i PowerShell skal der stå `curl.exe`, da `curl` dér er et alias for `Invoke-WebRequest` med helt andre argumenter.
+**2) Admin → Kampe → "Hent nu" — ingen hemmelighed, intet token.** Knappen sender admin-brugerens eget JWT. Den kan til gengæld **ikke** køre `dryRun` og sender ikke `&smSeason=`, så den forudsætter, at `api_season_id` allerede står på sæson-rækken.
+**3) Devtools-konsollen med et kopieret token** — når man vil have `dryRun` uden at kende hemmeligheden. **Tokenet kan IKKE hentes fra `localStorage`:** `pc_session` indeholder kun `refresh_token` og `user` (`App.jsx`, `saveSession`), mens adgangstokenet kun lever i React-state. `s.access_token` er `undefined` og giver `Bearer undefined` → 401. Kopiér det i stedet fra et kald, appen selv laver: F12 → **Network** → et vilkårligt kald til `…supabase.co/rest/v1/…` → **Request Headers** → `authorization: Bearer eyJ…`.
 ```js
-// 2) devtools-konsollen i appen, logget ind som admin
-const s = JSON.parse(localStorage.getItem("pc_session"));
-fetch("/api/sync-matches?leagueId=<uuid>&dryRun=true", { headers: { Authorization: `Bearer ${s.access_token}` } })
+fetch("/api/sync-matches?leagueId=<uuid>&dryRun=true", { headers: { Authorization: "Bearer eyJ…" } })
   .then((r) => r.json()).then(console.log);
 ```
 `?secret=<SYNC_SECRET>` i adresselinjen virker også, men **undgå det til manuelle kald**: hemmeligheden havner i browserhistorik og request-logs, og kaldet udløser `[A11]`-advarslen i Vercels logs — netop det signal, hvis fravær `A11` venter på for at kunne fjerne fallbacken (`docs/CRON.md`).
