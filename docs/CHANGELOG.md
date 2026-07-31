@@ -9,6 +9,11 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+31. juli 2026 — `sync-matches` logger nu sine vellykkede kørsler
+**Fundet ved at lede efter noget andet.** Spørgsmålet var, hvor man kunne se resultatet af en manuel sync, når det grønne svar i Admin → Kampe forsvinder ved reload. Svaret burde have været `job_runs` / Admin → Drift — men succes-stien i `api/sync-matches.js` svarede med et bart `res.status(200).json()` i stedet for `run.ok(res, …)`. **Kun fejlende kørsler skrev en række.**
+**To ting var i stykker, uden at nogen kunne se det.** Admin → Drift kunne aldrig vise en grøn `sync-matches`-kørsel, og `job-heartbeat.yml` — som netop findes for at fange *fraværet* af kørsler — ville melde "INGEN KOERSLER" for jobbet, uanset hvor fint det kørte. En alarm, der altid larmer, er den samme som ingen alarm. `sync-live` og `send-notifications` gjorde det rigtigt hele vejen, så fejlen var isoleret til det ene endpoint.
+**Detaljerne i rækken er ikke pynt:** `synced`/`totalFixtures`/`teamsCreated`/`unmatched` er præcis det, der gør en tavs delvis fejl synlig — en kørsel kan svare 200 og have hentet 0 kampe. Tørre kørsler (`?dryRun=true`) logges fortsat bevidst ikke; de laver ikke noget arbejde og ville ellers nulstille fejlserien. Symptomet er skrevet i fejlfindingsloggen (`DOCUMENTATION.md` §13).
+
 31. juli 2026 — Adgangstokenet ligger ikke i `localStorage`, og §10 påstod det modsatte
 **Rettelse af rettelsen samme dag.** Posten nedenfor tilføjede en devtools-opskrift, der læste `s.access_token` fra `pc_session`. Det felt findes ikke: `saveSession()` i `App.jsx` gemmer bevidst kun `{ refresh_token, user }`, og adgangstokenet lever udelukkende i React-state. Snippet'en producerede `Bearer undefined` og dermed nøjagtig samme 401, som den var skrevet for at undgå.
 **§10 skelner nu mellem tre veje og siger, hvad hver især koster:** `curl` med `SYNC_SECRET` (den eneste, der kan køre `dryRun` uden videre), **Admin → Kampe → "Hent nu"** (ingen hemmelighed og intet token — men kan ikke køre `dryRun` og forudsætter, at `api_season_id` står på sæson-rækken), og devtools-konsollen med et token **kopieret fra Network-fanen**, ikke fra `localStorage`.

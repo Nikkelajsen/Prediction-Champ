@@ -329,6 +329,7 @@ Analytics v1 (afsnit 21): hændelsesloggen (`analytics_events`) er fire-and-forg
 ---
 ## 13. Fejlfindingslog
 Symptom	Årsag	Løsning
+Admin → Drift viste aldrig en grøn `sync-matches`-kørsel, og job-heartbeat meldte "INGEN KOERSLER"	Succes-stien i `api/sync-matches.js` svarede med et bart `res.status(200).json()` i stedet for `run.ok(res, …)`, så kun FEJLENDE kørsler skrev en række i `job_runs`	Kald altid `run.ok(...)` på succes-stien (rettet 31. juli 2026). Tørre kørsler (`?dryRun=true`) logges fortsat bevidst ikke
 "Load failed" i artifact-preview	Claude-artifacts kan ikke lave eksterne netværkskald	Deploy som rigtig webapp på Vercel
 "infinite recursion" i Supabase	To RLS-policies refererede hinanden cirkulært	Forenklet policy
 Kampe fra forrige sæson blandet ind	Sync brugte datointerval i stedet for sæson-match	Match på Sportmonks' sæsonnavn

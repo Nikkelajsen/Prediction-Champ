@@ -241,7 +241,14 @@ export default async function handler(req, res) {
       });
     }
 
-    res.status(200).json({
+    // run.ok og ikke res.json: en vellykket kørsel SKAL skrive sin række i
+    // job_runs. Stod her tidligere som et bart res.status(200).json(), hvilket
+    // betød, at kun fejlende kørsler blev logget — Admin → Drift kunne aldrig
+    // vise en grøn sync-matches-kørsel, og job-heartbeat.yml ville melde
+    // "INGEN KOERSLER" for jobbet, uanset hvor fint det kørte. Detaljerne
+    // (synced/totalFixtures/teamsCreated/unmatched) er samtidig det, der gør en
+    // tavs delvis fejl synlig: en kørsel kan svare 200 og have hentet 0 kampe.
+    return run.ok(res, {
       synced: toUpsert.length,
       totalFixtures: fixtures.length,
       teamsCreated: newTeams.length,
