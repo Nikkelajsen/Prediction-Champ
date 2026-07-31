@@ -42,11 +42,13 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 | `src/lib/scoring.js` | `STAGE_LABELS` oversætter kun Superligaens stages til dansk (grundspil/mesterskabsspil/…). Tilføj den nye turnerings fasenavne; ukendte stages falder allerede pænt tilbage til råt navn. | ✅ **Leveret 31. juli 2026**, efter at navnene var aflæst hos Sportmonks — se §3.5. `1st Phase` → Grundspil, `2nd Phase` → Slutspil. Badge-reglen ser nu på det **danske** ord i stedet for at regex'e efter "regular season", så grundspillet skjules, uanset hvad turneringen kalder det på engelsk |
 | `api/sync-matches.js` (linje ~63, ~122) | (a) Sæson-navn-fallbacken er hardkodet `"2026/2027"`. (b) Paginationen stopper hårdt ved side 20 — en stor turnering kan blive **stille trunkeret**. | ✅ **Var allerede lukket før `B2`.** (a) Fallbacken er væk: uden `smSeason` og uden gemt `api_season_id` fejler kaldet nu tydeligt. (b) Loftet er 60 sider, og en afbrudt paginering **kaster** i stedet for at bryde stille |
 | `api/sync-matches.js` (holdmatch) | Holdopslag matcher på normaliserede navne (fuzzy). Verificér efter første sync, at den nye turnerings hold ikke er fejl-linket til eksisterende hold. | ⏳ **Drift-verifikation, ikke en kodeændring.** `teams` hentes med `league_id=eq.<liga>`, så den fuzzy match kun ser turneringens egne hold — fejl-link *på tværs af turneringer* kan ikke ske. Dubletter *inden for* den nye turnering skal stadig kontrolleres |
-| `src/lib/data/standings.js` | **Ikke forudset af drejebogen.** `loadRoundBoard`/`loadRoundsAvailable` læste *alle* kampe i en `round_key`, uanset turnering og uanset `is_visible`. Kampantallet afgør `isComplete` og dermed, om 🏆 og "er Rundens Prediction Champ" vises — en skjult turnering ville altså holde runden åben, indtil kampe, ingen kan se eller tippe, var spillet. | ✅ **Leveret.** Begge loadere filtrerer nu på sæsoner under synlige turneringer. Med alt synligt er det en no-op; det er et værn mod den dag, `is_visible` slås fra igen. **Grænse:** selve pointene kommer fra viewet `round_standings` og kan ikke filtreres fra klienten — skjules en turnering, *efter* der er tippet på den, tæller de tips fortsat med i stillingen |
+| `src/lib/data/standings.js` | **Ikke forudset af drejebogen.** `loadRoundBoard`/`loadRoundsAvailable` læste *alle* kampe i en `round_key`, uanset turnering og uanset `is_visible`. Kampantallet afgør `isComplete` og dermed, om 🏆 og "er Rundens Prediction Champ" vises — en skjult turnering ville altså holde runden åben, indtil kampe, ingen kan se eller tippe, var spillet. | ✅ **Leveret.** Begge loadere filtrerer på sæsoner under de turneringer, stillingen gælder. *(Udvidet samme dag: prædikatet blev `is_official` frem for `is_visible`, da Championship fik to niveauer — se §3.6. Kampantallet følger dermed samme afgrænsning som pointene.)* |
 
 ### 3.3 Beslutninger, der udløses (fra roadmappens åbne beslutninger)
 
-- **A2 — ✅ Lukket (juli 2026):** Månedsligaen tæller **samlede point**, også med flere turneringer (rating dækker præcision via gennemsnit). Ingen kodeændring — `monthly_standings` og "Sådan virker det"-teksten er allerede korrekte.
+- ~~**A2 — ✅ Lukket (juli 2026):** Månedsligaen tæller **samlede point**, også med flere turneringer (rating dækker præcision via gennemsnit). Ingen kodeændring.~~
+  **AFLØST 31. juli 2026, samme dag som turnering #2 kom i drift.** A2 blev truffet, før der fandtes to turneringer — altså om en situation, der ikke kunne afprøves. Da den blev virkelig, viste den sig at have en konsekvens, spørgsmålet ikke rummede: rundeliga og månedsliga måler ikke længere alle på de samme kampe, fordi hvad man tipper afgøres af, hvilke **frivillige** konkurrencer man er med i. De eneste konkurrencer, ingen selv har valgt, blev dermed afgjort af valg truffet andre steder.
+  **Nyt svar — to niveauer:** `scope = 'ALL'` samler alle **officielle** turneringer og kårer *Rundens/Månedens Prediction Champ* (den store titel, som fortsat tæller samlede point og altså belønner bredde — nu som en udtalt regel); `scope = <league_id>` giver én stilling pr. turnering, hvor alle ér målt på de samme kampe, med kåringen *"Rundens/Månedens bedste i X"*. Ny kolonne `leagues.is_official` afgør, hvad der overhovedet fodrer Championship. Migrering: `sql/tournament_scope.sql`. Fuld begrundelse i [`../DECISIONS.md`](../DECISIONS.md).
 - **Trin 5 — global tirsdag–mandag-runde** bliver først reelt anderledes end turneringsrunder, når turnering #2 er i drift. Forbliver bevidst udskudt; dette dokument ændrer ikke på det, men tilføjelsen af turnering #2 er dens forudsætning.
 - **A10 — ✅ Lukket (31. juli 2026):** abonnementet gater ikke længere denne drejebog. Se 3.4 nedenfor.
 
@@ -109,6 +111,32 @@ Antagelsen i §3.4 var, at de skotske navne måske var de samme engelske som Sup
 **Add-on-fælden:** Champions League ligger i **Euro Club Tournaments, +€29/md**, altså *uden for* de 5 selvvalgte turneringer. Roadmappens trin 5 nævner PL og CL i samme sætning, men de koster ikke det samme — CL er en fordobling af regningen og tages som en selvstændig beslutning. Internationale turneringer (+€129/md) er fravalgt.
 
 **Rate limit er ikke det, vi ville betale for:** `sync-live` bruger maks. 60 kald/time på kampdage og nul resten af tiden, `sync-matches` ~4 kald pr. kørsel pr. turnering hver 6. time. To turneringer fordobler kun det sidste tal. Fuld begrundelse i [`../DECISIONS.md`](../DECISIONS.md), 31. juli 2026.
+
+---
+
+### 3.6 Championship fik to niveauer — A2 afløst (31. juli 2026)
+
+*Tilføjet efter leveringen, da turnering #2 var i drift. Drejebogen forudså rettelsen af §3.2, men ikke det spørgsmål, den rejste: **hvad en kåring betyder, når der er mere end én turnering.***
+
+Rundeligaen og månedsligaen joinede kun `predictions` ↔ `matches`. Uden filter på turnering summerer de point for **alt**, brugeren har tippet — og hvad man tipper, afgøres af hvilke *frivillige* konkurrencer, man er meldt ind i. Med én turnering var det uproblematisk; med to måles to brugere på forskellige kampmængder (~12 kampe og et loft på 36 point mod ~6 og 18). De eneste konkurrencer, ingen selv har valgt, blev dermed afgjort af valg truffet andre steder.
+
+**Løsningen er to niveauer**, hvor navnet bærer forskellen:
+
+| `scope` | Hvad | Kåring |
+|---|---|---|
+| `'ALL'` | Alle **officielle** turneringer samlet | **Rundens / Månedens Prediction Champ** |
+| `<league_id>` | Én stilling pr. officiel turnering | Rundens / Månedens **bedste i {turnering}** |
+
+Det samlede tæller fortsat samlede point og belønner altså bredde — forskellen er, at det nu er en **udtalt** regel med et navn, ikke en skjult skævhed. Per-turnering-stillingen er den, hvor alle ér målt på de samme kampe.
+
+**`leagues.is_official`** (ny kolonne, `sql/tournament_scope.sql`) afgør, hvad der overhovedet fodrer Championship — adskilt fra `is_visible`, med en check-constraint der gør officiel til en indsnævring af synlig. **Scotland Premiership er sat `is_official = false`:** den er en generalprøve for *flere turneringer*, ikke en turnering, nogen skal vinde titler i. Championship er dermed uændret i dag, og maskineriet står klar til den dag, en rigtig turnering #3 forfremmes.
+
+To ting fulgte, som er værd at kende, hvis man rører ved det igen:
+
+- **`monthly_standings` havde allerede en `scope`-kolonne**, hårdkodet til `'ALL'` og filtreret af både `career_profile.sql` og `story_engine.sql`. Den var forberedt til netop dette (samme greb som `ratings.scope`), så månedslæsningerne var dækket på forhånd. `round_standings` havde den **ikke**, og tre steder læste den ufiltreret — de ville have talt hver rundesejr dobbelt. Filtre tilføjet i samme leverance.
+- **Sæsonchampionshippet beholder navnet "Sæsonens Prediction Champ"**, selvom det er pr. turnering. Navneregelen gælder, hvor to niveauer konkurrerer om samme navn; en sæson er turneringsbunden af natur, og en samlet sæsonstilling er fravalgt.
+
+Verificeret mod PostgreSQL 16.13 med en fixture, hvor én spiller tipper begge turneringer og to kun hver sin: summen af per-turnering-rækker er lig den samlede række (både kampe og point), rundesejre partitioneres pr. niveau, en ikke-officiel turnering påvirker intet, og constraint'en afviser officiel+usynlig.
 
 ---
 

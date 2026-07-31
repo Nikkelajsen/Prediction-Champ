@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 // begge komponenter er ren markup, og projektet skal ikke have et komponent-
 // testbibliotek for deres skyld.
 import { renderToStaticMarkup } from "react-dom/server";
-import { StandingsTable, Champions, pickSeasonLeague } from "./ChampionshipTab.jsx";
+import { StandingsTable, Champions, pickSeasonLeague, boardTitle } from "./ChampionshipTab.jsx";
 import { assignRanks, sortStandings } from "../lib/standings.js";
 
 // Basisrække: alle trin i stigen lige, så testene kun ændrer ét ad gangen.
@@ -94,5 +94,26 @@ describe("pickSeasonLeague (hvilken turnering vises)", () => {
 
   it("vælger stadig noget, når created_at mangler", () => {
     expect(pickSeasonLeague([{ id: "L9", name: "Uden dato" }], null).id).toBe("L9");
+  });
+});
+
+// Navnet bærer forskellen mellem de to niveauer: kun den SAMLEDE stilling hedder
+// "Prediction Champ". Reglen skal kunne læses ét sted og testes for sig, fordi
+// den optræder fire steder i fanen (overskrift, InfoDot-titel, kåring, modal).
+describe("boardTitle (samlet vs. pr. turnering)", () => {
+  const superliga = { id: "L1", name: "Superligaen" };
+
+  it("giver den store titel, når ingen turnering er valgt", () => {
+    expect(boardTitle("round", null)).toBe("Rundens Prediction Champ");
+    expect(boardTitle("month", null)).toBe("Månedens Prediction Champ");
+  });
+
+  it("bruger 'bedste i', så en turneringsstilling ikke låner titlen", () => {
+    expect(boardTitle("round", superliga)).toBe("Rundens bedste i Superligaen");
+    expect(boardTitle("month", superliga)).toBe("Månedens bedste i Superligaen");
+  });
+
+  it("nævner aldrig 'Prediction Champ' på et turneringsniveau", () => {
+    expect(boardTitle("month", superliga)).not.toContain("Prediction Champ");
   });
 });

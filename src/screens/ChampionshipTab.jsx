@@ -162,6 +162,20 @@ function writeSeasonLeagueId(id) {
   try { localStorage.setItem(SEASON_LEAGUE_KEY, id); } catch { /* utilgængelig — spring over */ }
 }
 
+// Championship har to niveauer, og navnet bærer forskellen: kun den SAMLEDE
+// stilling hedder "Prediction Champ". En turneringsstilling er "Månedens bedste
+// i Superligaen" — rangordenen ligger dermed i sproget og kræver ingen
+// forklaring i UI'et. (Sæsonchampionshippet er en bevidst undtagelse: det er
+// turneringsbundet af natur og har ingen samlet modpart at forveksles med.)
+export function boardTitle(kind, league) {
+  const what = kind === "round" ? "Rundens" : "Månedens";
+  return league ? `${what} bedste i ${league.name}` : `${what} Prediction Champ`;
+}
+
+// Scope-værdien, loaderne og DB-viewene bruger: 'ALL' = alle officielle
+// turneringer samlet, ellers turneringens id.
+const ALL_SCOPE = "ALL";
+
 function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   const [months, setMonths] = useState([]);
   const [month, setMonth] = useState(currentMonthKey());
@@ -174,8 +188,19 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   const [ratingMap, setRatingMap] = useState(null); // user_id -> { rating, provisional }
   const [full, setFull] = useState(null); // { title, rows, isComplete } — fuld-stilling-modal
 
+  // Kun OFFICIELLE turneringer fodrer Championship (leagues.is_official). En
+  // turnering kan være synlig og tipbar uden at afgøre titler — det er et
+  // bevidst valg pr. turnering, ikke noget der følger med, når den tændes.
+  // Filtreringen sker her og ikke i MainApp, så de øvrige skærme er upåvirkede.
+  const officialLeagues = useMemo(() => leagues.filter((l) => l.is_official !== false), [leagues]);
+
   const [seasonLeagueId, setSeasonLeagueId] = useState(readSeasonLeagueId);
-  const seasonLeague = useMemo(() => pickSeasonLeague(leagues, seasonLeagueId), [leagues, seasonLeagueId]);
+  const seasonLeague = useMemo(() => pickSeasonLeague(officialLeagues, seasonLeagueId), [officialLeagues, seasonLeagueId]);
+
+  const [roundScope, setRoundScope] = useState(ALL_SCOPE);
+  const [monthScope, setMonthScope] = useState(ALL_SCOPE);
+  const roundLeague = officialLeagues.find((l) => l.id === roundScope) || null;
+  const monthLeague = officialLeagues.find((l) => l.id === monthScope) || null;
 
   useEffect(() => {
     loadRatingMap(token).then(setRatingMap).catch(() => setRatingMap(new Map()));
@@ -184,15 +209,16 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const ms = await loadMonthsAvailable(token);
+      setRows(null);
+      const ms = await loadMonthsAvailable(token, monthScope);
       const list = ms.length ? ms : [currentMonthKey()];
       setMonths(list);
       const chosen = list.includes(month) ? month : list[0];
       setMonth(chosen);
-      setRows(await loadMonthlyBoard(token, chosen));
+      setRows(await loadMonthlyBoard(token, chosen, monthScope));
       setLoading(false);
     })();
-  }, []); // eslint-disable-line
+  }, [monthScope]); // eslint-disable-line
 
   useEffect(() => {
     if (!seasonLeague) { setSeason(undefined); return; }
@@ -210,28 +236,29 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const rs = await loadRoundsAvailable(token);
+      setRoundBoard(null);
+      const rs = await loadRoundsAvailable(token, roundScope);
       if (cancelled) return;
       setRounds(rs);
       if (rs.length) {
         setRoundKey(rs[0]);
-        const b = await loadRoundBoard(token, rs[0]);
+        const b = await loadRoundBoard(token, rs[0], roundScope);
         if (!cancelled) setRoundBoard(b);
       } else {
         setRoundBoard({ rows: [], totalMatches: 0, playedMatches: 0, isComplete: false });
       }
     })();
     return () => { cancelled = true; };
-  }, [token]);  
+  }, [token, roundScope]);
 
   async function changeMonth(m) {
     setMonth(m); setRows(null);
-    setRows(await loadMonthlyBoard(token, m));
+    setRows(await loadMonthlyBoard(token, m, monthScope));
   }
 
   async function changeRound(k) {
     setRoundKey(k); setRoundBoard(null);
-    setRoundBoard(await loadRoundBoard(token, k));
+    setRoundBoard(await loadRoundBoard(token, k, roundScope));
   }
 
   function changeSeasonLeague(id) {
@@ -261,14 +288,29 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
       <Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-            Rundens Prediction Champ
-            <InfoDot title="Rundens Prediction Champ">Dine samlede point for én enkelt spillerunde (på tværs af alle turneringer, hver kamp én gang). Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, og til sidst hvem der var tættest på. Rundens bedste kåres som Rundens Prediction Champ — er to helt lige, deles titlen. Vælg en runde i dropdownen.</InfoDot>
+            {boardTitle("round", roundLeague)}
+            <InfoDot title={boardTitle("round", roundLeague)}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div>Dine samlede point for én enkelt spillerunde. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, og til sidst hvem der var tættest på — er to helt lige, deles titlen. Vælg en runde i dropdownen.</div>
+                {officialLeagues.length > 1 && (
+                  <div><b>To niveauer:</b> "Alle turneringer" samler ugens kampe på tværs og kårer <b>Rundens Prediction Champ</b> — den store titel. Vælger du én turnering, ser du stillingen for netop den, hvor alle er målt på de samme kampe; dens vinder er "Rundens bedste i turneringen".</div>
+                )}
+              </div>
+            </InfoDot>
           </div>
-          {rounds.length > 0 && (
-            <select className="field" value={roundKey || ""} onChange={(e) => changeRound(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
-              {rounds.map((k) => <option key={k} value={k}>{roundLabel(k)}</option>)}
-            </select>
-          )}
+          <div style={{ display: "flex", gap: 6 }}>
+            {officialLeagues.length > 1 && (
+              <select className="field" value={roundScope} onChange={(e) => setRoundScope(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
+                <option value={ALL_SCOPE}>Alle turneringer</option>
+                {officialLeagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            )}
+            {rounds.length > 0 && (
+              <select className="field" value={roundKey || ""} onChange={(e) => changeRound(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
+                {rounds.map((k) => <option key={k} value={k}>{roundLabel(k)}</option>)}
+              </select>
+            )}
+          </div>
         </div>
 
         {roundBoard === null && <p style={{ ...muted, margin: 0 }}>Henter…</p>}
@@ -277,9 +319,9 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
 
         {roundBoard && roundBoard.rows.length > 0 && (
           <>
-            <Champions rows={roundBoard.rows} title="Rundens Prediction Champ" isComplete={roundBoard.isComplete} openProfile={openProfile} />
+            <Champions rows={roundBoard.rows} title={boardTitle("round", roundLeague)} isComplete={roundBoard.isComplete} openProfile={openProfile} />
             <Standings rows={roundBoard.rows} userId={userId} isComplete={roundBoard.isComplete} ratingMap={ratingMap}
-              title={`Rundeliga · runde ${roundKey ? roundLabel(roundKey) : ""}`} onOpenFull={setFull} openProfile={openProfile} />
+              title={`Rundeliga${roundLeague ? ` · ${roundLeague.name}` : ""} · runde ${roundKey ? roundLabel(roundKey) : ""}`} onOpenFull={setFull} openProfile={openProfile} />
           </>
         )}
       </Card>
@@ -288,21 +330,36 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
       <Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-            Månedens Prediction Champ
-            <InfoDot title="Månedens Prediction Champ">Dine samlede point for alle månedens kampe (hver kamp tælles én gang på tværs af turneringer). Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Månedens vinder kåres som Månedens Prediction Champ — er to helt lige, deles titlen. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</InfoDot>
+            {boardTitle("month", monthLeague)}
+            <InfoDot title={boardTitle("month", monthLeague)}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div>Dine samlede point for alle månedens kampe (hver kamp tælles én gang). Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på — er to helt lige, deles titlen. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</div>
+                {officialLeagues.length > 1 && (
+                  <div><b>To niveauer:</b> "Alle turneringer" samler månedens kampe på tværs og kårer <b>Månedens Prediction Champ</b> — den store titel. Vælger du én turnering, ser du stillingen for netop den, hvor alle er målt på de samme kampe.</div>
+                )}
+              </div>
+            </InfoDot>
           </div>
-          <select className="field" value={month} onChange={(e) => changeMonth(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
-            {months.map((m) => <option key={m} value={m}>{monthName(m)}</option>)}
-          </select>
+          <div style={{ display: "flex", gap: 6 }}>
+            {officialLeagues.length > 1 && (
+              <select className="field" value={monthScope} onChange={(e) => setMonthScope(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
+                <option value={ALL_SCOPE}>Alle turneringer</option>
+                {officialLeagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            )}
+            <select className="field" value={month} onChange={(e) => changeMonth(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
+              {months.map((m) => <option key={m} value={m}>{monthName(m)}</option>)}
+            </select>
+          </div>
         </div>
 
-        {rows && <Champions rows={rows} title="Månedens Prediction Champ" isComplete={isPast} openProfile={openProfile} />}
+        {rows && <Champions rows={rows} title={boardTitle("month", monthLeague)} isComplete={isPast} openProfile={openProfile} />}
 
         {loading && <p style={{ ...muted, margin: 0 }}>Henter…</p>}
         {!loading && rows && rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen point i denne måned endnu.</p>}
         {!loading && rows && rows.length > 0 && (
           <Standings rows={rows} userId={userId} isComplete={isPast} ratingMap={ratingMap}
-            title={`Månedsliga · ${monthName(month)}`} onOpenFull={setFull} openProfile={openProfile} />
+            title={`Månedsliga${monthLeague ? ` · ${monthLeague.name}` : ""} · ${monthName(month)}`} onOpenFull={setFull} openProfile={openProfile} />
         )}
       </Card>
 
@@ -320,10 +377,10 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
               én ville en dropdown med ét valg være støj. Fremdrifts-tælleren
               deler plads med den, så den flytter ned i underlinjen i stedet for
               at forsvinde. */}
-          {leagues.length > 1
+          {officialLeagues.length > 1
             ? (
               <select className="field" value={seasonLeague?.id || ""} onChange={(e) => changeSeasonLeague(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
-                {leagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                {officialLeagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
             )
             : season && season.rows && season.totalMatches > 0 && (
@@ -331,8 +388,8 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
             )}
         </div>
         <div style={{ color: C.muted, fontSize: 12, marginTop: -4, marginBottom: 8 }}>
-          {leagues.length > 1 ? "Løber over hele sæsonen" : `${seasonLeague?.name || "Turneringen"} · løber over hele sæsonen`}
-          {leagues.length > 1 && season && season.rows && season.totalMatches > 0 && ` · ${season.playedMatches}/${season.totalMatches} spillet`}
+          {officialLeagues.length > 1 ? "Løber over hele sæsonen" : `${seasonLeague?.name || "Turneringen"} · løber over hele sæsonen`}
+          {officialLeagues.length > 1 && season && season.rows && season.totalMatches > 0 && ` · ${season.playedMatches}/${season.totalMatches} spillet`}
         </div>
 
         {season === null && <p style={{ ...muted, margin: 0 }}>Henter…</p>}

@@ -50,7 +50,9 @@
 --   group_members(group_id, user_id),
 --   seasons(id, league_id, name, start_date),
 --   view monthly_standings(month, scope, user_id, total_points, matches, exact_count),
---   view round_standings(round_key, user_id, matches, total_points, exact_count, avg_goal_error),
+--   view round_standings(round_key, scope, user_id, matches, total_points, exact_count, avg_goal_error),
+--     — scope: 'ALL' = alle officielle turneringer samlet, ellers league_id. Denne
+--       funktion læser KUN 'ALL'; per-turnering-titler hører til i by_tournament.
 --   view season_standings(season_id, user_id, total_points, exact_count, outcome_count, round_wins, avg_goal_error),
 --   pc_points(ph, pa, hs, as_) — kanonisk pointfunktion (F2),
 --   stories(user_id, rule, payload).
@@ -354,6 +356,11 @@ begin
             group by round_key
             having bool_and(home_score is not null and away_score is not null)
           ) rc on rc.round_key = rs.round_key
+          -- Kun den SAMLEDE rundeliga. round_standings har siden
+          -- sql/tournament_scope.sql også en række pr. turnering, og uden dette
+          -- filter ville én rundesejr tælle to gange (samlet + i sin turnering).
+          -- Per-turnering-titler hører til i titles.by_tournament, ikke her.
+          where rs.scope = 'ALL'
         ) rr
         where rr.user_id = profile_user_id and rr.rnk = 1
       )
@@ -421,6 +428,10 @@ begin
           group by round_key
           having bool_and(home_score is not null and away_score is not null)
         ) rc on rc.round_key = rs.round_key
+        -- Kun den samlede rundeliga (sql/tournament_scope.sql). Uden filteret
+        -- ville feltstørrelsen tælle hver spiller én gang pr. turnering, og
+        -- "4. plads af 31" blive til "af 62".
+        where rs.scope = 'ALL'
       ),
       mine as (
         select round_key, rnk, field, total_points, exact_count, (rnk = 1) as won

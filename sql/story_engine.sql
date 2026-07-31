@@ -38,8 +38,10 @@
 --   profiles(id, display_name),
 --   ratings(user_id, scope, rating, rounds_played, provisional),
 --   rating_history(user_id, scope, round_key, rating_after),
---   views round_standings(round_key,user_id,total_points,exact_count) og
+--   views round_standings(round_key, scope, user_id,total_points,exact_count) og
 --   monthly_standings(month, scope, user_id, total_points, exact_count).
+--   Begge læses ALTID med scope = 'ALL' (den samlede stilling) — se
+--   sql/tournament_scope.sql. En historie hører til ugen, ikke til én turnering.
 -- Verificér mod jeres faktiske skema før produktion; køres i SKYGGETILSTAND først.
 
 -- ======================= 1. Tabel =======================
@@ -473,7 +475,9 @@ begin
     'Du ramte ' || rs.exact_count || ' kampe præcist i runden ' || v_label ||
       ' — ' || rs.total_points || ' point i alt.'
   from public.round_standings rs
-  where rs.round_key = v_round and rs.exact_count >= 2;
+  -- Kun den samlede rundeliga (sql/tournament_scope.sql). Uden scope-filteret
+  -- ville hver bruger få ét SHARP-kort pr. turnering med hver sit tal.
+  where rs.round_key = v_round and rs.scope = 'ALL' and rs.exact_count >= 2;
 
   -- ======== Dæmpet tier (v1.1) · kun når INTET andet er i spil ========
   -- Kandidaterne er de brugere, der tippede i runden og efter alle reglerne

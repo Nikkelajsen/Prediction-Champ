@@ -37,9 +37,9 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 5 | `rating_trigger_optimization.sql` | Statement-level triggere på `matches`; kalder `recompute_ratings()` + `generate_stories()` | Aktiv — forudsætter `rating_core.sql` (#0) |
 | 6 | `matches_stage.sql` | `matches.stage_name` (grundspil/slutspil) | Aktiv |
 | 7 | `push_notifications.sql` | `push_subscriptions` + `notification_log` | Aktiv |
-| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — **v1.1 (juli 2026) skal gen-køres i produktion**; kun funktionen ændres, tabel og view er uændrede |
+| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — **v1.1 (juli 2026) skal gen-køres i produktion**; kun funktionen ændres, tabel og view er uændrede. **Gen-kør også efter #20** (31. juli 2026): funktionen filtrerer nu `round_standings` på `scope = 'ALL'` |
 | 9 | `groups.sql` | Liga-laget: `groups`, `group_members`, `is_group_member()`, `move_competition_to_group()` | ⚠️ Aktiv, men **to af dens policies er afløst** — se advarslen nedenfor |
-| 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv |
+| 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv — **gen-kør efter #20** (31. juli 2026): rundesejre og "bedste runde" filtrerer nu `scope = 'ALL'`, ellers tælles hver sejr én gang pr. turnering |
 | 11 | `live_scores.sql` | `matches.live_*`-kolonner + live-indekser | Aktiv |
 | 12 | `standings_tiebreakers.sql` | Genskaber alle tre stillings-views med `outcome_count`, `round_wins`, `avg_goal_error` | Aktiv — **afløser #1** |
 | 13 | `group_membership_invariant.sql` | A8 i databasen: backfill, auto-indmeldende trigger, strammet liga-exit + framelding | Aktiv — **afløser to policies fra #9** |
@@ -49,14 +49,16 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 17 | `analytics_dashboard.sql` | Analytics v1: `analytics_round_locks`/`analytics_completion_facts`-views + `admin_analytics_health/engagement/league_health/retention`-RPC'er | Aktiv — **sikker og forventet at blive gen-kørt**. **Gen-kør efter 30. juli 2026-omlægningen** (Liga Health Score fjernet, `admin_analytics_league_health` returnerer nu signaler i stedet for en score) sammen med frontend-mergen; en gammel klient mod en ny RPC — eller omvendt — viser en tom liga-sektion, ikke forkerte tal |
 | 18 | `job_runs.sql` | Overvågning: tabellen `job_runs`, `admin_job_health()` og `prune_job_runs()` | Aktiv — tilføjet 30. juli 2026 |
 | 19 | `cleanup_orphans.sql` | Fjerner `trg_recompute_ratings()`, `leagues.country` og `seasons.end_date` | **Engangs-oprydning**, men idempotent. Filen dokumenterer også, hvad der bevidst IKKE blev fjernet, og hvorfor |
-| 20 | `tournament_scotland_premiership.sql` | Turnering #2 (`B2`): `leagues`- + `seasons`-rækken for Scotland Premiership (`501`) | **Data, ikke skema** — ændrer intet i strukturen og indgår derfor ikke i `schema.sql`. Idempotent. Verificér sæsonnavnet i filens hoved, før du kører. Trin 1 af tre; sync-kald og cron-job står i [`../docs/features/turnering-2.md`](../docs/features/turnering-2.md) §3.1 |
+| 20 | `tournament_scope.sql` | `leagues.is_official` + `round_standings`/`monthly_standings` med **scope** (samlet + pr. turnering) | Aktiv — **afløser de to views i #12**. Skal køres FØR eller sammen med gen-kørsel af #8 og #10, som nu filtrerer `scope = 'ALL'` |
+| 21 | `tournament_scotland_premiership.sql` | Turnering #2 (`B2`): `leagues`- + `seasons`-rækken for Scotland Premiership (`501`) | **Data, ikke skema** — ændrer intet i strukturen og indgår derfor ikke i `schema.sql`. Idempotent. Verificér sæsonnavnet i filens hoved, før du kører. Trin 1 af tre; sync-kald og cron-job står i [`../docs/features/turnering-2.md`](../docs/features/turnering-2.md) §3.1 |
 
-### ⚠️ To filer må ikke gen-køres blindt
+### ⚠️ Tre filer må ikke gen-køres blindt
 
-Begge bruger `drop policy … create policy` / `drop view … create view`, så en
+Alle tre bruger `drop policy … create policy` / `drop view … create view`, så en
 gen-kørsel **erstatter tavst** en nyere definition med en ældre. Der kommer ingen
 fejl — reglen bliver bare den gamle igen.
 
+- **`standings_tiebreakers.sql`** genskaber `round_standings` og `monthly_standings` i deres udgave **uden `scope`**. En gen-kørsel efter `tournament_scope.sql` (#20) fjerner scope-kolonnen tavst: Championship-fanen viser tomme stillinger, fordi den beder om `scope=eq.ALL`, og `career_profile`/`story_engine` fejler på det samme filter. `season_standings` i filen er derimod stadig den gældende udgave. **Kør altid `tournament_scope.sql` bagefter.** *(Tilføjet 31. juli 2026.)*
 - **`groups.sql`** genskaber `group_members_delete_self` og
   `comp_participants_delete_own_unlocked` i deres **oprindelige** form og ruller
   dermed A8-invarianten tilbage: man kan igen forlade en liga, mens man deltager i
