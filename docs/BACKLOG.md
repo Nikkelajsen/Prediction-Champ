@@ -34,7 +34,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
--
+- dokumentationen siger gratis-planen giver 180 kald/time pr. entitet, kontosiden siger 3.000 API-kald — hvilket tal og hvilken enhed gælder?
 
 ---
 
@@ -47,7 +47,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | # | Spørgsmål | Kontekst | Afgøres |
 |---|---|---|---|
 | A5 | **Emojis i historie-kort: til eller fra?** | Gør kortet skimbart på mobil, men mindre klassisk. **v1-default: emojis til.** **Delvist besvaret (v1.1, juli 2026):** emoji er nu et *signal* — den findes kun i højdepunkt-tieret, mens dæmpede kort er uden. Spørgsmålet er dermed reduceret til, om højdepunkterne skal beholde deres. **Datamanglen er lukket (30. juli 2026):** Analytics-fanens sektion "Story Engine-regler" viser genereret/vist/delt/afvist pr. regel, så spørgsmålet kan afgøres på tal frem for fornemmelse. | Når et par runder er kørt med den nye regelstatistik i hånden. |
-| A10 | **Sportmonks-abonnement: rækker gratis-planen til turnering #2?** | Den eneste åbne beslutning med en **ekstern** afhængighed, og bør derfor startes tidligt uanset prioritet. Gater `B2` (turnering #2), som gater `B1` (global runde). Detaljer i [`features/turnering-2.md`](./features/turnering-2.md). | Før turnering #2 tændes. |
 | A11 | **`?secret=`-fallbacken fjernes helt** (hænger sammen med teknisk gæld) | Kan først lukkes, når alle cron-jobs (ét sync-job pr. turnering + notifikations-jobbet) er bekræftet flyttet til `x-sync-secret`-headeren — ellers fejler de med 401. **Vejen er banet (30. juli 2026):** `isAuthorized()` i `api/_shared.js` logger en `[A11]`-advarsel, hver gang fallbacken bruges, så bekræftelsen kan *aflæses* i Vercels logs frem for gættes. Fremgangsmåden står i [`CRON.md`](./CRON.md). | Når loggene har været rene i en periode, der dækker alle skemaer (det langsomste er `sync-matches` hver 6. time) — senest sammen med turnering #2. |
 | A14 | **Skal hele kodebasen gennemformateres med Prettier?** | `npm run format` findes, men `format:check` er bevidst ikke et CI-trin. En fuld gennemformatering ville omskrive ~6.700 linjer ved `printWidth: 140` (~14.000 ved standard 80) på tværs af alle 46 filer. Prisen er hele repoets `git blame`; gevinsten er konsistens i en kodebase med én forfatter og en i forvejen ensartet håndstil. Beslutningen er **udskudt, ikke truffet** — se [`DECISIONS.md`](./DECISIONS.md), 30. juli 2026. | Næste gang der alligevel røres bredt i frontenden — ellers aldrig. |
 | K2 | **Per-turnering-opdeling af karriereprofilen fra start?** `ratings.scope` er forberedt til per-liga-rating. | Spec-lokal beslutning; sandheden står i [`features/karriereprofil-v1.md`](./features/karriereprofil-v1.md) §8. Står her, fordi backloggen skal kunne læses alene. v1-anbefaling: nej — ellers bygges en vælger uden indhold. | Når turnering #2 er i drift (`B2`). |
@@ -57,7 +56,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | # | Hvad | Hvorfor / hvad den venter på | Omfang |
 |---|---|---|---|
 | B3 | **Gen-kør `sql/story_engine.sql` i produktion** | Story Engine v1.1 (A3/A4-leverancen) er i repoet, men migreringen er en manuel kørsel i Supabase SQL-editor, og den er ikke bekræftet kørt. Triggeren er uændret siden A9-rettelsen. Forudsætning for at kunne læse tonen på kortene og dermed for `A5`. | Lille |
-| B2 | **Turnering #2 (flere fodboldturneringer)** | Skemaet er forberedt; få kodeændringer udestår. Drejebog: [`features/turnering-2.md`](./features/turnering-2.md). Gated af `A10` (abonnementet), gater `B1`. | Mellem |
+| B2 | **Turnering #2 (flere fodboldturneringer)** | Skemaet er forberedt; få kodeændringer udestår. Drejebog: [`features/turnering-2.md`](./features/turnering-2.md). **Ikke gated af abonnementet** (`A10`, afgjort 31. juli 2026): turnering #2 bliver **Scotland Premiership** (`501`), som allerede er i gratis-planen — tændes med `is_visible = false`, til §3.2 er verificeret. Premier League koster €29/md og venter på efterspørgsel. Gater `B1`. | Mellem |
 | B1 | **Global tirsdag–mandag-runde** | Produktbogens kapitel 4–5 beskriver den som gældende; appen regner i dag pr. turneringsrunde, hvilket med Superligaen alene reelt er det samme. Udskydes bevidst, til flere turneringer er i drift — først dér adskiller den sig. Står som trin 5 i [`ROADMAP.md`](./ROADMAP.md) og som kendt afvigelse mellem bog og app. | Mellem |
 
 ## Teknisk gæld
