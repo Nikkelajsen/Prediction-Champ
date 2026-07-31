@@ -1,0 +1,141 @@
+// Tests for tip-skærmens tids- og datologik.
+//
+// Logikken har eksisteret hele tiden, men lå midt i en 705-linjers skærmfil og
+// kunne derfor ikke nås. Det er den konkrete gevinst ved opdelingen: ikke færre
+// linjer, men noget der før var utestbart og nu ikke er det.
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { hhmm, dayKey, dayLabel, groupIntoDays, fmtLeft, lockLabel } from "./time.js";
+
+const kamp = (kickoff, id = kickoff) => ({ id, kickoff_at: kickoff });
+
+describe("hhmm", () => {
+  it("giver klokkeslættet i dansk format", () => {
+    expect(hhmm("2026-07-25T18:30:00Z")).toMatch(/^\d{2}[.:]\d{2}$/);
+  });
+
+  it("giver tom streng, når tidspunktet mangler", () => {
+    expect(hhmm(null)).toBe("");
+    expect(hhmm(undefined)).toBe("");
+    expect(hhmm("")).toBe("");
+  });
+});
+
+describe("dayKey", () => {
+  it("samler to kampe samme dag under samme nøgle", () => {
+    expect(dayKey("2026-07-25T13:00:00Z")).toBe(dayKey("2026-07-25T19:00:00Z"));
+  });
+
+  it("skiller to kampe på forskellige dage", () => {
+    expect(dayKey("2026-07-25T13:00:00Z")).not.toBe(dayKey("2026-07-26T13:00:00Z"));
+  });
+
+  it("giver tom streng uden tidspunkt", () => {
+    expect(dayKey(null)).toBe("");
+  });
+});
+
+describe("dayLabel", () => {
+  // Danske korte navne ender på punktum ("lør." / "jul."), og de punktummer
+  // bliver støjende i en versal overskrift — derfor fjernes de. Datoens
+  // ORDENSPUNKTUM ("25.") er derimod korrekt dansk og skal blive stående.
+  it("fjerner ugedagens og månedens punktum, men beholder datoens", () => {
+    expect(dayLabel("2026-07-25T13:00:00Z")).toBe("lør 25. jul");
+  });
+
+  it("fjerner ikke punktummer fra en måned, der ikke har et", () => {
+    // maj forkortes ikke på dansk og har derfor intet punktum at fjerne.
+    expect(dayLabel("2026-05-04T13:00:00Z")).toBe("man 4. maj");
+  });
+});
+
+describe("groupIntoDays", () => {
+  it("samler kampe pr. dag i den rækkefølge, de kommer", () => {
+    const dage = groupIntoDays([
+      kamp("2026-07-25T13:00:00Z"),
+      kamp("2026-07-25T19:00:00Z"),
+      kamp("2026-07-26T15:00:00Z"),
+    ]);
+    expect(dage).toHaveLength(2);
+    expect(dage[0].matches).toHaveLength(2);
+    expect(dage[1].matches).toHaveLength(1);
+  });
+
+  // Kampe uden fastlagt tidspunkt må ikke forsvinde — og de skal stå sidst,
+  // så en runde ikke åbner med "Tid ikke fastlagt".
+  it("lægger kampe uden kickoff sidst med en forklarende overskrift", () => {
+    const dage = groupIntoDays([
+      kamp(null, "ukendt"),
+      kamp("2026-07-25T13:00:00Z"),
+    ]);
+    expect(dage).toHaveLength(2);
+    expect(dage[dage.length - 1].label).toBe("Tid ikke fastlagt");
+    expect(dage[dage.length - 1].matches[0].id).toBe("ukendt");
+  });
+
+  it("giver en tom liste for ingen kampe", () => {
+    expect(groupIntoDays([])).toEqual([]);
+  });
+
+  it("taber ingen kampe", () => {
+    const kampe = [
+      kamp("2026-07-25T13:00:00Z", "a"),
+      kamp(null, "b"),
+      kamp("2026-07-26T15:00:00Z", "c"),
+      kamp("2026-07-25T19:00:00Z", "d"),
+    ];
+    const ud = groupIntoDays(kampe).flatMap((d) => d.matches.map((m) => m.id));
+    expect(ud.sort()).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+describe("fmtLeft", () => {
+  it("skriver timer og minutter, når der er over en time", () => {
+    expect(fmtLeft(3 * 3600000 + 12 * 60000)).toBe("3 t 12 min");
+  });
+
+  it("skriver kun minutter under en time", () => {
+    expect(fmtLeft(12 * 60000)).toBe("12 min");
+    expect(fmtLeft(0)).toBe("0 min");
+  });
+});
+
+describe("lockLabel", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const frys = (iso) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(iso));
+  };
+
+  it("er null, når deadline er passeret", () => {
+    frys("2026-07-25T12:00:00Z");
+    expect(lockLabel(new Date("2026-07-25T11:00:00Z").getTime())).toBeNull();
+  });
+
+  it("tæller ned, når der er under et døgn til", () => {
+    frys("2026-07-25T12:00:00Z");
+    expect(lockLabel(new Date("2026-07-25T15:30:00Z").getTime())).toBe("Låser om 3 t 30 min");
+  });
+
+  // Over et døgn ude giver en nedtælling i minutter ingen mening — så vises
+  // det absolutte tidspunkt i stedet.
+  it("viser absolut tidspunkt, når der er mere end et døgn til", () => {
+    frys("2026-07-25T12:00:00Z");
+    const label = lockLabel(new Date("2026-07-28T12:00:00Z").getTime());
+    expect(label).not.toContain("om ");
+    expect(label.startsWith("Låser ")).toBe(true);
+  });
+
+  it("kan få et andet præfiks end 'Låser'", () => {
+    frys("2026-07-25T12:00:00Z");
+    expect(lockLabel(new Date("2026-07-25T13:00:00Z").getTime(), "Deadline")).toBe(
+      "Deadline om 1 t 0 min"
+    );
+  });
+
+  // Grænsetilfældet: præcis 24 timer skal stadig være en nedtælling.
+  it("regner præcis et døgn som nedtælling", () => {
+    frys("2026-07-25T12:00:00Z");
+    expect(lockLabel(new Date("2026-07-26T12:00:00Z").getTime())).toContain("om ");
+  });
+});
