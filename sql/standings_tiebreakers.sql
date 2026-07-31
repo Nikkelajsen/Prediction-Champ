@@ -1,5 +1,12 @@
 -- Tiebreakers i stillingerne: udvider round_standings, season_standings og
 -- monthly_standings med de kolonner, hele tiebreaker-stigen har brug for.
+--
+-- ⚠️ MÅ IKKE GEN-KØRES ALENE (31. juli 2026). `sql/tournament_scope.sql` har
+--    afløst `round_standings` og `monthly_standings` med scope-udgaver (samlet
+--    + pr. turnering). Kører du denne fil igen, forsvinder scope-kolonnen tavst,
+--    Championship-fanen viser tomme stillinger, og karriereprofilens
+--    `scope = 'ALL'`-filtre fejler. Kør ALTID tournament_scope.sql bagefter.
+--    `season_standings` her er stadig den gældende udgave.
 -- Idempotent — kan køres igen når som helst.
 --
 -- Stigen (samme rækkefølge overalt, spejlet i src/lib/standings.js):

@@ -77,9 +77,17 @@ function standingsRow(r, nameById) {
   };
 }
 
-async function loadMonthlyBoard(token, month) {
+// ---------- scope: samlet eller pr. turnering ----------
+// Championship har to niveauer (sql/tournament_scope.sql):
+//   'ALL'        alle OFFICIELLE turneringer samlet — den store titel
+//   <league_id>  én stilling pr. officiel turnering
+// Alle loaderne herunder tager scope som sidste argument og defaulter til 'ALL',
+// så eksisterende kaldesteder er uændrede.
+const ALL = "ALL";
+
+async function loadMonthlyBoard(token, month, scope = ALL) {
   const rows = await db.select(token, "monthly_standings",
-    `month=eq.${month}&scope=eq.ALL&select=user_id,total_points,matches,exact_count,outcome_count,round_wins,avg_goal_error&order=${TIEBREAK_ORDER}`);
+    `month=eq.${month}&scope=eq.${scope}&select=user_id,total_points,matches,exact_count,outcome_count,round_wins,avg_goal_error&order=${TIEBREAK_ORDER}`);
   if (!rows.length) return [];
   const ids = rows.map((r) => r.user_id);
   const profiles = await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`);
@@ -87,47 +95,44 @@ async function loadMonthlyBoard(token, month) {
   return assignRanks(rows.map((r) => standingsRow(r, nameById)));
 }
 
-async function loadMonthsAvailable(token) {
-  const rows = await db.select(token, "monthly_standings", `scope=eq.ALL&select=month`);
+async function loadMonthsAvailable(token, scope = ALL) {
+  const rows = await db.select(token, "monthly_standings", `scope=eq.${scope}&select=month`);
   return [...new Set(rows.map((r) => r.month))].sort().reverse();
 }
 
 // ---------- Rundeliga: samlede point for én enkelt spillerunde (round_key) ----------
-// Samme princip som månedsligaen: alle er automatisk med, på tværs af alle ligaer,
-// hver kamp tælles én gang. Stillingen læses fra DB-viewet round_standings
-// (sql/standings_views.sql) — kun spillede (låste) kampe indgår i viewet.
+// Samme princip som månedsligaen: alle er automatisk med, hver kamp tælles én
+// gang. Stillingen læses fra DB-viewet round_standings — kun spillede (låste)
+// kampe indgår i viewet.
 //
-// Kun kampe i SYNLIGE turneringer tæller med. Rundens kampantal afgør
-// `isComplete`, og dermed om pokalen og "er Rundens Prediction Champ" vises —
-// en skjult turnering (`leagues.is_visible = false`) ville ellers holde runden
-// åben, indtil kampe, ingen kan se eller tippe, var spillet. Filteret er en
-// no-op, så længe alt er synligt; det er et værn mod den dag, flaget slås fra
-// igen, og skal derfor ikke fjernes som "overflødigt". To trins-opslaget er
-// samme mønster som loadStarterTournaments i src/lib/onboarding.js.
-//
-// Grænsen: selve pointene kommer fra viewet `round_standings` og kan ikke
-// filtreres herfra. Skjules en turnering, EFTER der er tippet på den, tæller de
-// tips fortsat med i stillingen — kun kampantallet følger synligheden.
-async function visibleSeasonIds(token) {
-  const leagues = await db.select(token, "leagues", `is_visible=is.true&select=id`);
+// Kampantallet skal følge SAMME afgrænsning som pointene, ellers kan de to ikke
+// tale sammen: antallet afgør `isComplete`, og dermed om pokalen og titlen vises.
+// Ved 'ALL' er det sæsonerne under de OFFICIELLE turneringer; ved et scope er det
+// den ene turnerings sæsoner. `is_official` frem for `is_visible`: en turnering
+// kan være tipbar uden at afgøre titler, og check-constraint'en på leagues gør
+// officiel til en indsnævring af synlig. To trins-opslaget er samme mønster som
+// loadStarterTournaments i src/lib/onboarding.js.
+async function scopeSeasonIds(token, scope = ALL) {
+  const filter = scope === ALL ? `is_official=is.true` : `id=eq.${scope}`;
+  const leagues = await db.select(token, "leagues", `${filter}&select=id`);
   if (!leagues.length) return [];
   const seasons = await db.select(token, "seasons", `league_id=in.(${leagues.map((l) => l.id).join(",")})&select=id`);
   return seasons.map((s) => s.id);
 }
-async function loadRoundsAvailable(token) {
-  const seasonIds = await visibleSeasonIds(token);
+async function loadRoundsAvailable(token, scope = ALL) {
+  const seasonIds = await scopeSeasonIds(token, scope);
   if (!seasonIds.length) return [];
   const rows = await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&home_score=not.is.null&select=round_key`);
   return [...new Set(rows.map((r) => r.round_key))].sort().reverse();
 }
-async function loadRoundBoard(token, roundKey) {
-  const seasonIds = await visibleSeasonIds(token);
+async function loadRoundBoard(token, roundKey, scope = ALL) {
+  const seasonIds = await scopeSeasonIds(token, scope);
   const ms = seasonIds.length
     ? await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&round_key=eq.${roundKey}&select=id,home_score,away_score`)
     : [];
   if (!ms.length) return { rows: [], totalMatches: 0, playedMatches: 0, isComplete: false };
   const board = await db.select(token, "round_standings",
-    `round_key=eq.${roundKey}&select=user_id,total_points,matches,exact_count,outcome_count,avg_goal_error&order=${TIEBREAK_ORDER_ROUND}`);
+    `round_key=eq.${roundKey}&scope=eq.${scope}&select=user_id,total_points,matches,exact_count,outcome_count,avg_goal_error&order=${TIEBREAK_ORDER_ROUND}`);
   const ids = board.map((r) => r.user_id);
   const profiles = ids.length ? await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`) : [];
   const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
