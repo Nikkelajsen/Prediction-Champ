@@ -54,11 +54,22 @@ function currentRoundIndex(rounds) {
 }
 // ---------- stages (grundspil / mesterskabsspil / nedrykningsspil) ----------
 // Sportmonks leverer stage-navne på engelsk; vi oversætter til dansk i UI'et.
-// Navnene her er dem, syncen faktisk har leveret for Superligaen. En ny
-// turnerings fasenavne tilføjes, når første sync har vist, hvad de HEDDER — et
-// gæt er værre end fallbacken nedenfor, som viser det rå navn pænt.
+// Navnene her er dem, syncen faktisk har leveret. En ny turnerings fasenavne
+// tilføjes, når man har SET dem — et gæt er værre end fallbacken nedenfor, som
+// viser det rå navn pænt.
+//
+// Navngivningen er ikke fælles på tværs af turneringer, og heller ikke på tværs
+// af sæsoner i samme turnering (verificeret hos Sportmonks 31. juli 2026):
+// Superligaen deler sig i "Championship Round"/"Relegation Round", mens Scotland
+// Premiership kalder det "1st Phase"/"2nd Phase" i 2026/2027 — men brugte
+// "Regular Season" + "2nd Phase" i 2025/2026. Derfor er både `Regular Season` og
+// `1st Phase` grundspil, og der er ét fælles ord for det skotske slutspil:
+// Sportmonks giver ikke top-6 og bund-6 hver sin stage, som DBU gør, så en
+// opdeling i mesterskabs-/nedrykningsspil ville påstå noget, dataene ikke siger.
 const STAGE_LABELS = {
   "Regular Season": "Grundspil",
+  "1st Phase": "Grundspil",
+  "2nd Phase": "Slutspil",
   "Championship Round": "Mesterskabsspil",
   "Relegation Round": "Nedrykningsspil",
   "Conference League Play-offs – Final": "Conference League-playoff",
@@ -66,9 +77,13 @@ const STAGE_LABELS = {
 // Chip/valg-label: vis altid (fallback = det rå navn).
 function stageOptionLabel(name) { return STAGE_LABELS[name] || name; }
 // Kamp-badge: skjul grundspil — stage er kun interessant, når sæsonen er delt.
+// Reglen ser på det DANSKE ord og ikke på det engelske navn: grundspil hedder
+// noget forskelligt i hver turnering ("Regular Season", "1st Phase" …), og en
+// badge på hver eneste kamp i grundspillet er præcis den støj, reglen findes for.
 function stageBadgeLabel(name) {
-  if (!name || /regular season/i.test(name)) return null;
-  return STAGE_LABELS[name] || name;
+  if (!name) return null;
+  const label = STAGE_LABELS[name] || name;
+  return label === "Grundspil" ? null : label;
 }
 // Filtrér kampe til de valgte stages (tom/undefined ⇒ alle stages).
 function filterByStages(matches, stages) {

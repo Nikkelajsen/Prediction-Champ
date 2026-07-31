@@ -80,6 +80,19 @@ describe("stageOptionLabel / stageBadgeLabel", () => {
     expect(stageBadgeLabel("Championship Round")).toBe("Mesterskabsspil");
     expect(stageBadgeLabel("Relegation Round")).toBe("Nedrykningsspil");
   });
+
+  // Scotland Premiership (turnering #2) kalder faserne noget andet end
+  // Superligaen — og noget andet fra sæson til sæson: 2026/2027 hedder
+  // grundspillet "1st Phase", 2025/2026 hed det "Regular Season".
+  it("oversætter Scotland Premierships faser", () => {
+    expect(stageOptionLabel("1st Phase")).toBe("Grundspil");
+    expect(stageOptionLabel("2nd Phase")).toBe("Slutspil");
+  });
+
+  it("skjuler grundspils-badgen, uanset hvad turneringen kalder den på engelsk", () => {
+    expect(stageBadgeLabel("1st Phase")).toBeNull();
+    expect(stageBadgeLabel("2nd Phase")).toBe("Slutspil");
+  });
 });
 
 describe("filterByStages", () => {

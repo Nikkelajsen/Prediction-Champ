@@ -39,7 +39,7 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 | Sted | Ændring | Status |
 |---|---|---|
 | `src/screens/ChampionshipTab.jsx` | **Den eneste reelle hardkodning i UI'et:** Sæsonchampionship fandt turneringen via navne-regex `/superliga/i`. Erstattet af en turnerings-vælger (dropdown, samme mønster som runde-/månedsvælgeren) — `loadSeasonBoard` tog allerede `leagueId`. Én sæsonstilling pr. turnering; en samlet på tværs af turneringer er bevidst fravalgt (den rolle har månedsligaen/ratingen). | ✅ **Leveret.** Vælgeren vises først ved mere end én turnering. Forvalget er `pickSeasonLeague()`: brugerens eget valg (husket i `localStorage`), ellers den **ældste** turnering — `created_at` og ikke navn, fordi listen er navnesorteret, og alfabetet ellers ville sætte "Scotland Premiership" foran "Superligaen" |
-| `src/lib/scoring.js` | `STAGE_LABELS` oversætter kun Superligaens stages til dansk (grundspil/mesterskabsspil/…). Tilføj den nye turnerings fasenavne; ukendte stages falder allerede pænt tilbage til råt navn. | ⏳ **Flyttet til drift.** De skotske navne er ikke verificeret, og et gæt er værre end fallbacken. Aflæs dem efter første sync (kommandoen i 3.4) og tilføj dem da |
+| `src/lib/scoring.js` | `STAGE_LABELS` oversætter kun Superligaens stages til dansk (grundspil/mesterskabsspil/…). Tilføj den nye turnerings fasenavne; ukendte stages falder allerede pænt tilbage til råt navn. | ✅ **Leveret 31. juli 2026**, efter at navnene var aflæst hos Sportmonks — se §3.5. `1st Phase` → Grundspil, `2nd Phase` → Slutspil. Badge-reglen ser nu på det **danske** ord i stedet for at regex'e efter "regular season", så grundspillet skjules, uanset hvad turneringen kalder det på engelsk |
 | `api/sync-matches.js` (linje ~63, ~122) | (a) Sæson-navn-fallbacken er hardkodet `"2026/2027"`. (b) Paginationen stopper hårdt ved side 20 — en stor turnering kan blive **stille trunkeret**. | ✅ **Var allerede lukket før `B2`.** (a) Fallbacken er væk: uden `smSeason` og uden gemt `api_season_id` fejler kaldet nu tydeligt. (b) Loftet er 60 sider, og en afbrudt paginering **kaster** i stedet for at bryde stille |
 | `api/sync-matches.js` (holdmatch) | Holdopslag matcher på normaliserede navne (fuzzy). Verificér efter første sync, at den nye turnerings hold ikke er fejl-linket til eksisterende hold. | ⏳ **Drift-verifikation, ikke en kodeændring.** `teams` hentes med `league_id=eq.<liga>`, så den fuzzy match kun ser turneringens egne hold — fejl-link *på tværs af turneringer* kan ikke ske. Dubletter *inden for* den nye turnering skal stadig kontrolleres |
 | `src/lib/data/standings.js` | **Ikke forudset af drejebogen.** `loadRoundBoard`/`loadRoundsAvailable` læste *alle* kampe i en `round_key`, uanset turnering og uanset `is_visible`. Kampantallet afgør `isComplete` og dermed, om 🏆 og "er Rundens Prediction Champ" vises — en skjult turnering ville altså holde runden åben, indtil kampe, ingen kan se eller tippe, var spillet. | ✅ **Leveret.** Begge loadere filtrerer nu på sæsoner under synlige turneringer. Med alt synligt er det en no-op; det er et værn mod den dag, `is_visible` slås fra igen. **Grænse:** selve pointene kommer fra viewet `round_standings` og kan ikke filtreres fra klienten — skjules en turnering, *efter* der er tippet på den, tæller de tips fortsat med i stillingen |
@@ -81,6 +81,28 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
   ```
 
   **Timing:** tidligt i en sæson findes opdelingen ofte ikke endnu — Sportmonks har typisk kun `Regular Season`, til slutspillet er sat. Ét navn i juli er derfor ikke et tegn på, at Skotland afviger; det gælder Superligaen på samme tidspunkt. Ukendte stages falder pænt tilbage til det rå navn, så en manglende oversættelse er kosmetik, ikke en fejl.
+
+  → **Aflæst 31. juli 2026. Skotland afviger — se §3.5.**
+
+### 3.5 Fasenavnene: Skotland hedder ikke det samme som Superligaen (aflæst 31. juli 2026)
+
+Antagelsen i §3.4 var, at de skotske navne måske var de samme engelske som Superligaens. Det er de ikke — og de er ikke engang de samme fra sæson til sæson i samme turnering:
+
+| Turnering | Sæson | Stages hos Sportmonks |
+|---|---|---|
+| Superligaen `271` | — | `Regular Season`, `Championship Round`, `Relegation Round`, `Conference League Play-offs – Final` |
+| Scotland Premiership `501` | **2026/2027** (`28275`) | **`1st Phase`** — og indtil videre kun den |
+| Scotland Premiership `501` | 2025/2026 (`25598`) | `Regular Season`, **`2nd Phase`** |
+
+**Tre ting følger af det:**
+
+1. **`1st Phase` og `Regular Season` er begge grundspil.** Begge peger nu på "Grundspil" i `STAGE_LABELS`. At 2025/2026 brugte det ene navn og 2026/2027 det andet betyder, at kortlægningen skal kunne rumme flere engelske navne for samme fase — ikke at det ene er "rigtigt".
+2. **`2nd Phase` er ét ord for hele slutspillet: "Slutspil".** Sportmonks giver *ikke* Skotland en stage pr. halvdel af opdelingen, som DBU-sæsonen får med `Championship Round`/`Relegation Round`. En oversættelse til "Mesterskabsspil" ville påstå noget, dataene ikke siger — top-6 og bund-6 ligger i samme stage.
+3. **Badge-reglen kunne ikke længere være et regex på "regular season".** Den skjuler grundspils-badgen, fordi en badge på hver eneste kamp i grundspillet er ren støj. Med `1st Phase` ville hver skotsk kamp have fået et "Grundspil"-mærke. `stageBadgeLabel` slår nu navnet op **først** og skjuler alt, der oversættes til "Grundspil" — så næste turnering med et tredje navn for grundspil er dækket, i samme øjeblik den får sin linje i kortlægningen.
+
+**Sæson-id'et er samtidig kendt:** `28275`. Det er skrevet direkte ind i `sql/tournament_scotland_premiership.sql`, så første sync ikke behøver `&smSeason=` — og Admin-knappen "Hent nu" virker fra første klik.
+
+**Bemærk, at 2026/2027 kun har én stage endnu.** Det er forventet: opdelingen skemalægges først, når grundspillet er ved at være slut. `2nd Phase` er oversat på forhånd, fordi navnet er set i 2025/2026-sæsonen — ikke gættet.
 
 **Premier League koster stadig penge — og det haster ikke.** Billigste plan er **Starter €29/md** (5 selvvalgte turneringer); Growth (€99) og Pro (€249) er irrelevante ved et behov på 2–3 turneringer. Abonnementet tegnes, når nogen reelt vil tippe PL ved en sæsonstart — ikke fordi roadmappen nævner den. Appen er gratis for brugerne, så udgiften er privat (~215 kr./md), og behovet er sæsonbestemt: en opsigelse hen over sommeren er driftsmæssigt ufarlig, fordi data ligger i Supabase og `sync-live` rydder pænt op for kampe, den ikke kan hente, i stedet for at fejle.
 

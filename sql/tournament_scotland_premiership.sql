@@ -35,25 +35,24 @@
 -- så en skjult turnering holder ikke runderne kunstigt åbne.
 --
 -- ---------------------------------------------------------------------------
--- FØR DU KØRER: verificér sæsonnavnet
+-- Sæsonen: 2026/2027, Sportmonks-id 28275 — verificeret 31. juli 2026
 --
--- Navnet nedenfor skal matche Sportmonks' sæsonnavn NØJAGTIGT. Gør det ikke det,
--- fejler første sync tydeligt ("Kunne ikke finde sæsonen … Tilgængelige sæsoner:
--- …") — den gætter aldrig. Slå det op med:
+-- Begge værdier er slået op på Sportmonks (liga 501 → "Current Season ID"), så
+-- api_season_id kan sættes med det samme. Det er ikke bare en genvej: sætter man
+-- id'et her, behøver første sync ikke &smSeason=<navn>, og Admin-knappen
+-- "Hent nu" virker fra første klik. Navnet bruges kun, når id'et mangler.
 --
+-- Skal en anden sæson bruges (næste år), slås parret op igen med:
 --    curl -s "https://api.sportmonks.com/v3/football/leagues/501?include=seasons&api_token=$T" \
 --      | jq -r '.data.seasons[] | "\(.id)\t\(.name)"'
---
--- api_season_id sættes bevidst IKKE her. Første kald til
--- /api/sync-matches?leagueId=<uuid>&smSeason=<navn> slår id'et op og gemmer det
--- på sæson-rækken, hvorefter navnet aldrig bruges igen.
 -- ---------------------------------------------------------------------------
 
 do $$
 declare
   v_league_id uuid;
-  -- De to parametre. Ret sæsonnavnet, hvis opslaget ovenfor siger noget andet.
+  -- De tre parametre. Navn og id hører sammen — ret dem samlet.
   v_season_name text := '2026/2027';
+  v_season_api_id text := '28275';
   v_season_start date := '2026-08-01';
 begin
   select id into v_league_id from leagues where api_league_id = '501';
@@ -65,14 +64,14 @@ begin
   end if;
 
   if not exists (select 1 from seasons where league_id = v_league_id and name = v_season_name) then
-    insert into seasons (league_id, name, start_date)
-    values (v_league_id, v_season_name, v_season_start);
+    insert into seasons (league_id, name, api_season_id, start_date)
+    values (v_league_id, v_season_name, v_season_api_id, v_season_start);
   end if;
 end $$;
 
 -- ---------------------------------------------------------------------------
--- Verifikation: én liga, én sæson, endnu ingen hold eller kampe (de kommer med
--- syncen). api_season_id er null, til første sync har slået det op.
+-- Verifikation: én liga, én sæson med api_season_id = 28275, og endnu ingen hold
+-- eller kampe — de kommer med syncen.
 select l.id as league_id, l.name, l.api_league_id, l.is_visible,
        s.id as season_id, s.name as season_name, s.api_season_id,
        (select count(*) from teams t where t.league_id = l.id) as teams,
