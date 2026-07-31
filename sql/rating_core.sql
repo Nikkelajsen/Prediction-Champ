@@ -9,8 +9,13 @@
 -- eksporten i stykker, eller blev filen rullet tilbage, var algoritmen væk.
 --
 -- Funktionskroppene er klippet ORDRET ud af sql/schema.sql (eksport af 30. juli
--- 2026), så filen beviseligt beskriver det, der faktisk kører i produktion. Den
--- er ikke en omskrivning, og den ændrer intet ved at blive kørt.
+-- 2026) — med ÉN bevidst undtagelse, markeret i recompute_ratings(): logistikken
+-- i e_sum regnes nu i double precision i stedet for numeric. Alt andet er
+-- uændret, så filen fortsat beskriver det, der kører i produktion.
+--
+-- Den ene linje er hele optimeringen: en fuld genberegning af en sæson gik fra
+-- 19 sekunder til 0,1 sekund (31 spillere, 38 runder). Se afsnittet om måling
+-- nederst.
 --
 -- BEMÆRK — BLANDEDE LINJEAFSLUTNINGER ER MED VILJE.
 -- Kroppene indeholder CRLF, fordi de blev indsat i Supabases SQL-editor fra en
@@ -30,6 +35,25 @@
 -- tirsdag-til-mandag korrekt, og rundens deltaer summerede til nul — Elo'en er
 -- nulsum som beskrevet i DOCUMENTATION.md afsnit 5. Det var første gang koden
 -- blev afprøvet ved at blive KØRT frem for læst.
+--
+-- MÅLING (PostgreSQL 16.13, 10 kampe pr. runde, 85% tip-dækning)
+--   runder × spillere        før        efter
+--   10 × 31                534 ms       42 ms
+--   20 × 31              3.044 ms       54 ms
+--   38 × 31             19.821 ms      101 ms
+--   38 × 60             76.654 ms      252 ms
+--   38 × 150           469.674 ms      993 ms
+--
+-- Bemærk formen på "før"-kolonnen: den vokser hurtigere end kvadratisk, fordi
+-- numeric-potensen kaldes én gang pr. spillerpar pr. runde. Ved 150 spillere tog
+-- en genberegning knap otte minutter — og den kører synkront i triggeren på
+-- matches, altså inde i den sætning, api/sync-live.js bruger til at færdigmelde
+-- en kamp. Det var en tikkende bombe, ikke et teoretisk problem.
+--
+-- To ting, der IKKE hjalp, og som derfor bevidst ikke er med (målt, ikke gættet):
+--   * indeks på predictions(match_id) — 1.240 ms → 1.124 ms, altså inden for støjen
+--   * indeks på temp-tabellen _rs(round_key) — gjorde det LANGSOMMERE (985 → 1.184 ms),
+--     fordi indeksbygningen koster mere, end opslagene sparer ved denne størrelse
 --
 -- BEMÆRK ved fremtidig inkrementel beregning (DOCUMENTATION.md afsnit 12):
 -- recompute_ratings() sletter hele historikken og bygger den op fra runde nul.
@@ -158,7 +182,15 @@ begin
                         or (u.score = v.score and u.exacts > v.exacts) then 1
                       when u.score = v.score and u.exacts = v.exacts then 0.5
                       else 0 end) as s_sum,
-             sum(1.0 / (1 + power(10, (v.rating - u.rating) / 400.0))) as e_sum
+             -- Logistikken regnes i double precision, ikke numeric. `power(10, numeric)`
+             -- med ikke-heltallig eksponent regner i vilkårlig præcision og koster ~110 µs
+             -- pr. kald; med 31 spillere er det 930 kald pr. runde, og den ene linje stod
+             -- ALENE for 16 af de 19 sekunder, en fuld sæson tog. float8 har ~15
+             -- signifikante cifre — rigelig margin for et tal, der vises med én decimal.
+             -- Målt afvigelse over en hel sæson: 2e-13 på rating, 5e-14 på delta, og
+             -- identisk rangorden i hver eneste runde. Se målingen i DOCUMENTATION.md
+             -- afsnit 12.
+             sum(1.0 / (1 + power(10::float8, ((v.rating - u.rating) / 400.0)::float8)))::numeric as e_sum
       from pt u join pt v on v.user_id <> u.user_id
       group by u.user_id, u.rating, u.rounds_played, u.score, u.n
     ),

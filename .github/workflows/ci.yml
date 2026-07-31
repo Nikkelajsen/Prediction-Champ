@@ -56,3 +56,39 @@ jobs:
       # importstier og alt andet, der først viser sig, når hele grafen samles.
       - name: Build
         run: npm run build
+
+  # Ratingberegningen er ren SQL og kan ikke nås fra Vitest. Den var indtil 30.
+  # juli 2026 det eneste store domæne helt uden test — og optimeringen samme dag
+  # ændrede logistikken fra numeric til double precision. Dette job er beviset
+  # for, at resultatet ikke flyttede sig: sql/tests/rating_equivalence.sql kører
+  # både den nuværende og den frosne før-optimering-reference og sammenligner.
+  #
+  # Egen database i en service-container — testen rører aldrig produktion, og
+  # den behøver ingen secrets.
+  sql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Ækvivalenstest for ratingberegningen
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database ratingtest;'
+          # `-b` gør, at fejl fra \ir-inkluderede filer også stopper kørslen.
+          psql -h localhost -U postgres -d ratingtest -v ON_ERROR_STOP=1 -b -f rating_equivalence.sql
