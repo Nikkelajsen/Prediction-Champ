@@ -41,15 +41,25 @@ Bemærk at job 6–10 ikke sender `&smSeason=`: `api_season_id` er sat direkte i
 | 3 | Push-notifikationer | cron-job.org | hver 15.–30. minut | `GET https://<app>/api/send-notifications` (valgfrit `&hours=`) | ? | — |
 | 4 | Skema-eksport | GitHub Actions | `0 6 * * 1` (mandag 06:00 UTC) + manuelt | `.github/workflows/schema-export.yml` | — (bruger repo-secret `SUPABASE_DB_URL`) | 30. juli 2026 |
 | 5 | Kampprogram + endelige resultater Scotland | cron-job.org | hver 12. time (kan stå på 10–15 min fra før live-syncen) | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | 31. juli 2026 (oprettet — bekræftet af ejeren) |
-| 6 | Kampprogram + endelige resultater Premier League | cron-job.org | hver 12. time, ved **minut 05** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` | 31. juli 2026 |
-| 7 | Kampprogram + endelige resultater Champions League | cron-job.org | hver 12. time, ved **minut 11** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` | 31. juli 2026 (kører, men henter 0 kampe — `B8`) |
-| 8 | Kampprogram + endelige resultater Bundesliga | cron-job.org | hver 12. time, ved **minut 17** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` | 31. juli 2026 |
-| 9 | Kampprogram + endelige resultater Serie A | cron-job.org | hver 12. time, ved **minut 23** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` | 31. juli 2026 |
-| 10 | Kampprogram + endelige resultater Primera División | cron-job.org | hver 12. time, ved **minut 29** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` | 31. juli 2026 |
+| 6 | Kampprogram + endelige resultater Premier League | cron-job.org | hver 12. time, ved **minut 05** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:05) |
+| 7 | Kampprogram + endelige resultater Champions League | cron-job.org | hver 12. time, ved **minut 11** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:17. Manuelt kald hentede 0 kampe — `B8`) |
+| 8 | Kampprogram + endelige resultater Bundesliga | cron-job.org | hver 12. time, ved **minut 17** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:23) |
+| 9 | Kampprogram + endelige resultater Serie A | cron-job.org | hver 12. time, ved **minut 23** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:11) |
+| 10 | Kampprogram + endelige resultater Primera División | cron-job.org | hver 12. time, ved **minut 29** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | **31. juli 2026 — kørt planlagt kl. 00:29, lykkedes (4,31 s)** |
 
 **Kolonnen "Hemmelighed sendes som" står med `?` med vilje.** Den kan ikke
 udfyldes fra repoet — kun ved at kigge i cron-job.org eller ved at aflæse
 loggene, se nedenfor. Udfyld den, når du ved det.
+
+**\*** Job 6–10 er udfyldt efter opsætningsvejledningen, ikke efter et opslag i
+cron-job.org. Antagelsen er efterprøvelig og efterprøver sig selv: dukker der en
+`[A11]`-advarsel op i Vercels logs efter deres første kørsel, kom hemmeligheden
+som `?secret=`, og stjernen skal rettes til `?query`. Bliver logs tavse, holder
+den. Det er samme mekanisme, `A11` i øvrigt hviler på.
+
+**Navnene i cron-job.org er ikke helt ens** — fire hedder "Kampe & Resultater
+\<turnering\>", to af dem med "Hent" foran og én med bindestreg. Det er kosmetik,
+men noteret her, fordi registeret skal kunne bruges til at *finde* jobbet igen.
 
 Job 4 er det eneste, der er defineret **i** repoet og dermed det eneste, der er
 versioneret. Resten er beskrevet her, men lever andetsteds.
