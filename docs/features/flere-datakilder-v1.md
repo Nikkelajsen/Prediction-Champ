@@ -1,6 +1,8 @@
 # Flere datakilder v1 — Sportmonks og football-data.org side om side
 
-**Status:** koden leveret 31. juli 2026. Drift står i backloggen som `B7`.
+**Status:** leveret og i drift 31. juli 2026. Fire af de fem turneringer henter kampe;
+Champions League gør endnu ikke (`B8` i [`../BACKLOG.md`](../BACKLOG.md)).
+Alle fem er synlige og officielle (`A19`).
 **Beslutning:** `A18` i [`../DECISIONS.md`](../DECISIONS.md).
 
 ---
@@ -183,12 +185,17 @@ kampe.** Det er tallet, man kigger på.
 ## 8. Hvad der bevidst IKKE blev gjort
 
 - **Ingen `provider`-kolonne på `matches`.** Se 3.1.
-- **`is_official = false` på alle fem.** Championship summerer point på tværs af
-  officielle turneringer, så fem nye ville ændre, hvad en titel betyder, i samme
-  sekund de blev tændt. Forfremmelse er et selvstændigt valg.
-- **`is_visible = false` indtil verifikation.** Modsat `B2`, hvor generalprøven
-  bevidst blev kørt i åbent land — dér var det én turnering med skandinaviske
-  holdnavne, her er det fem med engelske, tyske, italienske og spanske.
+- ~~**`is_official = false` på alle fem.**~~ **Rettet efter levering (A19, 31.
+  juli 2026): alle fem blev forfremmet samme dag.** Spec'ens argument var, at
+  Championship summerer point på tværs af officielle turneringer, så fem nye
+  ville ændre, hvad en titel betyder. Det argument holder — men det gælder kun
+  turneringer med **tips**, og disse fem havde ingen konkurrencer endnu. Derfor
+  var forfremmelsen gratis netop dér og ville være blevet dyrere for hver dag.
+  Forfremmelse er stadig et selvstændigt valg; det blev bare truffet med det
+  samme. `sql/tournament_footballdata_promote.sql`.
+- ~~**`is_visible = false` indtil verifikation.**~~ **Rettet efter levering (31.
+  juli 2026):** verifikationen blev kørt samme dag, og turneringerne blev tændt
+  bagefter — altså som spec'en foreskrev, bare uden ventetid imellem.
 - **Ingen retry på Sportmonks-siden.** Den har aldrig haft en, og at tilføje en
   under en oprydning ville skjule, om noget flyttede sig.
 - **Kadence-uoverensstemmelsen i `CRON.md` er ikke rettet.** Jobtabellen siger
@@ -209,7 +216,10 @@ Med `*` mangler felterne bare, og `indexSeasons()` læser dem som "sportmonks,
 live slået til", hvilket er præcis den verden, migreringen endnu ikke har
 ændret. Tabellen har én række pr. turnering, så bredden koster intet.
 
-## 9. Sådan sættes det i drift (`B7`)
+## 9. Sådan sættes det i drift
+
+> **Kørt 31. juli 2026.** Trinene står som opskrift, ikke som huskeliste —
+> næste turnering fra samme kilde følger den samme vej.
 
 1. Opret en gratis nøgle på <https://www.football-data.org/client/register> og
    sæt **`FOOTBALLDATA_TOKEN`** i Vercel (Production + Preview).
