@@ -65,7 +65,19 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 **To ting at være opmærksom på ved netop denne plan:**
 
 - **Sæsonopdelingen er stages, ikke turneringer — og det gælder også Skotland.** Superligaen er én sæson med flere stages, som alle kommer med i samme kald (DOCUMENTATION.md §8), og `STAGE_LABELS` i `src/lib/scoring.js` beviser det med de navne, syncen faktisk har leveret: `Regular Season`, `Championship Round`, `Relegation Round` og endda `Conference League Play-offs – Final`. Skotland deler sig efter samme model (grundspil → mesterskabs-/nedrykningsspil), så **`501` alene dækker hele Premiership-sæsonen** — der skal ikke oprettes en `leagues`-række pr. fase. De separate `*_Play-offs`-ligaer i planen (`1659`/`513`) er op-/nedrykningsspillet mod næstbedste række, altså en anden turnering end vores sæson, og de er ikke nødvendige for `B2`.
-- **Skotske fasenavne** rammer `STAGE_LABELS`-fallbacken (råt navn), indtil de oversættes. Sandsynligvis er de de samme engelske navne som Superligaens (`Championship Round`/`Relegation Round`) og dermed allerede dækket — det er præcis den slags, generalprøven skal vise. Ukendte stages falder pænt tilbage, så det haster ikke.
+- **Skotske fasenavne** rammer `STAGE_LABELS`-fallbacken (råt navn), indtil de oversættes. Er de de samme engelske navne som Superligaens (`Championship Round`/`Relegation Round`), er de allerede dækket. **Det er ikke verificeret** — sådan gør du (samme endpoint og include, som `sync-matches.js` faktisk læser `stage.name` fra, så svaret er præcis det, der ville stå i `matches.stage_name`):
+
+  ```bash
+  T=<token>
+  # sæson-id for turneringen (501 = Scotland Premiership, 271 = Superliga)
+  curl -s "https://api.sportmonks.com/v3/football/leagues/501?include=seasons&api_token=$T" \
+    | jq -r '.data.seasons[] | "\(.id)\t\(.name)"'
+  # de stage-navne, syncen ville gemme
+  curl -s "https://api.sportmonks.com/v3/football/fixtures?filters=fixtureSeasons:<SÆSON_ID>&include=stage&per_page=50&api_token=$T" \
+    | jq -r '.data[].stage.name' | sort -u
+  ```
+
+  **Timing:** tidligt i en sæson findes opdelingen ofte ikke endnu — Sportmonks har typisk kun `Regular Season`, til slutspillet er sat. Ét navn i juli er derfor ikke et tegn på, at Skotland afviger; det gælder Superligaen på samme tidspunkt. Ukendte stages falder pænt tilbage til det rå navn, så en manglende oversættelse er kosmetik, ikke en fejl.
 
 **Premier League koster stadig penge — og det haster ikke.** Billigste plan er **Starter €29/md** (5 selvvalgte turneringer); Growth (€99) og Pro (€249) er irrelevante ved et behov på 2–3 turneringer. Abonnementet tegnes, når nogen reelt vil tippe PL ved en sæsonstart — ikke fordi roadmappen nævner den. Appen er gratis for brugerne, så udgiften er privat (~215 kr./md), og behovet er sæsonbestemt: en opsigelse hen over sommeren er driftsmæssigt ufarlig, fordi data ligger i Supabase og `sync-live` rydder pænt op for kampe, den ikke kan hente, i stedet for at fejle.
 
