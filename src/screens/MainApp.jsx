@@ -367,7 +367,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   } else if (tab === "championship") {
     body = <ChampionshipTab token={token} userId={userId} leagues={visibleLeagues} openProfile={openProfile} />;
   } else if (tab === "rating") {
-    body = <RatingTab token={token} userId={userId} openProfile={openProfile} openPredictions={openPredictions} hasCompetitions={competitions.length > 0} />;
+    body = <RatingTab token={token} userId={userId} openProfile={openProfile} openPredictions={openPredictions} hasCompetitions={competitions.length > 0} leagues={visibleLeagues} />;
   }
 
   return (

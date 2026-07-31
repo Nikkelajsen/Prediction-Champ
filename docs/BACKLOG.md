@@ -22,7 +22,7 @@ som ikke arkiveres andre steder — de får en linje nederst, så den samme idé
 foreslås tre gange.
 
 **ID'erne er stabile og genbruges ikke.** `A#` fortsætter beslutningsserien fra
-ROADMAP (næste ledige: **A17**) — `A11` er fx også navnet på en logadvarsel i
+ROADMAP (næste ledige: **A18**) — `A11` er fx også navnet på en logadvarsel i
 `api/_shared.js`. `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale
 ID'er (`K2`, `F1`) beholder deres eget navn og linker til spec'en.
 
@@ -34,6 +34,8 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
+- `sql/rating_core.sql`s hoved siger, at funktionskroppene indeholder CRLF og ikke må normaliseres — filen har nul CR-tegn i dag, så enten er advarslen forældet eller også blev de normaliseret ubemærket
+
 ---
 
 ## Åbne beslutninger
@@ -44,7 +46,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Spørgsmål | Kontekst | Afgøres |
 |---|---|---|---|
-| A5 | **Emojis i historie-kort: til eller fra?** | Gør kortet skimbart på mobil, men mindre klassisk. **v1-default: emojis til.** **Delvist besvaret (v1.1, juli 2026):** emoji er nu et *signal* — den findes kun i højdepunkt-tieret, mens dæmpede kort er uden. Spørgsmålet er dermed reduceret til, om højdepunkterne skal beholde deres. **Datamanglen er lukket (30. juli 2026):** Analytics-fanens sektion "Story Engine-regler" viser genereret/vist/delt/afvist pr. regel, så spørgsmålet kan afgøres på tal frem for fornemmelse. | Når et par runder er kørt med den nye regelstatistik i hånden. |
+| A5 | **Emojis i historie-kort: til eller fra?** | Gør kortet skimbart på mobil, men mindre klassisk. **v1-default: emojis til.** **Delvist besvaret (v1.1, juli 2026):** emoji er nu et *signal* — den findes kun i højdepunkt-tieret, mens dæmpede kort er uden. Spørgsmålet er dermed reduceret til, om højdepunkterne skal beholde deres. **Datamanglen er lukket (30. juli 2026):** Analytics-fanens sektion "Story Engine-regler" viser genereret/vist/delt/afvist pr. regel, så spørgsmålet kan afgøres på tal frem for fornemmelse. **Sidste forudsætning er væk (31. juli 2026):** `story_engine.sql` er gen-kørt i produktion (den tidligere `B3`), så v1.1's 14 regler genererer nu rigtige kort. Uret på "et par runder" starter her. | Når et par runder er kørt med den nye regelstatistik i hånden. |
 | A11 | **`?secret=`-fallbacken fjernes helt** (hænger sammen med teknisk gæld) | Kan først lukkes, når alle cron-jobs (ét sync-job pr. turnering + notifikations-jobbet) er bekræftet flyttet til `x-sync-secret`-headeren — ellers fejler de med 401. **Vejen er banet (30. juli 2026):** `isAuthorized()` i `api/_shared.js` logger en `[A11]`-advarsel, hver gang fallbacken bruges, så bekræftelsen kan *aflæses* i Vercels logs frem for gættes. Fremgangsmåden står i [`CRON.md`](./CRON.md). | Når loggene har været rene i en periode, der dækker alle skemaer (det langsomste er `sync-matches` hver 6. time) — senest sammen med turnering #2. |
 | A14 | **Skal hele kodebasen gennemformateres med Prettier?** | `npm run format` findes, men `format:check` er bevidst ikke et CI-trin. En fuld gennemformatering ville omskrive ~6.700 linjer ved `printWidth: 140` (~14.000 ved standard 80) på tværs af alle 46 filer. Prisen er hele repoets `git blame`; gevinsten er konsistens i en kodebase med én forfatter og en i forvejen ensartet håndstil. Beslutningen er **udskudt, ikke truffet** — se [`DECISIONS.md`](./DECISIONS.md), 30. juli 2026. | Næste gang der alligevel røres bredt i frontenden — ellers aldrig. |
 | A15 | **Sportmonks gratis-plan: 180 kald/time pr. entitet, eller 3.000 API-kald — hvilket tal og hvilken enhed gælder?** | `DOCUMENTATION.md` §8 (linje 240) og `features/live-resultater-v1.md` angiver begge "180 kald i timen pr. entitet", men Sportmonks' egen kontoside viser "3.000 API-kald" — uklart om det er en anden periode/enhed eller en reel uoverensstemmelse mellem dokumentation og aftale. Forbruget i dag (`sync-live` maks. 60/time på kampdage, `sync-matches` ~4 pr. kørsel pr. turnering) ligger komfortabelt under begge tal, så det er ikke driftskritisk endnu. | Når nogen har efterprøvet Sportmonks' faktiske plan-vilkår (support eller deres egen dokumentation) og kan rette det tal, der viser sig forkert. |
@@ -54,8 +56,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Hvad | Hvorfor / hvad den venter på | Omfang |
 |---|---|---|---|
-| B3 | **Gen-kør `sql/story_engine.sql` i produktion** | Story Engine v1.1 (A3/A4-leverancen) er i repoet, men migreringen er en manuel kørsel i Supabase SQL-editor, og den er ikke bekræftet kørt. Triggeren er uændret siden A9-rettelsen. Forudsætning for at kunne læse tonen på kortene og dermed for `A5`. | Lille |
-| B2 | **Turnering #2: sæt Scotland Premiership i drift** | **Koden er leveret 31. juli 2026** (turneringsvælger, synligheds-korrekt rundeliga, SQL-script) — tilbage står de trin, der kræver produktionsadgang: kør [`sql/tournament_scotland_premiership.sql`](../sql/tournament_scotland_premiership.sql) (verificér sæsonnavnet først), kald `/api/sync-matches?leagueId=…` (`&dryRun=true` først — sæson-id'et står allerede i scriptet, så `&smSeason=` er unødvendig), kontrollér holdene for dubletter, opret cron-jobbet og skriv det i [`CRON.md`](./CRON.md), og kør testcases 2–6 i [`features/turnering-2.md`](./features/turnering-2.md) §6. Turneringen tændes **synlig** med det samme (fravigelse af `A10`). Gater `B1`. | Lille (drift) |
+| B2 | **Turnering #2: sæt Scotland Premiership i drift** | **Koden er leveret 31. juli 2026**, og to af drifts-trinnene er nu taget: SQL-scriptet er kørt, og cron-jobbet er oprettet (job #5 i [`CRON.md`](./CRON.md)). **Tilbage:** bekræft at første sync faktisk hentede kampe (Admin → Drift viser `sync-matches`-kørslerne), **kontrollér holdene for dubletter** — den fuzzy holdmatch er ikke afprøvet på skotske navne — verificér fasenavnene mod `STAGE_LABELS` (§4 i drejebogen forudsiger `2nd Phase` → "Slutspil"), og kør testcases 2–6 i [`features/turnering-2.md`](./features/turnering-2.md) §6. Turneringen er **synlig** (fravigelse af `A10`). Gater `B1`. | Lille (drift) |
 | B1 | **Global tirsdag–mandag-runde** | Produktbogens kapitel 4–5 beskriver den som gældende; appen regner i dag pr. turneringsrunde, hvilket med Superligaen alene reelt er det samme. Udskydes bevidst, til flere turneringer er i drift — først dér adskiller den sig. Står som trin 5 i [`ROADMAP.md`](./ROADMAP.md) og som kendt afvigelse mellem bog og app. | Mellem |
 | B4 | **Privatlivspolitik og brugervilkår** | Kræves før en offentlig lancering/deling af appen; ingen af delene findes i dag. Hvad de derudover skal dække (cookies, tredjeparts-tjenester som Sportmonks/Supabase, evt. databehandleraftaler) er ikke afklaret og bør afklares som en del af opgaven. | Mellem |
 | B5 | **Notifikation til ligamedlemmer, når der oprettes en ny konkurrence i deres liga** | Medlemmer opdager i dag kun en ny konkurrence ved selv at åbne ligaen. Naturlig udvidelse af push-notifikationerne (§16, `api/send-notifications.js`), som allerede har mønsteret for målrettede notifikationer. | Lille–mellem |

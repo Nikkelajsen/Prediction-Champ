@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 // begge komponenter er ren markup, og projektet skal ikke have et komponent-
 // testbibliotek for deres skyld.
 import { renderToStaticMarkup } from "react-dom/server";
-import { StandingsTable, Champions, pickSeasonLeague, boardTitle } from "./ChampionshipTab.jsx";
+import { StandingsTable, Champions, pickSeasonLeague, boardTitle, scopeNote } from "./ChampionshipTab.jsx";
 import { assignRanks, sortStandings } from "../lib/standings.js";
 
 // Basisrække: alle trin i stigen lige, så testene kun ændrer ét ad gangen.
@@ -115,5 +115,49 @@ describe("boardTitle (samlet vs. pr. turnering)", () => {
 
   it("nævner aldrig 'Prediction Champ' på et turneringsniveau", () => {
     expect(boardTitle("month", superliga)).not.toContain("Prediction Champ");
+  });
+});
+
+// En synlig turnering, der ikke afgør titler, blev udeladt af stillingerne uden
+// at blive nævnt: både vælgeren og "To niveauer"-forklaringen er gated på mere
+// end én OFFICIEL turnering, så med én af hver viste fanen ingen af delene.
+// Sætningen skal navngive begge sider — hvad der tæller, og hvad der ikke gør.
+describe("scopeNote (hvad tæller med i Championship)", () => {
+  const superliga = { id: "L1", name: "Superligaen" };
+  const skotland = { id: "L2", name: "Scotland Premiership" };
+  const brøndby = { id: "L3", name: "1. division" };
+
+  it("tier, når alle synlige turneringer afgør titler", () => {
+    expect(scopeNote([superliga], [])).toBeNull();
+  });
+
+  it("navngiver både den, der tæller, og den, der ikke gør", () => {
+    const note = scopeNote([superliga], [skotland]);
+    expect(note).toContain("Championship afgøres af Superligaen");
+    expect(note).toContain("Scotland Premiership");
+    expect(note).toContain("tæller hverken");
+  });
+
+  it("siger, hvor pointene så BLIVER af — ellers ligner udeladelsen et tab", () => {
+    expect(scopeNote([superliga], [skotland])).toContain("din konkurrence");
+  });
+
+  // A17 (31. juli 2026): ratingen filtrerer nu også på is_official. Sagde
+  // sætningen fortsat "og i din rating", ville den love point et sted, hvor de
+  // ikke længere lander — den værste slags forkert tekst.
+  it("lover ikke rating for en turnering, der ikke tæller", () => {
+    const note = scopeNote([superliga], [skotland]);
+    expect(note).toContain("hverken i Championship eller i rating");
+    expect(note).not.toMatch(/og i din rating/);
+  });
+
+  it("sætter flere navne sammen på dansk i begge ender", () => {
+    const note = scopeNote([superliga, brøndby], [skotland]);
+    expect(note).toContain("Superligaen og 1. division");
+  });
+
+  it("tier uden officielle turneringer — der er ingen stilling at forklare", () => {
+    expect(scopeNote([], [skotland])).toBeNull();
+    expect(scopeNote(undefined, undefined)).toBeNull();
   });
 });

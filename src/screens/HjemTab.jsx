@@ -273,7 +273,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
             style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", cursor: "pointer", flexShrink: 0 }}>
             <Eyebrow>Rating <InfoDot title="Rating">
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div>Din langsigtede dygtighed på tværs af alle turneringer. Alle starter på <b>1000</b>.</div>
+                <div>Din langsigtede dygtighed på tværs af de turneringer, der tæller i Championship. Alle starter på <b>1000</b>.</div>
                 <div>Hver spillerunde giver <b>én</b> ratingændring — ikke én pr. kamp og ikke én pr. konkurrence.</div>
                 <div>En <b>*</b> betyder foreløbig: de første 5 runder tæller ekstra, mens tallet finder sit leje.</div>
                 <div>Championship er dét, man vinder — rating er dét, man <i>er</i>. Tryk på tallet for at åbne din karriere.</div>

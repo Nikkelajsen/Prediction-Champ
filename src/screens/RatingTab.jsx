@@ -4,7 +4,10 @@ import { loadRatingBoard, loadRatingHistory } from "../lib/data.js";
 import { C, btnGhost, font } from "../ui/theme.js";
 import { Card, Eyebrow, FormDots, H, InfoDot, Move, PlayerName } from "../ui/components.jsx";
 
-function RatingTab({ token, userId, openProfile, openPredictions, hasCompetitions }) {
+function RatingTab({ token, userId, openProfile, openPredictions, hasCompetitions, leagues = [] }) {
+  // Synlige turneringer, der ikke tæller i rating (A17). Er der ingen, nævnes
+  // reglen ikke — en regel uden tilfælde er kun støj for læseren.
+  const unofficial = leagues.filter((l) => l.is_official === false);
   const [rows, setRows] = useState(null);
   const [hist, setHist] = useState(new Map());
   const [loading, setLoading] = useState(true);
@@ -21,7 +24,10 @@ function RatingTab({ token, userId, openProfile, openPredictions, hasCompetition
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
-        <Eyebrow>På tværs af alle turneringer <InfoDot title="Rating">Din langsigtede dygtighed på tværs af alle turneringer. Hver runde giver én ratingændring, beregnet ud fra alle ugens kampe. Den opdateres, hver gang en kamp er fløjtet af, og står endeligt fast, når runden er slut. Championship er dét, man vinder — rating er dét, man er.</InfoDot></Eyebrow>
+        {/* "alle turneringer" holdt, til A17 (31. juli 2026) filtrerede ratingen
+            på leagues.is_official. Nu navngiver linjen sit eget omfang — samme
+            regel som stillingerne: et tal skal sige, hvad det gælder. */}
+        <Eyebrow>På tværs af Championship-turneringerne <InfoDot title="Rating">Din langsigtede dygtighed på tværs af de turneringer, der tæller i Championship. Hver runde giver én ratingændring, beregnet ud fra alle ugens kampe. Den opdateres, hver gang en kamp er fløjtet af, og står endeligt fast, når runden er slut. Championship er dét, man vinder — rating er dét, man er.</InfoDot></Eyebrow>
         <H>Rating</H>
         <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
           Din langsigtede dygtighed. Rundens ændring opdateres, når kampene er fløjtet af — Championship er dét, man vinder; rating er dét, man <i>er</i>.
@@ -42,6 +48,14 @@ function RatingTab({ token, userId, openProfile, openPredictions, hasCompetition
           <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>
             Du får din rating, første gang du har tippet en runde, hvor kampene er spillet færdig.
             Alle starter på <b style={{ color: C.text }}>1000</b>.
+            {/* A17's ene pris: har du KUN tippet turneringer uden for Championship,
+                har du tippet en færdigspillet runde og står her alligevel ikke.
+                Uden denne sætning er kortet direkte forkert for netop den bruger —
+                og det er dem, der har allermest brug for et svar. */}
+            {unofficial.length > 0 && (
+              <> Kampe i {unofficial.map((l) => l.name).join(", ")} tæller ikke med:
+                de giver point i din konkurrence, men ikke rating.</>
+            )}
           </div>
           {hasCompetitions && openPredictions && (
             <button style={{ ...btnGhost, marginTop: 12 }} onClick={() => openPredictions("all")}>Tip nu</button>

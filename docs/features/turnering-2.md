@@ -138,6 +138,10 @@ To ting fulgte, som er værd at kende, hvis man rører ved det igen:
 
 Verificeret mod PostgreSQL 16.13 med en fixture, hvor én spiller tipper begge turneringer og to kun hver sin: summen af per-turnering-rækker er lig den samlede række (både kampe og point), rundesejre partitioneres pr. niveau, en ikke-officiel turnering påvirker intet, og constraint'en afviser officiel+usynlig.
 
+**Rettet efter leveringen (31. juli 2026):** *"Championship er dermed uændret i dag"* holdt i databasen, men ikke på skærmen. Både turneringsvælgeren og "To niveauer"-forklaringen i `ChampionshipTab.jsx` er gated på **mere end én officiel** turnering — så med præcis én officiel (Superligaen) og én uofficiel (Skotland) viste fanen ingen af delene, og de skotske kampe forsvandt ud af stillingen uden ét ord om hvorfor. Den bruger, der tipper Skotland, ser sine point tælle i konkurrencen og i ratingen, og ikke her. `scopeNote()` (samme fil, unit-testet) navngiver derfor begge sider — *"Championship afgøres af Superligaen. Scotland Premiership kan tippes og giver point i din konkurrence og i din rating, men tæller ikke med her."* — som en synlig linje på runde- og månedskortet, med hvorfor'et i InfoDot'en. Sæson-InfoDot'en siger nu tilsvarende, at den uofficielle turnering ingen sæsonstilling har. Reglen bag: et tal skal navngive sit eget omfang i den sætning, det står i (`DECISIONS.md`, 30. juli 2026). Linjen forsvinder af sig selv, den dag alle synlige turneringer er officielle.
+
+**Rettet igen samme dag (A17):** citatet ovenfor er den **første** udgave af sætningen. Ratingen filtrerer nu også på `is_official`, så sætningen lyder *"…kan tippes og giver point i din konkurrence, men tæller hverken i Championship eller i rating."* Ledsætningen om, at Skotland tælle**de** i ratingen, var netop det, der gjorde reglen svær at forklare — og dermed selv et af argumenterne for A17. Den gamle formulering står som citat frem for at blive slettet, fordi rækkefølgen er pointen: fejlen blev først *synlig*, da den skulle skrives ned i én sætning.
+
 ---
 
 ## 4. Forudsætning
@@ -165,4 +169,11 @@ Verificeret mod PostgreSQL 16.13 med en fixture, hvor én spiller tipper begge t
 
 ---
 
-*Næste skridt (opdateret 31. juli 2026 ved leveringen): ~~Beslut hvilken turnering (Premier League er roadmappens kandidat)~~ → ~~turnering #2 er Scotland Premiership (`501`)~~ → ~~udfør 3.1–3.2 med `is_visible = false`~~ → **§3.2 er leveret; tilbage står §3.1 (kør SQL-scriptet, sync med `&smSeason=`, opret cron-job og skriv det i [`../CRON.md`](../CRON.md)), verifikation af holdmatch og fasenavne, og derefter testcases 2–6.** Turneringen er synlig fra det øjeblik, rækkerne findes — merge derfor koden **først**. Premier League venter på efterspørgsel og €29/md (3.4). A2 er lukket.*
+*Næste skridt (opdateret 31. juli 2026, efter at driften var sat op): ~~Beslut hvilken turnering (Premier League er roadmappens kandidat)~~ → ~~turnering #2 er Scotland Premiership (`501`)~~ → ~~udfør 3.1–3.2 med `is_visible = false`~~ → ~~§3.2 er leveret; tilbage står §3.1~~ → **§3.1 og §3.2 er begge færdige: SQL-scriptet er kørt, og cron-jobbet er oprettet (job #5 i [`../CRON.md`](../CRON.md)). Tilbage står kun **verifikation**, ikke opsætning:*
+
+1. **Hold-dubletter** — den fuzzy holdmatch i `sync-matches` er aldrig afprøvet på skotske klubnavne, og et hold, der oprettes to gange, deler stillingen i to. Dette er acceptkriterie 2 og det mest sandsynlige sted, noget er gået galt.
+2. **Fasenavne** mod `STAGE_LABELS` i `src/lib/scoring.js` — §4 forudsiger `2nd Phase` → "Slutspil"; rammer de fallbacken, står der et råt engelsk navn i brugerfladen.
+3. **Kampantal** mod Sportmonks for sæsonen (acceptkriterie 1) — ingen stille trunkering.
+4. **Testcases 2–6** ovenfor.
+
+*Premier League venter på efterspørgsel og €29/md (3.4). A2 er lukket og afløst (§3.6).*

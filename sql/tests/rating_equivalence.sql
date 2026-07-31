@@ -33,15 +33,31 @@ do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
 end $$;
 
-drop table if exists predictions, matches, rating_history, ratings, profiles cascade;
+drop table if exists predictions, matches, seasons, leagues, rating_history, ratings, profiles cascade;
 create table public.profiles (id uuid primary key, display_name text, is_admin boolean default false);
 
 \ir ../rating_core.sql
+
+-- leagues/seasons er med, fordi recompute_ratings() siden A17 (31. juli 2026)
+-- kun tæller OFFICIELLE turneringer. Kun de kolonner, beregningen rører.
+-- `is_official` har samme default som i produktion (sql/tournament_scope.sql),
+-- så en turnering, der ikke siger andet, tæller med.
+create table public.leagues (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  is_official boolean not null default true
+);
+create table public.seasons (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references public.leagues(id) on delete cascade,
+  name text
+);
 
 -- matches.round_key er en GENERERET kolonne i produktion og skal være det her
 -- også — ellers tester vi ikke den rigtige rundeinddeling.
 create table public.matches (
   id uuid primary key default gen_random_uuid(),
+  season_id uuid not null references public.seasons(id) on delete cascade,
   kickoff_at timestamptz not null,
   round_key date generated always as (public.round_key(kickoff_at)) stored,
   home_score int,
@@ -67,8 +83,15 @@ insert into profiles(id, display_name)
 select ('00000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid, 'Spiller ' || g
 from generate_series(1, 31) g;
 
-insert into matches(kickoff_at, home_score, away_score)
-select timestamptz '2025-08-05 18:00+00' + (r * interval '7 days') + (m * interval '3 hours'),
+-- Én officiel turnering med én sæson — fixturen for selve ækvivalensen.
+insert into leagues(id, name, is_official)
+values ('11111111-1111-1111-1111-111111111111', 'Superligaen (test)', true);
+insert into seasons(id, league_id, name)
+values ('11111111-1111-1111-1111-111111111112', '11111111-1111-1111-1111-111111111111', '2025/2026');
+
+insert into matches(season_id, kickoff_at, home_score, away_score)
+select '11111111-1111-1111-1111-111111111112',
+       timestamptz '2025-08-05 18:00+00' + (r * interval '7 days') + (m * interval '3 hours'),
        (random() * 4)::int,
        (random() * 4)::int
 from generate_series(0, 37) r, generate_series(1, 10) m;
@@ -172,4 +195,84 @@ begin
     raise exception 'FEJL: samlet rating er % , forventet % — systemet er ikke nulsum', total, forventet;
   end if;
   raise notice 'OK: samlet rating er % som forventet (afvigelse %).', round(total), to_char(abs(total-forventet), '9D999999EEEE');
+end $$;
+
+-- ---------- A17: en uofficiel turnering må ikke flytte noget ----------
+-- Denne sektion findes, fordi referencen ikke længere kan bevise filteret: den
+-- fik det selv den 31. juli 2026, så de to sider ville være enige om at ignorere
+-- en uofficiel turnering, uanset om filteret virkede. Beviset skal derfor være
+-- en tilstandsændring: gem ratings, tilføj en uofficiel turnering, genberegn, og
+-- kræv at INTET har rykket sig.
+create temp table foer_r as select * from ratings;
+create temp table foer_h as select * from rating_history;
+
+insert into leagues(id, name, is_official)
+values ('22222222-2222-2222-2222-222222222221', 'Uofficiel turnering (test)', false);
+insert into seasons(id, league_id, name)
+values ('22222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222221', '2025/2026');
+
+-- Kampene lægges i EKSISTERENDE round_keys (en time efter en officiel kamp), så
+-- de ville blande sig i runder, der allerede har et ratingskridt. Det er den
+-- farligste form for forurening — en helt ny runde ville være lettere at opdage.
+insert into matches(season_id, kickoff_at, home_score, away_score)
+select '22222222-2222-2222-2222-222222222222', m.kickoff_at + interval '1 hour', 2, 1
+from matches m
+where m.season_id = '11111111-1111-1111-1111-111111111112'
+  and m.home_score is not null
+order by m.kickoff_at
+limit 40;
+
+-- Kun HALVDELEN af spillerne tipper dem, og de rammer alle præcist. Talte
+-- kampene med, ville de 15 få et gennemsnit, ingen af de øvrige kunne matche,
+-- og hver eneste runde ville se anderledes ud. Et perfekt tip fra ALLE ville
+-- derimod løfte feltet ensartet, og Elo er relativ — så det ville bevise mindre.
+-- Spiller 31 har ingen andre tips: efter A17 skal vedkommende stadig stå UDEN
+-- rating, selvom de nu tipper aktivt. Det er det dokumenterede vilkår.
+insert into predictions(user_id, match_id, pred_home, pred_away)
+select p.id, m.id, 2, 1
+from profiles p cross join matches m
+where m.season_id = '22222222-2222-2222-2222-222222222222'
+  and p.id in (
+    select ('00000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid from generate_series(1, 15) g
+    union all select '00000000-0000-0000-0000-000000000031'::uuid
+  );
+
+analyze;
+select public.recompute_ratings();
+
+do $$
+declare n_now int; n_foer int; n_diff int; n_hist_diff int; n_uoff int;
+begin
+  select count(*) into n_now from ratings;
+  select count(*) into n_foer from foer_r;
+  if n_now <> n_foer then
+    raise exception 'FEJL: antallet af rating-rækker gik fra % til % — en uofficiel turnering slap ind', n_foer, n_now;
+  end if;
+
+  select count(*) into n_diff
+  from ratings r full join foer_r f using (user_id, scope)
+  where r.rating is distinct from f.rating
+     or r.rounds_played is distinct from f.rounds_played
+     or r.provisional is distinct from f.provisional;
+  if n_diff > 0 then
+    raise exception 'FEJL: % rating-rækker flyttede sig, da en uofficiel turnering blev tilføjet', n_diff;
+  end if;
+
+  select count(*) into n_hist_diff
+  from rating_history h full join foer_h g using (user_id, scope, round_key)
+  where h.rating_after is distinct from g.rating_after
+     or h.delta is distinct from g.delta
+     or h.rnk is distinct from g.rnk
+     or h.matches_predicted is distinct from g.matches_predicted;
+  if n_hist_diff > 0 then
+    raise exception 'FEJL: % historik-rækker flyttede sig', n_hist_diff;
+  end if;
+
+  if exists (select 1 from ratings where user_id = '00000000-0000-0000-0000-000000000031') then
+    raise exception 'FEJL: en spiller, der KUN tipper en uofficiel turnering, fik en rating';
+  end if;
+
+  select count(*) into n_uoff from predictions p join matches m on m.id = p.match_id
+  where m.season_id = '22222222-2222-2222-2222-222222222222';
+  raise notice 'OK: % præcise tips i en uofficiel turnering flyttede hverken rating eller historik, og spilleren, der kun tipper den, har ingen rating (A17).', n_uoff;
 end $$;
