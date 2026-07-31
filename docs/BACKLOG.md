@@ -34,20 +34,6 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- `sql/rating_core.sql`s hoved siger, at funktionskroppene indeholder CRLF og ikke må normaliseres — filen har nul CR-tegn i dag, så enten er advarslen forældet eller også blev de normaliseret ubemærket
-- Mulighed for at kåre Runde og månedsvinder i lokale konkurrencer. Skal kunne tilvælges.
-- Konkurrence opbygning ved flere ligaer:
-|-----------------|------------------|
-| **Sæson** | Klassiske ligaer, der følger én eller flere turneringer hele sæsonen. |
-| **Favorithold** | Brugere, der kun vil tippe på udvalgte klubber på tværs af ligaer. |
-| **Weekly Mix** | En ugentlig, automatisk sammensat konkurrence med de mest interessante kampe ud fra valgte ligaer og regler. |
-| **Custom** | Administratorer, der vil definere præcis periode, turneringer, hold og regler. |
-| **Quick League** | En færdig konkurrence på få sekunder med 8 tilfældige kampe til de næste 6 spillerunder. |
-| **Quick Pick** | En færdig konkurrence på få sekunder med 8 tilfældige kampe til næste spillerunde. |
-- Notifikation når en ny turnering bliver tilgængelig.
-- `docs/CRON.md` modsiger sig selv om kadencen: jobtabellen siger hver 12. time, overvågningstabellen hver 6. time med alarm efter 14 timer — grænsen er strammere end skemaet, og de fem nye football-data-jobs kører også 12-timers, så tallet skal rettes samlet tre steder (CRON.md, `job-heartbeat.yml`, `JOBS` i `src/lib/ops.js`)
-- der findes ingen unique-constraint på `teams.api_team_id`, `seasons.api_season_id` eller `leagues.api_league_id` — med to leverandører er det nu id-præfikset alene, der holder dem fra hinanden
-
 ---
 
 ## Åbne beslutninger
@@ -74,6 +60,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | B4 | **Privatlivspolitik og brugervilkår** | Kræves før en offentlig lancering/deling af appen; ingen af delene findes i dag. Hvad de derudover skal dække (cookies, tredjeparts-tjenester som Sportmonks/Supabase, evt. databehandleraftaler) er ikke afklaret og bør afklares som en del af opgaven. | Mellem |
 | B5 | **Notifikation til ligamedlemmer, når der oprettes en ny konkurrence i deres liga** | Medlemmer opdager i dag kun en ny konkurrence ved selv at åbne ligaen. Naturlig udvidelse af push-notifikationerne (§16, `api/send-notifications.js`), som allerede har mønsteret for målrettede notifikationer. | Lille–mellem |
 | B6 | **Fjern default-navn ved oprettelse af en konkurrence** | `CreateCompetitionScreen.jsx` foreslår i dag et navn, som de fleste nok bare beholder frem for at sætte noget mere sigende. Lille, isoleret UI-rettelse. | Lille |
+| B9 | **Notifikation når en ny turnering bliver tilgængelig** | Naturlig udvidelse af push-notifikationerne (§16, `api/send-notifications.js`), som allerede har mønsteret for målrettede notifikationer — samme skuffe som `B5`, men trigger er en ny turnering frem for en ny konkurrence. | Lille–mellem |
 
 ## Teknisk gæld
 
@@ -83,6 +70,9 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | G2 | **26 ESLint-advarsler fra React Compiler** (`static-components`, `set-state-in-effect`, `purity`, `immutability`). | Står som advarsel frem for fejl, fordi hvert fund kræver en gennemtænkt omskrivning, ikke en rettelse. Loftet i `package.json` (`--max-warnings 26`) gør, at tallet kan falde, men aldrig vokse ubemærket — gælden er synlig i stedet for tavs. **Falder tallet, sænkes loftet i samme ombæring.** | Mellem |
 | G3 | **Frontenden læser stadig `rules`-feltet.** | `rules` er historisk: `pc_points()` hardkoder 3/1 og ignorerer det, og alle opgørelser er altid 3-1-0 (F2, juli 2026). Læsningen er død kode, der antyder en konfigurerbarhed, som ikke findes. Noteret som "separat oprydning" i [`features/karriereprofil-v1.md`](./features/karriereprofil-v1.md) §7 og aldrig planlagt siden. | Lille |
 | G4 | **Preview og produktion deler database**, medmindre staging-variablerne er sat (`DOCUMENTATION.md` §9). | Selve staging-projektet skal oprettes manuelt i Supabase; indtil det sker, kan en preview-deploy skrive i produktionsdata. Vilkåret er dokumenteret, men det er en risiko, ikke en beslutning. | Lille |
+| G5 | **`sql/rating_core.sql`s hoved advarer mod noget, filen ikke gør.** Kommentaren siger, at funktionskroppene indeholder CRLF og "MED VILJE" ikke må normaliseres (linje 26-30) — filen har i dag nul CR-tegn. | Enten er advarslen forældet (kroppene blev normaliseret ubemærket, uden at kommentaren blev rettet), eller også ligger CRLF kun i `prosrc` i selve databasen og forsvinder ved eksport/checkout — i så fald er advarslen korrekt for produktion, men vildledende for enhver, der læser filen i repoet. Skal afklares mod en frisk `sql/schema.sql`-eksport, før nogen stoler på hverken advarslen eller fraværet af den. | Lille |
+| G6 | **`docs/CRON.md` modsiger sig selv om kadencen.** Jobtabellen (job 1, 5-10) siger "hver 12. time", mens overvågningstabellen, `job-heartbeat.yml` og `JOBS` i `src/lib/ops.js` alle siger "hver 6. time" med alarm efter 14 timer. | Alarmgrænsen er strammere end det skema, den skal overvåge — og de fem nye football-data-jobs er også lagt ind som 12-timers, så samme fejl er nu gentaget seks steder. Uden rettelse er det uklart, om jobtabellen eller overvågningen lyver, når driftsloggen skal læses. | Lille |
+| G7 | **Ingen unique-constraint på `teams.api_team_id`, `seasons.api_season_id` eller `leagues.api_league_id`.** | Med to leverandører (Sportmonks og football-data.org, `A18`) er det i dag id-præfikset (`fd:`) alene, der holder deres id-rum fra hinanden — ikke databasen. En fremtidig fejl i sync-koden, der glemmer præfikset, ville kunne skrive et kollideret id uden at Postgres protesterer. | Lille |
 
 ## Ideer
 
@@ -103,6 +93,8 @@ idé bliver til en `B`- eller `A`-række, når den er værd at tage stilling til
 | I10 | **Domæne og professionel e-mail** | Forudsætning for troværdighed udadtil (hjemmeside, invitationer, kontakt) — hænger sammen med `I8`. | Afhænger af I8 |
 | I11 | **LinkedIn-side**, hvis der satses på indtægt via virksomheder | Betinget af en B2B-retning, der ikke er besluttet endnu. | Betinget af B2B-retning |
 | I12 | **Offentlig side pr. liga** (fx `predictionhub.app/league/padel-legends`: antal sæsoner, medlemmer, mestre, statistik — ikke tips, kun historik) | Bygger videre på liga-laget (§18) som en delbar, offentlig facade for hver liga. Kræver stillingtagen til, hvad der må vises uden login. | Ny |
+| I13 | **Runde- og månedsvinder i lokale konkurrencer, som en tilvælgbar mulighed** | Rundeliga og månedsliga findes i dag kun som globale, virtuelle konkurrencer på tværs af alt (`DOCUMENTATION.md` §5) — ikke som noget en enkelt konkurrence selv kan kåre. Ville kræve stillingtagen til, om det er en ny "virtuel" visning pr. konkurrence eller en rigtig kåring gemt et sted, og hvordan den forholder sig til de globale titler. | Ny |
+| I14 | **Flere konkurrence-opbygningsflows ved siden af de eksisterende modes** — Sæson, Favorithold (kun udvalgte klubber på tværs af ligaer), Weekly Mix (automatisk ugentlig sammensætning), Custom (admin definerer periode/turneringer/hold/regler selv), Quick League (8 tilfældige kampe, 6 runder frem), Quick Pick (8 tilfældige kampe, næste runde) | De nuværende modes (§3: `full_season`, `team`, `time_range`, `custom`, `random`) dækker allerede noget af dette — `random` ligner Quick League/Quick Pick i småt format, og `custom` ligner den skitserede Custom-mode. Uklart om dette er nye modes eller blot navngivne forudindstillinger af de eksisterende. | Ny |
 
 ## Forkastede ideer
 
