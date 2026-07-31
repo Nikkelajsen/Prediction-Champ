@@ -260,7 +260,19 @@ VIGTIGT: Uden disse variabler peger ALLE miljøer på SAMME Supabase-projekt —
 Find ligaens Sportmonks-id — og verificér, at den er i abonnementets plan. `GET /v3/football/leagues?api_token=…` returnerer netop planens turneringer; en turnering uden for den er ikke bare "ikke synlig", syncen fejler.
 Slå sæsonens navn op: `GET /v3/football/leagues/<id>?include=seasons`. Navnet skal matche nøjagtigt i næste trin.
 Indsæt en ny række i `leagues` (+ `api_league_id`, `is_visible`) og en sæson-række i `seasons`. **Sæt `api_season_id` med det samme** (id'et står som "Current Season ID" på Sportmonks' ligaside): så er første sync et almindeligt kald, og Admin-knappen "Hent nu" virker fra første klik. Skabelon: `sql/tournament_scotland_premiership.sql`.
-Kald sync-funktionen: `/api/sync-matches?leagueId=<uuid>` (`&dryRun=true` først). Den opretter selv holdene. Er `api_season_id` IKKE sat, skal første kald i stedet have `&smSeason=<sæsonnavn>` — navnet skal matche Sportmonks nøjagtigt, id'et slås så op og gemmes. Admin-knappen sender ikke `&smSeason=`, så netop dét kald skal ske via URL.
+Kald sync-funktionen: `/api/sync-matches?leagueId=<uuid>` (`&dryRun=true` først). **`leagueId` er vores egen `leagues.id`-uuid — ikke Sportmonks' id**, som står i `api_league_id`. Den opretter selv holdene. Er `api_season_id` IKKE sat, skal første kald i stedet have `&smSeason=<sæsonnavn>` — navnet skal matche Sportmonks nøjagtigt, id'et slås så op og gemmes. Admin-knappen sender ikke `&smSeason=`, så netop dét kald skal ske via URL.
+**Kaldet SKAL autoriseres, og det kan en adresselinje ikke.** `isAuthorized()` (`api/_shared.js`) kræver enten sync-hemmeligheden eller et admin-login som `Authorization: Bearer <supabase-JWT>`. Appens session ligger i `localStorage` og ikke i en cookie, så det hjælper ikke at være logget ind i browseren — en almindelig navigation sender ingen af delene og får `{"error":"Ikke autoriseret"}` (401). Brug én af disse:
+```bash
+# 1) headeren (renest — samme vej som cron-jobbene)
+curl -s -H "x-sync-secret: $SYNC_SECRET" "https://<app>/api/sync-matches?leagueId=<uuid>&dryRun=true"
+```
+```js
+// 2) devtools-konsollen i appen, logget ind som admin
+const s = JSON.parse(localStorage.getItem("pc_session"));
+fetch("/api/sync-matches?leagueId=<uuid>&dryRun=true", { headers: { Authorization: `Bearer ${s.access_token}` } })
+  .then((r) => r.json()).then(console.log);
+```
+`?secret=<SYNC_SECRET>` i adresselinjen virker også, men **undgå det til manuelle kald**: hemmeligheden havner i browserhistorik og request-logs, og kaldet udløser `[A11]`-advarslen i Vercels logs — netop det signal, hvis fravær `A11` venter på for at kunne fjerne fallbacken (`docs/CRON.md`).
 Kontrollér `teams` for den nye liga bagefter: holdmatchen er fuzzy på normaliserede navne (inden for ligaen), så dubletter skal fanges her.
 Opret et ekstra cron-job til automatisk opdatering — og skriv det i `docs/CRON.md` i samme ombæring.
 Er turneringen synlig, indgår dens kampe straks i rundeligaen og i konkurrence-oprettelsen. Vil du forberede den i ro, så sæt `is_visible = false` og tænd den, når den er verificeret.
