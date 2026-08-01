@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { JOBS, mergeJobHealth, STATE_LABEL, fmtSince } from "./ops.js";
+import { JOBS, mergeJobHealth, summarizeOutbox, STATE_LABEL, fmtSince } from "./ops.js";
 
 const NU = new Date("2026-08-01T12:00:00Z").getTime();
 const forSiden = (ms) => new Date(NU - ms).toISOString();
@@ -123,5 +123,65 @@ describe("fmtSince", () => {
   it("viser en tankestreg, når der intet er at vise", () => {
     expect(fmtSince(null)).toBe("—");
     expect(fmtSince(undefined)).toBe("—");
+  });
+});
+
+// Grupperingen er det eneste i forhåndsvisningen, der ikke er ren visning:
+// outboxen er (besked × bruger), så uden den er en runde med 18 tippere 18
+// næsten ens rækker — og modtagerantallet, som selv var det forkerte tal i
+// G51, ville aldrig blive vist som et tal.
+describe("summarizeOutbox", () => {
+  const besked = (key, userId, over = {}) => ({
+    key,
+    userId,
+    title: "Runden er slut ⚽",
+    body: "Runden 28.07 – 03.08: du fik 1 point og blev nr. 2 af 18.",
+    ...over,
+  });
+
+  it("samler den samme besked til flere brugere til én række med et antal", () => {
+    const ud = summarizeOutbox([
+      besked("result:2026-07-28", "u1"),
+      besked("result:2026-07-28", "u2"),
+      besked("result:2026-07-28", "u3"),
+    ]);
+    expect(ud).toHaveLength(1);
+    expect(ud[0].recipients).toBe(3);
+    expect(ud[0].key).toBe("result:2026-07-28");
+  });
+
+  it("holder forskellige nøgler adskilt og oversætter typen", () => {
+    const ud = summarizeOutbox([
+      besked("result:2026-07-28", "u1"),
+      besked("deadline:2026-08-01", "u1", { title: "Kampe låser snart ⏰" }),
+      besked("newcomp:abc", "u2", { title: "Ny konkurrence i Test 🎯" }),
+    ]);
+    expect(ud.map((r) => r.kindLabel)).toEqual([
+      "Runde-resultat",
+      "Deadline-påmindelse",
+      "Ny konkurrence",
+    ]);
+    expect(ud.every((r) => r.recipients === 1)).toBe(true);
+  });
+
+  // En ny beskedtype skal kunne SES her, før nogen husker at opdatere
+  // KIND_LABEL. Skjulte vi den ukendte, ville forhåndsvisningen lyve om,
+  // hvad der venter — og det er præcis den slags tavshed, kortet findes for.
+  it("viser en ukendt beskedtype med sit præfiks frem for at skjule den", () => {
+    const ud = summarizeOutbox([besked("streak:2026-08-01", "u1")]);
+    expect(ud).toHaveLength(1);
+    expect(ud[0].kindLabel).toBe("streak");
+  });
+
+  it("tåler en tom eller manglende liste", () => {
+    expect(summarizeOutbox([])).toEqual([]);
+    expect(summarizeOutbox(undefined)).toEqual([]);
+    expect(summarizeOutbox(null)).toEqual([]);
+  });
+
+  it("bevarer titel og tekst, så rækken kan læses som beskeden", () => {
+    const ud = summarizeOutbox([besked("result:2026-07-28", "u1")]);
+    expect(ud[0].title).toBe("Runden er slut ⚽");
+    expect(ud[0].body).toContain("nr. 2 af 18");
   });
 });

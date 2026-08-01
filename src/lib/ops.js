@@ -30,6 +30,63 @@ const JOBS = [
 const loadJobHealth = (token) =>
   restFetch(`/rest/v1/rpc/admin_job_health`, { method: "POST", token, body: {} });
 
+// Forhåndsvisning af, hvad notifikations-jobbet ville sende lige nu.
+//
+// Adgangen er admin-brugerens eget token — `isAuthorized()` i api/_shared.js
+// accepterer et admin-JWT ved siden af cron-hemmeligheden, og det er samme vej
+// som "Hent nu" i Admin → Kampe. Det er hele grunden til, at knappen hører
+// hjemme her: SYNC_SECRET findes kun i Vercels miljøvariabler, så uden denne
+// vej kræver en forhåndsvisning, at man henter hemmeligheden og kalder
+// endpointet i hånden. Access-tokenen ligger i appens hukommelse og ikke i
+// localStorage (App.jsx gemmer kun refresh_token), så konsollen er heller ikke
+// en genvej.
+//
+// Plain `fetch` og ikke `restFetch`: endpointet er appens eget, ikke Supabases.
+// Kaldet sender intet, reserverer intet i notification_log og skriver ingen
+// række i job_runs — se api/send-notifications.js.
+async function previewNotifications(token) {
+  const res = await fetch(`/api/send-notifications?dryRun=true`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Forhåndsvisningen fejlede (${res.status})`);
+  return data;
+}
+
+const KIND_LABEL = {
+  deadline: "Deadline-påmindelse",
+  result: "Runde-resultat",
+  newcomp: "Ny konkurrence",
+};
+
+// Outboxen er (besked × bruger), så en runde med 18 tippere er 18 næsten ens
+// rækker. Grupperingen pr. nøgle er derfor ikke pynt: den gør listen læselig,
+// og antallet af modtagere er selv det interessante tal — det var præcis dét,
+// der var forkert, da G51 meldte en igangværende runde færdig ("nr. 2 af 18").
+//
+// Beskedtypen udledes af nøglens præfiks (`result:`, `deadline:`, `newcomp:`),
+// fordi wouldSend ikke bærer `kind` med — endpointet returnerer bevidst kun de
+// fire felter, et menneske skal læse. En ukendt type vises med sit præfiks
+// frem for at blive skjult: en ny beskedtype skal kunne ses her, før nogen
+// husker at opdatere denne fil.
+function summarizeOutbox(wouldSend) {
+  const byKey = new Map();
+  for (const m of wouldSend || []) {
+    const kind = String(m.key ?? "").split(":")[0];
+    const found = byKey.get(m.key);
+    if (found) { found.recipients++; continue; }
+    byKey.set(m.key, {
+      key: m.key,
+      kind,
+      kindLabel: KIND_LABEL[kind] || kind || "Ukendt type",
+      title: m.title,
+      body: m.body,
+      recipients: 1,
+    });
+  }
+  return [...byKey.values()];
+}
+
 // Fletter det forventede (JOBS) med det målte (rækker fra admin_job_health).
 //
 // Fletningen går ud fra JOBS og ikke fra rækkerne, og det er hele pointen: et
@@ -89,4 +146,12 @@ function fmtSince(ms) {
   return `${Math.floor(t / 24)} d siden`;
 }
 
-export { JOBS, loadJobHealth, mergeJobHealth, STATE_LABEL, fmtSince };
+export {
+  JOBS,
+  loadJobHealth,
+  mergeJobHealth,
+  previewNotifications,
+  summarizeOutbox,
+  STATE_LABEL,
+  fmtSince,
+};
