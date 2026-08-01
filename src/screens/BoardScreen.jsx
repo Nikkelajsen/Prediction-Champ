@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Trophy, Copy, Check, ClipboardList } from "lucide-react";
 import { lockedRoundsOf, roundLabel } from "../lib/scoring.js";
 import { computeCompetitionState, loadRatingMap, ensureCompetitionAwards, loadCompetitionAwards, monthName } from "../lib/data.js";
+import { isAborted } from "../lib/supabase.js";
 import { logEvent } from "../lib/analytics.js";
 import { C, btnGhost, btnGold, font, muted, thStyle } from "../ui/theme.js";
 import { BackBar, Card, EmptyCompetitions, PlayerName, UserRoundPredictions } from "../ui/components.jsx";
@@ -57,13 +58,18 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
   useEffect(() => {
     if (!selectedCompId || !comp) return;
     let cancelled = false;
+    // Selve kaldene annulleres, ikke kun deres resultat (G25). `cancelled`-
+    // guarden alene forhindrer, at et sent svar lander i state — men kæden på
+    // seks opslag løb færdig alligevel, og skiftede man hurtigt mellem
+    // konkurrencer, kørte flere kæder oven i hinanden mod den samme forbindelse.
+    const ctrl = new AbortController();
     (async () => {
       setLoading(true);
       setLoadError("");
       setShowAllRounds(false);
       const rules = comp.rules || { exact: 3, outcome: 1 };
       try {
-        const result = await computeCompetitionState(token, selectedCompId, rules);
+        const result = await computeCompetitionState(token, selectedCompId, rules, { signal: ctrl.signal });
         try {
           const ratingMap = await loadRatingMap(token);
           result.rows.forEach((row) => {
@@ -72,13 +78,17 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
           });
         } catch { /* ratings optional */ }
         if (!cancelled) setState(result);
-      } catch {
-        if (!cancelled) { setState(null); setLoadError("Kunne ikke hente stillingen lige nu."); }
+      } catch (e) {
+        // En afbrudt indlæsning er ikke en fejl, brugeren skal se: de bad selv
+        // om at komme videre. Uden dette skel ville hvert skift af konkurrence
+        // kunne efterlade "Kunne ikke hente stillingen" på den skærm, man netop
+        // kom TIL — altså en fejltekst om noget, der aldrig gik galt.
+        if (!cancelled && !isAborted(e)) { setState(null); setLoadError("Kunne ikke hente stillingen lige nu."); }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; ctrl.abort(); };
   }, [selectedCompId, comp, reloadKey]); // eslint-disable-line
 
   // Lokale kåringer (I13): trig databasens writer og hent resultatet. Lazy med

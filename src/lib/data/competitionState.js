@@ -7,18 +7,26 @@ import { groupIntoRounds, pointsFor } from "../scoring.js";
 import { assignRanks, avgGoalError, compareStandings, sortStandings } from "../standings.js";
 import { roundRow, without } from "./_shared.js";
 
-// henter deltagere + kampe + forudsigelser for én konkurrence og beregner stilling + status
-async function computeCompetitionState(token, competitionId, rules) {
-  const participants = await db.select(token, "competition_participants", `competition_id=eq.${competitionId}&select=user_id`);
+// Henter deltagere + kampe + forudsigelser for én konkurrence og beregner
+// stilling + status.
+//
+// `signal` er valgfri (G25). Loaderen er SEKS kald efter hinanden, og det er
+// derfor netop den, hvor annullering betyder noget: skifter man konkurrence
+// midtvejs, fortsætter den gamle indlæsning ellers hele vejen igennem — og et
+// sent svar kan overskrive et nyere. Signalet sendes til hvert enkelt kald, så
+// kæden brydes ved det FØRSTE kald efter afbrydelsen frem for at løbe færdig.
+async function computeCompetitionState(token, competitionId, rules, { signal } = {}) {
+  const o = { signal };
+  const participants = await db.select(token, "competition_participants", `competition_id=eq.${competitionId}&select=user_id`, o);
   const userIds = participants.map((p) => p.user_id);
-  const profiles = userIds.length ? await db.select(token, "profiles", `id=in.(${userIds.join(",")})&select=*`) : [];
-  const cms = await db.select(token, "competition_matches", `competition_id=eq.${competitionId}&select=match_id`);
+  const profiles = userIds.length ? await db.select(token, "profiles", `id=in.(${userIds.join(",")})&select=*`, o) : [];
+  const cms = await db.select(token, "competition_matches", `competition_id=eq.${competitionId}&select=match_id`, o);
   const matchIds = cms.map((c) => c.match_id);
-  const ms = matchIds.length ? await db.select(token, "matches", `id=in.(${matchIds.join(",")})&select=*`) : [];
-  const preds = matchIds.length ? await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&select=*`) : [];
+  const ms = matchIds.length ? await db.select(token, "matches", `id=in.(${matchIds.join(",")})&select=*`, o) : [];
+  const preds = matchIds.length ? await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&select=*`, o) : [];
 
   const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]).filter(Boolean))];
-  const teams = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
+  const teams = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`, o) : [];
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   ms.forEach((m) => { m._home = teamName.get(m.home_team_id); m._away = teamName.get(m.away_team_id); });
 

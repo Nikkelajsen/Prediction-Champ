@@ -38,7 +38,10 @@ export default [
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
-      globals: globals.browser,
+      // `__APP_VERSION__` er stemplet ind af vite.config.js ved build (G42) og
+      // findes derfor ikke som en almindelig import. `readonly`: koden må læse
+      // den, aldrig skrive den.
+      globals: { ...globals.browser, __APP_VERSION__: "readonly" },
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
     plugins: { "react-hooks": reactHooks },

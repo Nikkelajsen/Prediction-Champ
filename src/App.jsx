@@ -5,6 +5,7 @@ import { auth, clearSession, db, loadSession, saveSession } from "./lib/supabase
 import { touchActivity } from "./lib/data.js";
 import { logEvent } from "./lib/analytics.js";
 import { disablePush } from "./lib/push.js";
+import { registerServiceWorker } from "./lib/pwa.js";
 import { C, globalCss, wrapOuter } from "./ui/theme.js";
 import { AuthScreen, ResetPasswordScreen } from "./screens/Auth.jsx";
 import MainApp from "./screens/MainApp.jsx";
@@ -56,6 +57,15 @@ export default function App() {
     disablePush(session?.access_token).catch(() => {});
     setSession(null); setProfile(null); clearSession();
   }
+
+  // Service workeren registreres ved OPSTART og ikke først, når nogen slår
+  // notifikationer til (G27). En registreret service worker er en betingelse
+  // for, at browseren overhovedet betragter appen som installerbar — så indtil
+  // nu var installations-prompten låst bag en helt anden beslutning.
+  //
+  // Registreringen cacher intet (se src/lib/pwa.js og public/sw.js) og kan ikke
+  // vælte opstarten: fejler den, mister man push og prompten, ikke appen.
+  useEffect(() => { registerServiceWorker(); }, []);
 
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));

@@ -67,6 +67,14 @@ function HowItWorksScreen({ onBack }) {
       <Section title="Installér som app">
         <InstallGuide />
       </Section>
+      {/* Versionsstemplet (G42). Står nederst på den ene side, enhver bruger
+          kan finde, og er dermed svaret på det spørgsmål, enhver fejlmelding
+          begynder med: HVILKEN version så du? Uden det er "det virkede ikke i
+          går" ikke til at koble til et deploy. `__APP_VERSION__` er commit-SHA'en,
+          stemplet ind af vite.config.js; lokalt står der "dev". */}
+      <p style={{ color: C.muted, fontSize: 11, textAlign: "center", margin: "6px 0 0" }}>
+        Version {__APP_VERSION__}
+      </p>
     </div>
   );
 }

@@ -568,3 +568,28 @@ describe("createRunLogger.setAuth", () => {
     expect(JSON.parse(sb.mock.calls[0][1].body).detail).toEqual({ written: 1 });
   });
 });
+
+// G42: hvilken kode kørte? Uden svaret kan en række i job_runs ikke kobles til
+// et deploy — og netop dét spørgsmål kostede `B8` tre merges, fordi det, der
+// kørte i produktion, var to versioner ældre end `main`, uden at nogen kunne se
+// det. Stemplet er tomt lokalt (ingen VERCEL_GIT_COMMIT_SHA), så testen her
+// pinner den ene invariant, der gælder begge veje.
+describe("createRunLogger — versionsstempel", () => {
+  const mkRes = () => {
+    const res = { statusCode: null, body: null,
+      status(c) { res.statusCode = c; return res; },
+      json(b) { res.body = b; return res; } };
+    return res;
+  };
+
+  it("lader svaret gå uændret videre, når der intet er at tilføje", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    const body = { written: 1 };
+    await createRunLogger(sb, "sync-live").ok(res, body);
+    // Ikke bare "ens" — SAMME objekt. `{...null}` ville ellers gøre et tomt
+    // resumé til `{}`, og de to ser ens ud i driftsloggen uden at være det.
+    expect(res.body).toBe(body);
+    expect(JSON.parse(sb.mock.calls[0][1].body).detail).toEqual({ written: 1 });
+  });
+});
