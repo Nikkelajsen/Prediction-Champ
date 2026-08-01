@@ -139,6 +139,24 @@ const MODE_HINTS = {
 // Ukendt mode vises råt frem for tomt — så en ny mode aldrig forsvinder i UI'et.
 function modeLabel(mode) { return MODE_LABELS[mode] || mode; }
 
+// Kan konkurrencen spænde over mere end én turnering? Låsen er scopet på
+// (season_id, round_key) og forbliver det (A16, afsnit 3), så en blandet
+// konkurrence får én deadline PR. TURNERING i samme viste runde. Opret-skærmen
+// skal sige det, hvor valget træffes — ikke lade det vise sig som et rundehoved,
+// der pludselig siger "Næste lås".
+//
+// Hver mode har sin egen kilde til turneringer, og det er dét, der gør den værd
+// at have som ren funktion: `team` og `time_range` er bundet til én turnering og
+// kan aldrig blande, mens `random` kun kan udtale sig om sin PULJE — trækningen
+// er tilfældig, så teksten siger "kan blande", ikke "blander".
+function mixesTournaments({ mode, fullSeasonLeagueIds = [], randomPoolLeagueIds = [], pickedLeagueIds = [] }) {
+  const many = (ids) => new Set(ids.filter(Boolean)).size > 1;
+  if (mode === "full_season") return many(fullSeasonLeagueIds);
+  if (mode === "random") return many(randomPoolLeagueIds);
+  if (mode === "custom") return many(pickedLeagueIds);
+  return false;
+}
+
 function formatKickoff(iso) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -219,4 +237,4 @@ function liveInfo(m) {
   };
 }
 
-export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockedRoundsOf, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, MODE_HINTS, modeLabel };
+export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockedRoundsOf, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, MODE_HINTS, modeLabel, mixesTournaments };

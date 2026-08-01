@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockedRoundsOf, buildRoundLockMap, roundLockKey, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockedRoundsOf, buildRoundLockMap, roundLockKey, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel, mixesTournaments } from "./scoring.js";
 
 const RULES = { exact: 3, outcome: 1 };
 
@@ -149,6 +149,20 @@ describe("runde-baseret låsning (roundLockKey / buildRoundLockMap / isLocked)",
     expect(isLocked(late, map)).toBe(false);
   });
 
+  // A16 (1. august 2026): låsen er scopet på (season_id, round_key) og forbliver det.
+  // Denne test er invarianten, ikke en detalje: forsøger nogen senere at lade låsen
+  // følge KONKURRENCEN i stedet for turneringen, er det her, det slår fejl.
+  it("to turneringer i samme round_key låser hver for sig", () => {
+    const dk = { season_id: "dk", round_key: "2026-07-13", home_score: null, kickoff_at: "2026-07-15T17:00:00Z" };
+    const sco = { season_id: "sco", round_key: "2026-07-13", home_score: null, kickoff_at: "2026-07-18T17:00:00Z" };
+    const map = buildRoundLockMap([dk, sco]);
+    expect(map.size).toBe(2); // delt round_key må ikke kollapse til én lås-gruppe
+
+    vi.useFakeTimers({ now: new Date("2026-07-15T16:30:00Z") }); // 30 min før DK's første kamp
+    expect(isLocked(dk, map)).toBe(true);
+    expect(isLocked(sco, map)).toBe(false); // den skotske runde er stadig åben at tippe
+  });
+
   it("kampe med resultat er altid låst, og uden map falder den tilbage til per-kamp", () => {
     vi.useFakeTimers({ now: new Date("2026-07-14T12:00:00Z") });
     expect(isLocked({ ...s1r1, home_score: 1, away_score: 0, kickoff_at: "2026-07-20T12:00:00Z" })).toBe(true);
@@ -269,5 +283,36 @@ describe("modeLabel", () => {
   // en ny mode må aldrig blive til en tom celle i UI'et
   it("falder tilbage til den rå værdi for en ukendt mode", () => {
     expect(modeLabel("knockout")).toBe("knockout");
+  });
+});
+
+// A16: en blandet konkurrence får én deadline PR. TURNERING, fordi låsen er scopet
+// på (season_id, round_key). Advarslen på opret-skærmen er det ene sted, brugeren
+// får det at vide, før valget er truffet — derfor testes udløseren, ikke teksten.
+describe("mixesTournaments", () => {
+  it("full_season blander, når mere end én turnering er valgt", () => {
+    expect(mixesTournaments({ mode: "full_season", fullSeasonLeagueIds: ["dk"] })).toBe(false);
+    expect(mixesTournaments({ mode: "full_season", fullSeasonLeagueIds: ["dk", "sco"] })).toBe(true);
+  });
+
+  it("random og custom ser på hver sin kilde og påvirker ikke hinanden", () => {
+    const both = { randomPoolLeagueIds: ["dk", "sco"], pickedLeagueIds: ["dk", "eng"] };
+    expect(mixesTournaments({ mode: "random", ...both })).toBe(true);
+    expect(mixesTournaments({ mode: "custom", ...both })).toBe(true);
+    // custom-udvalget er blandet, men random-puljen er det ikke — kun random spørges
+    expect(mixesTournaments({ mode: "random", randomPoolLeagueIds: ["dk", "dk"], pickedLeagueIds: ["dk", "eng"] })).toBe(false);
+  });
+
+  it("team og time_range blander aldrig — de er bundet til én turnering", () => {
+    const noisy = { fullSeasonLeagueIds: ["dk", "sco"], randomPoolLeagueIds: ["dk", "sco"], pickedLeagueIds: ["dk", "sco"] };
+    expect(mixesTournaments({ mode: "team", ...noisy })).toBe(false);
+    expect(mixesTournaments({ mode: "time_range", ...noisy })).toBe(false);
+  });
+
+  it("tomme og ufuldstændige lister giver falsk frem for at advare i blinde", () => {
+    expect(mixesTournaments({ mode: "full_season" })).toBe(false);
+    expect(mixesTournaments({ mode: "random", randomPoolLeagueIds: [] })).toBe(false);
+    // en kamp uden kendt liga (opslaget nåede ikke med) må ikke tælle som turnering nr. 2
+    expect(mixesTournaments({ mode: "custom", pickedLeagueIds: ["dk", undefined, null] })).toBe(false);
   });
 });

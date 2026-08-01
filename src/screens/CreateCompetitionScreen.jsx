@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { db } from "../lib/supabase.js";
 import { loadMyGroups, createCompetition } from "../lib/data.js";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { formatKickoff, groupIntoRounds, MODE_LABELS, MODE_HINTS } from "../lib/scoring.js";
+import { formatKickoff, groupIntoRounds, mixesTournaments, MODE_LABELS, MODE_HINTS } from "../lib/scoring.js";
 import { C, btnGhost, btnGreen, chip, muted } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
 
@@ -195,6 +195,17 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     return pool.filter((m) => m.round_key === firstRound);
   }, [upcoming, randomLeagueIds, leagues]);
 
+  // Blander konkurrencen flere turneringer? Reglen bor i scoring.js (A16, afsnit 3);
+  // her mappes kun skærmens egen state til turnerings-id'er pr. mode. `full_season`
+  // filtreres som i buildSpec(), så advarslen taler om de turneringer, der faktisk
+  // ender i konkurrencen — ikke om en tom chip, der er valgt uden at kunne bruges.
+  const mixed = useMemo(() => mixesTournaments({
+    mode,
+    fullSeasonLeagueIds: fsLeagueIds.filter((id) => seasonByLeague[id] && countByLeague[id] !== 0),
+    randomPoolLeagueIds: randomPool.map((m) => m._leagueId),
+    pickedLeagueIds: upcoming.filter((m) => pickedIds.includes(m.id)).map((m) => m._leagueId),
+  }), [mode, fsLeagueIds, seasonByLeague, countByLeague, randomPool, upcoming, pickedIds]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <BackBar title="Opret konkurrence" onBack={onBack} />
@@ -367,6 +378,17 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
             Rullende gætte-vindue — runden kan først tippes 7 dage før rundens første kamp
           </label>
           </>)}
+
+          {/* Uden for `advanced`: turneringsvælgeren til `full_season` ligger i hurtig-stien,
+              så advarslen ville være skjult for netop det almindelige tilfælde, hvis den lå
+              bag "Flere valg". Her står den lige over knappen og gælder alle modes. */}
+          {mixed && (
+            <p style={{ ...muted, margin: 0 }}>
+              Konkurrencen kan blande flere turneringer. Hver turnering låser for sig — én time
+              før sin egen første kamp — så en runde kan have flere deadlines, og alles gæt
+              bliver synligt turnering for turnering.
+            </p>
+          )}
 
           {err && <p style={{ color: C.red, fontSize: 13, margin: 0 }}>{err}</p>}
           <button style={{ ...btnGreen, opacity: busy || !name ? 0.5 : 1 }} onClick={submit} disabled={busy || !name}>
