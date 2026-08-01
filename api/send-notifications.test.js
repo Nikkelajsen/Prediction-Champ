@@ -8,8 +8,11 @@
 // Plus modtager-reglen for "ny konkurrence i din liga" (B5), som er den eneste
 // notifikation, hvor et forkert modtagerfelt er *synligt* forkert: den beder om
 // en handling, og en besked til en, der allerede deltager, er en selvmodsigelse.
+//
+// Plus sendevinduet (A24). Det er den ene regel her, der er umulig at afprøve i
+// drift: fejler den, opdages det ved, at nogen bliver vækket kl. 03.
 import { describe, it, expect } from "vitest";
-import { finishedRoundKeys, officialSeasonIds, newCompetitionMessages } from "./send-notifications.js";
+import { finishedRoundKeys, officialSeasonIds, newCompetitionMessages, hourInZone, withinSendWindow } from "./send-notifications.js";
 
 const kamp = (round_key, home_score, away_score) => ({ id: `${round_key}-${home_score}-${away_score}`, round_key, home_score, away_score });
 
@@ -167,5 +170,64 @@ describe("newCompetitionMessages", () => {
 
   it("giver ingen beskeder, når intet er oprettet", () => {
     expect(newCompetitionMessages({ competitions: [], groups: [], members: [], participants: [], creators: [] }, alle)).toEqual([]);
+  });
+});
+
+// Sendevinduet (A24). Testene bruger UTC-tidsstempler og lader funktionen om at
+// oversætte — det er præcis den oversættelse, der er let at tage fejl af, og som
+// en test med lokale datoer ville skjule ved at være grøn i én tidszone.
+describe("hourInZone", () => {
+  // Sommertid: Danmark er UTC+2. 21:00 UTC er 23:00 dansk — altså om natten,
+  // selvom serverens eget klokkeslæt ligger inde i vinduet.
+  it("oversætter til dansk sommertid (UTC+2)", () => {
+    expect(hourInZone(new Date("2026-08-01T21:00:00Z"))).toBe(23);
+    expect(hourInZone(new Date("2026-08-01T06:00:00Z"))).toBe(8);
+  });
+
+  // Vintertid: UTC+1. Samme UTC-klokkeslæt giver et andet dansk — grunden til,
+  // at grænsen ikke må hårdkodes i UTC.
+  it("oversætter til dansk vintertid (UTC+1)", () => {
+    expect(hourInZone(new Date("2026-12-01T21:00:00Z"))).toBe(22);
+    expect(hourInZone(new Date("2026-12-01T07:00:00Z"))).toBe(8);
+  });
+
+  // h23-hjørnet: uden hourCycle giver midnat "24" i flere ICU-versioner, og 24
+  // ligger uden for ethvert vindue, man ville skrive i hånden.
+  it("giver 0 ved midnat, ikke 24", () => {
+    expect(hourInZone(new Date("2026-08-01T22:00:00Z"))).toBe(0);
+  });
+});
+
+describe("withinSendWindow", () => {
+  it("sender midt på dagen", () => {
+    expect(withinSendWindow(new Date("2026-08-01T12:00:00Z"))).toBe(true); // 14 dansk
+  });
+
+  it("åbner kl. 08 og lukker kl. 22", () => {
+    expect(withinSendWindow(new Date("2026-08-01T06:00:00Z"))).toBe(true);  // 08:00 — inde
+    expect(withinSendWindow(new Date("2026-08-01T05:59:00Z"))).toBe(false); // 07:59 — ude
+    expect(withinSendWindow(new Date("2026-08-01T19:59:00Z"))).toBe(true);  // 21:59 — inde
+    expect(withinSendWindow(new Date("2026-08-01T20:00:00Z"))).toBe(false); // 22:00 — ude
+  });
+
+  it("tier hele natten", () => {
+    expect(withinSendWindow(new Date("2026-08-01T21:00:00Z"))).toBe(false); // 23 dansk
+    expect(withinSendWindow(new Date("2026-08-01T23:00:00Z"))).toBe(false); // 01 dansk
+    expect(withinSendWindow(new Date("2026-08-02T02:00:00Z"))).toBe(false); // 04 dansk
+  });
+
+  // Sommer/vinter afgør, om 21:00 UTC er inde eller ude. Faldt zonen væk, ville
+  // begge give det samme svar — og det ene af dem ville være forkert et halvt år.
+  it("følger sommertidsskiftet", () => {
+    expect(withinSendWindow(new Date("2026-08-01T21:00:00Z"))).toBe(false); // 23 dansk
+    expect(withinSendWindow(new Date("2026-12-01T20:30:00Z"))).toBe(true);  // 21:30 dansk
+  });
+
+  // Et vindue over midnat må ikke tavst betyde "aldrig" — den fælde er hele
+  // grunden til, at sammenligningen har to grene.
+  it("understøtter et vindue, der krydser midnat", () => {
+    const natten = { start: 22, end: 8 };
+    expect(withinSendWindow(new Date("2026-08-01T21:00:00Z"), natten)).toBe(true);  // 23 dansk
+    expect(withinSendWindow(new Date("2026-08-01T12:00:00Z"), natten)).toBe(false); // 14 dansk
   });
 });

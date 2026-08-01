@@ -18,6 +18,11 @@
 //    Brug ikke den form til nye jobs: hemmeligheden havner i request-logs.)
 //   valgfrit: &hours=3      hvor tæt på en kamps lås deadline-påmindelsen sendes
 //   valgfrit: &dryRun=true  vis hvad der VILLE blive sendt, uden at sende
+//   valgfrit: &force=true   send uden for sendevinduet (kun til fejlfinding)
+//
+// SENDEVINDUE (A24): der sendes kun mellem 08 og 22 dansk tid. Uden for vinduet
+// svarer kørslen 200 uden at sende og uden at reservere noget i notification_log
+// — se withinSendWindow() nedenfor for hvorfor det er hele mekanikken.
 // Offentligt: /api/send-notifications?action=vapidKey  (bruges af frontendens tilmelding)
 //
 // Miljøvariabler der skal være sat i Vercel:
@@ -41,6 +46,36 @@ const LOCK_LEAD_MS = HOUR; // en kamp låser 1 time før sit eget kickoff (A21)
 // Jobbet kører hvert 15.-30. minut (docs/CRON.md), så et døgn er rigelig luft
 // til et cron-udfald og stadig kort nok til, at beskeden er nyhed, når den lander.
 const NEW_COMPETITION_WINDOW_MS = 24 * HOUR;
+
+// ---- Sendevindue (A24) ----
+// Der sendes kun mellem 08:00 og 22:00 dansk tid. En push om natten vækker folk;
+// den er ikke bare irrelevant, den er skadelig for den ene tilladelse, produktet
+// ikke kan få tilbage, hvis brugeren slår notifikationer fra.
+//
+// Tidszonen er FAST og dansk, ikke serverens. Vercel kører UTC, så uden zonen
+// ville vinduet flytte sig en time to gange om året — og det er præcis det, en
+// hårdkodet UTC-grænse ville se rigtig ud til at gøre i vintertid og forkert ud
+// hele sommeren. Brugerne er én vennegruppe i én tidszone (samme forudsætning
+// som resten af appen: `da-DK` overalt, ingen sprogvalg).
+const SEND_WINDOW = { start: 8, end: 22, timeZone: "Europe/Copenhagen" };
+
+// Timetallet i en given tidszone. `hourCycle: "h23"` er ikke pynt: uden den
+// giver hour12:false "24" ved midnat i flere ICU-versioner, og 24 ligger uden
+// for ethvert vindue, man ville skrive i hånden.
+export function hourInZone(date, timeZone = SEND_WINDOW.timeZone) {
+  return Number(
+    new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(date)
+  );
+}
+
+// Må der sendes lige nu? Vinduet er inklusivt i starten og eksklusivt i slutningen
+// (08:00 er inde, 22:00 er ude), og et vindue, der krydser midnat, understøttes —
+// ellers ville `{ start: 22, end: 8 }` tavst betyde "aldrig".
+export function withinSendWindow(date, window = SEND_WINDOW) {
+  const { start, end, timeZone } = { ...SEND_WINDOW, ...window };
+  const h = hourInZone(date, timeZone);
+  return start <= end ? h >= start && h < end : h >= start || h < end;
+}
 
 function roundLabel(key) {
   const start = new Date(key + "T12:00:00");
@@ -197,8 +232,40 @@ export default async function handler(req, res) {
     }
 
     const dryRun = req.query.dryRun === "true";
+    const force = req.query.force === "true";
     const horizonHours = Math.min(24, Math.max(1, Number(req.query.hours) || 3));
     run = createRunLogger(sb, "send-notifications", { skip: dryRun });
+
+    // ---- Sendevindue (A24): ingen push om natten ----
+    // Kørslen stopper HER, før der er læst en eneste besked og længe før
+    // claim-trinnet. Det er ikke en optimering, det er hele mekanikken:
+    //
+    //   * Intet reserveres i notification_log, så intet går tabt. Havde vi i
+    //     stedet bygget beskederne og sprunget afsendelsen over efter claim'et,
+    //     ville de være PERMANENT tabt — claim-rækken forhindrer per design en
+    //     senere kørsel i at prøve igen (se claim-trinnet nedenfor).
+    //   * Der findes ingen kø, og der skal ikke bygges en. Outboxen udregnes
+    //     forfra ved hver kørsel, så en besked, der ikke blev sendt kl. 23, er
+    //     stadig sand kl. 08 og udregnes bare igen — nøglerne `result:<runde>`
+    //     og `newcomp:<id>` er uændrede, så den lander som ÉN besked kl. 08,
+    //     præcis som en udskudt levering ville have gjort. (`newcomp`s
+    //     døgn-vindue er med vilje større end vinduets 10 stille timer.)
+    //
+    // Deadline-påmindelsen opfører sig bevidst ANDERLEDES, og det er den rigtige
+    // forskel: den bliver ikke udskudt, den bortfalder. Kl. 08 udregnes en frisk
+    // påmindelse for det, der låser derefter. En udskudt natte-påmindelse ville
+    // sige "den første låser om 2 timer" om en kamp, der låste for seks timer
+    // siden — en besked, der er blevet usand undervejs, skal ikke leveres.
+    // Prisen: låser en kamp mellem 22 og 11 (vinduets åbning + horisonten),
+    // kommer der ingen påmindelse. Tidlige formiddagskampe er sjældne i de
+    // turneringer, appen dækker, og alternativet er at vække alle andre.
+    if (!dryRun && !force && !withinSendWindow(new Date())) {
+      return run.ok(res, {
+        sent: 0,
+        note: `Uden for sendevinduet (${SEND_WINDOW.start}–${SEND_WINDOW.end} dansk tid). Intet er reserveret; beskederne udregnes forfra og sendes ved første kørsel efter kl. ${SEND_WINDOW.start}.`,
+        window: `${SEND_WINDOW.start}-${SEND_WINDOW.end} ${SEND_WINDOW.timeZone}`,
+      });
+    }
 
     // tilmeldte enheder, grupperet pr. bruger — er ingen tilmeldt, er der intet at gøre
     const subs = await sb(`/rest/v1/push_subscriptions?select=id,user_id,endpoint,p256dh,auth`);
@@ -375,9 +442,16 @@ export default async function handler(req, res) {
     const candidates = outbox.filter((o) => !alreadySent.has(`${o.userId}:${o.key}`));
 
     if (dryRun) {
+      // Forhåndsvisningen ignorerer sendevinduet med vilje — man skal kunne se,
+      // hvad der ligger og venter, netop om aftenen. Men den siger det højt, så
+      // listen ikke læses som "det her afgår om lidt".
+      const iVindue = withinSendWindow(new Date());
       return run.ok(res, {
         dryRun: true,
-        note: "Intet er sendt eller logget — dette er kun en forhåndsvisning.",
+        note: iVindue
+          ? "Intet er sendt eller logget — dette er kun en forhåndsvisning."
+          : `Intet er sendt eller logget — dette er kun en forhåndsvisning. Bemærk: klokken er uden for sendevinduet (${SEND_WINDOW.start}–${SEND_WINDOW.end} dansk tid), så en RIGTIG kørsel ville ikke sende noget nu.`,
+        withinSendWindow: iVindue,
         wouldSend: candidates.map(({ userId, key, title, body }) => ({ userId, key, title, body })),
       });
     }

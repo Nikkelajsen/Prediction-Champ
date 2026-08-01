@@ -22,7 +22,7 @@ som ikke arkiveres andre steder — de får en linje nederst, så den samme idé
 foreslås tre gange.
 
 **ID'erne er stabile og genbruges ikke.** `A#` fortsætter beslutningsserien fra
-ROADMAP (næste ledige: **A24**) — `A11` er fx også navnet på en logadvarsel i
+ROADMAP (næste ledige: **A25**) — `A11` er fx også navnet på en logadvarsel i
 `api/_shared.js`. `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale
 ID'er (`K2`, `F1`) beholder deres eget navn og linker til spec'en.
 
