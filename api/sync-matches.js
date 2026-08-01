@@ -5,7 +5,7 @@
 // Kald med: /api/sync-matches?leagueId=<vores egen liga-uuid>&smSeason=2026/2027
 //
 // DATAKILDEN ER LIGAENS, IKKE KODENS. leagues.provider afgør, hvem der spørges
-// (se api/providers/index.js). Superligaen og Scotland Premiership kommer fra
+// (se api/_providers/index.js). Superligaen og Scotland Premiership kommer fra
 // Sportmonks; Premier League, Champions League, Bundesliga, Serie A og Primera
 // División fra football-data.org. Alt nedenfor — holdmatchning, upsert,
 // job-logning — er fælles og kender ingen leverandørs feltnavne.
@@ -16,8 +16,8 @@
 //   FOOTBALLDATA_TOKEN    (kræves kun af footballdata-ligaer)
 
 import { createSb, isAuthorized, createRunLogger, failJob, syncMatchesJob } from "./_shared.js";
-import { getProvider, providerToken } from "./providers/index.js";
-import { backfillCompetitionMatches } from "./backfill.js";
+import { getProvider, providerToken } from "./_providers/index.js";
+import { backfillCompetitionMatches } from "./_backfill.js";
 
 // Er en fejlet sæsonhentning en fejlet KØRSEL?
 //
@@ -336,7 +336,7 @@ export default async function handler(req, res) {
     // Efterfyld eksisterende konkurrencer med de kampe, der er kommet til siden
     // de blev oprettet (A20). Skal ligge EFTER upserten — det er først dér, de
     // nye kampe har fået et id. Reglerne og hvorfor de er, som de er, står i
-    // api/backfill.js; den kaster aldrig, så en fejl her kan ikke vælte en sync,
+    // api/_backfill.js; den kaster aldrig, så en fejl her kan ikke vælte en sync,
     // der ellers gik godt.
     const backfill = dryRun ? { added: 0, competitions: 0 } : await backfillCompetitionMatches(sb, seasonId);
 

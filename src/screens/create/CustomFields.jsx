@@ -2,7 +2,7 @@
 // tag alt i en periode. Perioden er den gamle `time_range`-mode; den bor her,
 // fordi begge er "du bestemmer selv"-svar, og et syvende gallerikort ikke
 // ville bære sin egen vægt. Mode-værdien i databasen er uændret, så
-// efterfyldningen (api/backfill.js) stadig kan lade periodens regel vokse.
+// efterfyldningen (api/_backfill.js) stadig kan lade periodens regel vokse.
 import { C, chip, muted } from "../../ui/theme.js";
 import { formatKickoff } from "../../lib/scoring.js";
 import LeagueChips from "./LeagueChips.jsx";

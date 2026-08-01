@@ -1,4 +1,4 @@
-// Tests for api/providers/index.js — registret over datakilder.
+// Tests for api/_providers/index.js — registret over datakilder.
 import { describe, it, expect } from "vitest";
 import { getProvider, providerToken, indexSeasons, DEFAULT_PROVIDER, PROVIDERS } from "./index.js";
 

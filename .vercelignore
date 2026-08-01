@@ -12,5 +12,9 @@
 # igen, og symptomet ville være lige så uigennemsigtigt.
 #
 # Testfilerne kører i CI og i `npm test`; de har intet at gøre i produktion.
-# Med dem ude er tallet 8, altså fire funktioners luft.
+# Testfilerne er dog ikke det eneste, der tællede med. Deploy'ets funktions-liste
+# viste 1. august 2026 SYV funktioner, hvoraf kun tre var endpoints: api/backfill.js
+# og api/providers/*.js er biblioteksmoduler uden handler, men manglede `_`-præfikset
+# og blev derfor routet — offentligt kaldbare og med i loftet. De hedder nu
+# api/_backfill.js og api/_providers/, så tallet er 3.
 api/**/*.test.js

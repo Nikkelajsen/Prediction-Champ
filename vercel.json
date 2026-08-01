@@ -1,7 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/*.js": {
+    "api/send-notifications.js": {
+      "maxDuration": 300
+    },
+    "api/sync-matches.js": {
+      "maxDuration": 60
+    },
+    "api/sync-live.js": {
       "maxDuration": 60
     }
   },

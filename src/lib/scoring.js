@@ -164,7 +164,7 @@ const LOCK_LEAD_MS = 60 * 60 * 1000; // 1 time før kampens eget kickoff
 // rigtigt begreb (tidsenhed for point, rating og stillinger), men den er ikke
 // længere et TIDSPUNKT her: både lås og åbning følger kampen. Rundens første
 // kickoff findes fortsat serverside, hvor det stadig betyder noget —
-// `api/backfill.js` regel 3 og `analytics_round_locks`.
+// `api/_backfill.js` regel 3 og `analytics_round_locks`.
 
 // Låsetidspunktet for én kamp (ms), eller null hvis kickoff ikke er kendt.
 function lockAtOf(m) {

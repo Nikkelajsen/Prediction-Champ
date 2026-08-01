@@ -104,7 +104,7 @@ async function createCompetition(token, userId, spec) {
   // league_id/season_id, `mode_params.team_id`); flere gør konkurrencen
   // turneringsløs som full_season-multi og skriver BÅDE `team_ids` og
   // `tournaments` — den sidste, fordi efterfyldningens `coversSeason()`
-  // (api/backfill.js) afgør sæsondækning på netop dén nøgle.
+  // (api/_backfill.js) afgør sæsondækning på netop dén nøgle.
   if (mode === "team" && Array.isArray(teams) && teams.length) {
     const sel = teams.filter((t) => t && t.leagueId && t.seasonId && t.teamId);
     if (!sel.length) throw new Error("Vælg mindst ét hold");

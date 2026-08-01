@@ -36,7 +36,7 @@
 //   FOOTBALLDATA_TOKEN    (kræves kun af footballdata-ligaer)
 
 import { createSb, isAuthorized, createRunLogger, failJob } from "./_shared.js";
-import { getProvider, providerToken, indexSeasons, DEFAULT_PROVIDER } from "./providers/index.js";
+import { getProvider, providerToken, indexSeasons, DEFAULT_PROVIDER } from "./_providers/index.js";
 
 // Hvor langt tilbage/frem vi leder efter kampe, der kan være i gang.
 // 6 timer bagud dækker rigeligt en kamp med forlænget spilletid og forsinkelser.
