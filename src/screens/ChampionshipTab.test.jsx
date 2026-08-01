@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 // begge komponenter er ren markup, og projektet skal ikke have et komponent-
 // testbibliotek for deres skyld.
 import { renderToStaticMarkup } from "react-dom/server";
-import { StandingsTable, Champions, pickSeasonLeague, boardTitle, scopeNote } from "./ChampionshipTab.jsx";
+import { StandingsTable, Champions, CardHead, pickSeasonLeague, boardTitle, scopeNote } from "./ChampionshipTab.jsx";
 import { assignRanks, sortStandings } from "../lib/standings.js";
 
 // Basisrække: alle trin i stigen lige, så testene kun ændrer ét ad gangen.
@@ -66,6 +66,48 @@ describe("Champions (kåringen)", () => {
 
   it("renderer intet uden rækker", () => {
     expect(renderToStaticMarkup(<Champions rows={[]} title="X" isComplete />)).toBe("");
+  });
+});
+
+// Overskriftsrækken bar filtrene ud over kortets højre kant på telefonen, da
+// turneringsvælgeren kom til: rækken brød ikke, og en <select> er så bred som
+// sin bredeste option. Testen pinner de to egenskaber, der bærer rettelsen —
+// rækken må bryde, og filtrene må krympe — så de ikke kan forsvinde i en
+// senere oprydning af inline-styles uden at nogen opdager det.
+describe("CardHead (titel + filtre på en 430 px skærm)", () => {
+  const head = (children, info) => renderToStaticMarkup(
+    <CardHead title="Rundens Prediction Champ" info={info}>{children}</CardHead>,
+  );
+
+  it("lader rækken bryde, så filtrene falder ned under titlen frem for ud over kanten", () => {
+    expect(head(<select />)).toMatch(/flex-wrap:wrap/);
+  });
+
+  it("lader både titel og filter-gruppe krympe — ellers skubber indholdet rækken bredere", () => {
+    expect([...head(<select />).matchAll(/min-width:0/g)]).toHaveLength(2);
+  });
+
+  it("holder filtrene i højre side, også når de står på deres egen linje", () => {
+    expect(head(<select />)).toMatch(/margin-left:auto/);
+  });
+
+  it("renderer ingen filter-gruppe, når kortet ikke har filtre", () => {
+    expect(head(false)).not.toMatch(/margin-left:auto/);
+  });
+
+  it("skriver titlen ud, som den er", () => {
+    expect(head(false).replace(/<[^>]*>/g, "")).toContain("Rundens Prediction Champ");
+  });
+
+  // ⓘ'en må aldrig kunne brydes ned på en linje for sig selv: den er en fodnote
+  // til titlen, og alene på en linje ligner den en knap uden tekst.
+  it("binder ⓘ sammen med titlens sidste ord", () => {
+    expect(head(false, <b>i</b>)).toMatch(/<span style="white-space:nowrap">Champ <b>i<\/b><\/span>/);
+  });
+
+  it("klarer en titel på ét ord", () => {
+    const html = renderToStaticMarkup(<CardHead title="Championship" info={<b>i</b>} />);
+    expect(html).toMatch(/<span style="white-space:nowrap">Championship <b>i<\/b><\/span>/);
   });
 });
 

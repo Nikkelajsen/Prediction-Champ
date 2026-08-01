@@ -176,6 +176,60 @@ export function boardTitle(kind, league) {
 // turneringer samlet, ellers turneringens id.
 const ALL_SCOPE = "ALL";
 
+// Kortets overskriftsrække: titel til venstre, filtre til højre.
+//
+// Rækken var en `space-between`-flex UDEN ombrydning, og det holdt kun, så længe
+// der var ét filter. Med turnering #2 kom turneringsvælgeren til, og to selects
+// ved siden af en tre-linjers titel kunne ikke være der: appen er maks. 430 px
+// bred (`phone` i theme.js), en `<select>` er så bred som sin bredeste option
+// ("Scotland Premiership"), og en flex-item krymper aldrig under sit indhold,
+// når `min-width` står på `auto`. Filtrene skød derfor ud over kortets højre
+// kant på telefonen.
+//
+// To greb, i den rækkefølge de træder i kraft: rækken BRYDER, så filtrene falder
+// ned på deres egen linje under titlen, når de ikke kan være ved siden af den —
+// og først når selv den linje er for smal, må hver select krympe (`minWidth: 0`)
+// frem for at stikke ud. Højrestillingen bevares gennem begge trin, så filtrene
+// står samme sted, uanset om de deler linje med titlen.
+//
+// `flex: "1 1 60%"` er det, der gør bruddet betinget frem for fast: titlen beder
+// om 60 % af bredden, så en smal ledsager — fremdrifts-tælleren "12/306 spillet"
+// — stadig får plads ved siden af den, mens to dropdowns ikke kan presses ind på
+// de sidste 40 % og derfor falder ned.
+//
+// Titlen er `display: block`, ikke flex, så ⓘ'en flyder med som et ord efter det
+// sidste ord frem for at blive skubbet ud i højre kant af en linje, teksten ikke
+// selv fylder. Prisen er, at den kan brydes NED alene — "Rundens Prediction
+// Champ" fylder præcis én linje på en iPhone, og så stod ⓘ'en for sig selv på
+// den næste. Derfor er sidste ord og ikonet bundet sammen i én `nowrap`-enhed:
+// de flytter linje sammen. Titlen tages som tekst og ikonet som `info` netop for
+// at gøre den binding mulig — en færdig JSX-titel kan man ikke finde sidste ord i.
+export function CardHead({ title, info, children }) {
+  const words = String(title).split(" ");
+  const last = words.pop();
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
+      <div style={{
+        fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase",
+        lineHeight: 1.15, flex: "1 1 60%", minWidth: 0,
+      }}>
+        {words.length > 0 && `${words.join(" ")} `}
+        <span style={{ whiteSpace: "nowrap" }}>{last}{info && <>{" "}{info}</>}</span>
+      </div>
+      {children && (
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", gap: 6, flex: "0 1 auto", minWidth: 0, marginLeft: "auto" }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Fælles udseende for kortenes filter-dropdowns. `minWidth: 0` er det, der
+// tillader den sidste krympning; `maxWidth: "100%"` holder en enkelt lang
+// turnering inde på sin egen linje frem for at lade den skubbe linjen bredere.
+const filterSelect = { padding: "4px 8px", fontSize: 12, minWidth: 0, maxWidth: "100%" };
+
 // Hvorfor en turnering kan udelades. Hører hjemme i en InfoDot og ikke på
 // kortet: begrundelsen er A2's egen — et tal, hvis betydning skifter, når
 // produktet vokser, kan ikke sammenlignes med sig selv.
@@ -323,33 +377,29 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
 
       {/* Rundeliga — Rundens Prediction Champ */}
       <Card>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-            {boardTitle("round", roundLeague)}
-            <InfoDot title={boardTitle("round", roundLeague)}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div>Dine samlede point for én enkelt spillerunde. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, og til sidst hvem der var tættest på — er to helt lige, deles titlen. Vælg en runde i dropdownen.</div>
-                {officialLeagues.length > 1 && (
-                  <div><b>To niveauer:</b> "Alle turneringer" samler ugens kampe på tværs og kårer <b>Rundens Prediction Champ</b> — den store titel. Vælger du én turnering, ser du stillingen for netop den, hvor alle er målt på de samme kampe; dens vinder er "Rundens bedste i turneringen".</div>
-                )}
-                {note && <div><b>Hvilke turneringer tæller:</b> {note} {WHY_NOT_ALL}</div>}
-              </div>
-            </InfoDot>
-          </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {officialLeagues.length > 1 && (
-              <select className="field" value={roundScope} onChange={(e) => setRoundScope(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
-                <option value={ALL_SCOPE}>Alle turneringer</option>
-                {officialLeagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            )}
-            {rounds.length > 0 && (
-              <select className="field" value={roundKey || ""} onChange={(e) => changeRound(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
-                {rounds.map((k) => <option key={k} value={k}>{roundLabel(k)}</option>)}
-              </select>
-            )}
-          </div>
-        </div>
+        <CardHead title={boardTitle("round", roundLeague)} info={
+          <InfoDot title={boardTitle("round", roundLeague)}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div>Dine samlede point for én enkelt spillerunde. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, og til sidst hvem der var tættest på — er to helt lige, deles titlen. Vælg en runde i dropdownen.</div>
+              {officialLeagues.length > 1 && (
+                <div><b>To niveauer:</b> "Alle turneringer" samler ugens kampe på tværs og kårer <b>Rundens Prediction Champ</b> — den store titel. Vælger du én turnering, ser du stillingen for netop den, hvor alle er målt på de samme kampe; dens vinder er "Rundens bedste i turneringen".</div>
+              )}
+              {note && <div><b>Hvilke turneringer tæller:</b> {note} {WHY_NOT_ALL}</div>}
+            </div>
+          </InfoDot>
+        }>
+          {officialLeagues.length > 1 && (
+            <select className="field" value={roundScope} onChange={(e) => setRoundScope(e.target.value)} style={filterSelect}>
+              <option value={ALL_SCOPE}>Alle turneringer</option>
+              {officialLeagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          )}
+          {rounds.length > 0 && (
+            <select className="field" value={roundKey || ""} onChange={(e) => changeRound(e.target.value)} style={filterSelect}>
+              {rounds.map((k) => <option key={k} value={k}>{roundLabel(k)}</option>)}
+            </select>
+          )}
+        </CardHead>
 
         {roundBoard === null && <p style={{ ...muted, margin: 0 }}>Henter…</p>}
         {roundBoard && rounds.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen spillede runder endnu — stillingen kommer, når en runde er i gang.</p>}
@@ -371,31 +421,27 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
 
       {/* Månedsliga */}
       <Card>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-            {boardTitle("month", monthLeague)}
-            <InfoDot title={boardTitle("month", monthLeague)}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div>Dine samlede point for alle månedens kampe (hver kamp tælles én gang). Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på — er to helt lige, deles titlen. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</div>
-                {officialLeagues.length > 1 && (
-                  <div><b>To niveauer:</b> "Alle turneringer" samler månedens kampe på tværs og kårer <b>Månedens Prediction Champ</b> — den store titel. Vælger du én turnering, ser du stillingen for netop den, hvor alle er målt på de samme kampe.</div>
-                )}
-                {note && <div><b>Hvilke turneringer tæller:</b> {note} {WHY_NOT_ALL}</div>}
-              </div>
-            </InfoDot>
-          </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {officialLeagues.length > 1 && (
-              <select className="field" value={monthScope} onChange={(e) => setMonthScope(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
-                <option value={ALL_SCOPE}>Alle turneringer</option>
-                {officialLeagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            )}
-            <select className="field" value={month} onChange={(e) => changeMonth(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
-              {months.map((m) => <option key={m} value={m}>{monthName(m)}</option>)}
+        <CardHead title={boardTitle("month", monthLeague)} info={
+          <InfoDot title={boardTitle("month", monthLeague)}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div>Dine samlede point for alle månedens kampe (hver kamp tælles én gang). Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på — er to helt lige, deles titlen. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</div>
+              {officialLeagues.length > 1 && (
+                <div><b>To niveauer:</b> "Alle turneringer" samler månedens kampe på tværs og kårer <b>Månedens Prediction Champ</b> — den store titel. Vælger du én turnering, ser du stillingen for netop den, hvor alle er målt på de samme kampe.</div>
+              )}
+              {note && <div><b>Hvilke turneringer tæller:</b> {note} {WHY_NOT_ALL}</div>}
+            </div>
+          </InfoDot>
+        }>
+          {officialLeagues.length > 1 && (
+            <select className="field" value={monthScope} onChange={(e) => setMonthScope(e.target.value)} style={filterSelect}>
+              <option value={ALL_SCOPE}>Alle turneringer</option>
+              {officialLeagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
-          </div>
-        </div>
+          )}
+          <select className="field" value={month} onChange={(e) => changeMonth(e.target.value)} style={filterSelect}>
+            {months.map((m) => <option key={m} value={m}>{monthName(m)}</option>)}
+          </select>
+        </CardHead>
 
         {rows && <Champions rows={rows} title={boardTitle("month", monthLeague)} isComplete={isPast} openProfile={openProfile} />}
 
@@ -410,31 +456,29 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
 
       {/* Sæsonchampionship (live — samlede point for hele sæsonen) */}
       <Card>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-            Sæsonens Prediction Champ
-            {/* Turneringsnavnet står i sin egen sætningsdel, så teksten holder uanset
-                bøjning — "for alle Superligaen kampe" var resultatet af at sætte
-                værdien ind, hvor kun fallbacken ("Superligaens") passede.
-                Sidste sætning: uden den ser vælgeren ud til at mangle en
-                turnering, brugeren kan se og tippe alle andre steder i appen. */}
-            <InfoDot title="Sæsonens Prediction Champ">Dine samlede point for alle kampe i {seasonLeague?.name || "turneringen"} i hele sæsonen. Én sæsonstilling pr. turnering i Championship — er der flere, vælges de i dropdownen. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Sæsonens bedste kåres som Sæsonens Prediction Champ — er to helt lige, deles titlen.
-              {unofficialLeagues.length > 0 && ` ${joinNames(unofficialLeagues.map((l) => l.name))} har ingen sæsonstilling.`}</InfoDot>
-          </div>
+        {/* Turneringsnavnet står i sin egen sætningsdel, så teksten holder uanset
+            bøjning — "for alle Superligaen kampe" var resultatet af at sætte
+            værdien ind, hvor kun fallbacken ("Superligaens") passede.
+            Sidste sætning: uden den ser vælgeren ud til at mangle en
+            turnering, brugeren kan se og tippe alle andre steder i appen. */}
+        <CardHead title="Sæsonens Prediction Champ" info={
+          <InfoDot title="Sæsonens Prediction Champ">Dine samlede point for alle kampe i {seasonLeague?.name || "turneringen"} i hele sæsonen. Én sæsonstilling pr. turnering i Championship — er der flere, vælges de i dropdownen. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Sæsonens bedste kåres som Sæsonens Prediction Champ — er to helt lige, deles titlen.
+            {unofficialLeagues.length > 0 && ` ${joinNames(unofficialLeagues.map((l) => l.name))} har ingen sæsonstilling.`}</InfoDot>
+        }>
           {/* Vælgeren dukker først op, når der ér mere end én turnering — med kun
               én ville en dropdown med ét valg være støj. Fremdrifts-tælleren
               deler plads med den, så den flytter ned i underlinjen i stedet for
               at forsvinde. */}
           {officialLeagues.length > 1
             ? (
-              <select className="field" value={seasonLeague?.id || ""} onChange={(e) => changeSeasonLeague(e.target.value)} style={{ padding: "4px 8px", fontSize: 12 }}>
+              <select className="field" value={seasonLeague?.id || ""} onChange={(e) => changeSeasonLeague(e.target.value)} style={filterSelect}>
                 {officialLeagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
             )
             : season && season.rows && season.totalMatches > 0 && (
               <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{season.playedMatches}/{season.totalMatches} spillet</span>
             )}
-        </div>
+        </CardHead>
         <div style={{ color: C.muted, fontSize: 12, marginTop: -4, marginBottom: 8 }}>
           {officialLeagues.length > 1 ? "Løber over hele sæsonen" : `${seasonLeague?.name || "Turneringen"} · løber over hele sæsonen`}
           {officialLeagues.length > 1 && season && season.rows && season.totalMatches > 0 && ` · ${season.playedMatches}/${season.totalMatches} spillet`}
