@@ -1,11 +1,40 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
 import { Trophy, Copy, Check, ClipboardList } from "lucide-react";
-import { lockedRoundsOf } from "../lib/scoring.js";
-import { computeCompetitionState, loadRatingMap } from "../lib/data.js";
+import { lockedRoundsOf, roundLabel } from "../lib/scoring.js";
+import { computeCompetitionState, loadRatingMap, ensureCompetitionAwards, loadCompetitionAwards, monthName } from "../lib/data.js";
 import { logEvent } from "../lib/analytics.js";
 import { C, btnGhost, btnGold, font, muted, thStyle } from "../ui/theme.js";
 import { BackBar, Card, EmptyCompetitions, PlayerName, UserRoundPredictions } from "../ui/components.jsx";
+
+// Én kåringslinje pr. periode: "🏅 Ugens bedste · 12/08 – 18/08: Nikolaj (14
+// point)". Delt førsteplads er flere rækker med samme period_key — de samles
+// her til "A og B (14 point — delt)", samme mønster som konkurrencevinderne på
+// Ligaer-fanen. Modulniveau-komponent (ikke inline i BoardScreen) af hensyn
+// til React Compilers static-components-regel.
+function AwardLines({ title, rows, labelOf, nameOf, openProfile }) {
+  const periods = [];
+  const idx = new Map();
+  for (const r of rows) {
+    if (!idx.has(r.period_key)) { idx.set(r.period_key, periods.length); periods.push({ key: r.period_key, winners: [] }); }
+    periods[idx.get(r.period_key)].winners.push(r);
+  }
+  return periods.map((p) => (
+    <div key={p.key} style={{ padding: "3px 0", fontSize: 13, lineHeight: 1.5 }}>
+      <span style={{ color: C.gold, fontWeight: 700 }}>🏅 {title}</span>
+      <span style={{ color: C.muted, fontSize: 12 }}> · {labelOf(p.key)}: </span>
+      <span style={{ color: C.text, fontWeight: 600 }}>
+        {p.winners.map((w, i) => (
+          <span key={w.user_id}>
+            {i > 0 && (i === p.winners.length - 1 ? " og " : ", ")}
+            <PlayerName userId={w.user_id} name={nameOf(w.user_id)} onOpenProfile={openProfile} />
+          </span>
+        ))}
+      </span>
+      <span style={{ color: C.muted, fontSize: 12 }}> ({p.winners[0].points} point{p.winners[0].shared ? " — delt" : ""})</span>
+    </div>
+  ));
+}
 
 function BoardScreen({ token, userId, competitions, initialCompId, inviterName, onBack, goToPredictions, openProfile, onCreate, goTab }) {
   const [selectedCompId, setSelectedCompId] = useState(initialCompId || competitions[0]?.id || null);
@@ -14,7 +43,9 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
   const [copied, setCopied] = useState(false);
   const [showAllRounds, setShowAllRounds] = useState(false);
   const [viewUser, setViewUser] = useState(null);
+  const [awards, setAwards] = useState(null);
   const comp = competitions.find((c) => c.id === selectedCompId);
+  const awardsEnabled = comp?.mode_params?.awards === true;
 
   useEffect(() => {
     if (!selectedCompId || !comp) return;
@@ -34,6 +65,25 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
       setLoading(false);
     })();
   }, [selectedCompId, comp]); // eslint-disable-line
+
+  // Lokale kåringer (I13): trig databasens writer og hent resultatet. Lazy med
+  // vilje — boardet er v1's eneste visningsflade, så "første åbning efter en
+  // færdig runde" er præcis tidligt nok. Begge kald er ufarlige at gentage.
+  // Rækkerne gemmes med deres konkurrence-id i stedet for at blive nulstillet
+  // synkront ved skift: render-betingelsen sammenligner id'et, så en anden
+  // konkurrences kåringer aldrig vises, heller ikke i et mellem-render.
+  useEffect(() => {
+    if (!selectedCompId || !awardsEnabled) return;
+    let cancelled = false;
+    (async () => {
+      await ensureCompetitionAwards(token, selectedCompId);
+      try {
+        const data = await loadCompetitionAwards(token, selectedCompId);
+        if (!cancelled) setAwards({ compId: selectedCompId, ...data });
+      } catch { /* sektionen udelades */ }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedCompId, awardsEnabled]); // eslint-disable-line
 
   async function shareInvite() {
     if (!comp) return;
@@ -180,6 +230,29 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
         )}
         {!loading && state && state.rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen deltagere endnu.</p>}
       </Card>
+
+      {/* Lokale kåringer (I13) — kun for konkurrencer, der har tilvalgt dem.
+          Ordvalget er bevidst IKKE de globale titler: "Ugens/Månedens bedste"
+          er konkurrencens egne, "rundevinder"/"månedsmester" er Championships. */}
+      {awardsEnabled && awards && awards.compId === selectedCompId && (
+        <Card>
+          <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>Kåringer</div>
+          {awards.rounds.length === 0 && awards.months.length === 0 ? (
+            <p style={{ ...muted, margin: 0 }}>
+              Ugens og Månedens bedste kåres her, når en runde eller kalendermåned er færdigspillet.
+            </p>
+          ) : (
+            <>
+              <AwardLines title="Månedens bedste" rows={awards.months} labelOf={monthName}
+                nameOf={(uid) => state?.rows.find((r) => r.userId === uid)?.player || "Tidligere deltager"}
+                openProfile={openProfile} />
+              <AwardLines title="Ugens bedste" rows={awards.rounds} labelOf={roundLabel}
+                nameOf={(uid) => state?.rows.find((r) => r.userId === uid)?.player || "Tidligere deltager"}
+                openProfile={openProfile} />
+            </>
+          )}
+        </Card>
+      )}
 
       {!loading && state && roundsDesc.length > 0 && (
         <Card>

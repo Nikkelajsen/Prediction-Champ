@@ -81,7 +81,10 @@ function matchesRule(competition, m) {
   const p = competition.mode_params || {};
   if (competition.mode === "full_season") return true;
   if (competition.mode === "team") {
-    return !!p.team_id && (m.home_team_id === p.team_id || m.away_team_id === p.team_id);
+    // Favorithold kan have flere hold (`team_ids`, I14); ét hold skriver stadig
+    // legacy-nøglen `team_id`. Begge former skal efterfyldes.
+    const ids = Array.isArray(p.team_ids) ? p.team_ids : p.team_id ? [p.team_id] : [];
+    return ids.includes(m.home_team_id) || ids.includes(m.away_team_id);
   }
   if (competition.mode === "time_range") {
     if (!p.start_date || !p.end_date || !m.kickoff_at) return false;

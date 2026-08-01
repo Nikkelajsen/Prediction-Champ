@@ -9,6 +9,7 @@
 // noget nyt, så læg det i det modul, det hører til — ikke her.
 
 export { touchActivity, loadUserStats, loadLatestStory, dismissStory } from "./data/activity.js";
+export { ensureCompetitionAwards, loadCompetitionAwards } from "./data/awards.js";
 export { loadCareerProfile, loadCareerMilestones } from "./data/career.js";
 export { computeCompetitionState } from "./data/competitionState.js";
 export { moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data/competitions.js";

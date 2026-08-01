@@ -254,12 +254,23 @@ describe("modeLabel", () => {
       .toEqual(["custom", "full_season", "random", "team", "time_range"]);
   });
 
-  it("giver det danske navn for hver mode", () => {
-    expect(modeLabel("full_season")).toBe("Hel sæson");
-    expect(modeLabel("team")).toBe("Et hold");
-    expect(modeLabel("time_range")).toBe("Tidsperiode");
-    expect(modeLabel("custom")).toBe("Håndplukkede kampe");
-    expect(modeLabel("random")).toBe("Tilfældig kupon");
+  it("giver det danske navn for hver mode (I14-ordforrådet)", () => {
+    expect(modeLabel("full_season")).toBe("Sæson");
+    expect(modeLabel("team")).toBe("Favorithold");
+    expect(modeLabel("time_range")).toBe("Periode");
+    expect(modeLabel("custom")).toBe("Custom");
+    expect(modeLabel("random")).toBe("Quick Pick");
+  });
+
+  // Quick League er ikke en mode i databasen — det er `random` over flere
+  // runder, og forskellen bor alene i mode_params.rounds. Uden params (fx
+  // admin-statistikkens aggregering) falder etiketten tilbage til Quick Pick.
+  it("kalder random over flere runder Quick League", () => {
+    expect(modeLabel("random", { rounds: 6 })).toBe("Quick League");
+    expect(modeLabel("random", { rounds: 1 })).toBe("Quick Pick");
+    expect(modeLabel("random", {})).toBe("Quick Pick");
+    expect(modeLabel("random")).toBe("Quick Pick");
+    expect(modeLabel("full_season", { rounds: 6 })).toBe("Sæson");
   });
 
   // en ny mode må aldrig blive til en tom celle i UI'et

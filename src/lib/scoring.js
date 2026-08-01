@@ -118,26 +118,36 @@ function stageBadgeLabel(name) {
 // steder i tre forskellige varianter (samme konkurrence hed "Enkelt hold" på
 // Ligaer-kortet, "Et hold" i opret-dropdownen og "Et hold" i admin-statistikken).
 // Kanoniske navne = dem brugeren møder først, i opret-flowet.
+// Ordforrådet fulgte I14-gennemgangen (august 2026): "Hel sæson" → "Sæson",
+// "Et hold" → "Favorithold", "Tilfældig kupon" → "Quick Pick" osv. Nøglerne
+// (mode-værdierne i databasen) er uændrede — kun det, brugeren ser, er nyt.
 const MODE_LABELS = {
-  full_season: "Hel sæson",
-  team: "Et hold",
-  time_range: "Tidsperiode",
-  custom: "Håndplukkede kampe",
-  random: "Tilfældig kupon",
+  full_season: "Sæson",
+  team: "Favorithold",
+  time_range: "Periode",
+  custom: "Custom",
+  random: "Quick Pick",
 };
-// Én linje pr. mode, der siger hvad valget BETYDER. Etiketten alene ("Tidsperiode",
-// "Håndplukkede kampe") forudsætter, at man allerede kender systemet — hintet
+// Én linje pr. mode, der siger hvad valget BETYDER. Etiketten alene ("Periode",
+// "Custom") forudsætter, at man allerede kender systemet — hintet
 // bor her ved siden af etiketten, så opret-skærmen og onboarding-guiden ikke kan
 // beskrive den samme mode forskelligt.
 const MODE_HINTS = {
-  full_season: "Alle resterende kampe i turneringen. Den klassiske — I følges ad hele sæsonen.",
-  team: "Kun ét holds kampe resten af sæsonen.",
+  full_season: "Alle resterende kampe i én eller flere turneringer — I følges ad hele sæsonen.",
+  team: "Følg dine favorithold — ét eller flere hold, også på tværs af turneringer.",
   time_range: "Alle kampe mellem to datoer — fx en enkelt måned.",
-  custom: "Du vælger selv præcis hvilke kampe, der skal med.",
-  random: "Et tilfældigt udpluk fra den nærmeste runde. Hurtig at gå til.",
+  custom: "Du bestemmer selv præcis hvilke kampe, der skal med.",
+  random: "Tilfældige kampe fra den nærmeste runde. Hurtig at gå til.",
 };
 // Ukendt mode vises råt frem for tomt — så en ny mode aldrig forsvinder i UI'et.
-function modeLabel(mode) { return MODE_LABELS[mode] || mode; }
+// `random` over flere runder er sit eget produkt-navn (Quick League), men samme
+// mode i databasen — forskellen bor i mode_params.rounds, så etiketten skal
+// have params med, hvor rækken har dem. Uden params falder den tilbage til
+// "Quick Pick", hvilket kun rammer aggregeringer uden mode_params (admin).
+function modeLabel(mode, modeParams) {
+  if (mode === "random" && Number(modeParams?.rounds) > 1) return "Quick League";
+  return MODE_LABELS[mode] || mode;
+}
 
 function formatKickoff(iso) {
   if (!iso) return "";

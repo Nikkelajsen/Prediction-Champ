@@ -32,11 +32,17 @@ import { loadGroupByCode, joinGroup, joinCompetition } from "./groups.js";
 //   groupId               liga-tilhør (null = liga-løs)
 //   mode                  full_season | team | time_range | custom | random
 //   tournaments           full_season: [{ leagueId, seasonId }]
-//   leagueId, seasonId    team | time_range
-//   teamId                team
+//   leagueId, seasonId    team (legacy-form) | time_range
+//   teamId                team (legacy-form: ét hold i én turnering)
+//   teams                 team: [{ leagueId, seasonId, teamId }] — kan spænde
+//                         over flere turneringer (I14: Favorithold)
 //   startDate, endDate    time_range
 //   matchIds              custom | random: de eksplicit valgte kampe
 //   randomCount           random: gemmes i mode_params
+//   rounds                random: antal runder (Quick League) — gemmes i
+//                         mode_params, men KUN når > 1, så gamle rækkers form
+//                         er uændret og `modeLabel` kan skelne på feltet
+//   awards                kårings-tilvalget (I13/A22): true ⇒ mode_params.awards
 //
 // Returnerer `matchCount`, så kalderen kan se, at en konkurrence blev tom —
 // fx en sæson, der er spillet færdig (`filterFromNextUnfinishedRound` giver da
@@ -45,8 +51,8 @@ async function createCompetition(token, userId, spec) {
   const {
     name, groupId = null, mode = "full_season",
     tournaments = [], leagueId = null, seasonId = null,
-    teamId = null, startDate = null, endDate = null,
-    matchIds = [], randomCount = null,
+    teamId = null, teams = null, startDate = null, endDate = null,
+    matchIds = [], randomCount = null, rounds = null, awards = false,
   } = spec;
 
   // Faste pointregler. Feltet er historisk konfigurerbart, men `pc_points()`
@@ -54,6 +60,9 @@ async function createCompetition(token, userId, spec) {
   // reelle variation, der nogensinde blev skrevet her — er fjernet igen (B1).
   const rules = { exact: 3, outcome: 1 };
   const base = { name, group_id: groupId || null, rules, created_by: userId };
+  // Kårings-tilvalget spredes ind i mode_params i ALLE grene — men kun når det
+  // er valgt, så en konkurrence uden tilvalg har præcis samme rækkeform som før.
+  const awardsParams = awards ? { awards: true } : {};
 
   // Full sæson kan spænde over flere turneringer på én gang (fx Superliga +
   // Premier League). Kampene materialiseres pr. turnering, så læse-stierne
@@ -78,13 +87,61 @@ async function createCompetition(token, userId, spec) {
       league_id: multi ? null : only.league_id,
       season_id: multi ? null : only.season_id,
       mode: "full_season",
-      mode_params: multi ? { tournaments: picked } : {},
+      mode_params: multi ? { tournaments: picked, ...awardsParams } : { ...awardsParams },
     }]);
     await db.insert(token, "competition_participants", [{ competition_id: competition.id, user_id: userId }]);
     if (ids.length) {
       await db.insert(token, "competition_matches", ids.map((id) => ({ competition_id: competition.id, match_id: id })));
     }
     logEvent(token, "competition_created", { competitionId: competition.id, groupId, metadata: { mode: "full_season", match_count: ids.length } });
+    return { competition, matchCount: ids.length };
+  }
+
+  // Favorithold (I14): flere hold, evt. på tværs af turneringer. Kun den NYE
+  // spec-form (`teams`-listen) rammer denne gren — den gamle (`teamId`) går
+  // uændret gennem den generiske sti nedenfor, så eksisterende kaldere og
+  // rækkeformer er urørte. Ét hold i listen giver præcis legacy-formen (bundet
+  // league_id/season_id, `mode_params.team_id`); flere gør konkurrencen
+  // turneringsløs som full_season-multi og skriver BÅDE `team_ids` og
+  // `tournaments` — den sidste, fordi efterfyldningens `coversSeason()`
+  // (api/backfill.js) afgør sæsondækning på netop dén nøgle.
+  if (mode === "team" && Array.isArray(teams) && teams.length) {
+    const sel = teams.filter((t) => t && t.leagueId && t.seasonId && t.teamId);
+    if (!sel.length) throw new Error("Vælg mindst ét hold");
+    const single = sel.length === 1;
+    // Hold grupperes pr. sæson: to hold i samme turnering er ét opslag, og et
+    // opgør mellem to valgte hold kommer naturligt kun med én gang.
+    const bySeason = new Map();
+    for (const t of sel) {
+      const e = bySeason.get(t.seasonId) || { leagueId: t.leagueId, teamIds: [] };
+      if (!e.teamIds.includes(t.teamId)) e.teamIds.push(t.teamId);
+      bySeason.set(t.seasonId, e);
+    }
+    const ids = [];
+    for (const [sid, e] of bySeason) {
+      let ms = await db.select(token, "matches",
+        `season_id=eq.${sid}&select=id,round_key,home_score&or=(home_team_id.in.(${e.teamIds.join(",")}),away_team_id.in.(${e.teamIds.join(",")}))`);
+      ms = filterFromNextUnfinishedRound(ms);
+      for (const m of ms) ids.push(m.id);
+    }
+    const [competition] = await db.insert(token, "competitions", [{
+      ...base,
+      league_id: single ? sel[0].leagueId : null,
+      season_id: single ? sel[0].seasonId : null,
+      mode: "team",
+      mode_params: single
+        ? { team_id: sel[0].teamId, ...awardsParams }
+        : {
+            team_ids: sel.map((t) => t.teamId),
+            tournaments: [...bySeason].map(([sid, e]) => ({ league_id: e.leagueId, season_id: sid })),
+            ...awardsParams,
+          },
+    }]);
+    await db.insert(token, "competition_participants", [{ competition_id: competition.id, user_id: userId }]);
+    if (ids.length) {
+      await db.insert(token, "competition_matches", ids.map((id) => ({ competition_id: competition.id, match_id: id })));
+    }
+    logEvent(token, "competition_created", { competitionId: competition.id, groupId, metadata: { mode: "team", match_count: ids.length } });
     return { competition, matchCount: ids.length };
   }
 
@@ -100,9 +157,12 @@ async function createCompetition(token, userId, spec) {
     season_id: crossLeague ? null : seasonId,
     mode,
     mode_params:
-      mode === "team" ? { team_id: teamId }
-      : mode === "time_range" ? { start_date: startDate, end_date: endDate }
-      : mode === "random" ? { count: Number(randomCount) || 6 } : {},
+      mode === "team" ? { team_id: teamId, ...awardsParams }
+      : mode === "time_range" ? { start_date: startDate, end_date: endDate, ...awardsParams }
+      // `rounds` skrives kun når > 1 (Quick League), så gamle Quick Pick-rækker
+      // og nye har samme form — og `modeLabel` kan skelne alene på feltet.
+      : mode === "random" ? { count: Number(randomCount) || 6, ...(Number(rounds) > 1 ? { rounds: Number(rounds) } : {}), ...awardsParams }
+      : { ...awardsParams },
   }]);
   await db.insert(token, "competition_participants", [{ competition_id: competition.id, user_id: userId }]);
 

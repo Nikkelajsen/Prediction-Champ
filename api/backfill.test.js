@@ -74,6 +74,17 @@ describe("matchesToBackfill", () => {
     expect(run(comp)).toEqual(["m3"]); // m4 er T2 mod T4
   });
 
+  // Favorithold (I14): flere hold skriver `team_ids` i stedet for `team_id`.
+  // Begge kampsider tæller, og legacy-formen skal blive ved med at virke.
+  it("team-mode med team_ids tager alle de valgte holds kampe med", () => {
+    const comp = { ...fullSeason, mode: "team", mode_params: { team_ids: ["T1", "T4"] } };
+    expect(run(comp)).toEqual(["m3", "m4"]); // m3 har T1 hjemme, m4 har T4 ude
+  });
+
+  it("team-mode uden hold i params efterfylder ingenting", () => {
+    expect(run({ ...fullSeason, mode: "team", mode_params: {} })).toEqual([]);
+  });
+
   it("time_range-mode holder sig inden for datointervallet", () => {
     const comp = {
       ...fullSeason, mode: "time_range",
