@@ -29,8 +29,35 @@ async function restFetch(path, { method = "GET", body, token, prefer } = {}) {
   const text = await res.text();
   return text ? JSON.parse(text) : null;
 }
+// Antal rækker UDEN at hente dem.
+//
+// PostgREST har et loft på, hvor mange rækker ét svar må indeholde (Supabase:
+// 1000), og loftet er tavst — svaret er bare kortere. Tæller man ved at hente
+// rækkerne og måle listen, tæller man derfor loftet frem for tabellen, så snart
+// der er mere end 1000 rækker at tælle. `count=exact` lader databasen tælle og
+// svarer i Content-Range ("0-0/1760"), som er upåvirket af loftet.
+async function restCount(path, { token } = {}) {
+  const res = await fetch(`${SUPABASE_URL}${path}`, {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${token || SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      // limit=0 i selve forespørgslen: vi vil have tallet, ikke rækkerne.
+      Prefer: "count=exact",
+    },
+  });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { msg = (await res.json()).message || msg; } catch {}
+    throw new Error(msg);
+  }
+  const total = Number((res.headers.get("content-range") || "").split("/")[1]);
+  return Number.isFinite(total) ? total : 0;
+}
 const db = {
   select: (token, table, query = "") => restFetch(`/rest/v1/${table}?${query}`, { token }),
+  count: (token, table, query = "") => restCount(`/rest/v1/${table}?${query}${query ? "&" : ""}limit=0`, { token }),
   insert: (token, table, rows) =>
     restFetch(`/rest/v1/${table}`, { method: "POST", token, body: rows, prefer: "return=representation" }),
   upsert: (token, table, rows, onConflict) =>
@@ -67,4 +94,4 @@ function clearSession() {
   try { localStorage.removeItem(SESSION_KEY); } catch {}
 }
 
-export { SUPABASE_URL, SUPABASE_KEY, restFetch, db, auth, saveSession, loadSession, clearSession };
+export { SUPABASE_URL, SUPABASE_KEY, restFetch, restCount, db, auth, saveSession, loadSession, clearSession };
