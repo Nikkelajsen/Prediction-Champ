@@ -25,16 +25,24 @@
 //    Derfor er der ingen overgangsregel og ingen dato at huske: dataene selv
 //    siger, hvilke rækker der må vokse.
 //
-// 3. EN LÅST RUNDE VOKSER ALDRIG. En kamp må kun tilføjes, hvis dens runde
-//    endnu ikke er låst. Det er strengere end nødvendigt og bevidst: så kan en
-//    efterfyldning aldrig give point for et tip, der allerede er afgivet — den
-//    fejl, `filterFromNextUnfinishedRound` findes for at forhindre ved
-//    oprettelsen. Låsen er scopet på (season_id, round_key) som alle andre
-//    steder, så det tidligste kickoff regnes ud fra HELE sæsonens kampe og ikke
-//    kun konkurrencens egne.
+// 3. EN RUNDE, DER ER GÅET I GANG, VOKSER ALDRIG. En kamp må kun tilføjes, hvis
+//    dens RUNDE endnu ikke har haft sin første kickoff (minus en time). Så kan
+//    en efterfyldning aldrig give point for et tip, der allerede er afgivet —
+//    den fejl, `filterFromNextUnfinishedRound` findes for at forhindre ved
+//    oprettelsen.
+//
+//    Reglen var før den samme som tipslåsen, men er det IKKE længere. Efter A21
+//    (1. august 2026) låser hver kamp for sig, og en mekanisk oversættelse
+//    hertil ville have gjort reglen løsere end sin egen begrundelse: en ny kamp
+//    kunne da lande midt i en runde, hvis tidlige kampe var spillet, mens
+//    deltagerne allerede havde tippet og set stillingen. Runde-betingelsen står
+//    derfor tilbage som en selvstændig, strengere efterfyldnings-regel.
+//    Rundestarten regnes ud fra HELE sæsonens kampe og ikke kun konkurrencens
+//    egne — ellers kunne en konkurrence uden fredagskampen vokse, efter runden
+//    reelt var i gang.
 
-// Samme værdi som LOCK_LEAD_MS i src/lib/scoring.js og som RLS-policyen i
-// sql/predictions_write_lock.sql ("kickoff_at <= now() + interval '1 hour'").
+// Én time før rundens start — samme margen som tipslåsen (LOCK_LEAD_MS i
+// src/lib/scoring.js), men målt på runden og ikke på kampen, jf. regel 3.
 export const LOCK_LEAD_MS = 60 * 60 * 1000;
 
 export const BACKFILLABLE_MODES = ["full_season", "team", "time_range"];
@@ -47,9 +55,10 @@ export function coversSeason(competition, seasonId) {
   return Array.isArray(list) && list.some((t) => t?.season_id === seasonId);
 }
 
-// Tidligste kickoff pr. runde over HELE sæsonen — det er den, låsen regnes af.
+// Tidligste kickoff pr. runde over HELE sæsonen — det er den, regel 3 regnes af.
 // Kampe uden kickoff springes over; en runde uden kendte kickoffs får ingen
-// entry og regnes som ulåst, præcis som buildRoundLockMap i frontenden.
+// entry og regnes som endnu ikke gået i gang (samme valg som buildRoundStartMap
+// i frontenden).
 function earliestByRound(matches) {
   const map = new Map();
   for (const m of matches) {
