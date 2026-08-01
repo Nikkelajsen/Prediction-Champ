@@ -116,6 +116,25 @@ export default async function handler(req, res) {
 
     const fixtures = await provider.fetchSeasonFixtures({ apiLeagueId, apiSeasonId, token });
 
+    // En sæson, der kommer tom hjem, er tvetydig: enten er kampprogrammet ikke
+    // offentliggjort endnu, eller også peger api_season_id et forkert sted hen.
+    // Kun den ene retter sig selv, og `totalFixtures: 0` alene kan ikke skelne
+    // dem — det var det, der efterlod `B8` uafgjort. Kan datakilden svare på
+    // spørgsmålet, stiller vi det, og svaret havner i job_runs, så det kan
+    // aflæses i Admin → Drift frem for at kræve et manuelt opslag.
+    //
+    // Diagnosen må ALDRIG kunne vælte en kørsel: en tom sæson er i sig selv en
+    // gyldig kørsel, og et ekstra opslag, der fejler (429, nedetid), skal ikke
+    // gøre den til en fejl. Derfor fanges alt og gemmes som tekst.
+    let emptySeason = null;
+    if (!fixtures.length && provider.describeEmptySeason) {
+      try {
+        emptySeason = await provider.describeEmptySeason({ apiLeagueId, apiSeasonId, token });
+      } catch (e) {
+        emptySeason = { code: "lookup-failed", message: e?.message ?? String(e) };
+      }
+    }
+
     if (dryRun) {
       const sample = fixtures.slice(0, 15).map((fx) => ({
         kickoff: fx.kickoffAt,
@@ -134,6 +153,7 @@ export default async function handler(req, res) {
         note: "Intet er skrevet til databasen — dette er kun en forhåndsvisning.",
         provider: provider.key,
         totalFixtures: fixtures.length,
+        ...(emptySeason ? { emptySeason } : {}),
         sample,
       });
     }
@@ -245,6 +265,9 @@ export default async function handler(req, res) {
       // Ikke en fejl, men skal kunne aflæses: står tallet stille hen over en
       // CL-lodtrækning, henter syncen ikke de nye kampe.
       undrawn,
+      // Kun til stede, når sæsonen kom tom hjem — og så er det netop det felt,
+      // der siger, om tomheden er ufarlig eller en fejlkonfiguration.
+      ...(emptySeason ? { emptySeason } : {}),
       // A20: hvor mange kampe der blev føjet til eksisterende konkurrencer.
       // Hører i detail'en af samme grund som de øvrige tal — en efterfyldning,
       // der tavst holder op med at virke, ville ellers først vise sig som en

@@ -108,6 +108,12 @@ function isoDate(d) {
   return new Date(d).toISOString().slice(0, 10);
 }
 
+// Sæsonens startår — det tal, `?season=` taler i. Både `currentSeason` og hver
+// række i `seasons` bærer en `startDate` ("2025-07-08"), og året deri ER id'et.
+function startYear(season) {
+  return String(season?.startDate || "").match(/^\d{4}/)?.[0] ?? null;
+}
+
 export const footballdata = {
   key: "footballdata",
   label: "football-data.org",
@@ -142,6 +148,59 @@ export const footballdata = {
       fetchImpl
     );
     return (data.matches || []).map(normalize);
+  },
+
+  // Hvorfor der findes et ekstra kald netop til den tomme sæson:
+  //
+  // `/competitions/<kode>/matches?season=<år>` svarer **200 med en tom liste** i
+  // to helt forskellige situationer — sæsonen findes hos leverandøren, men har
+  // endnu ingen kampe (Champions League før lodtrækningen), ELLER
+  // `api_season_id` peger på et år, leverandøren slet ikke kender. De to ser ens
+  // ud i Admin → Drift (`totalFixtures: 0`), og præcis dét efterlod `B8`
+  // uafgjort: den første retter sig selv, den anden gør ikke.
+  //
+  // `/competitions/<kode>` bærer svaret: `currentSeason` og listen `seasons`
+  // siger, hvilke år leverandøren overhovedet har. Kaldet sker KUN, når sæsonen
+  // kom tom hjem — altså højst ét ekstra kald pr. kørsel, og kun mens
+  // turneringen alligevel ikke leverer noget. Rate limiten (10/minut) mærker
+  // det ikke.
+  async describeEmptySeason({ apiLeagueId, apiSeasonId, token, fetchImpl = fetch }) {
+    const data = await fdFetch(`/competitions/${apiLeagueId}`, token, fetchImpl);
+    const requested = String(apiSeasonId);
+    const current = startYear(data.currentSeason);
+    const known = [...new Set((data.seasons || []).map(startYear).filter(Boolean))];
+
+    // Rækkefølgen er ikke tilfældig: den sikre udlægning først, gættet sidst.
+    let verdict;
+    if (known.includes(requested) || current === requested) {
+      verdict = {
+        code: "season-empty",
+        // Den ufarlige udgave. Sæsonen er oprettet, kampprogrammet er bare ikke
+        // offentliggjort endnu — næste kørsel efter offentliggørelsen henter det.
+        message: `Sæsonen ${requested} findes hos ${footballdata.label}, men har endnu ingen kampe. Retter sig selv, når programmet offentliggøres.`,
+      };
+    } else if (current && requested > current) {
+      verdict = {
+        code: "season-not-published",
+        // Også ufarlig, men et andet sted i forløbet: sæsonen er ikke engang
+        // oprettet endnu. Skelnes fra ovenstående, fordi den siger noget om HVOR
+        // længe der er til — en sæson uden en række er længere væk end en tom.
+        message: `${footballdata.label} har endnu ikke oprettet sæsonen ${requested} (aktuel sæson er ${current}). Ingen handling — turneringen begynder at hente af sig selv.`,
+      };
+    } else if (known.length || current) {
+      verdict = {
+        code: "season-unknown",
+        // Den, der IKKE retter sig selv.
+        message: `Sæsonen ${requested} kendes ikke af ${footballdata.label} (aktuel: ${current ?? "ukendt"}; kendte: ${known.join(", ") || "ingen"}). Ret api_season_id på sæson-rækken.`,
+      };
+    } else {
+      verdict = {
+        code: "undetermined",
+        message: `${footballdata.label} oplyste hverken aktuel sæson eller sæsonliste for ${apiLeagueId} — spørgsmålet kan ikke afgøres herfra.`,
+      };
+    }
+
+    return { requestedSeason: requested, currentSeason: current, knownSeasons: known, ...verdict };
   },
 
   // Kampe i et datovindue. football-data.org har intet "hent netop disse id'er"

@@ -1,7 +1,8 @@
 # Flere datakilder v1 — Sportmonks og football-data.org side om side
 
 **Status:** leveret og i drift 31. juli 2026. Fire af de fem turneringer henter kampe;
-Champions League gør endnu ikke (`B8` i [`../BACKLOG.md`](../BACKLOG.md)).
+Champions League gør endnu ikke (`B8` i [`../BACKLOG.md`](../BACKLOG.md) — siden
+1. august 2026 forklarer syncen selv hvorfor, se 7.1).
 Alle fem er synlige og officielle (`A19`).
 **Beslutning:** `A18` i [`../DECISIONS.md`](../DECISIONS.md).
 
@@ -181,6 +182,40 @@ samme vilkår som Superliga-slutspillet, af samme grund.
 
 **Står `undrawn` stille hen over en lodtrækning, henter syncen ikke de nye
 kampe.** Det er tallet, man kigger på.
+
+### 7.1 Tilføjet efter levering (1. august 2026): den tomme sæson kan nu forklare sig selv
+
+Spec'en forudså kampe uden hold. Den forudså ikke, at hele sæsonen kunne komme
+tom hjem — og det gjorde Champions League ved idriftsættelsen (`B8`). Problemet
+var ikke tomheden, men at den var **tvetydig**: `/competitions/CL/matches?season=2026`
+svarer 200 med en tom liste både når sæsonen findes uden kampe, og når
+`api_season_id` peger på et år, leverandøren ikke kender. `totalFixtures: 0`
+kunne ikke skelne dem, så spørgsmålet krævede et manuelt opslag, ingen kom til
+at foretage.
+
+Providerkontrakten har derfor fået en **valgfri** metode,
+`describeEmptySeason()`, som `sync-matches` kalder — og kun kalder — når nul
+kampe kom hjem. Den slår `/competitions/<kode>` op og lægger svaret i
+`emptySeason` i kørslens detalje:
+
+| `code` | Betydning | Handling |
+|---|---|---|
+| `season-empty` | Sæsonen findes hos leverandøren, men har endnu ingen kampe | Ingen — retter sig selv |
+| `season-not-published` | Sæsonen er slet ikke oprettet endnu (aktuel sæson er ældre) | Ingen — retter sig selv |
+| `season-unknown` | Året kendes ikke, og det er ikke et fremtidigt år | **Ret `seasons.api_season_id`** |
+| `undetermined` | Leverandøren oplyste hverken aktuel sæson eller sæsonliste | Manuelt opslag |
+| `lookup-failed` | Selve opslaget fejlede (fx 429) | Se på næste kørsel |
+
+Prisen er ét ekstra API-kald, og kun mens turneringen alligevel ikke leverer
+noget. Opslaget kan ikke vælte kørslen: en tom sæson **er** en gyldig kørsel, og
+en fejlende diagnose må ikke gøre den til en fejlet.
+
+Beskeden vises **to steder**: i `job_runs`-detaljen (Admin → Drift) og direkte
+under "Hent nu"-knappen på Admin-skærmen. Det sidste er ikke pynt — den, der
+trykker på knappen, er præcis den, der har brug for svaret, og kortet sagde
+indtil nu kun *"0 kampe synkroniseret ud af 0 fundet"*, som er den samme sætning
+i begge tilfælde. `season-unknown` står rødt, resten dæmpet, fordi kun den ene
+kræver en handling.
 
 ## 8. Hvad der bevidst IKKE blev gjort
 
