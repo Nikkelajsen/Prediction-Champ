@@ -8,6 +8,24 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://qfcjbpvttburc
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || "sb_publishable_Et9Dahm8LOhZk6cS1XRqhA_9RuNmnvC";
 
 // ---------- tiny REST helpers (no SDK needed) ----------
+// Fejlen bærer sin HTTP-status videre (G26).
+//
+// Uden den er en udløbet session ikke til at skelne fra et tomt datasæt eller
+// et netværkshul: kalderen får en tekst og intet andet. Med `status` kan
+// App.jsx skelne "din adgang er udløbet" (4xx fra auth-endpointet, log ud) fra
+// "vi kunne ikke nå serveren" (ingen status, prøv igen senere) — og de to skal
+// ikke føre til det samme.
+//
+// Egenskaben tilføjes på et almindeligt Error frem for en ny fejlklasse: alle
+// eksisterende `catch`-blokke læser `e.message` og er uændrede.
+async function restError(res) {
+  let msg = res.statusText;
+  try { msg = (await res.json()).message || msg; } catch { /* ikke JSON */ }
+  const err = new Error(msg);
+  err.status = res.status;
+  return err;
+}
+
 async function restFetch(path, { method = "GET", body, token, prefer } = {}) {
   const headers = {
     apikey: SUPABASE_KEY,
@@ -20,11 +38,7 @@ async function restFetch(path, { method = "GET", body, token, prefer } = {}) {
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) {
-    let msg = res.statusText;
-    try { msg = (await res.json()).message || msg; } catch {}
-    throw new Error(msg);
-  }
+  if (!res.ok) throw await restError(res);
   if (res.status === 204) return null;
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -47,11 +61,7 @@ async function restCount(path, { token } = {}) {
       Prefer: "count=exact",
     },
   });
-  if (!res.ok) {
-    let msg = res.statusText;
-    try { msg = (await res.json()).message || msg; } catch {}
-    throw new Error(msg);
-  }
+  if (!res.ok) throw await restError(res);
   const total = Number((res.headers.get("content-range") || "").split("/")[1]);
   return Number.isFinite(total) ? total : 0;
 }
@@ -94,4 +104,4 @@ function clearSession() {
   try { localStorage.removeItem(SESSION_KEY); } catch {}
 }
 
-export { SUPABASE_URL, SUPABASE_KEY, restFetch, restCount, db, auth, saveSession, loadSession, clearSession };
+export { SUPABASE_URL, SUPABASE_KEY, restError, restFetch, restCount, db, auth, saveSession, loadSession, clearSession };

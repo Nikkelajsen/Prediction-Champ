@@ -122,18 +122,47 @@ export async function recordRun(sb, job, { ok, startedAt, detail = null, error =
 // admin_job_health() og skjule et job, der reelt er gået i stå.
 export function createRunLogger(sb, job, { skip = false } = {}) {
   const startedAt = Date.now();
+  let name = job;
   return {
+    // Skifter jobnavnet MIDT i kørslen, uden at nulstille varigheden.
+    //
+    // Findes for sync-matches (G44): navnet skal bære turneringen, så syv jobs
+    // ikke deler én række i driftsloggen — men hvilken turnering det er, står i
+    // query-parameteren og kendes derfor først EFTER autorisationen. Havde vi i
+    // stedet flyttet logger-oprettelsen ned efter opslaget, ville en kørsel, der
+    // vælter undervejs, miste sin startTid; og de fejl, der sker før opslaget
+    // (manglende leagueId), ville slet ikke blive logget.
+    rename(nextJob) {
+      if (nextJob) name = nextJob;
+    },
     async ok(res, body) {
-      if (!skip) await recordRun(sb, job, { ok: true, startedAt, detail: body });
+      if (!skip) await recordRun(sb, name, { ok: true, startedAt, detail: body });
       return res.status(200).json(body);
     },
     // `error` er den fulde tekst til job_runs (kun admin-læsbar); `body` er det,
     // kalderen får at se. De to er med vilje ikke det samme — se handlernes catch.
     async fail(res, status, body, error) {
-      if (!skip) await recordRun(sb, job, { ok: false, startedAt, detail: body, error });
+      if (!skip) await recordRun(sb, name, { ok: false, startedAt, detail: body, error });
       return res.status(status).json(body);
     },
   };
+}
+
+// Jobnavnet for én turnerings kampsynkronisering (G44).
+//
+// Indtil august 2026 skrev alle syv sync-matches-jobs den SAMME jobrække, så
+// admin_job_health() så dem som ét job: den seneste kørsel vandt, og en
+// turnering, der fejlede ved hver eneste kørsel, var usynlig bag en, der gik
+// godt. Præcis den fejlklasse var `B8`, og den blev kun fundet, fordi nogen
+// kiggede manuelt.
+//
+// Nøglen er liga-UUID'en og ikke et navne-slug. Det er ikke pænere, det er
+// præcist: både overvågningen (job-heartbeat.yml) og Admin → Drift udleder den
+// forventede jobliste fra `leagues`-tabellen, og med id'et som nøgle kan de to
+// ender ikke drive fra hinanden — hvad de kunne, hvis en slug-funktion skulle
+// være ens i api/, i src/ og i SQL. Menneskenavnet slås op i samme tabel.
+export function syncMatchesJob(leagueId) {
+  return `sync-matches:${leagueId}`;
 }
 
 // Fælles afslutning på handlernes catch: fuld fejl i logs og i job_runs,

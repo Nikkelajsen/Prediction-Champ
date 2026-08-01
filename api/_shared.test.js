@@ -12,6 +12,7 @@ import {
   isAuthorized,
   recordRun,
   createRunLogger,
+  syncMatchesJob,
   failJob,
 } from "./_shared.js";
 
@@ -386,6 +387,42 @@ describe("createRunLogger", () => {
     };
     await createRunLogger(sb, "sync-live").ok(res, {});
     expect(order).toEqual(["log", "svar"]);
+  });
+
+  // G44: sync-matches kender først sin turnering EFTER autorisationen, men
+  // varigheden skal måles fra kørslens start. Derfor et navneskift midtvejs
+  // frem for at flytte selve logger-oprettelsen ned.
+  it("skriver det omdøbte jobnavn uden at nulstille varigheden", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    const run = createRunLogger(sb, "sync-matches");
+    const start = JSON.parse(JSON.stringify({ t: Date.now() }));
+    run.rename("sync-matches:abc");
+    await run.ok(res, {});
+
+    const row = JSON.parse(sb.mock.calls[0][1].body);
+    expect(row.job).toBe("sync-matches:abc");
+    expect(new Date(row.started_at).getTime()).toBeLessThanOrEqual(start.t + 50);
+  });
+
+  it("beholder det oprindelige navn, når omdøbningen ikke har noget at give", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    const run = createRunLogger(sb, "sync-matches");
+    run.rename(undefined);
+    await run.ok(res, {});
+    expect(JSON.parse(sb.mock.calls[0][1].body).job).toBe("sync-matches");
+  });
+});
+
+// Nøglen er liga-UUID'en og ikke et navne-slug, netop for at overvågningen og
+// api/ ikke kan drive fra hinanden: begge ender udleder navnet af den samme
+// leagues-række. Formatet fastholdes her, fordi src/lib/ops.js og
+// .github/workflows/job-heartbeat.yml bygger den samme streng hver for sig.
+describe("syncMatchesJob", () => {
+  it("navngiver kørslen efter turneringen", () => {
+    expect(syncMatchesJob("11111111-1111-1111-1111-111111111111"))
+      .toBe("sync-matches:11111111-1111-1111-1111-111111111111");
   });
 });
 

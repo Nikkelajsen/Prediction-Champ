@@ -1,6 +1,6 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
 import { useState, useEffect } from "react";
-import { Bell, ChevronRight, ChevronDown, Clock, Check, X, Share2 } from "lucide-react";
+import { Bell, ChevronRight, ChevronDown, Clock, Check, X, Share2, RefreshCw } from "lucide-react";
 import { formatKickoff } from "../lib/scoring.js";
 import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
@@ -144,6 +144,10 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
   const [placements, setPlacements] = useState(null); // [{ label, pos, gold, onClick }]
   const [story, setStory] = useState(null); // Story Engine — seneste historie (live for alle)
   const [, setTick] = useState(0);
+  // Manuel genindlæsning (B13). Tælleren står i afhængighedslisterne for de tre
+  // dataeffekter nedenfor, så et klik kører præcis de samme kald som en
+  // montering — ingen dobbelt kodesti, der kan komme i utakt med den rigtige.
+  const [reloadKey, setReloadKey] = useState(0);
   // Kortet kan skjules permanent; onboarding-tilstanden selv kommer fra MainApp,
   // så Hjem ikke skal hente brugerens ligaer en ekstra gang.
   const [cardHidden, setCardHidden] = useState(() => readFlag(CARD_KEY) === "1");
@@ -197,7 +201,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
     load();
     const id = setInterval(load, 60000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [token, userId, competitions]);  
+  }, [token, userId, competitions, reloadKey]);  
 
   useEffect(() => {
     let cancelled = false;
@@ -254,7 +258,21 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       } catch { if (!cancelled) setPlacements([]); }
     })();
     return () => { cancelled = true; };
-  }, [token, userId, competitions]);  
+  }, [token, userId, competitions, reloadKey]);  
+
+  // "Henter" UDLEDES af, at placeringerne mangler, frem for at være sin egen
+  // state med en effekt til at slukke den. Placeringerne er det tungeste kald
+  // på skærmen og dermed det, der reelt afgør, hvornår den er frisk igen — og
+  // en afledt værdi kan pr. konstruktion ikke komme i utakt med det, den
+  // beskriver. Det gælder også den allerførste indlæsning, hvor knappen med
+  // rette er optaget.
+  const refreshing = placements === null;
+
+  function refreshNow() {
+    if (refreshing) return;
+    setPlacements(null);
+    setReloadKey((k) => k + 1);
+  }
 
   const displayName = profile?.display_name || "";
 
@@ -262,7 +280,25 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div style={{ minWidth: 0 }}>
-          <Eyebrow>{daFullDate()}</Eyebrow>
+          <Eyebrow>
+            {daFullDate()}
+            {/* Opdater-knappen sidder ved DATOEN og ikke ved rating-tallet.
+                Grunden er, hvad den betyder: "hent skærmen igen", ikke "hent min
+                rating igen" — og datoen er den ene linje på Hjem, der handler om
+                hele siden. Runde-oversigten opdaterer sig selv hvert minut, men
+                "Dine placeringer" og rating-snapshottet hentede kun ved
+                montering, så en bruger med appen åben hele kampdagen — præcis
+                den situation, produktet er bygget til — så forældede tal uden
+                anden udvej end at genstarte appen (B13). */}
+            <button type="button" onClick={refreshNow} disabled={refreshing}
+              aria-label="Opdatér tallene på Hjem"
+              style={{
+                ...iconBtn, marginLeft: 6, padding: 2, verticalAlign: "middle",
+                opacity: refreshing ? 0.5 : 1, cursor: refreshing ? "default" : "pointer",
+              }}>
+              <RefreshCw size={13} className={refreshing ? "spin" : undefined} />
+            </button>
+          </Eyebrow>
           {/* Eget navn er samme indgang som alle andre navne i appen → karrieren. */}
           <H size={30}>Hej <PlayerName userId={userId} name={displayName} onOpenProfile={openProfile} /></H>
         </div>

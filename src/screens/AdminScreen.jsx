@@ -45,7 +45,7 @@ function AdminScreen({ token, leagues, reloadLeagues, onBack }) {
       {sub === "results" && <ResultsPanel token={token} leagues={leagues} />}
       {sub === "stats" && <StatsPanel token={token} />}
       {sub === "analytics" && <AnalyticsPanel token={token} />}
-      {sub === "ops" && <OpsPanel token={token} />}
+      {sub === "ops" && <OpsPanel token={token} leagues={leagues} />}
     </div>
   );
 }

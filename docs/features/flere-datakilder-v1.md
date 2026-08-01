@@ -290,10 +290,11 @@ et resultat, når deployet er bekræftet.
   bagefter — altså som spec'en foreskrev, bare uden ventetid imellem.
 - **Ingen retry på Sportmonks-siden.** Den har aldrig haft en, og at tilføje en
   under en oprydning ville skjule, om noget flyttede sig.
-- **Kadence-uoverensstemmelsen i `CRON.md` er ikke rettet.** Jobtabellen siger
-  hver 12. time, overvågningen hver 6. med alarm efter 14 timer. Rettelsen
-  kræver, at man ved, hvad jobbene faktisk står på i cron-job.org, og skal ske
-  tre steder samlet. Noteret i backloggens indbakke.
+- ~~**Kadence-uoverensstemmelsen i `CRON.md` er ikke rettet.**~~ **Rettet efter
+  levering (august 2026, `G6`):** jobtabellen sagde hver 12. time, overvågningen
+  hver 6. med alarm efter 14 timer — og to andre steder sagde noget tredje og
+  fjerde. Jobtabellen vandt, fordi den er den ene, der beskriver, hvad der
+  faktisk er sat op i cron-job.org. Alarmgrænsen fulgte med til 26 timer.
 
 ## 8b. Rækkefølgen deploy → migrering er ufarlig
 

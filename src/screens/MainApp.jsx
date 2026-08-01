@@ -1,5 +1,5 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { loadGroupByCode, joinGroup, joinCompetition } from "../lib/data.js";
@@ -291,7 +291,35 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     }
   }
 
-  const visibleLeagues = leagues.filter((l) => l.is_visible !== false);
+  // De to filtrerede lister er `useMemo` og ikke bare `filter` (G33).
+  //
+  // Grunden er ikke selve filtreringen — den koster ingenting på 10 rækker — men
+  // at listerne sendes ned i fire skærmes AFHÆNGIGHEDSLISTER. Et nyt array-objekt
+  // ved hver render invaliderer deres effekter, så HjemTab hentede sine seks kald
+  // pr. konkurrence forfra, hver gang MainApp gentegnede af en helt anden grund
+  // (et lukket join-banner, en opdateret onboarding-tilstand). Belastningen voksede
+  // dermed lineært med antallet af konkurrencer — netop for de mest aktive brugere.
+  // Minut-intervallet i HjemTab blev rykket ned og startet forfra ved samme
+  // lejlighed, så "hvert minut" i praksis var "oftere".
+  const visibleLeagues = useMemo(() => leagues.filter((l) => l.is_visible !== false), [leagues]);
+  const visibleCompetitions = useMemo(() => competitions.filter((c) => !c._hidden), [competitions]);
+
+  // Ny skærm ⇒ start øverst (G30).
+  //
+  // Uden dette arvede en ny skærm den forriges scroll-position — der er kun ÉN
+  // scroll-container i hele appen, og navigation er `useState` og ikke ruter
+  // (`A23`), så browserens egen scroll-gendannelse har intet at arbejde med.
+  // Åbnede man en konkurrence fra bunden af Hjem, startede stillingen langt nede
+  // i sit eget indhold og så tom eller forkert ud, indtil man selv scrollede op.
+  //
+  // Accepteret pris: at gå TILBAGE til en fane starter også øverst. At huske
+  // positionen ville kræve, at indholdet havde samme højde ved tilbagekomsten,
+  // og det har det ikke — skærmene henter asynkront, så en gendannet position
+  // ville lande et vilkårligt sted. Øverst er det ene sted, der altid er rigtigt.
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [tab, screen]);
 
   // navigations-hjælpere
   // At vende tilbage til Hjem er præcis det øjeblik, hvor et netop afgivet tip
@@ -358,11 +386,11 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       </div>
     );
   } else if (screen?.type === "board") {
-    body = <BoardScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
+    body = <BoardScreen token={token} userId={userId} competitions={visibleCompetitions}
       initialCompId={screen.compId} inviterName={profile?.display_name} onBack={() => setScreen(null)}
       goToPredictions={openPredictions} openProfile={openProfile} onCreate={openCreate} goTab={goTab} />;
   } else if (screen?.type === "predictions") {
-    body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
+    body = <PredictionsScreen token={token} userId={userId} competitions={visibleCompetitions}
       leagues={visibleLeagues} initialFilter={screen.compFilter} initialRoundKey={screen.roundKey}
       onBack={() => setScreen(null)} openProfile={openProfile} onCreate={openCreate} goTab={goTab} />;
   } else if (screen?.type === "group") {
@@ -381,11 +409,11 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   } else if (screen?.type === "how") {
     body = <HowItWorksScreen onBack={() => setScreen(null)} />;
   } else if (tab === "hjem") {
-    body = <HjemTab token={token} userId={userId} profile={profile} competitions={competitions.filter((c) => !c._hidden)}
+    body = <HjemTab token={token} userId={userId} profile={profile} competitions={visibleCompetitions}
       goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} openGroup={openGroup} openProfile={openProfile}
       onboarding={onboarding} />;
   } else if (tab === "tip") {
-    body = <PredictionsScreen token={token} userId={userId} competitions={competitions.filter((c) => !c._hidden)}
+    body = <PredictionsScreen token={token} userId={userId} competitions={visibleCompetitions}
       leagues={visibleLeagues} initialFilter="all" openProfile={openProfile} onCreate={openCreate} goTab={goTab} />;
   } else if (tab === "ligaer") {
     body = <LigaerTab token={token} userId={userId} competitions={competitions}
@@ -399,10 +427,15 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   return (
     <div style={wrapOuter}>
       <div style={phone}>
-        {/* Top brand bar */}
+        {/* Top brand bar
+            Den øverste inset er ikke valgfri, når index.html har både
+            viewport-fit=cover og apple-mobile-web-app-status-bar-style=
+            black-translucent: uret og batteriet tegnes da OVEN PÅ appen, og
+            uden pladsen ville brandbaren ligge under dem (G29). */}
         <div style={{
           padding: "14px 18px 10px", display: "flex", alignItems: "center", gap: 8,
           borderBottom: `1px solid ${C.line}`,
+          paddingTop: "calc(14px + env(safe-area-inset-top, 0px))",
         }}>
           <Crown size={17} color={C.gold} />
           <span style={{
@@ -419,8 +452,14 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
           </div>
         </div>
 
-        {/* Content */}
-        <div style={{ flex: 1, padding: "18px 18px 96px", overflowY: "auto" }}>
+        {/* Content
+            Bundpolstringen skal vokse med den samme inset som bundnavigationen
+            nedenfor — ellers ville de sidste 34 px indhold gemme sig bag en nav,
+            der netop er blevet højere (G29). */}
+        <div ref={scrollRef} style={{
+          flex: 1, padding: "18px 18px 96px", overflowY: "auto",
+          paddingBottom: "calc(96px + env(safe-area-inset-bottom, 0px))",
+        }}>
           {joinError && (
             <div style={{
               display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 14,
@@ -434,11 +473,16 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
           {body}
         </div>
 
-        {/* Bottom nav */}
+        {/* Bottom nav
+            `env(safe-area-inset-bottom)` som POLSTRING og ikke som `bottom`:
+            baggrunden skal nå helt ned bag home-indikatoren, mens knapperne
+            holder sig over den. Skubbede vi hele baren op i stedet, ville der
+            stå en stribe app-baggrund under den (G29). */}
         <div style={{
           position: "fixed", bottom: 0, width: "100%", maxWidth: 430,
           background: "rgba(12,22,34,0.96)", backdropFilter: "blur(8px)",
           borderTop: `1px solid ${C.line}`, display: "flex",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
         }}>
           {tabs.map((t) => {
             const Icon = t.icon;

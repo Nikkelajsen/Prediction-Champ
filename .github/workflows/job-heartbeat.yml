@@ -20,7 +20,18 @@ name: Job-heartbeat
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: "0 */6 * * *" # hver 6. time
+    # Hver halve time (G46). Kørte indtil august 2026 hver 6. time, hvilket ikke
+    # passede til det, den overvåger: sync-live har en tavshedsgrænse på 30
+    # minutter, så et dødt live-job kunne være usynligt næsten en hel kampdag —
+    # netop de timer, hvor det betyder mest, og hvor brugerne står med forkerte
+    # stillinger. En overvågning, der kigger sjældnere end den grænse, den
+    # håndhæver, håndhæver den i praksis ikke.
+    #
+    # Prisen er 48 kørsler i døgnet à ~20 sekunder. Repoet er offentligt, så
+    # GitHub Actions er gratis; bliver det privat igen, er dette tallet at kigge
+    # på først. GitHub kører i øvrigt planlagte workflows med forsinkelse under
+    # belastning, så kadencen er et loft for hyppigheden, ikke en garanti.
+    - cron: "*/30 * * * *"
 
 permissions:
   contents: read
@@ -39,6 +50,33 @@ jobs:
       # Runneren har en psql-klient forudinstalleret. Modsat pg_dump er psql
       # ikke kræsen med serverversionen for almindelige forespørgsler, så her
       # er der ingen grund til at installere pg17-klienten som i skema-eksporten.
+      # Rydningen af job_runs bor HER og ikke i et cron-job (G43).
+      #
+      # docs/CRON.md påstod, at tabellen blev ryddet med prune_job_runs(30),
+      # men funktionen havde ingen kaldere — hverken et job eller kode. sync-live
+      # alene skriver ~525.000 rækker om året, så tabellen voksede uden loft, og
+      # Admin → Drift blev langsommere med tiden. Et register, der beskriver en
+      # rydning, som ikke sker, er værre end ingen rydning: ingen leder efter
+      # problemet.
+      #
+      # Denne workflow er stedet, fordi den allerede har databaseadgangen og
+      # allerede kører på et skema — en rydning er ét ekstra udsagn frem for et
+      # nyt endpoint, et nyt cron-job og en ny række i registeret. Den kører FØR
+      # helbredstjekket, så et rødt tjek ikke afbryder den; 30 dages historik er
+      # rigeligt til at aflæse et mønster, og rækker ældre end det kan hverken
+      # gøre tjekket rødt eller grønt.
+      - name: Ryd gamle job_runs
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::error::Secret SUPABASE_DB_URL mangler. Tilføj den under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          slettet=$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -c "select public.prune_job_runs(30);")
+          echo "Ryddede $slettet rækker ældre end 30 dage fra job_runs."
+
       - name: Tjek jobbenes helbred
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -53,21 +91,32 @@ jobs:
           # docs/CRON.md, så et enkelt sprunget interval ikke larmer:
           #   sync-live          hvert minut        → alarm efter 30 min
           #   send-notifications hver 15.-30. minut → alarm efter 3 timer
-          #   sync-matches       hver 6. time       → alarm efter 14 timer
+          #   sync-matches       hver 12. time      → alarm efter 26 timer
+          #
+          # Kampprogram-jobbene UDLEDES af leagues-tabellen (G44) frem for at
+          # stå skrevet her. Ét job pr. turnering, navngivet med liga-UUID'en af
+          # api/_shared.js' syncMatchesJob(), så en ny turnering automatisk bliver
+          # forventet — og en turnering, hvis job er dødt, ikke længere kan gemme
+          # sig bag de seks andre. Turneringer uden api_league_id kan pr.
+          # definition ikke synkronisere og forventes derfor ikke.
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -F'|' > rapport.txt <<'SQL'
-          with forventet(job, taalt_stilhed) as (
-            values ('sync-live',          interval '30 minutes'),
-                   ('send-notifications', interval '3 hours'),
-                   ('sync-matches',       interval '14 hours')
+          with forventet(job, navn, taalt_stilhed) as (
+            select 'sync-live', 'sync-live', interval '30 minutes'
+            union all
+            select 'send-notifications', 'send-notifications', interval '3 hours'
+            union all
+            select 'sync-matches:' || l.id, 'sync-matches ' || l.name, interval '26 hours'
+              from public.leagues l
+             where l.api_league_id is not null
           ),
           seneste as (
-            select f.job,
+            select f.job, f.navn,
                    (select max(r.started_at) from job_runs r where r.job = f.job) as sidst,
                    (select max(r.started_at) from job_runs r where r.job = f.job and r.ok) as sidst_ok,
                    f.taalt_stilhed
             from forventet f
           )
-          select job,
+          select navn,
                  coalesce(to_char(sidst, 'YYYY-MM-DD HH24:MI'), 'aldrig'),
                  case
                    when sidst is null then 'INGEN KOERSLER'
@@ -79,7 +128,7 @@ jobs:
                      and f2.ok is distinct from true
                      and (sidst_ok is null or f2.started_at > sidst_ok))
           from seneste
-          order by job;
+          order by navn;
           SQL
 
           echo "Job | Sidste kørsel | Tilstand | Fejl i træk"
@@ -87,7 +136,7 @@ jobs:
           fail=0
           while IFS='|' read -r job sidst tilstand fejlserie; do
             [ -z "$job" ] && continue
-            printf '%-20s %-18s %-15s %s\n' "$job" "$sidst" "$tilstand" "$fejlserie"
+            printf '%-34s %-18s %-15s %s\n' "$job" "$sidst" "$tilstand" "$fejlserie"
 
             if [ "$tilstand" = "TAVS" ]; then
               echo "::error::$job har ikke meldt sig siden $sidst. Tjek om cron-job.org har deaktiveret jobbet (se docs/CRON.md)."

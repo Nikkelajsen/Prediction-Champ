@@ -15,7 +15,7 @@
 //   SPORTMONKS_TOKEN      (kræves kun af sportmonks-ligaer)
 //   FOOTBALLDATA_TOKEN    (kræves kun af footballdata-ligaer)
 
-import { createSb, isAuthorized, createRunLogger, failJob } from "./_shared.js";
+import { createSb, isAuthorized, createRunLogger, failJob, syncMatchesJob } from "./_shared.js";
 import { getProvider, providerToken } from "./providers/index.js";
 import { backfillCompetitionMatches } from "./backfill.js";
 
@@ -40,6 +40,46 @@ export function seasonFetchVerdict(fetchError, emptySeason) {
   if (emptySeason?.code === "season-not-published") return { tolerated: true };
   const why = emptySeason?.message ? ` — ${emptySeason.message}` : "";
   return { tolerated: false, message: `${fetchError?.message ?? String(fetchError)}${why}` };
+}
+
+// Holdnavne uden accenter, tegn og store bogstaver. Modulniveau, fordi
+// ambiguousTeamNames() bruger PRÆCIS samme normalisering som findByName()
+// nedenfor — en kontrol, der normaliserer anderledes end det, den kontrollerer,
+// ville melde noget andet end det, der faktisk sker.
+export function normalizeTeamName(s) {
+  return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+}
+
+// Holdpar, som den fuzzy navnematch ikke kan skelne.
+//
+// HVORFOR DEN FINDES. findByName() falder tilbage til en DELSTRENGS-match, når
+// et api_team_id ikke kendes: `normalize(a).includes(normalize(b))`. Den regel
+// er ufarlig i en liga med entydige navne og direkte forkert i en, hvor ét navn
+// er indeholdt i et andet — "Rangers" ligger inde i "Queen's Park Rangers", så
+// et nyt hold kan blive knyttet til et eksisterende holds række. Følgen er ikke
+// en fejl nogen ser: kampene lander bare på det forkerte hold.
+//
+// `B2` bad om, at holdene blev kontrolleret for dubletter, EFTER Scotland
+// Premiership var synkroniseret første gang, og indbakken bad om den samme
+// kontrol for Champions League efter lodtrækningen. Begge er engangs-tjek, som
+// et menneske skal huske på det rigtige tidspunkt. Her er de i stedet en
+// permanent del af hver kørsel: parrene lander i `detail` og kan aflæses i
+// Admin → Drift, uanset hvornår turneringen får sine hold.
+//
+// Kontrollen ADVARER og blokerer ikke. En ægte navnelighed (to klubber i samme
+// by) er lovlig, og en sync, der nægtede at køre på den, ville være værre end
+// den tvetydighed, den advarer om.
+export function ambiguousTeamNames(teams) {
+  const rows = (teams || []).map((t) => ({ name: t.name, key: normalizeTeamName(t.name) })).filter((t) => t.key);
+  const out = [];
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = i + 1; j < rows.length; j++) {
+      const a = rows[i], b = rows[j];
+      if (a.key === b.key) out.push({ teams: [a.name, b.name], why: "identiske navne" });
+      else if (a.key.includes(b.key) || b.key.includes(a.key)) out.push({ teams: [a.name, b.name], why: "det ene navn ligger inde i det andet" });
+    }
+  }
+  return out;
 }
 
 export default async function handler(req, res) {
@@ -86,6 +126,11 @@ export default async function handler(req, res) {
     // Et job uden leagueId er et forkert opsat cron-job, ikke en tilfældig fejl —
     // derfor tælles det som en fejlet kørsel, så det dukker op i fejlserien.
     if (!leagueId) return run.fail(res, 400, { error: "Mangler leagueId query-parameter" }, "Mangler leagueId query-parameter");
+    // Fra og med her har kørslen en turnering at høre til (G44). Navnet sættes
+    // FØR liga-opslaget og ikke efter: peger jobbet på en liga, der ikke findes,
+    // er det netop den slags fejl, der skal kunne spores til ét bestemt job —
+    // og med det fælles navn ville den have været usynlig bag de seks andre.
+    run.rename(syncMatchesJob(leagueId));
 
     // find ligaen i vores egen database (giver os navn, datakilde + dens liga-id)
     //
@@ -110,9 +155,7 @@ export default async function handler(req, res) {
 
     const teams = await sb(`/rest/v1/teams?league_id=eq.${leagueId}&select=id,name,api_team_id`);
 
-    function normalize(s) {
-      return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
-    }
+    const normalize = normalizeTeamName;
     function findByName(providerName) {
       const n = normalize(providerName);
       return teams.find((t) => normalize(t.name) === n)
@@ -243,6 +286,12 @@ export default async function handler(req, res) {
       });
     }
 
+    // Kontrollen kører på turneringens FULDE holdliste efter kørslen — de
+    // eksisterende plus dem, denne kørsel lige oprettede. Det er den liste,
+    // NÆSTE kørsels findByName() vil slå op i, og dermed den, tvetydigheden
+    // ville ramme. Se ambiguousTeamNames() ovenfor for hvorfor den findes.
+    const ambiguousTeams = ambiguousTeamNames([...teams, ...newTeams]);
+
     let toUpsert = [];
     const unmatched = new Set();
     let undrawn = 0;
@@ -303,6 +352,9 @@ export default async function handler(req, res) {
       synced: toUpsert.length,
       totalFixtures: fixtures.length,
       teamsCreated: newTeams.length,
+      // Kun til stede, når der ER noget at kigge på: et felt, der står tomt ved
+      // hver kørsel, holder man op med at læse. Se ambiguousTeamNames().
+      ...(ambiguousTeams.length ? { ambiguousTeams } : {}),
       // Ikke en fejl, men skal kunne aflæses: står tallet stille hen over en
       // CL-lodtrækning, henter syncen ikke de nye kampe.
       undrawn,

@@ -1,5 +1,5 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { auth, clearSession, db, loadSession, saveSession } from "./lib/supabase.js";
 import { touchActivity } from "./lib/data.js";
@@ -8,6 +8,14 @@ import { disablePush } from "./lib/push.js";
 import { C, globalCss, wrapOuter } from "./ui/theme.js";
 import { AuthScreen, ResetPasswordScreen } from "./screens/Auth.jsx";
 import MainApp from "./screens/MainApp.jsx";
+
+// Hvor ofte tokenen fornys, mens fanen er fremme — og hvor gammel den skal
+// være, før en vækning udløser en fornyelse. Vækningsgrænsen er lavere end
+// intervallet med vilje: kommer man tilbage efter 20 minutter, er tokenen ikke
+// udløbet endnu, men den næste timer-kørsel kan ligge langt ude i fremtiden,
+// fordi timeren stod stille imens.
+const REFRESH_MS = 45 * 60 * 1000;
+const STALE_MS = 10 * 60 * 1000;
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -78,16 +86,77 @@ export default function App() {
     })();
   }, []);  
 
+  // ---- token-fornyelse (G26) ----
+  //
+  // Fornyelsen hang indtil august 2026 udelukkende på et `setInterval` på 45
+  // minutter, og det er præcis den mekanisme, mobile browsere suspenderer, når
+  // appen går i baggrunden. En bruger, der lagde telefonen fra sig under en
+  // kampdag og vendte tilbage et par timer senere, havde derfor en død
+  // access-token — og fordi ingen kaldte 401 ved navn, så det ud som TOMME
+  // SKÆRME frem for som en udløbet session. To ting mangler derfor:
+  //
+  //   1. et vækning-tidspunkt. `visibilitychange` fyrer, når fanen bliver
+  //      synlig igen, og er det ene sted, hvor vi med sikkerhed ved, at
+  //      timeren kan have stået stille. Vi fornyer kun, hvis der reelt er gået
+  //      tid (STALE_MS), så et fanevip frem og tilbage ikke bliver til et kald.
+  //   2. et svar på en fornyelse, der ikke KAN lykkes. En 4xx fra
+  //      auth-endpointet betyder, at refresh-tokenen er udløbet eller trukket
+  //      tilbage — der er ingen vej tilbage derfra, og at blive siddende med en
+  //      død session er værre end at se login-skærmen. En fejl UDEN status er
+  //      derimod et netværkshul: den skal ikke logge nogen ud. Det er dét,
+  //      `err.status` fra restError() er til for.
+  // `0` og ikke Date.now(): en `useRef` initialiseres under render, og
+  // `Date.now()` dér er uren (react-hooks/purity) — samme regel som
+  // mergeJobHealth i ops.js følger. Værdien sættes i effekten nedenfor, som er
+  // det rigtige sted at aflæse "nu".
+  const lastRefreshAt = useRef(0);
+  const refreshingRef = useRef(false);
+
   useEffect(() => {
     if (!session?.refresh_token) return;
-    const id = setInterval(async () => {
+    let stopped = false;
+    // Sessionen er frisk i det øjeblik, denne effekt kører: enten er den lige
+    // hentet ved login, eller også er tokenen netop fornyet (effekten hænger på
+    // refresh_token). Uret starter derfor her og ikke under render.
+    lastRefreshAt.current = Date.now();
+
+    async function refreshNow() {
+      // Vagt mod to samtidige fornyelser: intervallet og vækningen kan ramme
+      // samme sekund, og Supabase roterer refresh-tokenen ved hvert kald, så
+      // det andet kald ville bruge en token, det første lige har brugt op.
+      if (refreshingRef.current || stopped) return;
+      refreshingRef.current = true;
       try {
         const res = await auth.refresh(session.refresh_token);
+        if (stopped) return;
+        lastRefreshAt.current = Date.now();
         setSession((s) => ({ ...s, access_token: res.access_token, refresh_token: res.refresh_token }));
         saveSession({ refresh_token: res.refresh_token, user: session.user });
-      } catch { /* ignorer */ }
-    }, 45 * 60 * 1000);
-    return () => clearInterval(id);
+      } catch (e) {
+        // Kun en afvisning fra serveren er endelig. Alt andet (offline, timeout)
+        // prøver vi igen ved næste interval eller næste vækning.
+        if (!stopped && e?.status >= 400 && e?.status < 500) {
+          clearSession();
+          setSession(null);
+          setProfile(null);
+        }
+      } finally {
+        refreshingRef.current = false;
+      }
+    }
+
+    const id = setInterval(refreshNow, REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastRefreshAt.current < STALE_MS) return;
+      refreshNow();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [session?.refresh_token]); // eslint-disable-line
 
   // push_opened: virker uanset om ?pn= ankom før eller efter login (session
