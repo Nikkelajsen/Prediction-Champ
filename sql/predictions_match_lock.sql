@@ -39,6 +39,97 @@
 -- kampe åbnet igen i samme øjeblik scriptet køres. Kør det derfor MELLEM to
 -- runder, ikke midt i en — ellers ændrer reglen sig for tips, der allerede er
 -- afgivet, og en spiller kan rette et gæt, en anden allerede har set.
+-- Om du ER mellem to runder, afgøres af PRE-FLIGHT-blokken herunder. Gæt ikke.
+
+-- ============================================================================
+-- PRE-FLIGHT — kør FØR scriptet (kommenteret, så filen kan køres i sin helhed)
+-- ============================================================================
+-- Migreringen kan kun låse OP, aldrig låse. En kamp, der er låst per kamp, er
+-- altid også låst per runde (kampens kickoff ligger efter rundens første), så
+-- intet bliver nylåst. Præcis ét sæt påvirkes:
+--
+--   uspillede kampe, hvis EGET kickoff er mere end en time ude,
+--   i en runde hvor en tidligere kamp allerede er begyndt.
+--
+-- Hvorfor det sæt er farligt: under rundelåsen blev HELE rundens gæt synlige,
+-- da runden låste. Migreringen giver skriveadgang tilbage til gæt, de andre
+-- deltagere allerede HAR set — den ene kombination, per-kamp-låsen ellers
+-- aldrig tillader. Dertil bliver samme runde afgjort under to regelsæt: den,
+-- der ikke nåede at tippe søndagskampen, fordi runden låste fredag, får nu lov,
+-- mens andre var bundet af den gamle regel.
+--
+-- Ingen point, stillinger eller ratings flytter sig. Færdigspillede kampe er
+-- låst under begge regler (`home_score is not null`), og et gæt ændret før
+-- kickoff er den tilsigtede adfærd. Det er kun de allerede AFSLØREDE gæt.
+
+-- Tjek 1 — er du mellem to runder? NUL RÆKKER = kør frit.
+-- Betingelsen er den gamle rundelås (fra predictions_round_lock_policies.sql)
+-- krydset med den nye per-kamp-regel, så tjekket ikke kan drive fra det, det måler.
+--
+-- select l.name as turnering, m.round_key,
+--        count(*) filter (where m.home_score is null
+--                           and m.kickoff_at > now() + interval '1 hour') as kampe_der_aabnes,
+--        count(*) as kampe_i_runden,
+--        min(m.kickoff_at) as runde_start,
+--        max(m.kickoff_at) as sidste_kickoff
+-- from public.matches m
+-- join public.seasons s on s.id = m.season_id
+-- join public.leagues  l on l.id = s.league_id
+-- where exists (select 1 from public.matches m2
+--               where m2.round_key = m.round_key
+--                 and m2.season_id is not distinct from m.season_id
+--                 and m2.kickoff_at is not null
+--                 and m2.kickoff_at <= now() + interval '1 hour')
+-- group by 1, 2
+-- having count(*) filter (where m.home_score is null
+--                          and m.kickoff_at > now() + interval '1 hour') > 0;
+
+-- Tjek 2 — hvor stor er eksponeringen? Det er dette tal, beslutningen står på:
+-- en håndfuld gæt i en testgruppe er noget andet end en fuld runde.
+--
+-- select count(*) as tips_der_kan_rettes,
+--        count(distinct p.user_id) as brugere,
+--        count(distinct m.id)      as kampe
+-- from public.predictions p
+-- join public.matches m on m.id = p.match_id
+-- where m.home_score is null
+--   and m.kickoff_at > now() + interval '1 hour'
+--   and exists (select 1 from public.matches m2
+--               where m2.round_key = m.round_key
+--                 and m2.season_id is not distinct from m.season_id
+--                 and m2.kickoff_at is not null
+--                 and m2.kickoff_at <= now() + interval '1 hour');
+
+-- Valgfrit snapshot — kun hvis tjek 2 gav noget, og du ikke vil vente.
+-- NØDVENDIGT, fordi `predictions.updated_at` IKKE kan bruges: der er ingen
+-- trigger på tabellen, og klienten sender ikke feltet (den upserter kun
+-- pred_home/pred_away), så det registrerer OPRETTELSE og ikke sidste ændring.
+-- Uden snapshottet findes der intet revisionsspor for et rettet gæt.
+--
+-- create table public._a21_snapshot as
+-- select p.user_id, p.match_id, p.pred_home, p.pred_away, now() as taget_kl
+-- from public.predictions p
+-- join public.matches m on m.id = p.match_id
+-- where m.home_score is null
+--   and m.kickoff_at > now() + interval '1 hour'
+--   and exists (select 1 from public.matches m2
+--               where m2.round_key = m.round_key
+--                 and m2.season_id is not distinct from m.season_id
+--                 and m2.kickoff_at is not null
+--                 and m2.kickoff_at <= now() + interval '1 hour');
+--
+-- … og bagefter, når runden er spillet — hvem rettede noget?
+--
+-- select s.user_id, s.match_id, s.pred_home as foer_h, s.pred_away as foer_a,
+--        p.pred_home as efter_h, p.pred_away as efter_a
+-- from public._a21_snapshot s
+-- join public.predictions p on p.user_id = s.user_id and p.match_id = s.match_id
+-- where p.pred_home is distinct from s.pred_home
+--    or p.pred_away is distinct from s.pred_away;
+--
+-- DROP TABELLEN BAGEFTER — ellers står den som et efterladt objekt, præcis den
+-- slags sql/cleanup_orphans.sql måtte rydde op i:
+-- drop table if exists public._a21_snapshot;
 
 alter table public.predictions enable row level security;
 

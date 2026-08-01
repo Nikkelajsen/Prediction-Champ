@@ -34,7 +34,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*Tom.*
+- `predictions.updated_at` opdateres aldrig ved rettelse — ingen trigger på tabellen, og klienten sender ikke feltet (`PredictionsScreen.jsx:181` upserter kun `pred_home`/`pred_away`). Verificeret mod PostgreSQL 16.13: `on conflict do update` uden feltet i `set` lader det stå. To følger: der findes intet revisionsspor for et rettet gæt, og Analytics' "Aktive konkurrencer" siger "mindst ét tip **opdateret** i vinduet" mens `p.updated_at` i praksis måler *oprettede* tips
 
 ---
 

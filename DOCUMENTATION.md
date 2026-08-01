@@ -310,7 +310,9 @@ Tjekliste før merge
 Fast tjekliste inden en branch merges til `main` (test på preview-URL, både mobil og desktop). Oprindeligt QA-listen fra migrationen til 4-fane-fladen; bevaret her som permanent regressions-tjek, da alle punkter fortsat er kernefunktioner:
 - [ ] Alle konkurrencetyper kan oprettes, tilgås og arkiveres.
 - [ ] Invite-links virker og lander det rigtige sted i navigationen.
-- [ ] UserRoundPredictions-visningen virker fra både konkurrence- og Championship-stillinger, og viser runder fra rundens LÅS (ikke først når alle kampe har resultat).
+- [ ] UserRoundPredictions-visningen virker fra både konkurrence- og Championship-stillinger, og viser kampe fra deres LÅS (ikke først når alle kampe har resultat).
+- [ ] En runde med kampe på to dage viser den tidlige kamp låst — med kolonnehoved og "alles gæt" — mens den senere stadig kan tippes i samme runde (`A21`).
+- [ ] **Køres `sql/predictions_match_lock.sql` i produktion: kør PRE-FLIGHT-blokken i filen FØRST.** Den afgør, om du er mellem to runder; migreringen låser kun OP, og de kampe, den åbner igen, har allerede fået deres gæt afsløret af rundelåsen. Nul rækker i tjek 1 ⇒ kør frit.
 - [ ] Rullende gætte-vindue (`openDaysBefore`) opfører sig som forventet.
 - [ ] Rating auto-genberegnes ved gemte resultater; admin-knappen "Opdater ratings" virker fortsat.
 - [ ] Hjem-fanens deadline-kort viser korrekt antal manglende tips og skifter korrekt til grøn, når alt er tippet.
