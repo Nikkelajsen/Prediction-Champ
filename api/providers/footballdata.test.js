@@ -148,6 +148,65 @@ describe("fetchSeasonFixtures", () => {
   });
 });
 
+describe("describeEmptySeason", () => {
+  function competition({ current = "2026-09-15", seasons = ["2026-09-15", "2025-07-08"] } = {}) {
+    return {
+      currentSeason: current ? { startDate: current } : null,
+      seasons: seasons.map((startDate) => ({ startDate })),
+    };
+  }
+
+  it("kalder turneringens eget endpoint, ikke kamplisten igen", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(competition()));
+    await footballdata.describeEmptySeason({
+      apiLeagueId: "CL", apiSeasonId: "2026", token: "hemmelig", fetchImpl,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0][0]).toBe("https://api.football-data.org/v4/competitions/CL");
+    expect(fetchImpl.mock.calls[0][1].headers["X-Auth-Token"]).toBe("hemmelig");
+  });
+
+  it("kalder sæsonen ufarlig, når leverandøren kender den", async () => {
+    // Det ene af de to svar på B8: sæsonen findes, kampprogrammet mangler bare.
+    const fetchImpl = vi.fn(async () => jsonResponse(competition()));
+    const out = await footballdata.describeEmptySeason({
+      apiLeagueId: "CL", apiSeasonId: "2026", token: "t", fetchImpl,
+    });
+    expect(out).toMatchObject({ code: "season-empty", requestedSeason: "2026", currentSeason: "2026" });
+    expect(out.knownSeasons).toEqual(["2026", "2025"]);
+  });
+
+  it("skelner en endnu ikke oprettet sæson fra en tom", async () => {
+    // Præcis Champions League-situationen i juli/august: 2026/2027 er ikke
+    // oprettet endnu, fordi ligafasen ikke er lodtrukket.
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(competition({ current: "2025-07-08", seasons: ["2025-07-08", "2024-07-09"] }))
+    );
+    const out = await footballdata.describeEmptySeason({
+      apiLeagueId: "CL", apiSeasonId: "2026", token: "t", fetchImpl,
+    });
+    expect(out.code).toBe("season-not-published");
+    expect(out.message).toMatch(/2026/);
+  });
+
+  it("udpeger et forkert api_season_id — den udgave, der ikke retter sig selv", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(competition()));
+    const out = await footballdata.describeEmptySeason({
+      apiLeagueId: "CL", apiSeasonId: "2019", token: "t", fetchImpl,
+    });
+    expect(out.code).toBe("season-unknown");
+    expect(out.message).toMatch(/api_season_id/);
+  });
+
+  it("gætter ikke, når leverandøren intet oplyser", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({}));
+    const out = await footballdata.describeEmptySeason({
+      apiLeagueId: "CL", apiSeasonId: "2026", token: "t", fetchImpl,
+    });
+    expect(out).toMatchObject({ code: "undetermined", currentSeason: null, knownSeasons: [] });
+  });
+});
+
 describe("fetchLive", () => {
   it("henter ét datovindue og filtrerer til de ønskede kampe", async () => {
     const fetchImpl = vi.fn(async () =>

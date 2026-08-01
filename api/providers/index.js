@@ -19,6 +19,12 @@
 //   fetchSeasonFixtures({ apiLeagueId, apiSeasonId, token })
 //   fetchLive({ providerIds, kickoffs, token })
 //
+// Valgfrit — kaldes kun, hvis modulet har den:
+//
+//   describeEmptySeason({ apiLeagueId, apiSeasonId, token })
+//                  Hvorfor kom sæsonen tom hjem? Svarer { code, message, … }.
+//                  Findes den ikke, står der bare `totalFixtures: 0` som før.
+//
 // De to fetch-funktioner returnerer NORMALISEREDE kampe (se normaliseret form
 // nederst i sportmonks.js). Alt hvad sync-matches og sync-live rører, er den
 // form — de kender ingen leverandørs feltnavne.
