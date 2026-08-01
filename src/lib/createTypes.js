@@ -54,7 +54,7 @@ const CREATE_TYPES = [
     mode: "random",
     title: "Quick League",
     duration: "Nogle uger",
-    subtitle: "Tilfældige kampe i hver runde, fx 6 runder frem.",
+    subtitle: "Tilfældige kampe i hver runde, fx 6 runder frem. Du vælger antal og turneringer.",
     multiRound: true,
     presets: { count: 8, rounds: 6 },
   },
