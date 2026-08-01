@@ -34,9 +34,9 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-Error boundary pr. skærm, nulstillet af `tab`/`screen`, så et render-kast i én skærm ikke tager navigationen med sig — den leverede boundary sidder om roden og kan kun tilbyde genindlæsning
-
-`ensureCompetitionAwards` afventes uden `catch` i `BoardScreen.jsx` — fejler den, bliver det en unhandled rejection; nabo-kaldet `loadCompetitionAwards` har sin egen catch
+- Lav knap til bruger de kan indesende feedback og forbedringsforslag
+- Error boundary pr. skærm, nulstillet af `tab`/`screen`, så et render-kast i én skærm ikke tager navigationen med sig — den leverede boundary sidder om roden og kan kun tilbyde genindlæsning
+- ensureCompetitionAwards` afventes uden `catch` i `BoardScreen.jsx` — fejler den, bliver det en unhandled rejection; nabo-kaldet `loadCompetitionAwards` har sin egen catch
 
 *Ryddet 1. august 2026 (anden runde): de tre linjer om grants/RLS og
 paginering blev `G50` og `G51`; testtallene blev foldet ind i `G21`, som
