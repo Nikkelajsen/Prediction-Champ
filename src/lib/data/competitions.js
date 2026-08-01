@@ -37,7 +37,6 @@ import { loadGroupByCode, joinGroup, joinCompetition } from "./groups.js";
 //   startDate, endDate    time_range
 //   matchIds              custom | random: de eksplicit valgte kampe
 //   randomCount           random: gemmes i mode_params
-//   openDaysBefore        rullende gætte-vindue (0 = fra)
 //
 // Returnerer `matchCount`, så kalderen kan se, at en konkurrence blev tom —
 // fx en sæson, der er spillet færdig (`filterFromNextUnfinishedRound` giver da
@@ -47,10 +46,13 @@ async function createCompetition(token, userId, spec) {
     name, groupId = null, mode = "full_season",
     tournaments = [], leagueId = null, seasonId = null,
     teamId = null, startDate = null, endDate = null,
-    matchIds = [], randomCount = null, openDaysBefore = 0,
+    matchIds = [], randomCount = null,
   } = spec;
 
-  const rules = { exact: 3, outcome: 1, ...(openDaysBefore ? { openDaysBefore } : {}) };
+  // Faste pointregler. Feltet er historisk konfigurerbart, men `pc_points()`
+  // hardkoder 3/1 (F2, juli 2026), og det rullende gætte-vindue — den eneste
+  // reelle variation, der nogensinde blev skrevet her — er fjernet igen (B1).
+  const rules = { exact: 3, outcome: 1 };
   const base = { name, group_id: groupId || null, rules, created_by: userId };
 
   // Full sæson kan spænde over flere turneringer på én gang (fx Superliga +

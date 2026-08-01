@@ -57,8 +57,13 @@ export function coversSeason(competition, seasonId) {
 
 // Tidligste kickoff pr. runde over HELE sæsonen — det er den, regel 3 regnes af.
 // Kampe uden kickoff springes over; en runde uden kendte kickoffs får ingen
-// entry og regnes som endnu ikke gået i gang (samme valg som buildRoundStartMap
-// i frontenden).
+// entry og regnes som endnu ikke gået i gang.
+//
+// Rundens start bor efter B1 (august 2026) KUN her og i `analytics_round_locks`:
+// frontendens udgave (`buildRoundStartMap`) forsvandt sammen med det rullende
+// gætte-vindue, som var dens eneste bruger. Regel 3 er en anden regel med sin
+// egen begrundelse og beholder både sin runde-grain og sin scoping pr. turnering
+// — kaldet henter kun kampe for én `season_id` ad gangen.
 function earliestByRound(matches) {
   const map = new Map();
   for (const m of matches) {

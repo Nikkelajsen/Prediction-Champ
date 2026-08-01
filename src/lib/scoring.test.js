@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockAtOf, lockedRoundsOf, buildRoundStartMap, roundStartKey, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 const RULES = { exact: 3, outcome: 1 };
 
@@ -149,26 +149,6 @@ describe("per-kamp-låsning (isLocked / lockAtOf)", () => {
     // Uden kendt kickoff er kampen åben for tips — spejler skrivegrenen i
     // sql/predictions_match_lock.sql, hvor `kickoff_at is null` behandles eksplicit.
     expect(isLocked({ ...r1, home_score: null, kickoff_at: null })).toBe(false);
-  });
-});
-
-// Rundens START bruges stadig — men kun af det rullende gætte-vindue, ikke af låsen.
-describe("roundStartKey / buildRoundStartMap", () => {
-  const r = { season_id: "s1", round_key: "2026-07-14" };
-
-  it("scoper på (season_id, round_key), så to turneringer i samme kalenderuge er hver sin runde", () => {
-    expect(roundStartKey({ season_id: "s1", round_key: "2026-07-14" }))
-      .not.toBe(roundStartKey({ season_id: "s2", round_key: "2026-07-14" }));
-  });
-
-  it("finder rundens tidligste kickoff og springer kampe uden kickoff over", () => {
-    const map = buildRoundStartMap([
-      { ...r, kickoff_at: "2026-07-18T14:00:00Z" },
-      { ...r, kickoff_at: "2026-07-15T17:00:00Z" },
-      { ...r, kickoff_at: null },
-    ]);
-    expect(map.get(roundStartKey(r))).toBe(new Date("2026-07-15T17:00:00Z").getTime());
-    expect(map.size).toBe(1);
   });
 });
 

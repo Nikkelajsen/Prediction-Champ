@@ -59,24 +59,14 @@ describe("roundStatus", () => {
     expect(out.status).toBe("Låst · 1 af 2 tippet · 1/2 spillet");
   });
 
-  it("venter runden helt på det rullende vindue, står datoen kun i hovedet", () => {
+  // Det rullende gætte-vindue er fjernet (B1), så en kamp langt ude i fremtiden
+  // er tipbar med det samme og tælles med i hovedet frem for at vente på en åbning.
+  it("tæller en kamp langt ude i fremtiden med som tipbar", () => {
     vi.useFakeTimers({ now: new Date("2026-07-01T12:00:00Z") });
-    const ms = [m("a", "2026-07-15T17:00:00Z"), m("b", "2026-07-18T14:00:00Z")];
-    const out = roundStatus({ matches: ms, rules: RULES, opensAt: () => new Date("2026-07-08T17:00:00Z") });
-    expect(out.status).toContain("Åbner");
-    expect(out.mixedOpening).toBe(false); // ingen række skal gentage datoen
-  });
-
-  it("er kun nogle kampe åbne, må rækkerne selv sige hvornår resten åbner", () => {
-    vi.useFakeTimers({ now: new Date("2026-07-14T12:00:00Z") });
-    const aaben = m("a", "2026-07-15T17:00:00Z");
-    const lukket = m("b", "2026-07-25T14:00:00Z");
-    const out = roundStatus({
-      matches: [aaben, lukket], rules: RULES,
-      opensAt: (x) => (x.id === "b" ? new Date("2026-07-18T14:00:00Z") : null),
-    });
-    expect(out.mixedOpening).toBe(true);
-    expect(out.status).toContain("0 af 1 tippet"); // kun den åbne kamp tælles
+    const ms = [m("a", "2026-07-15T17:00:00Z"), m("b", "2026-07-25T14:00:00Z")];
+    const out = roundStatus({ matches: ms, rules: RULES });
+    expect(out.status).toContain("0 af 2 tippet");
+    expect(out.status).not.toContain("Åbner");
   });
 
   it("en kamp uden kendt kickoff tælles som tipbar, men bærer ingen deadline", () => {

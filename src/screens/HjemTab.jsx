@@ -308,8 +308,8 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
 
       {/* Signatur: næste deadline */}
       {tips === null && <Card><span style={{ color: C.muted, fontSize: 13 }}>Henter din næste deadline…</span></Card>}
-      {/* Intet at tippe lige nu — IKKE det samme som "alle tips er inde". Runden er
-          låst eller spillet, eller det rullende vindue har ikke åbnet endnu. */}
+      {/* Intet at tippe lige nu — IKKE det samme som "alle tips er inde".
+          Alle kampe i brugerens konkurrencer er låst eller spillet. */}
       {tips && tips.hasComps && tips.nothingToTip && (
         <Card>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Intet at tippe lige nu</div>

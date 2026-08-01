@@ -80,7 +80,7 @@ function TeamNames({ home, away }) {
 // unmountede rækken hvert minut (live-tikket) og et fokuseret scorefelt mistede fokus
 // midt i indtastningen.
 function MatchRow({
-  m, pred, rules, homeName, awayName, locked, played, live, notOpenUntil, openLabel,
+  m, pred, rules, homeName, awayName, locked, played, live,
   showFinal, saved, err, onSave, expanded, onToggleExpanded, participants, matchPreds, userId, last, openProfile,
 }) {
   const hasPred = pred.pred_home !== null && pred.pred_away !== null;
@@ -89,12 +89,12 @@ function MatchRow({
   const correctOutcome = played && pts !== null && pts > 0;
   const stage = stageBadgeLabel(m.stage_name);
   const canExpand = locked && participants.length > 1;
-  // Anden linje vises nu kun til det, der IKKE kan bo i en kolonne: stage-mærket,
-  // "Åbner …" (kun når runden er delvist lukket af det rullende vindue) og slettefejl.
-  // "Slut", "Live" og "Alles gæt" er flyttet ind i rækken selv. Rækken bærer INGEN
+  // Anden linje vises nu kun til det, der IKKE kan bo i en kolonne: stage-mærket
+  // og slettefejl. "Slut", "Live" og "Alles gæt" er flyttet ind i rækken selv, og
+  // "Åbner …" forsvandt med det rullende gætte-vindue (B1). Rækken bærer INGEN
   // nedtælling: efter A21 er lås = kickoff − 1 time, og tid-kolonnen viser allerede
   // kickoff, så deadlinen er aflæselig af det, der står i forvejen.
-  const hasMeta = !!(stage || openLabel || err);
+  const hasMeta = !!(stage || err);
 
   // Tid/status-kolonnen bærer kampens tilstand: en færdigspillet kamps kickoff er
   // lav værdi, når facit står i samme række, og et spilleminut er lige så tydeligt
@@ -169,9 +169,9 @@ function MatchRow({
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-            <ScoreInput value={pred.pred_home} onChange={(v) => onSave(m.id, "pred_home", v)} disabled={!!notOpenUntil} />
+            <ScoreInput value={pred.pred_home} onChange={(v) => onSave(m.id, "pred_home", v)} />
             <span style={{ color: C.muted, fontSize: 12 }}>-</span>
-            <ScoreInput value={pred.pred_away} onChange={(v) => onSave(m.id, "pred_away", v)} disabled={!!notOpenUntil} />
+            <ScoreInput value={pred.pred_away} onChange={(v) => onSave(m.id, "pred_away", v)} />
             {/* Fast slot, så felterne ikke hopper når ✓ kommer og går. */}
             <span style={{ width: 16, display: "inline-flex", justifyContent: "center" }}>
               {saved && <Check size={15} style={{ color: C.green }} />}
@@ -188,9 +188,6 @@ function MatchRow({
               {stage}
             </span>
           )}
-          {/* Kun ved flere lås-grupper i samme runde (flere turneringer): så gælder
-              rundehovedets tid ikke alle kampe, og rækken må selv sige det. */}
-          {openLabel && <span style={{ color: C.muted, fontSize: 11 }}>{openLabel}</span>}
           {err && <span style={{ fontSize: 11, color: C.red }}>Kunne ikke slette</span>}
         </div>
       )}

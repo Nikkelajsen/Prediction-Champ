@@ -26,7 +26,6 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   const [pickLeagueIds, setPickLeagueIds] = useState(null);
   const [randomCount, setRandomCount] = useState(6);
   const [randomLeagueIds, setRandomLeagueIds] = useState(null);
-  const [rollingWindow, setRollingWindow] = useState(false);
   const [advanced, setAdvanced] = useState(false); // "Flere valg" — foldet ind som standard
   // Full sæson kan spænde over flere turneringer på én gang (fx Superliga + Premier League).
   const [seasonByLeague, setSeasonByLeague] = useState({}); // league_id -> nyeste sæson
@@ -149,7 +148,7 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   // Skærmen bygger kun `spec` ud fra sin UI-state; selve skrivningen bor i
   // data.js, så onboarding-guiden og denne skærm ikke kan divergere.
   function buildSpec() {
-    const shared = { name, groupId, mode, openDaysBefore: rollingWindow ? 7 : 0 };
+    const shared = { name, groupId, mode };
     if (mode === "full_season") {
       return {
         ...shared,
@@ -258,7 +257,7 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
           {/* Alt herunder er "Flere valg". Hurtig-stien er navn + liga + turnering:
               en ny bruger mødte før ti valg på én gang — modes, faser og et
               rullende vindue — uden at vide, hvad nogen af dem betød. Fase-
-              valget er siden fjernet helt; resten er kun foldet ind. */}
+              valget og vinduet er siden fjernet helt; resten er kun foldet ind. */}
           <button type="button" onClick={() => setAdvanced((v) => !v)} style={{
             ...btnGhost, alignSelf: "flex-start", marginTop: 2,
           }}>
@@ -362,10 +361,6 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
             </>
           )}
 
-          <label style={{ display: "flex", alignItems: "center", gap: 8, color: C.text, fontSize: 13, cursor: "pointer" }}>
-            <input type="checkbox" checked={rollingWindow} onChange={(e) => setRollingWindow(e.target.checked)} />
-            Rullende gætte-vindue — runden kan først tippes 7 dage før rundens første kamp
-          </label>
           </>)}
 
           {err && <p style={{ color: C.red, fontSize: 13, margin: 0 }}>{err}</p>}

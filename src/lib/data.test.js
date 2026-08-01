@@ -503,13 +503,14 @@ describe("computeHomeTips: allTipped vs. nothingToTip", () => {
     expect(tips.allTipped).toBeUndefined();
   });
 
-  it("siger nothingToTip, når det rullende vindue ikke har åbnet endnu", async () => {
-    // vindue på 7 dage, kickoff om 30 dage ⇒ runden kan ikke tippes endnu
+  it("en kamp langt ude i fremtiden er tipbar — det rullende vindue er fjernet (B1)", async () => {
+    // kickoff om 30 dage. Med vinduet ville den have været lukket endnu; nu er
+    // en kamp tipbar fra det øjeblik, den findes, og indtil den låser.
     const kickoff = new Date(Date.now() + 30 * 24 * HOUR).toISOString();
     setup({ matches: [match({ kickoff_at: kickoff })] });
-    const tips = await computeHomeTips("token", "u1", [comp({ openDaysBefore: 7 })]);
-    expect(tips.nothingToTip).toBe(true);
-    expect(tips.allTipped).toBeUndefined();
+    const tips = await computeHomeTips("token", "u1", [comp(null)]);
+    expect(tips.nothingToTip).toBeUndefined();
+    expect(tips.allTipped).toBe(false);
   });
 
   it("siger allTipped: false, når en tipbar kamp mangler tips", async () => {
@@ -609,14 +610,13 @@ describe("createCompetition", () => {
     expect(insertedRow("competition_participants")).toEqual({ competition_id: "c1", user_id: "u1" });
   });
 
-  it("rullende vindue lægges i rules, og udelades når det er slået fra", async () => {
+  // `rules` har ingen variation længere: det rullende gætte-vindue var det eneste,
+  // der nogensinde blev skrevet ud over pointreglerne, og det er fjernet (B1).
+  // En ukendt nøgle i spec'en må derfor ikke kunne snige sig ind i rules igen.
+  it("skriver altid de faste pointregler i rules", async () => {
     setup();
     const t = [{ leagueId: "L1", seasonId: "S1" }];
     await createCompetition("token", "u1", { name: "A", mode: "full_season", tournaments: t, openDaysBefore: 7 });
-    expect(insertedRow("competitions").rules).toEqual({ exact: 3, outcome: 1, openDaysBefore: 7 });
-
-    db.insert.mockClear();
-    await createCompetition("token", "u1", { name: "B", mode: "full_season", tournaments: t, openDaysBefore: 0 });
     expect(insertedRow("competitions").rules).toEqual({ exact: 3, outcome: 1 });
   });
 

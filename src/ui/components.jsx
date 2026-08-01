@@ -191,14 +191,17 @@ const BackBar = ({ title, onBack, right }) => (
   </div>
 );
 
-function ScoreInput({ value, onChange, disabled }) {
+// Ingen `disabled`-tilstand: en kamp, der ikke må tippes, får slet ikke felter
+// (rækken skifter form ved lås). Prop'en fandtes kun til det rullende
+// gætte-vindue og røg med det (B1).
+function ScoreInput({ value, onChange }) {
   return (
-    <input type="number" min="0" max="20" disabled={disabled}
+    <input type="number" min="0" max="20"
       value={value === null || value === undefined ? "" : value}
       onChange={(e) => onChange(e.target.value === "" ? null : Math.max(0, Math.min(20, Number(e.target.value))))}
       style={{
         width: 44, textAlign: "center", fontFamily: "ui-monospace, monospace", fontSize: 16, fontWeight: 700,
-        background: disabled ? C.surface : C.surface2, color: C.text, border: `1px solid ${C.line}`, borderRadius: 8, padding: "6px 2px",
+        background: C.surface2, color: C.text, border: `1px solid ${C.line}`, borderRadius: 8, padding: "6px 2px",
       }} />
   );
 }
