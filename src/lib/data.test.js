@@ -668,7 +668,7 @@ describe("createCompetition", () => {
     expect(row.league_id).toBeNull();
     expect(row.season_id).toBeNull();
     // `tournaments` er ikke pynt: efterfyldningens coversSeason() afgør
-    // sæsondækning på netop dén nøgle (api/backfill.js).
+    // sæsondækning på netop dén nøgle (api/_backfill.js).
     expect(row.mode_params).toEqual({
       team_ids: ["T1", "T9"],
       tournaments: [{ league_id: "L1", season_id: "S1" }, { league_id: "L2", season_id: "S2" }],

@@ -68,7 +68,7 @@ kupon (`B6` — et foreslået navn blev bare beholdt).
   Pick alene på feltet.
 - `awards: true` ⇒ `mode_params.awards = true` i alle mode-grene.
 
-`api/backfill.js` kender `team_ids` (fallback til `team_id`); `random` er
+`api/_backfill.js` kender `team_ids` (fallback til `team_id`); `random` er
 fortsat aldrig backfillbar (regel 1 — en kupon må ikke vokse).
 
 ## 3. Lokale kåringer (I13)

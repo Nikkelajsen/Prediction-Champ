@@ -38,14 +38,14 @@ ingenting. Det spørgsmål, `A10` aldrig stillede, var ikke *hvilken plan*, men
 Datakilden er nu en egenskab ved **ligaen**, ikke ved koden.
 
 ```
-leagues.provider  ──►  api/providers/<key>.js  ──►  normaliseret kamp  ──►  fælles sync
+leagues.provider  ──►  api/_providers/<key>.js  ──►  normaliseret kamp  ──►  fælles sync
 ```
 
 | Fil | Rolle |
 |---|---|
-| `api/providers/index.js` | Registret. `getProvider()`, `providerToken()`, `indexSeasons()` |
-| `api/providers/sportmonks.js` | Sportmonks. Koden er **flyttet**, ikke nyskrevet |
-| `api/providers/footballdata.js` | football-data.org. Ny |
+| `api/_providers/index.js` | Registret. `getProvider()`, `providerToken()`, `indexSeasons()` |
+| `api/_providers/sportmonks.js` | Sportmonks. Koden er **flyttet**, ikke nyskrevet |
+| `api/_providers/footballdata.js` | football-data.org. Ny |
 | `sql/multi_provider.sql` | `leagues.provider` + `leagues.live_enabled` + check-constraint |
 | `sql/tournament_footballdata.sql` | De fem turneringers `leagues`- og `seasons`-rækker |
 

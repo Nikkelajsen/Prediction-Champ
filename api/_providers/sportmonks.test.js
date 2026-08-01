@@ -1,4 +1,4 @@
-// Tests for api/providers/sportmonks.js.
+// Tests for api/_providers/sportmonks.js.
 //
 // Koden i modulet er FLYTTET ud af api/sync-matches.js og api/sync-live.js, ikke
 // nyskrevet. Testene her findes for at kunne bevise netop det: mappingen af

@@ -198,7 +198,7 @@ export const sportmonks = {
       if (page > MAX_PAGES && hasMore) {
         throw new Error(
           `Paginering afbrudt: Sportmonks har flere kampe efter side ${MAX_PAGES} for sæson ${apiSeasonId}. ` +
-          `Kampprogrammet ville blive ufuldstændigt. Hæv MAX_PAGES i api/providers/sportmonks.js.`
+          `Kampprogrammet ville blive ufuldstændigt. Hæv MAX_PAGES i api/_providers/sportmonks.js.`
         );
       }
       if (page > MAX_PAGES) break;

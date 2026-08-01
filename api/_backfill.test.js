@@ -4,7 +4,7 @@
 // vokser.
 
 import { describe, it, expect } from "vitest";
-import { matchesToBackfill, coversSeason, LOCK_LEAD_MS } from "./backfill.js";
+import { matchesToBackfill, coversSeason, LOCK_LEAD_MS } from "./_backfill.js";
 
 const NOW = Date.parse("2026-08-10T12:00:00Z");
 const iso = (ms) => new Date(ms).toISOString();

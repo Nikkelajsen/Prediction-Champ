@@ -35,7 +35,6 @@ pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor
 eller en linje i "Forkastede ideer".
 
 - Lav knap til bruger de kan indesende feedback og forbedringsforslag
-- `api/providers/*.js` og `api/backfill.js` deployes som serverless functions, selvom de er biblioteksmoduler uden handler — fire af de syv funktioner på deploy'et burde ikke findes, de er offentligt routbare (`/api/backfill`, `/api/providers/sportmonks` …) og de tæller med i det funktions-loft, `B8` blev ramt af. Rettelsen er `_`-præfikset, som Vercel bruger til netop dette: `api/_providers/` og `api/_backfill.js`
 - Error boundary pr. skærm, nulstillet af `tab`/`screen`, så et render-kast i én skærm ikke tager navigationen med sig — den leverede boundary sidder om roden og kan kun tilbyde genindlæsning
 - Holdnavne-normaliseringen folder ikke ø/æ/å ned (NFD splitter kun accenter fra deres grundbogstav), så "FC København" og "FC Kobenhavn" ikke kan parres af hverken `findByName()` eller den nye `ambiguousTeamNames()` — ufarligt i dag, fordi ingen af de syv turneringer har to skrivemåder af samme klub, men fastholdt i en test frem for afklaret
 

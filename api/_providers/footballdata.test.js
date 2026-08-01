@@ -1,4 +1,4 @@
-// Tests for api/providers/footballdata.js.
+// Tests for api/_providers/footballdata.js.
 //
 // Det, der testes, er MAPPINGEN — ikke netværket. En datakilde er kun så god
 // som oversættelsen af dens felter til vores, og det er dér, en stille fejl
