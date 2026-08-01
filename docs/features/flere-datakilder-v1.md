@@ -210,6 +210,13 @@ Prisen er ét ekstra API-kald, og kun mens turneringen alligevel ikke leverer
 noget. Opslaget kan ikke vælte kørslen: en tom sæson **er** en gyldig kørsel, og
 en fejlende diagnose må ikke gøre den til en fejlet.
 
+Beskeden vises **to steder**: i `job_runs`-detaljen (Admin → Drift) og direkte
+under "Hent nu"-knappen på Admin-skærmen. Det sidste er ikke pynt — den, der
+trykker på knappen, er præcis den, der har brug for svaret, og kortet sagde
+indtil nu kun *"0 kampe synkroniseret ud af 0 fundet"*, som er den samme sætning
+i begge tilfælde. `season-unknown` står rødt, resten dæmpet, fordi kun den ene
+kræver en handling.
+
 ## 8. Hvad der bevidst IKKE blev gjort
 
 - **Ingen `provider`-kolonne på `matches`.** Se 3.1.

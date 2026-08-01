@@ -112,6 +112,16 @@ function MatchesPanel({ token, leagues, reloadLeagues }) {
             {syncResult.unmatched?.length > 0 && <span style={{ color: C.red }}> Kunne ikke matche: {syncResult.unmatched.join(", ")}</span>}
           </p>
         )}
+        {/* Hentede kørslen nul kampe, står forklaringen her — ikke kun i Admin → Drift.
+            "0 kampe synkroniseret ud af 0 fundet" er sandt og ubrugeligt: det er den
+            samme sætning, uanset om turneringens kampprogram bare ikke er offentliggjort
+            endnu, eller api_season_id peger et forkert sted hen (B8). Kun season-unknown
+            kræver en handling, så den ene er rød og de øvrige dæmpede. */}
+        {syncResult?.emptySeason && (
+          <p style={{ color: syncResult.emptySeason.code === "season-unknown" ? C.red : C.muted, fontSize: 13, marginTop: 6, marginBottom: 0 }}>
+            {syncResult.emptySeason.message}
+          </p>
+        )}
         {syncResult?.error && <p style={{ color: C.red, fontSize: 13, marginTop: 10, marginBottom: 0 }}>Fejl: {syncResult.error}</p>}
       </Card>
 
