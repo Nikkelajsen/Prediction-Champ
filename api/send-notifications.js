@@ -219,15 +219,19 @@ export function pushRunVerdict({ sent, failed }, ratio = PUSH_FAILURE_ALERT_RATI
 
 // ---- tidsbudget for afsendelsen (G17) ----
 //
-// Funktionens samlede loft er `maxDuration` i vercel.json (60 s). Budgettet her
-// er MINDRE end det med vilje: når det løber ud, skal der stadig være tid til
-// at frigive claims, rydde døde abonnementer og skrive `job_runs`-rækken. Et
-// budget lig med loftet ville betyde, at oprydningen aldrig nåede at køre — og
-// så havde vi ikke rykket problemet, kun flyttet det.
+// Funktionens samlede loft er `maxDuration` i vercel.json (300 s for netop
+// dette endpoint). Budgettet her er MINDRE end det med vilje: når det løber ud,
+// skal der stadig være tid til at frigive claims, rydde døde abonnementer og
+// skrive `job_runs`-rækken. Et budget lig med loftet ville betyde, at
+// oprydningen aldrig nåede at køre — og så havde vi ikke rykket problemet, kun
+// flyttet det.
 //
 // De to tal hænger sammen og skal ændres sammen: hæves `maxDuration`, må dette
-// følge med, ellers spilder kørslen tid, den har fået.
-const SEND_BUDGET_MS = 40_000;
+// følge med, ellers spilder kørslen tid, den har fået. Det gik den anden vej
+// første gang: budgettet stod på 40 s under et antaget loft på 60, mens
+// platformens faktiske standard viste sig at være 300 (aflæst på Vercels
+// funktions-liste 1. august 2026) — altså var loftet gættet, ikke aflæst.
+const SEND_BUDGET_MS = 240_000;
 // Pr. afsendelse. Én uansvarlig push-tjeneste må ikke kunne bruge hele
 // budgettet alene — med denne grænse koster den højst 10 sekunder.
 const PUSH_TIMEOUT_MS = 10_000;

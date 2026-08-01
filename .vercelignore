@@ -12,5 +12,9 @@
 # igen, og symptomet ville være lige så uigennemsigtigt.
 #
 # Testfilerne kører i CI og i `npm test`; de har intet at gøre i produktion.
-# Med dem ude er tallet 8, altså fire funktioners luft.
+# Med dem ude er tallet 7 (aflæst på deploy'ets funktions-liste 1. august 2026).
+#
+# Fire af de syv burde i øvrigt slet ikke være funktioner: api/backfill.js og
+# api/providers/*.js er biblioteksmoduler uden handler, men mangler `_`-præfikset
+# og bliver derfor routet. Noteret i backloggens indbakke.
 api/**/*.test.js
