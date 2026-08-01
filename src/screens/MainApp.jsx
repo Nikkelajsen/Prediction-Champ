@@ -1,5 +1,5 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { loadGroupByCode, joinGroup, joinCompetition } from "../lib/data.js";
@@ -15,11 +15,21 @@ import RatingTab from "./RatingTab.jsx";
 import BoardScreen from "./BoardScreen.jsx";
 import PredictionsScreen from "./PredictionsScreen.jsx";
 import CreateCompetitionScreen from "./CreateCompetitionScreen.jsx";
-import AdminScreen from "./AdminScreen.jsx";
 import ProfileScreen from "./ProfileScreen.jsx";
 import HowItWorksScreen from "./HowItWorksScreen.jsx";
 import OnboardingFlow from "./OnboardingFlow.jsx";
 import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
+
+// Admin hentes FØRST når den åbnes (G34, august 2026).
+//
+// Den er kun relevant for én bruger, men lå i den samme chunk som alt andet —
+// så hver eneste førstegangsbruger hentede admin-fladen, Analytics-dashboardet
+// og deres tabeller, før den første skærm kunne tegnes. `React.lazy` om netop
+// dette træ er den største enkeltgevinst, der ikke kræver, at noget deles op.
+//
+// Kun Admin er delt ud, ikke fanerne: de fire faner er dét, appen ER, og at
+// hente dem enkeltvis ville bytte én ventetid ud med fire.
+const AdminScreen = lazy(() => import("./AdminScreen.jsx"));
 
 const PWA_ONBOARDED_KEY = "pc_pwa_onboarded";
 
@@ -402,7 +412,17 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       initialGroupId={screen.groupId} onBack={() => setScreen(null)}
       onCreated={async () => { await loadCompetitions(); }} openBoard={openBoard} />;
   } else if (screen?.type === "admin") {
-    body = <AdminScreen token={token} leagues={leagues} reloadLeagues={loadLeagues} onBack={() => setScreen(null)} />;
+    body = (
+      // Samme spinder som opstarts-indlæsningen, så en ventetid ser ens ud,
+      // uanset hvad der hentes.
+      <Suspense fallback={
+        <div style={{ display: "flex", gap: 10, color: C.muted, alignItems: "center", paddingTop: 40 }}>
+          <Loader2 className="spin" size={20} />Henter admin …
+        </div>
+      }>
+        <AdminScreen token={token} leagues={leagues} reloadLeagues={loadLeagues} onBack={() => setScreen(null)} />
+      </Suspense>
+    );
   } else if (screen?.type === "profile") {
     body = <ProfileScreen token={token} viewerUserId={userId} profileUserId={screen.profileUserId}
       onBack={() => setScreen(null)} openProfile={openProfile} />;

@@ -47,16 +47,16 @@ const METRICS = {
   active_groups: {
     title: "Aktive ligaer",
     what: "Ligaer, hvor nogen faktisk har TIPPET for nylig — ikke blot åbnet appen.",
-    how: "Distinkte grupper med mindst ét tip opdateret inden for vinduet, talt via konkurrencernes kampe. Hint-tallet 'med mindst én aktiv' er den svagere version (et medlem har åbnet appen).",
+    how: "Distinkte grupper med mindst ét tip AFGIVET inden for vinduet, talt via konkurrencernes kampe. Hint-tallet 'med mindst én aktiv' er den svagere version (et medlem har åbnet appen).",
     source: "predictions → competition_matches → competitions.group_id.",
-    caveat: "Gabet mellem de to tal er selv interessant: ligaer hvor folk kigger forbi, men ingen spiller.",
+    caveat: "Gabet mellem de to tal er selv interessant: ligaer hvor folk kigger forbi, men ingen spiller. Målt på `predictions.updated_at`, som ALDRIG opdateres ved en rettelse (der er ingen trigger på tabellen, og klienten sender ikke feltet) — tallet er derfor 'afgivet', ikke 'rørt ved'. En liga, hvor alle kun retter gamle tips, tæller ikke med (`G13`, rettet i ordbogen august 2026)."
   },
   active_competitions: {
     title: "Aktive konkurrencer",
     what: "Konkurrencer med tipaktivitet i perioden — og hvor mange der stadig har runder foran sig.",
-    how: "Aktiv = mindst ét tip opdateret i vinduet. 'I gang' = konkurrencen har mindst én runde, der endnu ikke er gået i gang.",
+    how: "Aktiv = mindst ét tip AFGIVET i vinduet. 'I gang' = konkurrencen har mindst én runde, der endnu ikke er gået i gang.",
     source: "predictions + competition_matches for aktiv; analytics_round_locks for 'i gang'.",
-    caveat: "De to tal er bevidst forskellige: en konkurrence kan have masser af historik uden en eneste runde tilbage, og en helt ny kan have runder foran sig uden aktivitet endnu.",
+    caveat: "De to tal er bevidst forskellige: en konkurrence kan have masser af historik uden en eneste runde tilbage, og en helt ny kan have runder foran sig uden aktivitet endnu. Som ovenfor måler `updated_at` i praksis AFGIVNE tips, ikke rettede (`G13`)."
   },
   deadline_miss_rate: {
     title: "Deadline Miss Rate",

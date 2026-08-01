@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 // renderToStaticMarkup frem for en jsdom-opsætning: PlayerName er ren markup,
 // og projektet skal ikke have et komponent-testbibliotek for den ene komponents skyld.
 import { renderToStaticMarkup } from "react-dom/server";
-import { PlayerName, UserRoundPredictions, EmptyCompetitions, StatTile, StatGroup, MiniBars, StateChip, SignalRow } from "./components.jsx";
+import { PlayerName, UserRoundPredictions, EmptyCompetitions, StatTile, StatGroup, MiniBars, StateChip, SignalRow, ScoreInput, Modal } from "./components.jsx";
 
 describe("PlayerName", () => {
   it("renderes som ren tekst uden onOpenProfile", () => {
@@ -177,5 +177,53 @@ describe("SignalRow", () => {
     const html = renderToStaticMarkup(<SignalRow label="Puls" value="100 %" />);
     expect(html).toContain("100 %");
     expect(html).not.toContain("undefined");
+  });
+});
+
+// G22: appens mest brugte kontrol og dens eneste dialog.
+//
+// At taste et resultat ER kernehandlingen, og feltet var en bar
+// `<input type="number">` uden navn — en skærmlæser sagde "redigeringsfelt,
+// tal" om begge felter i en kamp uden at kunne skelne hjemme fra ude.
+describe("ScoreInput (G22)", () => {
+  it("bærer det navn, kaldstedet giver den", () => {
+    const html = renderToStaticMarkup(
+      <ScoreInput label="Dit gæt: mål til Brøndby mod FCK" value={2} onChange={() => {}} />
+    );
+    expect(html).toContain('aria-label="Dit gæt: mål til Brøndby mod FCK"');
+  });
+
+  it("viser et tomt felt frem for 0, når der intet er tippet", () => {
+    const html = renderToStaticMarkup(<ScoreInput label="x" value={null} onChange={() => {}} />);
+    expect(html).toContain('value=""');
+  });
+});
+
+describe("Modal (G22)", () => {
+  const render = () =>
+    renderToStaticMarkup(<Modal title="Slet konkurrencen?" onClose={() => {}}>Indhold</Modal>);
+
+  // Uden dialog-semantikken er den for en skærmlæser bare mere indhold på
+  // siden — og da baggrunden ikke skjules, kunne brugeren læse videre ned i en
+  // skærm, der visuelt er dækket.
+  it("er en rigtig dialog med et navn", () => {
+    const html = render();
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain("aria-labelledby=");
+  });
+
+  // Navnet skal PEGE på den overskrift, der faktisk står der — ikke på et
+  // id, der ikke findes.
+  it("peger sit navn på den overskrift, der står i dialogen", () => {
+    const html = render();
+    const id = html.match(/aria-labelledby="([^"]+)"/)?.[1];
+    expect(id).toBeTruthy();
+    expect(html).toContain(`id="${id}"`);
+    expect(html).toContain("Slet konkurrencen?");
+  });
+
+  it("giver luk-knappen et navn", () => {
+    expect(render()).toContain('aria-label="Luk"');
   });
 });

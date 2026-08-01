@@ -172,9 +172,13 @@ function MatchRow({
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-            <ScoreInput value={pred.pred_home} onChange={(v) => onSave(m.id, "pred_home", v)} />
-            <span style={{ color: C.muted, fontSize: 12 }}>-</span>
-            <ScoreInput value={pred.pred_away} onChange={(v) => onSave(m.id, "pred_away", v)} />
+            {/* Etiketten navngiver BÅDE holdet og hvilken kamp — to felter i
+                samme runde ville ellers hedde det samme for en skærmlæser. */}
+            <ScoreInput label={`Dit gæt: mål til ${homeName} mod ${awayName}`}
+              value={pred.pred_home} onChange={(v) => onSave(m.id, "pred_home", v)} />
+            <span aria-hidden="true" style={{ color: C.muted, fontSize: 12 }}>-</span>
+            <ScoreInput label={`Dit gæt: mål til ${awayName} mod ${homeName}`}
+              value={pred.pred_away} onChange={(v) => onSave(m.id, "pred_away", v)} />
             {/* Fast slot, så felterne ikke hopper når ✓ kommer og går. Efter G24
                 bærer slottet BEGGE udfald: ✓ når gemningen lykkedes, ✗ når den
                 fejlede. Det er dér, øjet er lige efter et tastetryk — beskeden på

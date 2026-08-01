@@ -1,5 +1,5 @@
 // Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useId } from "react";
 import { ChevronRight, ChevronLeft, ArrowUp, ArrowDown, Minus, Info, X } from "lucide-react";
 import { pointsFor } from "../lib/scoring.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, pagerBtn } from "./theme.js";
@@ -121,24 +121,48 @@ const Move = ({ d }) => {
 };
 
 // ---------- generisk modal ----------
+// Dialogen er en RIGTIG dialog (G22, august 2026): `role="dialog"`,
+// `aria-modal` og et navn, der peger på overskriften. Uden dem er den for en
+// skærmlæser bare mere indhold på siden — og da baggrunden ikke er skjult,
+// ville brugeren kunne "læse videre" ned i en skærm, der visuelt er dækket.
+//
+// Fokus flyttes ind ved åbning og TILBAGE ved lukning. Det sidste er det, man
+// mærker: uden det står fokus på `<body>` efter en lukket dialog, og næste tryk
+// på Tab starter forfra øverst på siden — langt fra den knap, man lige brugte.
+//
+// Der er bevidst INGEN fuld fokusfælde. En sådan kræver, at man selv holder styr
+// på alle fokusérbare elementer og fanger Tab i begge retninger; dialogerne her
+// er små (en bekræftelse, en tabel), Escape og klik uden for virker begge, og en
+// halvfærdig fælde er værre end ingen — den kan spærre en bruger inde.
 function Modal({ title, children, onClose }) {
+  const kortRef = useRef(null);
+  const overskriftId = useId();
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const foer = document.activeElement;
+    kortRef.current?.focus();
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      // Kun hvis elementet stadig findes: skærmen bagved kan være skiftet ud,
+      // mens dialogen var åben, og et `focus()` på et fjernet element kaster.
+      if (foer instanceof HTMLElement && document.contains(foer)) foer.focus();
+    };
   }, [onClose]);
   return (
     <div onClick={onClose} style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 1000,
       display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
     }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
+      <div role="dialog" aria-modal="true" aria-labelledby={overskriftId}
+        ref={kortRef} tabIndex={-1}
+        onClick={(e) => e.stopPropagation()} style={{
         background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, width: "100%",
         maxWidth: 420, maxHeight: "85vh", overflowY: "auto", padding: 18,
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <div style={{ fontFamily: font.display, textTransform: "uppercase", fontWeight: 700, fontSize: 18 }}>{title}</div>
-          <button onClick={onClose} style={{ background: "transparent", border: "none", color: C.muted, cursor: "pointer", padding: 0 }}><X size={20} /></button>
+          <div id={overskriftId} style={{ fontFamily: font.display, textTransform: "uppercase", fontWeight: 700, fontSize: 18 }}>{title}</div>
+          <button type="button" aria-label="Luk" onClick={onClose} style={{ background: "transparent", border: "none", color: C.muted, cursor: "pointer", padding: 0 }}><X size={20} /></button>
         </div>
         <div style={{ color: C.text, fontSize: 14, lineHeight: 1.5 }}>{children}</div>
       </div>
@@ -194,9 +218,19 @@ const BackBar = ({ title, onBack, right }) => (
 // Ingen `disabled`-tilstand: en kamp, der ikke må tippes, får slet ikke felter
 // (rækken skifter form ved lås). Prop'en fandtes kun til det rullende
 // gætte-vindue og røg med det (B1).
-function ScoreInput({ value, onChange }) {
+//
+// `label` er PÅKRÆVET (G22, august 2026). Dette er appens mest brugte kontrol —
+// at taste et resultat ER kernehandlingen — og den var en bar `<input
+// type="number">` uden navn: en skærmlæser sagde "redigeringsfelt, tal" om
+// begge felter i en kamp, uden at kunne skelne hjemme fra ude. Etiketten er
+// skjult, fordi rækken er tæt og navnene står lige ved siden af for den, der
+// kan se; men den findes, og uden den kan tippet ikke afgives på gehør.
+//
+// Argumentet er en tekst frem for et `aria-label` direkte, så kaldstedet ikke
+// kan slippe af sted med at udelade det uden at det ses i diff'en.
+function ScoreInput({ value, onChange, label }) {
   return (
-    <input type="number" min="0" max="20"
+    <input type="number" min="0" max="20" aria-label={label}
       value={value === null || value === undefined ? "" : value}
       onChange={(e) => onChange(e.target.value === "" ? null : Math.max(0, Math.min(20, Number(e.target.value))))}
       style={{
