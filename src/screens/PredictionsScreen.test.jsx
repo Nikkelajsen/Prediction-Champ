@@ -17,7 +17,7 @@ function row(over = {}) {
     homeName: "Viborg FF",
     awayName: "Odense BK",
     locked: true, played: false, live: null,
-    notOpenUntil: null, openLabel: null, showFinal: true,
+    showFinal: true,
     saved: false, err: false, onSave: () => {},
     expanded: false, onToggleExpanded: () => {},
     participants: PARTS, matchPreds: [], userId: "u1", last: false,

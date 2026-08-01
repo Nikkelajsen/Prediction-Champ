@@ -62,10 +62,7 @@ function HowItWorksScreen({ onBack }) {
         på én gang, så du tipper kun én gang pr. kamp.{" "} <b>Månedsligaen</b> samler dine samlede point for månedens kampe (uafgjort afgøres af tiebreak-stigen ovenfor). Månedens bedste kåres som <b>Månedens Prediction Champ</b> — er to helt lige, deles titlen. Stillingen nulstilles den 1.
       </Section>
       <Section title="Tips-synlighed">
-        Du kan først se andres tips, når runden er låst — ingen kan se dine tips inden da. Alle kampe i en runde låses samtidig, 1 time før rundens første kamp. Så tipper alle på samme grundlag og ingen kan spekulere i resultater undervejs.
-      </Section>
-      <Section title="Rullende gætte-vindue">
-        Nogle konkurrencer bruger et rullende vindue: en runde kan først tippes <b>7 dage</b> før rundens første kamp. Så tipper alle med nogenlunde samme viden. Vinduet slås til eller fra, når konkurrencen oprettes — og gælder derefter hele konkurrencen.
+        Hver kamp låser <b>1 time før sit eget kickoff</b>. Først dér kan du se de andres tips på netop den kamp — ingen kan se dine inden da, og ingen kan rette efter. En runde er derfor typisk halvt låst: fredagskampen er afgjort og synlig, mens søndagskampen stadig kan tippes.
       </Section>
       <Section title="Installér som app">
         <InstallGuide />

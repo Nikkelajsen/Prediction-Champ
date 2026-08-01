@@ -37,7 +37,7 @@ Ordet "liga" er i dag brugt om **to forskellige ting** (fodboldligaer og private
   - `PredictionsScreen.jsx`: turnerings-filteret ("Alle ligaer" → "Alle turneringer", fallback-navnet "Liga" → "Turnering").
   - `CreateCompetitionScreen.jsx`: turneringsvalg ved oprettelse ("Ingen kommende kampe i de valgte ligaer" → "… valgte turneringer" m.fl.).
   - `AdminScreen.jsx`: "denne liga" → "denne turnering" (Sportmonks-sync-teksten). "Med i en privat liga"-statistikken omformuleres til konkurrence/liga-sprog, når liga-laget er ude.
-  - `HowItWorksScreen.jsx`: gennemskrives med ordbogen (fx "Nogle ligaer bruger et rullende vindue" → "Nogle konkurrencer …").
+  - `HowItWorksScreen.jsx`: gennemskrives med ordbogen (fx "Nogle ligaer bruger et rullende vindue" → "Nogle konkurrencer …"). **Overhalet 1. august 2026:** det rullende vindue er fjernet helt (`B1`), så netop den sætning findes ikke længere. Resten af gennemskrivningen står ved magt.
   - `ChampionshipTab.jsx` / `RatingTab.jsx`: InfoDot-tekster som "på tværs af alle ligaer" → "på tværs af alle dine konkurrencer".
   - DB-navne (`leagues`, `league_id`) og interne variabelnavne røres ikke — det er en ren UI-tekst-omdøbning.
 

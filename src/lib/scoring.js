@@ -147,27 +147,14 @@ function formatKickoff(iso) {
 }
 const LOCK_LEAD_MS = 60 * 60 * 1000; // 1 time før kampens eget kickoff
 
-// ---------- rundens START (ikke dens lås) ----------
-// Efter A21 låser kampe hver for sig, så en runde har ikke længere ét låsetidspunkt.
-// Men rundens FØRSTE kickoff er stadig et rigtigt begreb, og det rullende gætte-vindue
-// (`rules.openDaysBefore`) er fortsat ankret dér: hele runden åbner samlet, i stedet for
-// at kampene dryppe ind én ad gangen. Nøglen er (season_id, round_key) som før — to
-// turneringer, der deler kalenderuge, er stadig hver sin runde.
-function roundStartKey(m) { return `${m.season_id ?? ""}|${m.round_key ?? ""}`; }
-
-// Map<key, tidligste kickoff (ms)>. Kampe uden kickoff springes over; en runde uden
-// kendte kickoffs får ingen entry, og vinduet falder da tilbage på kampens egen tid.
-function buildRoundStartMap(matches) {
-  const map = new Map();
-  for (const m of matches) {
-    if (!m.kickoff_at) continue;
-    const key = roundStartKey(m);
-    const t = new Date(m.kickoff_at).getTime();
-    const cur = map.get(key);
-    if (cur === undefined || t < cur) map.set(key, t);
-  }
-  return map;
-}
+// ---------- rundens lås ----------
+// Klienten har ikke længere brug for rundens START. Den blev kun brugt af det
+// rullende gætte-vindue (`rules.openDaysBefore`), som er fjernet igen (B1, august
+// 2026) — og `roundStartKey`/`buildRoundStartMap` røg med. Runden er stadig et
+// rigtigt begreb (tidsenhed for point, rating og stillinger), men den er ikke
+// længere et TIDSPUNKT her: både lås og åbning følger kampen. Rundens første
+// kickoff findes fortsat serverside, hvor det stadig betyder noget —
+// `api/backfill.js` regel 3 og `analytics_round_locks`.
 
 // Låsetidspunktet for én kamp (ms), eller null hvis kickoff ikke er kendt.
 function lockAtOf(m) {
@@ -231,4 +218,4 @@ function liveInfo(m) {
   };
 }
 
-export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, LOCK_LEAD_MS, roundStartKey, buildRoundStartMap, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, MODE_HINTS, modeLabel };
+export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, LOCK_LEAD_MS, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, MODE_HINTS, modeLabel };

@@ -9,7 +9,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { db } from "../lib/supabase.js";
 import { logEvent } from "../lib/analytics.js";
-import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, isPlayed, liveInfo, buildRoundStartMap, roundStartKey } from "../lib/scoring.js";
+import { currentRoundIndex, groupIntoRounds, isLocked, isPlayed, liveInfo } from "../lib/scoring.js";
 import { C, chip, font, muted, thStyle } from "../ui/theme.js";
 import { BackBar, Card, EmptyCompetitions, H } from "../ui/components.jsx";
 import { groupIntoDays } from "./predictions/time.js";
@@ -31,7 +31,6 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
   const [savedIds, setSavedIds] = useState({});
   const [errIds, setErrIds] = useState({});
   const [expandedId, setExpandedId] = useState(null);
-  const [matchComps, setMatchComps] = useState({});
   const [, setTick] = useState(0);
   const startedRef = useRef(new Set()); // matchIds hvor prediction_started allerede er logget denne sideliv
   const comp = compFilter !== "all" ? competitions.find((c) => c.id === compFilter) : null;
@@ -50,9 +49,6 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
       setExpandedId(null);
       const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=competition_id,match_id`);
       const ids = [...new Set(cms.map((c) => c.match_id))];
-      const mcMap = {};
-      for (const c of cms) (mcMap[c.match_id] ||= []).push(c.competition_id);
-      setMatchComps(mcMap);
       if (!ids.length) { setAllMatches([]); setTeamsById({}); setLoading(false); return; }
       const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
       setAllMatches(ms);
@@ -94,8 +90,6 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
     [allMatches, leagueFilter, seasonLeague]
   );
   const rounds = useMemo(() => groupIntoRounds(filteredMatches), [filteredMatches]);
-  // Kun til det rullende gætte-vindue: rundens FØRSTE kickoff. Låsen er per kamp (A21).
-  const roundStarts = useMemo(() => buildRoundStartMap(filteredMatches), [filteredMatches]);
   // Klamp indekset: skifter man til et filter med færre runder, renderes der ÉN gang
   // med det gamle roundIndex, før effekten nedenfor retter det (effekter kører efter
   // render) — uden klampen er round undefined og skærmen crasher.
@@ -192,27 +186,10 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
     } catch { /* næste forsøg overskriver */ }
   }
 
-  function opensAt(m) {
-    const compIds = matchComps[m.id] || [];
-    const comps = compIds.map((id) => competitions.find((c) => c.id === id)).filter(Boolean);
-    if (!comps.length) return null;
-    const windows = comps.map((c) => c.rules?.openDaysBefore || 0);
-    if (windows.some((w) => !w)) return null;
-    const maxDays = Math.max(...windows);
-    // Åbning er fortsat RUNDE-baseret, selvom låsen ikke længere er det (A21):
-    // vinduet regnes fra rundens tidligste kickoff, så hele runden åbner samlet i
-    // stedet for at dryppe ind kamp for kamp. Blindgyden fra juli 2026 ("Åbner…"
-    // → "Låst" uden at kunne tippes) kan ikke længere opstå — en kamp låser nu af
-    // sit eget kickoff, som altid ligger efter rundens start.
-    const roundStart = roundStarts.get(roundStartKey(m)) ?? new Date(m.kickoff_at).getTime();
-    const openTime = roundStart - maxDays * 24 * 3600 * 1000;
-    return Date.now() < openTime ? new Date(openTime) : null;
-  }
-
   // Rundens ÉNE statuslinje. Logikken bor i predictions/roundStatus.js, så den kan
   // testes uden at rendere skærmen — den var utestet, netop mens per-kamp-låsen (A21)
   // ændrede den mest.
-  const roundInfo = round ? roundStatus({ matches: round.matches, preds, rules, opensAt }) : null;
+  const roundInfo = round ? roundStatus({ matches: round.matches, preds, rules }) : null;
 
   const days = useMemo(() => (round ? groupIntoDays(round.matches) : []), [round]);
 
@@ -300,7 +277,6 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
                   )}
                   {day.matches.map((m, mi) => {
                     const locked = isLocked(m);
-                    const notOpenUntil = !locked ? opensAt(m) : null;
                     return (
                       <MatchRow
                         key={m.id}
@@ -312,8 +288,6 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
                         locked={locked}
                         played={isPlayed(m)}
                         live={liveInfo(m)}
-                        notOpenUntil={notOpenUntil}
-                        openLabel={roundInfo?.mixedOpening && notOpenUntil ? `Åbner ${formatKickoff(notOpenUntil.toISOString())}` : null}
                         showFinal={roundInfo?.showFinal !== false}
                         saved={!!savedIds[m.id]}
                         err={!!errIds[m.id]}
