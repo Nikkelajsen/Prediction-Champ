@@ -44,6 +44,31 @@ eller en linje i "Forkastede ideer".
 - Ingen request-annullering: navigering væk midt i et load lader `setState` lande på afmonterede komponenter (stale-render-races, fx `BoardScreen.jsx:67,86`)
 - Bundlen har ingen code-splitting — én chunk på 412 kB (gzip 121), så førstegangsbrugeren betaler for Admin/Analytics/karriereprofil på første load; lazy-load af Admin/Analytics er en let gevinst
 - Pre-auth 500 afslører env-var-navne for uautentificerede (`sync-matches.js:36-38`, `sync-live.js:58-60`, `send-notifications.js:80-85`) — mindre info-lækage
+- Fejlet gem af et tip er helt tavst: tom `catch` i `PredictionsScreen.jsx:186`, og et manglende ✓ er tvetydigt — slette-stien (`:163`) sætter derimod `errIds`
+- Skærme kan hænge evigt i "Henter…": `setLoading(true)` + flere `await` uden `try/catch` i `PredictionsScreen.jsx:47-79`, `BoardScreen.jsx:52-66` og `MainApp.jsx:90-98` (app-opstart) — ingen fejltilstand, ingen "Prøv igen"
+- Sessionen udløber i baggrunden på mobil: token fornyes kun af `setInterval` 45 min (`App.jsx:83-89`), ingen `visibilitychange`-lytter, ingen 401-håndtering i `restFetch` (`supabase.js:23-27`)
+- Service worker registreres kun inde i `enablePush` (`push.js:44`) — brugere uden push har ingen SW, PWA'en har nul offline-adfærd, og `beforeinstallprompt` bruges ingen steder
+- Auth-skærmen er ikke en `<form>` (`Auth.jsx:110-135`): ingen Enter-submit, intet `type="email"`, ingen `autoComplete` (adgangskode-manager virker ikke), signup validerer ikke længde, og GoTrue-fejl vises rå på engelsk
+- iOS: `viewport-fit=cover` mangler i `index.html:5`, og bundnavigationen (`MainApp.jsx:412-416`) mangler `env(safe-area-inset-bottom)` — ligger under home-indikatoren
+- Scroll-positionen nulstilles aldrig ved navigation — én container (`MainApp.jsx:397`), ingen `scrollTo` i hele `src/`
+- Hjem laver 6 kald pr. konkurrence (`computeCompetitionState`) og gentager dem ved hver re-render: `MainApp.jsx:358` sender et nyt filtreret array pr. render, som sidder i fire skærmes dependency-lister — et `useMemo` fjerner hele klassen
+- Klientens tider/dagsgrupperinger følger enhedens tidszone (`predictions/time.js`, `scoring.js:155-156`) — kampe kan lande på forkert dag ift. `round_key` (adskilt fra `G11`)
+- Sletning/arkivering bruger `window.confirm` og melder ikke fejl (`LigaerTab.jsx:57-65`)
+- Google-font hentes via runtime-`@import` (`theme.js:57`): sen font-skift, ingen preconnect, og hver sidevisning sender IP til Google — hører til `B4`s afklaring
+- Ingen pull-to-refresh/opdater-knap; "Dine placeringer" og rating-snapshot hentes kun ved mount (`HjemTab.jsx:202-257`)
+- Ingen README — ny udvikler mødes af 142 kB `DOCUMENTATION.md`; intet samlet "klon → env-vars → npm run dev"
+- `/api/*` findes ikke i lokal udvikling (ingen Vite-proxy, intet `vercel dev`-script) — push-flowet kan slet ikke afprøves lokalt (`push.js:48`)
+- `npm run dev` uden `.env.local` udvikler direkte mod produktionsdata (`supabase.js:7-8`-fallback) — skærpelse af `G4`; og der findes ingen seed-SQL til en tom database
+- Ingen fejltelemetri og ingen source maps i frontenden — et crash hos en bruger efterlader nul spor (backenden har `job_runs`, frontenden intet)
+- Ingen versionssynlighed: commit-SHA stemples hverken i build eller `job_runs`, så en fejl kan ikke kobles til et deploy
+- Ingen Node-pin (`engines`/`.nvmrc` mangler; kun CI pinner 22), ingen pre-commit-hook, og `format:check`/`test:watch`/`coverage` er ukoblede eller mangler
+- `prune_job_runs()` kaldes aldrig — `CRON.md:132` påstår rydning, men ingen kaldere findes; `sync-live` skriver ~525.000 rækker/år i `job_runs`
+- Jobhelbredet kan ikke skelne de syv turneringer: alle `sync-matches`-jobs skriver samme jobnavn (`sync-matches.js:62`), så én sund turnering skjuler en permanent fejlende (præcis `B8`-klassen) — og OpsPanel viser 3 jobs mod registrets 10 (`ops.js:14-28`)
+- En push-kørsel meldes kun fejlet ved `sent === 0` (`send-notifications.js:312-315`) — `failed=40, sent=1` ser grøn ud, så en langsomt døende push-tjeneste er usynlig
+- Heartbeaten kører hver 6. time (`job-heartbeat.yml`), men `sync-live`s tavshedsgrænse er 30 min — et dødt live-job kan være usynligt en hel kampdag
+- Ingen `vercel.json`: ingen `maxDuration` (S5-timeout styres af platform-default), ingen `regions` (US-East mod Supabase i eu-west-1 — hver DB-rundtur krydser Atlanten), ingen cache-headere for `sw.js`/`manifest.json`
+- Sportmonks-provideren har ingen 429-håndtering, og `fetchLive` (`sportmonks.js:179`) gen-forsøger straks ved 4xx — inkl. 429, dvs. et ekstra kald mod en netop ramt grænse; football-data-provideren gør det rigtigt
+- Ingen backup-/gendannelsesstrategi: kun `--schema-only`-eksport, ingen datadump/PITR-plan — og `sql/README.md`s to tavst tilbagerullende migreringer har ingen rollback-vej
 
 ---
 
