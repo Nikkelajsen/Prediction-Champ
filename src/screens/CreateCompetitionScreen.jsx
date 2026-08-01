@@ -15,7 +15,7 @@ import { groupIntoRounds } from "../lib/scoring.js";
 import { createTypeById, pickRandomFromRounds, weeklyCouponName, buildSpec } from "../lib/createTypes.js";
 import { C, btnGhost, btnGreen, font } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
-import TypeGallery from "./create/TypeGallery.jsx";
+import TypeGallery, { ICONS } from "./create/TypeGallery.jsx";
 import SeasonFields from "./create/SeasonFields.jsx";
 import TeamFields from "./create/TeamFields.jsx";
 import RandomFields from "./create/RandomFields.jsx";
@@ -53,6 +53,7 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   const [upcomingTeams, setUpcomingTeams] = useState({});
 
   const type = createTypeById(typeId);
+  const TypeIcon = ICONS[typeId] || null;
 
   useEffect(() => { (async () => { try { setGroups(await loadMyGroups(token, userId)); } catch (e) { setGroups([]); } })(); }, [token, userId]); // eslint-disable-line
 
@@ -256,9 +257,15 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
         {typeId && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <div>
-                <div style={{ fontFamily: font.display, textTransform: "uppercase", fontWeight: 700, fontSize: 18 }}>{type.title}</div>
-                <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.4 }}>{type.subtitle}</div>
+              {/* Samme ikon som på kortet — kontinuitet fra galleriet. Hverken
+                  "Anbefalet" eller varigheds-mærkaten gentages her: begge dele
+                  hjalp med at VÆLGE, og valget er truffet. */}
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", minWidth: 0 }}>
+                {TypeIcon && <TypeIcon size={18} color={C.muted} style={{ flexShrink: 0, marginTop: 3 }} />}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: font.display, textTransform: "uppercase", fontWeight: 700, fontSize: 18 }}>{type.title}</div>
+                  <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.4 }}>{type.subtitle}</div>
+                </div>
               </div>
               <button type="button" style={{ ...btnGhost, flexShrink: 0 }} onClick={() => setTypeId(null)}>
                 <ChevronLeft size={14} /> Skift type

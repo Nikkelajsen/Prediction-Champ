@@ -11,6 +11,23 @@ describe("CREATE_TYPES", () => {
       .toEqual(["custom", "full_season", "random", "team"]); // time_range bor under Custom-kortet
   });
 
+  it("Sæson står øverst og er det anbefalede — præcis ét kort er det", () => {
+    // Rækkefølgen er en anbefaling, ikke kun varighed: det øverste kort er dét,
+    // produktet vil have flest i. Uden denne test kan den skride tavst ved
+    // næste redigering af listen.
+    expect(CREATE_TYPES[0].id).toBe("season");
+    expect(CREATE_TYPES[0].recommended).toBe(true);
+    expect(CREATE_TYPES.filter((t) => t.recommended)).toHaveLength(1);
+  });
+
+  it("hvert kort har både varigheds-mærkat og beskrivelse", () => {
+    // De to akser, kortet skal bære: HVOR LÆNGE og HVILKE kampe.
+    for (const t of CREATE_TYPES) {
+      expect(t.duration, t.id).toBeTruthy();
+      expect(t.subtitle, t.id).toBeTruthy();
+    }
+  });
+
   it("kårings-tilvalget (multiRound) er slukket for én-rundes typer", () => {
     // I en én-rundes konkurrence ER vinderen ugens bedste.
     expect(createTypeById("weekly_coupon").multiRound).toBe(false);
