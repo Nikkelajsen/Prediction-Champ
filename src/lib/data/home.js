@@ -3,7 +3,7 @@
 // kun de to bruger.
 
 import { db } from "../supabase.js";
-import { currentRoundIndex, groupIntoRounds, isLocked, liveInfo, pointsFor, roundLabel, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS } from "../scoring.js";
+import { currentRoundIndex, groupIntoRounds, isLocked, lockAtOf, liveInfo, pointsFor, roundLabel, buildRoundStartMap, roundStartKey } from "../scoring.js";
 
 // ---------- Hjem: næste deadline + manglende tips på tværs af brugerens konkurrencer ----------
 async function computeHomeTips(token, userId, competitions) {
@@ -15,7 +15,7 @@ async function computeHomeTips(token, userId, competitions) {
   const matchComps = {};
   for (const c of cms) (matchComps[c.match_id] ||= []).push(c.competition_id);
   const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
-  const lockMap = buildRoundLockMap(ms);
+  const roundStarts = buildRoundStartMap(ms);
   const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]).filter(Boolean))];
   const teams = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
@@ -23,7 +23,7 @@ async function computeHomeTips(token, userId, competitions) {
   const predByMatch = new Map(preds.map((p) => [p.match_id, p]));
 
   // rullende vindue: en kamp er "ikke åben endnu", hvis ALLE konkurrencer, den indgår i, har openDaysBefore.
-  // Vinduet er runde-baseret (regnet fra rundens tidligste kickoff), så en kamp aldrig åbner efter rundelåsen.
+  // Vinduet er fortsat runde-baseret (regnet fra rundens tidligste kickoff), så hele runden åbner samlet.
   const opensAt = (m) => {
     const cids = matchComps[m.id] || [];
     const cs = cids.map((id) => competitions.find((c) => c.id === id)).filter(Boolean);
@@ -31,13 +31,13 @@ async function computeHomeTips(token, userId, competitions) {
     const w = cs.map((c) => c.rules?.openDaysBefore || 0);
     if (w.some((x) => !x)) return false;
     const md = Math.max(...w);
-    const roundStart = lockMap.get(roundLockKey(m)) ?? new Date(m.kickoff_at).getTime();
+    const roundStart = roundStarts.get(roundStartKey(m)) ?? new Date(m.kickoff_at).getTime();
     return Date.now() < roundStart - md * 24 * 3600 * 1000;
   };
   const now = Date.now();
   const played = (m) => m.home_score !== null && m.home_score !== undefined;
 
-  const tippable = ms.filter((m) => !played(m) && !isLocked(m, lockMap) && !opensAt(m) && m.kickoff_at);
+  const tippable = ms.filter((m) => !played(m) && !isLocked(m) && !opensAt(m) && m.kickoff_at);
   const isTipped = (m) => { const p = predByMatch.get(m.id); return !!(p && p.pred_home != null && p.pred_away != null); };
   // Fælles hale til de to "der er intet at gøre lige nu"-tilstande: nærmeste
   // kommende kamp + dens runde, så kortets knap kan åbne Tip landet det rigtige
@@ -67,7 +67,10 @@ async function computeHomeTips(token, userId, competitions) {
     .sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));
   if (!roundUntipped.length) return allOk();
 
-  const deadline = Math.min(...roundUntipped.map((m) => (lockMap.get(roundLockKey(m)) ?? new Date(m.kickoff_at).getTime()) - LOCK_LEAD_MS));
+  // Kortets deadline er den FØRSTE af de utippede kampes egne låse — det er den, der
+  // løber ud først, og dermed den, brugeren skal nå. Efter A21 er det ikke længere
+  // én fælles rundelås, men de utippede kampe i runden ligger typisk tæt.
+  const deadline = Math.min(...roundUntipped.map((m) => lockAtOf(m)).filter((t) => t !== null));
   const names = roundUntipped.slice(0, 3).map((m) => `${teamName.get(m.home_team_id) || "?"} – ${teamName.get(m.away_team_id) || "?"}`);
   return { hasComps: true, allTipped: false, roundKey: nextRoundKey, roundLabelText: roundLabel(nextRoundKey), deadline, missingCount: roundUntipped.length, names };
 }

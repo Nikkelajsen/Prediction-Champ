@@ -1,6 +1,7 @@
 // Rundehoved: rundelabel + pager på én linje, og rundens status (deadline, lås,
-// tippet-tæller, point) på én dæmpet linje under. Deadline hører til runden — ikke
-// til hver enkelt kamp — så den står KUN her.
+// tippet-tæller, point) på én dæmpet linje under. Efter A21 låser hver kamp for sig,
+// men tiden står stadig KUN her: lås = kickoff − 1 time, og rækkens tid-kolonne viser
+// allerede kickoff, så hovedet behøver kun sige, hvornår den FØRSTE lås løber ud.
 import { ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { C, font, pagerBtn } from "../../ui/theme.js";
 import { InfoDot } from "../../ui/components.jsx";
@@ -25,8 +26,8 @@ function RoundHeader({ rounds, index, setIndex, status, hint }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div><b>Point:</b> <span style={{ color: C.green, fontWeight: 700 }}>+3</span> for det præcise resultat,{" "}
                 <span style={{ color: C.greenSoft, fontWeight: 700 }}>+1</span> for den rigtige vinder (eller uafgjort). Aldrig minuspoint.</div>
-              <div><b>Lås:</b> hele runden låser samtidig, 1 time før rundens første kamp. Indtil da kan du rette dine gæt frit.</div>
-              <div><b>Andres gæt:</b> først synlige, når runden er låst — så tipper alle på samme grundlag. Fra låsen kan du trykke på en kamp og se alles gæt.</div>
+              <div><b>Lås:</b> hver kamp låser 1 time før sit eget kickoff. Indtil da kan du rette dit gæt frit — også selvom tidligere kampe i runden allerede er låst.</div>
+              <div><b>Andres gæt:</b> først synlige, når kampen er låst — så tipper alle på samme grundlag. Fra låsen kan du trykke på kampen og se alles gæt.</div>
             </div>
           </InfoDot>
         </div>

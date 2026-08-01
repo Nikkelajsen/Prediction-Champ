@@ -139,43 +139,29 @@ const MODE_HINTS = {
 // Ukendt mode vises råt frem for tomt — så en ny mode aldrig forsvinder i UI'et.
 function modeLabel(mode) { return MODE_LABELS[mode] || mode; }
 
-// Kan konkurrencen spænde over mere end én turnering? Låsen er scopet på
-// (season_id, round_key) og forbliver det (A16, afsnit 3), så en blandet
-// konkurrence får én deadline PR. TURNERING i samme viste runde. Opret-skærmen
-// skal sige det, hvor valget træffes — ikke lade det vise sig som et rundehoved,
-// der pludselig siger "Næste lås".
-//
-// Hver mode har sin egen kilde til turneringer, og det er dét, der gør den værd
-// at have som ren funktion: `team` og `time_range` er bundet til én turnering og
-// kan aldrig blande, mens `random` kun kan udtale sig om sin PULJE — trækningen
-// er tilfældig, så teksten siger "kan blande", ikke "blander".
-function mixesTournaments({ mode, fullSeasonLeagueIds = [], randomPoolLeagueIds = [], pickedLeagueIds = [] }) {
-  const many = (ids) => new Set(ids.filter(Boolean)).size > 1;
-  if (mode === "full_season") return many(fullSeasonLeagueIds);
-  if (mode === "random") return many(randomPoolLeagueIds);
-  if (mode === "custom") return many(pickedLeagueIds);
-  return false;
-}
-
 function formatKickoff(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   return d.toLocaleDateString("da-DK", { weekday: "short", day: "2-digit", month: "2-digit" }) + " kl. " +
     d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
 }
-const LOCK_LEAD_MS = 60 * 60 * 1000; // 1 time før rundens første kickoff
+const LOCK_LEAD_MS = 60 * 60 * 1000; // 1 time før kampens eget kickoff
 
-// Rundenøgle til låsning: scoper på (season_id, round_key) — samme som RLS-policyen.
-// To ligaer der deler samme kalenderuge (round_key) er dermed separate runder.
-function roundLockKey(m) { return `${m.season_id ?? ""}|${m.round_key ?? ""}`; }
+// ---------- rundens START (ikke dens lås) ----------
+// Efter A21 låser kampe hver for sig, så en runde har ikke længere ét låsetidspunkt.
+// Men rundens FØRSTE kickoff er stadig et rigtigt begreb, og det rullende gætte-vindue
+// (`rules.openDaysBefore`) er fortsat ankret dér: hele runden åbner samlet, i stedet for
+// at kampene dryppe ind én ad gangen. Nøglen er (season_id, round_key) som før — to
+// turneringer, der deler kalenderuge, er stadig hver sin runde.
+function roundStartKey(m) { return `${m.season_id ?? ""}|${m.round_key ?? ""}`; }
 
-// Map<key, tidligste kickoff (ms)> over en fuld kampliste. Kampe uden kickoff
-// springes over; en runde uden kendte kickoffs får ingen entry ⇒ aldrig låst.
-function buildRoundLockMap(matches) {
+// Map<key, tidligste kickoff (ms)>. Kampe uden kickoff springes over; en runde uden
+// kendte kickoffs får ingen entry, og vinduet falder da tilbage på kampens egen tid.
+function buildRoundStartMap(matches) {
   const map = new Map();
   for (const m of matches) {
     if (!m.kickoff_at) continue;
-    const key = roundLockKey(m);
+    const key = roundStartKey(m);
     const t = new Date(m.kickoff_at).getTime();
     const cur = map.get(key);
     if (cur === undefined || t < cur) map.set(key, t);
@@ -183,29 +169,37 @@ function buildRoundLockMap(matches) {
   return map;
 }
 
+// Låsetidspunktet for én kamp (ms), eller null hvis kickoff ikke er kendt.
+function lockAtOf(m) {
+  if (!m?.kickoff_at) return null;
+  const t = new Date(m.kickoff_at).getTime();
+  return Number.isNaN(t) ? null : t - LOCK_LEAD_MS;
+}
+
 // En kamp er låst hvis den har fået resultat, ELLER hvis vi er inden for 1 time
-// af rundens TIDLIGSTE kickoff. roundLockMap kommer fra buildRoundLockMap over
-// hele kamplisten. Uden map falder vi tilbage til per-kamp (så intet crasher).
-function isLocked(match, roundLockMap) {
+// af sit EGET kickoff (A21, 1. august 2026 — afsnit 3). Låsen var før scopet på
+// (season_id, round_key), så rundens tidligste kickoff låste hele runden;
+// fredagens kamp låste dermed søndagens. Nu er deadlinen en egenskab ved kampen,
+// ens for alle — samme regel som RLS i sql/predictions_match_lock.sql.
+//
+// En kamp uden kendt kickoff er ikke låst; det spejler policyens skrivegren.
+function isLocked(match) {
   if (match.home_score !== null && match.home_score !== undefined) return true;
-  if (!match.kickoff_at) return false;
-  const earliest = roundLockMap
-    ? roundLockMap.get(roundLockKey(match))
-    : new Date(match.kickoff_at).getTime();
-  if (earliest === undefined || earliest === null) return false;
-  return Date.now() >= earliest - LOCK_LEAD_MS;
+  const lockAt = lockAtOf(match);
+  if (lockAt === null) return false;
+  return Date.now() >= lockAt;
 }
 
 // De runder, hvor andres tips må vises — nemlig fra låsen, hvor ingen længere
 // kan rette sit gæt. Hver runde beskæres til sine LÅSTE kampe, så et gæt aldrig
-// kan ses før deadline: en runde kan indeholde kampe fra flere turneringer, og
-// låsen er scopet på (season_id, round_key), så de kan låse på hver sit tidspunkt.
+// kan ses før deadline. Med per-kamp-låsen er en delvist låst runde reglen frem
+// for undtagelsen: en runde står typisk halvt beskåret i dagevis, mens dens
+// senere kampe stadig kan tippes.
 // Et resultat er ikke et krav — en låst, endnu ikke spillet kamp viser gættet
 // uden facit. Samme regel som "Alles gæt" på Tip-skærmen.
 function lockedRoundsOf(rounds) {
-  const lockMap = buildRoundLockMap(rounds.flatMap((r) => r.matches));
   return rounds
-    .map((r) => ({ ...r, matches: r.matches.filter((m) => isLocked(m, lockMap)) }))
+    .map((r) => ({ ...r, matches: r.matches.filter((m) => isLocked(m)) }))
     .filter((r) => r.matches.length > 0);
 }
 
@@ -237,4 +231,4 @@ function liveInfo(m) {
   };
 }
 
-export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockedRoundsOf, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, MODE_HINTS, modeLabel, mixesTournaments };
+export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, LOCK_LEAD_MS, roundStartKey, buildRoundStartMap, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, MODE_HINTS, modeLabel };
