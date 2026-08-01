@@ -10,7 +10,11 @@ og kan køres igen.
 `public`-skemaet, som det så ud ved seneste eksport. Den redigeres aldrig i hånden;
 den regenereres med guiden nedenfor.
 
-> **Øjebliksbilledet er friskt pr. 31. juli 2026** — eksporten er kørt efter
+> ⚠️ **Øjebliksbilledet er BAGUD pr. 1. august 2026**: `predictions_match_lock.sql` (#25) og
+> den omlagte `analytics_dashboard.sql` (nye `analytics_match_locks`, omdøbte kolonner i
+> `analytics_round_locks`) er kørt siden. Eksporten skal køres, og datoen nedenfor rettes.
+>
+> **Øjebliksbilledet var friskt pr. 31. juli 2026** — eksporten er kørt efter
 > `multi_provider.sql` (#22) og indeholder `leagues.provider`, `leagues.live_enabled`
 > og `leagues.is_official`. Et staging-projekt bygget op fra `schema.sql` alene får
 > altså det skema, koden faktisk kører imod.
@@ -36,7 +40,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 1 | `standings_views.superseded.sql` | Første udgave af `round_standings` + `season_standings` | ⚠️ **Afløst af `standings_tiebreakers.sql`** — kør den aldrig. Omdøbt 30. juli 2026, så filnavnet selv advarer; kun bevaret for historikken |
 | 2 | `user_stats.sql` | `user_activity_days`, `touch_activity()`, `admin_user_stats()` | Aktiv |
 | 3 | `username_constraints.sql` | Længde-constraint på `profiles.display_name` (2–20), `username_available()` | Aktiv |
-| 4 | `predictions_round_lock_policies.sql` | Runde-baseret lås på `predictions` for **SELECT + DELETE** | Aktiv, men ufuldstændig alene — se #14 |
+| 4 | `predictions_round_lock_policies.sql` | Runde-baseret lås på `predictions` for **SELECT + DELETE** | ⚠️ **Afløst af #25** — kør den aldrig igen. En gen-kørsel ruller tavst låsen tilbage fra kamp til runde |
 | 5 | `rating_trigger_optimization.sql` | Statement-level triggere på `matches`; kalder `recompute_ratings()` + `generate_stories()` | Aktiv — forudsætter `rating_core.sql` (#0) |
 | 6 | `matches_stage.sql` | `matches.stage_name` (grundspil/slutspil) | Aktiv |
 | 7 | `push_notifications.sql` | `push_subscriptions` + `notification_log` | Aktiv |
@@ -46,7 +50,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 11 | `live_scores.sql` | `matches.live_*`-kolonner + live-indekser | Aktiv |
 | 12 | `standings_tiebreakers.sql` | Genskaber alle tre stillings-views med `outcome_count`, `round_wins`, `avg_goal_error` | Aktiv — **afløser #1** |
 | 13 | `group_membership_invariant.sql` | A8 i databasen: backfill, auto-indmeldende trigger, strammet liga-exit + framelding | Aktiv — **afløser to policies fra #9** |
-| 14 | `predictions_write_lock.sql` | Runde-låsen også på **INSERT + UPDATE**; rydder den gamle `"read predictions"` op | Aktiv — **fuldfører #4** |
+| 14 | `predictions_write_lock.sql` | Runde-låsen også på **INSERT + UPDATE**; rydder den gamle `"read predictions"` op | ⚠️ **Afløst af #25** — kør den aldrig igen, af samme grund som #4 |
 | 15 | `story_engine_backfill.sql` | Kalder `generate_stories()` for alle fuldt afsluttede runder | **Engangs-/ad hoc-kørsel**, ikke en migrering. Kør efter #8, når nye regler skal gælde bagud |
 | 16 | `analytics_events.sql` | Analytics v1: `analytics_events` (hændelseslog), RLS (kun INSERT, egne rækker), indekser, hændelseskatalog-constraint | Aktiv — kør én gang, gen-kør kun ved ny event i kataloget |
 | 17 | `analytics_dashboard.sql` | Analytics v1: `analytics_round_locks`/`analytics_completion_facts`-views + `admin_analytics_health/engagement/league_health/retention`-RPC'er | Aktiv — **sikker og forventet at blive gen-kørt**. **Gen-kør efter 30. juli 2026-omlægningen** (Liga Health Score fjernet, `admin_analytics_league_health` returnerer nu signaler i stedet for en score) sammen med frontend-mergen; en gammel klient mod en ny RPC — eller omvendt — viser en tom liga-sektion, ikke forkerte tal |
@@ -56,6 +60,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 21 | `tournament_scotland_premiership.sql` | Turnering #2 (`B2`): `leagues`- + `seasons`-rækken for Scotland Premiership (`501`) | **Data, ikke skema** — ændrer intet i strukturen og indgår derfor ikke i `schema.sql`. Idempotent. **Kørt 31. juli 2026**, og cron-jobbet er oprettet (job #5 i [`../docs/CRON.md`](../docs/CRON.md)); tilbage af `B2` står verifikationen — dubletter i hold, fasenavne og testcases 2–6 i [`../docs/features/turnering-2.md`](../docs/features/turnering-2.md) §6 |
 | 22 | `multi_provider.sql` | Flere datakilder: `leagues.provider` + `leagues.live_enabled` + check-constraint | Aktiv — tilføjet 31. juli 2026. **Ændrer ingen eksisterende rækkers adfærd**: begge kolonner har en default (`'sportmonks'`, `true`), der beskriver verden før migreringen. Skal køres FØR #23 |
 | 23 | `tournament_footballdata.sql` | De fem football-data.org-turneringer: `leagues`- + `seasons`-rækker for Premier League (`PL`), Champions League (`CL`), Bundesliga (`BL1`), Serie A (`SA`), Primera División (`PD`) | **Data, ikke skema** — indgår derfor ikke i `schema.sql`. Idempotent, og en gen-kørsel rører hverken `is_visible` eller `is_official`, så en turnering, der er tændt manuelt, ikke slukkes igen. Forudsætter #22 |
+| 25 | `predictions_match_lock.sql` | **Per-kamp-lås** (`A21`): alle fire `predictions`-policies + `comp_participants_delete_own_unlocked`. En kamp låser 1 time før sit EGET kickoff | Aktiv — **afløser #4 og #14**. Idempotent. **Adfærdsændring i produktion:** en runde, der er låst i dag, får sine senere kampe åbnet igen i samme øjeblik. Kør derfor MELLEM to runder, ikke midt i en |
 | 24 | `tournament_footballdata_promote.sql` | Sætter `is_visible` + `is_official` = true på de fem football-data-turneringer (A19) | **Data, ikke skema.** Idempotent. **Kørt 31. juli 2026.** Begge kolonner sættes i SAMME update med vilje — check-constrainten `leagues_official_implies_visible` afviser en officiel turnering, ingen kan se, så to adskilte sætninger ville fejle på den første. Scotland Premiership er bevidst ikke med; den forfremmes, når dens igangværende spillerunde er talt op |
 
 ### ⚠️ Tre filer må ikke gen-køres blindt

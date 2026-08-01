@@ -26,9 +26,9 @@ const METRICS = {
   completion_rate: {
     title: "Prediction Completion Rate (North Star)",
     what: "Hvor stor en del af de tips, brugerne faktisk KUNNE have afgivet, de rent faktisk afgav.",
-    how: "Afgivne tips ÷ mulige tips. Et muligt tip er én kamp i én konkurrence, brugeren deltager i, i en runde der allerede er låst — og kun runder, der låste EFTER brugeren meldte sig til konkurrencen. Hvert (bruger, kamp)-par tælles én gang, også når kampen indgår i flere konkurrencer.",
+    how: "Afgivne tips ÷ mulige tips. Et muligt tip er én kamp i én konkurrence, brugeren deltager i, som allerede er låst — og kun kampe, der låste EFTER brugeren meldte sig til konkurrencen. Hvert (bruger, kamp)-par tælles én gang, også når kampen indgår i flere konkurrencer.",
     source: "predictions + matches via viewet analytics_completion_facts. ALDRIG fra hændelsesloggen, som er fire-and-forget og lossy by design.",
-    caveat: "Delvis udfyldning tæller forholdsmæssigt: 3 af 5 tippede kampe er 60 %, ikke 0. Ulåste runder indgår ikke — man kan ikke have misset en deadline, der ikke er indtruffet.",
+    caveat: "Delvis udfyldning tæller forholdsmæssigt: 3 af 5 tippede kampe er 60 %, ikke 0. Ulåste kampe indgår ikke — man kan ikke have misset en deadline, der ikke er indtruffet. Enheden skiftede fra runde til kamp 1. august 2026 (A21), så en serie hen over den dato sammenligner to definitioner.",
   },
   completion_trend: {
     title: "Retning mod forrige vindue",
@@ -54,14 +54,14 @@ const METRICS = {
   active_competitions: {
     title: "Aktive konkurrencer",
     what: "Konkurrencer med tipaktivitet i perioden — og hvor mange der stadig har runder foran sig.",
-    how: "Aktiv = mindst ét tip opdateret i vinduet. 'I gang' = konkurrencen har mindst én endnu ulåst runde.",
+    how: "Aktiv = mindst ét tip opdateret i vinduet. 'I gang' = konkurrencen har mindst én runde, der endnu ikke er gået i gang.",
     source: "predictions + competition_matches for aktiv; analytics_round_locks for 'i gang'.",
     caveat: "De to tal er bevidst forskellige: en konkurrence kan have masser af historik uden en eneste runde tilbage, og en helt ny kan have runder foran sig uden aktivitet endnu.",
   },
   deadline_miss_rate: {
     title: "Deadline Miss Rate",
     what: "Hvor stor en del af brugerne, der lod en hel runde gå, uden at afgive ét eneste tip.",
-    how: "Enheden er RUNDEN, ikke kampen. En bruger missede runde R, hvis de havde mindst ét muligt tip i R og afgav NUL af dem. Headline-tallet er missede brugere ÷ aktive brugere i perioden.",
+    how: "Enheden er RUNDEN, ikke kampen. En bruger missede runde R, hvis de havde mindst ét muligt tip i R og afgav NUL af dem. Headline-tallet er missede brugere ÷ aktive brugere i perioden. Runden var før valgt, fordi låsen sad dér; efter A21 låser hver kamp for sig, og enheden er nu valgt, fordi spørgsmålet har den — \"sad en bruger en spillerunde over?\".",
     source: "analytics_completion_facts grupperet pr. (bruger, sæson, runde) + user_activity_days som nævner.",
     caveat: "Er ikke det modsatte af Completion Rate: 3 af 5 tippede kampe er IKKE en miss. Det andet tal ('af dem der havde en deadline') findes, fordi headline-raten ellers falder kunstigt, efterhånden som brugerbasen vokser med folk uden konkurrencer.",
   },
@@ -74,15 +74,15 @@ const METRICS = {
   },
   completion_by_week: {
     title: "Completion rate pr. uge",
-    what: "Den samme North Star-metrik, delt op på den uge, rundens lås faldt i.",
-    how: "Pr. uge: afgivne ÷ mulige tips, hvor ugen bestemmes af rundens låsetidspunkt (ikke af hvornår tippet blev skrevet).",
+    what: "Den samme North Star-metrik, delt op på den uge, kampens lås faldt i.",
+    how: "Pr. uge: afgivne ÷ mulige tips, hvor ugen bestemmes af kampens låsetidspunkt (ikke af hvornår tippet blev skrevet).",
     source: "analytics_completion_facts, seneste ~12 uger.",
-    caveat: "En uge helt uden låste runder har ingen søjle og vises som tom — aldrig som 0 %, som ikke kunne skelnes fra en uge, hvor ingen tippede.",
+    caveat: "En uge helt uden låste kampe har ingen søjle og vises som tom — aldrig som 0 %, som ikke kunne skelnes fra en uge, hvor ingen tippede.",
   },
   completion_by_month: {
     title: "Completion rate pr. måned",
     what: "Samme metrik som ugesøjlerne, men aggregeret pr. kalendermåned — nok datapunkter til at se en sæsonrytme.",
-    how: "Pr. måned: afgivne ÷ mulige tips, måneden bestemt af rundens låsetidspunkt. Seneste 6 måneder.",
+    how: "Pr. måned: afgivne ÷ mulige tips, måneden bestemt af kampens låsetidspunkt. Seneste 6 måneder.",
     source: "analytics_completion_facts.",
     caveat: "En indeværende måned er ufuldstændig og skal ikke sammenlignes direkte med de afsluttede.",
   },
@@ -142,7 +142,7 @@ const METRICS = {
   league_pulse: {
     title: "Puls",
     what: "Hvor mange af ligaens runder der rent faktisk blev spillet.",
-    how: "Runder med mindst ét tip fra et medlem ÷ runder, der låste i perioden.",
+    how: "Runder med mindst ét tip fra et medlem ÷ runder, hvor mindst én kamp låste i perioden.",
     source: "analytics_completion_facts.",
     caveat: "Uafhængig af bredde: en liga kan have puls 100 % (nogen tipper hver runde) og bredde 20 % (det er altid den samme).",
   },
@@ -184,7 +184,7 @@ const METRICS = {
   league_competitions: {
     title: "Konkurrencer",
     what: "Hvor mange konkurrencer ligaen har, og hvor mange af dem der stadig har runder foran sig.",
-    how: "'I gang' betyder mindst én endnu ulåst runde. En konkurrence, hvis sæson er slut, tæller med i totalen, men ikke som i gang.",
+    how: "'I gang' betyder mindst én runde, der endnu ikke er gået i gang. En konkurrence, hvis sæson er slut, tæller med i totalen, men ikke som i gang.",
     source: "competitions + competition_matches + analytics_round_locks.",
     caveat: "Nul i gang er en strukturel mangel, ikke et engagementsproblem — der er bogstavelig talt intet at tippe på.",
   },
@@ -204,11 +204,11 @@ const METRICS = {
     caveat: "KORRELATION, IKKE ÅRSAG. De, der åbner notifikationer, er de engagerede i forvejen — forskellen er derfor et LOFT over pushets reelle effekt, ikke et estimat af den. Et push, der aldrig blev åbnet, kan desuden godt have virket: beskeden er synlig på låseskærmen, uden at linket bliver trykket.",
   },
   push_lead_time: {
-    title: "Varsel før rundelås",
+    title: "Varsel før første lås",
     what: "Hvor lang tid før deadline beskeden blev sendt — og om det gjorde en forskel for, om folk tippede.",
-    how: "Tiden fra beskeden blev sendt til rundens lås (rundens første kickoff minus én time), lagt i intervaller. For hvert interval: andelen af modtagerne, der tippede i den runde.",
-    source: "notification_log.sent_at + analytics_round_locks.lock_at + analytics_completion_facts.",
-    caveat: "Det er den eneste knap, der reelt kan drejes på (cron-tidspunktet), men intervallerne er ikke sammenlignelige uden videre: runder med tidligt kickoff får systematisk kortere varsel. 'Ukendt' dækker beskeder, hvis runde ikke kunne findes, eller som blev sendt efter låsen.",
+    how: "Tiden fra beskeden blev sendt til den første lås, brugeren stadig kunne nå (kampens kickoff minus én time), lagt i intervaller. For hvert interval: andelen af modtagerne, der nåede at tippe.",
+    source: "notification_log.sent_at + analytics_match_locks.lock_at + analytics_completion_facts.",
+    caveat: "Det er den eneste knap, der reelt kan drejes på (cron-tidspunktet), men intervallerne er ikke sammenlignelige uden videre: kampe med tidligt kickoff får systematisk kortere varsel. 'Ukendt' dækker beskeder, hvor ingen lås kunne findes efter afsendelsen. SERIEN STARTER FORFRA 1. august 2026: beskeden samles nu pr. bruger pr. dag, og de gamle logrækker har et nøgleformat, der bevidst udelades frem for at blive fejltolket.",
   },
 
   // ---------- Tragt for nye brugere ----------
@@ -259,7 +259,7 @@ const METRICS = {
   story_coverage: {
     title: "Dækning",
     what: "Hvor stor en del af de brugere, der havde en afsluttet runde, som fik mindst én historie.",
-    how: "Brugere med mindst én genereret historie i perioden ÷ brugere med mindst ét muligt tip i en låst runde i samme periode.",
+    how: "Brugere med mindst én genereret historie i perioden ÷ brugere med mindst ét muligt tip på en låst kamp i samme periode.",
     source: "public.stories + analytics_completion_facts.",
     caveat: "Det er dette tal, v1.1-leverancen blev målt på (1 af 8 → 8 af 8 brugere i premiereugen) — nu permanent i stedet for en engangsmåling. Under 100 % betyder, at nogen fik en runde uden en eneste historie.",
   },

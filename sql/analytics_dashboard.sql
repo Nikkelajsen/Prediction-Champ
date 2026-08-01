@@ -41,32 +41,64 @@ $fn$;
 
 grant execute on function public.analytics_require_admin() to authenticated;
 
--- ---------- View: analytics_round_locks ----------
--- Samme rundelås som sql/predictions_round_lock_policies.sql, omskrevet til
--- et AGGREGAT i stedet for en EXISTS-betingelse pr. kamp. De to udtryk er
--- algebraisk ækvivalente:
+-- ---------- Views: låsen, i to grain ----------
+-- DROP FØRST, og det er ikke pynt: `create or replace view` kan ikke OMDØBE en
+-- kolonne, og analytics_round_locks' `lock_at`/`is_locked` bliver til
+-- `round_start_at`/`has_started` her. Uden droppet fejler scriptet med
+--   "cannot change name of view column "lock_at" to "round_start_at"".
+-- analytics_completion_facts droppes med, fordi den afhænger af viewet; begge
+-- genskabes nedenfor, så filen er fortsat idempotent.
+drop view if exists public.analytics_completion_facts;
+drop view if exists public.analytics_round_locks;
+
+-- ---------- View: analytics_match_locks ----------
+-- Samme lås som sql/predictions_match_lock.sql, ét sted at læse den fra.
+-- Efter A21 (1. august 2026) låser hver kamp 1 time før sit EGET kickoff; før
+-- låste hele runden samtidig ved rundens tidligste kickoff. Det er derfor et
+-- KAMP-view og ikke længere et aggregat: der findes ikke ét låsetidspunkt pr.
+-- runde at måle på.
 --
---   exists (select 1 from matches m2 where … m2.kickoff_at <= now() + interval '1 hour')
---     ⇔  min(kickoff_at) <= now() + interval '1 hour'
---     ⇔  min(kickoff_at) - interval '1 hour' <= now()
---
--- En runde, hvor alle kickoffs er NULL, giver ingen række → regnes aldrig som
--- låst, ligesom policyen (`matches.kickoff_at` er i dag `not null`, så dette
--- er kun en defensiv detalje). VIGTIGT: denne fil må ALDRIG bruges til at
--- ÆNDRE selve rundelåsen — den lever udelukkende i
--- predictions_round_lock_policies.sql og predictions_write_lock.sql.
+-- En kamp uden kendt kickoff giver ingen række → regnes aldrig som låst,
+-- ligesom policyen (`matches.kickoff_at` er i dag `not null`, så dette er kun
+-- en defensiv detalje). VIGTIGT: denne fil må ALDRIG bruges til at ÆNDRE selve
+-- låsen — den lever udelukkende i predictions_match_lock.sql.
 --
 -- Bevidst UDEN security_invoker=on (modsat round_standings/latest_story, som
 -- klienter læser direkte): dette view kører med EJERENS rettigheder inde i
 -- RPC'erne nedenfor, og revokes derfor fra alle klient-roller.
+create or replace view public.analytics_match_locks as
+select
+  m.id                                      as match_id,
+  m.season_id,
+  m.round_key,
+  m.kickoff_at,
+  m.kickoff_at - interval '1 hour'          as lock_at,
+  (m.kickoff_at - interval '1 hour') <= now() as is_locked
+from public.matches m
+where m.kickoff_at is not null;
+
+revoke all on public.analytics_match_locks from anon, authenticated;
+
+-- ---------- View: analytics_round_locks ----------
+-- Runden er stadig et rigtigt begreb — men efter A21 er den ikke længere et
+-- LÅSETIDSPUNKT. Kolonnerne hedder derfor det, de faktisk er: `round_start_at`
+-- er rundens første kickoff minus en time (den margen, api/backfill.js' regel 3
+-- måler på), og `has_started` siger, om runden er gået i gang. De gamle navne
+-- `lock_at`/`is_locked` er FJERNET med vilje frem for omdøbt i stilhed: enhver
+-- forespørgsel, der stadig troede, at en runde havde ét låsetidspunkt, skal
+-- fejle højlydt i stedet for at måle noget andet, end den siger.
+--
+-- Bruges nu kun til to ting, der begge er ægte runde-spørgsmål: er runden gået
+-- i gang (live_competitions, competitions_active), og er den spillet færdig
+-- (rounds_completed).
 create or replace view public.analytics_round_locks as
 select
   m.season_id,
   m.round_key,
-  min(m.kickoff_at)                                 as first_kickoff,
-  min(m.kickoff_at) - interval '1 hour'              as lock_at,
-  (min(m.kickoff_at) - interval '1 hour') <= now()   as is_locked,
-  count(*)                                           as match_count,
+  min(m.kickoff_at)                                   as first_kickoff,
+  min(m.kickoff_at) - interval '1 hour'                as round_start_at,
+  (min(m.kickoff_at) - interval '1 hour') <= now()     as has_started,
+  count(*)                                             as match_count,
   count(*) filter (where m.home_score is not null and m.away_score is not null) as finished_count
 from public.matches m
 where m.kickoff_at is not null
@@ -77,18 +109,24 @@ revoke all on public.analytics_round_locks from anon, authenticated;
 -- ---------- View: analytics_completion_facts ----------
 -- Centerpiece for North Star-metrikken. Én række pr. MULIGT tip:
 --
---   1) "Mulige tips" = kampene i de konkurrencer, brugeren deltager i, i
---      runder der allerede er LÅST — en ulåst runde er ikke et muligt tip,
---      for man kan ikke have misset en deadline, der ikke er indtruffet.
---   2) … OG kun runder der låste EFTER brugeren meldte sig til
+--   1) "Mulige tips" = kampene i de konkurrencer, brugeren deltager i, som
+--      allerede er LÅST — en ulåst kamp er ikke et muligt tip, for man kan
+--      ikke have misset en deadline, der ikke er indtruffet.
+--   2) … OG kun kampe der låste EFTER brugeren meldte sig til
 --      (`lock_at >= cp.joined_at`). Uden dette ville alle, der joiner en
 --      igangværende full_season-konkurrence, starte ved ~0% og aldrig
 --      komme sig — North Star ville måle anciennitet, ikke deltagelse.
 --   3) `predicted = true`, blot fordi rækken FINDES i predictions, er
---      pålideligt uden et timestamp-tjek: sql/predictions_write_lock.sql
---      blokerer INSERT/UPDATE efter rundelåsen, og ingen serverkode skriver
+--      pålideligt uden et timestamp-tjek: sql/predictions_match_lock.sql
+--      blokerer INSERT/UPDATE efter kampens lås, og ingen serverkode skriver
 --      predictions (api/send-notifications.js læser kun) — så en eksisterende
 --      række KAN ikke være skrevet efter deadline.
+--
+-- ENHEDEN SKIFTEDE MED A21 (1. august 2026): `lock_at` er nu KAMPENS egen lås,
+-- ikke rundens. Tallene flytter sig derfor bagud i tid — en bruger, der meldte
+-- sig midt i en runde, tælles nu på de kampe, der reelt var åbne for dem, i
+-- stedet for at få hele runden talt med eller slet ingen. Det er mere korrekt,
+-- men en historik-serie hen over 1. august 2026 sammenligner to definitioner.
 --
 -- GRAIN-REGLEN (den letteste ting at få galt — læs før du grupperer):
 --   · pr. bruger / pr. liga / globalt / pr. uge / pr. måned:
@@ -117,9 +155,7 @@ from public.competition_participants cp
 join public.competitions        c  on c.id = cp.competition_id
 join public.competition_matches cm on cm.competition_id = c.id
 join public.matches             m  on m.id = cm.match_id
-join public.analytics_round_locks rl
-  on rl.season_id is not distinct from m.season_id
- and rl.round_key = m.round_key
+join public.analytics_match_locks rl on rl.match_id = m.id
 left join public.predictions p
   on p.user_id = cp.user_id and p.match_id = m.id
 where rl.lock_at <= now()
@@ -204,7 +240,7 @@ begin
       join public.matches m on m.id = cm.match_id
       join public.analytics_round_locks rl
         on rl.season_id is not distinct from m.season_id and rl.round_key = m.round_key
-      where not rl.is_locked
+      where not rl.has_started
     ),
 
     -- Prediction Completion Rate (North Star) — se analytics_completion_facts
@@ -284,11 +320,15 @@ begin
       ) mth
     ),
 
-    -- Deadline Miss Rate. Enheden er RUNDEN, ikke kampen — det er dér, låsen
-    -- og deadline-push'en er forankret. En bruger "missede deadline i runde
-    -- R", hvis de havde ≥1 muligt tip i R og NUL af dem blev afgivet — en
-    -- bruger der tippede 3 af 5 kampe missede IKKE deadline (det måler
-    -- Completion Rate, som dækker delvis udfyldning). Tre tal returneres:
+    -- Deadline Miss Rate. Enheden er fortsat RUNDEN, men af en ny grund. Før A21
+    -- var runden dér, låsen og deadline-push'en var forankret; efter A21 låser
+    -- hver kamp for sig, og påmindelsen samles pr. dag. Runden er nu valgt, fordi
+    -- den er den enhed, SPØRGSMÅLET har: "sad en bruger en spillerunde over?".
+    -- Alternativet — at tælle hver ubesvaret kamp — er allerede dækket af
+    -- Completion Rate, og ville gøre de to metrikker til det samme tal.
+    -- En bruger "missede deadline i runde R", hvis de havde ≥1 muligt tip i R og
+    -- NUL af dem blev afgivet — en bruger der tippede 3 af 5 kampe missede IKKE
+    -- deadline. Tre tal returneres:
     -- miss_rate (brugerens godkendte formel: missede / AKTIVE brugere,
     -- headline), miss_rate_of_exposed (missede / brugere der reelt HAVDE en
     -- deadline — forhindrer at raten falder kunstigt, når brugerbasen vokser
@@ -441,9 +481,10 @@ begin
         -- fastholdelses-værktøj, så det spørgsmål er værd at kunne svare på:
         -- tippede de, der åbnede den, oftere end de, der ikke gjorde?
         --
-        -- Enheden er (bruger, runde): én modtaget deadline-påmindelse for én
-        -- runde. "Tippede" = mindst ét tip i netop den runde, læst fra
-        -- analytics_completion_facts — altså fra predictions, ikke fra loggen.
+        -- Enheden er (bruger, senddag): én modtaget deadline-påmindelse. "Tippede"
+        -- = mindst ét tip på en kamp, der låste efter beskeden og inden for syv
+        -- dage, læst fra analytics_completion_facts — altså fra predictions, ikke
+        -- fra loggen.
         --
         -- ⚠️ KORRELATION, IKKE ÅRSAG. Folk, der åbner notifikationer, er de
         -- engagerede i forvejen; forskellen er derfor et LOFT over pushets
@@ -451,47 +492,62 @@ begin
         -- (src/lib/analyticsMetrics.js, `push_effect`), fordi det er den
         -- eneste måde, tallet kan læses forkert på.
         'effect', (
-          with sent_rounds as (
-            -- Nøglen er `deadline:<season_id>:<round_key>:<dato>` (se
-            -- api/send-notifications.js). season_id kan være tom, men indeholder
-            -- aldrig et kolon, så felt 3 er altid runde-nøglen. Regex-tjekket
-            -- gør parsingen defensiv: en nøgle i et uventet format udelades
-            -- frem for at kaste og tage hele Engagement-sektionen med sig.
-            select nl.user_id, split_part(nl.key, ':', 3)::date as round_key, min(nl.sent_at) as sent_at
+          with sent as (
+            -- Nøglen er `deadline:<dato>` (se api/send-notifications.js). Efter A21
+            -- er beskeden samlet pr. BRUGER PR. DAG i stedet for pr. runde, fordi en
+            -- runde ikke længere har ét låsetidspunkt at varsle om. Enheden her er
+            -- derfor (bruger, senddag).
+            --
+            -- ⚠️ SERIEN STARTER FORFRA 1. AUGUST 2026. Gamle rækker har formatet
+            -- `deadline:<season_id>:<round_key>:<dato>`, hvis felt 2 er et uuid og
+            -- ikke en dato — de falder derfor ud af regex-tjekket frem for at blive
+            -- fejltolket. Det er med vilje: at parse dem ind ville blande to
+            -- definitioner i samme kurve.
+            select nl.user_id, split_part(nl.key, ':', 2)::date as sent_day, min(nl.sent_at) as sent_at
             from public.notification_log nl
             where nl.key like 'deadline:%'
               and nl.sent_at >= now() - make_interval(days => p_days)
-              and split_part(nl.key, ':', 3) ~ '^\d{4}-\d{2}-\d{2}$'
+              and split_part(nl.key, ':', 2) ~ '^\d{4}-\d{2}-\d{2}$'
             group by 1, 2
-          ), opened_rounds as (
-            select distinct e.user_id, (e.metadata->>'round_key')::date as round_key
+          ), opened as (
+            -- push_opened bærer stadig et round_key i sin metadata (deep-linket
+            -- peger på den runde, den første manglende kamp ligger i), men det kan
+            -- ikke længere joines mod afsendelsen — dén kender kun dagen. Åbningen
+            -- bindes derfor til dagen, den skete.
+            select distinct e.user_id, e.created_at::date as sent_day
             from public.analytics_events e
             where e.event_name = 'push_opened'
               and e.metadata->>'kind' = 'deadline'
-              and e.metadata->>'round_key' ~ '^\d{4}-\d{2}-\d{2}$'
               and e.created_at >= now() - make_interval(days => p_days)
-          ), predicted_rounds as (
-            select user_id, round_key, bool_or(predicted) as any_predicted
-            from public.analytics_completion_facts
+          ), followed as (
+            -- De kampe, brugeren stadig kunne NÅ, da beskeden blev sendt: dem der
+            -- låste efter sent_at. "Fulgte op" = tippede mindst én af dem. Vinduet
+            -- på syv dage svarer til en spillerunde og forhindrer, at en besked får
+            -- æren for et tip afgivet en uge senere.
+            select s.user_id, s.sent_day,
+              bool_or(f.predicted) as did_predict,
+              min(f.lock_at)       as next_lock_at
+            from sent s
+            join public.analytics_completion_facts f
+              on f.user_id = s.user_id
+             and f.lock_at >  s.sent_at
+             and f.lock_at <  s.sent_at + interval '7 days'
             group by 1, 2
-          ), locks as (
-            select round_key, min(lock_at) as lock_at from public.analytics_round_locks group by 1
           ), j as (
-            select s.user_id, s.round_key, s.sent_at, l.lock_at,
+            select s.user_id, s.sent_day, s.sent_at, fw.next_lock_at,
               (o.user_id is not null)                as did_open,
-              coalesce(p2.any_predicted, false)      as did_predict,
+              coalesce(fw.did_predict, false)        as did_predict,
               case
-                when l.lock_at is null or l.lock_at <= s.sent_at then null
-                when l.lock_at - s.sent_at <  interval '3 hours'  then 1
-                when l.lock_at - s.sent_at <  interval '6 hours'  then 2
-                when l.lock_at - s.sent_at <  interval '12 hours' then 3
-                when l.lock_at - s.sent_at <  interval '24 hours' then 4
+                when fw.next_lock_at is null then null
+                when fw.next_lock_at - s.sent_at <  interval '3 hours'  then 1
+                when fw.next_lock_at - s.sent_at <  interval '6 hours'  then 2
+                when fw.next_lock_at - s.sent_at <  interval '12 hours' then 3
+                when fw.next_lock_at - s.sent_at <  interval '24 hours' then 4
                 else 5
               end as lead_bucket
-            from sent_rounds s
-            left join opened_rounds    o  on o.user_id  = s.user_id and o.round_key  = s.round_key
-            left join predicted_rounds p2 on p2.user_id = s.user_id and p2.round_key = s.round_key
-            left join locks            l  on l.round_key = s.round_key
+            from sent s
+            left join opened   o  on o.user_id  = s.user_id and o.sent_day = s.sent_day
+            left join followed fw on fw.user_id = s.user_id and fw.sent_day = s.sent_day
           )
           select jsonb_build_object(
             'recipients', (select count(*) from j),
@@ -505,8 +561,9 @@ begin
             'not_opened_rate', (select case when count(*) = 0 then null
                                  else round(100.0 * count(*) filter (where did_predict) / count(*), 1) end
                                from j where not did_open),
-            -- Varsel: hvor lang tid før rundelåsen blev beskeden sendt. Den
-            -- eneste knap, der reelt kan drejes på — cron-tidspunktet.
+            -- Varsel: hvor lang tid før den FØRSTE lås, brugeren stadig kunne nå,
+            -- blev beskeden sendt. Den eneste knap, der reelt kan drejes på —
+            -- cron-tidspunktet.
             'by_lead_time', coalesce((
               select jsonb_agg(jsonb_build_object(
                 'bucket', bucket, 'sort', sort, 'n', n, 'predicted', pred,
@@ -733,7 +790,7 @@ begin
         join public.competition_matches cm on cm.competition_id = c.id
         join public.matches m on m.id = cm.match_id
         join public.analytics_round_locks rl on rl.season_id is not distinct from m.season_id and rl.round_key = m.round_key
-        where c.group_id = g.id and not rl.is_locked) as competitions_active,
+        where c.group_id = g.id and not rl.has_started) as competitions_active,
       case when coalesce(pa.slots, 0) = 0 then null
         else round(100.0 * pa.done / pa.slots, 1) end as completion_rate,
       -- Trend-nøglen er null, når det foregående vindue havde under 5 mulige
@@ -1108,20 +1165,19 @@ grant execute on function public.admin_analytics_stories(int) to authenticated;
 -- Kør disse i Supabase SQL-editor. Alle "skal give 0" er ægte invarianter —
 -- samme stil som sql/group_membership_invariant.sql.
 
--- 1) Rundelås-udtrykket er ækvivalent med RLS-policyens. Skal give 0 rækker:
--- select rl.season_id, rl.round_key
--- from public.analytics_round_locks rl
+-- 1) Lås-udtrykket er ækvivalent med RLS-policyens (sql/predictions_match_lock.sql).
+--    Skal give 0 rækker:
+-- select rl.match_id
+-- from public.analytics_match_locks rl
 -- where rl.is_locked <> exists (
 --   select 1 from public.matches m2
---   where m2.round_key = rl.round_key
---     and m2.season_id is not distinct from rl.season_id
+--   where m2.id = rl.match_id
 --     and m2.kickoff_at is not null
 --     and m2.kickoff_at <= now() + interval '1 hour');
 
--- 2) Ingen "mulige tips" i runder der IKKE er låst. Skal give 0:
+-- 2) Ingen "mulige tips" på kampe der IKKE er låst. Skal give 0:
 -- select count(*) from public.analytics_completion_facts f
--- join public.analytics_round_locks rl
---   on rl.season_id is not distinct from f.season_id and rl.round_key = f.round_key
+-- join public.analytics_match_locks rl on rl.match_id = f.match_id
 -- where not rl.is_locked;
 
 -- 3) Ingen slots fra før man meldte sig til. Skal give 0:

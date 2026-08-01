@@ -107,7 +107,7 @@ alter table competitions add column if not exists group_id uuid references group
 | `group_members` SELECT | egne rækker + rækker i ligaer, man selv er medlem af — **via `security definer`-hjælpefunktionen `is_group_member(gid uuid)`**, aldrig ved at policy'en slår op i `group_members` direkte (kendt "infinite recursion"-fælde, jf. fejlfindingsloggen) |
 | `group_members` INSERT | `user_id = auth.uid()` (man melder sig selv ind — koden er adgangsbilletten) |
 | `group_members` DELETE | `user_id = auth.uid()` **og** man deltager ikke i nogen af ligaens konkurrencer (`sql/group_membership_invariant.sql`, A8). Admin-fjernelse af andre er bevidst udskudt (afsnit 8) |
-| `competition_participants` DELETE | **ny policy**: egen række, og **enten** har alle konkurrencens kampe resultat (forløbet er forbi), **eller** brugeren har ingen forudsigelser på allerede låste kampe (samme runde-lås-udtryk som `sql/predictions_round_lock_policies.sql`) — så framelding ikke kan bruges til at slette en dårlig, synlig historik midt i et forløb. Første gren kom til i `sql/group_membership_invariant.sql`, fordi den oprindelige regel var permanent og ikke "midt i et forløb" |
+| `competition_participants` DELETE | **ny policy**: egen række, og **enten** har alle konkurrencens kampe resultat (forløbet er forbi), **eller** brugeren har ingen forudsigelser på allerede låste kampe (samme lås-udtryk som `predictions`-policyerne — runde-baseret indtil `A21`, per kamp siden 1. august 2026, hvor udtrykket blev opdateret i `sql/predictions_match_lock.sql`) — så framelding ikke kan bruges til at slette en dårlig, synlig historik midt i et forløb. Første gren kom til i `sql/group_membership_invariant.sql`, fordi den oprindelige regel var permanent og ikke "midt i et forløb" |
 
 Opretteren indsættes som `role='admin'` i samme flow som liga-oprettelsen (frontend laver to inserts; rækkefølgen er ufarlig, da INSERT-policyen kun kræver eget `user_id`).
 
@@ -182,7 +182,7 @@ Rækkefølgen respekterer roadmappens tommelfingerregel: Story Engine-kalibrerin
 - Flytning af en konkurrence til en liga bevarer stilling, tips og deltagere 1:1, og deltagerne bliver liga-medlemmer.
 - En bruger, der ikke er medlem af en liga, kan ikke læse dens medlemsliste (RLS), men kan slå navnet op via invite-koden.
 - Ingen "infinite recursion"-fejl fra `group_members`-policies (verificér eksplicit — kendt fælde).
-- Rating, Championship, månedsliga, runde-lås og Story Engine er upåvirkede (regressions-tjeklisten består).
+- Rating, Championship, månedsliga, tipslåsen og Story Engine er upåvirkede (regressions-tjeklisten består).
 
 ## 10. Testcases
 

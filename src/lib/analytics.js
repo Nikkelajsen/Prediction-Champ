@@ -295,7 +295,7 @@ function diagnoseLeague(l, t = LEAGUE_THRESHOLDS) {
     return state("no_competition",
       l.competitions_total === 0
         ? "Ligaen har aldrig haft en konkurrence."
-        : `Ingen af ligaens ${l.competitions_total} konkurrencer har en ulåst runde tilbage.`,
+        : `Ingen af ligaens ${l.competitions_total} konkurrencer har en runde tilbage, der ikke er gået i gang.`,
       "Opret en konkurrence — indtil da er der intet at tippe på.");
   }
   if (days > t.dormantDays) {
@@ -308,13 +308,13 @@ function diagnoseLeague(l, t = LEAGUE_THRESHOLDS) {
       `Ligaen har ${l.members} medlem — der er ingen at dyste mod.`,
       "Den manglende handling er en invitation, ikke mere engagement.");
   }
-  // 3. Herfra måler vi deltagelse. Uden en låst runde i vinduet findes der
+  // 3. Herfra måler vi deltagelse. Uden en låst kamp i vinduet findes der
   //    ingen "mulige tips", og enhver deltagelsesprocent ville være et
   //    påstået 0 — samme falskhed, som retention-sektionen gråtoner væk.
   if (l.rounds_available === 0) {
     return state("no_rounds",
-      `Ingen låst runde i de seneste ${win} dage — der er intet at måle deltagelse på.`,
-      "Vælg et længere vindue, eller vent til ligaens næste runde låser.");
+      `Ingen låst kamp i de seneste ${win} dage — der er intet at måle deltagelse på.`,
+      "Vælg et længere vindue, eller vent til ligaens næste kamp låser.");
   }
   if (l.predictors === 0) {
     return state("no_predictors",

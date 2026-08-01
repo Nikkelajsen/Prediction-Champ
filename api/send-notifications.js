@@ -1,9 +1,9 @@
 // Server-side funktion (kører på Vercel, ikke i browseren).
 // Sender push-notifikationer til tilmeldte brugere:
-//   1) Deadline-påmindelse: runder der mangler tips og låser inden for de næste timer.
-//      Låsningen er RUNDE-baseret (som i sql/predictions_round_lock_policies.sql og
-//      frontendens isLocked): alle kampe i en runde — samme (season_id, round_key) —
-//      låser samtidig, 1 time før rundens tidligste kickoff.
+//   1) Deadline-påmindelse: kampe der mangler tips og låser inden for de næste timer.
+//      Låsningen er PER KAMP (A21, som i sql/predictions_match_lock.sql og frontendens
+//      isLocked): en kamp låser 1 time før sit eget kickoff. Beskederne samles til én
+//      pr. bruger pr. dag, så kadencen er uændret, selvom deadlines nu er mange.
 //   2) Runde-resultat: når alle kampe i en runde er færdigspillede — point + placering,
 //      læst fra DB-viewet round_standings (samme kilde som Championship-fanen).
 // notification_log sikrer, at samme besked aldrig sendes to gange.
@@ -11,7 +11,7 @@
 // Kald med: /api/send-notifications  med headeren  x-sync-secret: <SYNC_SECRET>  (ekstern cron)
 //   (?secret=<SYNC_SECRET> virker stadig som fallback, men er på vej ud — BACKLOG A11.
 //    Brug ikke den form til nye jobs: hemmeligheden havner i request-logs.)
-//   valgfrit: &hours=3      hvor tæt på rundelåsen deadline-påmindelsen sendes
+//   valgfrit: &hours=3      hvor tæt på en kamps lås deadline-påmindelsen sendes
 //   valgfrit: &dryRun=true  vis hvad der VILLE blive sendt, uden at sende
 // Offentligt: /api/send-notifications?action=vapidKey  (bruges af frontendens tilmelding)
 //
@@ -24,7 +24,7 @@ import webpush from "web-push";
 import { createSb, isAuthorized, createRunLogger, failJob } from "./_shared.js";
 
 const HOUR = 3600 * 1000;
-const LOCK_LEAD_MS = HOUR; // runden låser 1 time før sin tidligste kickoff
+const LOCK_LEAD_MS = HOUR; // en kamp låser 1 time før sit eget kickoff (A21)
 
 function roundLabel(key) {
   const start = new Date(key + "T12:00:00");
@@ -115,26 +115,31 @@ export default async function handler(req, res) {
     const now = Date.now();
 
     // ================= 1) Deadline-påmindelser =================
-    // Runder hvis lås (tidligste kickoff − 1 time) rammes inden for de næste horizonHours
-    // timer, og hvor ingen kamp har fået resultat endnu. Kickoff-vinduet nu-7d..nu+8d
-    // dækker alle kampe i de runder, der endnu ikke er låst (runder spænder tirs–man).
+    // Kampe hvis lås (kickoff − 1 time) rammes inden for de næste horizonHours timer,
+    // og som brugeren mangler tips på. Kickoff-vinduet nu-7d..nu+8d dækker rigeligt.
+    //
+    // Grupperingen er PR. BRUGER PR. DAG, ikke pr. runde. Før A21 låste hele runden
+    // samtidig, så "runden" var både deadline og besked-enhed. Nu låser hver kamp for
+    // sig, og en runde har ikke ét låsetidspunkt at varsle om. To ting fulgte med:
+    //   * den gamle kode sprang en hel runde over, så snart ÉN kamp havde resultat
+    //     ("resultat ⇒ runden er allerede låst"). Per kamp er det direkte forkert —
+    //     resten af runden kan sagtens være utippet og stadig åben, og brugeren ville
+    //     aldrig få en påmindelse om den.
+    //   * én besked pr. kamp ville være spam (en weekend med ti kampe = ti beskeder).
+    // Derfor: én samlet besked pr. bruger pr. dag, som nævner antallet og tiden til den
+    // FØRSTE lås. Kadencen er dermed den samme som før — kun enheden er en anden.
     {
       const from = new Date(now - 7 * 24 * HOUR).toISOString();
       const to = new Date(now + 8 * 24 * HOUR).toISOString();
       const ms = await sb(`/rest/v1/matches?kickoff_at=gte.${from}&kickoff_at=lte.${to}&select=id,season_id,round_key,kickoff_at,home_score`);
-      const byRound = {};
-      for (const m of ms) {
-        if (!m.kickoff_at) continue;
-        (byRound[`${m.season_id ?? ""}|${m.round_key ?? ""}`] ||= []).push(m);
-      }
-      const lockingRounds = Object.values(byRound).filter((list) => {
-        if (list.some((m) => m.home_score != null)) return false; // resultat ⇒ runden er allerede låst
-        const lockAt = Math.min(...list.map((m) => new Date(m.kickoff_at).getTime())) - LOCK_LEAD_MS;
+      const lockingMatches = ms.filter((m) => {
+        if (!m.kickoff_at || m.home_score != null) return false;
+        const lockAt = new Date(m.kickoff_at).getTime() - LOCK_LEAD_MS;
         return lockAt > now && lockAt <= now + horizonHours * HOUR;
       });
 
-      if (lockingRounds.length) {
-        const matchIds = lockingRounds.flatMap((list) => list.map((m) => m.id));
+      if (lockingMatches.length) {
+        const matchIds = lockingMatches.map((m) => m.id);
         // hvilke brugere er kampene relevante for? (deltagere i konkurrencer, kampene indgår i)
         const cms = await sb(`/rest/v1/competition_matches?match_id=in.(${matchIds.join(",")})&select=competition_id,match_id`);
         const compIds = [...new Set(cms.map((c) => c.competition_id))];
@@ -151,22 +156,24 @@ export default async function handler(req, res) {
         const tipped = new Set(preds.filter((p) => p.pred_home != null && p.pred_away != null).map((p) => `${p.match_id}:${p.user_id}`));
 
         const today = new Date().toISOString().slice(0, 10);
-        for (const list of lockingRounds) {
-          const { season_id, round_key } = list[0];
-          const lockAt = Math.min(...list.map((m) => new Date(m.kickoff_at).getTime())) - LOCK_LEAD_MS;
-          for (const uid of subscribedUsers) {
-            const missing = list.filter((m) => usersByMatch[m.id]?.has(uid) && !tipped.has(`${m.id}:${uid}`));
-            if (!missing.length) continue;
-            outbox.push({
-              userId: uid,
-              key: `deadline:${season_id ?? ""}:${round_key}:${today}`, // maks. én påmindelse pr. runde pr. dag
-              title: "Runden låser snart ⏰",
-              body: `${missing.length} ${missing.length === 1 ? "kamp mangler" : "kampe mangler"} dine tips — runden låser om ${fmtUntil(lockAt)}.`,
-              tag: `deadline-${round_key}`,
-              kind: "deadline",
-              roundKey: round_key,
-            });
-          }
+        for (const uid of subscribedUsers) {
+          const missing = lockingMatches
+            .filter((m) => usersByMatch[m.id]?.has(uid) && !tipped.has(`${m.id}:${uid}`))
+            .sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));
+          if (!missing.length) continue;
+          // Den første lås er den, brugeren skal nå — og den runde, Tip-skærmen
+          // skal lande på, når beskeden åbnes.
+          const first = missing[0];
+          const lockAt = new Date(first.kickoff_at).getTime() - LOCK_LEAD_MS;
+          outbox.push({
+            userId: uid,
+            key: `deadline:${today}`, // maks. én påmindelse pr. bruger pr. dag
+            title: missing.length === 1 ? "En kamp låser snart ⏰" : "Kampe låser snart ⏰",
+            body: `${missing.length} ${missing.length === 1 ? "kamp mangler" : "kampe mangler"} dine tips — den første låser om ${fmtUntil(lockAt)}.`,
+            tag: `deadline-${today}`,
+            kind: "deadline",
+            roundKey: first.round_key,
+          });
         }
       }
     }

@@ -25,23 +25,25 @@ const run = (competition, existingIds = []) =>
 const fullSeason = { id: "c1", mode: "full_season", mode_params: {}, season_id: "S1" };
 
 describe("matchesToBackfill", () => {
-  it("tilføjer kampe fra ulåste runder og springer dem over, konkurrencen allerede har", () => {
+  it("tilføjer kampe fra runder, der ikke er gået i gang, og springer dem over, konkurrencen allerede har", () => {
     expect(run(fullSeason, ["m3"])).toEqual(["m4"]);
   });
 
   // Regel 3. m2 ligger tre timer ude, men hører til en runde, hvis FØRSTE kamp
-  // låser om 30 minutter — låsen er scopet på runden, ikke på kampen.
-  it("lader en låst runde være, også når kampen selv ligger langt ude", () => {
+  // begynder om 30 minutter. Efter A21 låser m2 SELV først om tre timer og kan
+  // sagtens tippes — efterfyldningen er alligevel spærret, fordi regel 3 måler på
+  // runden og ikke på kampen. Det er bevidst strengere end tipslåsen.
+  it("lader en runde, der er gået i gang, være — også når kampen selv ligger langt ude", () => {
     expect(run(fullSeason)).toEqual(["m3", "m4"]);
   });
 
-  it("regner låsen ud fra hele sæsonens kampe, ikke kun konkurrencens egne", () => {
+  it("regner rundestarten ud fra hele sæsonens kampe, ikke kun konkurrencens egne", () => {
     // Konkurrencen har m1 i forvejen; m2 må stadig ikke tilføjes, fordi det er
-    // m1's kickoff, der låser runden.
+    // m1's kickoff, der sætter runden i gang.
     expect(run(fullSeason, ["m1"])).not.toContain("m2");
   });
 
-  it("åbner runden, så snart låsen er mere end en time væk", () => {
+  it("åbner runden, så snart dens start er mere end en time væk", () => {
     const justBefore = { ...fullSeason };
     const nowMs = Date.parse(iso(NOW + 30 * 60 * 1000)) - LOCK_LEAD_MS - 1000;
     const ids = matchesToBackfill({ competition: justBefore, matches, existingIds: [], nowMs });

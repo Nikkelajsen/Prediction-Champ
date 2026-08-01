@@ -77,13 +77,15 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
 
   const roundsDesc = state?.rounds ? state.rounds.slice().reverse() : [];
   const shownRounds = showAllRounds ? roundsDesc : roundsDesc.slice(0, 3);
-  // En spillers tips vises, så snart runden er LÅST — fra låsen (1 time før
-  // rundens tidligste kickoff) kan ingen rette sit gæt, så der er intet at
-  // beskytte. Samme regel som "Alles gæt" på Tip-skærmen (`canExpand = locked`).
+  // En spillers tips vises, så snart kampen er LÅST — fra låsen (1 time før kampens
+  // eget kickoff, A21) kan ingen rette sit gæt, så der er intet at beskytte. Samme
+  // regel som "Alles gæt" på Tip-skærmen (`canExpand = locked`).
   // Kravet var før, at hele runden var færdigspillet, hvilket gjorde drill-in'et
   // utilgængeligt i en sæson uden en eneste helt afsluttet runde — et tryk gjorde
   // ingenting, uden at noget forklarede hvorfor.
-  // Kun de låste kampe sendes videre, så et gæt aldrig kan ses før deadline.
+  // Kun de låste kampe sendes videre, så et gæt aldrig kan ses før deadline. Efter
+  // A21 vokser en runde her LØBENDE: den dukker op, når dens første kamp låser, og
+  // får flere kampe, efterhånden som resten låser.
   const lockedRounds = lockedRoundsOf(state?.allRounds || []);
   const hasLocked = lockedRounds.length > 0;
   const openUser = (uid, playerName, initialKey = null) => { if (hasLocked) setViewUser({ userId: uid, playerName, initialKey }); };
@@ -173,7 +175,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
             {state.rows.some((r) => r.shared) && " · ens placering = delt"}
             {hasLocked
               ? " · tryk på en række for spillerens tips runde for runde, på navnet for karrieren"
-              : " · tryk på et navn for karrieren — spillernes tips kan ses, når runden låser (1 time før første kamp)"}
+              : " · tryk på et navn for karrieren — spillernes tips kan ses, når kampen låser (1 time før kampstart)"}
           </p>
         )}
         {!loading && state && state.rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen deltagere endnu.</p>}

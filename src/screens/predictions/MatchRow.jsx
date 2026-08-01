@@ -80,7 +80,7 @@ function TeamNames({ home, away }) {
 // unmountede rækken hvert minut (live-tikket) og et fokuseret scorefelt mistede fokus
 // midt i indtastningen.
 function MatchRow({
-  m, pred, rules, homeName, awayName, locked, played, live, notOpenUntil, openLabel, countdown,
+  m, pred, rules, homeName, awayName, locked, played, live, notOpenUntil, openLabel,
   showFinal, saved, err, onSave, expanded, onToggleExpanded, participants, matchPreds, userId, last, openProfile,
 }) {
   const hasPred = pred.pred_home !== null && pred.pred_away !== null;
@@ -90,9 +90,11 @@ function MatchRow({
   const stage = stageBadgeLabel(m.stage_name);
   const canExpand = locked && participants.length > 1;
   // Anden linje vises nu kun til det, der IKKE kan bo i en kolonne: stage-mærket,
-  // rækkens egen deadline (kun ved flere turneringer i samme runde) og slettefejl.
-  // "Slut", "Live" og "Alles gæt" er flyttet ind i rækken selv.
-  const hasMeta = !!(stage || countdown || openLabel || err);
+  // "Åbner …" (kun når runden er delvist lukket af det rullende vindue) og slettefejl.
+  // "Slut", "Live" og "Alles gæt" er flyttet ind i rækken selv. Rækken bærer INGEN
+  // nedtælling: efter A21 er lås = kickoff − 1 time, og tid-kolonnen viser allerede
+  // kickoff, så deadlinen er aflæselig af det, der står i forvejen.
+  const hasMeta = !!(stage || openLabel || err);
 
   // Tid/status-kolonnen bærer kampens tilstand: en færdigspillet kamps kickoff er
   // lav værdi, når facit står i samme række, og et spilleminut er lige så tydeligt
@@ -188,7 +190,6 @@ function MatchRow({
           )}
           {/* Kun ved flere lås-grupper i samme runde (flere turneringer): så gælder
               rundehovedets tid ikke alle kampe, og rækken må selv sige det. */}
-          {countdown && <span style={{ color: C.gold, fontSize: 11 }}>{countdown}</span>}
           {openLabel && <span style={{ color: C.muted, fontSize: 11 }}>{openLabel}</span>}
           {err && <span style={{ fontSize: 11, color: C.red }}>Kunne ikke slette</span>}
         </div>

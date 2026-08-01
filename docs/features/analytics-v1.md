@@ -1,5 +1,14 @@
 # Feature: Analytics v1
 
+> **Rettet efter levering (`A21`, 1. august 2026):** låsen er ikke længere runde-baseret.
+> Spec'ens omtale af "rundelåsen" og `analytics_round_locks.lock_at` beskriver ordningen
+> før den dato. I dag er `analytics_match_locks` låsen (pr. kamp), mens
+> `analytics_round_locks` kun bærer rundens START (`round_start_at`/`has_started`).
+> Konsekvenser: North Star tæller nu slots pr. kamp i stedet for pr. runde, så serien
+> hen over 1. august 2026 sammenligner to definitioner; `deadline_miss` beholder runden
+> som enhed, men nu fordi spørgsmålet har den; og push-effekten måles pr. (bruger, senddag)
+> i stedet for pr. (bruger, runde), hvorfor dens serie starter forfra.
+
 **Status: ✅ Leveret (juli 2026) — `sql/analytics_events.sql` + `sql/analytics_dashboard.sql` + `src/lib/analytics.js` + `src/screens/AnalyticsPanel.jsx` (Admin → Analytics).**
 **⚠️ Rettet efter levering (30. juli 2026): Liga Health Score er fjernet og erstattet af Liga-diagnose (afsnit 6), og hvert nøgletal har fået en måle-ordbog (afsnit 5B).**
 **➕ Udvidet (30. juli 2026): to nye sektioner — Tragt for nye brugere (afsnit 5C, lukker A13) og Story Engine-regler (afsnit 5D, lukker A5's datamangel) — samt push-EFFEKT i Engagement. De tre øverste forslag i afsnit 13 er dermed bygget.** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 3 (fastholdelse før vækst) · Prioritering: [`../ROADMAP.md`](../ROADMAP.md)*
@@ -64,7 +73,7 @@ Logges via én generisk klient-helper, `logEvent(token, name, { groupId, competi
 
 | Event i den rå spec | Udledes af |
 |---|---|
-| `prediction_locked` | `analytics_round_locks`-viewet (rundelås-udtrykket som aggregat) + Deadline Miss Rate-beregningen |
+| `prediction_locked` | `analytics_match_locks`-viewet (lås-udtrykket pr. kamp) + Deadline Miss Rate-beregningen |
 | `story_generated` | `public.stories` (én række pr. genereret historie) |
 | `push_sent` | `public.notification_log` (én række pr. sendt besked, `key`-præfiks = type) |
 
@@ -94,7 +103,7 @@ Tre indekser, hver bundet til en konkret dashboard-forespørgsel: `(event_name, 
 
 To views i `sql/analytics_dashboard.sql`, begge revoked fra klienter (kun læst inde i RPC'erne, ikke direkte):
 
-- `analytics_round_locks` — rundelåsen (samme regel som `sql/predictions_round_lock_policies.sql`) omskrevet til et aggregat pr. `(season_id, round_key)`.
+- `analytics_match_locks` — låsen (samme regel som `sql/predictions_match_lock.sql`) pr. kamp; `analytics_round_locks` — rundens start, omskrevet til et aggregat pr. `(season_id, round_key)`.
 - `analytics_completion_facts` — North Star-facts, se afsnit 2.
 
 ---
@@ -215,7 +224,7 @@ Modtagerne findes ved at parse `notification_log.key` (`deadline:<season_id>:<ro
 
 > ⚠️ **Korrelation, ikke årsag.** De, der åbner notifikationer, er de engagerede i forvejen. Forskellen er et **loft** over pushets reelle effekt, ikke et estimat af den. Et push, der aldrig blev åbnet, kan desuden godt have virket — beskeden er synlig på låseskærmen, uden at linket bliver trykket.
 
-**Varsel før rundelås** (`sent_at` → `lock_at`, i intervaller) er med, fordi det er den eneste knap, der reelt kan drejes på: cron-tidspunktet. Intervallerne er ikke sammenlignelige uden videre — runder med tidligt kickoff får systematisk kortere varsel.
+**Varsel før første lås** (`sent_at` → `lock_at`, i intervaller) er med, fordi det er den eneste knap, der reelt kan drejes på: cron-tidspunktet. Intervallerne er ikke sammenlignelige uden videre — runder med tidligt kickoff får systematisk kortere varsel.
 
 ## 6. Liga-diagnose (afløser Health Score, 30. juli 2026)
 

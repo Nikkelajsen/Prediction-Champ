@@ -61,7 +61,7 @@ function GetStartedCard({ onboarding, actions = {}, push, onDismiss }) {
   // kan, og brugeren hverken har sagt ja eller nej endnu. Derfor tæller det
   // heller ikke med i "X af Y" — ellers ville tælleren hoppe mellem enheder.
   if (push?.available) {
-    steps.push({ id: "push", done: false, label: "Få besked før deadline", hint: "Vi minder dig om at tippe, inden runden låser." });
+    steps.push({ id: "push", done: false, label: "Få besked før deadline", hint: "Vi minder dig om at tippe, inden kampene låser." });
   }
 
   return (

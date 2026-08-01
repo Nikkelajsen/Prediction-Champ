@@ -145,7 +145,7 @@ Prediction Champ skal derfor hjælpe denne person uden at bygge en egentlig chat
 
 Appen er bygget som en mobilorienteret webapp med **React og Vite (JavaScript)**, **Supabase** (PostgreSQL og Auth, tilgået direkte via REST) og **Vercel** som hosting med automatiske deployments fra GitHub. Kampe og resultater importeres fra **Sportmonks** via en serverless synkroniseringsfunktion, der køres automatisk af et cron-job.
 
-Valget giver én kodebase, hurtige deployments, nem deling via links og stærk støtte fra AI-udviklingsværktøjer som Claude Code. Arkitekturen er en modulær monolit: frontenden er opdelt i skærme, datalag og genbrugelige UI-komponenter, mens forretningslogikken i stigende grad ligger i PostgreSQL som systemets kilde til sandhed — pointregler, ratingberegning (databasefunktioner og triggers) og adgangsregler via Row Level Security, herunder den rundebaserede tipslås, der ikke kan omgås fra brugerfladen.
+Valget giver én kodebase, hurtige deployments, nem deling via links og stærk støtte fra AI-udviklingsværktøjer som Claude Code. Arkitekturen er en modulær monolit: frontenden er opdelt i skærme, datalag og genbrugelige UI-komponenter, mens forretningslogikken i stigende grad ligger i PostgreSQL som systemets kilde til sandhed — pointregler, ratingberegning (databasefunktioner og triggers) og adgangsregler via Row Level Security, herunder tipslåsen, der ikke kan omgås fra brugerfladen (per kamp siden 1. august 2026, A21 — rundebaseret indtil da).
 
 > **Ændring fra version 1.0:** Den oprindelige strategi pegede på Next.js, TypeScript og Tailwind CSS. Appen er i praksis bygget med Vite, React og JavaScript — og det fungerer. En migrering ville koste uger uden mærkbar brugerværdi og fravælges derfor bevidst. Princippet består uændret: teknologien må aldrig definere produktet.
 
@@ -239,7 +239,7 @@ Prediction Champ skal have en rytme — ikke en tilfældig rytme, men en rytme, 
 
 - **Tirsdag:** En ny global spillerunde starter. Brugerne begynder at afgive deres tips.
 - **Onsdag og torsdag:** Der kommer måske nye kampe til. Nogle ændrer deres tips. Andre følger med i, hvem der allerede har tippet.
-- **Fredag:** De første kampe starter. Tips låses automatisk.
+- **Fredag:** De første kampe starter. Deres tips låses automatisk — resten af rundens kampe låser hver for sig, en time før de går i gang *(afviger fra rytmen ovenfor: A21, 1. august 2026, gjorde deadlinen til en egenskab ved kampen. Den samlede fredagslås hører til den globale spillerunde, som stadig ikke er bygget)*.
 - **Lørdag og søndag:** Kampene afgør ikke kun resultater. De afgør relationer. Point tikker ind, placeringer ændrer sig, rating rykker sig for hver kamp, der fløjtes af. Historier opstår.
 - **Mandag:** Spillerunden afsluttes. Rundens point, stillinger og rating står endeligt fast, og Story Engine finder ugens vigtigste fortælling.
 

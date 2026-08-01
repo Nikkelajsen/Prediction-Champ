@@ -37,7 +37,7 @@ Konsekvensen er, at **ingen eksisterende læse- eller skrivesti skulle ændres**
 
 - rating-triggeren (`sql/rating_trigger_optimization.sql`) sammenligner kun `home_score`/`away_score` i sine transition tables → live-opdateringer udløser hverken Elo-genberegning eller `generate_stories()`.
 - stillings-views'ene summerer kun kampe med endeligt resultat → tabellerne står stille under kampen.
-- låsningen er uændret (runde-baseret, kigger på `home_score` + kickoff).
+- låsningen er uændret af live-resultater (den kigger på `home_score` + kickoff). *Rettet efter levering (`A21`, 1. august 2026): låsen er nu **per kamp**, ikke runde-baseret — men live-stillingen låser fortsat ingenting, og punktet her gælder uændret.*
 
 Alternativet — at skrive live i `home_score` og filtrere det fra alle steder — ville have krævet ændringer i tre views, en trigger, en RLS-policy og hver eneste frontend-sti. Ét forglemt sted = forkerte point. Separate kolonner gør det rigtige til standarden.
 

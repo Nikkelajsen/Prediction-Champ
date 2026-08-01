@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockedRoundsOf, buildRoundLockMap, roundLockKey, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockAtOf, lockedRoundsOf, buildRoundStartMap, roundStartKey, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 const RULES = { exact: 3, outcome: 1 };
 
@@ -115,46 +115,60 @@ describe("filterFromNextUnfinishedRound", () => {
   });
 });
 
-describe("runde-baseret låsning (roundLockKey / buildRoundLockMap / isLocked)", () => {
+describe("per-kamp-låsning (isLocked / lockAtOf)", () => {
   afterEach(() => vi.useRealTimers());
 
-  const s1r1 = { season_id: "s1", round_key: "2026-07-14" };
+  const r1 = { season_id: "s1", round_key: "2026-07-14" };
 
-  it("roundLockKey scoper på (season_id, round_key)", () => {
-    expect(roundLockKey({ season_id: "s1", round_key: "2026-07-14" }))
-      .not.toBe(roundLockKey({ season_id: "s2", round_key: "2026-07-14" }));
-    expect(roundLockKey({ season_id: "s1", round_key: "2026-07-14" }))
-      .toBe(roundLockKey({ season_id: "s1", round_key: "2026-07-14" }));
+  it("lockAtOf er kickoff minus én time, og null uden kendt kickoff", () => {
+    expect(lockAtOf({ kickoff_at: "2026-07-15T17:00:00Z" }))
+      .toBe(new Date("2026-07-15T16:00:00Z").getTime());
+    expect(lockAtOf({ kickoff_at: null })).toBeNull();
+    expect(lockAtOf(null)).toBeNull();
   });
 
-  it("buildRoundLockMap finder rundens tidligste kickoff og springer kampe uden kickoff over", () => {
-    const map = buildRoundLockMap([
-      { ...s1r1, kickoff_at: "2026-07-18T14:00:00Z" },
-      { ...s1r1, kickoff_at: "2026-07-15T17:00:00Z" },
-      { ...s1r1, kickoff_at: null },
-    ]);
-    expect(map.get(roundLockKey(s1r1))).toBe(new Date("2026-07-15T17:00:00Z").getTime());
+  // A21 (1. august 2026): låsen følger KAMPEN, ikke runden. Denne test er invarianten
+  // og ikke en detalje: genindfører nogen rundeaggregeringen, er det her, det slår fejl.
+  it("en kamp låser af sit EGET kickoff — en tidligere kamp i runden låser den ikke", () => {
+    const tidlig = { ...r1, home_score: null, kickoff_at: "2026-07-15T17:00:00Z" };
+    const sen = { ...r1, home_score: null, kickoff_at: "2026-07-18T14:00:00Z" };
+
+    vi.useFakeTimers({ now: new Date("2026-07-15T16:30:00Z") }); // 30 min før den tidlige
+    expect(isLocked(tidlig)).toBe(true);
+    expect(isLocked(sen)).toBe(false); // under rundelåsen var denne true
+
+    vi.useFakeTimers({ now: new Date("2026-07-18T13:30:00Z") }); // 30 min før den sene
+    expect(isLocked(sen)).toBe(true);
   });
 
-  it("hele runden låser 1 time før rundens FØRSTE kickoff", () => {
-    vi.useFakeTimers({ now: new Date("2026-07-15T16:30:00Z") }); // 30 min før første kamp
-    const early = { ...s1r1, home_score: null, kickoff_at: "2026-07-15T17:00:00Z" };
-    const late = { ...s1r1, home_score: null, kickoff_at: "2026-07-18T14:00:00Z" };
-    const map = buildRoundLockMap([early, late]);
-    expect(isLocked(early, map)).toBe(true);
-    expect(isLocked(late, map)).toBe(true); // låst selvom dens egen kamp er 3 dage ude
-
-    vi.useFakeTimers({ now: new Date("2026-07-15T15:30:00Z") }); // 1½ time før første kamp
-    expect(isLocked(early, map)).toBe(false);
-    expect(isLocked(late, map)).toBe(false);
-  });
-
-  it("kampe med resultat er altid låst, og uden map falder den tilbage til per-kamp", () => {
+  it("kampe med resultat er altid låst, og en kamp uden kickoff er aldrig låst", () => {
     vi.useFakeTimers({ now: new Date("2026-07-14T12:00:00Z") });
-    expect(isLocked({ ...s1r1, home_score: 1, away_score: 0, kickoff_at: "2026-07-20T12:00:00Z" })).toBe(true);
-    expect(isLocked({ ...s1r1, home_score: null, kickoff_at: "2026-07-14T12:30:00Z" })).toBe(true); // 30 min til egen kickoff
-    expect(isLocked({ ...s1r1, home_score: null, kickoff_at: "2026-07-14T14:00:00Z" })).toBe(false); // 2 timer til egen kickoff
-    expect(isLocked({ ...s1r1, home_score: null, kickoff_at: null })).toBe(false);
+    expect(isLocked({ ...r1, home_score: 1, away_score: 0, kickoff_at: "2026-07-20T12:00:00Z" })).toBe(true);
+    expect(isLocked({ ...r1, home_score: null, kickoff_at: "2026-07-14T12:30:00Z" })).toBe(true); // 30 min til kickoff
+    expect(isLocked({ ...r1, home_score: null, kickoff_at: "2026-07-14T14:00:00Z" })).toBe(false); // 2 timer til kickoff
+    // Uden kendt kickoff er kampen åben for tips — spejler skrivegrenen i
+    // sql/predictions_match_lock.sql, hvor `kickoff_at is null` behandles eksplicit.
+    expect(isLocked({ ...r1, home_score: null, kickoff_at: null })).toBe(false);
+  });
+});
+
+// Rundens START bruges stadig — men kun af det rullende gætte-vindue, ikke af låsen.
+describe("roundStartKey / buildRoundStartMap", () => {
+  const r = { season_id: "s1", round_key: "2026-07-14" };
+
+  it("scoper på (season_id, round_key), så to turneringer i samme kalenderuge er hver sin runde", () => {
+    expect(roundStartKey({ season_id: "s1", round_key: "2026-07-14" }))
+      .not.toBe(roundStartKey({ season_id: "s2", round_key: "2026-07-14" }));
+  });
+
+  it("finder rundens tidligste kickoff og springer kampe uden kickoff over", () => {
+    const map = buildRoundStartMap([
+      { ...r, kickoff_at: "2026-07-18T14:00:00Z" },
+      { ...r, kickoff_at: "2026-07-15T17:00:00Z" },
+      { ...r, kickoff_at: null },
+    ]);
+    expect(map.get(roundStartKey(r))).toBe(new Date("2026-07-15T17:00:00Z").getTime());
+    expect(map.size).toBe(1);
   });
 });
 
@@ -164,26 +178,28 @@ describe("lockedRoundsOf", () => {
   const round = (key, matches) => ({ key, label: key, matches });
   const m = (season_id, round_key, kickoff_at, home_score = null) => ({ season_id, round_key, kickoff_at, home_score });
 
-  it("tager låste runder med UDEN at kræve resultater", () => {
-    // 30 min før første kickoff: runden er låst, men ingen kamp er spillet.
+  it("tager låste kampe med UDEN at kræve resultater", () => {
+    // 30 min før første kickoff: kampen er låst, men ikke spillet.
     // Dette var fejlen — kravet om færdigspillede kampe skjulte hele drill-in'et.
     vi.useFakeTimers({ now: new Date("2026-07-15T16:30:00Z") });
-    const r = round("2026-07-13", [m("s1", "2026-07-13", "2026-07-15T17:00:00Z"), m("s1", "2026-07-13", "2026-07-18T14:00:00Z")]);
-    const out = lockedRoundsOf([r]);
+    const laast = m("s1", "2026-07-13", "2026-07-15T17:00:00Z");
+    const senere = m("s1", "2026-07-13", "2026-07-18T14:00:00Z");
+    const out = lockedRoundsOf([round("2026-07-13", [laast, senere])]);
     expect(out).toHaveLength(1);
-    expect(out[0].matches).toHaveLength(2);
+    // Efter A21 beskæres runden: den sene kamp kan stadig tippes, så dens gæt er hemmeligt.
+    expect(out[0].matches).toEqual([laast]);
   });
 
-  it("udelader runder, der endnu ikke har låst", () => {
+  it("udelader runder, hvor ingen kamp har låst endnu", () => {
     vi.useFakeTimers({ now: new Date("2026-07-15T15:30:00Z") }); // 1½ time før
     const r = round("2026-07-13", [m("s1", "2026-07-13", "2026-07-15T17:00:00Z")]);
     expect(lockedRoundsOf([r])).toEqual([]);
   });
 
-  it("beskærer til de låste kampe, når en runde rummer to turneringer med hver sin lås", () => {
+  it("beskærer til de låste kampe, uanset om de deler sæson", () => {
     vi.useFakeTimers({ now: new Date("2026-07-15T16:30:00Z") });
     const laast = m("s1", "2026-07-13", "2026-07-15T17:00:00Z");   // låser 16:00
-    const aaben = m("s2", "2026-07-13", "2026-07-19T17:00:00Z");   // egen sæson, låser først 18/7
+    const aaben = m("s2", "2026-07-13", "2026-07-19T17:00:00Z");   // låser først 19/7
     const out = lockedRoundsOf([round("2026-07-13", [laast, aaben])]);
     expect(out[0].matches).toEqual([laast]); // det åbne gæt må ikke afsløres
   });
@@ -271,3 +287,4 @@ describe("modeLabel", () => {
     expect(modeLabel("knockout")).toBe("knockout");
   });
 });
+

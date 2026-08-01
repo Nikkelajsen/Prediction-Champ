@@ -9,10 +9,11 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { db } from "../lib/supabase.js";
 import { logEvent } from "../lib/analytics.js";
-import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, isPlayed, liveInfo, pointsFor, buildRoundLockMap, roundLockKey, LOCK_LEAD_MS } from "../lib/scoring.js";
+import { currentRoundIndex, formatKickoff, groupIntoRounds, isLocked, isPlayed, liveInfo, buildRoundStartMap, roundStartKey } from "../lib/scoring.js";
 import { C, chip, font, muted, thStyle } from "../ui/theme.js";
 import { BackBar, Card, EmptyCompetitions, H } from "../ui/components.jsx";
-import { groupIntoDays, lockLabel } from "./predictions/time.js";
+import { groupIntoDays } from "./predictions/time.js";
+import { roundStatus } from "./predictions/roundStatus.js";
 import { RoundHeader } from "./predictions/RoundHeader.jsx";
 import { MatchRow, TeamNames, ROW_COLS, ROW_GAP } from "./predictions/MatchRow.jsx";
 
@@ -93,7 +94,8 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
     [allMatches, leagueFilter, seasonLeague]
   );
   const rounds = useMemo(() => groupIntoRounds(filteredMatches), [filteredMatches]);
-  const roundLockMap = useMemo(() => buildRoundLockMap(filteredMatches), [filteredMatches]);
+  // Kun til det rullende gætte-vindue: rundens FØRSTE kickoff. Låsen er per kamp (A21).
+  const roundStarts = useMemo(() => buildRoundStartMap(filteredMatches), [filteredMatches]);
   // Klamp indekset: skifter man til et filter med færre runder, renderes der ÉN gang
   // med det gamle roundIndex, før effekten nedenfor retter det (effekter kører efter
   // render) — uden klampen er round undefined og skærmen crasher.
@@ -197,82 +199,27 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
     const windows = comps.map((c) => c.rules?.openDaysBefore || 0);
     if (windows.some((w) => !w)) return null;
     const maxDays = Math.max(...windows);
-    // Åbning er runde-baseret ligesom låsningen: vinduet regnes fra rundens
-    // TIDLIGSTE kickoff, ikke kampens eget. Ellers kunne en kamp åbne EFTER
-    // runden er låst (blindgyde: "Åbner…" → "Låst" uden at kunne tippes).
-    const roundStart = roundLockMap.get(roundLockKey(m)) ?? new Date(m.kickoff_at).getTime();
+    // Åbning er fortsat RUNDE-baseret, selvom låsen ikke længere er det (A21):
+    // vinduet regnes fra rundens tidligste kickoff, så hele runden åbner samlet i
+    // stedet for at dryppe ind kamp for kamp. Blindgyden fra juli 2026 ("Åbner…"
+    // → "Låst" uden at kunne tippes) kan ikke længere opstå — en kamp låser nu af
+    // sit eget kickoff, som altid ligger efter rundens start.
+    const roundStart = roundStarts.get(roundStartKey(m)) ?? new Date(m.kickoff_at).getTime();
     const openTime = roundStart - maxDays * 24 * 3600 * 1000;
     return Date.now() < openTime ? new Date(openTime) : null;
   }
 
-  // ---------- rundens ÉNE statuslinje ----------
-  // Deadline, lås og "åbner" er runde-egenskaber (låsen er nøglet på season_id+round_key),
-  // så de hører ét sted hen. Før stod den identiske nedtælling på hver eneste kamprække.
-  const roundInfo = (() => {
-    if (!round) return null;
-    const ms = round.matches;
-
-    // Lås-grupper i den viste runde. groupIntoRounds grupperer på round_key alene,
-    // mens låsen er (season_id, round_key) — med flere turneringer i samme kalenderuge
-    // kan én vist runde derfor have flere deadlines. Er de forskellige, viser hovedet
-    // den tidligste, og rækkerne får deres egen tid tilbage (mixedTiming).
-    const deadlines = [...new Set(ms.map(roundLockKey))]
-      .map((k) => roundLockMap.get(k))
-      .filter((t) => t != null)
-      .map((t) => t - LOCK_LEAD_MS);
-    const deadline = deadlines.length ? Math.min(...deadlines) : null;
-    const opens = ms.map((m) => opensAt(m));
-    const mixedTiming = new Set(deadlines).size > 1
-      || (opens.some(Boolean) && opens.some((o) => !o));
-
-    const parts = [];
-    const hasPred = (m) => {
-      const p = preds[m.id];
-      return !!(p && p.pred_home != null && p.pred_away != null);
-    };
-    const playedCount = ms.filter(isPlayed).length;
-    const allPlayed = ms.length > 0 && playedCount === ms.length;
-    // "Slut" på hver række er ren gentagelse, når hele runden er spillet og hver række
-    // har sit facit-chip; i en blandet runde er mærket derimod den hurtige adskiller.
-    const showFinal = !allPlayed;
-
-    if (allPlayed) {
-      const pts = ms.reduce((sum, m) => sum + (pointsFor(preds[m.id], m, rules) ?? 0), 0);
-      parts.push(`Spillet · ${pts} point`);
-      return { status: parts.join(" · "), mixedTiming, showFinal };
-    }
-
-    const notOpenAtAll = ms.length > 0 && opens.every(Boolean);
-    if (notOpenAtAll) {
-      const openTime = Math.min(...opens.map((o) => o.getTime()));
-      parts.push(`Åbner ${formatKickoff(new Date(openTime).toISOString())}`);
-      return { status: parts.join(" · "), mixedTiming, showFinal };
-    }
-
-    const tippable = ms.filter((m, i) => !isPlayed(m) && !isLocked(m, roundLockMap) && !opens[i]);
-    if (!tippable.length) {
-      // Runden er låst (eller helt uden tipbare kampe): vis hvad der nåede at komme ind.
-      parts.push(`Låst · ${ms.filter(hasPred).length} af ${ms.length} tippet`);
-      if (playedCount) parts.push(`${playedCount}/${ms.length} spillet`);
-      return { status: parts.join(" · "), mixedTiming, showFinal };
-    }
-
-    parts.push(`${tippable.filter(hasPred).length} af ${tippable.length} tippet`);
-    if (deadline != null) {
-      // Har runden flere lås-grupper, gælder tiden ikke alle kampe — sig "Næste lås",
-      // og lad hver række bære sin egen tid (mixedTiming nedenfor).
-      const lockText = lockLabel(deadline, mixedTiming ? "Næste lås" : "Låser");
-      if (lockText) parts.push(lockText);
-    }
-    return { status: parts.join(" · "), mixedTiming, showFinal };
-  })();
+  // Rundens ÉNE statuslinje. Logikken bor i predictions/roundStatus.js, så den kan
+  // testes uden at rendere skærmen — den var utestet, netop mens per-kamp-låsen (A21)
+  // ændrede den mest.
+  const roundInfo = round ? roundStatus({ matches: round.matches, preds, rules, opensAt }) : null;
 
   const days = useMemo(() => (round ? groupIntoDays(round.matches) : []), [round]);
 
-  // Kolonne-hovedet og forklaringslinjen hører til den LÅSTE runde: først dér findes
-  // der et facit og et point at stille op i kolonner, og først dér kan man se andres
-  // gæt (canExpand = locked). En åben runde er ren indtastning og får hverken.
-  const anyLocked = !!round && round.matches.some((m) => isLocked(m, roundLockMap));
+  // Forklaringslinjen hører til de LÅSTE kampe: først dér kan man se andres gæt
+  // (canExpand = locked). Efter A21 er en runde typisk delvist låst i dagevis, så
+  // linjen står, så snart ÉN kamp er låst — den peger på de rækker, der kan foldes ud.
+  const anyLocked = !!round && round.matches.some((m) => isLocked(m));
   const canSeeOthers = anyLocked && participants.length > 1;
 
   // Filtre vises kun, når der reelt er noget at vælge imellem — ELLER når et filter
@@ -325,18 +272,6 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
             <Card style={{ padding: "14px 14px 8px" }}>
               <RoundHeader rounds={rounds} index={safeIndex} setIndex={setRoundIndex} status={roundInfo?.status}
                 hint={canSeeOthers ? "Tryk på en kamp for at se alles gæt" : null} />
-              {anyLocked && (
-                <div style={{
-                  display: "grid", gridTemplateColumns: ROW_COLS, gap: ROW_GAP, alignItems: "center",
-                  padding: "2px 0 6px", borderBottom: `1px solid ${C.line}`,
-                }}>
-                  <span /><span />
-                  {["Gæt", "Facit", "P"].map((h) => (
-                    <span key={h} style={{ ...thStyle, textAlign: "center", fontSize: 11 }}>{h}</span>
-                  ))}
-                  <span />
-                </div>
-              )}
               {days.map((day, di) => (
                 <div key={day.key}>
                   <div style={{
@@ -345,18 +280,27 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
                   }}>
                     {day.label}
                   </div>
+                  {/* Kolonnehovedet hører til de LÅSTE rækker — kun de har facit og point at
+                      stille op i kolonner; en åben række er ren indtastning. Før stod det ÉN
+                      gang for hele runden, hvilket forudsatte, at runden var enten låst eller
+                      åben. Efter A21 er en runde blandet i dagevis, så hovedet hører til
+                      DAGEN: 1-times-vinduet er kort nok til, at en kampdag i praksis er enten
+                      forbi eller fremme, og hovedet står da præcis over de rækker, det gælder. */}
+                  {day.matches.some((m) => isLocked(m)) && (
+                    <div style={{
+                      display: "grid", gridTemplateColumns: ROW_COLS, gap: ROW_GAP, alignItems: "center",
+                      padding: "2px 0 4px", borderBottom: `1px solid ${C.line}`,
+                    }}>
+                      <span /><span />
+                      {["Gæt", "Facit", "P"].map((h) => (
+                        <span key={h} style={{ ...thStyle, textAlign: "center", fontSize: 11 }}>{h}</span>
+                      ))}
+                      <span />
+                    </div>
+                  )}
                   {day.matches.map((m, mi) => {
-                    const locked = isLocked(m, roundLockMap);
+                    const locked = isLocked(m);
                     const notOpenUntil = !locked ? opensAt(m) : null;
-                    // Nedtælling pr. række KUN når runden har flere forskellige deadlines
-                    // (flere turneringer i samme kalenderuge) — ellers står tiden én gang
-                    // i rundehovedet. I det tilfælde får HVER række sin egen tid, også når
-                    // der er mere end et døgn til, så ingen række er tavs om sin deadline.
-                    let countdown = null;
-                    if (roundInfo?.mixedTiming && !locked && !notOpenUntil) {
-                      const earliest = roundLockMap.get(roundLockKey(m));
-                      if (earliest != null) countdown = lockLabel(earliest - LOCK_LEAD_MS);
-                    }
                     return (
                       <MatchRow
                         key={m.id}
@@ -369,8 +313,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
                         played={isPlayed(m)}
                         live={liveInfo(m)}
                         notOpenUntil={notOpenUntil}
-                        openLabel={roundInfo?.mixedTiming && notOpenUntil ? `Åbner ${formatKickoff(notOpenUntil.toISOString())}` : null}
-                        countdown={countdown}
+                        openLabel={roundInfo?.mixedOpening && notOpenUntil ? `Åbner ${formatKickoff(notOpenUntil.toISOString())}` : null}
                         showFinal={roundInfo?.showFinal !== false}
                         saved={!!savedIds[m.id]}
                         err={!!errIds[m.id]}
