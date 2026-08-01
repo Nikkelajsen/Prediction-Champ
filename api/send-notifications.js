@@ -217,6 +217,82 @@ export function pushRunVerdict({ sent, failed }, ratio = PUSH_FAILURE_ALERT_RATI
   };
 }
 
+// ---- tidsbudget for afsendelsen (G17) ----
+//
+// Funktionens samlede loft er `maxDuration` i vercel.json (60 s). Budgettet her
+// er MINDRE end det med vilje: når det løber ud, skal der stadig være tid til
+// at frigive claims, rydde døde abonnementer og skrive `job_runs`-rækken. Et
+// budget lig med loftet ville betyde, at oprydningen aldrig nåede at køre — og
+// så havde vi ikke rykket problemet, kun flyttet det.
+//
+// De to tal hænger sammen og skal ændres sammen: hæves `maxDuration`, må dette
+// følge med, ellers spilder kørslen tid, den har fået.
+const SEND_BUDGET_MS = 40_000;
+// Pr. afsendelse. Én uansvarlig push-tjeneste må ikke kunne bruge hele
+// budgettet alene — med denne grænse koster den højst 10 sekunder.
+const PUSH_TIMEOUT_MS = 10_000;
+// Hvor mange beskeder der er undervejs på én gang. Loopet var helt sekventielt
+// indtil august 2026, så 100 beskeder var 100 rundture efter hinanden. Loftet
+// er lavt med vilje: push-tjenesterne er tredjeparts, og formålet er at bruge
+// ventetiden — ikke at presse dem.
+const SEND_CONCURRENCY = 6;
+
+// Sender så mange beskeder som budgettet tillader, og returnerer dem, der
+// ALDRIG blev forsøgt.
+//
+// Skillet er hele pointen: en besked, der ikke er forsøgt, kan frigives og
+// sendes af næste kørsel, mens en, hvis afsendelse fejlede, ikke kan — vi ved
+// ikke, om den nåede frem. Funktionen er derfor eksporteret og testet med et
+// styret ur; adfærden er umulig at afprøve i drift, fordi den kun viser sig,
+// når kørslen er ved at løbe tør for tid.
+//
+// `send` kaster aldrig (kalderen fanger selv), så et fejlet kald tæller som
+// forsøgt og bliver ikke frigivet.
+export async function sendWithBudget(messages, { deadlineAt, send, concurrency = SEND_CONCURRENCY, now = () => Date.now() }) {
+  let next = 0;
+  const skipped = [];
+  async function worker() {
+    for (;;) {
+      const i = next++;
+      if (i >= messages.length) return;
+      // Der brydes ikke ud af løkken: de resterende beskeder skal SAMLES OP,
+      // ikke bare forlades. Et `break` her ville efterlade dem claimet og
+      // dermed genskabe præcis den fejl, funktionen findes for at fjerne.
+      if (now() >= deadlineAt) { skipped.push(messages[i]); continue; }
+      await send(messages[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, messages.length)) }, worker));
+  return skipped;
+}
+
+// Sletter claim-rækkerne for beskeder, der ikke blev forsøgt.
+//
+// PostgREST har ingen "slet disse par"-form, så filtret bygges som et
+// `or=(and(user_id.eq…,key.eq…),…)`. Nøglerne citeres, fordi de indeholder
+// koloner (`result:2026-08-04`), som ellers ville blive læst som syntaks.
+// Chunkes, fordi en URL har en længdegrænse — og en frigivelse, der fejler på
+// en for lang URL, ville tabe præcis de beskeder, den skulle redde.
+export async function releaseClaims(sb, messages, chunkSize = 50) {
+  let released = 0;
+  for (let i = 0; i < messages.length; i += chunkSize) {
+    const chunk = messages.slice(i, i + chunkSize);
+    const filter = chunk
+      .map((m) => `and(user_id.eq.${m.userId},key.eq.${encodeURIComponent(`"${m.key}"`)})`)
+      .join(",");
+    try {
+      await sb(`/rest/v1/notification_log?or=(${filter})`, { method: "DELETE", prefer: "return=minimal" });
+      released += chunk.length;
+    } catch (e) {
+      // Må aldrig vælte kørslen: beskederne er ikke sendt, og en fejlet
+      // frigivelse efterlader os præcis dér, hvor vi var før rettelsen — ikke
+      // værre. Men den skal kunne ses.
+      console.error(`[send-notifications] Kunne ikke frigive ${chunk.length} claims:`, e?.message ?? e);
+    }
+  }
+  return released;
+}
+
 // Modtagerne af "ny konkurrence i din liga"-beskeden (B5), udregnet ud fra rå
 // rækker, så reglen kan efterprøves uden en database. Én besked pr.
 // (konkurrence, medlem) — nøglen `newcomp:<id>` gør den til én besked i alt.
@@ -277,6 +353,11 @@ export default async function handler(req, res) {
   // skal ende i job_runs.
   let run = null;
   try {
+    // Nulpunktet for afsendelsens tidsbudget (G17). Måles fra handlerens start
+    // og ikke fra selve send-loopet: opslagene før det bruger også af
+    // funktionens `maxDuration`, og det er dét loft, budgettet skal holde sig
+    // inden for.
+    const startedAt = Date.now();
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const SYNC_SECRET = process.env.SYNC_SECRET;
@@ -612,13 +693,22 @@ export default async function handler(req, res) {
     // ---- send + ryd døde abonnementer op ----
     let sent = 0;
     const deadSubIds = new Set();
-    // Beskeder, der er "claimet" i notification_log men fejlede ved afsendelse,
-    // er PERMANENT tabt: claim-rækken forhindrer, at en senere kørsel prøver
+    // Beskeder, der er "claimet" i notification_log men fejlede ved AFSENDELSE,
+    // er permanent tabt: claim-rækken forhindrer, at en senere kørsel prøver
     // igen. Det er prisen for race-sikkerheden (se claim-trinnet ovenfor), og
-    // den er bevidst — men indtil nu blev tabet slugt uden at blive talt.
+    // den er bevidst — vi ved ikke, om et halvt afsendt kald nåede frem.
+    //
+    // Det gjaldt indtil august 2026 OGSÅ de beskeder, der aldrig blev forsøgt
+    // (`G17`), og dét var ikke et bevidst valg: rammer funktionen sin
+    // vægurs-grænse midt i loopet, bliver den klippet over, og så er hver
+    // resterende claimet række tabt for altid — uden at nogen har prøvet at
+    // sende den, og uden at `recordRun` nåede at skrive job-rækken. Det er
+    // forskellen mellem "vi prøvede og det gik galt" og "vi nåede det ikke",
+    // og kun den første er en pris værd at betale. Derfor budgettet nedenfor.
     let failed = 0;
     const failureSamples = [];
-    for (const msg of toSend) {
+
+    async function sendOne(msg) {
       // ?pn=<kind> lader klienten logge push_opened med kontekst (analytics v1)
       // — der skrives ingen event her server-side, kun URL'en. De to øvrige
       // parametre er landingen: ?rk= peger Tip-skærmen på den rigtige runde,
@@ -634,7 +724,11 @@ export default async function handler(req, res) {
         try {
           await webpush.sendNotification(
             { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-            payload
+            payload,
+            // Uden den venter web-push i princippet for evigt på en push-tjeneste,
+            // der hverken svarer eller lukker — samme hul som `G19` lukkede for
+            // vores egne fetch-kald, bare i en pakke vi ikke selv skriver.
+            { timeout: PUSH_TIMEOUT_MS }
           );
           sent++;
         } catch (e) {
@@ -655,6 +749,30 @@ export default async function handler(req, res) {
         }
       }
     }
+
+    const skipped = await sendWithBudget(toSend, {
+      deadlineAt: startedAt + SEND_BUDGET_MS,
+      send: sendOne,
+    });
+
+    // Frigiv de claims, vi ALDRIG nåede at forsøge (G17). De er ikke sendt, så
+    // rækken beskytter ikke længere mod en dublet — den forhindrer bare, at
+    // beskeden nogensinde bliver sendt. Slettes den, samler næste kørsel den op
+    // af sig selv, fordi outboxen udregnes forfra hver gang (samme mekanik som
+    // sendevinduet i A24 hviler på).
+    //
+    // Kun de UFORSØGTE frigives. En besked, hvis afsendelse fejlede, beholder
+    // sin række: vi ved ikke, om den nåede frem, og en dublet er værre end en
+    // manglende besked.
+    let released = 0;
+    if (skipped.length) {
+      released = await releaseClaims(sb, skipped);
+      console.warn(
+        `[send-notifications] Tidsbudgettet løb ud: ${skipped.length} beskeder blev ikke forsøgt. ` +
+        `${released} claims frigivet, så næste kørsel kan sende dem.`
+      );
+    }
+
     if (deadSubIds.size) {
       await sb(`/rest/v1/push_subscriptions?id=in.(${[...deadSubIds].join(",")})`, { method: "DELETE", prefer: "return=minimal" });
     }
@@ -667,6 +785,10 @@ export default async function handler(req, res) {
       messages: toSend.length,
       removedSubscriptions: deadSubIds.size,
       failed,
+      // Kun til stede når budgettet faktisk løb ud. Tallet er selve signalet om,
+      // at kørslen skal deles op eller maxDuration hæves — uden det ville en
+      // kronisk overskredet kørsel se ud som en almindelig, lidt lille kørsel.
+      ...(skipped.length ? { skipped: skipped.length, releasedClaims: released } : {}),
       ...(failureSamples.length ? { failureSamples } : {}),
     };
     const verdict = pushRunVerdict({ sent, failed });

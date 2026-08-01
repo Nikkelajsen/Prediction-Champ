@@ -7,7 +7,7 @@
 // gamle kode faktisk læste — participants[].meta.location,
 // scores[].description === "CURRENT", state.short_name, periods[].ticking.
 import { describe, it, expect, vi } from "vitest";
-import { sportmonks, __test } from "./sportmonks.js";
+import { sportmonks, smFetch, __test } from "./sportmonks.js";
 
 const { normalize } = __test;
 
@@ -162,5 +162,94 @@ describe("resolveSeasonId", () => {
     await expect(
       sportmonks.resolveSeasonId({ apiLeagueId: "501", seasonName: "2030/2031", token: "t", fetchImpl })
     ).rejects.toThrow(/Tilgængelige sæsoner: 2025\/2026/);
+  });
+});
+
+// G48: 429 skal give ét gen-forsøg efter en pause — ikke et ekstra kald med det
+// samme.
+//
+// Providermodulet gen-forsøgte indtil august 2026 STRAKS ved enhver 4xx i
+// fetchLive, inklusive 429. Et ekstra kald mod en grænse, der lige er ramt,
+// gør situationen værre og kan forlænge udelukkelsen; `sync-live` kører hvert
+// minut, så det skete igen og igen. footballdata-provideren gjorde det rigtigt
+// fra starten, så mønsteret fandtes allerede i repoet.
+describe("smFetch — grænsen på kald i timen", () => {
+  const svar = (status, headers = {}) => ({
+    ok: status < 400, status,
+    headers: { get: (h) => headers[h] ?? null },
+    text: async () => "", json: async () => ({}),
+  });
+
+  it("prøver præcis én gang mere efter en pause ved 429", async () => {
+    const ventet = [];
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(svar(429, { "Retry-After": "3" }))
+      .mockResolvedValueOnce(svar(200));
+
+    const r = await smFetch("https://x.test/a", fetchImpl, async (ms) => { ventet.push(ms); });
+
+    expect(r.status).toBe(200);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(ventet).toEqual([3000]);
+  });
+
+  it("giver op efter det ene gen-forsøg frem for at banke videre", async () => {
+    const fetchImpl = vi.fn(async () => svar(429));
+    const r = await smFetch("https://x.test/a", fetchImpl, async () => {});
+    expect(r.status).toBe(429);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("rører ikke andre statusser", async () => {
+    for (const status of [200, 403, 404, 500]) {
+      const fetchImpl = vi.fn(async () => svar(status));
+      await smFetch("https://x.test/a", fetchImpl, async () => {});
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  // En absurd Retry-After ville ellers bruge hele funktionens budget på at
+  // vente, og et kald, der aldrig når at blive sendt, er værre end et, der
+  // fejler hurtigt.
+  it("lægger loft over ventetiden og falder tilbage, når headeren mangler", () => {
+    const { retryAfterMs, RETRY_AFTER_MAX_S, RETRY_AFTER_FALLBACK_S } = __test;
+    const res = (v) => ({ headers: { get: () => v } });
+    expect(retryAfterMs(res("3"))).toBe(3000);
+    expect(retryAfterMs(res("9999"))).toBe(RETRY_AFTER_MAX_S * 1000);
+    expect(retryAfterMs(res(null))).toBe(RETRY_AFTER_FALLBACK_S * 1000);
+    expect(retryAfterMs(res("nonsens"))).toBe(RETRY_AFTER_FALLBACK_S * 1000);
+    expect(retryAfterMs(res("-5"))).toBe(RETRY_AFTER_FALLBACK_S * 1000);
+  });
+});
+
+describe("fetchLive og 429", () => {
+  const svar = (status, body = {}) => ({
+    ok: status < 400, status,
+    headers: { get: () => null },
+    text: async () => "", json: async () => body,
+  });
+
+  // Selve rettelsen. En for høj kaldefrekvens har intet med `periods` at gøre,
+  // så et kald uden den include ville blot være ET KALD MERE mod en grænse, der
+  // lige er ramt. smFetch har allerede ventet og prøvet igen.
+  it("falder IKKE tilbage til et kald uden periods ved 429", async () => {
+    const fetchImpl = vi.fn(async () => svar(429));
+    await expect(
+      sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl, sleep: async () => {} })
+    ).rejects.toThrow(/Sportmonks \(live\): 429/);
+    // To kald: det oprindelige og smFetch's ene gen-forsøg. Ikke fire.
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    for (const [url] of fetchImpl.mock.calls) expect(url).toContain("periods");
+  });
+
+  // Fald-tilbage'et skal stadig virke for det, det var til: en include, der
+  // ikke er med i abonnementet.
+  it("falder stadig tilbage ved 403", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(svar(403))
+      .mockResolvedValueOnce(svar(200, { data: [fixture({ id: 7 })] }));
+    const out = await sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl });
+    expect(out.get("7")).toBeTruthy();
+    expect(fetchImpl.mock.calls[1][0]).not.toContain("periods");
   });
 });

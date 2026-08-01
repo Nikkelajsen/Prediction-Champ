@@ -14,6 +14,42 @@
 // mens src/ bygges til browseren. Denne fil er delingspunktet for api/ alene.
 import { createHash, timingSafeEqual } from "node:crypto";
 
+// ---- udgående kald med tidsgrænse (G19) ----
+//
+// Intet udgående `fetch` havde en timeout indtil august 2026, og standarden er
+// "vent for evigt". En hængende leverandør — ikke en fejlende, en HÆNGENDE —
+// stoppede dermed hele kørslen, indtil Vercel klippede funktionen over, og en
+// funktion, der klippes over, når hverken at skrive sin `job_runs`-række eller
+// at rydde op efter sig. `sync-live` kører hvert minut, så to hængende kald kan
+// desuden ligge oven i hinanden.
+//
+// Grænsen er PR. KALD og ikke pr. kørsel: en paginering på fire sider må gerne
+// tage fire gange så lang tid som én side, men ingen enkelt side må hænge. Det
+// samlede loft er funktionens `maxDuration` (vercel.json), og de to tal hænger
+// sammen — et kald-loft, der er større end funktionens budget, er ingen grænse.
+export const FETCH_TIMEOUT_MS = 10_000;
+
+// `AbortSignal.timeout()` frem for en håndrullet AbortController: den findes i
+// Node 18+ (Vercel kører 22), rydder sin egen timer op og kan ikke lække en
+// timer, hvis kaldet fejler af en anden grund undervejs.
+export async function fetchWithTimeout(url, opts = {}, ms = FETCH_TIMEOUT_MS) {
+  try {
+    return await fetch(url, { ...opts, signal: AbortSignal.timeout(ms) });
+  } catch (e) {
+    // Abort-fejlen siger kun "This operation was aborted", hvilket i en
+    // driftslog er ubrugeligt: den fortæller hverken hvilken adresse eller
+    // hvor længe. Fejlteksten ender i `job_runs.error` og skal kunne læses af
+    // et menneske et halvt år senere.
+    if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+      // Query-strengen klippes af med vilje: Sportmonks sender sin API-nøgle
+      // som `?api_token=`, og fejlteksten ender i `job_runs.error`.
+      const kort = String(url).split("?")[0];
+      throw new Error(`Tidsgrænse: intet svar fra ${kort} inden for ${ms} ms`, { cause: e });
+    }
+    throw e;
+  }
+}
+
 // PostgREST-klient mod Supabase med service-nøglen. Kaster ved alt andet end 2xx,
 // så en fejl aldrig kan forveksles med et tomt resultat.
 export function createSb(supabaseUrl, serviceKey) {
@@ -24,7 +60,7 @@ export function createSb(supabaseUrl, serviceKey) {
       "Content-Type": "application/json",
       ...(opts.prefer ? { Prefer: opts.prefer } : {}),
     };
-    const r = await fetch(`${supabaseUrl}${path}`, {
+    const r = await fetchWithTimeout(`${supabaseUrl}${path}`, {
       method: opts.method,
       headers,
       body: opts.body,

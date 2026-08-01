@@ -10,6 +10,8 @@
 //
 // Miljøvariabel: SPORTMONKS_TOKEN
 
+import { fetchWithTimeout } from "../_shared.js";
+
 const BASE = "https://api.sportmonks.com/v3/football";
 
 // Afslutnings-states. Stod før to steder (sync-matches.js:135 og sync-live.js:34)
@@ -28,6 +30,47 @@ const LIVE_STATES = new Set([
 const MAX_PAGES = 60;
 // Live-opslaget tager flere kampe i ét kald.
 const MAX_IDS_PER_CALL = 40;
+
+// ---- ét gen-forsøg ved 429 (G48) ----
+//
+// Providermodulet gen-forsøgte indtil august 2026 STRAKS ved enhver 4xx i
+// fetchLive — inklusive 429. Et ekstra kald mod en grænse, der lige er ramt,
+// gør situationen værre og kan forlænge udelukkelsen; `sync-live` kører hvert
+// minut, så det ville ske igen og igen. De øvrige to opslag håndterede slet
+// ikke 429.
+//
+// Ventetiden læses af `Retry-After`, når leverandøren sender den, ellers et
+// fast fald tilbage. Loftet er der, fordi en absurd `Retry-After` ellers ville
+// bruge hele funktionens budget på at vente — og et kald, der aldrig når at
+// blive sendt, er værre end et, der fejler hurtigt.
+//
+// Mønsteret er lånt fra footballdata.js, som gjorde det rigtigt fra starten,
+// og ÉT gen-forsøg er med vilje: to ville sløre, at forbruget reelt er for
+// højt, og det er dét, `A15` (hvor går Sportmonks' grænse egentlig?) venter på
+// at få afklaret.
+const RETRY_AFTER_MAX_S = 30;
+const RETRY_AFTER_FALLBACK_S = 5;
+
+function retryAfterMs(res) {
+  const raw = Number(res.headers?.get?.("Retry-After"));
+  const s = Number.isFinite(raw) && raw > 0 ? Math.min(raw, RETRY_AFTER_MAX_S) : RETRY_AFTER_FALLBACK_S;
+  return s * 1000;
+}
+
+// Kalder én gang, og præcis én gang mere hvis svaret er 429. Alle tre opslag
+// nedenfor går gennem den, så grænsen kun håndteres ét sted.
+// `sleep` er injicerbar af samme grund som `fetchImpl`: uden den ville en test
+// af gen-forsøget skulle vente i rigtige sekunder.
+const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export async function smFetch(url, fetchImpl, sleep = defaultSleep) {
+  let res = await fetchImpl(url);
+  if (res.status === 429) {
+    await (sleep || defaultSleep)(retryAfterMs(res));
+    res = await fetchImpl(url);
+  }
+  return res;
+}
 
 // Sportmonks returnerer state-navnet i flere felter afhængigt af endpoint/plan.
 function stateNames(fx) {
@@ -117,9 +160,9 @@ export const sportmonks = {
 
   // Slå sæson-id op ud fra navnet (fx "2026/2027"). Kaldes kun, når
   // seasons.api_season_id er tom — bagefter gemmer kalderen id'et.
-  async resolveSeasonId({ apiLeagueId, seasonName, token, fetchImpl = fetch }) {
-    const res = await fetchImpl(
-      `${BASE}/leagues/${apiLeagueId}?include=seasons&api_token=${token}`
+  async resolveSeasonId({ apiLeagueId, seasonName, token, fetchImpl = fetchWithTimeout, sleep }) {
+    const res = await smFetch(
+      `${BASE}/leagues/${apiLeagueId}?include=seasons&api_token=${token}`, fetchImpl, sleep
     );
     if (!res.ok) throw new Error(`Sportmonks (liga): ${res.status} ${await res.text()}`);
     const data = await res.json();
@@ -135,7 +178,7 @@ export const sportmonks = {
   },
 
   // Hele sæsonens kampprogram. Pagineret — ~4 kald for en typisk turnering.
-  async fetchSeasonFixtures({ apiSeasonId, token, fetchImpl = fetch }) {
+  async fetchSeasonFixtures({ apiSeasonId, token, fetchImpl = fetchWithTimeout, sleep }) {
     const byId = new Map();
     let page = 1;
     let hasMore = true;
@@ -143,7 +186,7 @@ export const sportmonks = {
       const url =
         `${BASE}/fixtures?filters=fixtureSeasons:${apiSeasonId}` +
         `&include=participants;scores;state;stage&per_page=50&page=${page}&api_token=${token}`;
-      const res = await fetchImpl(url);
+      const res = await smFetch(url, fetchImpl, sleep);
       if (!res.ok) throw new Error(`Sportmonks (kampe): ${res.status} ${await res.text()}`);
       const data = await res.json();
       for (const fx of data.data || []) byId.set(fx.id, fx);
@@ -166,17 +209,23 @@ export const sportmonks = {
   // Netop de angivne kampe, ét kald pr. 40. Returnerer en Map globalId → kamp;
   // kampe uden for abonnementet mangler ganske enkelt i den, og kalderen rydder
   // deres live-markering i stedet for at fejle.
-  async fetchLive({ providerIds, token, fetchImpl = fetch }) {
+  async fetchLive({ providerIds, token, fetchImpl = fetchWithTimeout, sleep }) {
     const out = new Map();
     for (let i = 0; i < providerIds.length; i += MAX_IDS_PER_CALL) {
       const chunk = providerIds.slice(i, i + MAX_IDS_PER_CALL);
       const endpoint = `${BASE}/fixtures/multi/${chunk.join(",")}`;
-      const call = (include) => fetchImpl(`${endpoint}?include=${include}&api_token=${token}`);
+      const call = (include) => smFetch(`${endpoint}?include=${include}&api_token=${token}`, fetchImpl, sleep);
       // periods giver spilleminuttet. Er den include ikke med i abonnementet,
       // svarer Sportmonks 4xx — så prøver vi igen uden, og viser kampen live
       // uden minuttal i stedet for at lade hele kørslen fejle.
+      //
+      // 429 er UNDTAGET fra det fald-tilbage (G48), og det er hele rettelsen:
+      // en for høj kaldefrekvens har intet med `periods` at gøre, så et kald
+      // uden den ville blot være ET KALD MERE mod en grænse, der lige er ramt.
+      // smFetch har allerede ventet og prøvet igen; er svaret stadig 429, skal
+      // kørslen fejle højlydt frem for at banke videre hvert minut.
       let r = await call("scores;state;periods");
-      if (!r.ok && r.status >= 400 && r.status < 500) r = await call("scores;state");
+      if (!r.ok && r.status >= 400 && r.status < 500 && r.status !== 429) r = await call("scores;state");
       if (!r.ok) throw new Error(`Sportmonks (live): ${r.status} ${await r.text()}`);
       const data = await r.json();
       const rows = Array.isArray(data.data) ? data.data : data.data ? [data.data] : [];
@@ -187,4 +236,4 @@ export const sportmonks = {
 };
 
 // Eksporteret til test — mappingen er det, der ikke må flytte sig ved en oprydning.
-export const __test = { normalize, statusOf, currentScore, liveMinute };
+export const __test = { normalize, statusOf, currentScore, liveMinute, retryAfterMs, RETRY_AFTER_MAX_S, RETRY_AFTER_FALLBACK_S };
