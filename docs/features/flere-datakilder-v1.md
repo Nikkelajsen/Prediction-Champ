@@ -1,8 +1,10 @@
 # Flere datakilder v1 — Sportmonks og football-data.org side om side
 
-**Status:** leveret og i drift 31. juli 2026. Fire af de fem turneringer henter kampe;
-Champions League gør endnu ikke (`B8` i [`../BACKLOG.md`](../BACKLOG.md) — siden
-1. august 2026 forklarer syncen selv hvorfor, se 7.1).
+**Status:** leveret og i drift 31. juli 2026. Fire af de fem turneringer henter kampe.
+Champions League gør ikke — og **`B8` er afgjort 1. august 2026: det er ikke en fejl.**
+football-data.org har endnu ikke oprettet sæsonen 2026 (deres aktuelle er 2025), fordi
+ligafasen ikke er lodtrukket. `api_season_id` er rigtig, og turneringen henter af sig
+selv, når sæsonen kommer. Se 7.1 og 7.2.
 Alle fem er synlige og officielle (`A19`).
 **Beslutning:** `A18` i [`../DECISIONS.md`](../DECISIONS.md).
 
@@ -247,6 +249,30 @@ det samme gælder alt, diagnosen ikke kunne afgøre. Præcis den skelnen er hele
 grunden til, at diagnosen findes, og reglen er trukket ud som den rene funktion
 `seasonFetchVerdict()` med sin egen test: en tolerance, der skrider, gør en død
 turnering grøn.
+
+### 7.3 Svaret på `B8` (1. august 2026)
+
+Første kørsel med diagnosen i drift svarede:
+
+> football-data.org har endnu ikke oprettet sæsonen 2026 (aktuel sæson er 2025).
+> Ingen handling — turneringen begynder at hente af sig selv.
+
+**Det var altså ikke en fejl.** `api_season_id = '2026'` er rigtig; sæsonen findes
+bare ikke hos leverandøren endnu, fordi ligafasen ikke er lodtrukket. Kørslen
+melder sig gennemført med nul kampe, indtil den bliver oprettet.
+
+To ting, det kostede at nå frem til, og som er værd at huske:
+
+**Antagelsen om, hvordan tomheden så ud, var forkert.** 7.1 blev bygget på "200
+med tom liste"; virkeligheden var 404. En diagnose, der kun dækker den udgang,
+man har forestillet sig, er ingen diagnose — den er en formodning med kode
+omkring sig.
+
+**Og rettelsen var ikke i drift, mens den blev afprøvet.** Deployet af den
+fejlede tavst (se `DOCUMENTATION.md` §13), så den samme 404 blev aflæst tre
+gange som kodens resultat, mens den kom fra en version, der var to merges
+gammel. **Et uændret symptom efter en merge er ikke et resultat** — det er først
+et resultat, når deployet er bekræftet.
 
 ## 8. Hvad der bevidst IKKE blev gjort
 
