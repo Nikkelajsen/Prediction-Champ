@@ -4,8 +4,9 @@
 //      Låsningen er PER KAMP (A21, som i sql/predictions_match_lock.sql og frontendens
 //      isLocked): en kamp låser 1 time før sit eget kickoff. Beskederne samles til én
 //      pr. bruger pr. dag, så kadencen er uændret, selvom deadlines nu er mange.
-//   2) Runde-resultat: når alle kampe i en runde er færdigspillede — point + placering,
-//      læst fra DB-viewet round_standings (samme kilde som Championship-fanen).
+//   2) Runde-resultat: når alle rundens kampe i de OFFICIELLE turneringer er
+//      færdigspillede — point + placering, læst fra DB-viewet round_standings med
+//      scope = 'ALL' (samme kilde OG samme afgrænsning som Championship-fanen).
 // notification_log sikrer, at samme besked aldrig sendes to gange.
 //
 // Kald med: /api/send-notifications  med headeren  x-sync-secret: <SYNC_SECRET>  (ekstern cron)
@@ -55,6 +56,33 @@ function fmtUntil(ts) {
   let s = Math.max(0, Math.floor((ts - Date.now()) / 1000));
   const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h} t ${m} min` : `${m} min`;
+}
+
+// Sæsonerne under de OFFICIELLE turneringer — samme afgrænsning som
+// round_standings' scope = 'ALL'. `is_official` frem for `is_visible`: en
+// turnering kan være tipbar uden at afgøre titler, og check-constraint'en på
+// leagues gør officiel til en indsnævring af synlig (sql/tournament_scope.sql).
+//
+// Den kanoniske kilde er scopeSeasonIds() i src/lib/data/standings.js; den
+// duplikeres her af samme grund som assignRanks og roundLabel ovenfor — api/
+// importerer bevidst ikke fra src/ (se api/_shared.js).
+export async function officialSeasonIds(sb) {
+  const leagues = await sb(`/rest/v1/leagues?is_official=is.true&select=id`);
+  if (!leagues.length) return [];
+  const seasons = await sb(`/rest/v1/seasons?league_id=in.(${leagues.map((l) => l.id).join(",")})&select=id`);
+  return seasons.map((s) => s.id);
+}
+
+// De round_key'er, hvor HVER kamp i listen har fået sit resultat. Kaldes med
+// kampe, der allerede er afgrænset til de officielle turneringer — afgrænsningen
+// er hele pointen: en runde må ikke holdes åben af kampe, der ikke tæller i den
+// stilling, beskeden rapporterer fra.
+export function finishedRoundKeys(matches) {
+  const byRound = {};
+  for (const m of matches) (byRound[m.round_key] ||= []).push(m);
+  return Object.entries(byRound)
+    .filter(([, list]) => list.length > 0 && list.every((m) => m.home_score != null && m.away_score != null))
+    .map(([roundKey]) => roundKey);
 }
 
 export default async function handler(req, res) {
@@ -180,20 +208,32 @@ export default async function handler(req, res) {
 
     // ================= 2) Runde-resultater =================
     // Runder fra de seneste 14 dage, hvor ALLE kampe har fået resultat: point + placering
-    // fra round_standings-viewet (på tværs af ligaer, som Championship-fanens rundeliga).
+    // fra round_standings-viewet (på tværs af de officielle turneringer, præcis som
+    // Championship-fanens rundeliga ved samlet visning).
+    //
+    // BEGGE sider er afgrænset til de OFFICIELLE turneringer, og de skal følges ad.
+    // Beskeden rapporterer fra scope = 'ALL', som kun summerer officielle turneringer
+    // (sql/tournament_scope.sql), så:
+    //   * kampopslaget afgrænses til deres sæsoner — ellers ville en uspillet kamp i en
+    //     turnering, stillingen ikke engang dækker (Skotland er synlig, men ikke
+    //     officiel), holde runden åben og notifikationen tilbage for ALLE. Samme regel
+    //     som loadRoundBoard/scopeSeasonIds i frontenden, jf. DOCUMENTATION.md §5.
+    //   * stillingsopslaget filtrerer på scope = 'ALL' — uden det har viewet én række
+    //     pr. (round_key, scope, user_id), så board.length bliver et multiplum af det
+    //     rigtige felt og "du blev nr. X af N" lyver om N.
     {
+      const seasonIds = await officialSeasonIds(sb);
       const fromKey = new Date(now - 14 * 24 * HOUR).toISOString().slice(0, 10);
-      const ms = await sb(`/rest/v1/matches?round_key=gte.${fromKey}&select=id,round_key,home_score,away_score`);
-      const byRound = {};
-      for (const m of ms) (byRound[m.round_key] ||= []).push(m);
-      const finishedRounds = Object.entries(byRound)
-        .filter(([, list]) => list.length > 0 && list.every((m) => m.home_score != null && m.away_score != null));
+      // Ingen officielle turneringer ⇒ ingen 'ALL'-stilling at melde om.
+      const ms = seasonIds.length
+        ? await sb(`/rest/v1/matches?season_id=in.(${seasonIds.join(",")})&round_key=gte.${fromKey}&select=id,round_key,home_score,away_score`)
+        : [];
 
-      for (const [roundKey] of finishedRounds) {
+      for (const roundKey of finishedRoundKeys(ms)) {
         // samme kilde og samme tiebreaker-stige som Championship-fanens rundeliga
         // (sql/standings_tiebreakers.sql). En runde har ingen rundesejre at bryde
         // lighed med, så stigen er point → præcise → udfald → målafvigelse.
-        const board = await sb(`/rest/v1/round_standings?round_key=eq.${roundKey}&select=user_id,total_points,exact_count,outcome_count,avg_goal_error&order=total_points.desc,exact_count.desc,outcome_count.desc,avg_goal_error.asc,user_id.asc`);
+        const board = await sb(`/rest/v1/round_standings?round_key=eq.${roundKey}&scope=eq.ALL&select=user_id,total_points,exact_count,outcome_count,avg_goal_error&order=total_points.desc,exact_count.desc,outcome_count.desc,avg_goal_error.asc,user_id.asc`);
         assignRanks(board);
 
         for (const r of board) {
