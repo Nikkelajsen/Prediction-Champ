@@ -30,7 +30,7 @@ function PushOptInCard({ push }) {
         <button style={iconBtn} aria-label="Skjul" onClick={push.dismiss}><X size={16} /></button>
       </div>
       <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
-        Vi minder dig om at tippe, inden runden låser — og fortæller, hvordan den gik.
+        Vi minder dig om at tippe, inden kampene låser — og fortæller, hvordan runden gik.
       </div>
       {push.error && <div style={{ color: C.red, fontSize: 13, marginTop: 8 }}>{push.error}</div>}
       <button style={{ ...btnGreen, marginTop: 12, opacity: push.busy ? 0.6 : 1 }} disabled={push.busy} onClick={push.enable}>

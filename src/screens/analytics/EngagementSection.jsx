@@ -50,7 +50,7 @@ function PushEffect({ effect }) {
         detail={`${effect.not_opened_pred} af ${effect.not_opened_n} tippede`} />
       {(effect.by_lead_time || []).length > 0 && (
         <div style={{ marginTop: 12 }}>
-          <SubHead>Varsel før rundelås <M id="push_lead_time" /></SubHead>
+          <SubHead>Varsel før første lås <M id="push_lead_time" /></SubHead>
           {effect.by_lead_time.map((b) => (
             <SignalRow key={b.bucket} label={b.bucket} value={b.rate === null ? "—" : `${b.rate} %`}
               detail={`${b.predicted} af ${b.n} tippede`} />
