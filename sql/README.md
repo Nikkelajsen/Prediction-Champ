@@ -122,6 +122,15 @@ rækketal (`OK:0` mod `OK:1`). Og en **funktions-revoke** skal ramme pseudorolle
 `PUBLIC`: Postgres giver som standard `EXECUTE` til `PUBLIC` på hver ny funktion,
 og `anon` arver den, så `revoke … from anon` alene lukker ingenting.
 
+**Roller er cluster-brede, ikke database-lokale** — og det gælder alle tre tests.
+CI kører dem mod SAMME postgres-service i hver sin database, så `anon`,
+`authenticated` og `service_role` deles på tværs, og den test, der kører først,
+bestemmer deres egenskaber. Et `if not exists … create role service_role
+bypassrls` er derfor ikke nok: kører `rating_equivalence.sql` først (det gør
+den), findes rollen allerede uden `bypassrls`, og blokken springer tavst over.
+Sæt egenskaber ubetinget med `alter role`. Fælden er usynlig lokalt, hvis man
+kører sin egen test først — den blev fanget i CI og ikke på maskinen.
+
 **`sql/tests/competition_awards.sql`** (samme CI-job, egen database) kører selve
 migreringen `competition_awards.sql` mod et minimalt skema og efterprøver
 kåringsreglerne: en færdigspillet runde/afsluttet måned kåres, en ufærdig gør

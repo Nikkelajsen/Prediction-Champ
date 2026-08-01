@@ -28,11 +28,22 @@
 \timing off
 
 -- ---------- roller ----------
+-- ⚠️ ROLLER ER CLUSTER-BREDE, IKKE DATABASE-LOKALE. CI kører alle tre SQL-tests
+-- mod SAMME postgres-service i hver sin database, og `rating_equivalence.sql`
+-- kører først og opretter `service_role` UDEN bypassrls. Et bart
+-- `if not exists … create role service_role bypassrls` springer derfor over og
+-- arver den anden tests rolle — hvorefter service_role-linjen i G14 fejler med
+-- `OK:0`, fordi RLS pludselig gælder for den. Egenskaben sættes derfor
+-- ubetinget med `alter role`, så testen ikke afhænger af, hvem der nåede først.
+-- (Præcis dén afhængighed var usynlig lokalt og blev først fanget i CI.)
 do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
-  if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role bypassrls; end if;
+  if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
 end $$;
+
+-- service_role omgår RLS i Supabase; uden det måler testen ikke produktionen.
+alter role service_role bypassrls;
 
 -- ---------- auth-stubs ----------
 create schema if not exists auth;
