@@ -4,8 +4,12 @@
 // Dækker de to invarianter, G9 og G10 brød: runde-resultat-notifikationen skal
 // afgrænse BEGGE sine sider til de officielle turneringer, ellers er udløseren
 // og indholdet uenige om, hvilke kampe runden består af.
+//
+// Plus modtager-reglen for "ny konkurrence i din liga" (B5), som er den eneste
+// notifikation, hvor et forkert modtagerfelt er *synligt* forkert: den beder om
+// en handling, og en besked til en, der allerede deltager, er en selvmodsigelse.
 import { describe, it, expect } from "vitest";
-import { finishedRoundKeys, officialSeasonIds } from "./send-notifications.js";
+import { finishedRoundKeys, officialSeasonIds, newCompetitionMessages } from "./send-notifications.js";
 
 const kamp = (round_key, home_score, away_score) => ({ id: `${round_key}-${home_score}-${away_score}`, round_key, home_score, away_score });
 
@@ -74,5 +78,94 @@ describe("officialSeasonIds", () => {
     const { sb, kald } = stubSb({ "/rest/v1/leagues": [] });
     expect(await officialSeasonIds(sb)).toEqual([]);
     expect(kald).toHaveLength(1);
+  });
+});
+
+describe("newCompetitionMessages", () => {
+  const OPRETTET = "2026-08-01T10:00:00+00:00";
+  const basis = () => ({
+    competitions: [{
+      id: "komp-1", name: "Efterår 2026", group_id: "liga-1",
+      created_by: "anna", created_at: OPRETTET, invite_code: "abc123",
+    }],
+    groups: [{ id: "liga-1", name: "Kontoret" }],
+    members: [
+      { group_id: "liga-1", user_id: "anna", joined_at: "2026-07-01T00:00:00+00:00" },
+      { group_id: "liga-1", user_id: "bo", joined_at: "2026-07-01T00:00:00+00:00" },
+    ],
+    participants: [{ competition_id: "komp-1", user_id: "anna" }],
+    creators: [{ id: "anna", display_name: "Anna" }],
+  });
+  const alle = () => true;
+
+  it("inviterer det medlem, der ikke deltager endnu", () => {
+    const beskeder = newCompetitionMessages(basis(), alle);
+    expect(beskeder).toHaveLength(1);
+    expect(beskeder[0]).toMatchObject({
+      userId: "bo",
+      key: "newcomp:komp-1",
+      kind: "newcomp",
+      joinCode: "abc123",
+    });
+    expect(beskeder[0].title).toBe("Ny konkurrence i Kontoret 🎯");
+    expect(beskeder[0].body).toContain("Anna");
+    expect(beskeder[0].body).toContain("Efterår 2026");
+  });
+
+  // Opretteren er allerede deltager, så deltager-filtret ville fange dem alligevel.
+  // Testen holder BEGGE spærrer i live: fjernes den ene, skal den anden vise sig.
+  it("skriver aldrig til opretteren", () => {
+    const data = basis();
+    data.participants = []; // ingen deltagerrækker overhovedet
+    expect(newCompetitionMessages(data, alle).map((b) => b.userId)).toEqual(["bo"]);
+  });
+
+  it("springer den over, der allerede deltager", () => {
+    const data = basis();
+    data.participants.push({ competition_id: "komp-1", user_id: "bo" });
+    expect(newCompetitionMessages(data, alle)).toEqual([]);
+  });
+
+  // Den vigtigste af de fire spærrer: konkurrencen stod på liga-siden, da de kom
+  // ind, så "ny konkurrence" ville være direkte usandt.
+  it("springer den over, der meldte sig ind i ligaen efter oprettelsen", () => {
+    const data = basis();
+    data.members[1].joined_at = "2026-08-01T11:00:00+00:00";
+    expect(newCompetitionMessages(data, alle)).toEqual([]);
+  });
+
+  it("tager et medlem med, der meldte sig ind i samme minut som oprettelsen", () => {
+    const data = basis();
+    data.members[1].joined_at = OPRETTET;
+    expect(newCompetitionMessages(data, alle)).toHaveLength(1);
+  });
+
+  it("skriver kun til brugere med en tilmeldt enhed", () => {
+    expect(newCompetitionMessages(basis(), (uid) => uid !== "bo")).toEqual([]);
+  });
+
+  // group_id sættes til null, når en liga slettes, men rækken kan være læst før.
+  // Uden navnet har beskeden hverken en sætning eller en medlemsliste.
+  it("springer en konkurrence over, hvis ligaen ikke findes", () => {
+    const data = basis();
+    data.groups = [];
+    expect(newCompetitionMessages(data, alle)).toEqual([]);
+  });
+
+  it("klarer sig uden opretterens navn", () => {
+    const data = basis();
+    data.creators = [];
+    expect(newCompetitionMessages(data, alle)[0].body).toBe('"Efterår 2026" er åbnet. Tryk for at være med.');
+  });
+
+  it("holder ligaerne adskilt", () => {
+    const data = basis();
+    data.groups.push({ id: "liga-2", name: "Vennerne" });
+    data.members.push({ group_id: "liga-2", user_id: "carl", joined_at: "2026-07-01T00:00:00+00:00" });
+    expect(newCompetitionMessages(data, alle).map((b) => b.userId)).toEqual(["bo"]);
+  });
+
+  it("giver ingen beskeder, når intet er oprettet", () => {
+    expect(newCompetitionMessages({ competitions: [], groups: [], members: [], participants: [], creators: [] }, alle)).toEqual([]);
   });
 });

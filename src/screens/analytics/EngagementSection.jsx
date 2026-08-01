@@ -21,7 +21,10 @@ const SERIES = [
   { id: "opened_championship", label: "Championship" },
   { id: "story_viewed", label: "Historie-kort" },
 ];
-const PUSH_KIND = { deadline: "Deadline-påmindelse", result: "Runde-resultat" };
+// Nøglerne er præfikset i notification_log.key (api/send-notifications.js).
+// Splittet i SQL'en er generisk (split_part på ':'), så en ny beskedtype dukker
+// op af sig selv her — men uden sin etiket, og står så med sit rå præfiks.
+const PUSH_KIND = { deadline: "Deadline-påmindelse", result: "Runde-resultat", newcomp: "Ny konkurrence" };
 
 // Virkede beskeden? Open rate måler, om den blev åbnet — dette måler, om der
 // blev tippet bagefter. Løftet er det eneste tal, der siger noget om, hvorvidt

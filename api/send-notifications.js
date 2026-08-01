@@ -7,6 +7,10 @@
 //   2) Runde-resultat: når alle rundens kampe i de OFFICIELLE turneringer er
 //      færdigspillede — point + placering, læst fra DB-viewet round_standings med
 //      scope = 'ALL' (samme kilde OG samme afgrænsning som Championship-fanen).
+//   3) Ny konkurrence i en liga: når et liga-medlem endnu ikke deltager i en
+//      konkurrence, der lige er oprettet i deres liga (B5). Beskeden dybdelinker
+//      til konkurrencens invitationskode, så trykket lander i den samme
+//      bekræftelse som et invitationslink.
 // notification_log sikrer, at samme besked aldrig sendes to gange.
 //
 // Kald med: /api/send-notifications  med headeren  x-sync-secret: <SYNC_SECRET>  (ekstern cron)
@@ -26,6 +30,17 @@ import { createSb, isAuthorized, createRunLogger, failJob } from "./_shared.js";
 
 const HOUR = 3600 * 1000;
 const LOCK_LEAD_MS = HOUR; // en kamp låser 1 time før sit eget kickoff (A21)
+
+// Hvor længe en konkurrence tæller som "ny" (B5). Vinduet gør to ting:
+//   * det holder opslaget lille — uden det ville hver kørsel læse hele
+//     konkurrence-tabellen og på sigt ramme PostgRESTs 1000-rækkers loft, som
+//     sb() ikke pagerer omkring;
+//   * det er den eneste grund til, at feature'en ikke udsender hele bagkataloget
+//     ved første kørsel efter udrulning. notification_log kan ikke redde os dér:
+//     den er tom for en beskedtype, der aldrig er sendt før.
+// Jobbet kører hvert 15.-30. minut (docs/CRON.md), så et døgn er rigelig luft
+// til et cron-udfald og stadig kort nok til, at beskeden er nyhed, når den lander.
+const NEW_COMPETITION_WINDOW_MS = 24 * HOUR;
 
 function roundLabel(key) {
   const start = new Date(key + "T12:00:00");
@@ -83,6 +98,60 @@ export function finishedRoundKeys(matches) {
   return Object.entries(byRound)
     .filter(([, list]) => list.length > 0 && list.every((m) => m.home_score != null && m.away_score != null))
     .map(([roundKey]) => roundKey);
+}
+
+// Modtagerne af "ny konkurrence i din liga"-beskeden (B5), udregnet ud fra rå
+// rækker, så reglen kan efterprøves uden en database. Én besked pr.
+// (konkurrence, medlem) — nøglen `newcomp:<id>` gør den til én besked i alt.
+//
+// Fire ting udelukker et medlem, og de er ikke alle lige åbenlyse:
+//   * opretteren selv — de ved det godt, og de er i forvejen deltager;
+//   * den, der allerede deltager. Konkurrencen ER opdaget, og en invitation til
+//     noget, man er med i, er støj. Det fanger opretteren igen (auto-tilmeldt),
+//     så filtret er en sikkerhedssele, ikke en dublet;
+//   * den, der meldte sig ind i ligaen EFTER konkurrencen blev oprettet. For dem
+//     er konkurrencen ikke ny — den stod på liga-siden, da de kom ind — og
+//     "ny konkurrence" ville være en direkte usand sætning;
+//   * den, der ikke har en tilmeldt enhed (afgøres af kalderen via isSubscribed).
+export function newCompetitionMessages({ competitions, groups, members, participants, creators }, isSubscribed) {
+  const groupName = new Map((groups || []).map((g) => [g.id, g.name]));
+  const creatorName = new Map((creators || []).map((p) => [p.id, p.display_name]));
+  const membersByGroup = {};
+  for (const m of members || []) (membersByGroup[m.group_id] ||= []).push(m);
+  const joined = new Set((participants || []).map((p) => `${p.competition_id}:${p.user_id}`));
+
+  const out = [];
+  for (const c of competitions || []) {
+    const liga = groupName.get(c.group_id);
+    // Ligaen kan være slettet, mens konkurrencen stadig lå i vinduet (group_id
+    // sættes til null ved sletning, men rækken kan være læst før). Uden navnet
+    // har beskeden ingen sætning at sige — og ingen medlemsliste at sende til.
+    if (!liga) continue;
+    for (const m of membersByGroup[c.group_id] || []) {
+      if (m.user_id === c.created_by) continue;
+      if (joined.has(`${c.id}:${m.user_id}`)) continue;
+      if (m.joined_at && c.created_at && new Date(m.joined_at) > new Date(c.created_at)) continue;
+      if (!isSubscribed(m.user_id)) continue;
+      const opretter = creatorName.get(c.created_by);
+      out.push({
+        userId: m.user_id,
+        key: `newcomp:${c.id}`,
+        title: `Ny konkurrence i ${liga} 🎯`,
+        body: opretter
+          ? `${opretter} har oprettet "${c.name}". Tryk for at være med.`
+          : `"${c.name}" er åbnet. Tryk for at være med.`,
+        tag: `newcomp-${c.id}`,
+        kind: "newcomp",
+        // Invitationskoden er ikke en hemmelighed over for denne modtager: de er
+        // medlem af ligaen og kan i forvejen se og deltage i konkurrencen fra
+        // liga-siden. Koden bruges her, fordi ?join= allerede har en bekræftelse
+        // og en landing — beskeden skal ikke opfinde sin egen (A8: joinet melder
+        // ind i begge, hvilket for et medlem er en no-op).
+        joinCode: c.invite_code,
+      });
+    }
+  }
+  return out;
 }
 
 export default async function handler(req, res) {
@@ -255,6 +324,40 @@ export default async function handler(req, res) {
       }
     }
 
+    // ================= 3) Ny konkurrence i en liga (B5) =================
+    // Et liga-medlem opdagede før kun en ny konkurrence ved selv at åbne ligaen.
+    // Beskeden er dermed den eneste af de tre, der handler om FÆLLESSKABET frem
+    // for om kampe — og den eneste, der beder om en handling, brugeren ellers
+    // ikke ville vide fandtes.
+    //
+    // Modsat de to andre sektioner er der ingen kamp- eller stillingsafgrænsning
+    // her: en konkurrence i en uofficiel turnering er lige så meget en invitation
+    // som en i Superligaen. Reglen selv står i newCompetitionMessages().
+    {
+      const since = new Date(now - NEW_COMPETITION_WINDOW_MS).toISOString();
+      const competitions = await sb(
+        `/rest/v1/competitions?group_id=not.is.null&created_at=gte.${since}&select=id,name,group_id,created_by,created_at,invite_code`
+      );
+      if (competitions.length) {
+        const groupIds = [...new Set(competitions.map((c) => c.group_id))];
+        const creatorIds = [...new Set(competitions.map((c) => c.created_by).filter(Boolean))];
+        const [groups, members, participants, creators] = await Promise.all([
+          sb(`/rest/v1/groups?id=in.(${groupIds.join(",")})&select=id,name`),
+          sb(`/rest/v1/group_members?group_id=in.(${groupIds.join(",")})&select=group_id,user_id,joined_at`),
+          sb(`/rest/v1/competition_participants?competition_id=in.(${competitions.map((c) => c.id).join(",")})&select=competition_id,user_id`),
+          creatorIds.length
+            ? sb(`/rest/v1/profiles?id=in.(${creatorIds.join(",")})&select=id,display_name`)
+            : Promise.resolve([]),
+        ]);
+        outbox.push(
+          ...newCompetitionMessages(
+            { competitions, groups, members, participants, creators },
+            (uid) => Boolean(subsByUser[uid])
+          )
+        );
+      }
+    }
+
     if (!outbox.length) return run.ok(res, { sent: 0, note: "Intet at sende lige nu" });
 
     // ---- dedup mod notification_log ----
@@ -305,9 +408,16 @@ export default async function handler(req, res) {
     let failed = 0;
     const failureSamples = [];
     for (const msg of toSend) {
-      // ?pn=<kind>&rk=<round> lader klienten logge push_opened med kontekst
-      // (analytics v1) — der skrives ingen event her server-side, kun URL'en.
-      const url = `/?pn=${encodeURIComponent(msg.kind || "")}&rk=${encodeURIComponent(msg.roundKey || "")}`;
+      // ?pn=<kind> lader klienten logge push_opened med kontekst (analytics v1)
+      // — der skrives ingen event her server-side, kun URL'en. De to øvrige
+      // parametre er landingen: ?rk= peger Tip-skærmen på den rigtige runde,
+      // ?join= sender "ny konkurrence"-beskeden ind i den eksisterende
+      // invitations-bekræftelse i MainApp. De sættes kun, når beskeden har dem —
+      // App.jsx læser dem uafhængigt af hinanden.
+      const params = new URLSearchParams({ pn: msg.kind || "" });
+      if (msg.roundKey) params.set("rk", msg.roundKey);
+      if (msg.joinCode) params.set("join", msg.joinCode);
+      const url = `/?${params.toString()}`;
       const payload = JSON.stringify({ title: msg.title, body: msg.body, tag: msg.tag, url });
       for (const s of subsByUser[msg.userId] || []) {
         try {

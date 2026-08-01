@@ -112,7 +112,7 @@ const METRICS = {
   push_open_rate: {
     title: "Push Notification Open Rate",
     what: "Hvor stor en del af de sendte push-beskeder, der førte til, at appen blev åbnet fra beskeden.",
-    how: "Åbninger ÷ sendte. 'Sendt' tælles i notification_log, 'åbnet' er push_opened-hændelser, som udløses af ?pn=/?rk= i push-linket. Splittet på type via nøglens præfiks (deadline/resultat).",
+    how: "Åbninger ÷ sendte. 'Sendt' tælles i notification_log, 'åbnet' er push_opened-hændelser, som udløses af ?pn= i push-linket. Splittet på type via nøglens præfiks (deadline/result/newcomp).",
     source: "notification_log (sendt) + analytics_events (åbnet).",
     caveat: "Raten er et GULV i begge ender: notification_log claimes FØR selve afsendelsen, så en fejlet levering tæller stadig som sendt, og en åbning, hvis logning fejler, tæller ikke. Sammenlign typer med hinanden frem for at læse niveauet absolut.",
   },
