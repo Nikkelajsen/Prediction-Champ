@@ -7,6 +7,7 @@ import { logEvent } from "../lib/analytics.js";
 import { deriveOnboarding, loadOnboardingSignals, readFlag, writeFlag, COMPLETE_KEY, FLOW_KEY } from "../lib/onboarding.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
 import { Modal } from "../ui/components.jsx";
+import { ErrorBoundary, ScreenFallback } from "../ui/ErrorBoundary.jsx";
 import HjemTab from "./HjemTab.jsx";
 import LigaerTab from "./LigaerTab.jsx";
 import GroupScreen from "./GroupScreen.jsx";
@@ -490,7 +491,20 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
               <button onClick={() => setJoinError("")} aria-label="Luk" style={iconBtn}><X size={16} /></button>
             </div>
           )}
-          {body}
+          {/* Boundary om ÉN skærm, ikke om roden (indbakken, august 2026).
+              Den leverede boundary sidder om app-roden (`main.jsx`) og kan kun
+              tilbyde en genindlæsning: et render-kast i én fane tog hele appen
+              med sig, inklusive den navigation, brugeren skulle bruge for at
+              komme videre. Her lever skallen og bundnavigationen videre.
+
+              `key` er nulstillingen. En boundary, der først har fanget, bliver
+              siddende i fejltilstand — den har ingen måde at vide, om årsagen er
+              væk. Skifter nøglen, monterer React en ny instans, og skærmen
+              prøver forfra. Derfor beder teksten netop om at navigere: det ER
+              nulstillingen, ikke et forslag om at prøve lykken igen. */}
+          <ErrorBoundary key={`${tab}:${screen?.type ?? ""}`} fallback={<ScreenFallback />}>
+            {body}
+          </ErrorBoundary>
         </div>
 
         {/* Bottom nav

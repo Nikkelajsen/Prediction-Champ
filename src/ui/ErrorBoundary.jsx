@@ -41,6 +41,26 @@ function Fallback() {
   );
 }
 
+// Fallback for en boundary om ÉN skærm frem for om roden.
+//
+// Forskellen er handlingen: her ER der noget at navigere hen til, fordi
+// app-skallen og bundnavigationen står uden for boundaryen og lever videre.
+// "Genindlæs appen" ville derfor være at foreslå det dyreste af de mulige
+// udveje — brugeren kan bare gå et andet sted hen, og skærmen nulstilles af
+// sig selv, når de kommer tilbage (se `key` i MainApp).
+function ScreenFallback() {
+  return (
+    <div style={{ paddingTop: 40 }}>
+      <p style={{ color: C.red, fontSize: 14, lineHeight: 1.6, margin: "0 0 6px" }}>
+        Denne skærm kunne ikke tegnes færdig.
+      </p>
+      <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+        Dine tips er gemt. Skift til en anden fane og tilbage — så prøver skærmen forfra.
+      </p>
+    </div>
+  );
+}
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -58,9 +78,16 @@ class ErrorBoundary extends React.Component {
   }
 
   render() {
-    return this.state.failed ? <Fallback /> : this.props.children;
+    // `fallback` gør komponenten brugbar begge steder: om roden (den fulde
+    // side med "Genindlæs") og om én skærm (den lille tekst, der lader
+    // navigationen stå). Der findes bevidst INGEN "prøv igen"-knap: den
+    // tilstand, der fremkaldte kastet, ligger i netop den træ-instans, der lige
+    // er revet ned — nulstillingen sker ved at skifte `key`, altså ved at
+    // navigere, hvilket er det, teksten beder om.
+    if (!this.state.failed) return this.props.children;
+    return this.props.fallback ?? <Fallback />;
   }
 }
 
-export { ErrorBoundary, Fallback };
+export { ErrorBoundary, Fallback, ScreenFallback };
 export default ErrorBoundary;

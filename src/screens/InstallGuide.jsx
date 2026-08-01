@@ -1,7 +1,9 @@
 // Vejledning i at føje appen til hjemmeskærmen (PWA-installation).
 // Bruges både i første-login-modalen (MainApp) og i "Sådan virker det"-siden,
 // så den altid kan genfindes. Trinene tilpasses platformen.
-import { C } from "../ui/theme.js";
+import { Download } from "lucide-react";
+import { C, btnGreen } from "../ui/theme.js";
+import { useInstallPrompt } from "../lib/pwa.js";
 
 // Er appen allerede åbnet som installeret PWA? (så skjuler vi vejledningen)
 export function isStandalone() {
@@ -39,6 +41,7 @@ const STEPS = {
 function InstallGuide() {
   const platform = detectPlatform();
   const steps = STEPS[platform];
+  const install = useInstallPrompt();
   const note = platform === "ios"
     ? "På iPhone/iPad virker push-notifikationer først, når appen er føjet til hjemmeskærmen."
     : "Så åbner Prediction Champ som en rigtig app — uden browser-linjen.";
@@ -47,6 +50,16 @@ function InstallGuide() {
       <p style={{ margin: "0 0 10px", color: C.muted, fontSize: 14, lineHeight: 1.5 }}>
         Føj Prediction Champ til hjemmeskærmen, så den åbner som en app og altid er ét tryk væk.
       </p>
+      {/* Har browseren en rigtig installations-prompt, er ÉT tryk bedre end tre
+          trin (G27). Den vises kun, når `beforeinstallprompt` faktisk er fyret —
+          altså når browseren selv mener, appen kan installeres. Trinene bliver
+          stående nedenfor og forsvinder ikke: de er den eneste vej på iOS, som
+          ingen prompt har, og de er samtidig svaret, hvis prompten afvises. */}
+      {install.available && (
+        <button type="button" style={{ ...btnGreen, marginBottom: 12 }} onClick={install.promptInstall}>
+          <Download size={15} /> Installér appen
+        </button>
+      )}
       <ol style={{ margin: "0 0 10px", paddingLeft: 18, color: C.text, fontSize: 14, lineHeight: 1.6 }}>
         {steps.map((s, i) => <li key={i}>{s}</li>)}
       </ol>

@@ -115,6 +115,18 @@ export async function sbAll(sb, path, { order, pageSize = 1000, maxPages = 100 }
   throw new Error(`sbAll(${path}): over ${maxPages * pageSize} rækker — opslaget skal afgrænses`);
 }
 
+// Hvilken kode kørte? (G42)
+//
+// Vercel sætter VERCEL_GIT_COMMIT_SHA i funktionsmiljøet. Uden den kan en
+// række i `job_runs` ikke kobles til et deploy — og netop dét spørgsmål er
+// dyrt at ikke kunne svare på: `B8` kostede tre merges, fordi et fejlet deploy
+// betød, at det, der kørte i produktion, var to versioner ældre end `main`,
+// uden at nogen kunne se det. Med SHA'en på hver kørsel er "kørte rettelsen
+// overhovedet?" et opslag frem for en antagelse.
+//
+// Syv tegn, samme længde som frontendens stempel og som `git log --oneline`.
+const APP_VERSION = (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || null;
+
 // Skriver én række i job_runs pr. kørsel (sql/job_runs.sql).
 //
 // KONTRAKT: må ALDRIG kaste og aldrig ændre jobbets svar. Overvågning, der kan
@@ -165,7 +177,13 @@ export function createRunLogger(sb, job, { skip = false } = {}) {
   // Detaljen er jobbets eget svar PLUS det, kørslen ved om sig selv. De to
   // holdes adskilt, fordi svaret er til kalderen (et cron-job, en maskine),
   // mens detaljen er til den, der læser driftsloggen bagefter.
-  const withMeta = (body) => (authVia ? { ...body, authVia } : body);
+  const withMeta = (body) => {
+    const ekstra = { ...(authVia ? { authVia } : {}), ...(APP_VERSION ? { version: APP_VERSION } : {}) };
+    // Er der intet at tilføje, sendes svaret videre UÆNDRET — også når det er
+    // null. `{...null}` ville blive til `{}`, altså et tomt resumé, hvor der
+    // før stod "ingenting", og de to ser ens ud i driftsloggen uden at være det.
+    return Object.keys(ekstra).length ? { ...body, ...ekstra } : body;
+  };
   return {
     // Skifter jobnavnet MIDT i kørslen, uden at nulstille varigheden.
     //
