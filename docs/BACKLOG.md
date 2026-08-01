@@ -36,6 +36,7 @@ eller en linje i "Forkastede ideer".
 
 - `rules.openDaysBefore` ligger stadig i gamle `competitions`-rækker, men læses ikke længere — ryddes sammen med `G3`, hvis `rules` nogensinde ryddes op
 - `StateChip` i `ui/components.jsx` har en død ternær: `background: tone ? "transparent" : "transparent"` — enten skulle en tone have en svag fyldfarve, eller også skal linjen bare være `"transparent"`
+- PostgREST's 1000-rækkers loft rammer tavst: `db.select` for kommende kampe i `CreateCompetitionScreen` bruger `limit=1000` (altså præcis loftet) — gennemgå de øvrige brede opslag (`upcoming`-puljen, `teams`, `predictions`) for samme fælde, nu hvor kampantallet er rettet
 - Mål om "Anbefalet" på Sæson-kortet flytter fordelingen — `competition_created` bærer allerede `metadata.mode`, så før/efter kan aflæses uden ny instrumentering
 
 ---

@@ -88,19 +88,25 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   // dette tal blev vist, var det eneste tegn på det en konkurrence, der aldrig
   // fik noget at tippe på. Tallet gør den frosne liste synlig præcis dér, hvor
   // nogen kan nå at reagere på den.
+  //
+  // Tælles med ét opslag PR. TURNERING, ikke ved at hente alle turneringers
+  // kampe i én omgang og tælle dem i browseren. Det sidste var fejlen bag
+  // "Premier League · 0 kampe": PostgREST leverer højst 1000 rækker pr. svar og
+  // siger ikke, at det klipper, så de fire første turneringer fyldte loftet
+  // (306+380+182+132 = præcis 1000), og Premier League og Serie A — hentet og
+  // fuldt indlæste i databasen — faldt uden for svaret og blev talt som nul.
+  // Chippen var derfor slukket for turneringer, der intet fejlede.
   useEffect(() => {
     if (typeId !== "season") return;
-    const seasonIds = Object.values(seasonByLeague).map((s) => s.id);
-    if (!seasonIds.length) return;
+    if (!Object.keys(seasonByLeague).length) return;
     (async () => {
-      const seasonToLeague = Object.fromEntries(Object.values(seasonByLeague).map((s) => [s.id, s.league_id]));
-      const rows = await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&select=season_id`);
-      const counts = {};
-      for (const l of leagues) counts[l.id] = 0;
-      for (const r of rows) {
-        const lid = seasonToLeague[r.season_id];
-        if (lid) counts[lid] = (counts[lid] || 0) + 1;
-      }
+      const entries = await Promise.all(leagues.map(async (l) => {
+        const s = seasonByLeague[l.id];
+        // Ingen sæsonrække = ingen kampe at tippe på — samme spærring som nul kampe.
+        if (!s) return [l.id, 0];
+        return [l.id, await db.count(token, "matches", `season_id=eq.${s.id}`)];
+      }));
+      const counts = Object.fromEntries(entries);
       setCountByLeague(counts);
       // Forvalget må ikke lande på en tom turnering: den ville se valgt ud og
       // samtidig være det ene valg, der ikke kan bruges.
