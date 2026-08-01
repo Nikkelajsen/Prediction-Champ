@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   createSb,
+  sbAll,
   secretsMatch,
   isAuthorized,
   recordRun,
@@ -105,6 +106,77 @@ describe("createSb", () => {
     await expect(sb("/rest/v1/hemmelig")).rejects.toThrow(
       "Supabase /rest/v1/hemmelig: 403 permission denied"
     );
+  });
+});
+
+// G51: den tavse afkortning kostede en falsk runde-notifikation 1. august 2026.
+// Testene her pinner de to egenskaber, der gør sbAll() til et svar på den — og
+// som begge er lette at "forenkle" væk igen.
+describe("sbAll", () => {
+  // Stub-sb, der opfører sig som PostgREST: læser limit/offset af stien og
+  // skærer i sin egen række-liste. `kald` gemmer stierne, så pagineringen kan
+  // efterprøves på det, der faktisk blev bedt om.
+  const stubSb = (rows, { maxRows = Infinity } = {}) => {
+    const kald = [];
+    const sb = async (path) => {
+      kald.push(path);
+      const limit = Number(new URL(`https://x${path}`).searchParams.get("limit"));
+      const offset = Number(new URL(`https://x${path}`).searchParams.get("offset"));
+      return rows.slice(offset, offset + Math.min(limit, maxRows));
+    };
+    return { sb, kald };
+  };
+
+  const rækker = (n) => Array.from({ length: n }, (_, i) => ({ id: i }));
+
+  it("henter én side, når der er færre rækker end loftet", async () => {
+    const { sb, kald } = stubSb(rækker(3));
+    expect(await sbAll(sb, "/rest/v1/matches?select=id", { order: "id.asc", pageSize: 10 })).toHaveLength(3);
+    // To kald: siden med de tre rækker, og den tomme, der beviser, at det var alt.
+    expect(kald).toHaveLength(2);
+    expect(kald[0]).toBe("/rest/v1/matches?select=id&order=id.asc&limit=10&offset=0");
+    expect(kald[1]).toBe("/rest/v1/matches?select=id&order=id.asc&limit=10&offset=3");
+  });
+
+  it("samler alle sider, når rækkerne er flere end én side", async () => {
+    const { sb, kald } = stubSb(rækker(25));
+    const ud = await sbAll(sb, "/rest/v1/matches?select=id", { order: "id.asc", pageSize: 10 });
+    expect(ud.map((r) => r.id)).toEqual(rækker(25).map((r) => r.id));
+    // Fire kald: 10 + 10 + 5 + den tomme. Den sidste er ikke spild — det er
+    // den, der skelner "det var alt" fra "her er de første."
+    expect(kald).toHaveLength(4);
+  });
+
+  // KERNEN. Projektets db-max-rows kan ikke aflæses fra repoet og kan være
+  // mindre end pageSize. Stoppede vi ved "kortere side end bestilt", ville hver
+  // eneste fulde side se ud som den sidste — altså præcis den tavse afkortning,
+  // funktionen findes for at forhindre.
+  it("stopper ved en TOM side, ikke ved en side der er kortere end pageSize", async () => {
+    const { sb } = stubSb(rækker(25), { maxRows: 10 }); // loftet er lavere end pageSize
+    const ud = await sbAll(sb, "/rest/v1/matches?select=id", { order: "id.asc", pageSize: 1000 });
+    expect(ud).toHaveLength(25);
+  });
+
+  it("tilføjer separator korrekt, når stien ingen query har", async () => {
+    const { sb, kald } = stubSb([]);
+    await sbAll(sb, "/rest/v1/matches", { order: "id.asc" });
+    expect(kald[0]).toBe("/rest/v1/matches?order=id.asc&limit=1000&offset=0");
+  });
+
+  // Uden stabil sortering er PostgRESTs rækkefølge udefineret mellem to kald,
+  // så paginering ville både tabe og gentage rækker. Der er ingen standardværdi
+  // at falde tilbage på: flere tabeller har sammensat PK og ingen id-kolonne.
+  it("kaster, når sorteringen mangler eller står i stien", async () => {
+    const { sb } = stubSb([]);
+    await expect(sbAll(sb, "/rest/v1/matches?select=id")).rejects.toThrow("order");
+    await expect(sbAll(sb, "/rest/v1/matches?order=id.asc", { order: "id.asc" })).rejects.toThrow("order");
+  });
+
+  it("kaster frem for at returnere et halvt resultat ved for mange sider", async () => {
+    const { sb } = stubSb(rækker(100));
+    await expect(
+      sbAll(sb, "/rest/v1/matches?select=id", { order: "id.asc", pageSize: 10, maxPages: 3 })
+    ).rejects.toThrow("skal afgrænses");
   });
 });
 

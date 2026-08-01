@@ -36,6 +36,49 @@ export function createSb(supabaseUrl, serviceKey) {
   };
 }
 
+// Henter ALLE rækker for et GET-opslag — også når der er flere, end Supabase
+// leverer i ét svar.
+//
+// Supabase klipper hvert svar ved projektets `db-max-rows` (1000 som standard)
+// og siger det ikke: svaret er 200 med en kortere liste. `sb()` kaster kun ved
+// ikke-2xx og kan derfor ikke se forskel på "det var alt" og "her er de første
+// 1000" — et afkortet svar er ikke en fejl, men et forkert facit.
+//
+// Det kostede en falsk notifikation 1. august 2026 (`G51`): runde-opslaget i
+// send-notifications havde kun en NEDRE grænse på `round_key` og bad dermed om
+// hele resten af sæsonen for fem officielle turneringer. Svaret blev klippet, og
+// en runde, hvis uspillede kampe faldt uden for klippet, så færdigspillet ud.
+//
+// To detaljer er ikke til forhandling:
+//   * `order` er PÅKRÆVET. PostgRESTs rækkefølge er udefineret uden den, så
+//     paginering ville både tabe og gentage rækker mellem to sider. Der findes
+//     ingen brugbar standardværdi at gætte på: flere tabeller i skemaet har
+//     sammensat primærnøgle og slet ingen `id`-kolonne.
+//   * der stoppes ved en TOM side, ikke ved en side, der er kortere end
+//     `pageSize`. Er projektets `db-max-rows` mindre end `pageSize`, ville
+//     "kortere end bestilt" være sandt for hver eneste fulde side — og så havde
+//     vi bygget den samme tavse afkortning igen. Loftet kan ikke aflæses fra
+//     repoet, så det må ikke antages. Prisen er ét ekstra kald pr. opslag;
+//     jobbene kører hvert 15.-30. minut.
+export async function sbAll(sb, path, { order, pageSize = 1000, maxPages = 100 } = {}) {
+  if (!order || /[?&]order=/.test(path)) {
+    throw new Error(
+      `sbAll(${path}): sorteringen skal angives i 'order'-argumentet og kun dér — paginering uden én stabil sortering taber rækker`
+    );
+  }
+  const sep = path.includes("?") ? "&" : "?";
+  const rows = [];
+  for (let page = 0; page < maxPages; page++) {
+    const batch = await sb(`${path}${sep}order=${order}&limit=${pageSize}&offset=${rows.length}`);
+    if (!batch?.length) return rows;
+    rows.push(...batch);
+  }
+  // Nås kun ved mere end maxPages sider. Kastet er med vilje: at returnere det
+  // halve resultat her ville være præcis den tavse afkortning, funktionen findes
+  // for at forhindre.
+  throw new Error(`sbAll(${path}): over ${maxPages * pageSize} rækker — opslaget skal afgrænses`);
+}
+
 // Skriver én række i job_runs pr. kørsel (sql/job_runs.sql).
 //
 // KONTRAKT: må ALDRIG kaste og aldrig ændre jobbets svar. Overvågning, der kan

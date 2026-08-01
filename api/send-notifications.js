@@ -31,7 +31,7 @@
 //   VAPID_SUBJECT (valgfri, mailto:-adresse til push-tjenesterne)
 
 import webpush from "web-push";
-import { createSb, isAuthorized, createRunLogger, failJob } from "./_shared.js";
+import { createSb, sbAll, isAuthorized, createRunLogger, failJob } from "./_shared.js";
 
 const HOUR = 3600 * 1000;
 const LOCK_LEAD_MS = HOUR; // en kamp låser 1 time før sit eget kickoff (A21)
@@ -66,6 +66,17 @@ export function hourInZone(date, timeZone = SEND_WINDOW.timeZone) {
   return Number(
     new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(date)
   );
+}
+
+// Datoen (ÅÅÅÅ-MM-DD) i en given tidszone. Bruges som øvre grænse på `round_key`,
+// som er en `date` beregnet af `round_key(kickoff_at)` — altså rundens TIRSDAG:
+// runderne løber tirsdag til mandag (`round_key()` i sql/rating_core.sql).
+// Serverens egen dato ville være UTC og dermed ligge en dag bagud i timerne
+// efter midnat dansk tid; samme grund som SEND_WINDOW's faste tidszone.
+export function dateInZone(date, timeZone = SEND_WINDOW.timeZone) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(date);
 }
 
 // Må der sendes lige nu? Vinduet er inklusivt i starten og eksklusivt i slutningen
@@ -268,7 +279,9 @@ export default async function handler(req, res) {
     }
 
     // tilmeldte enheder, grupperet pr. bruger — er ingen tilmeldt, er der intet at gøre
-    const subs = await sb(`/rest/v1/push_subscriptions?select=id,user_id,endpoint,p256dh,auth`);
+    const subs = await sbAll(sb, `/rest/v1/push_subscriptions?select=id,user_id,endpoint,p256dh,auth`, {
+      order: "id.asc",
+    });
     if (!subs.length) return run.ok(res, { sent: 0, note: "Ingen tilmeldte enheder" });
     const subsByUser = {};
     for (const s of subs) (subsByUser[s.user_id] ||= []).push(s);
@@ -295,7 +308,11 @@ export default async function handler(req, res) {
     {
       const from = new Date(now - 7 * 24 * HOUR).toISOString();
       const to = new Date(now + 8 * 24 * HOUR).toISOString();
-      const ms = await sb(`/rest/v1/matches?kickoff_at=gte.${from}&kickoff_at=lte.${to}&select=id,season_id,round_key,kickoff_at,home_score`);
+      const ms = await sbAll(
+        sb,
+        `/rest/v1/matches?kickoff_at=gte.${from}&kickoff_at=lte.${to}&select=id,season_id,round_key,kickoff_at,home_score`,
+        { order: "id.asc" }
+      );
       const lockingMatches = ms.filter((m) => {
         if (!m.kickoff_at || m.home_score != null) return false;
         const lockAt = new Date(m.kickoff_at).getTime() - LOCK_LEAD_MS;
@@ -305,10 +322,18 @@ export default async function handler(req, res) {
       if (lockingMatches.length) {
         const matchIds = lockingMatches.map((m) => m.id);
         // hvilke brugere er kampene relevante for? (deltagere i konkurrencer, kampene indgår i)
-        const cms = await sb(`/rest/v1/competition_matches?match_id=in.(${matchIds.join(",")})&select=competition_id,match_id`);
+        const cms = await sbAll(
+          sb,
+          `/rest/v1/competition_matches?match_id=in.(${matchIds.join(",")})&select=competition_id,match_id`,
+          { order: "competition_id.asc,match_id.asc" }
+        );
         const compIds = [...new Set(cms.map((c) => c.competition_id))];
         const parts = compIds.length
-          ? await sb(`/rest/v1/competition_participants?competition_id=in.(${compIds.join(",")})&select=competition_id,user_id`)
+          ? await sbAll(
+              sb,
+              `/rest/v1/competition_participants?competition_id=in.(${compIds.join(",")})&select=competition_id,user_id`,
+              { order: "competition_id.asc,user_id.asc" }
+            )
           : [];
         const usersByComp = {};
         for (const p of parts) (usersByComp[p.competition_id] ||= new Set()).add(p.user_id);
@@ -316,7 +341,13 @@ export default async function handler(req, res) {
         for (const c of cms) {
           for (const uid of usersByComp[c.competition_id] || []) (usersByMatch[c.match_id] ||= new Set()).add(uid);
         }
-        const preds = await sb(`/rest/v1/predictions?match_id=in.(${matchIds.join(",")})&select=user_id,match_id,pred_home,pred_away`);
+        // Skalerer som kampe × brugere og er dermed den, der først rammer
+        // loftet: en afkortet tip-liste ville give falske "du mangler tips".
+        const preds = await sbAll(
+          sb,
+          `/rest/v1/predictions?match_id=in.(${matchIds.join(",")})&select=user_id,match_id,pred_home,pred_away`,
+          { order: "user_id.asc,match_id.asc" }
+        );
         const tipped = new Set(preds.filter((p) => p.pred_home != null && p.pred_away != null).map((p) => `${p.match_id}:${p.user_id}`));
 
         const today = new Date().toISOString().slice(0, 10);
@@ -360,9 +391,26 @@ export default async function handler(req, res) {
     {
       const seasonIds = await officialSeasonIds(sb);
       const fromKey = new Date(now - 14 * 24 * HOUR).toISOString().slice(0, 10);
+      // ØVRE grænse, og den er lige så nødvendig som den nedre. Uden den bad
+      // opslaget om hver eneste kamp fra de seneste 14 dage OG resten af
+      // sæsonen — for fem officielle turneringer er det langt over de 1000
+      // rækker, Supabase leverer i ét svar, og afkortningen er tavs (G51).
+      // Følgen var ikke en manglende besked, men en FORKERT: faldt en rundes
+      // uspillede kampe uden for de 1000, så runden færdigspillet ud, og
+      // "Runden er slut" afgik midt i en igangværende runde med et
+      // stillingsfelt, der kun talte de spillede kampes tippere.
+      //
+      // Grænsen er ikke bare en optimering: en runde, hvis STARTDAG ligger i
+      // fremtiden, kan pr. definition ikke være færdigspillet, så alt over
+      // dagens dato er rækker, svaret aldrig skulle have båret.
+      const toKey = dateInZone(new Date(now));
       // Ingen officielle turneringer ⇒ ingen 'ALL'-stilling at melde om.
       const ms = seasonIds.length
-        ? await sb(`/rest/v1/matches?season_id=in.(${seasonIds.join(",")})&round_key=gte.${fromKey}&select=id,round_key,home_score,away_score`)
+        ? await sbAll(
+            sb,
+            `/rest/v1/matches?season_id=in.(${seasonIds.join(",")})&round_key=gte.${fromKey}&round_key=lte.${toKey}&select=id,round_key,home_score,away_score`,
+            { order: "id.asc" }
+          )
         : [];
 
       for (const roundKey of finishedRoundKeys(ms)) {
@@ -410,8 +458,14 @@ export default async function handler(req, res) {
         const creatorIds = [...new Set(competitions.map((c) => c.created_by).filter(Boolean))];
         const [groups, members, participants, creators] = await Promise.all([
           sb(`/rest/v1/groups?id=in.(${groupIds.join(",")})&select=id,name`),
-          sb(`/rest/v1/group_members?group_id=in.(${groupIds.join(",")})&select=group_id,user_id,joined_at`),
-          sb(`/rest/v1/competition_participants?competition_id=in.(${competitions.map((c) => c.id).join(",")})&select=competition_id,user_id`),
+          sbAll(sb, `/rest/v1/group_members?group_id=in.(${groupIds.join(",")})&select=group_id,user_id,joined_at`, {
+            order: "group_id.asc,user_id.asc",
+          }),
+          sbAll(
+            sb,
+            `/rest/v1/competition_participants?competition_id=in.(${competitions.map((c) => c.id).join(",")})&select=competition_id,user_id`,
+            { order: "competition_id.asc,user_id.asc" }
+          ),
           creatorIds.length
             ? sb(`/rest/v1/profiles?id=in.(${creatorIds.join(",")})&select=id,display_name`)
             : Promise.resolve([]),
@@ -437,7 +491,11 @@ export default async function handler(req, res) {
     // tom log, begge sender — og brugeren får to ens notifikationer på samme tid.
     const userIds = [...new Set(outbox.map((o) => o.userId))];
     const keys = [...new Set(outbox.map((o) => o.key))];
-    const logged = await sb(`/rest/v1/notification_log?user_id=in.(${userIds.join(",")})&key=in.(${keys.map((k) => encodeURIComponent(`"${k}"`)).join(",")})&select=user_id,key`);
+    const logged = await sbAll(
+      sb,
+      `/rest/v1/notification_log?user_id=in.(${userIds.join(",")})&key=in.(${keys.map((k) => encodeURIComponent(`"${k}"`)).join(",")})&select=user_id,key`,
+      { order: "user_id.asc,key.asc" }
+    );
     const alreadySent = new Set(logged.map((l) => `${l.user_id}:${l.key}`));
     const candidates = outbox.filter((o) => !alreadySent.has(`${o.userId}:${o.key}`));
 

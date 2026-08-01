@@ -41,6 +41,8 @@
 //    egne — ellers kunne en konkurrence uden fredagskampen vokse, efter runden
 //    reelt var i gang.
 
+import { sbAll } from "./_shared.js";
+
 // Én time før rundens start — samme margen som tipslåsen (LOCK_LEAD_MS i
 // src/lib/scoring.js), men målt på runden og ikke på kampen, jf. regel 3.
 export const LOCK_LEAD_MS = 60 * 60 * 1000;
@@ -123,15 +125,30 @@ export function matchesToBackfill({ competition, matches, existingIds, nowMs, lo
 export async function backfillCompetitionMatches(sb, seasonId, { now = Date.now() } = {}) {
   try {
     const modes = BACKFILLABLE_MODES.join(",");
-    const comps = await sb(`/rest/v1/competitions?mode=in.(${modes})&select=id,mode,mode_params,season_id`);
+    // Alle tre opslag pagineres (G51): Supabase klipper tavst ved db-max-rows,
+    // og `links` skalerer som konkurrencer × sæsonens kampe — tre "hel sæson"-
+    // konkurrencer i samme turnering er over 1000 rækker. En afkortet
+    // `links`-liste ville få allerede tilknyttede kampe til at se manglende ud;
+    // `on_conflict` gør genindsættelsen harmløs, men `added` ville lyve.
+    const comps = await sbAll(sb, `/rest/v1/competitions?mode=in.(${modes})&select=id,mode,mode_params,season_id`, {
+      order: "id.asc",
+    });
     const relevant = (comps || []).filter((c) => coversSeason(c, seasonId));
     if (!relevant.length) return { added: 0, competitions: 0 };
 
-    const matches = await sb(`/rest/v1/matches?season_id=eq.${seasonId}&select=id,round_key,kickoff_at,home_score,home_team_id,away_team_id`);
+    const matches = await sbAll(
+      sb,
+      `/rest/v1/matches?season_id=eq.${seasonId}&select=id,round_key,kickoff_at,home_score,home_team_id,away_team_id`,
+      { order: "id.asc" }
+    );
     if (!matches?.length) return { added: 0, competitions: 0 };
 
     const ids = relevant.map((c) => c.id).join(",");
-    const links = await sb(`/rest/v1/competition_matches?competition_id=in.(${ids})&select=competition_id,match_id`);
+    const links = await sbAll(
+      sb,
+      `/rest/v1/competition_matches?competition_id=in.(${ids})&select=competition_id,match_id`,
+      { order: "competition_id.asc,match_id.asc" }
+    );
     const byComp = new Map();
     for (const l of links || []) {
       if (!byComp.has(l.competition_id)) byComp.set(l.competition_id, new Set());
