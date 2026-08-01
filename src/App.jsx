@@ -1,4 +1,6 @@
-// Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
+// Appens rod: session, login-tilstand, token-fornyelse og de deep links, der
+// læses ved boot (?join=, ?liga=, ?pn=). Alt andet ligger i MainApp — denne fil
+// afgør kun, OM der er en bruger, og holder den bruger logget ind.
 import { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { auth, clearSession, db, loadSession, saveSession } from "./lib/supabase.js";

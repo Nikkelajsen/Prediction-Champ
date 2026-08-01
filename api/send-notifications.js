@@ -372,18 +372,24 @@ export default async function handler(req, res) {
     // Offentligt endpoint: frontendens tilmelding henter den offentlige VAPID-nøgle her,
     // så nøglen kun findes ét sted (Vercels miljøvariabler).
     if (req.query.action === "vapidKey") {
-      if (!VAPID_PUBLIC_KEY) return res.status(500).json({ error: "VAPID_PUBLIC_KEY er ikke sat i Vercel-projektet" });
+      if (!VAPID_PUBLIC_KEY) {
+        // Offentligt endpoint: samme regel som ovenfor (G38) — navnet i logs,
+        // ikke i svaret.
+        console.error("[opsætning] VAPID_PUBLIC_KEY mangler i miljøet.");
+        return res.status(500).json({ error: "Notifikationer er ikke sat op på serveren endnu." });
+      }
       return res.status(200).json({ publicKey: VAPID_PUBLIC_KEY });
     }
 
+    // Svaret navngiver IKKE variablerne (G38). Tjekket ligger nødvendigvis FØR
+    // autorisationen — uden dem kan vi ikke engang slå kalderen op — så teksten
+    // ville ellers kortlægge backendens opsætning for enhver uautentificeret
+    // kaldende. Navnene er ikke hemmelige, men de er gratis rekognoscering, og
+    // de hører hjemme dér, hvor kun vi kan læse dem: i Vercels logs.
     if (!SUPABASE_URL || !SERVICE_KEY) {
-      return res.status(500).json({ error: "Miljøvariabler mangler i Vercel-projektet (SUPABASE_URL eller SUPABASE_SERVICE_ROLE_KEY)" });
+      console.error("[opsætning] SUPABASE_URL eller SUPABASE_SERVICE_ROLE_KEY mangler i miljøet.");
+      return res.status(500).json({ error: "Serveren er ikke sat rigtigt op." });
     }
-    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-      return res.status(500).json({ error: "VAPID-nøgler mangler i Vercel-projektet (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)" });
-    }
-    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-
     const sb = createSb(SUPABASE_URL, SERVICE_KEY);
 
     // ---- autorisation: enten en admin-brugers login, eller den delte hemmelige nøgle (til ekstern cron) ----
@@ -397,6 +403,15 @@ export default async function handler(req, res) {
     if (!auth.ok) {
       return res.status(401).json({ error: "Ikke autoriseret" });
     }
+
+    // VAPID-tjekket ligger EFTER autorisationen (G38). Modsat Supabase-nøglerne
+    // er det muligt her — autorisationen har ikke brug for dem — og så må navnene
+    // gerne stå i svaret: den eneste, der kan se det, er en admin eller cron-jobbet,
+    // og for dem er det præcise navn hele værdien.
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+      return res.status(500).json({ error: "VAPID-nøgler mangler i Vercel-projektet (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)" });
+    }
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
     const dryRun = req.query.dryRun === "true";
     const force = req.query.force === "true";

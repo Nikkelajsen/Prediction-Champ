@@ -1,4 +1,5 @@
-// Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
+// Hjem-fanen: dagens overblik. Deadline-kort, rating-snapshot, rundens
+// live-oversigt, dine placeringer, rundens historie og opt-in til notifikationer.
 import { useState, useEffect } from "react";
 import { Bell, ChevronRight, ChevronDown, Clock, Check, X, Share2, RefreshCw } from "lucide-react";
 import { formatKickoff } from "../lib/scoring.js";

@@ -89,4 +89,4 @@ function GetStartedCard({ onboarding, actions = {}, push, onDismiss }) {
 }
 
 export default GetStartedCard;
-export { StepRow };
+export {  };

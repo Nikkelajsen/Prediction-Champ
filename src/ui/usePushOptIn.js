@@ -50,4 +50,4 @@ function usePushOptIn(token, userId) {
   return { state, available: state === "available", busy, error, enable, dismiss };
 }
 
-export { usePushOptIn, PUSH_DISMISS_KEY };
+export { usePushOptIn };

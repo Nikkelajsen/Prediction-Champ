@@ -1,4 +1,5 @@
-// Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
+// Stilling for én konkurrence: tabellen, point pr. runde, kåringer og
+// invitationslinket. Drill-in fra Hjem og Ligaer.
 import { useState, useEffect } from "react";
 import { Trophy, Copy, Check, ClipboardList } from "lucide-react";
 import { lockedRoundsOf, roundLabel } from "../lib/scoring.js";

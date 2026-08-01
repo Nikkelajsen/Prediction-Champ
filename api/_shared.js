@@ -225,6 +225,24 @@ export function createRunLogger(sb, job, { skip = false } = {}) {
   };
 }
 
+// Er værdien et UUID? (G18)
+//
+// `leagueId` kommer fra query-strengen og interpoleres i PostgREST-URL'er, der
+// kaldes med SERVICE-NØGLEN. Det er ikke SQL-injektion — PostgREST
+// parametriserer — men en kaldende med sync-hemmeligheden kunne føje EKSTRA
+// PostgREST-parametre til (`&limit=`, `&order=`, flere filtre) og dermed
+// omforme en forespørgsel, der kører uden om RLS. Værdier afledt af databasen
+// (api/_backfill.js) er betroede og går ikke gennem denne.
+//
+// Formatet er den rigtige kontrol og ikke en escaping: kolonnen ER en uuid, så
+// alt andet end et uuid er alligevel en fejl. Afvises tidligt, er der intet at
+// escape.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(v) {
+  return typeof v === "string" && UUID.test(v);
+}
+
 // Jobnavnet for én turnerings kampsynkronisering (G44).
 //
 // Indtil august 2026 skrev alle syv sync-matches-jobs den SAMME jobrække, så

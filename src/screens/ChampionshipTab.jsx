@@ -1,4 +1,5 @@
-// Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
+// Championship-fanen: de officielle konkurrencer, hvor alle er med automatisk.
+// Rundeliga, månedsliga og sæsonchampionship — hver med sin kåring.
 import { useState, useEffect, useMemo } from "react";
 import { Crown, ChevronLeft, ChevronRight } from "lucide-react";
 import { currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRatingMap, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard, monthName } from "../lib/data.js";

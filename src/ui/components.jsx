@@ -1,4 +1,6 @@
-// Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
+// Delkomponenter, der bruges på tværs af skærmene: kort, overskrifter,
+// spillernavne, dialoger, tal-felter og de små signal-visninger til Analytics
+// og Drift. Alt her er rent visuelt — ingen komponent henter data selv.
 import { useState, useEffect, useRef, useId } from "react";
 import { ChevronRight, ChevronLeft, ArrowUp, ArrowDown, Minus, Info, X } from "lucide-react";
 import { pointsFor } from "../lib/scoring.js";
@@ -446,7 +448,14 @@ function StateChip({ label, tone }) {
     <span style={{
       display: "inline-block", padding: "3px 9px", borderRadius: 999,
       border: `1px solid ${color}`, color,
-      background: tone ? "transparent" : "transparent",
+      // Ingen fyldfarve, uanset tone (G37). Her stod `tone ? "transparent" :
+      // "transparent"` — en ternær med samme svar i begge grene, altså enten en
+      // halvfærdig visuel tilstand eller en rest. Valget er truffet: ORDET er
+      // signalet, farven er kun ekstra (samme regel som OpsPanels TONE-tabel),
+      // og en svag fyldfarve bag et ord, der allerede er farvet, ville sløre
+      // netop den skelnen. Skal en tone en dag give fyld, er det en beslutning
+      // og ikke en genopdagelse.
+      background: "transparent",
       fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em",
       whiteSpace: "nowrap",
     }}>{label}</span>

@@ -1,4 +1,6 @@
-// Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
+// Point, runder og låsning: de rene funktioner, hele appen regner med.
+// Ingen netværkskald og ingen React — kun input ind, tal ud, hvilket er
+// grunden til, at det er den tungest testede fil i src/.
 
 // ---------- scoring helpers ----------
 // Simpelt, straffrit pointsystem:
@@ -128,17 +130,12 @@ const MODE_LABELS = {
   custom: "Custom",
   random: "Quick Pick",
 };
-// Én linje pr. mode, der siger hvad valget BETYDER. Etiketten alene ("Periode",
-// "Custom") forudsætter, at man allerede kender systemet — hintet
-// bor her ved siden af etiketten, så opret-skærmen og onboarding-guiden ikke kan
-// beskrive den samme mode forskelligt.
-const MODE_HINTS = {
-  full_season: "Alle resterende kampe i én eller flere turneringer — I følges ad hele sæsonen.",
-  team: "Følg dine favorithold — ét eller flere hold, også på tværs af turneringer.",
-  time_range: "Alle kampe mellem to datoer — fx en enkelt måned.",
-  custom: "Du bestemmer selv præcis hvilke kampe, der skal med.",
-  random: "Tilfældige kampe fra den nærmeste runde. Hurtig at gå til.",
-};
+// MODE_HINTS lå her indtil august 2026 (G36): én linje pr. mode om, hvad valget
+// BETYDER. Den blev aldrig læst af nogen — opret-galleriet (`A22`) fik sine egne
+// beskrivelser i `createTypes.js`, hvor de hører til, fordi galleriet viser
+// TYPER og ikke modes, og de to er ikke det samme (`random` er både Quick Pick,
+// Quick League og Ugens kupon). Konstanten blev stående som en eksport uden
+// forbruger og lovede dermed en fælles kilde, der ikke fandtes.
 // Ukendt mode vises råt frem for tomt — så en ny mode aldrig forsvinder i UI'et.
 // `random` over flere runder er sit eget produkt-navn (Quick League), men samme
 // mode i databasen — forskellen bor i mode_params.rounds, så etiketten skal
@@ -228,4 +225,4 @@ function liveInfo(m) {
   };
 }
 
-export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, LOCK_LEAD_MS, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, MODE_HINTS, modeLabel };
+export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };

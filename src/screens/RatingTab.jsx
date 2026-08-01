@@ -1,4 +1,5 @@
-// Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
+// Rating-fanen: den globale rangliste med formkurve, bevægelse og
+// provisorisk-markering af nye spillere.
 import { useState, useEffect } from "react";
 import { loadRatingBoard, loadRatingHistory } from "../lib/data.js";
 import { C, btnGhost, font } from "../ui/theme.js";

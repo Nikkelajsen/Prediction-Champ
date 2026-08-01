@@ -162,4 +162,4 @@ async function loadSeasonBoard(token, leagueId) {
   return { season, rows, totalMatches, playedMatches, isComplete: totalMatches > 0 && playedMatches === totalMatches };
 }
 
-export { loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, standingsRow, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard };
+export { loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard };

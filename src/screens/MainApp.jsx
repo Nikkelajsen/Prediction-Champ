@@ -1,4 +1,5 @@
-// Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
+// App-skallen: navigation mellem de fem faner og drill-in-skærmene, plus den
+// fælles indlæsning af ligaer og konkurrencer, alle faner bygger på.
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";

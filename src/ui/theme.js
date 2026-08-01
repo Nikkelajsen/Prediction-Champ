@@ -1,4 +1,5 @@
-// Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
+// Designtokens og de delte styles: farver, skrifttyper, knapper, felter og den
+// globale CSS. Ét sted, så en farve eller en knapform ikke findes i to udgaver.
 const C = {
   bg: "#0C1622",
   surface: "#14212F",
