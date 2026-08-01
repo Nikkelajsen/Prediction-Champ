@@ -19,9 +19,21 @@
 -- kan rulle resultat-lagring eller rating-genberegning tilbage (best-effort,
 -- jf. spec'ens "stilhed er tilladt"-princip).
 
+-- SECURITY DEFINER siden august 2026 (G15). Ikke for at give triggeren mere at
+-- gøre, men for at give den lov til det, den altid har gjort: recompute_ratings()
+-- er nu service_role-only, og triggeren kører som SKRIVEREN. Uden definer ville
+-- enhver admin-rettelse af et resultat i Admin-skærmen fejle på "permission
+-- denied for function recompute_ratings".
+--
+-- Sikker som definer, fordi en trigger-funktion ikke kan kaldes direkte
+-- ("trigger functions can only be called as triggers"), og de eneste triggere,
+-- der peger på den, sidder på public.matches — en tabel, kun admins og
+-- service_role må skrive i efter G14.
 create or replace function public.recompute_ratings_if_scores_changed()
 returns trigger
 language plpgsql
+security definer
+set search_path to 'public'
 as $fn$
 declare
   -- date, ikke text: matches.round_key er en genereret date-kolonne, og Postgres

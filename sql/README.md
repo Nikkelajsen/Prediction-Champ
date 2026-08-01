@@ -10,10 +10,15 @@ og kan køres igen.
 `public`-skemaet, som det så ud ved seneste eksport. Den redigeres aldrig i hånden;
 den regenereres med guiden nedenfor.
 
-> ⚠️ **Øjebliksbilledet er BAGUD pr. 1. august 2026**: `predictions_match_lock.sql` (#25),
+> ⚠️ **Øjebliksbilledet er BAGUD pr. august 2026**: `predictions_match_lock.sql` (#25),
 > den omlagte `analytics_dashboard.sql` (nye `analytics_match_locks`, omdøbte kolonner i
-> `analytics_round_locks`) og `competition_awards.sql` (#26) er kørt/tilføjet siden.
-> Eksporten skal køres, og datoen nedenfor rettes.
+> `analytics_round_locks`), `competition_awards.sql` (#26) og `security_hardening.sql`
+> (#27) er kørt/tilføjet siden. Eksporten skal køres, og datoen nedenfor rettes.
+>
+> **Netop nu er den også misvisende om sikkerhed.** Filen viser stadig de gamle,
+> åbne `matches`-policies (`auth.role() = 'authenticated'`) og `grant … to anon` på
+> `recompute_ratings()` — de blev lukket med #27. Læser man `schema.sql` som
+> adgangskontrakten, læser man altså tre huller, der ikke findes længere.
 >
 > **Øjebliksbilledet var friskt pr. 31. juli 2026** — eksporten er kørt efter
 > `multi_provider.sql` (#22) og indeholder `leagues.provider`, `leagues.live_enabled`
@@ -64,6 +69,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 25 | `predictions_match_lock.sql` | **Per-kamp-lås** (`A21`): alle fire `predictions`-policies + `comp_participants_delete_own_unlocked`. En kamp låser 1 time før sit EGET kickoff | Aktiv — **afløser #4 og #14**. Idempotent. **Adfærdsændring i produktion:** en runde, der er låst i dag, får sine senere kampe åbnet igen i samme øjeblik. Kør derfor MELLEM to runder, ikke midt i en |
 | 24 | `tournament_footballdata_promote.sql` | Sætter `is_visible` + `is_official` = true på de fem football-data-turneringer (A19) | **Data, ikke skema.** Idempotent. **Kørt 31. juli 2026.** Begge kolonner sættes i SAMME update med vilje — check-constrainten `leagues_official_implies_visible` afviser en officiel turnering, ingen kan se, så to adskilte sætninger ville fejle på den første. Scotland Premiership er bevidst ikke med; den forfremmes, når dens igangværende spillerunde er talt op |
 | 26 | `competition_awards.sql` | Lokale kåringer (I13/A22): tabellen `competition_awards` + SECURITY DEFINER-RPC'en `award_competition_periods()` ("Ugens/Månedens bedste" i en opt-in-konkurrence) | Aktiv — tilføjet 1. august 2026. Idempotent. Ingen skrive-policies: funktionen er den eneste skriver, klienten trigger den ved board-åbning. **Skal køres FØR frontend-mergen** — omvendt degraderer boardet blot til en tom kåringssektion |
+| 27 | `security_hardening.sql` | Sikkerhedsstramning (G14/G15/G16): `matches` bliver admin-only at skrive i, `recompute_ratings()` bliver service_role-only med wrapperen `admin_recompute_ratings()`, og `monthly_standings` får `security_invoker` | Aktiv — tilføjet august 2026. Idempotent. **Ændrer ingen tal og intet, brugerne ser** — kun hvem der må skrive og læse. **Skal køres FØR frontend-mergen:** Admin-skærmens "Opdater ratings" kalder herefter `admin_recompute_ratings`, som først findes med denne migrering. Forudsætter #0, #5 og #20 |
 
 ### ⚠️ Tre filer må ikke gen-køres blindt
 
@@ -71,7 +77,7 @@ Alle tre bruger `drop policy … create policy` / `drop view … create view`, s
 gen-kørsel **erstatter tavst** en nyere definition med en ældre. Der kommer ingen
 fejl — reglen bliver bare den gamle igen.
 
-- **`standings_tiebreakers.sql`** genskaber `round_standings` og `monthly_standings` i deres udgave **uden `scope`**. En gen-kørsel efter `tournament_scope.sql` (#20) fjerner scope-kolonnen tavst: Championship-fanen viser tomme stillinger, fordi den beder om `scope=eq.ALL`, og `career_profile`/`story_engine` fejler på det samme filter. `season_standings` i filen er derimod stadig den gældende udgave. **Kør altid `tournament_scope.sql` bagefter.** *(Tilføjet 31. juli 2026.)*
+- **`standings_tiebreakers.sql`** genskaber `round_standings` og `monthly_standings` i deres udgave **uden `scope`**. En gen-kørsel efter `tournament_scope.sql` (#20) fjerner scope-kolonnen tavst: Championship-fanen viser tomme stillinger, fordi den beder om `scope=eq.ALL`, og `career_profile`/`story_engine` fejler på det samme filter. `season_standings` i filen er derimod stadig den gældende udgave. **Kør altid `tournament_scope.sql` bagefter.** *(Tilføjet 31. juli 2026.)* **Siden august 2026 er der to ting at miste:** filens `monthly_standings` er også uden `security_invoker`, så en gen-kørsel genåbner G16 — den uautentificerede læsning af per-bruger månedspoint. `tournament_scope.sql` bagefter lukker begge dele på én gang.
 - **`groups.sql`** genskaber `group_members_delete_self` og
   `comp_participants_delete_own_unlocked` i deres **oprindelige** form og ruller
   dermed A8-invarianten tilbage: man kan igen forlade en liga, mens man deltager i
@@ -100,6 +106,22 @@ kræver, at intet rykker sig. Sådan en sektion ligger nu nederst i
 `rating_equivalence.sql`, og den er verificeret ved at fjerne filteret igen og se testen
 fejle.
 
+**`sql/tests/security_hardening.sql`** (samme CI-job, egen database) kører
+migreringen `security_hardening.sql` mod et minimalt skema og efterprøver de tre
+huller i BEGGE retninger: at `anon` og en almindelig indlogget bruger er lukket
+ude af `matches`, `recompute_ratings()` og `monthly_standings` — og at admin,
+rating-triggeren og `service_role` stadig kommer igennem. Testen ruller bevidst
+de to kildefiler tilbage til deres sårbare form først, så den måler et skifte og
+ikke bare en tilstand.
+
+To detaljer er værd at kende, hvis testen skal udvides. En **UPDATE**, hvis
+`using`-udtryk er falsk, rammer nul rækker og kaster **ingen** fejl — RLS
+filtrerer i stedet for at afvise, så en test, der kun spørger "kastede den?",
+ville rapportere en blokeret skrivning som gennemført. Derfor sammenlignes der på
+rækketal (`OK:0` mod `OK:1`). Og en **funktions-revoke** skal ramme pseudorollen
+`PUBLIC`: Postgres giver som standard `EXECUTE` til `PUBLIC` på hver ny funktion,
+og `anon` arver den, så `revoke … from anon` alene lukker ingenting.
+
 **`sql/tests/competition_awards.sql`** (samme CI-job, egen database) kører selve
 migreringen `competition_awards.sql` mod et minimalt skema og efterprøver
 kåringsreglerne: en færdigspillet runde/afsluttet måned kåres, en ufærdig gør
@@ -112,9 +134,10 @@ stubbes med session-GUC'er (`test.uid`/`test.role`), så testen kan skifte
 Testene kan køres lokalt mod enhver tom database:
 
 ```bash
-createdb ratingtest && createdb awardstest
+createdb ratingtest && createdb awardstest && createdb sectest
 cd sql/tests && psql -d ratingtest -v ON_ERROR_STOP=1 -b -f rating_equivalence.sql
 psql -d awardstest -v ON_ERROR_STOP=1 -b -f competition_awards.sql
+psql -d sectest -v ON_ERROR_STOP=1 -b -f security_hardening.sql
 ```
 
 Samme mønster gælder mildere for `predictions_round_lock_policies.sql`: den rører

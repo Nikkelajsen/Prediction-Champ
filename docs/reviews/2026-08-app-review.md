@@ -40,19 +40,22 @@ sikkerhedslag.
 
 | # | Alvorlighed | Fund | Reference |
 |---|---|---|---|
-| S1 | 🔴 Høj | Enhver indlogget bruger kan skrive kampresultater (`matches` INSERT/UPDATE åben for `authenticated`, UPDATE uden `WITH CHECK`) → point, stillinger og rating kan manipuleres. | `sql/schema.sql:3642,3885,4121` |
-| S2 | 🔴 Høj | `recompute_ratings()` er `SECURITY DEFINER` uden admin-tjek og givet til `anon` → uautentificeret DB-dækkende genberegning kan udløses gentagne gange. | `sql/rating_core.sql:261` |
-| S3 | 🔴 Høj | `monthly_standings` mangler `security_invoker` og er givet til `anon` → uautentificeret læsning af per-bruger månedspoint. | `sql/tournament_scope.sql:110,170` |
+| S1 | 🔴 Høj | Enhver indlogget bruger kan skrive kampresultater (`matches` INSERT/UPDATE åben for `authenticated`, UPDATE uden `WITH CHECK`) → point, stillinger og rating kan manipuleres. **LUKKET august 2026** (`G14`, `sql/security_hardening.sql`): skrivning er nu admin- eller `service_role`-only, og UPDATE har `with check`. | `sql/schema.sql:3642,3885,4121` |
+| S2 | 🔴 Høj | `recompute_ratings()` er `SECURITY DEFINER` uden admin-tjek og givet til `anon` → uautentificeret DB-dækkende genberegning kan udløses gentagne gange. **LUKKET august 2026** (`G15`): motoren er `service_role`-only, Admin går gennem wrapperen `admin_recompute_ratings()` med `is_admin`-tjek. | `sql/rating_core.sql:261` |
+| S3 | 🔴 Høj | `monthly_standings` mangler `security_invoker` og er givet til `anon` → uautentificeret læsning af per-bruger månedspoint. **LUKKET august 2026** (`G16`): viewet har `security_invoker = on` som de to andre stillings-views. | `sql/tournament_scope.sql:110,170` |
 | S4 | 🟠 Mellem | Runderesultat-notifikationen læser `round_standings` uden `scope`-filter → forkert "nr. X af N" (allerede kendt som G9). | `api/send-notifications.js:196` |
 | S5 | 🟠 Mellem | Claimed-but-unsent notifikationer tabes permanent ved funktions-timeout (sekventiel send-loop, ingen genforsøg). | `api/send-notifications.js:243-296` |
 | D1 | 🟠 Mellem | Dokumentationen er på flere punkter faktuelt forkert: testtal, linjetal, metrik-tal, lint-loft, sync-kadence (fire forskellige svar), analytics-sektioner (fire vs. seks). | §4 |
 | T1 | 🟠 Mellem | De tre rigtige HTTP-handlere (`sync-matches`, `sync-live`, `send-notifications`) og hele navigations-/auth-laget (`MainApp`, `App`, `Auth`) er uden tests. | §6 |
 | Q1 | 🟡 Lav | `rules`-feltet trådes gennem hele frontenden, men `pc_points()` hardkoder 3/1/0 — en antydet konfigurerbarhed, der ikke findes (kendt som G3). | `sql/rating_core.sql:116-118` |
 
-Sikkerhedshullerne S1–S3 er de eneste fund, der bør handles på hurtigt: de er
+Sikkerhedshullerne S1–S3 var de eneste fund, der burde handles på hurtigt: de var
 udnyttelige af enhver, der har den offentlige `publishable`-nøgle, som er indbygget
-i den udsendte bundle (`src/lib/supabase.js:7-8`). Resten er kvalitet, gæld og
-dokumentationshygiejne — reelt, men ikke akut.
+i den udsendte bundle (`src/lib/supabase.js:7-8`). **Alle tre er lukket i august
+2026** med `sql/security_hardening.sql` og dækket af `sql/tests/security_hardening.sql`
+i CI; beskrivelserne nedenfor er bevaret, som de blev skrevet, med et
+LUKKET-afsnit til sidst. Resten er kvalitet, gæld og dokumentationshygiejne —
+reelt, men ikke akut.
 
 ---
 
@@ -117,6 +120,14 @@ begrænsninger") nævner dem ikke.
 allerede service-nøglen) eller gated på `is_admin` (Admin-skærmen skriver resultater).
 Klient-roller (`anon`, `authenticated`) bør kun have SELECT.
 
+**✅ LUKKET august 2026** — `sql/security_hardening.sql` (`G14`). `is_admin`-vejen
+blev valgt frem for `service_role`-only, fordi Admin-skærmen skriver med brugerens
+eget token og knappen i forvejen kun vises for `profile.is_admin`; policyen
+håndhæver nu i databasen, hvad brugerfladen antog. UPDATE har fået `with check`,
+og INSERT/UPDATE/DELETE er revoked fra `anon`. Undersøgt i samme ombæring: `teams`,
+`seasons` og `leagues` har samme brede grants, men ingen skrive-policies, så RLS
+afviser dem allerede — `matches` var det eneste hul.
+
 ### 🔴 S2 — `recompute_ratings()` er en uautentificeret skrive-/CPU-forstærker — **verificeret**
 
 ```
@@ -136,6 +147,16 @@ plus CPU-forstærker. Til sammenligning er `prune_job_runs` korrekt `service_rol
 
 **Anbefaling:** Fjern `anon` (og formentlig `authenticated`) fra grant'en, eller læg et
 `is_admin`-tjek ind i funktionen. Syncen kalder den via `service_role`.
+
+**✅ LUKKET august 2026** — `sql/security_hardening.sql` (`G15`). Begge dele, men
+ikke inde i motoren: `recompute_ratings()` er revoked fra `public`, `anon` og
+`authenticated` og kun givet til `service_role`, mens `is_admin`-tjekket ligger i
+den nye wrapper `admin_recompute_ratings()`, som Admin-skærmen kalder. Motorens krop
+er urørt med vilje — den er frosset af `sql/tests/rating_equivalence.sql`, og et
+adgangsproblem skal ikke koste en ændring i en funktion, hvis tal er under test.
+To detaljer viste sig undervejs: revoke'en skal ramme pseudorollen `PUBLIC` (ellers
+lukker den ingenting), og rating-triggeren måtte gøres `security definer`, da den
+kører som skriveren og ellers ville få admins egen resultat-rettelse til at fejle.
 
 ### 🔴 S3 — `monthly_standings` lækker per-bruger-data til uautentificerede — **verificeret**
 
@@ -157,6 +178,13 @@ ikke eksponeret.)
 
 **Anbefaling:** Enten sæt `security_invoker = on` på `monthly_standings` som på de to
 andre standings-views, eller revoke SELECT fra `anon`.
+
+**✅ LUKKET august 2026** — `sql/security_hardening.sql` (`G16`). `security_invoker
+= on`, så viewet nu opfører sig som de to andre. Bemærkningen om
+`standings_tiebreakers.sql:33-37` holdt ikke ved nærlæsning: kommentaren dér siger,
+at DEN migrering ikke rørte adgangsregler — ikke at fraværet var et performance-valg.
+Ingen indlogget bruger ser andre tal, fordi viewet kun tæller kampe med resultat, og
+præcis de tips er synlige for enhver authenticated bruger via `predictions_select_visible`.
 
 ### 🟠 S4 — Runderesultat-notifikation uden `scope`-filter (kendt som G9) — **verificeret**
 
@@ -415,16 +443,23 @@ hele `src/` — en god intention, men ujævnt gennemført.
 
 ## 11. Prioriteret handlingsliste
 
-Rækkefølgen afspejler risiko × indsats. Alt herunder er anbefalinger — intet er ændret.
+Rækkefølgen afspejler risiko × indsats. Listen var ren anbefaling, da rapporten blev
+skrevet; punkt 1–3 er siden udført og står med ✅, resten er uændret.
 
-**Nu (sikkerhed, lav indsats, høj risiko):**
+**Nu (sikkerhed, lav indsats, høj risiko) — ✅ udført august 2026:**
 
-1. **S1** — Fjern INSERT/UPDATE på `matches` for `authenticated`/`anon`; læg skrivning på
-   `service_role` eller `is_admin`. *(Én migrering.)*
-2. **S2** — Fjern `anon` fra `recompute_ratings()`-grant'en, eller læg `is_admin`-guard
-   ind. *(Én linje.)*
-3. **S3** — Sæt `security_invoker = on` på `monthly_standings` (som de to andre
-   standings-views), eller revoke SELECT fra `anon`. *(Én migrering.)*
+1. ✅ **S1** — Fjern INSERT/UPDATE på `matches` for `authenticated`/`anon`; læg skrivning på
+   `service_role` eller `is_admin`. *(Én migrering.)* → `is_admin`-policies i
+   `sql/security_hardening.sql`.
+2. ✅ **S2** — Fjern `anon` fra `recompute_ratings()`-grant'en, eller læg `is_admin`-guard
+   ind. *(Én linje.)* → begge dele: revoke fra `public`/`anon`/`authenticated` plus
+   wrapperen `admin_recompute_ratings()`.
+3. ✅ **S3** — Sæt `security_invoker = on` på `monthly_standings` (som de to andre
+   standings-views), eller revoke SELECT fra `anon`. *(Én migrering.)* → invoker sat.
+
+Alle tre er dækket af `sql/tests/security_hardening.sql`, som kører i CI og
+efterprøver begge retninger: at klient-rollerne er lukket ude, og at admin,
+rating-triggeren og `service_role` stadig kommer igennem.
 
 **Snart (brugervendte fejl):**
 
