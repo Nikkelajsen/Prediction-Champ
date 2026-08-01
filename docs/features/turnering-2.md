@@ -50,7 +50,8 @@ Jf. ordbogen i [`liga-laget-v1.md`](./liga-laget-v1.md) afsnit 2: en **turnering
 - ~~**A2 — ✅ Lukket (juli 2026):** Månedsligaen tæller **samlede point**, også med flere turneringer (rating dækker præcision via gennemsnit). Ingen kodeændring.~~
   **AFLØST 31. juli 2026, samme dag som turnering #2 kom i drift.** A2 blev truffet, før der fandtes to turneringer — altså om en situation, der ikke kunne afprøves. Da den blev virkelig, viste den sig at have en konsekvens, spørgsmålet ikke rummede: rundeliga og månedsliga måler ikke længere alle på de samme kampe, fordi hvad man tipper afgøres af, hvilke **frivillige** konkurrencer man er med i. De eneste konkurrencer, ingen selv har valgt, blev dermed afgjort af valg truffet andre steder.
   **Nyt svar — to niveauer:** `scope = 'ALL'` samler alle **officielle** turneringer og kårer *Rundens/Månedens Prediction Champ* (den store titel, som fortsat tæller samlede point og altså belønner bredde — nu som en udtalt regel); `scope = <league_id>` giver én stilling pr. turnering, hvor alle ér målt på de samme kampe, med kåringen *"Rundens/Månedens bedste i X"*. Ny kolonne `leagues.is_official` afgør, hvad der overhovedet fodrer Championship. Migrering: `sql/tournament_scope.sql`. Fuld begrundelse i [`../DECISIONS.md`](../DECISIONS.md).
-- **Trin 5 — global tirsdag–mandag-runde** bliver først reelt anderledes end turneringsrunder, når turnering #2 er i drift. Forbliver bevidst udskudt; dette dokument ændrer ikke på det, men tilføjelsen af turnering #2 er dens forudsætning.
+- ~~**Trin 5 — global tirsdag–mandag-runde** bliver først reelt anderledes end turneringsrunder, når turnering #2 er i drift. Forbliver bevidst udskudt.~~
+  **RETTET 1. august 2026.** Præmissen var forkert: der findes intet turneringsrunde-begreb i produktet, og `round_key()` har givet rundens tirsdag siden begyndelsen. Trin 5 var altså allerede leveret, da denne drejebog blev skrevet — og dét, drejebogen **selv** leverede (`scope = 'ALL'` i `sql/tournament_scope.sql`), var den sidste manglende brik. Tilbage står kun gætte-vinduets scoping pr. turnering, fulgt som `B1`. Se [`../DECISIONS.md`](../DECISIONS.md).
 - **A10 — ✅ Lukket (31. juli 2026):** abonnementet gater ikke længere denne drejebog. Se 3.4 nedenfor.
 
 ### 3.4 Turnering #2 er Scotland Premiership — A10, afgjort 31. juli 2026
@@ -164,7 +165,7 @@ Verificeret mod PostgreSQL 16.13 med en fixture, hvor én spiller tipper begge t
 ## 6. Testcases
 
 1. Sync af turnering #2 med `dryRun=true` → forventet antal kampe, ingen skrivninger.
-2. Runde med kampe i begge turneringer → rundeligaen viser samlede point på tværs; `round_key` beregnes pr. turneringsrunde som i dag.
+2. Runde med kampe i begge turneringer → rundeligaen viser samlede point på tværs. ~~`round_key` beregnes pr. turneringsrunde som i dag.~~ **Rettet 1. august 2026:** `round_key` er kalenderugen (tirsdag–mandag) og har altid været det — kampe fra begge turneringer i samme uge deler derfor `round_key`. Det er netop dét, testcasen beviser. Gætte-vinduet er det ene sted, der stadig scoper pr. `(season_id, round_key)`, så de to turneringers kampe kan åbne på hver sin dag i samme runde.
 3. `full_season`-konkurrence med begge turneringer (multivalg) → kampe fra begge materialiseres, stilling korrekt.
 4. Bruger tipper kun den ene turnering → rating (snit pr. kamp) er fair; månedsliga følger A2-beslutningen.
 5. Sæsonvælger på Championship: skift mellem turneringerne → korrekt stilling + fremdrifts-tæller pr. turnering.

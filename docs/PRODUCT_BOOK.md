@@ -189,7 +189,7 @@ Ikke alle ønsker at tippe alle turneringer. Nogle følger kun Superligaen, andr
 
 ### Den globale spillerunde
 
-En af de mest markante beslutninger i produktets design var at indføre en global spillerunde. I stedet for at lade hver turnering leve sit eget liv, skal alle ugens kampe samles i én fælles spillerunde, der altid løber fra tirsdag til mandag. *(Endnu ikke bygget: appen regner i dag pr. turneringsrunde, hvilket med Superligaen alene reelt er det samme. Ombygningen venter, til flere turneringer er i drift — se "Kendte afvigelser" i [`ROADMAP.md`](./ROADMAP.md).)* Runden er regnestykkets enhed: Point, stillinger og rating hører til runden, ikke til den enkelte kamp — men de opdateres løbende, efterhånden som ugens kampe fløjtes af, så brugeren aldrig sidder og venter på at se, hvordan det gik. Når mandag er slut, står rundens tal endeligt fast, og fire ting er gjort i præcis samme rækkefølge: Først pointene. Dernæst konkurrencernes stillinger. Så spillernes Elo-rating. Til sidst historierne, som er de eneste, der først kan skrives, når rundens sidste kamp er spillet.
+En af de mest markante beslutninger i produktets design var at indføre en global spillerunde. I stedet for at lade hver turnering leve sit eget liv, skal alle ugens kampe samles i én fælles spillerunde, der altid løber fra tirsdag til mandag. *(Rettelse 1. august 2026: dette afsnit bar indtil da forbeholdet "endnu ikke bygget — appen regner pr. turneringsrunde". Det var forkert. Runden har været tirsdag–mandag siden begyndelsen, og tvær-turnerings-aggregeringen blev færdig 31. juli 2026. Forbeholdet er fjernet, ikke opfyldt. Én undtagelse står tilbage: det rullende gætte-vindue åbner stadig pr. turnering — se `B1` i [`BACKLOG.md`](./BACKLOG.md).)* Runden er regnestykkets enhed: Point, stillinger og rating hører til runden, ikke til den enkelte kamp — men de opdateres løbende, efterhånden som ugens kampe fløjtes af, så brugeren aldrig sidder og venter på at se, hvordan det gik. Når mandag er slut, står rundens tal endeligt fast, og fire ting er gjort i præcis samme rækkefølge: Først pointene. Dernæst konkurrencernes stillinger. Så spillernes Elo-rating. Til sidst historierne, som er de eneste, der først kan skrives, når rundens sidste kamp er spillet.
 
 Denne rytme er bevidst. Prediction Champ skal have sin egen ugentlige puls: Brugerne skal vide, at mandag aften afsluttes ugen — tirsdag begynder en ny.
 
@@ -235,11 +235,11 @@ Ikke alle følger de samme turneringer. Derfor kan ligaen godt rumme både Super
 
 ### En fast ugerytme
 
-Prediction Champ skal have en rytme — ikke en tilfældig rytme, men en rytme, som brugerne lærer at kende. Rytmen herunder beskriver den globale spillerunde og er derfor et **mål**, ikke nuværende adfærd (se afsnittet ovenfor):
+Prediction Champ skal have en rytme — ikke en tilfældig rytme, men en rytme, som brugerne lærer at kende. Rytmen herunder beskriver den globale spillerunde og er **gældende adfærd** *(rettet 1. august 2026: den stod indtil da som et mål — se afsnittet ovenfor)*, med den ene undtagelse, fredags-punktet nævner:
 
 - **Tirsdag:** En ny global spillerunde starter. Brugerne begynder at afgive deres tips.
 - **Onsdag og torsdag:** Der kommer måske nye kampe til. Nogle ændrer deres tips. Andre følger med i, hvem der allerede har tippet.
-- **Fredag:** De første kampe starter. Deres tips låses automatisk — resten af rundens kampe låser hver for sig, en time før de går i gang *(afviger fra rytmen ovenfor: A21, 1. august 2026, gjorde deadlinen til en egenskab ved kampen. Den samlede fredagslås hører til den globale spillerunde, som stadig ikke er bygget)*.
+- **Fredag:** De første kampe starter. Deres tips låses automatisk — resten af rundens kampe låser hver for sig, en time før de går i gang *(den eneste afvigelse fra rytmen ovenfor: A21, 1. august 2026, gjorde deadlinen til en egenskab ved kampen. Den samlede fredagslås er dermed fravalgt med vilje — ikke ubygget)*.
 - **Lørdag og søndag:** Kampene afgør ikke kun resultater. De afgør relationer. Point tikker ind, placeringer ændrer sig, rating rykker sig for hver kamp, der fløjtes af. Historier opstår.
 - **Mandag:** Spillerunden afsluttes. Rundens point, stillinger og rating står endeligt fast, og Story Engine finder ugens vigtigste fortælling.
 
