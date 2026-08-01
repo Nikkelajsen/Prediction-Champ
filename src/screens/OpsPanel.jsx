@@ -9,10 +9,17 @@
 // .github/workflows/job-heartbeat.yml. Denne skærm er den hurtige aflæsning;
 // heartbeat-workflowen er den, der råber, når ingen kigger.
 import { useState, useEffect } from "react";
-import { RefreshCw, Loader2 } from "lucide-react";
+import { RefreshCw, Loader2, Eye } from "lucide-react";
 import { C, btnGhost, font, muted } from "../ui/theme.js";
 import { Card, H, StateChip, SignalRow } from "../ui/components.jsx";
-import { loadJobHealth, mergeJobHealth, STATE_LABEL, fmtSince } from "../lib/ops.js";
+import {
+  loadJobHealth,
+  mergeJobHealth,
+  previewNotifications,
+  summarizeOutbox,
+  STATE_LABEL,
+  fmtSince,
+} from "../lib/ops.js";
 
 // Tonen følger StateChips regel: ORDET er signalet, farven er kun ekstra.
 // "Ingen kørsler" får bevidst ingen tone — "vi ved det ikke" må ikke kunne
@@ -97,6 +104,97 @@ function JobCard({ j }) {
   );
 }
 
+// Forhåndsvisning af notifikations-outboxen (?dryRun=true).
+//
+// Kortet er en LÆSNING og ikke en handling: der sendes intet, reserveres intet
+// i notification_log og skrives ingen række i job_runs. Derfor den dæmpede
+// knap — den skal ikke kunne forveksles med de knapper, der ændrer noget.
+//
+// Det er også den eneste vej til en forhåndsvisning uden SYNC_SECRET. Behovet
+// blev fundet under G51 (august 2026), hvor den falske runde-besked skulle
+// efterprøves, og den eneste vej var at hente hemmeligheden i Vercel og kalde
+// endpointet i hånden.
+function PreviewCard({ token }) {
+  const [loading, setLoading] = useState(false);
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState("");
+
+  async function run() {
+    setLoading(true);
+    setErr("");
+    setRes(null);
+    try {
+      setRes(await previewNotifications(token));
+    } catch (e) {
+      setErr(String(e?.message ?? e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 60%", minWidth: 0 }}>
+          <div style={{ color: C.text, fontWeight: 700, fontSize: 14 }}>Forhåndsvis notifikationer</div>
+          <div style={{ ...muted, fontSize: 11 }}>
+            Viser hvad næste kørsel ville sende. Sender intet, reserverer intet.
+          </div>
+        </div>
+        <button style={btnGhost} onClick={run} disabled={loading}>
+          {loading ? <Loader2 size={14} className="spin" /> : <Eye size={14} />} Vis hvad der venter
+        </button>
+      </div>
+
+      {err && <p style={{ color: C.red, fontSize: 12, margin: "10px 0 0" }}>{err}</p>}
+
+      {res && <OutboxPreview res={res} />}
+    </Card>
+  );
+}
+
+// Selve aflæsningen, skilt fra knappen så den kan afprøves uden et klik.
+// Delingen er ikke kosmetisk: hele værdien af kortet ligger i de to
+// formuleringer nedenfor, og den ene af dem er kontraintuitiv.
+function OutboxPreview({ res }) {
+  const rows = summarizeOutbox(res.wouldSend);
+  return (
+    <div style={{ marginTop: 10 }}>
+      {/* Noten kommer fra endpointet og skrives ikke om her — den er også
+          stedet, hvor "klokken er uden for sendevinduet" bliver sagt, og den
+          formulering skal kun findes ét sted. */}
+      <p style={{ ...muted, fontSize: 11, margin: 0 }}>{res.note}</p>
+
+      {rows.length === 0 ? (
+        // Forbeholdet er hele grunden til, at tomheden kan læses forkert:
+        // wouldSend er filtreret mod notification_log, så en allerede sendt
+        // besked er usynlig her. Uden sætningen ville "ingen beskeder venter"
+        // se ud som "der er ikke noget at sende" — to forskellige ting.
+        <p style={{ ...muted, fontSize: 12, margin: "8px 0 0" }}>
+          Ingen beskeder venter. Bemærk: listen er filtreret mod <code>notification_log</code>, så
+          tom betyder <em>intet nyt</em> — ikke, at der intet findes.
+        </p>
+      ) : (
+        <div style={{ marginTop: 8 }}>
+          {rows.map((r) => (
+            <div key={r.key} style={{ borderTop: `1px solid ${C.surface2}`, padding: "8px 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ color: C.gold, fontSize: 11, fontWeight: 700 }}>{r.kindLabel}</span>
+                <span style={{ ...muted, fontSize: 11 }}>
+                  {r.recipients} {r.recipients === 1 ? "modtager" : "modtagere"}
+                </span>
+              </div>
+              <div style={{ color: C.text, fontSize: 13, fontWeight: 600, marginTop: 2 }}>{r.title}</div>
+              <div style={{ ...muted, fontSize: 12 }}>{r.body}</div>
+              <code style={{ ...muted, fontSize: 10 }}>{r.key}</code>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OpsPanel({ token }) {
   const [jobs, setJobs] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -152,9 +250,11 @@ function OpsPanel({ token }) {
       {loading && !jobs && <p style={{ ...muted, margin: 0 }}>Henter …</p>}
 
       {jobs && jobs.map((j) => <JobCard key={j.job} j={j} />)}
+
+      <PreviewCard token={token} />
     </div>
   );
 }
 
 export default OpsPanel;
-export { JobCard };
+export { JobCard, PreviewCard, OutboxPreview };
