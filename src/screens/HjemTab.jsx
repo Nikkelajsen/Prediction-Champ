@@ -91,9 +91,13 @@ function Placements({ placements, goTab, openBoard }) {
   const compRows = placements.filter((r) => r.compId);
   const hasGroups = compRows.some((r) => r.groupId);
 
+  // Rigtige knapper og ikke klikbare `<div>`s (G22): rækkerne er appens
+  // primære vej videre fra Hjem, og de var tastatur-uopnåelige og uden rolle
+  // for en skærmlæser. `width: 100%` + `textAlign: left` beholder udseendet.
   const Row = ({ r, top }) => (
-    <div onClick={() => (r.tab ? goTab(r.tab) : openBoard(r.compId))} style={{
-      display: "flex", justifyContent: "space-between", alignItems: "center",
+    <button type="button" onClick={() => (r.tab ? goTab(r.tab) : openBoard(r.compId))} style={{
+      display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%",
+      background: "none", border: "none", textAlign: "left", font: "inherit", color: "inherit",
       padding: "10px 0", borderTop: top ? `1px solid ${C.line}` : "none", cursor: "pointer",
     }}>
       <span style={{ fontSize: 14 }}>{r.label}</span>
@@ -103,7 +107,7 @@ function Placements({ placements, goTab, openBoard }) {
         <span style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, color: r.pos === "1." ? C.gold : C.text }}>{r.pos}</span>
         <ChevronRight size={15} color={C.muted} />
       </span>
-    </div>
+    </button>
   );
   const SubHead = ({ children }) => (
     <div style={{ fontFamily: font.display, textTransform: "uppercase", letterSpacing: "0.1em", fontSize: 11, color: C.muted, margin: "12px 0 2px" }}>{children}</div>
@@ -305,7 +309,9 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         {/* Rating (kun tal + bevægelse) ved navnet — tappbar til karriereprofil.
             Placering ("Nr. X af Y") udelades bevidst for at spare plads. */}
         {snapshot && !snapshot.none && (
-          <div onClick={() => (openProfile ? openProfile(userId) : goTab("rating"))}
+          <div role="button" tabIndex={0} aria-label="Åbn din karriereprofil"
+            onClick={() => (openProfile ? openProfile(userId) : goTab("rating"))}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openProfile ? openProfile(userId) : goTab("rating"); } }}
             style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", cursor: "pointer", flexShrink: 0 }}>
             <Eyebrow>Rating <InfoDot title="Rating">
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -409,7 +415,11 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           et klik på header folder den fulde kamp-for-kamp-visning ud. */}
       {round && round.totalCount > 0 && (
         <Card>
-          <div onClick={() => setRoundOpen((v) => !v)} style={{ cursor: "pointer" }}>
+          <div role="button" tabIndex={0} aria-expanded={roundOpen}
+            aria-label={roundOpen ? "Skjul rundens kampe" : "Vis rundens kampe"}
+            onClick={() => setRoundOpen((v) => !v)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setRoundOpen((v) => !v); } }}
+            style={{ cursor: "pointer" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
               <Eyebrow>Indeværende runde</Eyebrow>
               <span style={{ color: C.muted, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>

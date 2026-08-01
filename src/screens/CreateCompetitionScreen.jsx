@@ -16,6 +16,14 @@ import { createTypeById, pickRandomFromRounds, weeklyCouponName, buildSpec } fro
 import { C, btnGhost, btnGreen, font } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
 import TypeGallery, { ICONS } from "./create/TypeGallery.jsx";
+
+// Hvor mange kommende kampe vi henter til valg-listerne.
+//
+// Tallene er BEVIDST under PostgRESTs loft på 1000 (G35): et loft, der er lig
+// med platformens, kan ikke skelnes fra en afkortning. Der hentes altid én
+// række mere end vist, så "der er flere" kan siges frem for at ske i stilhed.
+const UPCOMING_LIMIT_QUICK = 800;
+const UPCOMING_LIMIT_PICK = 300;
 import SeasonFields from "./create/SeasonFields.jsx";
 import TeamFields from "./create/TeamFields.jsx";
 import RandomFields from "./create/RandomFields.jsx";
@@ -51,6 +59,7 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   // kommende kampe (puljen for random-typerne og håndplukket)
   const [upcoming, setUpcoming] = useState([]);
   const [upcomingTeams, setUpcomingTeams] = useState({});
+  const [upcomingTruncated, setUpcomingTruncated] = useState(false); // ramte vi loftet? (G35)
 
   const type = createTypeById(typeId);
   const TypeIcon = ICONS[typeId] || null;
@@ -160,10 +169,23 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
       const seasonToLeague = Object.fromEntries(Object.values(seasonByLeague).map((s) => [s.id, s.league_id]));
       const leagueNames = Object.fromEntries(leagues.map((l) => [l.id, l.name]));
       const nowIso = new Date().toISOString();
+      // `limit=1000` var PRÆCIS PostgRESTs loft (G35, august 2026). Rammes det,
+      // forsvinder den 1001. kamp uden fejl, brugeren kan ikke vælge den, og
+      // ingen kode kan se forskel på "1000 kampe" og "for mange kampe" — samme
+      // tavse afkortning, som kostede "Premier League · 0 kampe" og en falsk
+      // runde-notifikation (`G51`).
+      //
+      // Rettelsen er ikke et højere loft, men at loftet kan MÆRKES: vi beder om
+      // én række mere, end vi vil vise. Kommer den, ved vi, at der er flere —
+      // og så siges det højt frem for at lade listen se komplet ud.
+      const visLoft = typeId === "quick_league" ? UPCOMING_LIMIT_QUICK : UPCOMING_LIMIT_PICK;
       const horizon = typeId === "quick_league"
-        ? `&kickoff_at=lte.${new Date(Date.now() + 11 * 7 * 24 * 3600 * 1000).toISOString()}&limit=1000`
-        : "&limit=300";
-      const ms = await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&kickoff_at=gte.${nowIso}&select=*&order=kickoff_at${horizon}`);
+        ? `&kickoff_at=lte.${new Date(Date.now() + 11 * 7 * 24 * 3600 * 1000).toISOString()}`
+        : "";
+      const raw = await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&kickoff_at=gte.${nowIso}&select=*&order=kickoff_at${horizon}&limit=${visLoft + 1}`);
+      const afkortet = raw.length > visLoft;
+      const ms = afkortet ? raw.slice(0, visLoft) : raw;
+      setUpcomingTruncated(afkortet);
       const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]))];
       const tms = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
       setUpcomingTeams(Object.fromEntries(tms.map((t) => [t.id, t.name])));
@@ -298,6 +320,16 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
                   ? `${Math.min(8, randomRounds[0].matches.length)} tilfældige kampe fra runden ${randomRounds[0].label} — på tværs af alle turneringer.`
                   : "Henter den kommende runde…"}
               </span>
+            )}
+            {/* Loftet siges HØJT (G35). Uden linjen ser listen komplet ud, og en
+                bruger, der leder efter en kamp langt ude i fremtiden, ville tro,
+                den ikke fandtes — hvilket er den samme fejl som "0 kampe", bare
+                med et andet tal. */}
+            {upcomingTruncated && (typeId === "custom" || typeId === "quick_pick" || typeId === "quick_league") && (
+              <p role="status" style={{ color: C.muted, fontSize: 12, margin: 0 }}>
+                Der er flere kampe, end der kan vises her. Listen er skåret ved de førstkommende —
+                skal du bruge en kamp længere ude i fremtiden, så opret konkurrencen som en periode eller en hel sæson.
+              </p>
             )}
             {typeId === "custom" && (
               <CustomFields method={method} onMethod={setMethod}

@@ -204,9 +204,11 @@ function ResultsPanel({ token, leagues }) {
                 </td>
                 <td>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <ScoreInput value={m.home_score} onChange={(v) => setScore(m.id, "home_score", v)} />
-                    <span style={{ color: C.muted }}>-</span>
-                    <ScoreInput value={m.away_score} onChange={(v) => setScore(m.id, "away_score", v)} />
+                    <ScoreInput label={`Resultat: mål til ${teamsById[m.home_team_id]} mod ${teamsById[m.away_team_id]}`}
+                      value={m.home_score} onChange={(v) => setScore(m.id, "home_score", v)} />
+                    <span aria-hidden="true" style={{ color: C.muted }}>-</span>
+                    <ScoreInput label={`Resultat: mål til ${teamsById[m.away_team_id]} mod ${teamsById[m.home_team_id]}`}
+                      value={m.away_score} onChange={(v) => setScore(m.id, "away_score", v)} />
                   </div>
                 </td>
               </tr>

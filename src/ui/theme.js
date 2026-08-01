@@ -70,8 +70,28 @@ const globalCss = `
   .tiprow:hover, .tiprow:active { background: ${C.surface2}; }
   .livedot { animation: livepulse 1.4s ease-in-out infinite; }
   @keyframes livepulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
-  @media (prefers-reduced-motion: reduce) { .livedot { animation: none; } }
-  button:focus-visible { outline: 2px solid ${C.green}; outline-offset: 2px; }
+  /* Reduceret bevægelse gælder ALLE animationer, ikke kun live-prikken (G22).
+     Spinderen er den hyppigste af dem — den kører på hver eneste indlæsning —
+     og en bruger, der har bedt om ro, har bedt om ro fra den også. Den skjules
+     ikke, kun stilles: ikonet er stadig signalet om, at noget er i gang. */
+  @media (prefers-reduced-motion: reduce) {
+    .livedot, .spin { animation: none; }
+  }
+  /* Fokusringen skal findes på ALT, der kan tabbes til — ikke kun knapper.
+     Et felt, man kan nå med tastaturet, men ikke kan se, man står i, er
+     tastatur-tilgængeligt kun på papiret. */
+  button:focus-visible, input:focus-visible, select:focus-visible,
+  a:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid ${C.green}; outline-offset: 2px;
+  }
+  /* Etiket, der kun findes for skærmlæsere. Bruges hvor et synligt label ville
+     gentage en placeholder eller sprænge en tæt kontrol — se ScoreInput og
+     Auth-skærmen. Clip-metoden frem for display:none, som fjerner elementet
+     fra tilgængelighedstræet og dermed også fra skærmlæseren. */
+  .srOnly {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
 `;
 
 
