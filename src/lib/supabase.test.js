@@ -47,3 +47,42 @@ describe("db.count", () => {
     await expect(db.count("tok", "matches", "season_id=eq.s1")).rejects.toThrow("boom");
   });
 });
+
+// Fejlen skal bære sin HTTP-status videre (G26).
+//
+// Uden den kan en udløbet session ikke skelnes fra et netværkshul, og de to må
+// ikke føre til det samme: den ene skal logge brugeren ud, den anden skal
+// prøve igen. Før august 2026 kastede begge helpers et bart Error med en tekst.
+describe("restFetch/restCount — fejlens status", () => {
+  beforeEach(() => { globalThis.fetch = vi.fn(); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  const fejl = (status, body) => globalThis.fetch.mockResolvedValue({
+    ok: false, status, statusText: "Unauthorized",
+    headers: { get: () => null },
+    json: async () => (body ?? { message: "JWT expired" }),
+  });
+
+  it("sætter status på fejlen fra et REST-kald", async () => {
+    fejl(401);
+    await expect(db.select("tok", "matches")).rejects.toMatchObject({ status: 401, message: "JWT expired" });
+  });
+
+  it("sætter status på fejlen fra et tælle-kald", async () => {
+    fejl(403);
+    await expect(db.count("tok", "matches")).rejects.toMatchObject({ status: 403 });
+  });
+
+  // Alle eksisterende catch-blokke læser `e.message`; en fejl uden JSON-krop må
+  // derfor stadig give en læselig tekst.
+  it("falder tilbage til statusText, når kroppen ikke er JSON", async () => {
+    globalThis.fetch.mockResolvedValue({
+      ok: false, status: 500, statusText: "Internal Server Error",
+      headers: { get: () => null },
+      json: async () => { throw new Error("ikke JSON"); },
+    });
+    await expect(db.select("tok", "matches")).rejects.toMatchObject({
+      status: 500, message: "Internal Server Error",
+    });
+  });
+});
