@@ -13,6 +13,7 @@ import {
   recordRun,
   createRunLogger,
   syncMatchesJob,
+  fetchWithTimeout,
   failJob,
 } from "./_shared.js";
 
@@ -471,5 +472,42 @@ describe("failJob", () => {
     await failJob(null, res, new Error("miljøvariabel mangler"), "sync-live");
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({ error: "miljøvariabel mangler" });
+  });
+});
+
+// Tidsgrænsen på udgående kald (G19).
+//
+// Uden den er standarden "vent for evigt", og en HÆNGENDE leverandør — ikke en
+// fejlende — stopper hele kørslen, indtil Vercel klipper funktionen over. En
+// funktion, der klippes over, når hverken at skrive sin job_runs-række eller at
+// rydde op efter sig, så symptomet er tavshed frem for en fejl.
+describe("fetchWithTimeout", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("sender signalet med, så kaldet kan afbrydes", async () => {
+    const spy = vi.fn(async () => ({ ok: true }));
+    globalThis.fetch = spy;
+    await fetchWithTimeout("https://x.test/a", { method: "POST" }, 50);
+    const [, opts] = spy.mock.calls[0];
+    expect(opts.method).toBe("POST");
+    expect(opts.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  // Fejlteksten ender i job_runs.error og skal kunne læses af et menneske et
+  // halvt år senere. "This operation was aborted" siger hverken hvilken adresse
+  // eller hvor længe — og query-strengen udelades, fordi Sportmonks lægger sin
+  // API-nøgle dér.
+  it("giver en læsbar fejl uden query-strengen, når svaret udebliver", async () => {
+    globalThis.fetch = (url, opts) =>
+      new Promise((_, reject) => {
+        opts.signal.addEventListener("abort", () => reject(opts.signal.reason));
+      });
+    await expect(fetchWithTimeout("https://x.test/kampe?api_token=hemmelig", {}, 20))
+      .rejects.toThrow(/Tidsgrænse: intet svar fra https:\/\/x\.test\/kampe inden for 20 ms/);
+  });
+
+  it("lader andre fejl passere uændret", async () => {
+    globalThis.fetch = async () => { throw new Error("ECONNREFUSED"); };
+    await expect(fetchWithTimeout("https://x.test/a", {}, 50)).rejects.toThrow("ECONNREFUSED");
   });
 });

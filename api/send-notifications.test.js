@@ -12,7 +12,7 @@
 // Plus sendevinduet (A24). Det er den ene regel her, der er umulig at afprøve i
 // drift: fejler den, opdages det ved, at nogen bliver vækket kl. 03.
 import { describe, it, expect } from "vitest";
-import { finishedRoundKeys, lastClosedRoundKey, pushRunVerdict, officialSeasonIds, newCompetitionMessages, hourInZone, dateInZone, withinSendWindow } from "./send-notifications.js";
+import { finishedRoundKeys, lastClosedRoundKey, pushRunVerdict, sendWithBudget, releaseClaims, officialSeasonIds, newCompetitionMessages, hourInZone, dateInZone, withinSendWindow } from "./send-notifications.js";
 
 const kamp = (round_key, home_score, away_score) => ({ id: `${round_key}-${home_score}-${away_score}`, round_key, home_score, away_score });
 
@@ -318,5 +318,119 @@ describe("withinSendWindow", () => {
     const natten = { start: 22, end: 8 };
     expect(withinSendWindow(new Date("2026-08-01T21:00:00Z"), natten)).toBe(true);  // 23 dansk
     expect(withinSendWindow(new Date("2026-08-01T12:00:00Z"), natten)).toBe(false); // 14 dansk
+  });
+});
+
+// G17: en kørsel, der løber tør for tid, må ikke tabe beskeder.
+//
+// Claim-før-send er en ægte race-garanti, men den betyder også, at en claimet
+// række aldrig forsøges igen. Rammer funktionen sin vægurs-grænse midt i
+// loopet, bliver den klippet over — og hver resterende claimet række er tabt
+// for altid, uden at nogen har prøvet at sende den. Skillet mellem FORSØGT og
+// IKKE FORSØGT er hele rettelsen, og det er den, testene her holder fast i.
+describe("sendWithBudget", () => {
+  const beskeder = (n) => Array.from({ length: n }, (_, i) => ({ userId: `u${i}`, key: `k${i}` }));
+
+  it("sender alt, når budgettet rækker", async () => {
+    const sendt = [];
+    const skipped = await sendWithBudget(beskeder(5), {
+      deadlineAt: Number.MAX_SAFE_INTEGER,
+      send: async (m) => { sendt.push(m.key); },
+    });
+    expect(sendt.sort()).toEqual(["k0", "k1", "k2", "k3", "k4"]);
+    expect(skipped).toEqual([]);
+  });
+
+  // Kernen: de uforsøgte skal SAMLES OP, ikke bare forlades. Et `break` i
+  // løkken ville efterlade dem claimet og genskabe præcis den fejl, funktionen
+  // findes for at fjerne.
+  it("samler ALLE uforsøgte op, når uret løber ud undervejs", async () => {
+    let ur = 0;
+    const sendt = [];
+    const skipped = await sendWithBudget(beskeder(10), {
+      deadlineAt: 3,
+      concurrency: 1,
+      now: () => ur,
+      send: async (m) => { sendt.push(m.key); ur++; },
+    });
+    expect(sendt).toEqual(["k0", "k1", "k2"]);
+    expect(skipped.map((m) => m.key)).toEqual(["k3", "k4", "k5", "k6", "k7", "k8", "k9"]);
+  });
+
+  it("taber ingen besked: sendte plus uforsøgte er altid det hele", async () => {
+    let ur = 0;
+    const sendt = [];
+    const alle = beskeder(20);
+    const skipped = await sendWithBudget(alle, {
+      deadlineAt: 5,
+      concurrency: 4,
+      now: () => ur,
+      send: async (m) => { sendt.push(m.key); ur++; },
+    });
+    expect(sendt.length + skipped.length).toBe(alle.length);
+    expect(new Set([...sendt, ...skipped.map((m) => m.key)]).size).toBe(alle.length);
+  });
+
+  // En besked, hvis afsendelse fejlede, tæller som FORSØGT og må ikke frigives:
+  // vi ved ikke, om den nåede frem, og en dublet er værre end en manglende
+  // besked. `send` fanger derfor selv sine fejl — den kaster aldrig herop.
+  it("regner en forsøgt besked som forsøgt, også når afsendelsen gik galt", async () => {
+    const skipped = await sendWithBudget(beskeder(3), {
+      deadlineAt: Number.MAX_SAFE_INTEGER,
+      send: async () => { /* kalderen har allerede fanget fejlen */ },
+    });
+    expect(skipped).toEqual([]);
+  });
+
+  it("kører flere beskeder ad gangen", async () => {
+    let samtidige = 0;
+    let top = 0;
+    await sendWithBudget(beskeder(12), {
+      deadlineAt: Number.MAX_SAFE_INTEGER,
+      concurrency: 4,
+      send: async () => {
+        samtidige++; top = Math.max(top, samtidige);
+        await new Promise((r) => setTimeout(r, 1));
+        samtidige--;
+      },
+    });
+    expect(top).toBeGreaterThan(1);
+    expect(top).toBeLessThanOrEqual(4);
+  });
+
+  it("tåler en tom liste", async () => {
+    expect(await sendWithBudget([], { deadlineAt: 0, send: async () => {} })).toEqual([]);
+  });
+});
+
+describe("releaseClaims", () => {
+  it("sletter præcis de par, der ikke blev forsøgt", async () => {
+    const kald = [];
+    const sb = async (path, opts) => { kald.push({ path, opts }); return null; };
+    const n = await releaseClaims(sb, [{ userId: "u1", key: "result:2026-08-04" }]);
+
+    expect(n).toBe(1);
+    expect(kald[0].opts.method).toBe("DELETE");
+    // Nøglen citeres, fordi den indeholder et kolon, som PostgREST ellers ville
+    // læse som syntaks — og filtret er par-vis, så u1's nøgle ikke kan slette
+    // u2's række.
+    expect(kald[0].path).toBe(
+      `/rest/v1/notification_log?or=(and(user_id.eq.u1,key.eq.${encodeURIComponent('"result:2026-08-04"')}))`
+    );
+  });
+
+  it("deler store mængder op, så URL'en ikke bliver for lang", async () => {
+    const kald = [];
+    const sb = async (path) => { kald.push(path); return null; };
+    const mange = Array.from({ length: 120 }, (_, i) => ({ userId: `u${i}`, key: `k${i}` }));
+    expect(await releaseClaims(sb, mange, 50)).toBe(120);
+    expect(kald).toHaveLength(3);
+  });
+
+  // Frigivelsen må aldrig vælte kørslen: fejler den, står vi præcis dér, hvor
+  // vi var før rettelsen — ikke værre.
+  it("kaster ikke, når sletningen fejler", async () => {
+    const sb = async () => { throw new Error("boom"); };
+    await expect(releaseClaims(sb, [{ userId: "u1", key: "k" }])).resolves.toBe(0);
   });
 });

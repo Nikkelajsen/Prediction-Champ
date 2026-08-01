@@ -19,6 +19,8 @@
 //
 // Miljøvariabel: FOOTBALLDATA_TOKEN
 
+import { fetchWithTimeout } from "../_shared.js";
+
 const BASE = "https://api.football-data.org/v4";
 
 // Præfikset på alle id'er fra denne leverandør.
@@ -141,7 +143,7 @@ export const footballdata = {
 
   // Hele sæsonen i ét kald. `apiLeagueId` er turneringskoden ("PL", "CL",
   // "BL1", "SA", "PD") — den samme text-kolonne som Sportmonks' talværdier.
-  async fetchSeasonFixtures({ apiLeagueId, apiSeasonId, token, fetchImpl = fetch }) {
+  async fetchSeasonFixtures({ apiLeagueId, apiSeasonId, token, fetchImpl = fetchWithTimeout }) {
     const data = await fdFetch(
       `/competitions/${apiLeagueId}/matches?season=${apiSeasonId}`,
       token,
@@ -164,7 +166,7 @@ export const footballdata = {
   // kom tom hjem — altså højst ét ekstra kald pr. kørsel, og kun mens
   // turneringen alligevel ikke leverer noget. Rate limiten (10/minut) mærker
   // det ikke.
-  async describeEmptySeason({ apiLeagueId, apiSeasonId, token, fetchImpl = fetch }) {
+  async describeEmptySeason({ apiLeagueId, apiSeasonId, token, fetchImpl = fetchWithTimeout }) {
     const data = await fdFetch(`/competitions/${apiLeagueId}`, token, fetchImpl);
     const requested = String(apiSeasonId);
     const current = startYear(data.currentSeason);
@@ -207,7 +209,7 @@ export const footballdata = {
   // på gratis-planen, så vi henter vinduet omkring de kampe, vi allerede ved
   // ligger dér, og filtrerer selv. Det er ÉT kald uanset hvor mange
   // turneringer der spiller — modsat Sportmonks, der tager 40 id'er pr. kald.
-  async fetchLive({ providerIds, kickoffs = [], token, fetchImpl = fetch }) {
+  async fetchLive({ providerIds, kickoffs = [], token, fetchImpl = fetchWithTimeout }) {
     const wanted = new Set(providerIds.map(String));
     if (!wanted.size) return new Map();
 
