@@ -35,6 +35,8 @@ pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor
 eller en linje i "Forkastede ideer".
 
 - `rules.openDaysBefore` ligger stadig i gamle `competitions`-rækker, men læses ikke længere — ryddes sammen med `G3`, hvis `rules` nogensinde ryddes op
+- `StateChip` i `ui/components.jsx` har en død ternær: `background: tone ? "transparent" : "transparent"` — enten skulle en tone have en svag fyldfarve, eller også skal linjen bare være `"transparent"`
+- Mål om "Anbefalet" på Sæson-kortet flytter fordelingen — `competition_created` bærer allerede `metadata.mode`, så før/efter kan aflæses uden ny instrumentering
 
 ---
 

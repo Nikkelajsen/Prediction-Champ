@@ -8,61 +8,80 @@
 // Ugens kupon er `random` med et fast preset.
 import { roundLabel } from "./scoring.js";
 
-// Rækkefølgen ER varigheds-spørgsmålet (I14: "varighed før turnering"):
-// kortene står kort → langt, så det første valg samtidig svarer på, hvor
-// længe konkurrencen skal leve.
+// Rækkefølgen ER varigheds-spørgsmålet (I14: "varighed før turnering"), men
+// den står langt → kort (vendt 1. august 2026): det øverste kort er dét,
+// produktet anbefaler, og Sæson er den type, der binder en liga sammen en hel
+// sæson. Sæson og Favorithold står sammen øverst, fordi de er de eneste to,
+// der løber sæsonen ud OG vokser af sig selv, når nye kampe skemalægges
+// (efterfyldnings-regel 1) — Favorithold er derfor det nærmeste alternativ
+// under det anbefalede: "hele sæsonen, bare ikke alle kampe". Custom er sidst
+// som escape-hatch.
 //
+//   duration    varigheds-mærkaten på kortet. Den findes, fordi forskellen på
+//               typerne er to akser — HVILKE kampe og HVOR LÆNGE — og den
+//               anden akse skal kunne aflæses uden at læse beskrivelsen.
+//   recommended sætter "Anbefalet"-mærket. Præcis ét kort må bære det.
 //   multiRound  styrer kårings-tilvalget (I13): for en én-rundes konkurrence
 //               ER konkurrencevinderen ugens bedste, så tilvalget skjules.
 //   presets     udfyldes i skærmens state, når kortet vælges — de er
 //               startværdier, ikke låste valg (undtagen Ugens kupon, der
 //               netop er "klar med to tryk" og ingen opfølgning har).
+//
+// Ikonet pr. korttype bor IKKE her: lucide-ikoner er React-komponenter, og
+// denne fil skal kunne unit-testes uden render. Se ICONS i TypeGallery.jsx.
 const CREATE_TYPES = [
   {
-    id: "weekly_coupon",
-    mode: "random",
-    title: "Ugens kupon",
-    subtitle: "Én kupon for den kommende runde, alle turneringer. Klar med to tryk.",
-    multiRound: false,
-    presets: { count: 8, rounds: 1, allLeagues: true },
-  },
-  {
-    id: "quick_pick",
-    mode: "random",
-    title: "Quick Pick",
-    subtitle: "Tilfældige kampe fra den nærmeste runde. Hurtig at gå til.",
-    multiRound: false,
-    presets: { count: 6, rounds: 1 },
-  },
-  {
-    id: "quick_league",
-    mode: "random",
-    title: "Quick League",
-    subtitle: "Tilfældige kampe i flere runder frem — en lille liga over nogle uger.",
+    id: "season",
+    mode: "full_season",
+    title: "Sæson",
+    duration: "Hele sæsonen",
+    subtitle: "Alle kampe i én eller flere turneringer. Nye kampe kommer automatisk med.",
+    recommended: true,
     multiRound: true,
-    presets: { count: 8, rounds: 6 },
+    presets: {},
   },
   {
     id: "team",
     mode: "team",
     title: "Favorithold",
-    subtitle: "Følg dine hold — ét eller flere, også på tværs af turneringer.",
+    duration: "Hele sæsonen",
+    subtitle: "Kun dine holds kampe. Vælg ét eller flere hold, også på tværs af turneringer.",
     multiRound: true,
     presets: {},
   },
   {
-    id: "season",
-    mode: "full_season",
-    title: "Sæson",
-    subtitle: "Hele sæsonen i én eller flere turneringer. Den klassiske.",
+    id: "quick_league",
+    mode: "random",
+    title: "Quick League",
+    duration: "Nogle uger",
+    subtitle: "Tilfældige kampe i hver runde, fx 6 runder frem.",
     multiRound: true,
-    presets: {},
+    presets: { count: 8, rounds: 6 },
+  },
+  {
+    id: "quick_pick",
+    mode: "random",
+    title: "Quick Pick",
+    duration: "Én runde",
+    subtitle: "Tilfældige kampe fra næste runde. Du vælger antal og turneringer.",
+    multiRound: false,
+    presets: { count: 6, rounds: 1 },
+  },
+  {
+    id: "weekly_coupon",
+    mode: "random",
+    title: "Ugens kupon",
+    duration: "Én runde",
+    subtitle: "8 tilfældige kampe fra næste runde, alle turneringer. Klar med to tryk.",
+    multiRound: false,
+    presets: { count: 8, rounds: 1, allLeagues: true },
   },
   {
     id: "custom",
     mode: "custom",
     title: "Custom",
-    subtitle: "Du bestemmer alt: håndpluk kampe eller tag en periode.",
+    duration: "Du bestemmer",
+    subtitle: "Håndpluk kampene selv, eller tag alle kampe i en periode.",
     multiRound: true,
     presets: {},
   },

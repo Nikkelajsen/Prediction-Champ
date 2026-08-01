@@ -22,17 +22,35 @@ bag en "Flere valg"-fold.
 
 Første skærm er "Hvad vil I spille?" med seks kort; et valg viser kun dén types
 1–3 felter plus de fælles (navn, liga, kårings-tilvalg). Rækkefølgen er
-varigheds-spørgsmålet — kort → langt — så det første valg samtidig svarer på,
-hvor længe konkurrencen lever.
+varigheds-spørgsmålet, så det første valg samtidig svarer på, hvor længe
+konkurrencen lever.
 
-| Kort | Mode + params | Opfølgning |
-|---|---|---|
-| **Ugens kupon** | `random`, preset count=8, rounds=1, alle turneringer | ingen — navnet forudfyldes "Ugens kupon <runde-label>" (det ENESTE kort med forudfyldt navn) |
-| **Quick Pick** | `random`, rounds=1 | antal kampe · turneringer |
-| **Quick League** | `random`, `mode_params.rounds` 2–10 (default 6) | runder · kampe **pr. runde** · turneringer |
-| **Favorithold** | `team`, evt. flere hold: `mode_params.team_ids` + `tournaments` | hold på tværs af turneringer (grupperet dropdown + chips) |
-| **Sæson** | `full_season` | turnerings-chips med kampantal |
-| **Custom** | `custom` (håndpluk) eller `time_range` (periode) | metode · kampvælger ELLER datointerval + turnering |
+> **Rettet efter levering (1. august 2026).** Udkastet stillede kortene
+> **kort → langt** med Ugens kupon øverst og beskrev rækkefølgen som neutral
+> varighed. Den er nu vendt til **langt → kort**, og Sæson er markeret
+> **Anbefalet** — rækkefølgen er dermed ikke længere neutral, men en anbefaling:
+> det øverste kort er dét, produktet vil have flest i. Sæson og Favorithold står
+> sammen øverst, fordi de er de eneste to, der løber sæsonen ud OG vokser af sig
+> selv (efterfyldnings-regel 1); Favorithold er derfor det nærmeste alternativ
+> under det anbefalede. Tabellen nedenfor står i den leverede rækkefølge.
+>
+> Samme ombæring gav hvert kort et **ikon** og en **varigheds-mærkat** ("Hele
+> sæsonen" / "Nogle uger" / "Én runde" / "Du bestemmer") over beskrivelsen.
+> Begrundelse: typerne adskiller sig på to akser — *hvilke kampe* og *hvor
+> længe* — og udkastets beskrivelser var varianter af hinanden, så begge akser
+> skulle udledes af prosaen. Mærkaten er den anden akse gjort aflæselig. Felterne
+> `duration` og `recommended` er ren data i `CREATE_TYPES`; ikonet bor i
+> `TypeGallery.jsx` (`ICONS`), fordi `createTypes.js` skal kunne testes uden
+> render.
+
+| Kort | Mærkat | Mode + params | Opfølgning |
+|---|---|---|---|
+| **Sæson** (Anbefalet) | Hele sæsonen | `full_season` | turnerings-chips med kampantal |
+| **Favorithold** | Hele sæsonen | `team`, evt. flere hold: `mode_params.team_ids` + `tournaments` | hold på tværs af turneringer (grupperet dropdown + chips) |
+| **Quick League** | Nogle uger | `random`, `mode_params.rounds` 2–10 (default 6) | runder · kampe **pr. runde** · turneringer |
+| **Quick Pick** | Én runde | `random`, rounds=1 | antal kampe · turneringer |
+| **Ugens kupon** | Én runde | `random`, preset count=8, rounds=1, alle turneringer | ingen — navnet forudfyldes "Ugens kupon <runde-label>" (det ENESTE kort med forudfyldt navn) |
+| **Custom** | Du bestemmer | `custom` (håndpluk) eller `time_range` (periode) | metode · kampvælger ELLER datointerval + turnering |
 
 Vilkår, der bevidst er ført videre uændret: liga-feltet er aldrig skjult
 (liga-løs må ikke ske tavst), tomme turneringer kan ikke vælges (frossen-liste-
