@@ -329,7 +329,15 @@ Deploy: Vercel auto-deployer ved hver commit til `main`. Hver branch får desude
 **`vercel.json` (august 2026, `G47`).** Filen fandtes ikke før, så tre ting blev afgjort af platformens standardvalg frem for af et valg:
 
 * `maxDuration: 60` for `api/*.js`. Standarden er 10 sekunder, og den var det loft, notifikations-jobbet reelt kørte på — se `SEND_BUDGET_MS` i `api/send-notifications.js` (afsnit 16), som skal holde sig **under** dette tal, så der er tid til oprydningen. **De to tal hænger sammen og skal ændres sammen.** 60 s er Hobby-planens maksimum.
-* `regions: ["dub1"]` (Dublin, AWS eu-west-1) — samme region som Supabase-projektet. Funktionerne kørte som standard i US-East, så hver DB-rundtur krydsede Atlanten; det er mærkbart i et notifikations-loop med mange rundture. **Antagelsen om Supabase-regionen er ikke verificeret fra repoet** — kan den ikke passe, er det denne linje, der skal rettes.
+* `regions: ["dub1"]` (Dublin, AWS eu-west-1) — samme region som Supabase-projektet, **verificeret 1. august 2026** mod projektets forside i Supabase ("Primary Database · West EU (Ireland) · eu-west-1"). Funktionerne kørte som standard i US-East, så hver DB-rundtur krydsede Atlanten; det er mærkbart i et notifikations-loop med mange rundture.
+
+  **Feltet kan ikke aflæses på Settings → Functions.** Den side viser projektets *standard*-region, og `vercel.json` overskriver den uden at ændre siden — så "Washington, D.C." dér er ikke et tegn på, at override\'et ikke virkede. Tre steder svarer rigtigt: det enkelte deploys funktions-liste, en invocation-række i Logs, og hurtigst af alt svar-headeren:
+
+  ```
+  curl -sI "https://<app>/api/send-notifications?action=vapidKey" | grep -i x-vercel-id
+  ```
+
+  `x-vercel-id` bærer regionskoderne. `dub1` = override\'et tog effekt; kun `iad1` = det gjorde ikke.
 * Cache-headere på `sw.js` og `manifest.json` (`max-age=0, must-revalidate`). En cachet service worker kan ellers holde en gammel version i live, længe efter et deploy.
 
 JSON tillader ikke kommentarer, så begrundelsen står her og ingen andre steder. Ændrer du filen, så ret dette afsnit i samme ombæring.
