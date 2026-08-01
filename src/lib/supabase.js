@@ -1,4 +1,5 @@
-// Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
+// REST-klienten mod Supabase. Ingen SDK — kun `fetch` plus de få helpers,
+// resten af appen har brug for: db-opslag, auth-endpoints og den gemte session.
 // ---------- Supabase config ----------
 // Produktionsværdierne er hårdkodede fallbacks (offentlig publishable-nøgle,
 // beskyttet af RLS — by design). Sæt VITE_SUPABASE_URL/VITE_SUPABASE_KEY
@@ -120,4 +121,4 @@ function clearSession() {
   try { localStorage.removeItem(SESSION_KEY); } catch {}
 }
 
-export { SUPABASE_URL, SUPABASE_KEY, restError, isAborted, restFetch, restCount, db, auth, saveSession, loadSession, clearSession };
+export { restError, isAborted, restFetch, restCount, db, auth, saveSession, loadSession, clearSession };

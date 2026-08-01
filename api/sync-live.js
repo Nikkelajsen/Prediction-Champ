@@ -55,8 +55,14 @@ export default async function handler(req, res) {
 
     // API-nøglerne tjekkes ikke her, men pr. leverandør nedenfor — se
     // kommentaren i api/sync-matches.js.
+    // Svaret navngiver IKKE variablerne (G38). Tjekket ligger nødvendigvis FØR
+    // autorisationen — uden dem kan vi ikke engang slå kalderen op — så teksten
+    // ville ellers kortlægge backendens opsætning for enhver uautentificeret
+    // kaldende. Navnene er ikke hemmelige, men de er gratis rekognoscering, og
+    // de hører hjemme dér, hvor kun vi kan læse dem: i Vercels logs.
     if (!SUPABASE_URL || !SERVICE_KEY) {
-      return res.status(500).json({ error: "Miljøvariabler mangler i Vercel-projektet (SUPABASE_URL eller SUPABASE_SERVICE_ROLE_KEY)" });
+      console.error("[opsætning] SUPABASE_URL eller SUPABASE_SERVICE_ROLE_KEY mangler i miljøet.");
+      return res.status(500).json({ error: "Serveren er ikke sat rigtigt op." });
     }
 
     const sb = createSb(SUPABASE_URL, SERVICE_KEY);

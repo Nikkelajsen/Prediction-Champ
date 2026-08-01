@@ -14,6 +14,7 @@ import {
   createRunLogger,
   syncMatchesJob,
   fetchWithTimeout,
+  isUuid,
   failJob,
 } from "./_shared.js";
 
@@ -591,5 +592,32 @@ describe("createRunLogger — versionsstempel", () => {
     // resumé til `{}`, og de to ser ens ud i driftsloggen uden at være det.
     expect(res.body).toBe(body);
     expect(JSON.parse(sb.mock.calls[0][1].body).detail).toEqual({ written: 1 });
+  });
+});
+
+// G18: `leagueId` kommer fra query-strengen og interpoleres i PostgREST-URL'er,
+// der kaldes med SERVICE-NØGLEN — altså uden om RLS. Det er ikke SQL-injektion,
+// men en kaldende med sync-hemmeligheden kunne føje ekstra PostgREST-parametre
+// til og dermed omforme forespørgslen. Formatet er den rigtige kontrol: kolonnen
+// ER en uuid, så alt andet er alligevel en fejl.
+describe("isUuid", () => {
+  it("godkender et rigtigt uuid, uanset store og små bogstaver", () => {
+    expect(isUuid("11111111-2222-3333-4444-555555555555")).toBe(true);
+    expect(isUuid("A1B2C3D4-E5F6-7890-ABCD-EF1234567890")).toBe(true);
+  });
+
+  // Netop de former, der ville kunne føje en parameter til URL'en.
+  it("afviser en værdi med noget hængende bagefter", () => {
+    expect(isUuid("11111111-2222-3333-4444-555555555555&limit=1")).toBe(false);
+    expect(isUuid("11111111-2222-3333-4444-555555555555&order=id.desc")).toBe(false);
+    expect(isUuid("*")).toBe(false);
+  });
+
+  it("afviser tomt, forkert længde og ikke-tekst", () => {
+    expect(isUuid("")).toBe(false);
+    expect(isUuid("1111-2222")).toBe(false);
+    expect(isUuid(undefined)).toBe(false);
+    expect(isUuid(null)).toBe(false);
+    expect(isUuid(12345)).toBe(false);
   });
 });

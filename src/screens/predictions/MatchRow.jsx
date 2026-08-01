@@ -226,4 +226,4 @@ function MatchRow({
   );
 }
 
-export { MatchRow, TeamNames, ROW_COLS, ROW_GAP, rowGrid, cellCenter, scoreChip, NAME_STEPS };
+export { MatchRow, TeamNames, ROW_COLS, ROW_GAP };

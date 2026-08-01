@@ -70,4 +70,4 @@ async function disablePush(token) {
   await sub.unsubscribe();
 }
 
-export { isPushSupported, needsHomeScreenInstall, registerServiceWorker, getExistingSubscription, enablePush, disablePush };
+export { isPushSupported, registerServiceWorker, getExistingSubscription, enablePush, disablePush };

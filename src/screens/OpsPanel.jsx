@@ -272,4 +272,4 @@ function OpsPanel({ token, leagues }) {
 }
 
 export default OpsPanel;
-export { JobCard, PreviewCard, OutboxPreview };
+export { PreviewCard, OutboxPreview };

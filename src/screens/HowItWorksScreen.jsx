@@ -1,4 +1,5 @@
-// Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
+// "Sådan virker det": reglerne forklaret for brugeren — point, låsning,
+// runder, Championship og installation. Bærer også appens versionsnummer.
 import { C, font } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
 import InstallGuide from "./InstallGuide.jsx";

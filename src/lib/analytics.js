@@ -384,11 +384,4 @@ function summarizeDiagnoses(diagnosed) {
   return out;
 }
 
-export {
-  logEvent, logEventOnce,
-  loadAnalyticsHealth, loadAnalyticsEngagement, loadAnalyticsLeagueHealth, loadAnalyticsRetention,
-  loadAnalyticsFunnel, loadAnalyticsStories,
-  diagnoseLeague, diagnoseLeagues, summarizeDiagnoses, LEAGUE_THRESHOLDS, LEAGUE_STATES,
-  funnelRow, funnelSteps, biggestDrop, fmtMinutes, FUNNEL_STEPS, FUNNEL_STALLS,
-  storyRuleRows, STORY_RULES,
-};
+export { logEvent, logEventOnce, loadAnalyticsHealth, loadAnalyticsEngagement, loadAnalyticsLeagueHealth, loadAnalyticsRetention, loadAnalyticsFunnel, loadAnalyticsStories, diagnoseLeague, diagnoseLeagues, summarizeDiagnoses, LEAGUE_THRESHOLDS, funnelRow, funnelSteps, biggestDrop, fmtMinutes, FUNNEL_STALLS, storyRuleRows, STORY_RULES };

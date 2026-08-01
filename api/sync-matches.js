@@ -15,7 +15,7 @@
 //   SPORTMONKS_TOKEN      (kræves kun af sportmonks-ligaer)
 //   FOOTBALLDATA_TOKEN    (kræves kun af footballdata-ligaer)
 
-import { createSb, isAuthorized, createRunLogger, failJob, syncMatchesJob } from "./_shared.js";
+import { createSb, isAuthorized, createRunLogger, failJob, isUuid, syncMatchesJob } from "./_shared.js";
 import { getProvider, providerToken } from "./_providers/index.js";
 import { backfillCompetitionMatches } from "./_backfill.js";
 
@@ -96,8 +96,14 @@ export default async function handler(req, res) {
     // ville et krav om SPORTMONKS_TOKEN blokere en football-data-liga, der
     // aldrig bruger den. Nøglen hentes af providerToken() først, når vi ved
     // hvilken datakilde ligaen har — og fejler lige så tydeligt dér.
+    // Svaret navngiver IKKE variablerne (G38). Tjekket ligger nødvendigvis FØR
+    // autorisationen — uden dem kan vi ikke engang slå kalderen op — så teksten
+    // ville ellers kortlægge backendens opsætning for enhver uautentificeret
+    // kaldende. Navnene er ikke hemmelige, men de er gratis rekognoscering, og
+    // de hører hjemme dér, hvor kun vi kan læse dem: i Vercels logs.
     if (!SUPABASE_URL || !SERVICE_KEY) {
-      return res.status(500).json({ error: "Miljøvariabler mangler i Vercel-projektet (SUPABASE_URL eller SUPABASE_SERVICE_ROLE_KEY)" });
+      console.error("[opsætning] SUPABASE_URL eller SUPABASE_SERVICE_ROLE_KEY mangler i miljøet.");
+      return res.status(500).json({ error: "Serveren er ikke sat rigtigt op." });
     }
 
     const sb = createSb(SUPABASE_URL, SERVICE_KEY);
@@ -128,6 +134,10 @@ export default async function handler(req, res) {
     // Et job uden leagueId er et forkert opsat cron-job, ikke en tilfældig fejl —
     // derfor tælles det som en fejlet kørsel, så det dukker op i fejlserien.
     if (!leagueId) return run.fail(res, 400, { error: "Mangler leagueId query-parameter" }, "Mangler leagueId query-parameter");
+    // Formatet tjekkes, FØR værdien interpoleres i en service-role-URL (G18).
+    // Et forkert format er altid en fejl — kolonnen er en uuid — så afvisningen
+    // koster ingen gyldige kald, og der er dermed intet at escape længere nede.
+    if (!isUuid(leagueId)) return run.fail(res, 400, { error: "leagueId er ikke et gyldigt UUID" }, `leagueId er ikke et gyldigt UUID: ${String(leagueId).slice(0, 100)}`);
     // Fra og med her har kørslen en turnering at høre til (G44). Navnet sættes
     // FØR liga-opslaget og ikke efter: peger jobbet på en liga, der ikke findes,
     // er det netop den slags fejl, der skal kunne spores til ét bestemt job —

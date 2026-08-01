@@ -1,4 +1,5 @@
-// Auto-genereret modul — udtrukket fra den tidligere monolitiske App.jsx.
+// Admin-skærmen (kun for is_admin): kampe, resultater, brugerstatistik,
+// Analytics og Drift. Hentes først, når den åbnes — se lazy() i MainApp.
 import { useState, useEffect, useMemo } from "react";
 import { RefreshCw, Loader2 } from "lucide-react";
 import { db, restFetch } from "../lib/supabase.js";

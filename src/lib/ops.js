@@ -194,15 +194,4 @@ function fmtSince(ms) {
   return `${Math.floor(t / 24)} d siden`;
 }
 
-export {
-  BASE_JOBS,
-  expectedJobs,
-  SYNC_MATCHES_KADENCE,
-  SYNC_MATCHES_SILENCE_MS,
-  loadJobHealth,
-  mergeJobHealth,
-  previewNotifications,
-  summarizeOutbox,
-  STATE_LABEL,
-  fmtSince,
-};
+export { BASE_JOBS, expectedJobs, loadJobHealth, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince };

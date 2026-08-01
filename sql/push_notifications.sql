@@ -26,7 +26,19 @@ create index if not exists push_subscriptions_user_idx
   on public.push_subscriptions (user_id);
 
 -- Log over sendte beskeder, så samme besked aldrig sendes to gange.
--- key-format: 'deadline:<round_key>:<dato>' eller 'result:<round_key>'.
+--
+-- KEY-FORMAT (rettet august 2026, G12 — beskrivelsen her var forkert):
+--   'deadline:<dato>'          maks. én påmindelse pr. bruger pr. DAG
+--   'result:<round_key>'       rundens resultat, én pr. runde
+--   'newcomp:<competition_id>' ny konkurrence i din liga (B5)
+--
+-- Deadline-nøglen stod her som 'deadline:<round_key>:<dato>', hvilket koden
+-- aldrig har skrevet. Nøglen ER dedup-garantien, så en forkert beskrivelse af
+-- den er en fælde for enhver, der regner baglæns fra kommentaren: man ville tro,
+-- der kunne sendes én påmindelse pr. runde pr. dag, og med `A21`s per-kamp-lås
+-- er en runde i gang i dagevis. Den kanoniske kilde er
+-- api/send-notifications.js; analytics_dashboard.sql beskriver den korrekt.
+--
 -- Ingen policies: kun serverfunktionen (service role) læser/skriver.
 create table if not exists public.notification_log (
   user_id uuid not null references auth.users (id) on delete cascade,
