@@ -17,6 +17,7 @@
 
 import { createSb, isAuthorized, createRunLogger, failJob } from "./_shared.js";
 import { getProvider, providerToken } from "./providers/index.js";
+import { backfillCompetitionMatches } from "./backfill.js";
 
 export default async function handler(req, res) {
   // Sættes så snart autorisationen er i hus. Ligger uden for try'et, fordi
@@ -222,6 +223,13 @@ export default async function handler(req, res) {
       });
     }
 
+    // Efterfyld eksisterende konkurrencer med de kampe, der er kommet til siden
+    // de blev oprettet (A20). Skal ligge EFTER upserten — det er først dér, de
+    // nye kampe har fået et id. Reglerne og hvorfor de er, som de er, står i
+    // api/backfill.js; den kaster aldrig, så en fejl her kan ikke vælte en sync,
+    // der ellers gik godt.
+    const backfill = dryRun ? { added: 0, competitions: 0 } : await backfillCompetitionMatches(sb, seasonId);
+
     // run.ok og ikke res.json: en vellykket kørsel SKAL skrive sin række i
     // job_runs. Stod her tidligere som et bart res.status(200).json(), hvilket
     // betød, at kun fejlende kørsler blev logget — Admin → Drift kunne aldrig
@@ -237,6 +245,13 @@ export default async function handler(req, res) {
       // Ikke en fejl, men skal kunne aflæses: står tallet stille hen over en
       // CL-lodtrækning, henter syncen ikke de nye kampe.
       undrawn,
+      // A20: hvor mange kampe der blev føjet til eksisterende konkurrencer.
+      // Hører i detail'en af samme grund som de øvrige tal — en efterfyldning,
+      // der tavst holder op med at virke, ville ellers først vise sig som en
+      // konkurrence, der manglede sit slutspil.
+      backfilled: backfill.added,
+      backfilledCompetitions: backfill.competitions,
+      ...(backfill.error ? { backfillError: backfill.error } : {}),
       unmatched: [...unmatched],
     });
   } catch (e) {

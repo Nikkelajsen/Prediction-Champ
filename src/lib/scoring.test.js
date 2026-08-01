@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockedRoundsOf, buildRoundLockMap, roundLockKey, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockedRoundsOf, buildRoundLockMap, roundLockKey, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 const RULES = { exact: 3, outcome: 1 };
 
@@ -63,15 +63,18 @@ describe("groupIntoRounds", () => {
   });
 });
 
-describe("stageOptionLabel / stageBadgeLabel", () => {
+// Fase-afgrænsning ved oprettelse er fjernet (A20, juli 2026), og med den
+// stageOptionLabel og filterByStages. STAGE_LABELS og badgen består: en kamp
+// viser stadig, om den hører til et slutspil.
+describe("stageBadgeLabel", () => {
   it("oversætter kendte Sportmonks-stages til dansk", () => {
-    expect(stageOptionLabel("Championship Round")).toBe("Mesterskabsspil");
-    expect(stageOptionLabel("Relegation Round")).toBe("Nedrykningsspil");
-    expect(stageOptionLabel("Regular Season")).toBe("Grundspil");
+    expect(STAGE_LABELS["Championship Round"]).toBe("Mesterskabsspil");
+    expect(STAGE_LABELS["Relegation Round"]).toBe("Nedrykningsspil");
+    expect(STAGE_LABELS["Regular Season"]).toBe("Grundspil");
   });
 
   it("falder tilbage til det rå navn for ukendte stages", () => {
-    expect(stageOptionLabel("Some New Stage")).toBe("Some New Stage");
+    expect(stageBadgeLabel("Some New Stage")).toBe("Some New Stage");
   });
 
   it("skjuler grundspil-badge, men viser slutspils-stages", () => {
@@ -84,33 +87,9 @@ describe("stageOptionLabel / stageBadgeLabel", () => {
   // Scotland Premiership (turnering #2) kalder faserne noget andet end
   // Superligaen — og noget andet fra sæson til sæson: 2026/2027 hedder
   // grundspillet "1st Phase", 2025/2026 hed det "Regular Season".
-  it("oversætter Scotland Premierships faser", () => {
-    expect(stageOptionLabel("1st Phase")).toBe("Grundspil");
-    expect(stageOptionLabel("2nd Phase")).toBe("Slutspil");
-  });
-
   it("skjuler grundspils-badgen, uanset hvad turneringen kalder den på engelsk", () => {
     expect(stageBadgeLabel("1st Phase")).toBeNull();
     expect(stageBadgeLabel("2nd Phase")).toBe("Slutspil");
-  });
-});
-
-describe("filterByStages", () => {
-  const ms = [
-    { id: "a", stage_name: "Regular Season" },
-    { id: "b", stage_name: "Championship Round" },
-    { id: "c", stage_name: "Relegation Round" },
-    { id: "d", stage_name: null },
-  ];
-
-  it("tom/undefined liste ⇒ alle kampe (også uden stage_name)", () => {
-    expect(filterByStages(ms, [])).toHaveLength(4);
-    expect(filterByStages(ms, undefined)).toHaveLength(4);
-  });
-
-  it("filtrerer til de valgte stages", () => {
-    expect(filterByStages(ms, ["Championship Round"]).map((m) => m.id)).toEqual(["b"]);
-    expect(filterByStages(ms, ["Championship Round", "Relegation Round"]).map((m) => m.id)).toEqual(["b", "c"]);
   });
 });
 

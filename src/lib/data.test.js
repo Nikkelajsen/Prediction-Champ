@@ -546,7 +546,7 @@ describe("createCompetition", () => {
     setup();
     const res = await createCompetition("token", "u1", {
       name: "Superligaen 2026/27", groupId: "g1", mode: "full_season",
-      tournaments: [{ leagueId: "L1", seasonId: "S1", availableStages: ["Grundspil", "Mesterskabsspil"], selectedStages: ["Grundspil", "Mesterskabsspil"] }],
+      tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     });
 
     expect(insertedRow("competitions")).toMatchObject({
@@ -557,25 +557,27 @@ describe("createCompetition", () => {
     expect(res.matchCount).toBe(2);
   });
 
-  it("et ægte stage-delmængdevalg gemmes i mode_params og filtrerer kampene", async () => {
+  // A20: fase-afgrænsning findes ikke længere. "Hel sæson" betyder hele
+  // sæsonen, også mesterskabsspillet — og `mode_params.stages` skrives aldrig,
+  // fordi feltet nu er efterfyldningens mærkat for "afgrænset i hånden".
+  it("tager alle faser med og skriver ALDRIG stages i mode_params", async () => {
     setup();
     await createCompetition("token", "u1", {
-      name: "Kun grundspil", mode: "full_season",
-      tournaments: [{ leagueId: "L1", seasonId: "S1", availableStages: ["Grundspil", "Mesterskabsspil"], selectedStages: ["Grundspil"] }],
+      name: "Hele sæsonen", mode: "full_season",
+      tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     });
 
-    expect(insertedRow("competitions").mode_params).toEqual({ stages: ["Grundspil"] });
-    expect(matchRows().map((r) => r.match_id)).toEqual(["m3"]); // m4 er mesterskabsspil
+    expect(insertedRow("competitions").mode_params).toEqual({});
+    expect(matchRows().map((r) => r.match_id)).toEqual(["m3", "m4"]); // m4 er mesterskabsspil
   });
 
-  it("dækker stage-valget ALLE stages, filtreres der ikke", async () => {
-    // Ellers ville kampe uden stage_name fra ældre sync tavst blive droppet.
+  it("stage-felter i spec'en ignoreres, hvis en gammel kalder stadig sender dem", async () => {
     setup();
     await createCompetition("token", "u1", {
-      name: "Alt", mode: "full_season",
-      tournaments: [{ leagueId: "L1", seasonId: "S1", availableStages: ["Grundspil", "Mesterskabsspil"], selectedStages: ["Grundspil", "Mesterskabsspil"] }],
+      name: "Gammel kalder", mode: "team", leagueId: "L1", seasonId: "S1", teamId: "T1",
+      availableStages: ["Grundspil", "Mesterskabsspil"], selectedStages: ["Grundspil"],
     });
-    expect(insertedRow("competitions").mode_params).toEqual({});
+    expect(insertedRow("competitions").mode_params).toEqual({ team_id: "T1" });
   });
 
   it("flere turneringer gør konkurrencen turneringsløs og gemmer dem i mode_params", async () => {
@@ -583,8 +585,8 @@ describe("createCompetition", () => {
     await createCompetition("token", "u1", {
       name: "Dobbelt", mode: "full_season",
       tournaments: [
-        { leagueId: "L1", seasonId: "S1", availableStages: [], selectedStages: [] },
-        { leagueId: "L2", seasonId: "S2", availableStages: [], selectedStages: [] },
+        { leagueId: "L1", seasonId: "S1" },
+        { leagueId: "L2", seasonId: "S2" },
       ],
     });
 
@@ -598,7 +600,7 @@ describe("createCompetition", () => {
     setup([{ id: "m1", round_key: "2026-08-04", home_score: 1, stage_name: null }]);
     const res = await createCompetition("token", "u1", {
       name: "For sent", mode: "full_season",
-      tournaments: [{ leagueId: "L1", seasonId: "S1", availableStages: [], selectedStages: [] }],
+      tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     });
 
     expect(res.matchCount).toBe(0);
@@ -609,7 +611,7 @@ describe("createCompetition", () => {
 
   it("rullende vindue lægges i rules, og udelades når det er slået fra", async () => {
     setup();
-    const t = [{ leagueId: "L1", seasonId: "S1", availableStages: [], selectedStages: [] }];
+    const t = [{ leagueId: "L1", seasonId: "S1" }];
     await createCompetition("token", "u1", { name: "A", mode: "full_season", tournaments: t, openDaysBefore: 7 });
     expect(insertedRow("competitions").rules).toEqual({ exact: 3, outcome: 1, openDaysBefore: 7 });
 

@@ -103,8 +103,6 @@ const STAGE_LABELS = {
   THIRD_PLACE: "Bronzekamp",
   FINAL: "Finale",
 };
-// Chip/valg-label: vis altid (fallback = det rå navn).
-function stageOptionLabel(name) { return STAGE_LABELS[name] || name; }
 // Kamp-badge: skjul grundspil — stage er kun interessant, når sæsonen er delt.
 // Reglen ser på det DANSKE ord og ikke på det engelske navn: grundspil hedder
 // noget forskelligt i hver turnering ("Regular Season", "1st Phase" …), og en
@@ -113,11 +111,6 @@ function stageBadgeLabel(name) {
   if (!name) return null;
   const label = STAGE_LABELS[name] || name;
   return label === "Grundspil" ? null : label;
-}
-// Filtrér kampe til de valgte stages (tom/undefined ⇒ alle stages).
-function filterByStages(matches, stages) {
-  if (!stages || !stages.length) return matches;
-  return matches.filter((m) => stages.includes(m.stage_name));
 }
 
 // ---------- konkurrence-modes ----------
@@ -226,4 +219,4 @@ function liveInfo(m) {
   };
 }
 
-export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockedRoundsOf, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageOptionLabel, stageBadgeLabel, filterByStages, isPlayed, liveInfo, MODE_LABELS, MODE_HINTS, modeLabel };
+export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockedRoundsOf, LOCK_LEAD_MS, roundLockKey, buildRoundLockMap, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, MODE_HINTS, modeLabel };
