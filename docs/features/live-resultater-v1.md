@@ -53,7 +53,7 @@ Alternativet — at skrive live i `home_score` og filtrere det fra alle steder �
 
 Uændrede skrivninger springes over, så databasen ikke bankes på hvert minut uden grund.
 
-**Sidegevinst:** funktionen færdigmelder også kampe. Før ventede en færdigspillet kamp op til 15 minutter på næste `sync-matches`-kørsel; nu opdaterer stillinger og rating inden for et minut efter slutfløjt. `sync-matches` bevares uændret (ét job pr. liga, hvert 10.-15. minut) og passer kampprogram, flyttede kampe og nye hold.
+**Sidegevinst:** funktionen færdigmelder også kampe. Før ventede en færdigspillet kamp op til 15 minutter på næste `sync-matches`-kørsel; nu opdaterer stillinger og rating inden for et minut efter slutfløjt. `sync-matches` bevares uændret (ét job pr. liga; kadencen er siden skruet ned til hver 12. time) og passer kampprogram, flyttede kampe og nye hold.
 
 ## 5. Brugerfladen
 
@@ -146,7 +146,9 @@ Den endelige test er appen: åbn Hjem-fanen under en kamp — "Indeværende rund
 
 `sync-matches`-jobbene kørte hvert 10.-15. minut for at fange resultater hurtigt. **Den grund er væk** — `sync-live` færdigmelder nu kampe inden for et minut efter slutfløjt. Tilbage har `sync-matches` kun langsomme opgaver: nye kampe i programmet, flyttede kickoff-tider og nye hold.
 
-Sæt dem til **hver 6. time**. På Sportmonks' gratis-plan (180 kald i timen pr. entitet) falder det konstante forbrug fra ~24 kald/time til ~0,7, og hele budgettet er frit til live-syncens 60 kald/time på kampdage. Ren indstillingsændring hos cron-job.org — ingen kodeændring.
+~~Sæt dem til **hver 6. time**.~~ **Rettet efter levering (august 2026, `G6`):** de blev sat til **hver 12. time**, ikke hver 6., og dét er tallet, der gælder. Afvigelsen stod uopdaget, fordi overvågningen — heartbeat'en og `ops.js` — beholdt spec'ens 6 timer med alarm efter 14, altså en grænse, der var strammere end det skema, den skulle overvåge. Registeret i [`../CRON.md`](../CRON.md) er kilden til kadencen; alarmgrænsen er nu 26 timer.
+
+Uanset tallet er pointen den samme: på Sportmonks' gratis-plan (180 kald i timen pr. entitet) falder det konstante forbrug fra ~24 kald/time til under 1, og hele budgettet er frit til live-syncens 60 kald/time på kampdage. Ren indstillingsændring hos cron-job.org — ingen kodeændring.
 
 ### Fejlfinding
 

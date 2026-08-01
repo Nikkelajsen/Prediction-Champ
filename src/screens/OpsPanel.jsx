@@ -56,6 +56,15 @@ function JobCard({ j }) {
         </p>
       )}
 
+      {j.unexpected && (
+        <p style={{ ...muted, fontSize: 11, marginTop: 8, marginBottom: 0 }}>
+          Jobbet har meldt sig, men svarer ikke til nogen turnering. Enten peger et cron-job på en
+          liga, der ikke findes, eller også er det en gammel række fra dengang alle turneringer
+          skrev samme jobnavn — de sidste forsvinder af sig selv, når <code>job_runs</code> ryddes.
+          Tavshed kan ikke måles her, fordi der ingen forventet kadence er.
+        </p>
+      )}
+
       {j.state === "tavs" && (
         <p style={{ color: C.red, fontSize: 11, marginTop: 8, marginBottom: 0 }}>
           Jobbet har ikke meldt sig længe nok til, at noget er galt. Tjek først, om cron-job.org har
@@ -195,7 +204,10 @@ function OutboxPreview({ res }) {
   );
 }
 
-function OpsPanel({ token }) {
+// `leagues` kommer ind som prop og hentes ikke her: AdminScreen har dem i
+// forvejen (Kampe- og Resultat-panelerne bruger dem), og de er selve den
+// forventning, listen fletter mod — ét kampprogram-job pr. turnering (G44).
+function OpsPanel({ token, leagues }) {
   const [jobs, setJobs] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -204,7 +216,7 @@ function OpsPanel({ token }) {
     setLoading(true);
     setErr("");
     try {
-      setJobs(mergeJobHealth(await loadJobHealth(token)));
+      setJobs(mergeJobHealth(await loadJobHealth(token), { leagues }));
     } catch (e) {
       // Den hyppigste årsag lige efter levering er, at migreringen ikke er kørt
       // endnu — så sig det frem for at vise en rå PostgREST-fejl.
@@ -229,7 +241,10 @@ function OpsPanel({ token }) {
     //     effekten til at løbe i ring, hvis den stod i afhængighederne.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+    // `leagues` er med, fordi den forventede jobliste udledes af den: kommer
+    // turneringerne først efter montering, ville listen ellers blive stående
+    // uden sine kampprogram-jobs — altså præcis den tomhed, G44 ville væk fra.
+  }, [token, leagues]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{ display: "grid", gap: 12 }}>

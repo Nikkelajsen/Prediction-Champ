@@ -12,31 +12,36 @@
 // Plus sendevinduet (A24). Det er den ene regel her, der er umulig at afprøve i
 // drift: fejler den, opdages det ved, at nogen bliver vækket kl. 03.
 import { describe, it, expect } from "vitest";
-import { finishedRoundKeys, officialSeasonIds, newCompetitionMessages, hourInZone, dateInZone, withinSendWindow } from "./send-notifications.js";
+import { finishedRoundKeys, lastClosedRoundKey, pushRunVerdict, officialSeasonIds, newCompetitionMessages, hourInZone, dateInZone, withinSendWindow } from "./send-notifications.js";
 
 const kamp = (round_key, home_score, away_score) => ({ id: `${round_key}-${home_score}-${away_score}`, round_key, home_score, away_score });
 
+// En grænse langt ude i fremtiden, når testen handler om resultat-betingelsen
+// og ikke om rundevinduet. Den skal stå der og ikke kunne udelades — se
+// funktionens eget krav om, at grænsen aldrig må gættes.
+const ALLE_LUKKEDE = "2099-01-01";
+
 describe("finishedRoundKeys", () => {
   it("melder en runde færdig, når hver kamp har begge scorer", () => {
-    expect(finishedRoundKeys([kamp("2026-08-04", 2, 1), kamp("2026-08-04", 0, 0)])).toEqual(["2026-08-04"]);
+    expect(finishedRoundKeys([kamp("2026-08-04", 2, 1), kamp("2026-08-04", 0, 0)], ALLE_LUKKEDE)).toEqual(["2026-08-04"]);
   });
 
   // G10's kerne: ÉN uspillet kamp holder hele runden tilbage. Det er korrekt
   // adfærd — fejlen var, at listen indeholdt kampe fra turneringer, stillingen
   // ikke dækker. Afgrænsningen sker i kaldet, invarianten her er "alle eller ingen".
   it("melder ikke en runde færdig, når én kamp mangler resultat", () => {
-    expect(finishedRoundKeys([kamp("2026-08-04", 2, 1), kamp("2026-08-04", null, null)])).toEqual([]);
+    expect(finishedRoundKeys([kamp("2026-08-04", 2, 1), kamp("2026-08-04", null, null)], ALLE_LUKKEDE)).toEqual([]);
   });
 
   // Et 0-0 er et resultat: null-tjekket skal være på null og ikke på falsy,
   // ellers ville hver målløs kamp holde sin runde åben for evigt.
   it("behandler 0-0 som et resultat", () => {
-    expect(finishedRoundKeys([kamp("2026-08-04", 0, 0)])).toEqual(["2026-08-04"]);
+    expect(finishedRoundKeys([kamp("2026-08-04", 0, 0)], ALLE_LUKKEDE)).toEqual(["2026-08-04"]);
   });
 
   it("melder ikke en runde færdig, når kun den ene scorer er sat", () => {
-    expect(finishedRoundKeys([kamp("2026-08-04", 3, null)])).toEqual([]);
-    expect(finishedRoundKeys([kamp("2026-08-04", null, 3)])).toEqual([]);
+    expect(finishedRoundKeys([kamp("2026-08-04", 3, null)], ALLE_LUKKEDE)).toEqual([]);
+    expect(finishedRoundKeys([kamp("2026-08-04", null, 3)], ALLE_LUKKEDE)).toEqual([]);
   });
 
   it("afgør hver runde for sig", () => {
@@ -44,12 +49,82 @@ describe("finishedRoundKeys", () => {
       kamp("2026-07-28", 1, 1),
       kamp("2026-08-04", 2, 0),
       kamp("2026-08-04", null, null),
-    ]);
+    ], ALLE_LUKKEDE);
     expect(ud).toEqual(["2026-07-28"]);
   });
 
   it("giver ingen runder for en tom liste", () => {
-    expect(finishedRoundKeys([])).toEqual([]);
+    expect(finishedRoundKeys([], ALLE_LUKKEDE)).toEqual([]);
+  });
+
+  // Den anden betingelse, og grunden til at der er to. "Alle kampe har
+  // resultat" er et svar om de kampe, vi har IMPORTERET — ikke om runden. En
+  // kamp uden fastlagt dato findes slet ikke som række, og en kontrol af rækker
+  // kan ikke se en række, der ikke findes. Kun et lukket rundevindue garanterer,
+  // at sammensætningen ikke kan ændre sig mere.
+  it("melder ikke en runde færdig, mens dens vindue stadig er åbent", () => {
+    expect(finishedRoundKeys([kamp("2026-08-04", 2, 1)], "2026-07-28")).toEqual([]);
+  });
+
+  it("melder runden færdig, så snart vinduet er lukket", () => {
+    expect(finishedRoundKeys([kamp("2026-08-04", 2, 1)], "2026-08-04")).toEqual(["2026-08-04"]);
+  });
+
+  // Grænsen må ikke kunne glemmes: en standardværdi ville gøre funktionen tavst
+  // usund igen. Samme regel som `order` i sbAll().
+  it("kaster, hvis grænsen mangler", () => {
+    expect(() => finishedRoundKeys([kamp("2026-08-04", 2, 1)])).toThrow(/lastClosed/);
+  });
+});
+
+describe("lastClosedRoundKey", () => {
+  // Runderne løber tirsdag til mandag. Runden, der starter tirsdag den 4.,
+  // slutter mandag den 10. og er først forbi tirsdag den 11.
+  it("udelukker den igangværende runde og medtager den forrige", () => {
+    expect(lastClosedRoundKey(new Date("2026-08-11T09:00:00+02:00"))).toBe("2026-08-04");
+    expect(lastClosedRoundKey(new Date("2026-08-10T21:00:00+02:00"))).toBe("2026-08-03");
+  });
+
+  // Samme grund som dateInZone's egen: serverens UTC-dato ligger en dag bagud i
+  // timerne efter midnat dansk tid, og en runde ville da se åben ud et døgn for
+  // længe. Kl. 00:30 dansk tid den 11. er UTC stadig den 10.
+  it("regner i dansk tid og ikke i serverens", () => {
+    expect(lastClosedRoundKey(new Date("2026-08-10T22:30:00Z"))).toBe("2026-08-04");
+  });
+});
+
+// G45: en kørsel, hvor de fleste beskeder ikke kom frem, må ikke stå grøn.
+// Reglen var `sent === 0`, så `failed=40, sent=1` så vellykket ud, og en
+// langsomt døende push-kæde var usynlig, indtil den var helt død.
+describe("pushRunVerdict", () => {
+  it("kalder en kørsel uden fejl vellykket", () => {
+    expect(pushRunVerdict({ sent: 12, failed: 0 }).ok).toBe(true);
+  });
+
+  it("tåler et enkelt hik", () => {
+    expect(pushRunVerdict({ sent: 12, failed: 1 }).ok).toBe(true);
+  });
+
+  it("fanger den langsomt døende kæde, den gamle regel lod passere", () => {
+    const v = pushRunVerdict({ sent: 1, failed: 40 });
+    expect(v.ok).toBe(false);
+    expect(v.reason).toContain("41");
+  });
+
+  it("melder stadig fejl, når intet slap igennem", () => {
+    const v = pushRunVerdict({ sent: 0, failed: 3 });
+    expect(v.ok).toBe(false);
+    expect(v.reason).toContain("Alle 3");
+  });
+
+  // Grænsen går ved halvdelen, og den skal kunne aflæses frem for gættes.
+  it("går rødt præcis ved halvdelen", () => {
+    expect(pushRunVerdict({ sent: 3, failed: 2 }).ok).toBe(true);
+    expect(pushRunVerdict({ sent: 2, failed: 2 }).ok).toBe(false);
+  });
+
+  it("kalder en kørsel uden afsendelser overhovedet vellykket", () => {
+    expect(pushRunVerdict({ sent: 0, failed: 0 }).ok).toBe(true);
   });
 });
 

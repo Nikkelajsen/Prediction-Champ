@@ -34,13 +34,24 @@ de minutter, der allerede er taget.
 Bemærk at job 6–10 ikke sender `&smSeason=`: `api_season_id` er sat direkte i
 `sql/tournament_footballdata.sql`, så navne-opslaget aldrig bliver nødvendigt.
 
+**Kampprogram-jobbene hedder ikke længere det samme i driftsloggen.** Hver
+kørsel af `sync-matches` skriver `sync-matches:<liga-uuid>` i `job_runs` (G44,
+august 2026) frem for det fælles `sync-matches`. Indtil da delte alle syv jobs
+én række, så `admin_job_health()` så dem som ét job: den seneste kørsel vandt,
+og en turnering, der fejlede hver gang, stod grøn bag en, der gik godt. Det var
+præcis den fejlklasse, `B8` var — og den blev kun fundet, fordi nogen kiggede
+manuelt. Både Admin → Drift og `job-heartbeat.yml` udleder nu den forventede
+jobliste af `leagues`-tabellen, så en ny turnering forventes uden at nogen skal
+huske at rette en liste. Der skal **intet ændres i cron-job.org** — navnet
+kommer af `leagueId`, som jobbene allerede sender.
+
 | # | Job | Hvor | Skema | Kald | Hemmelighed sendes som | Sidst verificeret |
 |---|---|---|---|---|---|---|
-| 1 | Kampprogram + endelige resultater Superliga | cron-job.org | hver 12. time (kan stå på 10–15 min fra før live-syncen) | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | — |
+| 1 | Kampprogram + endelige resultater Superliga | cron-job.org | hver 12. time | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | — |
 | 2 | Live-resultater | cron-job.org | hvert minut | `GET https://<app>/api/sync-live` | ? | — |
 | 3 | Push-notifikationer | cron-job.org | hver 15.–30. minut, **hele døgnet** | `GET https://<app>/api/send-notifications` (valgfrit `&hours=`) | ? | — |
 | 4 | Skema-eksport | GitHub Actions | `0 6 * * 1` (mandag 06:00 UTC) + manuelt | `.github/workflows/schema-export.yml` | — (bruger repo-secret `SUPABASE_DB_URL`) | 30. juli 2026 |
-| 5 | Kampprogram + endelige resultater Scotland | cron-job.org | hver 12. time (kan stå på 10–15 min fra før live-syncen) | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | 31. juli 2026 (oprettet — bekræftet af ejeren) |
+| 5 | Kampprogram + endelige resultater Scotland | cron-job.org | hver 12. time | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | 31. juli 2026 (oprettet — bekræftet af ejeren) |
 | 6 | Kampprogram + endelige resultater Premier League | cron-job.org | hver 12. time, ved **minut 05** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:05) |
 | 7 | Kampprogram + endelige resultater Champions League | cron-job.org | hver 12. time, ved **minut 11** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:17. **`B8` er afgjort 1. august 2026:** football-data.org har endnu ikke oprettet sæsonen 2026 — deres aktuelle er 2025 — så jobbet henter 0 kampe og melder sig **gennemført** med forklaringen i `emptySeason`, indtil ligafasen er lodtrukket) |
 | 8 | Kampprogram + endelige resultater Bundesliga | cron-job.org | hver 12. time, ved **minut 17** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:23) |
@@ -89,7 +100,7 @@ og syncen står stille. Fremgangsmåden er derfor:
    ```
 
 2. **Lad den køre nogle dage** — mindst så længe, at alle fire skemaer ovenfor har
-   udløst flere gange (det langsomste er `sync-matches` hver 6. time).
+   udløst flere gange (det langsomste er `sync-matches` hver 12. time).
 
 3. **Aflæs.** Ingen `[A11]`-linjer i perioden = alle jobs bruger headeren. Udfyld
    kolonnen ovenfor, og fjern fallbacken fra `api/_shared.js`.
@@ -109,9 +120,17 @@ ikke — de laver ikke noget arbejde, og ville ellers nulstille fejlserien.
 
 **2. `job-heartbeat.yml` — hvad der IKKE skete.** `job_runs` kan per definition
 kun se de kørsler, der fandt sted. Et job, cron-job.org har auto-deaktiveret,
-skriver ingen rækker, og tavshed ligner ro. Derfor kører en workflow hver 6.
-time, som slår alarm, hvis et job har været tavst for længe eller er fejlet
-mindst 3 gange i træk.
+skriver ingen rækker, og tavshed ligner ro. Derfor kører en workflow **hver
+halve time**, som slår alarm, hvis et job har været tavst for længe eller er
+fejlet mindst 3 gange i træk.
+
+Kadencen var indtil august 2026 hver 6. time og passede ikke til det, den
+overvåger (`G46`): `sync-live`s tavshedsgrænse er 30 minutter, så et dødt
+live-job kunne være usynligt næsten en hel kampdag — netop de timer, hvor det
+betyder mest. En overvågning, der kigger sjældnere end den grænse, den
+håndhæver, håndhæver den i praksis ikke. Repoet er offentligt, så de 48 kørsler
+i døgnet er gratis; GitHub kører dog planlagte workflows med forsinkelse under
+belastning, så kadencen er et loft for hyppigheden, ikke en garanti.
 
 Alarmen ligger med vilje **uden for appen**: kører Supabase eller Vercel ikke,
 ville en alarm inde i appen dø af præcis samme årsag som jobbet. Kanalen er
@@ -124,13 +143,28 @@ interval ikke larmer:
 |---|---|---|
 | `sync-live` | hvert minut | 30 minutter |
 | `send-notifications` | hver 15.–30. minut | 3 timer |
-| `sync-matches` | hver 6. time | 14 timer |
+| `sync-matches:<liga>` (ét pr. turnering) | hver 12. time | 26 timer |
 
 > Grænserne står **tre** steder og skal ændres samlet: tabellen her,
-> `.github/workflows/job-heartbeat.yml` og `JOBS` i `src/lib/ops.js`.
+> `.github/workflows/job-heartbeat.yml` og `BASE_JOBS`/`SYNC_MATCHES_*` i
+> `src/lib/ops.js`.
 
-`job_runs` ryddes med `prune_job_runs(30)` — uden en grænse ville `sync-live`
-alene lægge 1.440 rækker i tabellen i døgnet.
+**Kampprogrammets tal er rettet i august 2026 (`G6`).** Kadencen stod fire
+steder med fire forskellige værdier: "hver 12. time" her i jobtabellen, "hver
+6. time" i overvågningstabellen, i heartbeat'en og i `ops.js`, "hvert 10.-15.
+minut" i `DOCUMENTATION.md` §8 og "pt. hver time" i `ROADMAP.md`. Registeret
+vandt, fordi det er det ene af de fire, der beskriver, hvad der faktisk er sat
+op i cron-job.org. Alarmgrænsen fulgte med fra 14 til 26 timer: 14 timer mod et
+12-timers interval gav to timers luft, altså strammere end det skema, den skulle
+overvåge — ét sprunget interval ville have larmet.
+
+`job_runs` ryddes med `prune_job_runs(30)`, som kaldes af `job-heartbeat.yml`
+før hvert helbredstjek. **Funktionen havde ingen kaldere overhovedet indtil
+august 2026 (`G43`)** — dette afsnit beskrev en rydning, der ikke skete, mens
+`sync-live` alene lagde 1.440 rækker i tabellen i døgnet. Heartbeat'en er
+stedet, fordi den allerede har databaseadgangen og allerede kører på et skema:
+en rydning er ét ekstra udsagn frem for et nyt endpoint, et nyt cron-job og en
+ny række i denne tabel.
 
 Ud over dette findes stadig cron-job.orgs egen fejlnotifikation og Vercels
 invocation-forbrug — se `docs/features/live-resultater-v1.md` afsnit 9.

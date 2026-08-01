@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { JOBS, mergeJobHealth, summarizeOutbox, STATE_LABEL, fmtSince } from "./ops.js";
+import { BASE_JOBS, expectedJobs, mergeJobHealth, summarizeOutbox, STATE_LABEL, fmtSince } from "./ops.js";
 
 const NU = new Date("2026-08-01T12:00:00Z").getTime();
 const forSiden = (ms) => new Date(NU - ms).toISOString();
@@ -16,20 +16,72 @@ const raek = (job, over = {}) => ({
   ...over,
 });
 
+// To turneringer, så det, G44 handlede om, faktisk kan gå galt i testen: med
+// kun én kunne en sund aldrig skjule en fejlende.
+const LIGAER = [
+  { id: "11111111-1111-1111-1111-111111111111", name: "Superliga" },
+  { id: "22222222-2222-2222-2222-222222222222", name: "Scotland Premiership" },
+];
+const SUPERLIGA_JOB = "sync-matches:11111111-1111-1111-1111-111111111111";
+const SKOTLAND_JOB = "sync-matches:22222222-2222-2222-2222-222222222222";
+
+describe("expectedJobs", () => {
+  it("giver ét kampprogram-job pr. turnering oven i de faste", () => {
+    const ud = expectedJobs(LIGAER);
+    expect(ud).toHaveLength(BASE_JOBS.length + LIGAER.length);
+    expect(ud.map((j) => j.job)).toContain(SUPERLIGA_JOB);
+    expect(ud.find((j) => j.job === SKOTLAND_JOB).label).toContain("Scotland Premiership");
+  });
+
+  // Listen udledes af data og skrives ikke ned: en ny turnering skal blive
+  // forventet uden at nogen husker at rette en konstant. Det var netop dét,
+  // der manglede, da syv turneringer delte ét jobnavn.
+  it("udvider sig selv, når der kommer en turnering til", () => {
+    const foer = expectedJobs(LIGAER).length;
+    expect(expectedJobs([...LIGAER, { id: "33333333-3333-3333-3333-333333333333", name: "Serie A" }]))
+      .toHaveLength(foer + 1);
+  });
+
+  it("tåler ingen turneringer", () => {
+    expect(expectedJobs([]).map((j) => j.job)).toEqual(BASE_JOBS.map((j) => j.job));
+    expect(expectedJobs(undefined)).toHaveLength(BASE_JOBS.length);
+  });
+});
+
 describe("mergeJobHealth", () => {
-  // Kernen i det hele: fletningen går ud fra JOBS, ikke fra rækkerne. Et job,
-  // der aldrig har meldt sig — fordi cron-job.org har deaktiveret det — har
-  // ingen række, og ville forsvinde fra listen, hvis vi gik ud fra data.
+  // Kernen i det hele: fletningen går ud fra forventningen, ikke fra rækkerne.
+  // Et job, der aldrig har meldt sig — fordi cron-job.org har deaktiveret det —
+  // har ingen række, og ville forsvinde fra listen, hvis vi gik ud fra data.
   it("viser et job uden nogen kørsler i stedet for at udelade det", () => {
-    const out = mergeJobHealth([], NU);
-    expect(out).toHaveLength(JOBS.length);
-    expect(out.map((j) => j.job).sort()).toEqual(JOBS.map((j) => j.job).sort());
+    const forventet = expectedJobs(LIGAER);
+    const out = mergeJobHealth([], { leagues: LIGAER, now: NU });
+    expect(out).toHaveLength(forventet.length);
+    expect(out.map((j) => j.job).sort()).toEqual(forventet.map((j) => j.job).sort());
     expect(out.every((j) => j.state === "ukendt")).toBe(true);
     expect(out[0].silentFor).toBeNull();
   });
 
+  // G44's kerne. Før rettelsen skrev alle turneringer den SAMME jobrække, så
+  // den seneste kørsel vandt: en turnering, der fejlede hver gang, stod grøn,
+  // fordi naboen lige havde kørt godt.
+  it("holder to turneringers kampprogram-jobs adskilt", () => {
+    const out = mergeJobHealth(
+      [raek(SUPERLIGA_JOB), raek(SKOTLAND_JOB, { consecutive_failures: 4 })],
+      { leagues: LIGAER, now: NU }
+    );
+    expect(out.find((j) => j.job === SUPERLIGA_JOB).state).toBe("ok");
+    expect(out.find((j) => j.job === SKOTLAND_JOB).state).toBe("fejler");
+  });
+
+  // Kortet skal kunne læses uden at slå en UUID op.
+  it("navngiver kampprogram-jobbet med turneringen", () => {
+    const j = mergeJobHealth([], { leagues: LIGAER, now: NU }).find((x) => x.job === SKOTLAND_JOB);
+    expect(j.label).toBe("Kampprogram · Scotland Premiership");
+    expect(j.kadence).toBe("hver 12. time");
+  });
+
   it("kalder et friskt job uden fejl for ok", () => {
-    const j = mergeJobHealth([raek("sync-live")], NU).find((x) => x.job === "sync-live");
+    const j = mergeJobHealth([raek("sync-live")], { now: NU }).find((x) => x.job === "sync-live");
     expect(j.state).toBe("ok");
     expect(j.silentFor).toBe(MIN);
     expect(j.okSilentFor).toBe(MIN);
@@ -37,7 +89,7 @@ describe("mergeJobHealth", () => {
 
   it("kalder et job tavst, når der er gået længere end dets grænse", () => {
     // sync-live forventes hvert minut; grænsen er 30 min.
-    const j = mergeJobHealth([raek("sync-live", { last_run_at: forSiden(31 * MIN) })], NU).find(
+    const j = mergeJobHealth([raek("sync-live", { last_run_at: forSiden(31 * MIN) })], { now: NU }).find(
       (x) => x.job === "sync-live"
     );
     expect(j.state).toBe("tavs");
@@ -48,18 +100,29 @@ describe("mergeJobHealth", () => {
   it("bruger hvert jobs egen tålmodighed", () => {
     const rows = [
       raek("sync-live", { last_run_at: forSiden(45 * MIN) }),
-      raek("sync-matches", { last_run_at: forSiden(45 * MIN) }),
+      raek(SUPERLIGA_JOB, { last_run_at: forSiden(45 * MIN) }),
     ];
-    const out = mergeJobHealth(rows, NU);
+    const out = mergeJobHealth(rows, { leagues: LIGAER, now: NU });
     expect(out.find((j) => j.job === "sync-live").state).toBe("tavs");
-    expect(out.find((j) => j.job === "sync-matches").state).toBe("ok");
+    expect(out.find((j) => j.job === SUPERLIGA_JOB).state).toBe("ok");
+  });
+
+  // Alarmgrænsen skal være løsere end det skema, den overvåger. Den var
+  // 14 timer mod et 12-timers interval (G6) og gav dermed to timers luft —
+  // et enkelt sprunget interval ville have larmet.
+  it("tåler et sprunget kampprogram-interval, men ikke to", () => {
+    const stille = (t) => mergeJobHealth([raek(SUPERLIGA_JOB, { last_run_at: forSiden(t) })], {
+      leagues: LIGAER, now: NU,
+    }).find((j) => j.job === SUPERLIGA_JOB).state;
+    expect(stille(25 * TIME)).toBe("ok");
+    expect(stille(27 * TIME)).toBe("tavs");
   });
 
   it("skelner mellem ustabil og fejlende ud fra fejlserien", () => {
-    const to = mergeJobHealth([raek("sync-live", { consecutive_failures: 2 })], NU);
+    const to = mergeJobHealth([raek("sync-live", { consecutive_failures: 2 })], { now: NU });
     expect(to.find((j) => j.job === "sync-live").state).toBe("ustabil");
 
-    const tre = mergeJobHealth([raek("sync-live", { consecutive_failures: 3 })], NU);
+    const tre = mergeJobHealth([raek("sync-live", { consecutive_failures: 3 })], { now: NU });
     expect(tre.find((j) => j.job === "sync-live").state).toBe("fejler");
   });
 
@@ -68,7 +131,7 @@ describe("mergeJobHealth", () => {
   it("lader tavshed vinde over fejlserien", () => {
     const j = mergeJobHealth(
       [raek("sync-live", { last_run_at: forSiden(2 * TIME), consecutive_failures: 5 })],
-      NU
+      { now: NU }
     ).find((x) => x.job === "sync-live");
     expect(j.state).toBe("tavs");
   });
@@ -76,24 +139,47 @@ describe("mergeJobHealth", () => {
   it("håndterer et job, der har kørt men aldrig med succes", () => {
     const j = mergeJobHealth(
       [raek("sync-live", { last_ok_at: null, consecutive_failures: 7 })],
-      NU
+      { now: NU }
     ).find((x) => x.job === "sync-live");
     expect(j.state).toBe("fejler");
     expect(j.lastOkAt).toBeNull();
     expect(j.okSilentFor).toBeNull();
   });
 
-  it("tåler null og ukendte jobs i svaret", () => {
-    expect(() => mergeJobHealth(null, NU)).not.toThrow();
-    const out = mergeJobHealth([raek("et-job-vi-ikke-kender")], NU);
-    expect(out).toHaveLength(JOBS.length);
-    expect(out.every((j) => j.state === "ukendt")).toBe(true);
+  it("tåler et manglende svar", () => {
+    expect(() => mergeJobHealth(null, { leagues: LIGAER, now: NU })).not.toThrow();
+    expect(mergeJobHealth(null, { leagues: LIGAER, now: NU })).toHaveLength(expectedJobs(LIGAER).length);
+  });
+
+  // En række uden forventning smides ikke væk. Den opstår, når et cron-job
+  // peger på en liga, der ikke findes — og lige efter G44 også som de gamle
+  // `sync-matches`-rækker fra dengang alle turneringer delte ét navn.
+  it("viser et job, der har meldt sig uden at være forventet", () => {
+    const out = mergeJobHealth([raek("sync-matches")], { leagues: LIGAER, now: NU });
+    expect(out).toHaveLength(expectedJobs(LIGAER).length + 1);
+    const fremmed = out.find((j) => j.job === "sync-matches");
+    expect(fremmed.unexpected).toBe(true);
+    expect(fremmed.state).toBe("ok");
+  });
+
+  // Uden en forventet kadence findes der ingen grænse at måle tavshed mod.
+  // At gætte en ville være at opfinde en forventning, ingen har udtrykt.
+  it("kalder aldrig et uventet job tavst, men melder dets fejl", () => {
+    const gammelt = mergeJobHealth([raek("sync-matches", { last_run_at: forSiden(300 * TIME) })], {
+      leagues: LIGAER, now: NU,
+    }).find((j) => j.job === "sync-matches");
+    expect(gammelt.state).toBe("ok");
+
+    const daarligt = mergeJobHealth([raek("sync-matches", { consecutive_failures: 3 })], {
+      leagues: LIGAER, now: NU,
+    }).find((j) => j.job === "sync-matches");
+    expect(daarligt.state).toBe("fejler");
   });
 
   it("fører fejltekst og resumé med videre", () => {
     const j = mergeJobHealth(
       [raek("sync-live", { last_error: "boom", last_detail: { written: 4 } })],
-      NU
+      { now: NU }
     ).find((x) => x.job === "sync-live");
     expect(j.lastError).toBe("boom");
     expect(j.lastDetail).toEqual({ written: 4 });
@@ -102,7 +188,7 @@ describe("mergeJobHealth", () => {
   it("har en etiket til hver tilstand", () => {
     const states = new Set(
       [[], [raek("sync-live")], [raek("sync-live", { consecutive_failures: 4 })]].flatMap((rows) =>
-        mergeJobHealth(rows, NU).map((j) => j.state)
+        mergeJobHealth(rows, { now: NU }).map((j) => j.state)
       )
     );
     for (const s of states) expect(STATE_LABEL[s]).toBeTruthy();

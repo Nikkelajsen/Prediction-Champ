@@ -134,16 +134,87 @@ export async function officialSeasonIds(sb) {
   return seasons.map((s) => s.id);
 }
 
-// De round_key'er, hvor HVER kamp i listen har fået sit resultat. Kaldes med
-// kampe, der allerede er afgrænset til de officielle turneringer — afgrænsningen
-// er hele pointen: en runde må ikke holdes åben af kampe, der ikke tæller i den
-// stilling, beskeden rapporterer fra.
-export function finishedRoundKeys(matches) {
+// Den nyeste runde, hvis VINDUE er lukket.
+//
+// Runderne løber tirsdag til mandag (`round_key()` i sql/rating_core.sql), og
+// `round_key` er rundens tirsdag. En runde er derfor forbi, når der er gået syv
+// dage fra dens tirsdag — og datoen syv dage tilbage er præcis den nyeste
+// round_key, der opfylder det. Regnes i dansk tid af samme grund som
+// dateInZone() selv: serverens UTC-dato ligger en dag bagud efter midnat.
+export function lastClosedRoundKey(now, timeZone) {
+  return dateInZone(new Date(now.getTime() - 7 * 24 * HOUR), timeZone);
+}
+
+// De round_key'er, der er FÆRDIGE — hvor runden både er forbi, og hver kamp i
+// listen har fået sit resultat. Kaldes med kampe, der allerede er afgrænset til
+// de officielle turneringer: en runde må ikke holdes åben af kampe, der ikke
+// tæller i den stilling, beskeden rapporterer fra.
+//
+// HVORFOR DER ER TO BETINGELSER OG IKKE ÉN. "Alle kampe har resultat" er ikke
+// et svar på, om runden er slut — det er et svar på, om alt, vi har IMPORTERET,
+// er spillet. De to er kun det samme, hvis kamplisten er komplet, og det er den
+// ikke nødvendigvis: en kamp uden fastlagt dato findes slet ikke som række (en
+// udsat kamp uden nyt tidspunkt, en knockout-kamp før lodtrækningen — se
+// `undrawn` i api/sync-matches.js), og en række, der ikke findes, kan ingen
+// kontrol af rækker opdage.
+//
+// `G51` (1. august 2026) lukkede den ENE måde, listen kunne være ufuldstændig
+// på — de tavst afkortede svar — og efterlod den anden. Rettelsen der var at
+// give opslaget en øvre grænse; rettelsen her er at gøre grænsen til den, der
+// også dækker den anden: et lukket rundevindue er den eneste tilstand, hvor
+// rundens SAMMENSÆTNING ikke længere kan ændre sig. En kamp kan flyttes frem og
+// dermed ud af runden, aldrig tilbage og ind i den.
+//
+// Prisen er, at "Runden er slut" tidligst afgår tirsdag. For de fleste runder
+// er det ingen forskel: den sidste kamp ligger typisk mandag aften, og
+// sendevinduet (A24) holder alligevel beskeden tilbage til tirsdag kl. 08. For
+// en runde, der er færdigspillet søndag, er beskeden ~2 døgn senere end før.
+// Det er valgt bevidst: en besked, der siger "du blev nr. 4 af 18" om en runde,
+// der senere viser sig at have 22 tippere, er værre end en besked, der kommer
+// tirsdag.
+//
+// `lastClosed` er PÅKRÆVET og har ingen standardværdi. En, der kunne glemmes,
+// ville gøre funktionen tavst usund igen — samme regel som `order` i sbAll().
+export function finishedRoundKeys(matches, lastClosed) {
+  if (!lastClosed) {
+    throw new Error("finishedRoundKeys(): lastClosed mangler — en runde, hvis vindue stadig er åbent, kan ikke meldes færdig");
+  }
   const byRound = {};
   for (const m of matches) (byRound[m.round_key] ||= []).push(m);
   return Object.entries(byRound)
+    .filter(([roundKey]) => roundKey <= lastClosed)
     .filter(([, list]) => list.length > 0 && list.every((m) => m.home_score != null && m.away_score != null))
     .map(([roundKey]) => roundKey);
+}
+
+// Er kørslen lykkedes, når nogle beskeder ikke kunne afleveres? (G45)
+//
+// Delvist tab er normalt: en enkelt push-tjeneste, der hikker, skal ikke udløse
+// alarm. Men reglen var indtil august 2026 `sent === 0`, og den er for løs:
+// `failed=40, sent=1` stod grønt i Admin → Drift, så en langsomt døende
+// push-kæde (udløbne VAPID-nøgler, en leverandør med problemer) var usynlig,
+// indtil den var HELT død. Fejlraten fandtes allerede i funktionen; den manglede
+// bare i vurderingen.
+//
+// Halvdelen er grænsen, fordi det er det punkt, hvor "et hik" ikke længere er en
+// troværdig forklaring. Én rød kørsel udløser ikke i sig selv en alarm —
+// heartbeat'en råber først ved tre fejl i træk — så tærsklen må gerne være
+// følsom nok til at fange en enkelt dårlig kørsel.
+//
+// Bemærk hvad der IKKE tælles med: 404/410 fra push-tjenesten er afmeldte
+// enheder og ryddes op som normal drift, ikke som fejl.
+export const PUSH_FAILURE_ALERT_RATIO = 0.5;
+
+export function pushRunVerdict({ sent, failed }, ratio = PUSH_FAILURE_ALERT_RATIO) {
+  if (!failed) return { ok: true };
+  const attempted = sent + failed;
+  if (failed / attempted < ratio) return { ok: true };
+  return {
+    ok: false,
+    reason: sent === 0
+      ? `Alle ${failed} afsendelser fejlede.`
+      : `${failed} af ${attempted} afsendelser fejlede (${Math.round((failed / attempted) * 100)} %).`,
+  };
 }
 
 // Modtagerne af "ny konkurrence i din liga"-beskeden (B5), udregnet ud fra rå
@@ -390,9 +461,14 @@ export default async function handler(req, res) {
     //     rigtige felt og "du blev nr. X af N" lyver om N.
     {
       const seasonIds = await officialSeasonIds(sb);
-      const fromKey = new Date(now - 14 * 24 * HOUR).toISOString().slice(0, 10);
+      // NEDRE grænse: hvor langt tilbage en glemt runde stadig kan indhentes.
+      // Tre uger og ikke to, fordi den øvre grænse flyttede en uge tilbage (se
+      // nedenfor) — vinduet mellem de to skal blive ved med at være 14 dage
+      // bredt, ellers rummer det kun ÉN tirsdag, og et cron-udfald på en uge
+      // ville springe en runde over for altid frem for at hente den senere.
+      const fromKey = new Date(now - 21 * 24 * HOUR).toISOString().slice(0, 10);
       // ØVRE grænse, og den er lige så nødvendig som den nedre. Uden den bad
-      // opslaget om hver eneste kamp fra de seneste 14 dage OG resten af
+      // opslaget om hver eneste kamp fra de seneste uger OG resten af
       // sæsonen — for fem officielle turneringer er det langt over de 1000
       // rækker, Supabase leverer i ét svar, og afkortningen er tavs (G51).
       // Følgen var ikke en manglende besked, men en FORKERT: faldt en rundes
@@ -400,10 +476,13 @@ export default async function handler(req, res) {
       // "Runden er slut" afgik midt i en igangværende runde med et
       // stillingsfelt, der kun talte de spillede kampes tippere.
       //
-      // Grænsen er ikke bare en optimering: en runde, hvis STARTDAG ligger i
-      // fremtiden, kan pr. definition ikke være færdigspillet, så alt over
-      // dagens dato er rækker, svaret aldrig skulle have båret.
-      const toKey = dateInZone(new Date(now));
+      // Grænsen er ikke bare en optimering: en runde, hvis vindue endnu er
+      // åbent, kan pr. definition ikke være færdig, så alt derover er rækker,
+      // svaret aldrig skulle have båret. Grænsen gik indtil august 2026 ved
+      // dagens dato; den går nu ved den nyeste LUKKEDE runde, hvilket lukker
+      // den anden måde, kamplisten kan være ufuldstændig på — se
+      // finishedRoundKeys() for hvorfor de to ikke er det samme.
+      const toKey = lastClosedRoundKey(new Date(now));
       // Ingen officielle turneringer ⇒ ingen 'ALL'-stilling at melde om.
       const ms = seasonIds.length
         ? await sbAll(
@@ -413,7 +492,7 @@ export default async function handler(req, res) {
           )
         : [];
 
-      for (const roundKey of finishedRoundKeys(ms)) {
+      for (const roundKey of finishedRoundKeys(ms, toKey)) {
         // samme kilde og samme tiebreaker-stige som Championship-fanens rundeliga
         // (sql/standings_tiebreakers.sql). En runde har ingen rundesejre at bryde
         // lighed med, så stigen er point → præcise → udfald → målafvigelse.
@@ -580,10 +659,9 @@ export default async function handler(req, res) {
       await sb(`/rest/v1/push_subscriptions?id=in.(${[...deadSubIds].join(",")})`, { method: "DELETE", prefer: "return=minimal" });
     }
 
-    // Delvist tab holder kørslen "vellykket": jobbet gjorde sit arbejde, og en
-    // enkelt push-tjeneste, der hikker, skal ikke udløse alarm. Slap INTET
-    // igennem, selvom der var noget at sende, er kørslen derimod mislykket —
-    // det er signaturen på udløbne VAPID-nøgler eller en nede push-tjeneste.
+    // Er kørslen lykkedes? Reglen bor i pushRunVerdict() ovenfor — den er
+    // eksporteret og testet, fordi tærsklen er et produktvalg og ikke en
+    // detalje i et svar.
     const detail = {
       sent,
       messages: toSend.length,
@@ -591,8 +669,9 @@ export default async function handler(req, res) {
       failed,
       ...(failureSamples.length ? { failureSamples } : {}),
     };
-    if (failed > 0 && sent === 0) {
-      return run.fail(res, 200, detail, `Alle ${failed} afsendelser fejlede. ${failureSamples.join(" | ")}`);
+    const verdict = pushRunVerdict({ sent, failed });
+    if (!verdict.ok) {
+      return run.fail(res, 200, detail, `${verdict.reason} ${failureSamples.join(" | ")}`.trim());
     }
     return run.ok(res, detail);
   } catch (e) {
