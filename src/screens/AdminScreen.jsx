@@ -17,7 +17,10 @@ function AdminScreen({ token, leagues, reloadLeagues, onBack }) {
   async function recompute() {
     setRecomputing(true); setMsg("");
     try {
-      await restFetch(`/rest/v1/rpc/recompute_ratings`, { method: "POST", token, body: {} });
+      // admin_recompute_ratings, ikke recompute_ratings: motoren er service_role-only
+      // siden G15 (sql/security_hardening.sql). Wrapperen har is_admin-tjekket og er
+      // den eneste vej ind for et brugertoken.
+      await restFetch(`/rest/v1/rpc/admin_recompute_ratings`, { method: "POST", token, body: {} });
       setMsg("Ratings opdateret.");
     } catch (e) { setMsg("Fejl: " + (e.message || "kunne ikke opdatere")); }
     setRecomputing(false);

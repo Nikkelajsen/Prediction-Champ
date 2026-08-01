@@ -105,3 +105,17 @@ jobs:
           set -euo pipefail
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database awardstest;'
           psql -h localhost -U postgres -d awardstest -v ON_ERROR_STOP=1 -b -f competition_awards.sql
+
+      # Sikkerhedsstramningen (G14/G15/G16): kører selve migreringen
+      # security_hardening.sql og efterprøver BEGGE retninger — at anon og en
+      # almindelig bruger er lukket ude af matches, recompute_ratings() og
+      # monthly_standings, OG at admin, rating-triggeren og service_role stadig
+      # kommer igennem. Egen database, som de to andre.
+      - name: Test af sikkerhedsstramningen
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database sectest;'
+          psql -h localhost -U postgres -d sectest -v ON_ERROR_STOP=1 -b -f security_hardening.sql

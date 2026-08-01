@@ -105,9 +105,20 @@ group by round_key, scope, user_id;
 -- Rundesejre afgrænses af (scope, måned, runde): en runde, der krydser en
 -- månedsgrænse, tæller i hver måned med netop de kampe, der allerede giver point
 -- dér — og en rundesejr i én turnering er ikke en rundesejr samlet set.
+--
+-- security_invoker tilføjet august 2026 (G16). Uden det kørte viewet med ejerens
+-- rettigheder og omgik RLS på predictions — og med `grant select … to anon`
+-- nederst i filen kunne en UAUTENTIFICERET kalder læse per-bruger månedspoint.
+-- round_standings ovenfor har haft det hele tiden; her manglede det.
+--
+-- Ingen indlogget bruger ser andre tal af den grund: viewet tæller kun kampe MED
+-- resultat, og præcis de tips er synlige for enhver authenticated bruger via
+-- predictions_select_visible. Det, RLS nu skærer væk, er det, viewet alligevel
+-- ikke medtog. For anon findes der slet ingen SELECT-policy på predictions.
 drop view if exists public.monthly_standings;
 
-create view public.monthly_standings as
+create view public.monthly_standings
+with (security_invoker = on) as
 with scored as (
   select
     to_char(date_trunc('month', m.kickoff_at), 'YYYY-MM') as month,

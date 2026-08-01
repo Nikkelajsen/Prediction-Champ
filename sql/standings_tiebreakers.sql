@@ -36,6 +36,13 @@
 -- adgangsregler. Kun kampe MED resultat indgår, og de er altid låste, så alles
 -- gæt må læses (ingen snyde-risiko).
 --
+-- ⚠️ RETTET EFTER LEVERING (august 2026, G16). Afsnittet ovenfor holder for
+-- SNYD, men ikke for LÆKAGE: uden security_invoker omgik monthly_standings RLS
+-- helt, og grant'en nederst i filen gav `anon` adgang — altså per-bruger
+-- månedspoint til en kalder helt uden login. Den gældende udgave af viewet
+-- (sql/tournament_scope.sql) har nu security_invoker = on som de to andre.
+-- Endnu en grund til, at denne fil aldrig må gen-køres alene.
+--
 -- Views'ene gendannes med drop + create, fordi kolonnetyper normaliseres til int.
 -- Der bruges bevidst IKKE `cascade`: fejler drop'et på en overset afhængighed, er
 -- det sikkerhedsnettet, ikke noget der skal tvinges igennem. generate_stories og

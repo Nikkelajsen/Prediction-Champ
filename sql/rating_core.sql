@@ -258,4 +258,20 @@ $$;
 
 grant all on function public.pc_points(ph integer, pa integer, hs integer, as_ integer) to anon, authenticated, service_role;
 grant all on function public.round_key(ts timestamp with time zone) to anon, authenticated, service_role;
-grant all on function public.recompute_ratings() to anon, authenticated, service_role;
+
+-- recompute_ratings() er IKKE givet til klient-rollerne (G15, august 2026).
+-- Funktionen er SECURITY DEFINER uden eget adgangstjek og sletter/genopbygger
+-- hele ratings + rating_history fra runde nul. Så længe `anon` stod på denne
+-- linje, var et `POST /rest/v1/rpc/recompute_ratings` med nøglen fra
+-- klient-bundlen en gratis, gentagelig DB-dækkende skrivning.
+--
+-- De tre kaldere, der er tilbage — og hvorfor ingen af dem behøver grant'en:
+--   * rating-triggeren (sql/rating_trigger_optimization.sql) er SECURITY
+--     DEFINER og kalder som ejer;
+--   * Admin-skærmen kalder wrapperen admin_recompute_ratings() med is_admin-
+--     tjek (sql/security_hardening.sql);
+--   * service_role omgår i forvejen alt og har grant'en herunder.
+--
+-- ⚠️ Sætter du anon/authenticated tilbage på denne linje, er hullet åbent igen.
+grant execute on function public.recompute_ratings() to service_role;
+revoke execute on function public.recompute_ratings() from public, anon, authenticated;
