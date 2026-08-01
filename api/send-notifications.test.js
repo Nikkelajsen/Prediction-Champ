@@ -12,7 +12,7 @@
 // Plus sendevinduet (A24). Det er den ene regel her, der er umulig at afprøve i
 // drift: fejler den, opdages det ved, at nogen bliver vækket kl. 03.
 import { describe, it, expect } from "vitest";
-import { finishedRoundKeys, officialSeasonIds, newCompetitionMessages, hourInZone, withinSendWindow } from "./send-notifications.js";
+import { finishedRoundKeys, officialSeasonIds, newCompetitionMessages, hourInZone, dateInZone, withinSendWindow } from "./send-notifications.js";
 
 const kamp = (round_key, home_score, away_score) => ({ id: `${round_key}-${home_score}-${away_score}`, round_key, home_score, away_score });
 
@@ -195,6 +195,20 @@ describe("hourInZone", () => {
   // ligger uden for ethvert vindue, man ville skrive i hånden.
   it("giver 0 ved midnat, ikke 24", () => {
     expect(hourInZone(new Date("2026-08-01T22:00:00Z"))).toBe(0);
+  });
+});
+
+// Den øvre grænse på round_key, som G51 manglede. Grænsen er en DATO, og
+// serverens egen (UTC) er en anden end brugerens i timerne efter midnat dansk.
+describe("dateInZone", () => {
+  it("giver den danske dato, også når UTC stadig er i går", () => {
+    expect(dateInZone(new Date("2026-08-01T22:30:00Z"))).toBe("2026-08-02"); // 00:30 dansk
+    expect(dateInZone(new Date("2026-08-01T21:30:00Z"))).toBe("2026-08-01"); // 23:30 dansk
+  });
+
+  it("giver ÅÅÅÅ-MM-DD, som round_key sammenlignes på", () => {
+    expect(dateInZone(new Date("2026-01-05T12:00:00Z"))).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(dateInZone(new Date("2026-01-05T12:00:00Z"))).toBe("2026-01-05");
   });
 });
 
