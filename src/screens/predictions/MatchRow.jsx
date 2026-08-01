@@ -1,7 +1,7 @@
 // Én kamps række i tip-skærmen — både den låste visning og den åbne med
 // score-input — plus holdnavnenes elastiske typografi og de delte kolonnebredder.
 import { useLayoutEffect, useRef } from "react";
-import { Check, ChevronUp, ChevronRight } from "lucide-react";
+import { Check, ChevronUp, ChevronRight, X } from "lucide-react";
 import { pointsFor, stageBadgeLabel } from "../../lib/scoring.js";
 import { C, font } from "../../ui/theme.js";
 import { FinalBadge, PlayerName, PointsPill, ScoreInput } from "../../ui/components.jsx";
@@ -90,7 +90,10 @@ function MatchRow({
   const stage = stageBadgeLabel(m.stage_name);
   const canExpand = locked && participants.length > 1;
   // Anden linje vises nu kun til det, der IKKE kan bo i en kolonne: stage-mærket
-  // og slettefejl. "Slut", "Live" og "Alles gæt" er flyttet ind i rækken selv, og
+  // og en fejlbesked. `err` er efter G24 selve BESKEDEN (eller null), fordi rækken
+  // nu kan fejle på to måder — den hårdkodede "Kunne ikke slette" pegede det
+  // forkerte sted hen, den dag et gem også kunne fejle synligt.
+  // "Slut", "Live" og "Alles gæt" er flyttet ind i rækken selv, og
   // "Åbner …" forsvandt med det rullende gætte-vindue (B1). Rækken bærer INGEN
   // nedtælling: efter A21 er lås = kickoff − 1 time, og tid-kolonnen viser allerede
   // kickoff, så deadlinen er aflæselig af det, der står i forvejen.
@@ -172,9 +175,13 @@ function MatchRow({
             <ScoreInput value={pred.pred_home} onChange={(v) => onSave(m.id, "pred_home", v)} />
             <span style={{ color: C.muted, fontSize: 12 }}>-</span>
             <ScoreInput value={pred.pred_away} onChange={(v) => onSave(m.id, "pred_away", v)} />
-            {/* Fast slot, så felterne ikke hopper når ✓ kommer og går. */}
+            {/* Fast slot, så felterne ikke hopper når ✓ kommer og går. Efter G24
+                bærer slottet BEGGE udfald: ✓ når gemningen lykkedes, ✗ når den
+                fejlede. Det er dér, øjet er lige efter et tastetryk — beskeden på
+                linje 2 forklarer, men det er krydset, der bliver set. */}
             <span style={{ width: 16, display: "inline-flex", justifyContent: "center" }}>
-              {saved && <Check size={15} style={{ color: C.green }} />}
+              {err ? <X size={15} style={{ color: C.red }} aria-label="Ikke gemt" />
+                : saved && <Check size={15} style={{ color: C.green }} aria-label="Gemt" />}
             </span>
           </div>
         </div>
@@ -188,7 +195,7 @@ function MatchRow({
               {stage}
             </span>
           )}
-          {err && <span style={{ fontSize: 11, color: C.red }}>Kunne ikke slette</span>}
+          {err && <span style={{ fontSize: 11, color: C.red }}>{err}</span>}
         </div>
       )}
 

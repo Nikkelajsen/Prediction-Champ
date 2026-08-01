@@ -31,6 +31,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   const [tab, setTab] = useState("hjem");
   const [screen, setScreen] = useState(null); // null | {type, ...params}
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(""); // fejl fra opstarts-indlæsningen (G23)
   const [leagues, setLeagues] = useState([]);
   const [competitions, setCompetitions] = useState([]);
   const [joinError, setJoinError] = useState(""); // fejl fra invite-join-deeplink (?join=kode)
@@ -87,11 +88,26 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     return [];
   }
 
+  // G23: uden try/catch her låste ét fejlet kald hele appen i "Henter data …" —
+  // det er root-loaderen, så der er ingen anden skærm at komme videre til, og med
+  // G20's manglende boundary var der heller intet, der kunne fange det.
+  //
+  // refreshOnboarding ligger UDEN FOR try'en med vilje: den har sin egen catch
+  // (den må aldrig blokere appen), og en fejlende onboarding-probe skal ikke
+  // kunne fejlmelde en opstart, hvor ligaer og konkurrencer kom fint ind.
   async function loadAll() {
     setLoading(true);
-    await loadLeagues();
-    const comps = await loadCompetitions();
-    setLoading(false);
+    setLoadError("");
+    let comps;
+    try {
+      await loadLeagues();
+      comps = await loadCompetitions();
+    } catch {
+      setLoadError("Kunne ikke hente dine data lige nu. Tjek forbindelsen og prøv igen.");
+      return;
+    } finally {
+      setLoading(false);
+    }
     await refreshOnboarding(comps);
   }
 
@@ -329,6 +345,16 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     body = (
       <div style={{ display: "flex", gap: 10, color: C.muted, alignItems: "center", paddingTop: 40 }}>
         <Loader2 className="spin" size={20} />Henter data …
+      </div>
+    );
+  } else if (loadError) {
+    // App-skallen (header og bundnavigation) bliver stående: fejlen er i dataene,
+    // ikke i appen, og en bruger, der kan se sin egen app, forstår "prøv igen"
+    // anderledes end en, der ser en tom side.
+    body = (
+      <div style={{ paddingTop: 40 }}>
+        <p style={{ color: C.red, fontSize: 14, lineHeight: 1.6, margin: "0 0 14px" }}>{loadError}</p>
+        <button type="button" style={btnGhost} onClick={loadAll}>Prøv igen</button>
       </div>
     );
   } else if (screen?.type === "board") {

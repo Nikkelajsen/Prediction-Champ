@@ -40,6 +40,8 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
   const [selectedCompId, setSelectedCompId] = useState(initialCompId || competitions[0]?.id || null);
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0); // "Prøv igen" — genudløser indlæsnings-effekten
   const [copied, setCopied] = useState(false);
   const [showAllRounds, setShowAllRounds] = useState(false);
   const [viewUser, setViewUser] = useState(null);
@@ -47,24 +49,37 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
   const comp = competitions.find((c) => c.id === selectedCompId);
   const awardsEnabled = comp?.mode_params?.awards === true;
 
+  // G23: computeCompetitionState lå uden for try'en (kun ratings-kaldet var
+  // beskyttet), så et kast dér lod setLoading(false) uden for rækkevidde og
+  // efterlod stillingen i en evig "Henter stilling …". Ratings beholder sin egen
+  // catch: de er valgfri pynt på rækkerne, og en manglende rating må ikke
+  // fejlmelde en stilling, der ellers er hentet fint.
   useEffect(() => {
     if (!selectedCompId || !comp) return;
+    let cancelled = false;
     (async () => {
       setLoading(true);
+      setLoadError("");
       setShowAllRounds(false);
       const rules = comp.rules || { exact: 3, outcome: 1 };
-      const result = await computeCompetitionState(token, selectedCompId, rules);
       try {
-        const ratingMap = await loadRatingMap(token);
-        result.rows.forEach((row) => {
-          const rt = ratingMap.get(row.userId);
-          if (rt) { row.rating = rt.rating; row.provisional = rt.provisional; }
-        });
-      } catch { /* ratings optional */ }
-      setState(result);
-      setLoading(false);
+        const result = await computeCompetitionState(token, selectedCompId, rules);
+        try {
+          const ratingMap = await loadRatingMap(token);
+          result.rows.forEach((row) => {
+            const rt = ratingMap.get(row.userId);
+            if (rt) { row.rating = rt.rating; row.provisional = rt.provisional; }
+          });
+        } catch { /* ratings optional */ }
+        if (!cancelled) setState(result);
+      } catch {
+        if (!cancelled) { setState(null); setLoadError("Kunne ikke hente stillingen lige nu."); }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
-  }, [selectedCompId, comp]); // eslint-disable-line
+    return () => { cancelled = true; };
+  }, [selectedCompId, comp, reloadKey]); // eslint-disable-line
 
   // Lokale kåringer (I13): trig databasens writer og hent resultatet. Lazy med
   // vilje — boardet er v1's eneste visningsflade, så "første åbning efter en
@@ -162,6 +177,15 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
             : state && state.totalMatches > 0 && <span style={{ color: C.muted, fontSize: 12 }}>{state.playedMatches}/{state.totalMatches} spillet</span>}
         </div>
         {loading && <p style={{ ...muted, margin: 0 }}>Beregner…</p>}
+        {/* Fejlen står inde i stillings-kortet frem for at erstatte hele skærmen:
+            invitér-knappen og konkurrencevælgeren ovenfor virker fint, og en
+            fejlet beregning må ikke tage dem med sig. */}
+        {!loading && loadError && (
+          <div>
+            <div style={{ color: C.red, fontSize: 13, marginBottom: 10 }}>{loadError}</div>
+            <button type="button" style={btnGhost} onClick={() => setReloadKey((k) => k + 1)}>Prøv igen</button>
+          </div>
+        )}
         {!loading && state && state.rows.length > 0 && (
           <table style={{ tableLayout: "fixed", width: "100%" }}>
             <colgroup>

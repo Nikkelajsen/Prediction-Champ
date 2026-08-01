@@ -10,12 +10,18 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { db } from "../lib/supabase.js";
 import { logEvent } from "../lib/analytics.js";
 import { currentRoundIndex, groupIntoRounds, isLocked, isPlayed, liveInfo } from "../lib/scoring.js";
-import { C, chip, font, muted, thStyle } from "../ui/theme.js";
+import { C, btnGhost, chip, font, muted, thStyle } from "../ui/theme.js";
 import { BackBar, Card, EmptyCompetitions, H } from "../ui/components.jsx";
 import { groupIntoDays } from "./predictions/time.js";
 import { roundStatus } from "./predictions/roundStatus.js";
 import { RoundHeader } from "./predictions/RoundHeader.jsx";
 import { MatchRow, TeamNames, ROW_COLS, ROW_GAP } from "./predictions/MatchRow.jsx";
+
+// errIds bærer BESKEDEN og ikke bare `true`: efter G24 kan en række fejle på to
+// måder, og "Kunne ikke slette" på et fejlet gem ville pege brugeren det forkerte
+// sted hen. Rækken viser det, der står her — den kender ikke de to tilfælde.
+const ERR_SAVE = "Kunne ikke gemme — prøv igen";
+const ERR_DELETE = "Kunne ikke slette";
 
 function PredictionsScreen({ token, userId, competitions, leagues = [], initialFilter, initialRoundKey, onBack, openProfile, onCreate, goTab }) {
   const [compFilter, setCompFilter] = useState(initialFilter || "all");
@@ -27,6 +33,8 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
   const [participants, setParticipants] = useState([]);
   const [teamsById, setTeamsById] = useState({});
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0); // "Prøv igen" — genudløser indlæsnings-effekten
   const [roundIndex, setRoundIndex] = useState(0);
   const [savedIds, setSavedIds] = useState({});
   const [errIds, setErrIds] = useState({});
@@ -41,43 +49,57 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
     return () => clearInterval(id);
   }, []);
 
+  // G23: otte sekventielle await uden try/catch betød, at ét kast lod
+  // setLoading(false) uden for rækkevidde — skærmen blev stående i "Henter kampe…"
+  // for evigt, uden fejl og uden vej ud. Mønstret her er ProfileScreen.jsx'
+  // (try/catch/finally + cancelled-guard), som allerede er repoets svar på det.
   useEffect(() => {
     const compIds = compFilter === "all" ? competitions.map((c) => c.id) : [compFilter];
     if (!compIds.length) { setAllMatches([]); return; }
+    let cancelled = false;
     (async () => {
       setLoading(true);
+      setLoadError("");
       setExpandedId(null);
-      const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=competition_id,match_id`);
-      const ids = [...new Set(cms.map((c) => c.match_id))];
-      if (!ids.length) { setAllMatches([]); setTeamsById({}); setLoading(false); return; }
-      const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
-      setAllMatches(ms);
-      // season_id -> league_id, så Tips kan filtreres på liga (matchens egen liga,
-      // uafhængigt af konkurrencens league_id — virker også for custom/random-kuponer).
-      const seasonIds = [...new Set(ms.map((m) => m.season_id).filter(Boolean))];
-      if (seasonIds.length) {
-        const seasons = await db.select(token, "seasons", `id=in.(${seasonIds.join(",")})&select=id,league_id`);
-        setSeasonLeague(Object.fromEntries(seasons.map((s) => [s.id, s.league_id])));
-      } else { setSeasonLeague({}); }
-      const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]))];
-      if (teamIds.length) {
-        const tms = await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`);
-        setTeamsById(Object.fromEntries(tms.map((t) => [t.id, t.name])));
+      try {
+        const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=competition_id,match_id`);
+        const ids = [...new Set(cms.map((c) => c.match_id))];
+        if (!ids.length) { setAllMatches([]); setTeamsById({}); return; }
+        const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
+        setAllMatches(ms);
+        // season_id -> league_id, så Tips kan filtreres på liga (matchens egen liga,
+        // uafhængigt af konkurrencens league_id — virker også for custom/random-kuponer).
+        const seasonIds = [...new Set(ms.map((m) => m.season_id).filter(Boolean))];
+        if (seasonIds.length) {
+          const seasons = await db.select(token, "seasons", `id=in.(${seasonIds.join(",")})&select=id,league_id`);
+          setSeasonLeague(Object.fromEntries(seasons.map((s) => [s.id, s.league_id])));
+        } else { setSeasonLeague({}); }
+        const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]))];
+        if (teamIds.length) {
+          const tms = await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`);
+          setTeamsById(Object.fromEntries(tms.map((t) => [t.id, t.name])));
+        }
+        const ap = await db.select(token, "predictions", `match_id=in.(${ids.join(",")})&select=*`);
+        setAllPreds(ap);
+        setPreds(Object.fromEntries(ap.filter((p) => p.user_id === userId).map((p) => [p.match_id, p])));
+        const parts = await db.select(token, "competition_participants", `competition_id=in.(${compIds.join(",")})&select=user_id`);
+        const partIds = [...new Set(parts.map((p) => p.user_id))];
+        const profs = partIds.length ? await db.select(token, "profiles", `id=in.(${partIds.join(",")})&select=id,display_name`) : [];
+        setParticipants(profs);
+        const rds = groupIntoRounds(ms);
+        // Land på den ønskede runde (fra "Tip nu"/"Se tips" på Hjem), ellers den nærmeste runde.
+        const targetIdx = initialRoundKey ? rds.findIndex((r) => r.key === initialRoundKey) : -1;
+        setRoundIndex(targetIdx >= 0 ? targetIdx : currentRoundIndex(rds));
+      } catch {
+        // Delvist hentet data ryddes: står kampene tilbage uden tips eller hold,
+        // ligner skærmen en tom runde frem for en fejlet indlæsning.
+        if (!cancelled) { setAllMatches([]); setLoadError("Kunne ikke hente kampene lige nu."); }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      const ap = await db.select(token, "predictions", `match_id=in.(${ids.join(",")})&select=*`);
-      setAllPreds(ap);
-      setPreds(Object.fromEntries(ap.filter((p) => p.user_id === userId).map((p) => [p.match_id, p])));
-      const parts = await db.select(token, "competition_participants", `competition_id=in.(${compIds.join(",")})&select=user_id`);
-      const partIds = [...new Set(parts.map((p) => p.user_id))];
-      const profs = partIds.length ? await db.select(token, "profiles", `id=in.(${partIds.join(",")})&select=id,display_name`) : [];
-      setParticipants(profs);
-      const rds = groupIntoRounds(ms);
-      // Land på den ønskede runde (fra "Tip nu"/"Se tips" på Hjem), ellers den nærmeste runde.
-      const targetIdx = initialRoundKey ? rds.findIndex((r) => r.key === initialRoundKey) : -1;
-      setRoundIndex(targetIdx >= 0 ? targetIdx : currentRoundIndex(rds));
-      setLoading(false);
     })();
-  }, [compFilter, competitions]); // eslint-disable-line
+    return () => { cancelled = true; };
+  }, [compFilter, competitions, reloadKey]); // eslint-disable-line
 
   // Ligaer der optræder i de hentede kampe (til liga-dropdownen).
   const leagueOptions = useMemo(() => {
@@ -155,12 +177,12 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
           // rækker. Tom liste = intet blev slettet (RLS-policyen mangler/blokerer), selvom
           // rækken findes — gør det synligt i stedet for at fejle lydløst.
           if (Array.isArray(deleted) && deleted.length === 0) {
-            setErrIds((s) => ({ ...s, [matchId]: true }));
+            setErrIds((s) => ({ ...s, [matchId]: ERR_DELETE }));
           } else {
             setErrIds((s) => { const c = { ...s }; delete c[matchId]; return c; });
             setAllPreds((ap) => ap.filter((p) => !(p.user_id === userId && p.match_id === matchId)));
           }
-        } catch { setErrIds((s) => ({ ...s, [matchId]: true })); }
+        } catch { setErrIds((s) => ({ ...s, [matchId]: ERR_DELETE })); }
       }
       return;
     }
@@ -173,6 +195,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
       && cur.pred_away !== null && cur.pred_away !== undefined;
     try {
       await db.upsert(token, "predictions", [{ user_id: userId, match_id: matchId, pred_home: next.pred_home, pred_away: next.pred_away }], "user_id,match_id");
+      setErrIds((s) => { const c = { ...s }; delete c[matchId]; return c; });
       setSavedIds((s) => ({ ...s, [matchId]: true }));
       setTimeout(() => setSavedIds((s) => { const c = { ...s }; delete c[matchId]; return c; }), 2000);
 
@@ -183,7 +206,17 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
       const meta = { match_id: matchId, round_key: allMatches.find((m) => m.id === matchId)?.round_key || null, comp_filter: compFilter };
       logEvent(token, "prediction_saved", { competitionId: comp?.id || null, metadata: meta });
       logEvent(token, wasComplete ? "prediction_updated" : "prediction_submitted", { competitionId: comp?.id || null, metadata: meta });
-    } catch { /* næste forsøg overskriver */ }
+    } catch {
+      // G24: her stod tidligere en tom catch med noten "næste forsøg overskriver".
+      // Det var sandt om DATAEN og forkert om brugeren: den eneste kvittering, et
+      // gem har, er ✓'et, så et fejlet gem så præcis ud som et gem, man ikke havde
+      // set kvitteringen på endnu. Det er appens kernehandling, og den eneste med
+      // en deadline — tvivlen kan ikke opklares efter kampen.
+      //
+      // Kun logEvent-kaldene ovenfor ligger også i try'en, og de kan ikke kaste
+      // (analytics.js:42-51 fanger selv), så denne gren betyder ét: upserten fejlede.
+      setErrIds((s) => ({ ...s, [matchId]: ERR_SAVE }));
+    }
   }
 
   // Rundens ÉNE statuslinje. Logikken bor i predictions/roundStatus.js, så den kan
@@ -236,9 +269,18 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
           )}
 
           {loading && <p style={muted}>Henter kampe…</p>}
+          {/* Fejlen har forrang for "ingen kampe": uden den ville en fejlet
+              indlæsning se ud som en tom konkurrence — samme skærm, modsat årsag,
+              og kun den ene har en handling. */}
+          {!loading && loadError && (
+            <Card style={{ borderColor: C.red }}>
+              <div style={{ color: C.red, fontSize: 13, marginBottom: 10 }}>{loadError}</div>
+              <button type="button" style={btnGhost} onClick={() => setReloadKey((k) => k + 1)}>Prøv igen</button>
+            </Card>
+          )}
           {/* Nævn kun filteret, hvis der FINDES et filter at skrue på — ellers får
               brugeren skylden for et valg, skærmen ikke engang viser. */}
-          {!loading && rounds.length === 0 && (
+          {!loading && !loadError && rounds.length === 0 && (
             <p style={muted}>
               {leagueFilter !== "all" || compFilter !== "all"
                 ? "Ingen kampe i det valgte filter endnu."
@@ -290,7 +332,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
                         live={liveInfo(m)}
                         showFinal={roundInfo?.showFinal !== false}
                         saved={!!savedIds[m.id]}
-                        err={!!errIds[m.id]}
+                        err={errIds[m.id] || null}
                         onSave={save}
                         expanded={expandedId === m.id}
                         onToggleExpanded={() => setExpandedId(expandedId === m.id ? null : m.id)}

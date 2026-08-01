@@ -73,3 +73,33 @@ describe("MatchRow — åben runde", () => {
     expect(html).not.toContain("aria-expanded");
   });
 });
+
+// G24: rækken er det eneste sted, et fejlet gem kan blive synligt — der er ingen
+// toast og ingen anden kvittering end ✓'et. Kontrakten er derfor, at `err` bærer
+// BESKEDEN (ikke bare true), at den vises, og at den fortrænger ✓'et i det faste
+// slot, så en fejl aldrig kan ligne et gem.
+describe("MatchRow — fejlmarkering", () => {
+  it("viser den besked, der sendes med — ikke en hårdkodet", () => {
+    const html = row({ locked: false, err: "Kunne ikke gemme — prøv igen" });
+    expect(html).toContain("Kunne ikke gemme — prøv igen");
+    expect(html).not.toContain("Kunne ikke slette");
+  });
+
+  it("viser stadig slettefejlen, når det er DEN, der sendes med", () => {
+    expect(row({ locked: false, err: "Kunne ikke slette" })).toContain("Kunne ikke slette");
+  });
+
+  it("fortrænger ✓'et, så et fejlet gem ikke kan forveksles med et gemt", () => {
+    const ok = row({ locked: false, saved: true });
+    const failed = row({ locked: false, saved: true, err: "Kunne ikke gemme — prøv igen" });
+    expect(ok).toContain('aria-label="Gemt"');
+    expect(failed).toContain('aria-label="Ikke gemt"');
+    expect(failed).not.toContain('aria-label="Gemt"');
+  });
+
+  it("tegner ingen fejllinje, når der ingen fejl er", () => {
+    const html = row({ locked: false });
+    expect(html).not.toContain("Kunne ikke");
+    expect(html).not.toContain('aria-label="Ikke gemt"');
+  });
+});
