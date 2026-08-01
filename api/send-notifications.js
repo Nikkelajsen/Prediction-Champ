@@ -402,6 +402,8 @@ export default async function handler(req, res) {
     const force = req.query.force === "true";
     const horizonHours = Math.min(24, Math.max(1, Number(req.query.hours) || 3));
     run = createRunLogger(sb, "send-notifications", { skip: dryRun });
+    // A11: hvilken vej autorisationen kom ind, ned i driftsloggen — se setAuth().
+    run.setAuth(auth.via);
 
     // ---- Sendevindue (A24): ingen push om natten ----
     // Kørslen stopper HER, før der er læst en eneste besked og længe før

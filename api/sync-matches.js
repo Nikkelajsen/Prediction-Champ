@@ -123,6 +123,8 @@ export default async function handler(req, res) {
     const seasonNameOverride = req.query.smSeason || null;
     const dryRun = req.query.dryRun === "true";
     run = createRunLogger(sb, "sync-matches", { skip: dryRun });
+    // A11: hvilken vej autorisationen kom ind, ned i driftsloggen — se setAuth().
+    run.setAuth(auth.via);
     // Et job uden leagueId er et forkert opsat cron-job, ikke en tilfældig fejl —
     // derfor tælles det som en fejlet kørsel, så det dukker op i fejlserien.
     if (!leagueId) return run.fail(res, 400, { error: "Mangler leagueId query-parameter" }, "Mangler leagueId query-parameter");
@@ -149,6 +151,11 @@ export default async function handler(req, res) {
     const token = providerToken(provider);
     const apiLeagueId = dbLeague.api_league_id;
 
+    // Leverandørens eget regnskab over forbruget, udfyldt undervejs af
+    // provideren og lagt i kørslens resumé nedenfor (A15). Objektet er tomt,
+    // hvis datakilden ikke rapporterer noget — kun Sportmonks gør i dag.
+    const providerMeta = {};
+
     const seasons = await sb(`/rest/v1/seasons?league_id=eq.${leagueId}&select=id,name,api_season_id&order=start_date.desc&limit=1`);
     if (!seasons.length) throw new Error("Sæson ikke fundet i databasen for denne liga");
     const seasonId = seasons[0].id;
@@ -174,7 +181,7 @@ export default async function handler(req, res) {
           `Kald med fx &smSeason=2026/2027 én gang — id'et gemmes derefter på sæson-rækken.`
         );
       }
-      apiSeasonId = await provider.resolveSeasonId({ apiLeagueId, seasonName, token });
+      apiSeasonId = await provider.resolveSeasonId({ apiLeagueId, seasonName, token, meta: providerMeta });
       await sb(`/rest/v1/seasons?id=eq.${seasonId}`, {
         method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ api_season_id: String(apiSeasonId) }),
       });
@@ -195,7 +202,7 @@ export default async function handler(req, res) {
     let fixtures = null;
     let fetchError = null;
     try {
-      fixtures = await provider.fetchSeasonFixtures({ apiLeagueId, apiSeasonId, token });
+      fixtures = await provider.fetchSeasonFixtures({ apiLeagueId, apiSeasonId, token, meta: providerMeta });
     } catch (e) {
       fetchError = e;
     }
@@ -352,6 +359,8 @@ export default async function handler(req, res) {
       synced: toUpsert.length,
       totalFixtures: fixtures.length,
       teamsCreated: newTeams.length,
+      // Leverandørens eget forbrugstal, når den rapporterer et (A15).
+      ...(providerMeta.rateLimit ? { rateLimit: providerMeta.rateLimit } : {}),
       // Kun til stede, når der ER noget at kigge på: et felt, der står tomt ved
       // hver kørsel, holder man op med at læse. Se ambiguousTeamNames().
       ...(ambiguousTeams.length ? { ambiguousTeams } : {}),

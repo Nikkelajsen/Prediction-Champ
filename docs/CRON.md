@@ -90,23 +90,41 @@ Reglerne bor ét sted: `isAuthorized()` i `api/_shared.js`.
 ### Sådan afgøres A11
 
 Fallbacken kan ikke fjernes på et gæt — rammer man forkert, svarer jobbene 401,
-og syncen står stille. Fremgangsmåden er derfor:
+og syncen står stille. Fremgangsmåden er **ét SQL-opslag** (august 2026):
 
-1. **Instrumenteringen er allerede live.** `isAuthorized()` skriver en advarsel i
-   Vercels logs, hver gang hemmeligheden kommer som `?secret=`:
+```sql
+-- Hvordan har hvert job autoriseret sig den seneste uge?
+select job,
+       coalesce(detail->>'authVia', '(ukendt)') as vej,
+       count(*) as koersler,
+       max(started_at) as senest
+  from job_runs
+ where started_at > now() - interval '7 days'
+ group by 1, 2
+ order by 1, 2;
+```
 
-   ```
-   [A11] Forældet autorisation: hemmeligheden kom som ?secret=. Flyt jobbet til headeren x-sync-secret.
-   ```
+**Sådan læses svaret.** Én række pr. (job, vej):
 
-2. **Lad den køre nogle dage** — mindst så længe, at alle fire skemaer ovenfor har
-   udløst flere gange (det langsomste er `sync-matches` hver 12. time).
+| Hvad der står | Hvad det betyder |
+|---|---|
+| `header` for ALLE jobs, og intet andet | Fallbacken er ubrugt. Fjern den fra `api/_shared.js`, og udfyld kolonnen ovenfor |
+| `query` for ét job | Dét job kalder stadig med `?secret=`. Ret det i cron-job.org, og kør opslaget igen om et døgn |
+| `admin-token` | Et menneske har trykket "Hent nu" i Admin. Tæller ikke med — cron-jobbene er dem, der skal flyttes |
+| Et job **mangler helt** | Det har ikke kørt i vinduet. Det er IKKE det samme som "kalder rigtigt", og det er den eneste måde at tage fejl på her |
 
-3. **Aflæs.** Ingen `[A11]`-linjer i perioden = alle jobs bruger headeren. Udfyld
-   kolonnen ovenfor, og fjern fallbacken fra `api/_shared.js`.
+**Hvorfor et opslag og ikke logs.** Frem til august 2026 var det eneste spor en
+advarsel i Vercels logs (`[A11] Forældet autorisation …`, som stadig skrives).
+Den fremgangsmåde havde tre svagheder, og den tredje er den alvorlige: man
+skulle huske at kigge et sted uden for appen, inden for logopbevaringens vindue
+— og **fravær af advarsler kunne ikke skelnes fra fravær af kørsler.** Et job,
+cron-job.org havde deaktiveret, så ud præcis som et job, der kaldte rigtigt.
+`isAuthorized()` har altid returneret `via`; værdien blev bare kasseret. Nu står
+den i `job_runs.detail` med 30 dages historik (`prune_job_runs`), hvor et job
+uden kørsler simpelthen mangler i svaret.
 
-4. **Er der linjer**, fortæller de, hvilket endpoint der stadig kalder forkert.
-   Ret jobbet i cron-job.org først, og start punkt 2 forfra.
+Vejen står også i **Admin → Drift** under "Seneste resumé" på hvert jobkort, hvis
+man kun vil have et hurtigt kig.
 
 ## Overvågning
 

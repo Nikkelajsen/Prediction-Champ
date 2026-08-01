@@ -74,6 +74,8 @@ export default async function handler(req, res) {
 
     const dryRun = req.query.dryRun === "true";
     run = createRunLogger(sb, "sync-live", { skip: dryRun });
+    // A11: hvilken vej autorisationen kom ind, ned i driftsloggen — se setAuth().
+    run.setAuth(auth.via);
 
     // ---- 1) hvilke kampe kan være i gang lige nu? ----
     // (a) kampe uden endeligt resultat, hvis kickoff ligger i tidsvinduet, ELLER
@@ -136,6 +138,9 @@ export default async function handler(req, res) {
     const skipped = new Set();
     const providerErrors = [];
 
+    // Leverandørens eget regnskab over forbruget (A15). Kun Sportmonks
+    // rapporterer i dag; feltet mangler tavst for de øvrige.
+    const providerMeta = {};
     for (const [key, matches] of groups) {
       try {
         const provider = getProvider(key);
@@ -144,6 +149,7 @@ export default async function handler(req, res) {
           providerIds: matches.map((m) => provider.fromGlobalId(m.api_fixture_id)),
           kickoffs: matches.map((m) => m.kickoff_at),
           token,
+          meta: providerMeta,
         });
         for (const [globalId, fx] of found) fixtureByGlobalId.set(globalId, fx);
       } catch (e) {
@@ -264,7 +270,14 @@ export default async function handler(req, res) {
       });
     }
 
-    const body = { ...summary, written: updates.length };
+    const body = {
+      ...summary,
+      written: updates.length,
+      // Leverandørens eget forbrugstal, når den rapporterer et (A15). Netop
+      // dette job er det interessante: det kører hvert minut og er dermed det,
+      // der kommer tættest på grænsen.
+      ...(providerMeta.rateLimit ? { rateLimit: providerMeta.rateLimit } : {}),
+    };
 
     // Rækkefølgen er med vilje: de leverandører, der virkede, har fået deres
     // opdateringer skrevet, FØR kørslen meldes fejlet. En fejlet leverandør

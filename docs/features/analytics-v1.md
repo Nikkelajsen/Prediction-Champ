@@ -226,6 +226,53 @@ Modtagerne findes ved at parse `notification_log.key` (`deadline:<season_id>:<ro
 
 **Varsel før første lås** (`sent_at` → `lock_at`, i intervaller) er med, fordi det er den eneste knap, der reelt kan drejes på: cron-tidspunktet. Intervallerne er ikke sammenlignelige uden videre — runder med tidligt kickoff får systematisk kortere varsel.
 
+## 5F. Ad hoc-opslag: virker "Anbefalet"? (`B12`, august 2026)
+
+Spec'en siger, at SQL-editoren **er** eksport- og analysemekanismen (§10). Det
+gælder også dette: `B12` beder ikke om en ny sektion i dashboardet, men om ét
+opslag, der er kørt én gang. Det står her, fordi et spørgsmål uden en formuleret
+forespørgsel i praksis aldrig bliver stillet.
+
+**Spørgsmålet.** `A22` satte mærkatet "Anbefalet" på Sæson-kortet i opret-galleriet
+netop for at flytte, hvilken mode nye brugere vælger. Effekten er aldrig aflæst —
+og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger
+den plads, der skulle guide.
+
+**Der skal ikke instrumenteres noget.** `competition_created` bærer allerede
+`metadata.mode`, så før/efter kan opgøres på eksisterende data:
+
+```sql
+-- Fordelingen af konkurrence-typer før og efter, at "Anbefalet" kom på.
+-- Sæt datoen til den dag, A22 blev udrullet.
+with maerket as (select timestamptz '2026-08-01 00:00+02' as fra)
+select case when e.created_at < m.fra then 'før' else 'efter' end as periode,
+       e.metadata->>'mode'                                        as mode,
+       count(*)                                                   as antal,
+       round(100.0 * count(*) / sum(count(*)) over (partition by (e.created_at < m.fra)), 1) as pct
+  from analytics_events e cross join maerket m
+ where e.event_name = 'competition_created'
+ group by 1, 2
+ order by 1 desc, 4 desc;
+```
+
+**Sådan læses svaret.** Sammenlign `pct` for `full_season` før og efter. Bemærk
+tre forbehold, som skal med, hvis tallet skal bære en beslutning:
+
+* **Antallet er lille.** Med få oprettelser pr. uge er en forskel på et par
+  procentpoint støj. Står `antal` i enkeltcifre for en periode, er svaret "vi
+  ved det ikke endnu" — ikke "det virkede ikke".
+* **Hændelsesloggen er fire-and-forget og lossy by design** (§2). Den er et
+  GULV, ikke et facit. Til gengæld rammer tabet begge perioder lige, så
+  *fordelingen* er mere troværdig end de absolutte tal.
+* **Rækkefølgen af kortene blev vendt samme dag** som mærkatet kom på (langt →
+  kort med Sæson øverst). De to kan ikke skilles ad i data — flytter fordelingen
+  sig, ved vi ikke hvilken af dem, der gjorde det. Det er acceptabelt for det,
+  spørgsmålet skal bruges til (*virkede indgrebet?*), men ikke for et forsøg på
+  at kalibrere de to hver for sig.
+
+Samme opslag svarer på `I15`s åbne spørgsmål: bruges "Ugens kupon"-kortet
+overhovedet? Kig efter `random` i `mode`-kolonnen.
+
 ## 6. Liga-diagnose (afløser Health Score, 30. juli 2026)
 
 **Den sammenvejede Health Score (0-100) er fjernet.** Den var for bred til at bruge til noget, af fire grunde:
