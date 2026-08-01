@@ -1,0 +1,16 @@
+# Hvad der IKKE skal med i deployet.
+#
+# Vercel gør hver eneste .js-fil under api/ til en selvstændig serverless
+# function (undtagen dem med _ foran, som er delt kode). Testfilerne tæller
+# altså med i det antal — og Hobby-planen tillader højst 12 funktioner pr.
+# deploy.
+#
+# Det var ikke en teoretisk grænse: repoet lå på præcis 12, og den første nye
+# fil i api/ (`sync-matches.test.js`, 1. august 2026) gjorde det til 13. Deployet
+# fejlede da på 11 sekunder uden at nå at bygge — altså uden at fejlen lignede
+# noget, koden havde gjort. Uden denne fil ville næste testfil i api/ gøre det
+# igen, og symptomet ville være lige så uigennemsigtigt.
+#
+# Testfilerne kører i CI og i `npm test`; de har intet at gøre i produktion.
+# Med dem ude er tallet 8, altså fire funktioners luft.
+api/**/*.test.js
