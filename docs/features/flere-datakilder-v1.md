@@ -187,16 +187,21 @@ kampe.** Det er tallet, man kigger på.
 
 Spec'en forudså kampe uden hold. Den forudså ikke, at hele sæsonen kunne komme
 tom hjem — og det gjorde Champions League ved idriftsættelsen (`B8`). Problemet
-var ikke tomheden, men at den var **tvetydig**: `/competitions/CL/matches?season=2026`
-svarer 200 med en tom liste både når sæsonen findes uden kampe, og når
-`api_season_id` peger på et år, leverandøren ikke kender. `totalFixtures: 0`
-kunne ikke skelne dem, så spørgsmålet krævede et manuelt opslag, ingen kom til
-at foretage.
+var ikke tomheden, men at den var **tvetydig**: turneringen henter ingen kampe,
+og man kan ikke se, om det er en fejl. Enten er kampprogrammet ikke
+offentliggjort endnu, eller også peger `api_season_id` et sted hen,
+leverandøren ikke kender — og kun den ene retter sig selv.
+
+**Rettet samme dag (se 7.2): tvetydigheden har to former, ikke én.**
+`/competitions/CL/matches?season=<år>` kan både svare 200 med en tom liste og
+**404** (*"The resource you are looking for does not exist"*), og de er lige
+uigennemsigtige. Første udgave af diagnosen dækkede kun den første — og det var
+den anden, Champions League faktisk gav.
 
 Providerkontrakten har derfor fået en **valgfri** metode,
-`describeEmptySeason()`, som `sync-matches` kalder — og kun kalder — når nul
-kampe kom hjem. Den slår `/competitions/<kode>` op og lægger svaret i
-`emptySeason` i kørslens detalje:
+`describeEmptySeason()`, som `sync-matches` kalder — og kun kalder — når
+sæsonopslaget enten kom tomt hjem **eller fejlede**. Den slår
+`/competitions/<kode>` op og lægger svaret i `emptySeason` i kørslens detalje:
 
 | `code` | Betydning | Handling |
 |---|---|---|
@@ -216,6 +221,32 @@ trykker på knappen, er præcis den, der har brug for svaret, og kortet sagde
 indtil nu kun *"0 kampe synkroniseret ud af 0 fundet"*, som er den samme sætning
 i begge tilfælde. `season-unknown` står rødt, resten dæmpet, fordi kun den ene
 kræver en handling.
+
+### 7.2 Rettet efter første test (1. august 2026): 404, ikke tom liste — og én tolereret fejl
+
+Det første forsøg på at hente Champions League gav ikke 200 med en tom liste,
+men **404**. Diagnosen kørte derfor slet ikke: den sad kun på den tomme sæson,
+mens 404'en kastede og gik direkte i `catch`'en. To ting fulgte af det.
+
+**Diagnosen sidder nu på begge udgange.** Sæsonopslaget pakkes ind, og fejler
+det, stilles spørgsmålet alligevel. Fejlbeskeden bærer så forklaringen med sig:
+`football-data.org: 404 … — football-data.org har endnu ikke oprettet sæsonen
+2026 (aktuel sæson er 2025)`. Den rå 404 er sand og ubrugelig; det er
+sætningen efter tankestregen, man handler på.
+
+**Og én kode tolereres.** Er svaret `season-not-published`, tælles kørslen som
+**gennemført med nul kampe** frem for som fejlet. Grunden er ikke pænhed, men
+brugbarhed: CL' ligafase lodtrækkes i slutningen af august, så jobbet ville
+ellers stå rødt ved hver eneste kørsel i seks uger for noget fuldstændig
+forventeligt — og et job, der altid er rødt, lærer én at holde op med at kigge,
+hvorefter den *næste* røde række også er usynlig.
+
+**Kun den ene kode slipper igennem.** `season-unknown` — et forkert
+`api_season_id` — bliver ved med at være rød, fordi den ikke retter sig selv, og
+det samme gælder alt, diagnosen ikke kunne afgøre. Præcis den skelnen er hele
+grunden til, at diagnosen findes, og reglen er trukket ud som den rene funktion
+`seasonFetchVerdict()` med sin egen test: en tolerance, der skrider, gør en død
+turnering grøn.
 
 ## 8. Hvad der bevidst IKKE blev gjort
 

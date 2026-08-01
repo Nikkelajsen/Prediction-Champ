@@ -19,6 +19,29 @@ import { createSb, isAuthorized, createRunLogger, failJob } from "./_shared.js";
 import { getProvider, providerToken } from "./providers/index.js";
 import { backfillCompetitionMatches } from "./backfill.js";
 
+// Er en fejlet sæsonhentning en fejlet KØRSEL?
+//
+// Næsten altid ja. Det ene undtagelsestilfælde er, at leverandøren endnu ikke
+// har oprettet sæsonen: Champions League' ligafase lodtrækkes i slutningen af
+// august, så `?season=2026` svarer 404 ved hver eneste kørsel indtil da. Et job,
+// der står rødt i seks uger for noget forventeligt, er værre end intet job — det
+// lærer én at holde op med at kigge, og så er den NÆSTE røde række også usynlig.
+// Den kørsel tælles derfor som gennemført med nul kampe, med forklaringen i
+// detaljen.
+//
+// Kun `season-not-published` slipper igennem. `season-unknown` — et forkert
+// api_season_id — skal blive ved med at være rød, fordi den ikke retter sig
+// selv, og det samme gælder alt, diagnosen ikke kunne afgøre. Præcis den
+// skelnen er hele grunden til, at diagnosen findes.
+//
+// Ren funktion og eksporteret, fordi reglen er værd at fastholde i en test:
+// handleren selv kræver en database og et request-objekt.
+export function seasonFetchVerdict(fetchError, emptySeason) {
+  if (emptySeason?.code === "season-not-published") return { tolerated: true };
+  const why = emptySeason?.message ? ` — ${emptySeason.message}` : "";
+  return { tolerated: false, message: `${fetchError?.message ?? String(fetchError)}${why}` };
+}
+
 export default async function handler(req, res) {
   // Sættes så snart autorisationen er i hus. Ligger uden for try'et, fordi
   // catch'en skal kunne bruge den — en kørsel, der vælter, er netop den, der
@@ -114,25 +137,43 @@ export default async function handler(req, res) {
       });
     }
 
-    const fixtures = await provider.fetchSeasonFixtures({ apiLeagueId, apiSeasonId, token });
-
-    // En sæson, der kommer tom hjem, er tvetydig: enten er kampprogrammet ikke
-    // offentliggjort endnu, eller også peger api_season_id et forkert sted hen.
-    // Kun den ene retter sig selv, og `totalFixtures: 0` alene kan ikke skelne
-    // dem — det var det, der efterlod `B8` uafgjort. Kan datakilden svare på
-    // spørgsmålet, stiller vi det, og svaret havner i job_runs, så det kan
-    // aflæses i Admin → Drift frem for at kræve et manuelt opslag.
+    // Sæsonopslaget er tvetydigt på TO måder, og begge betyder det samme for
+    // den, der kigger: turneringen henter ingen kampe, og man kan ikke se, om
+    // det er en fejl. Enten er kampprogrammet ikke offentliggjort endnu, eller
+    // også peger api_season_id et sted hen, leverandøren ikke kender — kun den
+    // ene retter sig selv. Det var dét, der efterlod `B8` uafgjort.
     //
-    // Diagnosen må ALDRIG kunne vælte en kørsel: en tom sæson er i sig selv en
-    // gyldig kørsel, og et ekstra opslag, der fejler (429, nedetid), skal ikke
-    // gøre den til en fejl. Derfor fanges alt og gemmes som tekst.
+    // De to udgange ser forskellige ud i HTTP og er lige uigennemsigtige:
+    //   · 200 med tom liste → `totalFixtures: 0`, som ikke siger hvorfor
+    //   · 404               → "The resource you are looking for does not exist",
+    //                         som heller ikke siger hvorfor
+    // Første udgave af diagnosen dækkede kun den første — og det var den anden,
+    // Champions League faktisk gav. Derfor spørges datakilden i BEGGE tilfælde.
+    let fixtures = null;
+    let fetchError = null;
+    try {
+      fixtures = await provider.fetchSeasonFixtures({ apiLeagueId, apiSeasonId, token });
+    } catch (e) {
+      fetchError = e;
+    }
+
+    // Diagnosen må ALDRIG kunne vælte en kørsel, der ellers gik godt: en tom
+    // sæson er i sig selv en gyldig kørsel, og et ekstra opslag, der fejler
+    // (429, nedetid), skal ikke gøre den til en fejl. Derfor fanges alt og
+    // gemmes som tekst.
     let emptySeason = null;
-    if (!fixtures.length && provider.describeEmptySeason) {
+    if ((fetchError || !fixtures.length) && provider.describeEmptySeason) {
       try {
         emptySeason = await provider.describeEmptySeason({ apiLeagueId, apiSeasonId, token });
       } catch (e) {
         emptySeason = { code: "lookup-failed", message: e?.message ?? String(e) };
       }
+    }
+
+    if (fetchError) {
+      const verdict = seasonFetchVerdict(fetchError, emptySeason);
+      if (!verdict.tolerated) throw new Error(verdict.message, { cause: fetchError });
+      fixtures = [];
     }
 
     if (dryRun) {
