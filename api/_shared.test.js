@@ -511,3 +511,60 @@ describe("fetchWithTimeout", () => {
     await expect(fetchWithTimeout("https://x.test/a", {}, 50)).rejects.toThrow("ECONNREFUSED");
   });
 });
+
+// A11: hvilken vej autorisationen kom ind, skal kunne aflæses i driftsloggen.
+//
+// `isAuthorized()` har altid vidst det, men værdien blev kasseret, så det
+// eneste spor var en advarsel i Vercels logs. Beslutningen om at fjerne
+// `?secret=`-fallbacken afhang dermed af, at nogen huskede at kigge et sted
+// uden for appen — og af at kunne skelne "ingen advarsler" fra "ingen kørsler".
+describe("createRunLogger.setAuth", () => {
+  const mkRes = () => {
+    const res = { statusCode: null, body: null,
+      status(c) { res.statusCode = c; return res; },
+      json(b) { res.body = b; return res; } };
+    return res;
+  };
+
+  it("lægger autorisationsvejen i detaljen", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    const run = createRunLogger(sb, "sync-live");
+    run.setAuth("header");
+    await run.ok(res, { written: 2 });
+
+    expect(JSON.parse(sb.mock.calls[0][1].body).detail).toEqual({ written: 2, authVia: "header" });
+  });
+
+  // Detaljen er til driftsloggen, svaret er til kalderen. De to skal ikke
+  // vokse sammen — cron-jobbet har ingen brug for at få at vide, hvordan det
+  // selv kaldte ind.
+  it("ændrer ikke det, kalderen får at se", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    const run = createRunLogger(sb, "sync-live");
+    run.setAuth("query");
+    await run.ok(res, { written: 2 });
+    expect(res.body).toEqual({ written: 2 });
+  });
+
+  // En FEJLET kørsel er lige så interessant for A11: kaldte jobbet forkert OG
+  // fejlede, skal begge dele kunne ses på samme række.
+  it("gælder også fejlede kørsler", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    const run = createRunLogger(sb, "sync-matches");
+    run.setAuth("query");
+    await run.fail(res, 500, { error: "kort" }, "lang");
+    const row = JSON.parse(sb.mock.calls[0][1].body);
+    expect(row.detail).toEqual({ error: "kort", authVia: "query" });
+    expect(row.ok).toBe(false);
+  });
+
+  it("skriver intet felt, når vejen er ukendt", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    await createRunLogger(sb, "sync-live").ok(res, { written: 1 });
+    expect(JSON.parse(sb.mock.calls[0][1].body).detail).toEqual({ written: 1 });
+  });
+});

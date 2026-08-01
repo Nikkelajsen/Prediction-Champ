@@ -72,6 +72,32 @@ export async function smFetch(url, fetchImpl, sleep = defaultSleep) {
   return res;
 }
 
+// ---- forbruget, som leverandøren selv opgør det (A15) ----
+//
+// `A15` spørger, hvilket tal der gælder for gratis-planen: dokumentationen og
+// `live-resultater-v1.md` siger "180 kald i timen pr. entitet", mens Sportmonks'
+// kontoside viser "3.000 API-kald". Spørgsmålet har stået åbent, fordi svaret
+// krævede, at nogen skrev til supporten.
+//
+// Det behøver det ikke: Sportmonks lægger sit eget regnskab i HVERT svar, i et
+// `rate_limit`-objekt med `remaining`, `resets_in_seconds` og — afgørende —
+// `requested_entity`. Netop det sidste felt afgør uenigheden: er grænsen pr.
+// entitet, står entitetens navn der.
+//
+// Værdien lægges i kørslens resumé og kan dermed aflæses i Admin → Drift.
+// Feltet er VALGFRIT: er det der ikke (anden plan, ændret svarformat), skrives
+// intet, og alt fungerer som før. En aflæsning, der kræver en ændring i
+// leverandørens svar for at fejle stille, er ikke værd at have.
+function readRateLimit(data, meta) {
+  const rl = data?.rate_limit;
+  if (!meta || !rl) return;
+  meta.rateLimit = {
+    remaining: rl.remaining ?? null,
+    resetsInSeconds: rl.resets_in_seconds ?? null,
+    entity: rl.requested_entity ?? null,
+  };
+}
+
 // Sportmonks returnerer state-navnet i flere felter afhængigt af endpoint/plan.
 function stateNames(fx) {
   return [fx.state?.developer_name, fx.state?.state, fx.state?.short_name].filter(Boolean);
@@ -160,12 +186,13 @@ export const sportmonks = {
 
   // Slå sæson-id op ud fra navnet (fx "2026/2027"). Kaldes kun, når
   // seasons.api_season_id er tom — bagefter gemmer kalderen id'et.
-  async resolveSeasonId({ apiLeagueId, seasonName, token, fetchImpl = fetchWithTimeout, sleep }) {
+  async resolveSeasonId({ apiLeagueId, seasonName, token, fetchImpl = fetchWithTimeout, sleep, meta }) {
     const res = await smFetch(
       `${BASE}/leagues/${apiLeagueId}?include=seasons&api_token=${token}`, fetchImpl, sleep
     );
     if (!res.ok) throw new Error(`Sportmonks (liga): ${res.status} ${await res.text()}`);
     const data = await res.json();
+    readRateLimit(data, meta);
     const seasons = data.data?.seasons || [];
     const match = seasons.find((s) => s.name === seasonName);
     if (!match) {
@@ -178,7 +205,7 @@ export const sportmonks = {
   },
 
   // Hele sæsonens kampprogram. Pagineret — ~4 kald for en typisk turnering.
-  async fetchSeasonFixtures({ apiSeasonId, token, fetchImpl = fetchWithTimeout, sleep }) {
+  async fetchSeasonFixtures({ apiSeasonId, token, fetchImpl = fetchWithTimeout, sleep, meta }) {
     const byId = new Map();
     let page = 1;
     let hasMore = true;
@@ -189,6 +216,7 @@ export const sportmonks = {
       const res = await smFetch(url, fetchImpl, sleep);
       if (!res.ok) throw new Error(`Sportmonks (kampe): ${res.status} ${await res.text()}`);
       const data = await res.json();
+      readRateLimit(data, meta);
       for (const fx of data.data || []) byId.set(fx.id, fx);
       hasMore = !!data.pagination?.has_more;
       page++;
@@ -209,7 +237,7 @@ export const sportmonks = {
   // Netop de angivne kampe, ét kald pr. 40. Returnerer en Map globalId → kamp;
   // kampe uden for abonnementet mangler ganske enkelt i den, og kalderen rydder
   // deres live-markering i stedet for at fejle.
-  async fetchLive({ providerIds, token, fetchImpl = fetchWithTimeout, sleep }) {
+  async fetchLive({ providerIds, token, fetchImpl = fetchWithTimeout, sleep, meta }) {
     const out = new Map();
     for (let i = 0; i < providerIds.length; i += MAX_IDS_PER_CALL) {
       const chunk = providerIds.slice(i, i + MAX_IDS_PER_CALL);
@@ -228,6 +256,7 @@ export const sportmonks = {
       if (!r.ok && r.status >= 400 && r.status < 500 && r.status !== 429) r = await call("scores;state");
       if (!r.ok) throw new Error(`Sportmonks (live): ${r.status} ${await r.text()}`);
       const data = await r.json();
+      readRateLimit(data, meta);
       const rows = Array.isArray(data.data) ? data.data : data.data ? [data.data] : [];
       for (const fx of rows) out.set(String(fx.id), normalize(fx));
     }
@@ -236,4 +265,4 @@ export const sportmonks = {
 };
 
 // Eksporteret til test — mappingen er det, der ikke må flytte sig ved en oprydning.
-export const __test = { normalize, statusOf, currentScore, liveMinute, retryAfterMs, RETRY_AFTER_MAX_S, RETRY_AFTER_FALLBACK_S };
+export const __test = { normalize, statusOf, currentScore, liveMinute, readRateLimit, retryAfterMs, RETRY_AFTER_MAX_S, RETRY_AFTER_FALLBACK_S };

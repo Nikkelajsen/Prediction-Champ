@@ -253,3 +253,61 @@ describe("fetchLive og 429", () => {
     expect(fetchImpl.mock.calls[1][0]).not.toContain("periods");
   });
 });
+
+// A15: hvilket tal gælder for gratis-planen — 180 pr. entitet eller 3.000?
+//
+// Spørgsmålet har stået åbent, fordi svaret krævede en henvendelse til
+// supporten. Det gør det ikke: Sportmonks lægger sit eget regnskab i hvert
+// svar, og `requested_entity` er netop det felt, der afgør, om grænsen er pr.
+// entitet. Aflæses i Admin → Drift.
+describe("readRateLimit", () => {
+  const { readRateLimit } = __test;
+
+  it("plukker de tre felter, spørgsmålet handler om", () => {
+    const meta = {};
+    readRateLimit({ rate_limit: { remaining: 2999, resets_in_seconds: 3540, requested_entity: "Fixture" } }, meta);
+    expect(meta.rateLimit).toEqual({ remaining: 2999, resetsInSeconds: 3540, entity: "Fixture" });
+  });
+
+  // Feltet er VALGFRIT. Er det der ikke — anden plan, ændret svarformat —
+  // skrives intet, og alt fungerer som før. En aflæsning, der kræver en
+  // ændring hos leverandøren for at fejle stille, er ikke værd at have.
+  it("skriver intet, når leverandøren ikke rapporterer noget", () => {
+    const meta = {};
+    readRateLimit({ data: [] }, meta);
+    readRateLimit(null, meta);
+    expect(meta).toEqual({});
+  });
+
+  it("tåler at blive kaldt uden et sted at skrive hen", () => {
+    expect(() => readRateLimit({ rate_limit: { remaining: 1 } }, undefined)).not.toThrow();
+  });
+
+  it("bevarer feltet som null frem for at udelade det, når kun nogle er der", () => {
+    const meta = {};
+    readRateLimit({ rate_limit: { remaining: 7 } }, meta);
+    expect(meta.rateLimit).toEqual({ remaining: 7, resetsInSeconds: null, entity: null });
+  });
+});
+
+describe("providerne fører forbruget videre", () => {
+  const svar = (body) => ({ ok: true, status: 200, headers: { get: () => null },
+    text: async () => JSON.stringify(body), json: async () => body });
+  const RL = { remaining: 2999, resets_in_seconds: 3540, requested_entity: "Fixture" };
+
+  it("fra kampprogram-opslaget", async () => {
+    const meta = {};
+    const fetchImpl = vi.fn(async () => svar({ data: [fixture({ id: 1 })], pagination: { has_more: false }, rate_limit: RL }));
+    await sportmonks.fetchSeasonFixtures({ apiSeasonId: "1", token: "t", fetchImpl, meta });
+    expect(meta.rateLimit.remaining).toBe(2999);
+  });
+
+  // Det vigtigste sted: sync-live kører hvert minut og kommer dermed tættest
+  // på grænsen af alle jobs.
+  it("fra live-opslaget", async () => {
+    const meta = {};
+    const fetchImpl = vi.fn(async () => svar({ data: [fixture({ id: 7 })], rate_limit: RL }));
+    await sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl, meta });
+    expect(meta.rateLimit.entity).toBe("Fixture");
+  });
+})

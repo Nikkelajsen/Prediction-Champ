@@ -159,6 +159,13 @@ export async function recordRun(sb, job, { ok, startedAt, detail = null, error =
 export function createRunLogger(sb, job, { skip = false } = {}) {
   const startedAt = Date.now();
   let name = job;
+  // Hvordan kørslen autoriserede sig. Sættes af handleren og lægges i
+  // `job_runs.detail` — se setAuth() nedenfor for hvorfor.
+  let authVia = null;
+  // Detaljen er jobbets eget svar PLUS det, kørslen ved om sig selv. De to
+  // holdes adskilt, fordi svaret er til kalderen (et cron-job, en maskine),
+  // mens detaljen er til den, der læser driftsloggen bagefter.
+  const withMeta = (body) => (authVia ? { ...body, authVia } : body);
   return {
     // Skifter jobnavnet MIDT i kørslen, uden at nulstille varigheden.
     //
@@ -171,14 +178,30 @@ export function createRunLogger(sb, job, { skip = false } = {}) {
     rename(nextJob) {
       if (nextJob) name = nextJob;
     },
+    // Skriver HVILKEN vej kørslen autoriserede sig ind i driftsloggen (A11).
+    //
+    // `isAuthorized()` har altid vidst det — den returnerer `via` — men værdien
+    // blev kasseret, så det eneste spor var en `[A11]`-advarsel i Vercels logs.
+    // Det gjorde beslutningen om at fjerne `?secret=`-fallbacken afhængig af, at
+    // nogen huskede at kigge et sted uden for appen, inden for logopbevaringens
+    // vindue, og kunne skelne "ingen advarsler" fra "ingen kørsler".
+    //
+    // Med værdien i `job_runs.detail` bliver spørgsmålet et ALMINDELIGT OPSLAG
+    // med 30 dages historik (`prune_job_runs`), og — vigtigst — et opslag, der
+    // kan skelne de to: et job, der ikke har kørt, har ingen række, mens et job,
+    // der kalder rigtigt, har rækker med `authVia: "header"`. Fremgangsmåden
+    // står i docs/CRON.md.
+    setAuth(via) {
+      authVia = via || null;
+    },
     async ok(res, body) {
-      if (!skip) await recordRun(sb, name, { ok: true, startedAt, detail: body });
+      if (!skip) await recordRun(sb, name, { ok: true, startedAt, detail: withMeta(body) });
       return res.status(200).json(body);
     },
     // `error` er den fulde tekst til job_runs (kun admin-læsbar); `body` er det,
     // kalderen får at se. De to er med vilje ikke det samme — se handlernes catch.
     async fail(res, status, body, error) {
-      if (!skip) await recordRun(sb, name, { ok: false, startedAt, detail: body, error });
+      if (!skip) await recordRun(sb, name, { ok: false, startedAt, detail: withMeta(body), error });
       return res.status(status).json(body);
     },
   };
