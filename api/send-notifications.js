@@ -69,7 +69,8 @@ export function hourInZone(date, timeZone = SEND_WINDOW.timeZone) {
 }
 
 // Datoen (ÅÅÅÅ-MM-DD) i en given tidszone. Bruges som øvre grænse på `round_key`,
-// som er en `date` beregnet af `round_key(kickoff_at)` — altså rundens mandag.
+// som er en `date` beregnet af `round_key(kickoff_at)` — altså rundens TIRSDAG:
+// runderne løber tirsdag til mandag (`round_key()` i sql/rating_core.sql).
 // Serverens egen dato ville være UTC og dermed ligge en dag bagud i timerne
 // efter midnat dansk tid; samme grund som SEND_WINDOW's faste tidszone.
 export function dateInZone(date, timeZone = SEND_WINDOW.timeZone) {
@@ -399,7 +400,7 @@ export default async function handler(req, res) {
       // "Runden er slut" afgik midt i en igangværende runde med et
       // stillingsfelt, der kun talte de spillede kampes tippere.
       //
-      // Grænsen er ikke bare en optimering: en runde, hvis mandag ligger i
+      // Grænsen er ikke bare en optimering: en runde, hvis STARTDAG ligger i
       // fremtiden, kan pr. definition ikke være færdigspillet, så alt over
       // dagens dato er rækker, svaret aldrig skulle have båret.
       const toKey = dateInZone(new Date(now));
