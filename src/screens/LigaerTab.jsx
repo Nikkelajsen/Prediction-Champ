@@ -21,6 +21,9 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
   const [joinErr, setJoinErr] = useState("");
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  // I4: har man ligaer, foldes opret/deltag sammen til én kompakt knap-række,
+  // og panelet her styrer, hvilket af de to inputfelter der er foldet ud.
+  const [openPanel, setOpenPanel] = useState(null); // null | "create" | "join"
   const [nudgeGone, setNudgeGone] = useState(() => { try { return !!localStorage.getItem(NUDGE_KEY); } catch { return false; } });
 
   async function reloadGroups() {
@@ -110,7 +113,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
               <span>{c.name}</span>
             </div>
             <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
-              {modeLabel(c.mode)}{s?.participants != null ? ` · ${s.participants} deltager${s.participants === 1 ? "" : "e"}` : ""}
+              {modeLabel(c.mode, c.mode_params)}{s?.participants != null ? ` · ${s.participants} deltager${s.participants === 1 ? "" : "e"}` : ""}
               {s && !s.isComplete && s.totalMatches > 0 ? ` · ${s.playedMatches}/${s.totalMatches} spillet` : ""}
             </div>
             {s?.isComplete && s.winners?.length > 0 && (
@@ -188,26 +191,67 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
         )}
       </div>
 
-      {/* Opret liga */}
-      <Card>
-        <Eyebrow>Opret en liga</Eyebrow>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input className="field" style={{ flex: 1 }} placeholder="Navn på liga (2–40 tegn)…" value={newName} maxLength={40}
-            onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && createNewGroup()} />
-          <button style={{ ...btnGreen, width: "auto", padding: "8px 14px", opacity: creating || !newName.trim() ? 0.5 : 1 }}
-            disabled={creating || !newName.trim()} onClick={createNewGroup}><Plus size={15} /> Opret</button>
+      {/* Opret liga + deltag med kode (I4). To tilstande med hver sin målgruppe:
+          uden ligaer ER de to felter opgaven og vises fuldt — med ligaer er de
+          sekundære og foldes sammen til én kompakt knap-række, så ligalisten
+          rykker op som det første, man ser. Spejlbilledet af "Ny konkurrence"-
+          rettelsen ovenfor: vis tingene for dem, der har brug for dem. */}
+      {groups && groups.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={btnGhost} aria-expanded={openPanel === "create"}
+              onClick={() => setOpenPanel(openPanel === "create" ? null : "create")}>
+              <Plus size={14} /> Opret liga
+            </button>
+            <button style={btnGhost} aria-expanded={openPanel === "join"}
+              onClick={() => setOpenPanel(openPanel === "join" ? null : "join")}>
+              Deltag med kode
+            </button>
+          </div>
+          {openPanel === "create" && (
+            <Card>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input className="field" style={{ flex: 1 }} placeholder="Navn på liga (2–40 tegn)…" value={newName} maxLength={40} autoFocus
+                  onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && createNewGroup()} />
+                <button style={{ ...btnGreen, width: "auto", padding: "8px 14px", opacity: creating || !newName.trim() ? 0.5 : 1 }}
+                  disabled={creating || !newName.trim()} onClick={createNewGroup}><Plus size={15} /> Opret</button>
+              </div>
+              {joinErr && <p style={{ color: C.red, fontSize: 13, margin: "8px 0 0" }}>{joinErr}</p>}
+            </Card>
+          )}
+          {openPanel === "join" && (
+            <Card>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input className="field" style={{ flex: 1 }} placeholder="Invitationskode…" value={inviteCode} autoFocus
+                  onChange={(e) => setInviteCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && joinByCode()} />
+                <button style={{ ...btnGold, opacity: busy || !inviteCode ? 0.5 : 1 }} onClick={joinByCode} disabled={busy || !inviteCode}>Deltag</button>
+              </div>
+              {joinErr && <p style={{ color: C.red, fontSize: 13, margin: "8px 0 0" }}>{joinErr}</p>}
+            </Card>
+          )}
         </div>
-      </Card>
+      ) : (<>
+        {/* Opret liga */}
+        <Card>
+          <Eyebrow>Opret en liga</Eyebrow>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input className="field" style={{ flex: 1 }} placeholder="Navn på liga (2–40 tegn)…" value={newName} maxLength={40}
+              onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && createNewGroup()} />
+            <button style={{ ...btnGreen, width: "auto", padding: "8px 14px", opacity: creating || !newName.trim() ? 0.5 : 1 }}
+              disabled={creating || !newName.trim()} onClick={createNewGroup}><Plus size={15} /> Opret</button>
+          </div>
+        </Card>
 
-      {/* Join med kode (liga eller konkurrence) */}
-      <Card>
-        <Eyebrow>Deltag med kode</Eyebrow>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input className="field" style={{ flex: 1 }} placeholder="Invitationskode…" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && joinByCode()} />
-          <button style={{ ...btnGold, opacity: busy || !inviteCode ? 0.5 : 1 }} onClick={joinByCode} disabled={busy || !inviteCode}>Deltag</button>
-        </div>
-        {joinErr && <p style={{ color: C.red, fontSize: 13, margin: "8px 0 0" }}>{joinErr}</p>}
-      </Card>
+        {/* Join med kode (liga eller konkurrence) */}
+        <Card>
+          <Eyebrow>Deltag med kode</Eyebrow>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input className="field" style={{ flex: 1 }} placeholder="Invitationskode…" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && joinByCode()} />
+            <button style={{ ...btnGold, opacity: busy || !inviteCode ? 0.5 : 1 }} onClick={joinByCode} disabled={busy || !inviteCode}>Deltag</button>
+          </div>
+          {joinErr && <p style={{ color: C.red, fontSize: 13, margin: "8px 0 0" }}>{joinErr}</p>}
+        </Card>
+      </>)}
 
       {/* Ligaer */}
       {groups && groups.length > 0 && groups.map((g) => <GroupCard key={g.id} g={g} />)}

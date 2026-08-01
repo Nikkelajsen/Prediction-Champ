@@ -92,3 +92,16 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database ratingtest;'
           # `-b` gør, at fejl fra \ir-inkluderede filer også stopper kørslen.
           psql -h localhost -U postgres -d ratingtest -v ON_ERROR_STOP=1 -b -f rating_equivalence.sql
+
+      # Lokale kåringer (A22): kører selve migreringen competition_awards.sql
+      # og efterprøver kåringsreglerne — færdig runde/måned, delt sejr, guard,
+      # idempotens, service_role. Egen database, så de to tests ikke kan
+      # forurene hinandens skema.
+      - name: Test af lokale kåringer
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database awardstest;'
+          psql -h localhost -U postgres -d awardstest -v ON_ERROR_STOP=1 -b -f competition_awards.sql

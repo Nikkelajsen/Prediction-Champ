@@ -10,9 +10,10 @@ og kan køres igen.
 `public`-skemaet, som det så ud ved seneste eksport. Den redigeres aldrig i hånden;
 den regenereres med guiden nedenfor.
 
-> ⚠️ **Øjebliksbilledet er BAGUD pr. 1. august 2026**: `predictions_match_lock.sql` (#25) og
+> ⚠️ **Øjebliksbilledet er BAGUD pr. 1. august 2026**: `predictions_match_lock.sql` (#25),
 > den omlagte `analytics_dashboard.sql` (nye `analytics_match_locks`, omdøbte kolonner i
-> `analytics_round_locks`) er kørt siden. Eksporten skal køres, og datoen nedenfor rettes.
+> `analytics_round_locks`) og `competition_awards.sql` (#26) er kørt/tilføjet siden.
+> Eksporten skal køres, og datoen nedenfor rettes.
 >
 > **Øjebliksbilledet var friskt pr. 31. juli 2026** — eksporten er kørt efter
 > `multi_provider.sql` (#22) og indeholder `leagues.provider`, `leagues.live_enabled`
@@ -62,6 +63,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 23 | `tournament_footballdata.sql` | De fem football-data.org-turneringer: `leagues`- + `seasons`-rækker for Premier League (`PL`), Champions League (`CL`), Bundesliga (`BL1`), Serie A (`SA`), Primera División (`PD`) | **Data, ikke skema** — indgår derfor ikke i `schema.sql`. Idempotent, og en gen-kørsel rører hverken `is_visible` eller `is_official`, så en turnering, der er tændt manuelt, ikke slukkes igen. Forudsætter #22 |
 | 25 | `predictions_match_lock.sql` | **Per-kamp-lås** (`A21`): alle fire `predictions`-policies + `comp_participants_delete_own_unlocked`. En kamp låser 1 time før sit EGET kickoff | Aktiv — **afløser #4 og #14**. Idempotent. **Adfærdsændring i produktion:** en runde, der er låst i dag, får sine senere kampe åbnet igen i samme øjeblik. Kør derfor MELLEM to runder, ikke midt i en |
 | 24 | `tournament_footballdata_promote.sql` | Sætter `is_visible` + `is_official` = true på de fem football-data-turneringer (A19) | **Data, ikke skema.** Idempotent. **Kørt 31. juli 2026.** Begge kolonner sættes i SAMME update med vilje — check-constrainten `leagues_official_implies_visible` afviser en officiel turnering, ingen kan se, så to adskilte sætninger ville fejle på den første. Scotland Premiership er bevidst ikke med; den forfremmes, når dens igangværende spillerunde er talt op |
+| 26 | `competition_awards.sql` | Lokale kåringer (I13/A22): tabellen `competition_awards` + SECURITY DEFINER-RPC'en `award_competition_periods()` ("Ugens/Månedens bedste" i en opt-in-konkurrence) | Aktiv — tilføjet 1. august 2026. Idempotent. Ingen skrive-policies: funktionen er den eneste skriver, klienten trigger den ved board-åbning. **Skal køres FØR frontend-mergen** — omvendt degraderer boardet blot til en tom kåringssektion |
 
 ### ⚠️ Tre filer må ikke gen-køres blindt
 
@@ -98,11 +100,21 @@ kræver, at intet rykker sig. Sådan en sektion ligger nu nederst i
 `rating_equivalence.sql`, og den er verificeret ved at fjerne filteret igen og se testen
 fejle.
 
-Testen kan køres lokalt mod enhver tom database:
+**`sql/tests/competition_awards.sql`** (samme CI-job, egen database) kører selve
+migreringen `competition_awards.sql` mod et minimalt skema og efterprøver
+kåringsreglerne: en færdigspillet runde/afsluttet måned kåres, en ufærdig gør
+ikke, delt sejr giver én række pr. vinder, et ikke-deltagende tip kan aldrig
+vinde, en fremmed kalder skriver intet, andet kald er et no-op, og
+`service_role` må kalde uden at være deltager. `auth.uid()`/`auth.role()`
+stubbes med session-GUC'er (`test.uid`/`test.role`), så testen kan skifte
+"kalder" undervejs.
+
+Testene kan køres lokalt mod enhver tom database:
 
 ```bash
-createdb ratingtest
+createdb ratingtest && createdb awardstest
 cd sql/tests && psql -d ratingtest -v ON_ERROR_STOP=1 -b -f rating_equivalence.sql
+psql -d awardstest -v ON_ERROR_STOP=1 -b -f competition_awards.sql
 ```
 
 Samme mønster gælder mildere for `predictions_round_lock_policies.sql`: den rører

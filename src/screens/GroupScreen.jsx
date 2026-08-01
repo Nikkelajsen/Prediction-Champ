@@ -137,7 +137,7 @@ function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard
                 <div style={{ minWidth: 0, flex: 1, cursor: c.joined ? "pointer" : "default" }} onClick={() => c.joined && openBoard(c.id)}>
                   <div style={{ fontWeight: 600, fontSize: 15 }}>{c.name}</div>
                   <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
-                    {modeLabel(c.mode)} · {c.participantCount} deltager{c.participantCount === 1 ? "" : "e"}
+                    {modeLabel(c.mode, c.mode_params)} · {c.participantCount} deltager{c.participantCount === 1 ? "" : "e"}
                   </div>
                 </div>
                 {c.joined ? (

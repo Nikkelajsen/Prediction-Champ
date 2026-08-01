@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "lint": "eslint . --max-warnings 24",
+    "lint": "eslint . --max-warnings 23",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
