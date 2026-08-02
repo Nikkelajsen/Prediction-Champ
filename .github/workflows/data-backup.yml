@@ -144,9 +144,12 @@ jobs:
       # --no-owner som i skema-eksporten; grants beholdes bevidst (de er en del af
       # sikkerhedskontrakten, jf. sql/README.md).
       #
-      # Kan pooler-rollen læse auth? Det kan ikke afgøres fra repoet, og det gættes
-      # ikke: fejler dette trin på auth, indsnævres dumpet til -t auth.users
-      # -t auth.identities, og begrænsningen skrives i docs/RESTORE.md.
+      # Kan pooler-rollen læse auth? JA — aflæst ved første kørsel 2. august 2026:
+      # dumpet gik igennem, og facitlisten talte 22 tabeller (20 i public plus
+      # auth.users og auth.identities). Spørgsmålet stod åbent, indtil kørslen
+      # svarede, frem for at blive gættet. Fejler trinnet på auth en dag alligevel
+      # (Supabase kan stramme rollens rettigheder), er vejen at indsnævre til
+      # -t auth.users -t auth.identities og skrive begrænsningen i docs/RESTORE.md.
       - name: Dump database
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}

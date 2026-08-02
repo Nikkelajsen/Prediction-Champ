@@ -22,6 +22,14 @@ Det eneste, der findes, er derfor det, repoet selv tager:
 | **Hvor længe** | 90 dage (GitHubs loft for et offentligt repo) |
 | **Bevist gendannelig** | Ja — hver kørsel gendanner sit eget dump i en tom PostgreSQL og efterprøver rækketallene mod produktion |
 
+**Første kørsel: 2. august 2026 — bestået.** 22 tabeller (20 i `public` plus
+`auth.users` og `auth.identities`), 8.434 rækker, 316 kB krypteret. Kørslen
+besvarede samtidig det ene, der ikke kunne afgøres fra repoet: **pooler-rollen må
+læse `auth`**, så brugerkontiene er faktisk med i kopien. Tallene står her som
+udgangspunkt, ikke som et krav — men et dump, der pludselig er markant *mindre*
+end det forrige, er værd at kigge på, og hver kørsels egen `manifest.txt` bærer
+sammenligningsgrundlaget.
+
 **Ikke dækket. Læs listen én gang nu, ikke først den dag det gælder:**
 
 - **Op til 24 timers tab.** Uden PITR er kadencen tabsgrænsen. Et uheld kl. 02:55
