@@ -22,6 +22,19 @@ Det eneste, der findes, er derfor det, repoet selv tager:
 | **Hvor længe** | 90 dage (GitHubs loft for et offentligt repo) |
 | **Bevist gendannelig** | Ja — hver kørsel gendanner sit eget dump i en tom PostgreSQL og efterprøver rækketallene mod produktion |
 
+**Første kørsel: 2. august 2026 — bestået.** 22 tabeller (20 i `public` plus
+`auth.users` og `auth.identities`), 8.434 rækker, 316 kB krypteret. Kørslen
+besvarede samtidig det ene, der ikke kunne afgøres fra repoet: **pooler-rollen må
+læse `auth`**, så brugerkontiene er faktisk med i kopien. Tallene står her som
+udgangspunkt, ikke som et krav — men et dump, der pludselig er markant *mindre*
+end det forrige, er værd at kigge på, og hver kørsels egen `manifest.txt` bærer
+sammenligningsgrundlaget.
+
+**Guarden er efterprøvet samme dag.** En kørsel uden `BACKUP_PASSPHRASE` fejlede
+efter 22 sekunder — før dumpet — og efterlod **nul artefakter**. Det er kontrollen
+af, at et ukrypteret dump ikke kan slippe ud af et offentligt repo, og den er
+værd at gentage, hvis krypteringstrinnet nogensinde ændres.
+
 **Ikke dækket. Læs listen én gang nu, ikke først den dag det gælder:**
 
 - **Op til 24 timers tab.** Uden PITR er kadencen tabsgrænsen. Et uheld kl. 02:55
@@ -41,6 +54,16 @@ Dumpet er krypteret med repo-secret'en `BACKUP_PASSPHRASE`. **Den skal også lig
 i en passwordmanager uden for GitHub.** Ligger den kun som repo-secret, kan et
 artefakt, man allerede har hentet ned, ikke dekrypteres af den, der har mistet
 adgangen til repoet — og så er kopien til pynt.
+
+**Ændrer du nøglen, så prøv at låse op med den bagefter.** En forkert indsat værdi
+— et ekstra mellemrum, et manglende tegn — er **usynlig i drift**: gpg krypterer
+lige så gladeligt med den forkerte nøgle, kørslen bliver grøn, og
+gendannelsestesten rører aldrig den krypterede fil. Fejlen viser sig først den dag,
+kopien skal bruges, og da er hver eneste kopi siden ændringen låst med en nøgle,
+ingen har. Den eneste kontrol er at hente næste artefakt og dekryptere det med
+passphrasen kopieret **fra passwordmanageren**, ikke fra hukommelsen. Husk også, at
+en ændring ikke virker bagud: gamle artefakter er stadig låst med den gamle nøgle,
+som derfor skal blive liggende, indtil de er udløbet.
 
 Af samme grund: **hent ét artefakt i kvartalet og læg det et andet sted.** 90-dages
 loftet og et tabt GitHub-login rammer ellers alle kopier på én gang. Den manuelle
