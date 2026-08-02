@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 const RULES = { exact: 3, outcome: 1 };
 
@@ -149,6 +149,55 @@ describe("per-kamp-låsning (isLocked / lockAtOf)", () => {
     // Uden kendt kickoff er kampen åben for tips — spejler skrivegrenen i
     // sql/predictions_match_lock.sql, hvor `kickoff_at is null` behandles eksplicit.
     expect(isLocked({ ...r1, home_score: null, kickoff_at: null })).toBe(false);
+  });
+
+  // Tid ikke fastlagt: kickoff_at bærer kun en dato, og "1 time før kickoff" er
+  // derfor ikke et rigtigt tidspunkt. Låsen bliver midnat på spilledagen.
+  //
+  // Testene er skrevet som EGENSKABER frem for et fast tidsstempel, fordi låsen
+  // følger enhedens tidszone: CI kører UTC og en dansk telefon UTC+2, og et
+  // hårdkodet ms-tal ville måle maskinen i stedet for reglen.
+  it("en kamp uden fastlagt tid låser ved midnat på spilledagen, ikke kickoff minus én time", () => {
+    const kickoff = "2026-09-13T00:00:00Z"; // pladsholderen fra datakilden
+    const lockAt = lockAtOf({ kickoff_at: kickoff, kickoff_tbd: true });
+
+    const d = new Date(lockAt);
+    expect([d.getHours(), d.getMinutes(), d.getSeconds()]).toEqual([0, 0, 0]);
+    expect(d.getDate()).toBe(new Date(kickoff).getDate()); // samme dag som kampen
+    expect(lockAt).not.toBe(new Date(kickoff).getTime() - 60 * 60 * 1000);
+  });
+
+  it("kickoff_tbd ændrer intet for en kamp med rigtigt klokkeslæt", () => {
+    const kickoff = "2026-09-13T14:00:00Z";
+    expect(lockAtOf({ kickoff_at: kickoff, kickoff_tbd: false }))
+      .toBe(new Date("2026-09-13T13:00:00Z").getTime());
+    // Feltet mangler helt på gamle rækker og skal opføre sig som false.
+    expect(lockAtOf({ kickoff_at: kickoff })).toBe(new Date("2026-09-13T13:00:00Z").getTime());
+  });
+
+  it("en TBD-kamp er åben dagen før og låst på selve spilledagen", () => {
+    const m = { ...r1, home_score: null, kickoff_at: "2026-09-13T00:00:00Z", kickoff_tbd: true };
+
+    vi.useFakeTimers({ now: new Date("2026-09-11T12:00:00Z") });
+    expect(isLocked(m)).toBe(false);
+
+    vi.useFakeTimers({ now: new Date("2026-09-13T12:00:00Z") });
+    expect(isLocked(m)).toBe(true);
+  });
+});
+
+describe("formatKickoff", () => {
+  it("udelader klokkeslættet, når tiden ikke er fastlagt", () => {
+    const iso = "2026-09-13T00:00:00Z";
+    expect(formatKickoff(iso)).toContain(" kl. ");
+    expect(formatKickoff(iso, true)).not.toContain("kl.");
+    // Datoen bliver stående — den ER kendt; det er kun tiden, der mangler.
+    expect(formatKickoff(iso, true)).toBe(formatKickoff(iso).split(" kl. ")[0]);
+  });
+
+  it("giver tom streng uden kickoff, uanset flaget", () => {
+    expect(formatKickoff(null)).toBe("");
+    expect(formatKickoff(null, true)).toBe("");
   });
 });
 

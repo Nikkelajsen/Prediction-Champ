@@ -6,8 +6,13 @@
 import { formatKickoff } from "../../lib/scoring.js";
 
 // Datoen står i dagens overskrift; rækken viser kun klokkeslæt.
-function hhmm(iso) {
-  if (!iso) return "";
+//
+// Er tiden ikke fastlagt, er der intet klokkeslæt at vise: kickoff_at bærer en
+// pladsholder, som ville stå som "02.00" og se ud som en rigtig kampstart.
+// Tomt svar lader kalderens `|| "–"` slå igennem; forklaringen står i
+// dagsoverskriften, hvor der er plads til den.
+function hhmm(iso, tbd = false) {
+  if (!iso || tbd) return "";
   return new Date(iso).toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
 }
 function dayKey(iso) {
@@ -26,6 +31,10 @@ function dayLabel(iso) {
 // Gruppér rundens kampe pr. kampdag, så datoen står ÉN gang i stedet for på hver
 // række. Kampene er allerede sorteret på kickoff (groupIntoRounds); kampe uden
 // kickoff samles i en sidste bucket.
+//
+// En kamp uden fastlagt klokkeslæt bliver i sin RIGTIGE dag — datoen er kendt,
+// det er kun tiden, der mangler. Står hele dagen uden tider, siger overskriften
+// det; det er dér, rækkernes tomme tidskolonne får sin forklaring.
 function groupIntoDays(matches) {
   const days = [];
   const byKey = new Map();
@@ -38,6 +47,11 @@ function groupIntoDays(matches) {
       days.push(bucket);
     }
     bucket.matches.push(m);
+  }
+  for (const day of days) {
+    if (day.key !== "?" && day.matches.every((m) => m.kickoff_tbd)) {
+      day.label += " · Tid ikke fastlagt";
+    }
   }
   return days.sort((a, b) => (a.key === "?" ? 1 : b.key === "?" ? -1 : 0));
 }

@@ -109,7 +109,7 @@ function MatchRow({
         <span className="livedot" style={{ width: 6, height: 6, borderRadius: "50%", background: C.red, flexShrink: 0 }} />
         {live.label}
       </span>
-    ) : <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{played ? "" : hhmm(m.kickoff_at) || "–"}</span>;
+    ) : <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{played ? "" : hhmm(m.kickoff_at, m.kickoff_tbd) || "–"}</span>;
 
   // Den låste række: seks kolonner, én linje. Hele rækken er tryk-fladen for
   // "alles gæt" — en låst række har ingen indtastningsfelter at komme i vejen for,
@@ -165,7 +165,7 @@ function MatchRow({
            at stille op i kolonner. */
         <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 40, padding: "7px 0" }}>
           <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{hhmm(m.kickoff_at) || "–"}</span>
+            <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>{hhmm(m.kickoff_at, m.kickoff_tbd) || "–"}</span>
             {/* Ombryder frem for at trunkere: et afkortet holdnavn er skjult information. */}
             <span style={{ color: C.text, fontWeight: 600, fontSize: 14, lineHeight: 1.25, minWidth: 0 }}>
               {homeName} – {awayName}

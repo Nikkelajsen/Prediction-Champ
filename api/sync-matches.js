@@ -239,6 +239,9 @@ export default async function handler(req, res) {
     if (dryRun) {
       const sample = fixtures.slice(0, 15).map((fx) => ({
         kickoff: fx.kickoffAt,
+        // Med i forhåndsvisningen, fordi det er her man aflæser, om en runde
+        // står uden fastsatte klokkeslæt — og hvilken markør leverandøren brugte.
+        kickoffTbd: fx.kickoffTbd,
         state: fx.liveState,
         stage: fx.stageName,
         home: fx.home?.name ?? null,
@@ -334,6 +337,7 @@ export default async function handler(req, res) {
         home_team_id: homeTeamId,
         away_team_id: awayTeamId,
         kickoff_at: fx.kickoffAt,
+        kickoff_tbd: !!fx.kickoffTbd,
         home_score: finished ? fx.score.home : null,
         away_score: finished ? fx.score.away : null,
         status: finished ? "finished" : "scheduled",

@@ -483,11 +483,15 @@ export default async function handler(req, res) {
       const to = new Date(now + 8 * 24 * HOUR).toISOString();
       const ms = await sbAll(
         sb,
-        `/rest/v1/matches?kickoff_at=gte.${from}&kickoff_at=lte.${to}&select=id,season_id,round_key,kickoff_at,home_score`,
+        `/rest/v1/matches?kickoff_at=gte.${from}&kickoff_at=lte.${to}&select=id,season_id,round_key,kickoff_at,kickoff_tbd,home_score`,
         { order: "id.asc" }
       );
       const lockingMatches = ms.filter((m) => {
         if (!m.kickoff_at || m.home_score != null) return false;
+        // En kamp uden fastlagt klokkeslæt har intet "om en time" at minde om —
+        // dens kickoff_at bærer kun en dato, og beskeden ville nævne et tidspunkt,
+        // kampen ikke spilles på. Runde-påmindelsen dækker den fortsat.
+        if (m.kickoff_tbd) return false;
         const lockAt = new Date(m.kickoff_at).getTime() - LOCK_LEAD_MS;
         return lockAt > now && lockAt <= now + horizonHours * HOUR;
       });

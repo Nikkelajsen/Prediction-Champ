@@ -60,12 +60,22 @@ Alt, hvad et providermodul returnerer:
 {
   providerId, globalId,          // leverandørens id · værdien i matches.api_fixture_id
   kickoffAt, stageName,
+  kickoffTbd,                    // klokkeslættet i kickoffAt er en PLADSHOLDER
   home, away,                    // { providerId, globalId, name } | null
   status,                        // "scheduled" | "live" | "finished"
   score: { home, away },         // AKTUEL stilling — ikke nødvendigvis endelig
   liveState, liveMinute,
 }
 ```
+
+> **Tilføjet efter levering (august 2026):** `kickoffTbd` stod ikke i det
+> oprindelige udkast. Det kom til, da seks Superliga-kampe viste sig i appen med
+> starttidspunkt "02.00" — midnat UTC, som begge leverandører sender, når kun
+> datoen er kendt. Feltet er et godt eksempel på, hvad den normaliserede form er
+> til for: **formen er fælles, kilden er det ikke.** football-data.org skelner
+> `SCHEDULED` fra `TIMED`; Sportmonks har state `TBA` plus selve
+> midnat-pladsholderen. Havde kalderen skullet kende den forskel, ville hele
+> pointen med laget være væk.
 
 `score` er den aktuelle stilling. Kalderen må kun skrive den i
 `home_score`/`away_score`, når `status === "finished"` — hele appen bruger
