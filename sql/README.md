@@ -79,6 +79,11 @@ Alle fire bruger `drop policy … create policy` / `drop view … create view`, 
 gen-kørsel **erstatter tavst** en nyere definition med en ældre. Der kommer ingen
 fejl — reglen bliver bare den gamle igen.
 
+> **Er det allerede sket?** Rettelsen er at køre den *nyere* fil bagefter, ikke at
+> gendanne data — de er der jo stadig. Parrene står samlet som scenarie 3 i
+> [`../docs/RESTORE.md`](../docs/RESTORE.md); begrundelsen for hvert par står her.
+> Har migreringen derimod ændret **data**, er det scenarie 1 samme sted.
+
 - **`predictions_match_lock.sql`** (#25) genskaber alle fem policies med låsen skrevet
   i hånden som `kickoff_at <= now() + interval '1 hour'` og taber dermed
   `kickoff_tbd`: en kamp, hvis klokkeslæt ikke er fastlagt, låser igen kl. 01.00 om
