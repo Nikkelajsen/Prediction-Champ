@@ -57,6 +57,7 @@ kommer af `leagueId`, som jobbene allerede sender.
 | 8 | Kampprogram + endelige resultater Bundesliga | cron-job.org | hver 12. time, ved **minut 17** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:23) |
 | 9 | Kampprogram + endelige resultater Serie A | cron-job.org | hver 12. time, ved **minut 23** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:11) |
 | 10 | Kampprogram + endelige resultater Primera División | cron-job.org | hver 12. time, ved **minut 29** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | **31. juli 2026 — kørt planlagt kl. 00:29, lykkedes (4,31 s)** |
+| 11 | Datasikkerhedskopi | GitHub Actions | `0 3 * * *` (dagligt 03:00 UTC) + manuelt | `.github/workflows/data-backup.yml` | — (repo-secrets `SUPABASE_DB_URL` + `BACKUP_PASSPHRASE`) | 2. august 2026 (oprettet) |
 
 **Kolonnen "Hemmelighed sendes som" står med `?` med vilje.** Den kan ikke
 udfyldes fra repoet — kun ved at kigge i cron-job.org eller ved at aflæse
@@ -153,6 +154,13 @@ belastning, så kadencen er et loft for hyppigheden, ikke en garanti.
 Alarmen ligger med vilje **uden for appen**: kører Supabase eller Vercel ikke,
 ville en alarm inde i appen dø af præcis samme årsag som jobbet. Kanalen er
 GitHubs egen notifikation, når workflowen fejler.
+
+**Job 4 og 11 overvåges af ingen af de to lag** — de skriver ikke i `job_runs`
+og optræder derfor ikke i Admin → Drift. De er selv GitHub Actions, så en fejlet
+kørsel er allerede en rød workflow med en notifikation til ejeren; et ekstra lag
+ville kun kunne se det samme. For job 11 (datasikkerhedskopien) er der en pointe
+mere: den er rød, hvis dens **egen gendannelsestest** fejler, ikke kun hvis
+dumpet fejler. Se [`RESTORE.md`](./RESTORE.md).
 
 Tavshedsgrænserne er rundhåndede i forhold til kadencen, så et enkelt sprunget
 interval ikke larmer:
