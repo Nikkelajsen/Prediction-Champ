@@ -221,15 +221,25 @@ create policy comp_participants_delete_own_unlocked on public.competition_partic
 -- ============================================================================
 -- 4) analytics_match_locks — læser låsen, definerer den ikke
 -- ============================================================================
+-- `kickoff_tbd` står SIDST, og det er ikke en smagssag: `create or replace view`
+-- må kun føje kolonner til ENDEN. Eksisterende kolonner sammenlignes position for
+-- position, så en ny kolonne indsat i midten læses som et forsøg på at omdøbe den,
+-- der stod dér — `cannot change name of view column "lock_at" to "kickoff_tbd"`.
+-- Samme fælde kostede en kørsel under A21 (se docs/DECISIONS.md).
+--
+-- `lock_at` og `is_locked` beholder både navn og type; kun deres UDTRYK skifter til
+-- funktionskaldene, og det er tilladt. Et `drop view` ville være det forkerte svar:
+-- `analytics_completion_facts` joiner dette view, så droppet ville kræve `cascade`
+-- og rive det andet view med sig.
 create or replace view public.analytics_match_locks as
 select
-  m.id                                             as match_id,
+  m.id                                              as match_id,
   m.season_id,
   m.round_key,
   m.kickoff_at,
-  m.kickoff_tbd,
-  public.match_lock_at(m.kickoff_at, m.kickoff_tbd) as lock_at,
-  public.match_locked(m.kickoff_at, m.kickoff_tbd)  as is_locked
+  public.match_lock_at(m.kickoff_at, m.kickoff_tbd)  as lock_at,
+  public.match_locked(m.kickoff_at, m.kickoff_tbd)   as is_locked,
+  m.kickoff_tbd
 from public.matches m
 where m.kickoff_at is not null;
 
