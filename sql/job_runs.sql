@@ -42,7 +42,8 @@ create policy job_runs_read_admin on public.job_runs
 
 -- ---------- oprydning ----------
 -- Uden en grænse vokser tabellen for evigt: sync-live alene giver 1.440 rækker
--- i døgnet. 30 dage er rigeligt til at se et mønster og til at afgøre A11.
+-- i døgnet. 30 dage er rigeligt til at se et mønster — og var rigeligt til at
+-- afgøre A11, som blev besvaret på under et døgns historik (2. august 2026).
 
 create or replace function public.prune_job_runs(keep_days integer default 30)
 returns integer

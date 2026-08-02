@@ -213,7 +213,10 @@ tabt for altid — ingen senere kørsel genforsøger dem (rækken *findes* jo i
 - **Hemmelighed i query-string (A11, kendt).** `api/_shared.js:145` accepterer
   `?secret=` som fallback; den lander i cron-/Vercel-logs. Mitigeret af et `[A11]`-
   warn (`:150-152`), og `docs/CRON.md` markerer jobs 1–3's transport som `?`
-  (uverificeret).
+  (uverificeret). — ✅ **LUKKET 2. august 2026.** Fallbacken er fjernet: et opslag i
+  `job_runs.detail` viste `header` for alle ni cron-jobs og ingen `query`, altså at
+  ingen ville få 401 af fjernelsen. Transport-kolonnen i `docs/CRON.md` er udfyldt
+  af samme opslag.
 - **Uvalideret `leagueId` interpoleret i service-role-URL'er.** `api/sync-matches.js:76`
   (også `:84,:88`) bygger `` `/rest/v1/leagues?id=eq.${leagueId}&select=*` `` uden
   UUID-validering eller encoding. Ikke SQL-injektion (PostgREST parametriserer) og bag

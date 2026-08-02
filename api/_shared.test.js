@@ -1,9 +1,9 @@
 // Tests for api/_shared.js.
 //
-// api/ havde indtil nu ingen testdækning overhovedet. Autorisationen er
-// samtidig det sted, hvor BACKLOG A11 skal skære (`?secret=`-fallbacken
-// fjernes), så det er præcis den kode, der har brug for et net under sig
-// FØR den ændres — ikke efter.
+// api/ havde indtil nu ingen testdækning overhovedet. Autorisationen var
+// samtidig det sted, hvor A11 skulle skære (`?secret=`-fallbacken fjernet
+// 2. august 2026), så det var præcis den kode, der havde brug for et net under
+// sig FØR den blev ændret — ikke efter.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   createSb,
@@ -208,17 +208,25 @@ describe("isAuthorized", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("godkender ?secret=-fallbacken, men råber op om den (A11)", async () => {
+  // A11 (2. august 2026): fallbacken er væk. Selv den RIGTIGE hemmelighed i
+  // query-strengen giver nu 401 — det er hele beslutningen, og den skal fejle
+  // her, hvis nogen genindfører fallbacken.
+  it("afviser ?secret=, også når hemmeligheden er rigtig (A11)", async () => {
     const r = await isAuthorized(reqWith({ query: { secret: SECRET } }), deps());
-    expect(r).toEqual({ ok: true, via: "query" });
+    expect(r).toEqual({ ok: false, via: null });
+  });
+
+  // Advarslen er nu en forklaring på en 401 frem for et varsel om en kommende.
+  // Uden den ligner en forkert transport en forkert hemmelighed i logget.
+  it("forklarer i logget, at hemmeligheden kom ad den forkerte vej (A11)", async () => {
+    await isAuthorized(reqWith({ query: { secret: "hvadsomhelst" } }), deps());
     expect(warn).toHaveBeenCalledOnce();
     expect(warn.mock.calls[0][0]).toContain("[A11]");
   });
 
-  // Bevaret adfærd fra før udtrækningen: `header || query` betyder, at en
-  // TILSTEDE men forkert header blokerer fallbacken. Dokumenteret her, så
-  // ingen "retter" den ved et uheld.
-  it("lader en forkert header blokere query-fallbacken", async () => {
+  // Headeren afgør alene. At query-strengen også bærer den rigtige hemmelighed
+  // ændrer intet — hverken før eller efter A11.
+  it("lader en forkert header afvise kaldet, uanset query-strengen", async () => {
     const req = reqWith({ headers: { "x-sync-secret": "forkert" }, query: { secret: SECRET } });
     expect(await isAuthorized(req, deps())).toEqual({ ok: false, via: null });
   });
@@ -515,10 +523,10 @@ describe("fetchWithTimeout", () => {
 
 // A11: hvilken vej autorisationen kom ind, skal kunne aflæses i driftsloggen.
 //
-// `isAuthorized()` har altid vidst det, men værdien blev kasseret, så det
-// eneste spor var en advarsel i Vercels logs. Beslutningen om at fjerne
-// `?secret=`-fallbacken afhang dermed af, at nogen huskede at kigge et sted
-// uden for appen — og af at kunne skelne "ingen advarsler" fra "ingen kørsler".
+// Feltet afgjorde A11 den 2. august 2026 og bliver stående bagefter: skellet
+// mellem `header` (cron-jobbet kalder selv) og `admin-token` (et menneske har
+// trykket "Hent nu") er præcis det, aflæsningen hang på, og uden feltet ville
+// næste tilsvarende spørgsmål kræve den samme instrumentering forfra.
 describe("createRunLogger.setAuth", () => {
   const mkRes = () => {
     const res = { statusCode: null, body: null,
@@ -544,21 +552,21 @@ describe("createRunLogger.setAuth", () => {
     const sb = vi.fn(async () => null);
     const res = mkRes();
     const run = createRunLogger(sb, "sync-live");
-    run.setAuth("query");
+    run.setAuth("admin-token");
     await run.ok(res, { written: 2 });
     expect(res.body).toEqual({ written: 2 });
   });
 
-  // En FEJLET kørsel er lige så interessant for A11: kaldte jobbet forkert OG
-  // fejlede, skal begge dele kunne ses på samme række.
+  // En FEJLET kørsel skal bære vejen med: uden den kan en fejlserie ikke
+  // adskilles i "cron-jobbet fejler" og "det manuelle forsøg fejlede".
   it("gælder også fejlede kørsler", async () => {
     const sb = vi.fn(async () => null);
     const res = mkRes();
     const run = createRunLogger(sb, "sync-matches");
-    run.setAuth("query");
+    run.setAuth("admin-token");
     await run.fail(res, 500, { error: "kort" }, "lang");
     const row = JSON.parse(sb.mock.calls[0][1].body);
-    expect(row.detail).toEqual({ error: "kort", authVia: "query" });
+    expect(row.detail).toEqual({ error: "kort", authVia: "admin-token" });
     expect(row.ok).toBe(false);
   });
 
