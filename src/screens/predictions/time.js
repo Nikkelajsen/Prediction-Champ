@@ -3,7 +3,7 @@
 // Ren logik uden React — udskilt så den kan testes direkte, hvilket den ikke
 // kunne, da den lå midt i en 705-linjers skærmfil.
 
-import { formatKickoff } from "../../lib/scoring.js";
+import { byKickoffThenTeams, formatKickoff } from "../../lib/scoring.js";
 
 // Datoen står i dagens overskrift; rækken viser kun klokkeslæt.
 //
@@ -35,7 +35,12 @@ function dayLabel(iso) {
 // En kamp uden fastlagt klokkeslæt bliver i sin RIGTIGE dag — datoen er kendt,
 // det er kun tiden, der mangler. Står hele dagen uden tider, siger overskriften
 // det; det er dér, rækkernes tomme tidskolonne får sin forklaring.
-function groupIntoDays(matches) {
+//
+// `teamNameOf` sorterer dagens kampe på holdnavn, når de deler tidsstempel. Det
+// er reglen frem for undtagelsen på en dag uden fastlagte tider: dér bærer ALLE
+// kampe det samme, og uden en tiebreaker kunne listen skifte orden mellem to
+// visninger af den samme runde.
+function groupIntoDays(matches, teamNameOf) {
   const days = [];
   const byKey = new Map();
   for (const m of matches) {
@@ -48,7 +53,9 @@ function groupIntoDays(matches) {
     }
     bucket.matches.push(m);
   }
+  const cmp = byKickoffThenTeams(teamNameOf);
   for (const day of days) {
+    day.matches.sort(cmp);
     if (day.key !== "?" && day.matches.every((m) => m.kickoff_tbd)) {
       day.label += " · Tid ikke fastlagt";
     }
