@@ -9,7 +9,7 @@
 // bliver holdt op med at blive læst.
 import { useState, useEffect } from "react";
 import { RefreshCw, Loader2, Check, RotateCcw } from "lucide-react";
-import { C, btnGhost, chip, font, muted } from "../ui/theme.js";
+import { C, btnGhost, chip, muted } from "../ui/theme.js";
 import { Card, H } from "../ui/components.jsx";
 import { KINDS, loadFeedback, setFeedbackHandled } from "../lib/data/feedback.js";
 
@@ -52,12 +52,10 @@ function FeedbackRow({ row, onToggle, busy }) {
             Version {row.context.version || "ukendt"}
             {row.context.screen ? ` · skærm: ${row.context.screen}` : ""}
           </summary>
+          {/* Ingen fontFamily: <pre> er monospace i forvejen, og JSON skal
+              stå i kolonner. Samme valg som de to i OpsPanel.jsx. */}
           <pre style={{
-            // `fontFamily: font.body` og ikke `...font`: `font` er
-            // {display, body}, så et spread sætter CSS-egenskaben `display`
-            // til et skriftnavn. Browseren ignorerer det, men det er stadig
-            // forkert — se indbakken i docs/BACKLOG.md.
-            fontFamily: font.body, fontSize: 10, color: C.muted, whiteSpace: "pre-wrap",
+            fontSize: 10, color: C.muted, whiteSpace: "pre-wrap",
             wordBreak: "break-word", margin: "6px 0 0",
           }}>
             {JSON.stringify(row.context, null, 2)}

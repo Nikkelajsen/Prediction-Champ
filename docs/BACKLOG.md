@@ -34,7 +34,9 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- `...font` i et style-objekt sætter CSS-egenskaben `display` til et skriftnavn — `font` er `{display, body}`, ikke et style-objekt. To steder i `OpsPanel.jsx` (linje 80 og 100). Browseren ignorerer værdien, så `<pre>`'erne ser rigtige ud; det er forkert uden at gøre noget
+*Tom.*
+
+*Ryddet 2. august 2026: `...font`-linjen blev rettet med det samme frem for at få et ID. `...font` satte CSS-egenskaben `display` til et skriftnavn i to `<pre>` i `OpsPanel.jsx`; spredningen er fjernet frem for erstattet, fordi en `<pre>` er monospace i forvejen, og det er dét, en rå fejltekst og et JSON-resumé skal have. Visningen er derfor uændret — kun løftet om at gøre noget er væk.*
 
 *Ryddet 1. august 2026 (fjerde runde): feedback-knappen blev `B14` og ikke en
 idé — den er en direkte anmodning fra produktejeren, altså besluttet, og det
