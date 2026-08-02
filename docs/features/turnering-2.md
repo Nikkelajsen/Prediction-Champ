@@ -1,6 +1,6 @@
 # Feature: Turnering #2 (flere fodboldturneringer)
 
-**Status: Koden er leveret (31. juli 2026) — drift-trinnene i §3.1 udestår** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 4 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), forudsætning for trin 5*
+**Status: ✅ Leveret og verificeret i drift (2. august 2026)** — koden 31. juli, drift-trinnene i §3.1 samme dag, og de sidste verifikationspunkter aflæst/kørt 2. august (se §5 og næste-skridt-listen nederst). · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 4 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), forudsætning for trin 5*
 
 *Mere drejebog end klassisk spec: infrastrukturen til flere turneringer er allerede bygget. Dette dokument samler, hvad der er klar, og præcis hvad der mangler, før fx Premier League kan tændes.*
 
@@ -162,7 +162,7 @@ Verificeret mod PostgreSQL 16.13 med en fixture, hvor én spiller tipper begge t
 - En runde markeres som færdig, når dens kampe i **synlige** turneringer er spillet — en skjult turnering må ikke holde 🏆 tilbage. *(Tilføjet ved leveringen; se §3.2's sidste række.)*
 - A2 er afgjort og logget i ROADMAP, og "Sådan virker det"-teksten matcher.
 
-**Status 2. august 2026:** de to første kriterier er **aflæst i drift** — 198 af 198 kampe synkroniseret (ingen stille trunkering) og ingen dublet- eller fejl-linkede hold; det ene par, kontrollen melder, er en ægte navnelighed (`Dundee` / `Dundee United`), se næste-skridt-listen nederst. A2 er afgjort og afløst (§3.6). De øvrige kriterier er brugerflade og dækkes af testcases 2–6.
+**Status 2. august 2026: alle kriterier er opfyldt.** De to første er **aflæst i drift** — 198 af 198 kampe synkroniseret (ingen stille trunkering) og ingen dublet- eller fejl-linkede hold; det ene par, kontrollen melder, er en ægte navnelighed (`Dundee` / `Dundee United`), se næste-skridt-listen nederst. A2 er afgjort og afløst (§3.6). De øvrige er brugerflade og er dækket af **testcases 2–6, som ejeren har kørt og godkendt samme dag**.
 
 ## 6. Testcases
 
@@ -182,6 +182,8 @@ Verificeret mod PostgreSQL 16.13 med en fixture, hvor én spiller tipper begge t
    **Risikoen, der bliver stående, er kendt og lille:** `findByName()` prøver den præcise normaliserede match **først**, så delstrengs-reglen kun kan ramme et navn, der ikke allerede står i listen ordret. Den ville altså kræve, at en af de to klubber både mistede sit `api_team_id` og skiftede skrivemåde hos leverandøren samtidig. Prisen for kontrollen er derimod permanent: feltet står nu i **hver** Scotland-kørsel, og et felt, der altid er der, holder man op med at læse — noteret i backloggens indbakke.
 2. ~~**Fasenavne** mod `STAGE_LABELS`~~ **Verificeret i koden (august 2026):** `STAGE_LABELS` i `src/lib/scoring.js` indeholder `"2nd Phase": "Slutspil"` og `"1st Phase": "Grundspil"`, altså præcis dét §4 forudsagde, og en test i `scoring.test.js` fastholder dem. Rammer et *ukendt* skotsk fasenavn stadig fallbacken, står det råt i brugerfladen — det kan kun ses mod rigtige data.
 3. ~~**Kampantal** mod Sportmonks for sæsonen (acceptkriterie 1) — ingen stille trunkering.~~ **Aflæst 2. august 2026: 198 kampe, og tallet kan efterprøves uden at spørge Sportmonks.** Resuméet siger `totalFixtures: 198` og `synced: 198` — leverandøren gav 198, og alle 198 blev skrevet, så intet forsvandt undervejs i vores egen kode. At leverandøren så gav det *rigtige* antal, følger af turneringens form: Premiership har 12 hold, som møder hinanden tre gange før opdelingen = 33 runder × 6 kampe = **198**. De sidste 5 runder (30 kampe) findes ikke endnu, fordi `2nd Phase` først skemalægges, når grundspillet er ved at være slut — præcis som §3.5 beskriver. Fire sider à 50 er desuden langt fra `MAX_PAGES` (60), og en afbrudt paginering ville i dag kaste frem for at bryde stille.
-4. **Testcases 2–6** ovenfor. *(Eneste udestående punkt pr. 2. august 2026 — de kræver alle brugerfladen mod produktionsdata.)*
+4. ~~**Testcases 2–6** ovenfor.~~ **Kørt og godkendt af ejeren 2. august 2026** — de krævede alle brugerfladen mod produktionsdata og kunne derfor kun afgøres dér. Testcase 1 blev kørt ved selve opsætningen 31. juli.
+
+**Dermed er `B2` lukket, og drejebogen er færdig.** Rækken er slettet af backloggen efter husreglen — historikken står i [`../CHANGELOG.md`](../CHANGELOG.md) og [`../DECISIONS.md`](../DECISIONS.md). Det, der bliver stående som *permanent* værn frem for som opgave, er de to kontroller, verifikationen blev lavet om til: `ambiguousTeams` i hver `sync-matches`-kørsel og `STAGE_LABELS`-testen i `scoring.test.js`. De dækker automatisk turnering #3, den dag den kommer.
 
 *Premier League venter på efterspørgsel og €29/md (3.4). A2 er lukket og afløst (§3.6).*
