@@ -294,6 +294,10 @@ describe("fetchLive og 429", () => {
 // supporten. Det gør det ikke: Sportmonks lægger sit eget regnskab i hvert
 // svar, og `requested_entity` er netop det felt, der afgør, om grænsen er pr.
 // entitet. Aflæses i Admin → Drift.
+//
+// Svaret kom 2. august 2026: `Fixture`, 2996 tilbage efter fire kald, 3600 s
+// vindue — altså 3.000 i timen PR. ENTITET. Testene herunder er derfor ikke
+// længere kun forberedelse: de holder på det felt, beslutningen hviler på.
 describe("readRateLimit", () => {
   const { readRateLimit } = __test;
 

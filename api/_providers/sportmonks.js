@@ -46,8 +46,8 @@ const MAX_IDS_PER_CALL = 40;
 //
 // Mønsteret er lånt fra footballdata.js, som gjorde det rigtigt fra starten,
 // og ÉT gen-forsøg er med vilje: to ville sløre, at forbruget reelt er for
-// højt, og det er dét, `A15` (hvor går Sportmonks' grænse egentlig?) venter på
-// at få afklaret.
+// højt. Grænsen selv er nu kendt (`A15`, aflæst 2. august 2026: 3.000 kald i
+// timen pr. entitet), men en 429 er stadig den ene besked, der ikke må dæmpes.
 const RETRY_AFTER_MAX_S = 30;
 const RETRY_AFTER_FALLBACK_S = 5;
 
@@ -88,6 +88,13 @@ export async function smFetch(url, fetchImpl, sleep = defaultSleep) {
 // Feltet er VALGFRIT: er det der ikke (anden plan, ændret svarformat), skrives
 // intet, og alt fungerer som før. En aflæsning, der kræver en ændring i
 // leverandørens svar for at fejle stille, er ikke værd at have.
+//
+// AFLÆST 2. august 2026 — `A15` er lukket. En Scotland-kørsel svarede
+// `{ entity: "Fixture", remaining: 2996, resetsInSeconds: 3600 }` efter fire
+// kald: enheden er pr. entitet (som dokumentationen sagde), og tallet er 3.000
+// i timen (som kontosiden sagde), ikke 180. Loftet står ikke i svaret — det er
+// udledt af 2996 + 4. Funktionen bliver stående: den er nu den løbende
+// måling af, hvor tæt forbruget ligger på et loft, vi kender.
 function readRateLimit(data, meta) {
   const rl = data?.rate_limit;
   if (!meta || !rl) return;

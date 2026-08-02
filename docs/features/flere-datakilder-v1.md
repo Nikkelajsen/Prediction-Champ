@@ -137,7 +137,9 @@ Tallet er den synlige kvittering for, hvad €12/md faktisk ville købe.
 ## 4. Kaldbudget — er 10 kald/minut nok?
 
 Ja, med margin. Loftet er en **rate limit pr. minut**, ikke en månedspulje, så
-der er ingen skjult grænse af den slags, `A15` stadig er åben om hos Sportmonks.
+der er ingen skjult grænse af den slags. **Det samme gælder Sportmonks (`A15`, aflæst
+2. august 2026):** 3.000 kald i timen pr. entitet — også en rate limit, ikke en
+månedspulje. De to leverandører adskiller sig altså i tal og periode, ikke i art.
 
 | Kald | Frekvens | Forbrug |
 |---|---|---|
