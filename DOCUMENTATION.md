@@ -29,6 +29,7 @@ hele. `CLAUDE.md` har en rutetabel fra opgave til afsnit.
 - [19. Karriereprofil (`sql/career_profile.sql`)](#19-karriereprofil-sqlcareer_profilesql)
 - [20. Onboarding (`src/lib/onboarding.js`)](#20-onboarding-srclibonboardingjs)
 - [21. Analytics v1 (`sql/analytics_events.sql`, `sql/analytics_dashboard.sql`)](#21-analytics-v1-sqlanalytics_eventssql-sqlanalytics_dashboardsql)
+- [22. Feedback fra brugerne (`sql/feedback.sql`)](#22-feedback-fra-brugerne-sqlfeedbacksql)
 
 Se også: [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) · [`docs/CRON.md`](./docs/CRON.md) · [`sql/README.md`](./sql/README.md)
 
@@ -60,7 +61,7 @@ Kildekode: GitHub-repository `Nikkelajsen/Prediction-Champ`.
 Tabel	Formål
 `leagues`	Ligaer. **`provider`** = datakilden (`sportmonks` → numerisk liga-id, `footballdata` → turneringskode som `PL`/`CL`); `api_league_id` er ligaens id hos netop den. **`live_enabled`** styrer, om ligaens kampe overhovedet må vises som i gang — det følger abonnementet, ikke leverandøren (afsnit 8). `is_visible` styrer om ligaen vises for almindelige brugere (admin ser altid alt).
 `seasons`	Sæson pr. liga. `api_season_id` gemmes automatisk af sync-funktionen første gang, så fremtidige kørsler ikke behøver navne-opslag. Betydningen følger leverandøren: et sæson-id hos Sportmonks, STARTÅRET (`2026`) hos football-data.org.
-`teams`	Hold. `api_team_id` = holdets id hos ligaens datakilde, sat automatisk — præfikset `fd:` for football-data.org (se id-præfikset i afsnit 8). Tabellen er scopet til `league_id`, så samme klub i to turneringer er to rækker.
+`teams`	Hold. `api_team_id` = holdets id hos ligaens datakilde, sat automatisk — præfikset `fd:` for football-data.org (se id-præfikset i afsnit 8). Tabellen er scopet til `league_id`, så samme klub i to turneringer er to rækker. **Unique `(league_id, api_team_id)`** siden `G7` (`sql/api_id_uniqueness.sql`) — omfanget er per turnering og ikke globalt, netop fordi Arsenal findes i både Premier League og Champions League med samme `fd:57`. Tilsvarende har `leagues` unique `(provider, api_league_id)` og `seasons` unique `(league_id, api_season_id)`; sidstnævnte kan ikke være global, fordi alle fem football-data-turneringer deler sæson-id'et `2026`.
 `matches`	Kampe. `round_key` (tirsdag–mandag, auto-beregnet), `home_score`/`away_score` (**endeligt** resultat — `not null` betyder "kampen er spillet"), `stage_name` (leverandørens rå stage-navn, fx "Regular Season"/"Championship Round"/"Relegation Round" — se afsnit 8/10), `api_fixture_id` (unik). Desuden live-kolonnerne `live_home_score`, `live_away_score`, `live_state`, `live_minute`, `live_updated_at` (`sql/live_scores.sql`), der viser den *nuværende* stilling mens kampen spilles og aldrig giver point — se afsnit 8.
 `profiles`	Brugerprofiler. `display_name`, `is_admin`, `created_at` (tilmelding, backfillet fra `auth.users`), `last_seen_at` (senest aktiv, sat af `touch_activity()`). `display_name` er unikt (case-insensitivt) — se afsnit 6.
 `competitions`	`mode` ∈ `full_season / team / time_range / custom / random`. `league_id`/`season_id` er nullable — `custom` og `random` kan spænde over flere ligaer. `group_id` (nullable, `on delete set null`) = liga-tilhør (liga-laget, afsnit 18); `null` = liga-løs konkurrence. `rules` (jsonb) indeholder pointregler og skrives altid som `{ exact: 3, outcome: 1 }` — `openDaysBefore` (det rullende gætte-vindue) er fjernet august 2026 og læses ikke længere; nøglen kan stadig ligge i gamle rækker, hvor den er inert.
@@ -77,6 +78,7 @@ Tabel	Formål
 `season_standings` (view)	Live-view med sæsonchampionship-stillingen pr. `season_id` (`sql/standings_tiebreakers.sql`). Se afsnit 5.
 `push_subscriptions`	Web Push-abonnementer, én række pr. enhed/browser der har slået notifikationer til. RLS: kun egne rækker. Se afsnit 16.
 `notification_log`	Log over sendte push-beskeder pr. bruger (`user_id`, `key`), så samme besked aldrig sendes to gange. Kun serverfunktionen læser/skriver. Se afsnit 16.
+`feedback`	Meldinger fra brugerne (`B14`, `sql/feedback.sql`): `kind` ∈ `problem/idea/other`, `message` (4–2000 tegn), `context` (jsonb: version, skærm, browser), `handled_at`/`handled_by`. RLS: **kun INSERT af egne rækker, ingen SELECT overhovedet** — læsning sker gennem `admin_feedback()`. `user_id` er nullable med `on delete set null`, så en melding overlever den konto, der skrev den. Se afsnit 22.
 `user_activity_days`	Aktivitets-sporing til brugerstatistik: én række pr. bruger pr. aktiv dag (`user_id`, `day`, PK begge). Skrives af `touch_activity()` ved app-start. RLS slået til uden policies — læses/skrives kun via `security definer`-funktioner. Se afsnit 15.
 `analytics_events`	Analytics v1: hændelseslog (`event_id`, `event_name`, `user_id` default `auth.uid()`, `group_id`/`competition_id` nullable, `metadata` jsonb, `created_at`). RLS: kun INSERT af egne rækker — ingen SELECT/UPDATE/DELETE for almindelige brugere. Skrevet fire-and-forget fra klienten (`logEvent`/`logEventOnce` i `src/lib/analytics.js`), læst kun via admin-gatede RPC'er. Se afsnit 21.
 `stories`	Story Engine-historier pr. bruger pr. runde (`user_id`, `round_key`, `competition_id` nullable, `rule`, `priority`, `league_size`, `payload`, `headline`, `body`, `dismissed_at`). Skrives kun af `generate_stories()`. RLS: læs/afvis kun egne. Se afsnit 17.
@@ -400,6 +402,8 @@ Fast tjekliste inden en branch merges til `main` (test på preview-URL, både mo
 - [ ] Analytics → Engagement: push-effekten viser to rater, og åbnede + ikke-åbnede summer til modtagere (invariant 6f).
 - [ ] Liga-diagnose: hver liga har præcis én tilstand med en begrundelse, der nævner ligaens egne tal; en liga under 14 dage gammel står som "For ny" uanset alt andet. Kør invariant 6 og 6b i verifikationsblokken i `sql/analytics_dashboard.sql`.
 - [ ] En ikke-admin kan hverken kalde `admin_analytics_*`-RPC'erne (skal give `forbidden`) eller læse `analytics_events` (skal give 0 rækker).
+- [ ] **Feedback (`B14`):** send en melding fra Sådan virker det → "Skriv til os". Kvitteringen skal blive STÅENDE på kortet, efter dialogen er lukket, og rækken skal stå i Admin → Feedback med rigtig version og skærm. Markér den som behandlet, slå "Kun ubehandlede" fra og til — den skal forsvinde og komme igen.
+- [ ] En ikke-admin kan hverken kalde `admin_feedback()`/`admin_feedback_set_handled()` (skal give `forbidden`) eller læse `feedback` (skal give en tilladelsesfejl, ikke 0 rækker — der findes ingen select-policy).
 ---
 ## 12. Kendte begrænsninger
 Dette afsnit beskriver **vilkår** — det, der er sådan, og som ingen har tænkt sig at lave om. Det, der skal gøres noget ved, står som `G#`-rækker i [`docs/BACKLOG.md`](docs/BACKLOG.md), så en opgave ikke bor to steder. *(Skellet er indført 31. juli 2026, fordi afsnittet ikke havde det: det beskrev en fil-opdeling som "næste naturlige oprydning" tre uger efter den var leveret, og henviste til Liga Health Score og beslutning A12, som begge var fjernet. En begrænsning ældes ikke — en to-do gør.)*
@@ -652,6 +656,27 @@ Frontend: instrumentering centraliseret i `MainApp.jsx`s `goTab`/`open*` (al nav
 Ydelseskontrakt (ufravigelig): events logges asynkront og påvirker aldrig brugeroplevelsen (blokeres skrivningen i devtools, virker appen uændret). Dashboardet rammer kun de fire aggregerede RPC'er, aldrig rå/live-tabeller. Ingen ny cron, intet materialized view.
 
 Engangsopsætning: kør `sql/analytics_events.sql` og derefter `sql/analytics_dashboard.sql` i Supabase ("Run without RLS"). Den anden fil er, modsat den første, sikker og forventet at blive gen-kørt. Efter 30. juli 2026-ændringerne (Liga-diagnose + de to nye RPC'er + push-effekt) skal den gen-køres sammen med frontend-mergen; en gammel klient mod en ny RPC (eller omvendt) viser en tom liga-sektion, ikke forkerte tal.
+
+---
+## 22. Feedback fra brugerne (`sql/feedback.sql`)
+
+Den ene vej fra en bruger til udvikleren (`B14`, 2. august 2026). Indtil da fandtes ingen: en fejl, en forvirring eller et ønske døde, hvor det opstod, og det eneste, der nåede frem, var det, nogen huskede at sige i telefonen. Det er samme hul som `G42` set fra den anden side — dér mangler maskinens spor efter et crash, her mangler menneskets.
+
+**Hvor knappen bor.** Kortet "Sig til" ligger nederst i **Sådan virker det**, lige over versionsstemplet. Den skærm er ét tryk væk fra ⓘ i toppen af enhver skærm og er i forvejen det sted, man går hen, når man ikke forstår noget. Profil var alternativet, men det er også det sted, ingen er, når noget går galt. De to naboer hører sammen: stemplet svarer på "hvilken version så du?", kortet er stedet, spørgsmålet kan stilles.
+
+**Hvad der sendes med.** `context`-jsonb'en bærer `version` (commit-SHA'en fra `__APP_VERSION__`), `screen` og `userAgent`. Uden dem er halvdelen af meldingerne ikke til at følge op — "knappen virker ikke" kan ikke reproduceres uden skærm og version. Alle tre står **synligt i formularen, før der sendes**; en videregivelse om brugeren skal kunne ses i det øjeblik, de trykker, ikke i en politik, ingen læser.
+
+**Skrivning.** `public.feedback` (`user_id` default `auth.uid()`, `kind`, `message`, `context`, `created_at`, `handled_at`, `handled_by`). RLS giver **kun INSERT af egne rækker** — ingen SELECT-policy overhovedet, heller ikke på ens egen række, så klientens insert **skal** bruge `Prefer: return=minimal`. To check-constraints bærer ordforrådet (`problem`/`idea`/`other`) og længden (4–2000 tegn); `KINDS`/`MESSAGE_MAX` i `src/lib/data/feedback.js` er den samme grænse sagt på dansk, én gang tidligere, så brugeren ikke møder en PostgREST-fejl.
+
+Skrivningen er **ikke** fire-and-forget, modsat `analytics.js`. Forskellen er, hvem der venter: en hændelse er noget, *vi* vil vide, mens en melding er noget, *brugeren* vil have sagt. Fejler den, siges det højt — ellers tror de, beskeden er afsendt, og skriver den ikke igen. Kvitteringen bliver stående på kortet, efter dialogen lukkes; en bekræftelse, der forsvinder sammen med det, den bekræfter, er ingen bekræftelse (samme lærdom som `G24`).
+
+**Læsning.** `admin_feedback(only_open, max_rows)` og `admin_feedback_set_handled(id, handled)` — begge `security definer` med et eksplicit `is_admin`-tjek som første sætning, samme form som `admin_job_health()`. `display_name` joines på, så en melding kan følges op; e-mail hentes bevidst **ikke** med, så listen kan stå åben på en telefon uden at være en eksport af brugernes mailadresser. Vises i **Admin → Feedback** (`src/screens/FeedbackPanel.jsx`), hvor "Kun ubehandlede" er tændt som udgangspunkt — en liste, der kun vokser, holder man op med at læse.
+
+⚠️ **Fælde, der kostede tid:** returtabellen i `admin_feedback()` erklærer en OUT-parameter, der hedder `id`, og plpgsql kan ikke skelne den fra `profiles.id` i admin-vagten. Uden aliasset (`from public.profiles pr where pr.id = auth.uid()`) fejler funktionen med *"column reference id is ambiguous"* — ikke ved oprettelsen, men først når den kaldes. `admin_job_health()` slipper, fordi ingen af dens kolonner deler navn med en tabelkolonne i vagten; det er ikke en forskel, man ser ved at kopiere mønstret.
+
+`user_id` er **nullable** med `on delete set null` (modsat `analytics_events`' cascade): en hændelseslog uden sin bruger er værdiløs, men en fejlmelding er stadig sand, efter den, der skrev den, har slettet sin konto — og den fejl, den beskriver, findes stadig. `not null` ville i øvrigt have gjort en kontosletning umulig. Skrivesiden er uændret lukket: `null = auth.uid()` er NULL og ikke sand, så policyen afviser en klient, der forsøger at sende `user_id: null`.
+
+Engangsopsætning: kør `sql/feedback.sql` i Supabase ("Run without RLS") **før** frontend-mergen — ellers får brugeren en fejl, når de trykker Send. Dækket af `sql/tests/feedback.sql` i CI.
 
 ---
 Bed Claude om at opdatere denne fil, når der sker større ændringer.

@@ -119,3 +119,33 @@ jobs:
           set -euo pipefail
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database sectest;'
           psql -h localhost -U postgres -d sectest -v ON_ERROR_STOP=1 -b -f security_hardening.sql
+
+      # Feedback (B14): kører migreringen feedback.sql og efterprøver, at RLS
+      # kun tillader insert af egne rækker, at INGEN bruger kan læse tabellen,
+      # og at begge admin-RPC'er svarer 'forbidden' til en ikke-admin.
+      - name: Test af feedback
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database fbtest;'
+          psql -h localhost -U postgres -d fbtest -v ON_ERROR_STOP=1 -b -f feedback.sql
+
+      # Unique-constraints på leverandør-id'erne (G7): efterprøver især, at de
+      # tre LOVLIGE gentagelser stadig er lovlige — samme klub i to turneringer,
+      # samme sæson-id i flere turneringer, samme liga-id hos to leverandører.
+      # En for stram constraint her gør Champions League usynkroniserbar.
+      #
+      # Kørslen støjer med to FORVENTEDE fejl til sidst (vagten mod dubletter,
+      # der findes i forvejen — se filens punkt 4). Den slår selv ON_ERROR_STOP
+      # fra og til igen omkring dem, så et grønt trin betyder stadig, at alle
+      # påstande holdt.
+      - name: Test af unique-constraints på leverandør-id'er
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database idtest;'
+          psql -h localhost -U postgres -d idtest -v ON_ERROR_STOP=1 -b -f api_id_uniqueness.sql

@@ -3,8 +3,9 @@
 import { C, font } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
 import InstallGuide from "./InstallGuide.jsx";
+import FeedbackCard from "./FeedbackCard.jsx";
 
-function HowItWorksScreen({ onBack }) {
+function HowItWorksScreen({ onBack, token }) {
   const Section = ({ title, children }) => (
     <Card>
       <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>{title}</div>
@@ -68,6 +69,11 @@ function HowItWorksScreen({ onBack }) {
       <Section title="Installér som app">
         <InstallGuide />
       </Section>
+      {/* Feedback-kortet (B14) står lige over versionsstemplet, og de to hører
+          sammen: stemplet svarer på "hvilken version så du?", kortet er stedet,
+          spørgsmålet overhovedet kan stilles. Versionen følger automatisk med
+          hver melding, så ingen skal skrive den af. */}
+      <FeedbackCard token={token} />
       {/* Versionsstemplet (G42). Står nederst på den ene side, enhver bruger
           kan finde, og er dermed svaret på det spørgsmål, enhver fejlmelding
           begynder med: HVILKEN version så du? Uden det er "det virkede ikke i

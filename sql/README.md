@@ -70,6 +70,8 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 24 | `tournament_footballdata_promote.sql` | Sætter `is_visible` + `is_official` = true på de fem football-data-turneringer (A19) | **Data, ikke skema.** Idempotent. **Kørt 31. juli 2026.** Begge kolonner sættes i SAMME update med vilje — check-constrainten `leagues_official_implies_visible` afviser en officiel turnering, ingen kan se, så to adskilte sætninger ville fejle på den første. Scotland Premiership er bevidst ikke med; den forfremmes, når dens igangværende spillerunde er talt op |
 | 26 | `competition_awards.sql` | Lokale kåringer (I13/A22): tabellen `competition_awards` + SECURITY DEFINER-RPC'en `award_competition_periods()` ("Ugens/Månedens bedste" i en opt-in-konkurrence) | Aktiv — tilføjet 1. august 2026. Idempotent. Ingen skrive-policies: funktionen er den eneste skriver, klienten trigger den ved board-åbning. **Skal køres FØR frontend-mergen** — omvendt degraderer boardet blot til en tom kåringssektion |
 | 27 | `security_hardening.sql` | Sikkerhedsstramning (G14/G15/G16): `matches` bliver admin-only at skrive i, `recompute_ratings()` bliver service_role-only med wrapperen `admin_recompute_ratings()`, og `monthly_standings` får `security_invoker` | Aktiv — tilføjet august 2026. Idempotent. **Ændrer ingen tal og intet, brugerne ser** — kun hvem der må skrive og læse. **Skal køres FØR frontend-mergen:** Admin-skærmens "Opdater ratings" kalder herefter `admin_recompute_ratings`, som først findes med denne migrering. Forudsætter #0, #5 og #20 |
+| 28 | `feedback.sql` | Feedback fra brugerne (`B14`): tabellen `feedback` + RPC'erne `admin_feedback()` og `admin_feedback_set_handled()` | Aktiv — tilføjet 2. august 2026. Idempotent. Ingen adfærdsændring for eksisterende data. **Skal køres FØR frontend-mergen** — omvendt får brugeren en fejl, når de trykker Send, og Admin → Feedback siger "Er sql/feedback.sql kørt?" |
+| 29 | `api_id_uniqueness.sql` | Unique-constraints på leverandør-id'erne (`G7`): `leagues (provider, api_league_id)`, `seasons (league_id, api_season_id)`, `teams (league_id, api_team_id)` | Aktiv — tilføjet 2. august 2026. Idempotent. **Fejler højlydt, hvis der allerede findes dubletter** — det er med vilje, og fejlteksten nævner rækkerne. Ingen kodeændring hører til; se filens eget hoved for, hvorfor `api/sync-matches.js` bevidst IKKE er lavet om til et upsert |
 
 ### ⚠️ Tre filer må ikke gen-køres blindt
 
@@ -140,13 +142,35 @@ vinde, en fremmed kalder skriver intet, andet kald er et no-op, og
 stubbes med session-GUC'er (`test.uid`/`test.role`), så testen kan skifte
 "kalder" undervejs.
 
+**`sql/tests/feedback.sql`** (samme CI-job, egen database) kører migreringen
+`feedback.sql` mod et minimalt skema og efterprøver adgangen fra begge sider: en
+bruger kan skrive sin egen melding og kun sin egen, INGEN bruger kan læse
+tabellen (heller ikke sin egen række — der findes ingen select-policy), `anon`
+kan hverken læse eller skrive, de to check-constraints afviser en ukendt type og
+en for kort/lang besked, og begge admin-RPC'er svarer `forbidden` til en
+ikke-admin. Sidste punkt er, at en slettet konto efterlader meldingen — den
+`on delete set null`, kolonnen har.
+
+**`sql/tests/api_id_uniqueness.sql`** (samme CI-job, egen database) er skrevet
+for ét punkt frem for de andre: at de tre **lovlige** gentagelser stadig er
+lovlige. Samme klub i to turneringer (Arsenal i PL og i CL, begge `fd:57`),
+samme `api_season_id` i flere turneringer (`'2026'` i alle fem
+football-data-turneringer) og samme `api_league_id` hos to leverandører. En
+global unique — som `G7` oprindeligt var formuleret — ville have afvist alle
+tre, og Champions League kunne da ikke synkroniseres. At dubletter afvises,
+ville et hvilket som helst unique-indeks bestå; kun det rigtige omfang består
+den første halvdel. Kørslen støjer bevidst med to forventede fejl til sidst
+(vagten mod dubletter, der findes i forvejen).
+
 Testene kan køres lokalt mod enhver tom database:
 
 ```bash
-createdb ratingtest && createdb awardstest && createdb sectest
+createdb ratingtest && createdb awardstest && createdb sectest && createdb fbtest && createdb idtest
 cd sql/tests && psql -d ratingtest -v ON_ERROR_STOP=1 -b -f rating_equivalence.sql
 psql -d awardstest -v ON_ERROR_STOP=1 -b -f competition_awards.sql
 psql -d sectest -v ON_ERROR_STOP=1 -b -f security_hardening.sql
+psql -d fbtest -v ON_ERROR_STOP=1 -b -f feedback.sql
+psql -d idtest -v ON_ERROR_STOP=1 -b -f api_id_uniqueness.sql
 ```
 
 Samme mønster gælder mildere for `predictions_round_lock_policies.sql`: den rører

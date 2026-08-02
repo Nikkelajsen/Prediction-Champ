@@ -9,6 +9,7 @@ import { C, btnGhost, btnGold, chip, font, muted } from "../ui/theme.js";
 import { BackBar, Card, RoundPager, ScoreInput, StatTile, StatGroup, MiniBars } from "../ui/components.jsx";
 import AnalyticsPanel from "./AnalyticsPanel.jsx";
 import OpsPanel from "./OpsPanel.jsx";
+import FeedbackPanel from "./FeedbackPanel.jsx";
 
 function AdminScreen({ token, leagues, reloadLeagues, onBack }) {
   const [sub, setSub] = useState("matches");
@@ -41,12 +42,14 @@ function AdminScreen({ token, leagues, reloadLeagues, onBack }) {
         <button style={chip(sub === "stats")} onClick={() => setSub("stats")}>Statistik</button>
         <button style={chip(sub === "analytics")} onClick={() => setSub("analytics")}>Analytics</button>
         <button style={chip(sub === "ops")} onClick={() => setSub("ops")}>Drift</button>
+        <button style={chip(sub === "feedback")} onClick={() => setSub("feedback")}>Feedback</button>
       </div>
       {sub === "matches" && <MatchesPanel token={token} leagues={leagues} reloadLeagues={reloadLeagues} />}
       {sub === "results" && <ResultsPanel token={token} leagues={leagues} />}
       {sub === "stats" && <StatsPanel token={token} />}
       {sub === "analytics" && <AnalyticsPanel token={token} />}
       {sub === "ops" && <OpsPanel token={token} leagues={leagues} />}
+      {sub === "feedback" && <FeedbackPanel token={token} />}
     </div>
   );
 }

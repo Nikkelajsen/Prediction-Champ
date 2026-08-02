@@ -25,6 +25,7 @@
 | karriereprofil | §19 · `docs/features/karriereprofil-v1.md` |
 | onboarding | §20 · `docs/features/onboarding-v1.md` |
 | analytics og måle-ordbogen | §21 · `docs/features/analytics-v1.md` |
+| feedback fra brugerne | §22 · `sql/feedback.sql` · `src/screens/FeedbackCard.jsx` |
 | planlagte jobs (cron) | `docs/CRON.md` |
 | historik over ændringer | `docs/CHANGELOG.md` |
 
