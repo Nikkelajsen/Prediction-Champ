@@ -12,8 +12,9 @@ den regenereres med guiden nedenfor.
 
 > ⚠️ **Øjebliksbilledet er BAGUD pr. august 2026**: `predictions_match_lock.sql` (#25),
 > den omlagte `analytics_dashboard.sql` (nye `analytics_match_locks`, omdøbte kolonner i
-> `analytics_round_locks`), `competition_awards.sql` (#26) og `security_hardening.sql`
-> (#27) er kørt/tilføjet siden. Eksporten skal køres, og datoen nedenfor rettes.
+> `analytics_round_locks`), `competition_awards.sql` (#26), `security_hardening.sql`
+> (#27) og `matches_kickoff_tbd.sql` (#28 — kolonnen `matches.kickoff_tbd` og
+> låsefunktionerne) er kørt/tilføjet siden. Eksporten skal køres, og datoen nedenfor rettes.
 >
 > **Netop nu er den også misvisende om sikkerhed.** Filen viser stadig de gamle,
 > åbne `matches`-policies (`auth.role() = 'authenticated'`) og `grant … to anon` på
@@ -69,13 +70,23 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 25 | `predictions_match_lock.sql` | **Per-kamp-lås** (`A21`): alle fire `predictions`-policies + `comp_participants_delete_own_unlocked`. En kamp låser 1 time før sit EGET kickoff | Aktiv — **afløser #4 og #14**. Idempotent. **Adfærdsændring i produktion:** en runde, der er låst i dag, får sine senere kampe åbnet igen i samme øjeblik. Kør derfor MELLEM to runder, ikke midt i en |
 | 24 | `tournament_footballdata_promote.sql` | Sætter `is_visible` + `is_official` = true på de fem football-data-turneringer (A19) | **Data, ikke skema.** Idempotent. **Kørt 31. juli 2026.** Begge kolonner sættes i SAMME update med vilje — check-constrainten `leagues_official_implies_visible` afviser en officiel turnering, ingen kan se, så to adskilte sætninger ville fejle på den første. Scotland Premiership er bevidst ikke med; den forfremmes, når dens igangværende spillerunde er talt op |
 | 26 | `competition_awards.sql` | Lokale kåringer (I13/A22): tabellen `competition_awards` + SECURITY DEFINER-RPC'en `award_competition_periods()` ("Ugens/Månedens bedste" i en opt-in-konkurrence) | Aktiv — tilføjet 1. august 2026. Idempotent. Ingen skrive-policies: funktionen er den eneste skriver, klienten trigger den ved board-åbning. **Skal køres FØR frontend-mergen** — omvendt degraderer boardet blot til en tom kåringssektion |
+| 28 | `matches_kickoff_tbd.sql` | **"Tid ikke fastlagt"**: kolonnen `matches.kickoff_tbd` + låsen samlet i `public.match_lock_at()`/`match_locked()`, som alle fem policies og `analytics_match_locks` nu kalder | Aktiv — tilføjet august 2026. Idempotent. **Afløser låseudtrykket i #25**, som stod 1:1 fem steder. **Ingen adfærdsændring ved kørsel:** kolonnen får `default false`, så udtrykket er bogstaveligt det gamle, indtil `sync-matches` har sat flaget — derfor behøver den *ikke* køres mellem to runder. Skal køres FØR frontend-mergen; ellers viser klienten stadig pladsholder-tider. Forudsætter #25 |
 | 27 | `security_hardening.sql` | Sikkerhedsstramning (G14/G15/G16): `matches` bliver admin-only at skrive i, `recompute_ratings()` bliver service_role-only med wrapperen `admin_recompute_ratings()`, og `monthly_standings` får `security_invoker` | Aktiv — tilføjet august 2026. Idempotent. **Ændrer ingen tal og intet, brugerne ser** — kun hvem der må skrive og læse. **Skal køres FØR frontend-mergen:** Admin-skærmens "Opdater ratings" kalder herefter `admin_recompute_ratings`, som først findes med denne migrering. Forudsætter #0, #5 og #20 |
 
-### ⚠️ Tre filer må ikke gen-køres blindt
+### ⚠️ Fire filer må ikke gen-køres blindt
 
-Alle tre bruger `drop policy … create policy` / `drop view … create view`, så en
+Alle fire bruger `drop policy … create policy` / `drop view … create view`, så en
 gen-kørsel **erstatter tavst** en nyere definition med en ældre. Der kommer ingen
 fejl — reglen bliver bare den gamle igen.
+
+- **`predictions_match_lock.sql`** (#25) genskaber alle fem policies med låsen skrevet
+  i hånden som `kickoff_at <= now() + interval '1 hour'` og taber dermed
+  `kickoff_tbd`: en kamp, hvis klokkeslæt ikke er fastlagt, låser igen kl. 01.00 om
+  natten i stedet for ved midnat på spilledagen — og klienten, som følger den nye
+  regel, vil være uenig med serveren. Filen er stadig den bedste beskrivelse af
+  *hvorfor* låsen følger kampen, men selve udtrykket bor nu i
+  `public.match_lock_at()`. **Skal `predictions_match_lock.sql` køres, så kør
+  `matches_kickoff_tbd.sql` (#28) umiddelbart efter.** *(Tilføjet august 2026.)*
 
 - **`standings_tiebreakers.sql`** genskaber `round_standings` og `monthly_standings` i deres udgave **uden `scope`**. En gen-kørsel efter `tournament_scope.sql` (#20) fjerner scope-kolonnen tavst: Championship-fanen viser tomme stillinger, fordi den beder om `scope=eq.ALL`, og `career_profile`/`story_engine` fejler på det samme filter. `season_standings` i filen er derimod stadig den gældende udgave. **Kør altid `tournament_scope.sql` bagefter.** *(Tilføjet 31. juli 2026.)* **Siden august 2026 er der to ting at miste:** filens `monthly_standings` er også uden `security_invoker`, så en gen-kørsel genåbner G16 — den uautentificerede læsning af per-bruger månedspoint. `tournament_scope.sql` bagefter lukker begge dele på én gang.
 - **`groups.sql`** genskaber `group_members_delete_self` og

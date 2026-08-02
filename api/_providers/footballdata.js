@@ -45,7 +45,18 @@ function statusOf(m) {
   if (FINISHED_STATES.has(m.status)) return "finished";
   if (LIVE_STATES.has(m.status)) return "live";
   // SCHEDULED, TIMED, POSTPONED, SUSPENDED, CANCELLED — samme behandling.
+  // Forskellen på SCHEDULED og TIMED er ikke uden konsekvens, men den hører
+  // ikke til her: den bæres videre i kickoffTbd (se kickoffTbdOf).
   return "scheduled";
+}
+
+// "Tid ikke fastlagt". Hos football-data.org er skelnen eksplicit: en kamp
+// SCHEDULES med en grov dato, når terminslisten lægges, og TIMES først, når det
+// eksakte klokkeslæt er fastsat — typisk nogle uger før kampen. `utcDate` bærer
+// en pladsholder-tid indtil da, og den er ikke til at kende fra en ægte
+// kampstart. Derfor er status det eneste sted, informationen findes.
+function kickoffTbdOf(m) {
+  return m.status === "SCHEDULED";
 }
 
 function team(t) {
@@ -62,6 +73,7 @@ function normalize(m) {
     providerId: String(m.id),
     globalId: PREFIX + m.id,
     kickoffAt: m.utcDate ?? null,
+    kickoffTbd: kickoffTbdOf(m),
     // Rå engelsk stage-navn ("REGULAR_SEASON", "LAST_16" …) — oversættes i
     // STAGE_LABELS (src/lib/scoring.js), samme vej som Sportmonks' navne.
     stageName: m.stage ?? null,

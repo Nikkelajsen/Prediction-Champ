@@ -146,11 +146,15 @@ function modeLabel(mode, modeParams) {
   return MODE_LABELS[mode] || mode;
 }
 
-function formatKickoff(iso) {
+// `tbd` udelader klokkeslættet: er kampens tid ikke fastlagt, bærer kickoff_at
+// kun en dato, og et påhæftet "kl. 02.00" ville være opdigtet. Datoen står
+// stadig — den ER kendt.
+function formatKickoff(iso, tbd = false) {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleDateString("da-DK", { weekday: "short", day: "2-digit", month: "2-digit" }) + " kl. " +
-    d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
+  const date = d.toLocaleDateString("da-DK", { weekday: "short", day: "2-digit", month: "2-digit" });
+  if (tbd) return date;
+  return date + " kl. " + d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
 }
 const LOCK_LEAD_MS = 60 * 60 * 1000; // 1 time før kampens eget kickoff
 
@@ -164,10 +168,20 @@ const LOCK_LEAD_MS = 60 * 60 * 1000; // 1 time før kampens eget kickoff
 // `api/_backfill.js` regel 3 og `analytics_round_locks`.
 
 // Låsetidspunktet for én kamp (ms), eller null hvis kickoff ikke er kendt.
+//
+// Er klokkeslættet ikke fastlagt (kickoff_tbd), er "1 time før kickoff"
+// meningsløst — der er intet kickoff at regne fra, kun en dato. Låsen bliver da
+// MIDNAT PÅ SPILLEDAGEN. Det er det eneste tidspunkt, der holder, når kampen kan
+// ligge hvor som helst på dagen: enhver senere lås ville kunne ligge efter et
+// fløjt. Det er strengere end 1-times reglen, og med vilje — den anden vej ville
+// koste tips, ikke bare præcision.
 function lockAtOf(m) {
   if (!m?.kickoff_at) return null;
   const t = new Date(m.kickoff_at).getTime();
-  return Number.isNaN(t) ? null : t - LOCK_LEAD_MS;
+  if (Number.isNaN(t)) return null;
+  if (!m.kickoff_tbd) return t - LOCK_LEAD_MS;
+  const d = new Date(t);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
 // En kamp er låst hvis den har fået resultat, ELLER hvis vi er inden for 1 time

@@ -49,6 +49,40 @@ describe("normalize", () => {
     expect(n.away.name).toBe("Brøndby IF");
   });
 
+  // "Tid ikke fastlagt". Sportmonks har ingen status for "dato kendt, klokkeslæt
+  // ukendt" — den tilstand en Superliga-runde står i, indtil TV-tiderne falder
+  // på plads — så to markører må bære den: state TBA, og midnat-pladsholderen
+  // i starting_at.
+  describe("kickoffTbd", () => {
+    it("er falsk for en kamp med et rigtigt klokkeslæt", () => {
+      expect(normalize(fixture()).kickoffTbd).toBe(false);
+      expect(normalize(fixture({ starting_at: "2026-09-13 20:00:00" })).kickoffTbd).toBe(false);
+    });
+
+    it("er sand, når starting_at står på midnat", () => {
+      // Sådan så de seks Superliga-kampe ud seks uger før runden: kun datoen var
+      // kendt. Gemt ordret som 00:00 UTC blev de vist som "02.00" dansk tid.
+      const n = normalize(fixture({
+        starting_at: "2026-09-13 00:00:00",
+        state: { short_name: "NS", developer_name: "NS" },
+      }));
+      expect(n.kickoffTbd).toBe(true);
+      expect(n.status).toBe("scheduled"); // statussen selv er uændret
+    });
+
+    it("er sand for state TBA, uanset hvad der står i starting_at", () => {
+      const n = normalize(fixture({
+        starting_at: "2026-09-13 16:00:00",
+        state: { short_name: "TBA", developer_name: "TBA" },
+      }));
+      expect(n.kickoffTbd).toBe(true);
+    });
+
+    it("er falsk, når starting_at helt mangler", () => {
+      expect(normalize(fixture({ starting_at: null })).kickoffTbd).toBe(false);
+    });
+  });
+
   it("holder Sportmonks-id'er UDEN præfiks", () => {
     // Bevidst asymmetri med footballdata.js: id'erne står allerede i tusindvis
     // af rækker i matches.api_fixture_id. Et præfiks her ville betyde, at hver

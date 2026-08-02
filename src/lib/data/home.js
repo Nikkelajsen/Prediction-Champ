@@ -32,7 +32,14 @@ async function computeHomeTips(token, userId, competitions) {
   const nextUp = (extra) => {
     const future = ms.filter((m) => !played(m) && m.kickoff_at && new Date(m.kickoff_at).getTime() > now)
       .sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));
-    return { hasComps: true, ...extra, nextOpen: future[0]?.kickoff_at || null, roundKey: future[0]?.round_key || null };
+    // nextOpenTbd følger med nextOpen: uden den ville kortet vise et opdigtet
+    // klokkeslæt for en kamp, hvis tid endnu ikke er fastlagt.
+    return {
+      hasComps: true, ...extra,
+      nextOpen: future[0]?.kickoff_at || null,
+      nextOpenTbd: !!future[0]?.kickoff_tbd,
+      roundKey: future[0]?.round_key || null,
+    };
   };
   // "Alle tips er inde" er en påstand om BRUGERENS tips og må kun bruges, når vi
   // faktisk har set, at rundens tipbare kampe er tippet.
