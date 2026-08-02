@@ -9,6 +9,11 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+2. august 2026 — Kampenes rækkefølge er nu deterministisk: kickoff, derefter holdnavn
+**Kampe med samme kickoff kunne bytte plads mellem to visninger af den samme runde.** `order=kickoff_at` i PostgREST er ikke en TOTAL orden — deler to rækker tidsstempel, er resten udefineret, og databasen må returnere dem i den orden, den finder billigst. Det var der hele tiden, men var skjult bag seks ens klokkeslæt; da tiderne forsvandt fra visningen (`kickoff_tbd`), var der ikke længere noget, der forklarede rækkefølgen, og den så vilkårlig ud — hvad den også var.
+**Tiebreakeren er holdnavnet**, samlet i `byKickoffThenTeams()` (`src/lib/scoring.js`) og brugt fra `groupIntoDays()`, `groupIntoRounds()` og Hjem-fanens to opslag. Navnene bor i `teams` og ikke på kampen, så sorteringen kan ikke ligge i forespørgslen — den skal ske, hvor opslaget findes. På Hjem er det efter holdopslaget; på Tip er `teamsById` med i `useMemo`-afhængighederne, fordi navnene hentes EFTER kampene og rækkefølgen ellers ville fryse i det ene render, hvor de endnu ikke fandtes.
+**Sorteringen er dansk (`localeCompare(…, "da")`), og det er ikke pynt:** "Aa" alfabetiseres som "Å" og lander efter Z, mens æ/ø/å ellers ville lande midt i alfabetet. Testen fangede min egen forkerte forventning her — Aalborg BK står sidst, ikke først, og det er den rigtige adfærd. Uden holdnavne (det ene render før opslaget er hjemme) falder den tilbage på hold-ID: vilkårligt, men **stabilt**, hvilket er hele pointen.
+
 2. august 2026 — Rettelse til #28: `create or replace view` kan kun tilføje kolonner SIDST
 **Migreringen fejlede ved første kørsel i Supabase** med `cannot change name of view column "lock_at" to "kickoff_tbd"`. `kickoff_tbd` var indsat som femte kolonne i `analytics_match_locks`, og `create or replace view` sammenligner kolonner position for position — en ny kolonne i midten læses derfor som et forsøg på at omdøbe den, der stod dér. Kolonnen står nu sidst, i **begge** filer der definerer viewet (`matches_kickoff_tbd.sql` og `analytics_dashboard.sql`); gav de to filer viewet hver sin rækkefølge, ville den af dem, der køres sidst, fejle.
 **`drop view` ville have været det forkerte svar:** `analytics_completion_facts` joiner viewet, så droppet ville kræve `cascade` og rive det andet view med sig.

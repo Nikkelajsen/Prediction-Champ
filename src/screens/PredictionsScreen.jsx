@@ -224,7 +224,13 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
   // ændrede den mest.
   const roundInfo = round ? roundStatus({ matches: round.matches, preds, rules }) : null;
 
-  const days = useMemo(() => (round ? groupIntoDays(round.matches) : []), [round]);
+  // teamsById er med i afhængighederne, fordi holdnavnene AFGØR rækkefølgen, når
+  // kampene deler tidsstempel. De hentes efter kampene, så uden den ville listen
+  // beholde den orden, den fik i det ene render, hvor navnene endnu ikke fandtes.
+  const days = useMemo(
+    () => (round ? groupIntoDays(round.matches, (id) => teamsById[id]) : []),
+    [round, teamsById]
+  );
 
   // Forklaringslinjen hører til de LÅSTE kampe: først dér kan man se andres gæt
   // (canExpand = locked). Efter A21 er en runde typisk delvist låst i dagevis, så
