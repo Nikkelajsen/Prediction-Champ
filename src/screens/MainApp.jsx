@@ -19,6 +19,7 @@ import PredictionsScreen from "./PredictionsScreen.jsx";
 import CreateCompetitionScreen from "./CreateCompetitionScreen.jsx";
 import ProfileScreen from "./ProfileScreen.jsx";
 import HowItWorksScreen from "./HowItWorksScreen.jsx";
+import LegalScreen from "./LegalScreen.jsx";
 import OnboardingFlow from "./OnboardingFlow.jsx";
 import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
 
@@ -371,6 +372,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   };
   const openAdmin = () => setScreen({ type: "admin" });
   const openHow = () => setScreen({ type: "how" });
+  const openLegal = (doc = "privatliv") => setScreen({ type: "legal", doc });
 
   const tabs = [
     { id: "hjem", label: "Hjem", icon: Home },
@@ -429,7 +431,12 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     body = <ProfileScreen token={token} viewerUserId={userId} profileUserId={screen.profileUserId}
       onBack={() => setScreen(null)} openProfile={openProfile} />;
   } else if (screen?.type === "how") {
-    body = <HowItWorksScreen onBack={() => setScreen(null)} token={token} />;
+    body = <HowItWorksScreen onBack={() => setScreen(null)} token={token} openLegal={openLegal} />;
+  } else if (screen?.type === "legal") {
+    // Tilbage fører til "Sådan virker det" og ikke til `null` som de øvrige
+    // grene: man kom DERFRA, og der findes ingen fane at lande på. Uden det
+    // ville et tryk på tilbage smide brugeren ud på Hjem.
+    body = <LegalScreen doc={screen.doc} onBack={() => setScreen({ type: "how" })} />;
   } else if (tab === "hjem") {
     body = <HjemTab token={token} userId={userId} profile={profile} competitions={visibleCompetitions}
       goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} openGroup={openGroup} openProfile={openProfile}

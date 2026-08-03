@@ -1,17 +1,25 @@
 // "Sådan virker det": reglerne forklaret for brugeren — point, låsning,
 // runder, Championship og installation. Bærer også appens versionsnummer.
-import { C, font } from "../ui/theme.js";
+import { C, btnGhost, font, muted } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
 import InstallGuide from "./InstallGuide.jsx";
 import FeedbackCard from "./FeedbackCard.jsx";
 
-function HowItWorksScreen({ onBack, token }) {
-  const Section = ({ title, children }) => (
+// Modulniveau og ikke inde i HowItWorksScreen. Defineret indeni blev den
+// genskabt ved hver render, så React så en NY komponenttype hver gang og kunne
+// ikke genbruge noget under den — og React Compiler klagede én gang pr.
+// brugssted (ti advarsler ud af lint-loftets treogtyve, altså den enkeltstørste
+// post på gældslisten `G2`). Flytningen er ren: den bruger kun modul-imports.
+function Section({ title, children }) {
+  return (
     <Card>
       <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>{title}</div>
       <div style={{ color: C.text, fontSize: 14, lineHeight: 1.55 }}>{children}</div>
     </Card>
   );
+}
+
+function HowItWorksScreen({ onBack, token, openLegal }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <BackBar title="Sådan virker det" onBack={onBack} />
@@ -68,6 +76,28 @@ function HowItWorksScreen({ onBack, token }) {
       </Section>
       <Section title="Installér som app">
         <InstallGuide />
+      </Section>
+      {/* Privatliv og vilkår (B4). Teksterne bor her og ikke på Profil, fordi
+          det er her, man går hen, når man vil vide, hvordan noget hænger
+          sammen — og fordi det er den ene skærm, der er ét tryk væk fra ⓘ
+          overalt i appen. Kortet bærer også vejen ud af produktet: at lukke
+          sin konto står samme sted som beskrivelsen af, hvad lukningen gør. */}
+      <Section title="Privatliv og vilkår">
+        <p style={{ margin: "0 0 10px" }}>
+          Hvad vi gemmer om dig, hvem vi deler det med, og hvad du kan forlange.
+          Og reglerne for at bruge appen.
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" style={btnGhost} onClick={() => openLegal("privatliv")}>
+            Privatlivspolitik
+          </button>
+          <button type="button" style={btnGhost} onClick={() => openLegal("vilkaar")}>
+            Brugervilkår
+          </button>
+        </div>
+        <p style={{ ...muted, fontSize: 11, margin: "10px 0 0" }}>
+          Vil du lukke din konto, står knappen samme sted.
+        </p>
       </Section>
       {/* Feedback-kortet (B14) står lige over versionsstemplet, og de to hører
           sammen: stemplet svarer på "hvilken version så du?", kortet er stedet,

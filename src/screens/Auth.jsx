@@ -18,6 +18,8 @@ import { Crown, Loader2 } from "lucide-react";
 import { auth } from "../lib/supabase.js";
 import { C, btnGreen, fieldFull, font, muted, wrapOuter } from "../ui/theme.js";
 import { Card } from "../ui/components.jsx";
+import { findDokument, MINDSTEALDER } from "../lib/legal.js";
+import LegalDocument from "./LegalDocument.jsx";
 
 // Et felt med et navn, en skærmlæser kan læse. Etiketten er skjult (`.srOnly`),
 // fordi placeholderen bærer det synlige design — men den FINDES, hvilket
@@ -47,6 +49,48 @@ function LinkButton({ onClick, children, style }) {
   );
 }
 
+// Inline-link i en sætning. LinkButton kan ikke bruges: den er `width: 100%`
+// og lægger sig som sin egen blok, hvilket river sætningen fra hinanden.
+// `type="button"` er stadig ikke til forhandling, selvom linjen ligger uden
+// for formularen — reglen er billigere at holde ubetinget end at vurdere.
+function TekstLink({ onClick, children }) {
+  return (
+    <button type="button" onClick={onClick} style={{
+      background: "none", border: "none", padding: 0, font: "inherit",
+      color: C.green, textDecoration: "underline", cursor: "pointer",
+    }}>
+      {children}
+    </button>
+  );
+}
+
+// Jura-linjen (B4). Én komponent, to former, så teksten ikke står to steder.
+//
+// Den vises i ALLE tilstande og ikke kun ved oprettelse: dokumenterne skal
+// kunne læses UDEN at oprette en konto, og login-skærmen er det eneste sted, en
+// ikke-indlogget person overhovedet kan komme til dem. Ved oprettelse bærer den
+// desuden selve samtykket — et link er ikke nok, når man skal acceptere noget.
+function JuraLinje({ mode, onÅbn }) {
+  const stil = { ...muted, fontSize: 11, lineHeight: 1.5, textAlign: "center", margin: "14px 0 0" };
+  if (mode === "signup") {
+    return (
+      <p style={stil}>
+        Ved at oprette en konto accepterer du{" "}
+        <TekstLink onClick={() => onÅbn("vilkaar")}>brugervilkårene</TekstLink> og{" "}
+        <TekstLink onClick={() => onÅbn("privatliv")}>privatlivspolitikken</TekstLink>.
+        {" "}Du skal være mindst {MINDSTEALDER} år.
+      </p>
+    );
+  }
+  return (
+    <p style={stil}>
+      <TekstLink onClick={() => onÅbn("privatliv")}>Privatlivspolitik</TekstLink>
+      {" · "}
+      <TekstLink onClick={() => onÅbn("vilkaar")}>Brugervilkår</TekstLink>
+    </p>
+  );
+}
+
 // GoTrues fejl kommer på engelsk i en ellers dansk app. De tre nedenfor er dem,
 // en bruger realistisk rammer; alt andet vises som det kommer, fordi en tavs
 // omskrivning af en ukendt fejl ville gøre fejlsøgning sværere end den engelske
@@ -64,11 +108,14 @@ export function daAuthError(besked) {
   return tekst || "Noget gik galt";
 }
 
-function AuthShell({ children }) {
+// `bred` bruges kun af jura-visningen: en politik i en 320 px kolonne er
+// ulæselig. Default er uændret, så de tre login-tilstande og
+// ResetPasswordScreen ser præcis ud som før.
+function AuthShell({ children, bred }) {
   return (
     <div style={{ ...wrapOuter, alignItems: "flex-start" }}>
       <div style={{ width: "100%", maxWidth: 430, padding: "60px 18px", display: "flex", justifyContent: "center" }}>
-        <Card style={{ width: 320 }}>
+        <Card style={{ width: bred ? "100%" : 320 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
             <Crown size={18} color={C.gold} />
             <span style={{ fontFamily: font.display, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", fontSize: 16 }}>
@@ -143,6 +190,12 @@ function AuthScreen({ onAuthed, booting }) {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
+  // Jura-visningen er en EGEN tilstand og ikke en fjerde `mode`. `mode` styrer
+  // fem ting, og tre af dem er kæder, hvis fallback er "forgot" — en fjerde
+  // værdi ville give overskriften "Nulstil adgangskode", knapteksten "Send
+  // nulstillingslink", og værst: submit()'s else-gren kalder auth.signIn(), så
+  // et Enter-tryk på en politik-side ville forsøge et login.
+  const [jura, setJura] = useState(null); // null | "privatliv" | "vilkaar"
 
   async function submit(e) {
     e?.preventDefault?.();
@@ -179,6 +232,19 @@ function AuthScreen({ onAuthed, booting }) {
 
   const skift = (næste) => { setMode(næste); setError(""); setInfo(""); };
 
+  // Kun formularen afmonteres — `email`, `password`, `username` og `mode` bor i
+  // AuthScreen og overlever. Man kommer derfor tilbage til præcis den
+  // oprettelse, man forlod, uden at skulle skrive noget igen. Det er hele
+  // argumentet for et tidligt return frem for en ny værdi i `mode`.
+  if (jura) {
+    return (
+      <AuthShell bred>
+        <LegalDocument doc={findDokument(jura)} />
+        <LinkButton style={{ marginTop: 12 }} onClick={() => setJura(null)}>Tilbage</LinkButton>
+      </AuthShell>
+    );
+  }
+
   return (
     <AuthShell>
       <p style={muted}>{mode === "signin" ? "Log ind" : mode === "signup" ? "Opret konto" : "Nulstil adgangskode"}</p>
@@ -212,8 +278,9 @@ function AuthScreen({ onAuthed, booting }) {
       <LinkButton style={{ marginTop: 2 }} onClick={() => skift(mode === "signup" || mode === "forgot" ? "signin" : "signup")}>
         {mode === "signup" ? "Har du allerede en konto? Log ind" : mode === "forgot" ? "Tilbage til login" : "Ny bruger? Opret konto"}
       </LinkButton>
+      <JuraLinje mode={mode} onÅbn={setJura} />
     </AuthShell>
   );
 }
 
-export { AuthScreen, ResetPasswordScreen };
+export { AuthScreen, ResetPasswordScreen, JuraLinje };
