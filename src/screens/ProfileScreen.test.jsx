@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { recordFacts, h2hSentence, rivalTally, Sparkline } from "./ProfileScreen.jsx";
+// Importerne peger på de udskilte moduler efter fil-opdelingen (G1, 3. august
+// 2026) — reglerne bor nu dér, og testen skal ramme koden, ikke skærmen.
+import { recordFacts, rivalTally, h2hSentence } from "./profile/facts.js";
+import { Sparkline } from "./profile/Sparkline.jsx";
 
 // Rekorder-sektionen er GLOBAL (Championship + global rating), ikke en opgørelse
 // pr. brugerens egne konkurrencer. Reglerne for hvad der vises, ligger i

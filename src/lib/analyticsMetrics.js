@@ -49,14 +49,14 @@ const METRICS = {
     what: "Ligaer, hvor nogen faktisk har TIPPET for nylig — ikke blot åbnet appen.",
     how: "Distinkte grupper med mindst ét tip AFGIVET inden for vinduet, talt via konkurrencernes kampe. Hint-tallet 'med mindst én aktiv' er den svagere version (et medlem har åbnet appen).",
     source: "predictions → competition_matches → competitions.group_id.",
-    caveat: "Gabet mellem de to tal er selv interessant: ligaer hvor folk kigger forbi, men ingen spiller. Målt på `predictions.updated_at`, som ALDRIG opdateres ved en rettelse (der er ingen trigger på tabellen, og klienten sender ikke feltet) — tallet er derfor 'afgivet', ikke 'rørt ved'. En liga, hvor alle kun retter gamle tips, tæller ikke med (`G13`, rettet i ordbogen august 2026)."
+    caveat: "Gabet mellem de to tal er selv interessant: ligaer hvor folk kigger forbi, men ingen spiller. Målt på `predictions.updated_at`, som siden `G13` (3. august 2026) også flytter sig, når et tip RETTES — tallet er derfor 'afgivet eller rettet', altså aktivitet. Indtil da talte det kun afgivne tips, så en liga, hvor alle kun rettede gamle tips, så død ud; tal fra før den dato er tilsvarende en anelse for lave. En gen-skrivning af den SAMME score tæller ikke med."
   },
   active_competitions: {
     title: "Aktive konkurrencer",
     what: "Konkurrencer med tipaktivitet i perioden — og hvor mange der stadig har runder foran sig.",
     how: "Aktiv = mindst ét tip AFGIVET i vinduet. 'I gang' = konkurrencen har mindst én runde, der endnu ikke er gået i gang.",
     source: "predictions + competition_matches for aktiv; analytics_round_locks for 'i gang'.",
-    caveat: "De to tal er bevidst forskellige: en konkurrence kan have masser af historik uden en eneste runde tilbage, og en helt ny kan have runder foran sig uden aktivitet endnu. Som ovenfor måler `updated_at` i praksis AFGIVNE tips, ikke rettede (`G13`)."
+    caveat: "De to tal er bevidst forskellige: en konkurrence kan have masser af historik uden en eneste runde tilbage, og en helt ny kan have runder foran sig uden aktivitet endnu. Som ovenfor tæller `updated_at` siden `G13` både afgivne og rettede tips — men ikke en gen-skrivning af den samme score."
   },
   deadline_miss_rate: {
     title: "Deadline Miss Rate",
@@ -238,7 +238,7 @@ const METRICS = {
     what: "Mediantiden fra kontoen blev oprettet, til brugeren nåede trinnet.",
     how: "Median (ikke gennemsnit, som ét ekstremt tilfælde ville trække skævt) af tiden fra oprettelse til trinnets tidsstempel, kun blandt dem der NÅEDE trinnet.",
     source: "profiles.created_at sammenholdt med de tre trin-tidsstempler.",
-    caveat: "Tid til første tip er en ØVRE grænse: `predictions` har ingen created_at, kun updated_at, som flytter sig når et tip rettes. Retter en bruger sit allerførste tip en uge senere, ser det ud som om, de ventede en uge. Antallet der nåede trinnet er upåvirket — kun tiden kan være for høj.",
+    caveat: "Tid til første tip er en ØVRE grænse: `predictions` har ingen created_at, kun updated_at, som flytter sig når et tip rettes. Retter en bruger sit allerførste tip en uge senere, ser det ud som om, de ventede en uge. Antallet der nåede trinnet er upåvirket — kun tiden kan være for høj. Forbeholdet var indtil `G13` (3. august 2026) forkert i sin egen præmis: feltet flyttede sig slet ikke ved en rettelse. Nu gør det, og advarslen er blevet sand.",
   },
 
   // ---------- Story Engine ----------

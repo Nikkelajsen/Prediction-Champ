@@ -20,14 +20,38 @@ import MainApp from "./screens/MainApp.jsx";
 const REFRESH_MS = 45 * 60 * 1000;
 const STALE_MS = 10 * 60 * 1000;
 
+// Hvad adressen bad om, læst ÉN gang.
+//
+// Deep links (`?join=`, `?liga=`, `?pn=`/`?rk=`) og Supabases recovery-hash er
+// begge kun sande ved den allerførste render: de strippes af `replaceState`, så
+// snart de er brugt. De hører derfor til som INITIAL tilstand og ikke som en
+// effekt, der sætter state umiddelbart efter mount (G2, august 2026) — den
+// gamle form gav en ekstra render, hvor appen troede, der ingen invitation var,
+// og React Compiler kalder den slags "cascading renders" med rette.
+function readUrlIntent() {
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const recovery = hash.get("type") === "recovery" ? hash.get("access_token") : null;
+  const params = new URLSearchParams(window.location.search);
+  const pn = params.get("pn");
+  return {
+    recoveryToken: recovery || null,
+    join: params.get("join") || null,
+    liga: params.get("liga") || null,
+    push: pn ? { kind: pn, roundKey: params.get("rk") || null } : null,
+  };
+}
+
 export default function App() {
+  const [urlIntent] = useState(readUrlIntent);
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [booting, setBooting] = useState(true);
-  const [recoveryToken, setRecoveryToken] = useState(null);
-  const [pendingJoinCode, setPendingJoinCode] = useState(null);
-  const [pendingLigaCode, setPendingLigaCode] = useState(null);
-  const [pendingPushOpen, setPendingPushOpen] = useState(null); // { kind, roundKey } fra ?pn=/?rk=
+  // Er der en recovery-token, skal appen ikke boote en session op bagved —
+  // skærmen er nulstil-adgangskode og intet andet.
+  const [booting, setBooting] = useState(!urlIntent.recoveryToken);
+  const [recoveryToken, setRecoveryToken] = useState(urlIntent.recoveryToken);
+  const [pendingJoinCode, setPendingJoinCode] = useState(urlIntent.join);
+  const [pendingLigaCode, setPendingLigaCode] = useState(urlIntent.liga);
+  const [pendingPushOpen] = useState(urlIntent.push); // { kind, roundKey } fra ?pn=/?rk=
 
   // `source` skelner mellem tre veje ind i completeAuth, som IKKE må logges
   // ens: "signup" (ny konto), "signin" (almindeligt login) og "restore" (den
@@ -70,19 +94,9 @@ export default function App() {
   useEffect(() => { registerServiceWorker(); }, []);
 
   useEffect(() => {
-    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    if (hash.get("type") === "recovery" && hash.get("access_token")) {
-      setRecoveryToken(hash.get("access_token"));
-      setBooting(false);
-      return;
-    }
-    const params = new URLSearchParams(window.location.search);
-    const join = params.get("join");
-    if (join) setPendingJoinCode(join);
-    const liga = params.get("liga");
-    if (liga) setPendingLigaCode(liga);
-    const pn = params.get("pn");
-    if (pn) setPendingPushOpen({ kind: pn, roundKey: params.get("rk") || null });
+    // Adressen er allerede læst (se readUrlIntent ovenfor). Tilbage står den ene
+    // ting, der ikke KAN ske under render: at hente sessionen op igen.
+    if (urlIntent.recoveryToken) return;
 
     (async () => {
       const saved = loadSession();
@@ -96,7 +110,11 @@ export default function App() {
       }
       setBooting(false);
     })();
-  }, []);  
+    // Kun ved mount. `urlIntent` er sat under den første render og kan pr.
+    // konstruktion ikke ændre sig — men den kan læses her, så linteren beder
+    // om den i listen; en tom liste er den rigtige, og undtagelsen er derfor
+    // markeret frem for at lade advarslen stå og larme.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- token-fornyelse (G26) ----
   //
@@ -174,12 +192,19 @@ export default function App() {
   // push_opened: virker uanset om ?pn= ankom før eller efter login (session
   // kan mangle, når linket først åbnes). Fyrer så snart en token findes, og
   // rydder query-strengen så et refresh ikke logger den samme åbning igen.
+  //
+  // "Én gang" bæres af en ref og ikke af at nulstille tilstanden (G2): det
+  // gjorde den før, og en effekt, der sætter state synkront, tvinger en ekstra
+  // render igennem for at fortælle sig selv, at den er færdig. Ref'en siger det
+  // samme uden at røre render-træet — og `pendingPushOpen` bliver dermed dét,
+  // den beskriver: hvad adressen bad om, ikke hvad vi mangler at gøre ved det.
+  const pushLogged = useRef(false);
   useEffect(() => {
-    if (!session?.access_token || !pendingPushOpen) return;
+    if (!session?.access_token || !pendingPushOpen || pushLogged.current) return;
+    pushLogged.current = true;
     logEvent(session.access_token, "push_opened", {
       metadata: { kind: pendingPushOpen.kind, round_key: pendingPushOpen.roundKey },
     });
-    setPendingPushOpen(null);
     const url = new URL(window.location.href);
     url.searchParams.delete("pn"); url.searchParams.delete("rk");
     window.history.replaceState({}, "", url);

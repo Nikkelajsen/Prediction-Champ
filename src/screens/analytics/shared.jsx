@@ -26,21 +26,28 @@ function fmtDur(sec) {
 
 // ⓘ for ét id i måle-ordbogen. Ukendt id → ingen ⓘ (metricInfo returnerer
 // null), så en tastefejl koster forklaringen, ikke sektionen.
+// Én linje i ordbogs-opslaget. Ligger på MODULniveau og ikke inde i `M`, som
+// den gjorde indtil G2 (august 2026): en komponent defineret under render får
+// ny identitet ved hver eneste render, så React unmounter og remounter dens
+// undertræ i stedet for at opdatere det. Her var det harmløst (ren tekst), men
+// prisen for at opdage det den dag indholdet får tilstand, er høj — og det var
+// fire af de fjorten advarsler, netop fordi `Row` bruges fire steder.
+const InfoRow = ({ head, children }) => (
+  <p style={{ margin: "0 0 10px" }}>
+    <span style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", display: "block" }}>{head}</span>
+    {children}
+  </p>
+);
+
 function M({ id }) {
   const m = metricInfo(id);
   if (!m) return null;
-  const Row = ({ head, children }) => (
-    <p style={{ margin: "0 0 10px" }}>
-      <span style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", display: "block" }}>{head}</span>
-      {children}
-    </p>
-  );
   return (
     <InfoDot title={m.title}>
-      <Row head="Hvad måles">{m.what}</Row>
-      <Row head="Hvordan">{m.how}</Row>
-      <Row head="Kilde">{m.source}</Row>
-      {m.caveat && <Row head="Forbehold">{m.caveat}</Row>}
+      <InfoRow head="Hvad måles">{m.what}</InfoRow>
+      <InfoRow head="Hvordan">{m.how}</InfoRow>
+      <InfoRow head="Kilde">{m.source}</InfoRow>
+      {m.caveat && <InfoRow head="Forbehold">{m.caveat}</InfoRow>}
     </InfoDot>
   );
 }

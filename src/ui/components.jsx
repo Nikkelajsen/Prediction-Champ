@@ -331,7 +331,17 @@ function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, in
   // Kalderen leverer kun LÅSTE kampe: fra låsen kan ingen rette sit gæt, så
   // gættet må vises, uanset om kampen er spillet endnu. En låst, endnu ikke
   // spillet kamp viser derfor gættet med "–" som facit og ingen point.
-  let roundTotal = 0;
+  //
+  // Totalen regnes FØR listen tegnes (G2, august 2026). Den blev tidligere lagt
+  // sammen inde i `map`-kaldet, altså som en sideeffekt af at rendere en række
+  // — og en render må ikke kunne læses i den rækkefølge, den tilfældigvis
+  // kører. Tallet står desuden NEDEN under listen, så visningen afhang af, at
+  // React nåede at tælle færdigt først; det holder i dag og er ikke en
+  // egenskab, man skal bygge oven på.
+  const roundTotal = round.matches.reduce(
+    (sum, m) => sum + (pointsFor(predsByKey.get(`${m.id}:${userId}`), m) ?? 0),
+    0
+  );
 
   return (
     <div onClick={onClose} style={{
@@ -377,7 +387,6 @@ function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, in
           {round.matches.map((m) => {
             const pred = predsByKey.get(`${m.id}:${userId}`);
             const pts = pointsFor(pred, m);
-            if (pts !== null) roundTotal += pts;
             const has = pred && pred.pred_home !== null && pred.pred_home !== undefined;
             const played = m.home_score !== null && m.home_score !== undefined;
             const ptColor = pts === POINTS.exact ? C.green : pts === POINTS.outcome ? C.greenSoft : C.muted;

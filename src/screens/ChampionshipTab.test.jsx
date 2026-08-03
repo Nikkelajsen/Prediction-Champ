@@ -3,7 +3,13 @@ import { describe, it, expect } from "vitest";
 // begge komponenter er ren markup, og projektet skal ikke have et komponent-
 // testbibliotek for deres skyld.
 import { renderToStaticMarkup } from "react-dom/server";
-import { StandingsTable, Champions, CardHead, pickSeasonLeague, boardTitle, scopeNote } from "./ChampionshipTab.jsx";
+// Importerne peger på de udskilte moduler efter fil-opdelingen (G1, 3. august
+// 2026). Skærmen selv eksporterer dem ikke længere — testen skal ramme dér,
+// hvor koden bor, ikke gennem en gennemgangsluge, der kan blive stående som
+// den eneste bruger.
+import { StandingsTable, Champions } from "./championship/StandingsTable.jsx";
+import { CardHead } from "./championship/CardHead.jsx";
+import { pickSeasonLeague, boardTitle, scopeNote } from "./championship/scope.js";
 import { assignRanks, sortStandings } from "../lib/standings.js";
 
 // Basisrække: alle trin i stigen lige, så testene kun ændrer ét ad gangen.
