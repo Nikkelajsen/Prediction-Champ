@@ -28,6 +28,7 @@
 | planlagte jobs (cron) | `docs/CRON.md` |
 | backup, gendannelse efter tabt data | `docs/RESTORE.md` · §22 · `.github/workflows/data-backup.yml` |
 | feedback fra brugerne | §23 · `sql/feedback.sql` · `src/screens/FeedbackCard.jsx` |
+| privatliv, vilkår, kontolukning | §24 · `src/lib/legal.js` · `docs/features/privatliv-og-vilkaar-v1.md` |
 | historik over ændringer | `docs/CHANGELOG.md` |
 
 Ved produktbeslutninger og nye features læses desuden:

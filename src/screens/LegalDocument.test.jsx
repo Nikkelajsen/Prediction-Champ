@@ -4,6 +4,7 @@ import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import LegalDocument from "./LegalDocument.jsx";
 import { JuraLinje } from "./Auth.jsx";
+import { SletKontoKort, BEKRÆFT_ORD } from "./LegalScreen.jsx";
 import { PRIVATLIV, VILKAAR, findDokument, MINDSTEALDER } from "../lib/legal.js";
 
 const render = (el) => renderToStaticMarkup(el);
@@ -59,5 +60,26 @@ describe("JuraLinje", () => {
   it("bruger knapper, der ikke sender formularen", () => {
     const html = render(<JuraLinje mode="signup" onÅbn={() => {}} />);
     expect(html.match(/<button type="button"/g)).toHaveLength(2);
+  });
+});
+
+describe("SletKontoKort", () => {
+  // Handlingen kan ikke fortrydes. Kortet skal derfor sige BÅDE hvad der sker,
+  // og hvad der IKKE sker — det sidste er det, folk faktisk er utrygge ved.
+  it("siger hvad der forsvinder, og hvad der bliver stående", () => {
+    const html = render(<SletKontoKort token="t" onLogout={() => {}} />);
+    expect(html).toContain("Luk min konto");
+    expect(html).toContain("pseudonym");
+    expect(html).toContain("venners stillinger");
+  });
+
+  // Én knap, ét fejltryk. Bekræftelsesordet er det, der står imellem en telefon
+  // i en lomme og en uigenkaldelig handling.
+  it("kræver et bekræftelsesord, før noget kan ske", () => {
+    expect(BEKRÆFT_ORD).toBeTruthy();
+    const html = render(<SletKontoKort token="t" onLogout={() => {}} />);
+    // Dialogen findes først efter et klik, som statisk render ikke kan give —
+    // men knappen, der åbner den, må aldrig selv være handlingen.
+    expect(html).not.toContain("Luk kontoen endeligt");
   });
 });

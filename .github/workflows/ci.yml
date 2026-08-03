@@ -149,3 +149,16 @@ jobs:
           set -euo pipefail
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database idtest;'
           psql -h localhost -U postgres -d idtest -v ON_ERROR_STOP=1 -b -f api_id_uniqueness.sql
+
+      # Kontolukning ved anonymisering (B4): efterprøver især den påstand, hele
+      # valget hviler på — at brugerens tips, rating, kåringer OG den liga,
+      # de oprettede, står uændret bagefter. En rigtig sletning ville have
+      # kaskaderet ligaen væk og taget de andre medlemmer med.
+      - name: Test af kontolukning
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database anontest;'
+          psql -h localhost -U postgres -d anontest -v ON_ERROR_STOP=1 -b -f account_anonymization.sql
