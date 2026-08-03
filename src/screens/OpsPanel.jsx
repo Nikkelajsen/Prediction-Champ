@@ -10,7 +10,7 @@
 // heartbeat-workflowen er den, der råber, når ingen kigger.
 import { useState, useEffect } from "react";
 import { RefreshCw, Loader2, Eye } from "lucide-react";
-import { C, btnGhost, font, muted } from "../ui/theme.js";
+import { C, btnGhost, muted } from "../ui/theme.js";
 import { Card, H, StateChip, SignalRow } from "../ui/components.jsx";
 import {
   loadJobHealth,
@@ -75,9 +75,15 @@ function JobCard({ j }) {
       {j.lastError && (
         <details style={{ marginTop: 8 }}>
           <summary style={{ ...muted, fontSize: 11, cursor: "pointer" }}>Seneste fejl</summary>
+          {/* Ingen fontFamily: en <pre> er monospace i forvejen, og det er
+              det rigtige for rå fejltekst og JSON — tegnene skal kunne
+              skelnes, og kolonnerne skal stå. Her stod `...font`, hvilket
+              satte CSS-egenskaben `display` til et skriftnavn (`font` er
+              {display, body}, ikke et style-objekt). Browseren ignorerede
+              det, så visningen er uændret; kun løftet om at gøre noget er
+              væk. */}
           <pre
             style={{
-              ...font,
               fontSize: 10,
               color: C.muted,
               whiteSpace: "pre-wrap",
@@ -95,9 +101,9 @@ function JobCard({ j }) {
       {j.lastDetail && (
         <details style={{ marginTop: 6 }}>
           <summary style={{ ...muted, fontSize: 11, cursor: "pointer" }}>Seneste resumé</summary>
+          {/* Samme valg som ovenfor. */}
           <pre
             style={{
-              ...font,
               fontSize: 10,
               color: C.muted,
               whiteSpace: "pre-wrap",

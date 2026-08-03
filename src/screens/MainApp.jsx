@@ -429,7 +429,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     body = <ProfileScreen token={token} viewerUserId={userId} profileUserId={screen.profileUserId}
       onBack={() => setScreen(null)} openProfile={openProfile} />;
   } else if (screen?.type === "how") {
-    body = <HowItWorksScreen onBack={() => setScreen(null)} />;
+    body = <HowItWorksScreen onBack={() => setScreen(null)} token={token} />;
   } else if (tab === "hjem") {
     body = <HjemTab token={token} userId={userId} profile={profile} competitions={visibleCompetitions}
       goTab={goTab} openPredictions={openPredictions} openBoard={openBoard} openGroup={openGroup} openProfile={openProfile}
