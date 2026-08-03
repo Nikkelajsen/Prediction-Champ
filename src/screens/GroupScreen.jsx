@@ -7,7 +7,7 @@ import { loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, deleteG
 import { logEvent } from "../lib/analytics.js";
 import { modeLabel } from "../lib/scoring.js";
 import { C, btnGhost, btnGold, btnGreen, font, muted } from "../ui/theme.js";
-import { BackBar, Card, Eyebrow, PlayerName } from "../ui/components.jsx";
+import { BackBar, Card, Eyebrow, InviteCode, PlayerName } from "../ui/components.jsx";
 
 function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard, openCreate, reloadGroups, openProfile }) {
   const [detail, setDetail] = useState(null);
@@ -117,6 +117,9 @@ function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard
         <button style={btnGold} onClick={shareInvite}>{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Kopieret!" : "Invitér"}</button>
         <button style={btnGhost} onClick={() => openCreate(groupId)}><Plus size={15} /> Opret konkurrence</button>
       </div>
+      {/* Linket er den nemme vej; koden er den, der kan siges højt. Den passer
+          i "Deltag med kode"-feltet på Ligaer-fanen. */}
+      <InviteCode code={group.invite_code} label="Liga-kode" />
 
       {note && <Card style={{ borderColor: C.red }}><span style={{ color: C.red, fontSize: 13 }}>{note}</span></Card>}
 

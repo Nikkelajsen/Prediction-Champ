@@ -2,7 +2,7 @@
 // spillernavne, dialoger, tal-felter og de små signal-visninger til Analytics
 // og Drift. Alt her er rent visuelt — ingen komponent henter data selv.
 import { useState, useEffect, useRef, useId } from "react";
-import { ChevronRight, ChevronLeft, ArrowUp, ArrowDown, Minus, Info, X } from "lucide-react";
+import { ChevronRight, ChevronLeft, ArrowUp, ArrowDown, Minus, Info, X, Copy, Check } from "lucide-react";
 import { pointsFor } from "../lib/scoring.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, pagerBtn } from "./theme.js";
 
@@ -208,6 +208,46 @@ const EmptyCompetitions = ({ onCreate, onJoin }) => (
     </div>
   </Card>
 );
+
+// Invitationskoden i klartekst, ved siden af "Invitér"-knappen.
+//
+// Delingen har altid været et LINK, og linket er stadig den nemme vej: det
+// åbner appen og bekræftelses-modalen i ét tryk. Men koden selv stod ingen
+// steder i appen — mens "Deltag med kode"-feltet på Ligaer-fanen hele tiden
+// har taget imod netop den rå kode. Man kunne altså joine med en kode, man
+// ikke kunne få fat i, med mindre man selv klippede den ud af et link. Det er
+// den anden halvdel af invitationen, ikke en ny måde at invitere på: koden kan
+// læses op i telefonen, skrives på en tavle eller sendes et sted hen, hvor et
+// link ikke overlever.
+//
+// Koden vises PRÆCIS som den står i databasen (små bogstaver, otte hex-tegn) —
+// opslaget er `eq.`, og et pænere versal-format ville producere en kode, der
+// ikke kunne bruges.
+function InviteCode({ code, label = "Kode" }) {
+  const [copied, setCopied] = useState(false);
+  if (!code) return null;
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* udklipsholderen kan være spærret — koden står der stadig */ }
+  }
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, color: C.muted, fontSize: 12 }}>
+      <span>{label}</span>
+      <span style={{
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 13.5,
+        letterSpacing: "0.08em", color: C.text, userSelect: "all",
+        background: C.surface, border: `1px solid ${C.line}`, borderRadius: 8, padding: "3px 8px",
+      }}>{code}</span>
+      <button type="button" onClick={copy} aria-label="Kopiér invitationskoden"
+        style={{ ...iconBtn, gap: 4, fontSize: 12, color: copied ? C.green : C.muted }}>
+        {copied ? <Check size={13} /> : <Copy size={13} />}{copied ? "Kopieret!" : "Kopiér"}
+      </button>
+    </div>
+  );
+}
 
 const BackBar = ({ title, onBack, right }) => (
   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
@@ -514,4 +554,4 @@ function PctGrid({ columns, rows }) {
   );
 }
 
-export { Card, Eyebrow, H, PlayerName, FormDots, Move, Modal, InfoDot, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill, EmptyCompetitions, StatTile, StatGroup, MiniBars, StateChip, SignalRow, PctGrid };
+export { Card, Eyebrow, H, PlayerName, FormDots, Move, Modal, InfoDot, InviteCode, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill, EmptyCompetitions, StatTile, StatGroup, MiniBars, StateChip, SignalRow, PctGrid };

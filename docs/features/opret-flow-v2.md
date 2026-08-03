@@ -57,6 +57,12 @@ Vilkår, der bevidst er ført videre uændret: liga-feltet er aldrig skjult
 problemet), og navne-forudfyldningen er FJERNET for alle andre kort end Ugens
 kupon (`B6` — et foreslået navn blev bare beholdt).
 
+*Rettet efter levering (august 2026): liga-feltet er ikke længere blot altid
+synligt — det er **påkrævet**. "Ingen liga" er væk, og en liga kan oprettes i
+selve feltet. "Liga-løs må ikke ske tavst" er dermed blevet til "liga-løs sker
+ikke": `createCompetition` afviser en spec uden `groupId`. Se `DOCUMENTATION.md`
+§18.*
+
 ### Spec-former (nye felter i `createCompetition`, alle bagudkompatible)
 
 - `teams: [{ leagueId, seasonId, teamId }]` — ét hold ⇒ præcis legacy-formen

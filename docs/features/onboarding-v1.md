@@ -85,6 +85,8 @@ Derfor:
 
 Kontrol efter udrulning: `select count(*) from competitions where group_id is null and created_at > <udrulning>` skal være **0**.
 
+**Udvidet efter levering (august 2026): reglen gælder nu hele appen, ikke kun guiden.** Så længe "Ingen liga" stod i opret-skærmens dropdown, var kontrollen ovenfor en måling af, hvad brugerne valgte — ikke af, hvad appen tillod, og den kunne kun give 0, indtil den ikke gjorde. `createCompetition` afviser nu en spec uden `groupId`, og skærmen har hverken valgmuligheden eller en vej udenom: har man ingen liga, oprettes den i selve opret-flowet. Se `DOCUMENTATION.md` §18 og [`liga-laget-v1.md`](./liga-laget-v1.md) §3.
+
 ## 7. Frontend-ændringer pr. fil
 
 | Fil | Ændring |

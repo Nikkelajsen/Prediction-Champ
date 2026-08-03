@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 // renderToStaticMarkup frem for en jsdom-opsætning: PlayerName er ren markup,
 // og projektet skal ikke have et komponent-testbibliotek for den ene komponents skyld.
 import { renderToStaticMarkup } from "react-dom/server";
-import { PlayerName, UserRoundPredictions, EmptyCompetitions, StatTile, StatGroup, MiniBars, StateChip, SignalRow, ScoreInput, Modal } from "./components.jsx";
+import { PlayerName, UserRoundPredictions, EmptyCompetitions, InviteCode, StatTile, StatGroup, MiniBars, StateChip, SignalRow, ScoreInput, Modal } from "./components.jsx";
 
 describe("PlayerName", () => {
   it("renderes som ren tekst uden onOpenProfile", () => {
@@ -92,6 +92,24 @@ describe("EmptyCompetitions", () => {
     const html = renderToStaticMarkup(<EmptyCompetitions onJoin={() => {}} />);
     expect(html).not.toContain("Opret konkurrence");
     expect((html.match(/<button/g) || []).length).toBe(1);
+  });
+});
+
+describe("InviteCode", () => {
+  // Koden skal kunne tastes ind i "Deltag med kode"-feltet, som slår op med
+  // `eq.` — vises den pænere, end den er gemt, kan den ikke bruges.
+  it("viser koden præcis som den er gemt", () => {
+    const html = renderToStaticMarkup(<InviteCode code="a1b2c3d4" label="Liga-kode" />);
+    expect(html).toContain("a1b2c3d4");
+    expect(html).toContain("Liga-kode");
+    expect(html).not.toContain("text-transform:uppercase");
+    expect(html).toContain('aria-label="Kopiér invitationskoden"');
+  });
+
+  // En konkurrence, der endnu ikke er hentet, har ingen kode — så står der
+  // hverken en tom ramme eller et "Kopiér", der intet ville kopiere.
+  it("renderer intet uden en kode", () => {
+    expect(renderToStaticMarkup(<InviteCode code={undefined} />)).toBe("");
   });
 });
 

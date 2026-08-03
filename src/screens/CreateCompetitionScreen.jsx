@@ -9,7 +9,8 @@
 // kan divergere.
 import { useState, useEffect, useMemo, useRef } from "react";
 import { db } from "../lib/supabase.js";
-import { loadMyGroups, createCompetition } from "../lib/data.js";
+import { loadMyGroups, createCompetition, createGroup } from "../lib/data.js";
+import { validateGroupName } from "../lib/onboarding.js";
 import { ChevronLeft } from "lucide-react";
 import { groupIntoRounds } from "../lib/scoring.js";
 import { createTypeById, pickRandomFromRounds, weeklyCouponName, buildSpec } from "../lib/createTypes.js";
@@ -31,8 +32,13 @@ import CustomFields from "./create/CustomFields.jsx";
 
 function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null, onBack, onCreated, openBoard }) {
   const [typeId, setTypeId] = useState(null); // null = galleriet
-  const [groups, setGroups] = useState([]);
+  const [groups, setGroups] = useState(null); // null = ikke hentet endnu
   const [groupId, setGroupId] = useState(initialGroupId || "");
+  // Liga oprettet inde i opret-flowet (se liga-blokken nedenfor)
+  const [newGroupName, setNewGroupName] = useState("");
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [groupErr, setGroupErr] = useState("");
+  const [makingGroup, setMakingGroup] = useState(false); // står "Opret ny liga…" valgt i dropdownen?
   const [name, setName] = useState("");
   const [awards, setAwards] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -66,15 +72,39 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
 
   useEffect(() => { (async () => { try { setGroups(await loadMyGroups(token, userId)); } catch (e) { setGroups([]); } })(); }, [token, userId]); // eslint-disable-line
 
-  // Liga defaulter til brugerens FØRSTE liga, ikke til "Ingen liga".
+  // Liga defaulter til brugerens FØRSTE liga.
   //
   // Før var tom-værdien defaulten, så en konkurrence oprettet uden at røre
   // feltet blev liga-løs: ingen medlemsliste, intet permanent invite-link, og
-  // intet der består, når sæsonen slutter. Det er overgangstilstanden, hele
-  // liga-laget handlede om at komme væk fra — den skal ikke være standardvalget.
+  // intet der består, når sæsonen slutter. Det valg findes ikke længere (se
+  // liga-blokken nedenfor) — defaulten står, fordi den også sparer et klik.
   useEffect(() => {
-    if (!groupId && !initialGroupId && groups.length) setGroupId(groups[0].id);
+    if (!groupId && !initialGroupId && groups?.length) setGroupId(groups[0].id);
   }, [groups]); // eslint-disable-line
+
+  // Opret ligaen UDEN at forlade opret-flowet.
+  //
+  // Man må gerne begynde med konkurrencen — det er tit dér, lysten er — men
+  // den kan ikke gøres færdig uden en liga. Havde man skullet ud på
+  // Ligaer-fanen for at oprette den, ville alt det halvvalgte (kampe, hold,
+  // navn) være tabt, og den nye regel ville koste præcis den bruger, den skal
+  // hjælpe. Derfor bor liga-oprettelsen her, to felter fra "Opret".
+  async function createAndSelectGroup() {
+    const problem = validateGroupName(newGroupName);
+    if (problem) { setGroupErr(problem); return; }
+    setCreatingGroup(true); setGroupErr("");
+    try {
+      const g = await createGroup(token, userId, newGroupName);
+      setGroups((prev) => [...(prev || []), g]);
+      setGroupId(g.id);
+      setMakingGroup(false);
+      setNewGroupName("");
+    } catch (e) {
+      setGroupErr(e.message || "Kunne ikke oprette ligaen.");
+    } finally {
+      setCreatingGroup(false);
+    }
+  }
 
   // Nyeste sæson pr. turnering hentes ÉN gang — Sæson-chippene, holdvalget,
   // perioden og kamp-puljen bruger alle det samme opslag.
@@ -256,7 +286,9 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     });
   }
 
-  const canSubmit = !!name && (
+  // Ligaen er et krav på linje med navnet og kampene — knappen er slukket,
+  // indtil den er valgt eller oprettet.
+  const canSubmit = !!name && !!groupId && (
     typeId === "season" ? fsLeagueIds.some((id) => countByLeague[id] !== 0)
     : typeId === "team" ? teamSel.length > 0
     : typeId === "custom" ? (method === "period" ? !!(periodLeagueId && startDate && endDate) : pickedIds.length > 0)
@@ -345,22 +377,46 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
                 onChange={(e) => { nameTouched.current = true; setName(e.target.value); }} />
             </label>
 
-            {/* Liga er en del af hurtig-stien og må ALDRIG være skjult: uden den
-                ville en konkurrence oprettet på to felter tavst blive liga-løs. */}
-            {groups.length > 0 ? (
-              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ color: C.muted, fontSize: 12 }}>Liga</span>
-                <select className="field" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+            {/* Liga er et KRAV, ikke et tilvalg (august 2026). "Ingen liga" var
+                før et lovligt punkt i dropdownen, og en konkurrence oprettet
+                dér havde hverken medlemsliste, permanent invite-link eller
+                noget, der bestod, når sæsonen sluttede. Har man ingen liga,
+                oprettes den her — samme skærm, to felter, ingen omvej. */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ color: C.muted, fontSize: 12 }}>Liga</span>
+              {!groups && <span style={{ color: C.muted, fontSize: 12 }}>Henter dine ligaer…</span>}
+              {groups?.length > 0 && (
+                <select className="field" aria-label="Liga" value={makingGroup ? "__new" : groupId}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setGroupErr("");
+                    if (v === "__new") { setMakingGroup(true); setGroupId(""); }
+                    else { setMakingGroup(false); setGroupId(v); }
+                  }}>
                   {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                  <option value="">Ingen liga</option>
+                  <option value="__new">+ Opret ny liga…</option>
                 </select>
-              </label>
-            ) : (
-              <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.45 }}>
-                Du har ingen liga endnu, så konkurrencen bliver <b>liga-løs</b>. Opret en liga på
-                Ligaer-fanen for at samle medlemmer, historik og ét fælles invite-link.
-              </div>
-            )}
+              )}
+              {groups && (groups.length === 0 || makingGroup) && (
+                <>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input className="field" style={{ flex: 1 }} placeholder="Navn på liga (2–40 tegn)…"
+                      value={newGroupName} maxLength={40} aria-label="Navn på liga"
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createAndSelectGroup(); } }} />
+                    <button type="button" style={{ ...btnGhost, flexShrink: 0, opacity: creatingGroup || !newGroupName.trim() ? 0.5 : 1 }}
+                      disabled={creatingGroup || !newGroupName.trim()} onClick={createAndSelectGroup}>
+                      {creatingGroup ? "Opretter…" : "Opret liga"}
+                    </button>
+                  </div>
+                  <span style={{ color: C.muted, fontSize: 12, lineHeight: 1.45 }}>
+                    En konkurrence hører altid til en liga — fællesskabet, der bliver stående, når
+                    konkurrencen er slut. Ligaen samler medlemmer, historik og ét fælles invite-link.
+                  </span>
+                </>
+              )}
+              {groupErr && <p style={{ color: C.red, fontSize: 13, margin: 0 }}>{groupErr}</p>}
+            </div>
 
             {/* Kårings-tilvalget (I13) vises kun for typer over flere runder: i en
                 én-rundes konkurrence ER vinderen ugens bedste. Navnene er med

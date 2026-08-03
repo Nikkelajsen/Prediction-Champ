@@ -7,7 +7,7 @@ import { computeCompetitionState, loadRatingMap, ensureCompetitionAwards, loadCo
 import { isAborted } from "../lib/supabase.js";
 import { logEvent } from "../lib/analytics.js";
 import { C, btnGhost, btnGold, font, muted, thStyle } from "../ui/theme.js";
-import { BackBar, Card, EmptyCompetitions, PlayerName, UserRoundPredictions } from "../ui/components.jsx";
+import { BackBar, Card, EmptyCompetitions, InviteCode, PlayerName, UserRoundPredictions } from "../ui/components.jsx";
 
 // Én kåringslinje pr. periode: "🏅 Ugens bedste · 12/08 – 18/08: Nikolaj (14
 // point)". Delt førsteplads er flere rækker med samme period_key — de samles
@@ -179,6 +179,10 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
         </button>
         <button style={btnGhost} onClick={() => goToPredictions(selectedCompId)}><ClipboardList size={15} /> Tip</button>
       </div>
+      {/* Samme kode, som Invitér-knappen lægger i linket — her i en form, der
+          kan læses op eller skrives af. Stedet afgør stadig (A7): her er det
+          konkurrencens kode, på liga-siden ligaens. */}
+      <InviteCode code={comp?.invite_code} label="Konkurrence-kode" />
 
       <Card>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>

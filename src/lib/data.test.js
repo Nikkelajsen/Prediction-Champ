@@ -534,6 +534,9 @@ describe("createCompetition", () => {
     { id: "m3", round_key: "2026-08-11", home_score: null, stage_name: "Grundspil" },
     { id: "m4", round_key: "2026-08-18", home_score: null, stage_name: "Mesterskabsspil" },
   ];
+  // Hver ny konkurrence skal høre til en liga (august 2026), så testene sender
+  // den samme liga med, med mindre de netop handler om det manglende felt.
+  const create = (spec) => createCompetition("token", "u1", { groupId: "g1", ...spec });
   const insertedRow = (table) => db.insert.mock.calls.find((c) => c[1] === table)?.[2][0];
   const matchRows = () => db.insert.mock.calls.find((c) => c[1] === "competition_matches")?.[2] || [];
 
@@ -545,7 +548,7 @@ describe("createCompetition", () => {
 
   it("full sæson med én turnering bevarer den bundne form og tager kun ikke-spillede runder med", async () => {
     setup();
-    const res = await createCompetition("token", "u1", {
+    const res = await create({
       name: "Superligaen 2026/27", groupId: "g1", mode: "full_season",
       tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     });
@@ -563,7 +566,7 @@ describe("createCompetition", () => {
   // fordi feltet nu er efterfyldningens mærkat for "afgrænset i hånden".
   it("tager alle faser med og skriver ALDRIG stages i mode_params", async () => {
     setup();
-    await createCompetition("token", "u1", {
+    await create({
       name: "Hele sæsonen", mode: "full_season",
       tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     });
@@ -574,7 +577,7 @@ describe("createCompetition", () => {
 
   it("stage-felter i spec'en ignoreres, hvis en gammel kalder stadig sender dem", async () => {
     setup();
-    await createCompetition("token", "u1", {
+    await create({
       name: "Gammel kalder", mode: "team", leagueId: "L1", seasonId: "S1", teamId: "T1",
       availableStages: ["Grundspil", "Mesterskabsspil"], selectedStages: ["Grundspil"],
     });
@@ -583,7 +586,7 @@ describe("createCompetition", () => {
 
   it("flere turneringer gør konkurrencen turneringsløs og gemmer dem i mode_params", async () => {
     setup();
-    await createCompetition("token", "u1", {
+    await create({
       name: "Dobbelt", mode: "full_season",
       tournaments: [
         { leagueId: "L1", seasonId: "S1" },
@@ -599,7 +602,7 @@ describe("createCompetition", () => {
 
   it("en færdigspillet sæson giver matchCount 0 og INTET competition_matches-insert", async () => {
     setup([{ id: "m1", round_key: "2026-08-04", home_score: 1, stage_name: null }]);
-    const res = await createCompetition("token", "u1", {
+    const res = await create({
       name: "For sent", mode: "full_season",
       tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     });
@@ -616,13 +619,13 @@ describe("createCompetition", () => {
   it("skriver altid de faste pointregler i rules", async () => {
     setup();
     const t = [{ leagueId: "L1", seasonId: "S1" }];
-    await createCompetition("token", "u1", { name: "A", mode: "full_season", tournaments: t, openDaysBefore: 7 });
+    await create({ name: "A", mode: "full_season", tournaments: t, openDaysBefore: 7 });
     expect(insertedRow("competitions").rules).toEqual({ exact: 3, outcome: 1 });
   });
 
   it("custom bruger de valgte kampe og er turneringsløs", async () => {
     setup();
-    const res = await createCompetition("token", "u1", {
+    const res = await create({
       name: "Håndplukket", mode: "custom", matchIds: ["x1", "x2"],
     });
 
@@ -633,10 +636,22 @@ describe("createCompetition", () => {
 
   it("afviser full sæson uden turnering og custom uden kampe — uden at skrive noget", async () => {
     setup();
-    await expect(createCompetition("token", "u1", { name: "A", mode: "full_season", tournaments: [] }))
+    await expect(create({ name: "A", mode: "full_season", tournaments: [] }))
       .rejects.toThrow("Vælg mindst én turnering");
-    await expect(createCompetition("token", "u1", { name: "A", mode: "custom", matchIds: [] }))
+    await expect(create({ name: "A", mode: "custom", matchIds: [] }))
       .rejects.toThrow("Vælg mindst én kamp");
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  // En liga-løs konkurrence kan ikke oprettes længere (august 2026). Reglen står
+  // i skriveren og ikke kun i opret-skærmen, fordi guiden er det andet kaldested
+  // — og fordi den ikke kan være et `not null` i databasen (`on delete set null`
+  // gør en konkurrence liga-løs, når ligaen slettes).
+  it("afviser en konkurrence uden liga — uden at skrive noget", async () => {
+    setup();
+    await expect(createCompetition("token", "u1", {
+      name: "Uden liga", mode: "full_season", tournaments: [{ leagueId: "L1", seasonId: "S1" }],
+    })).rejects.toThrow("Vælg eller opret den liga");
     expect(db.insert).not.toHaveBeenCalled();
   });
 
@@ -644,7 +659,7 @@ describe("createCompetition", () => {
 
   it("ét hold i teams-listen giver præcis legacy-formen (bundet league/season, team_id)", async () => {
     setup();
-    await createCompetition("token", "u1", {
+    await create({
       name: "Kun FCK", mode: "team",
       teams: [{ leagueId: "L1", seasonId: "S1", teamId: "T1" }],
     });
@@ -657,7 +672,7 @@ describe("createCompetition", () => {
 
   it("flere hold gør konkurrencen turneringsløs og skriver team_ids + tournaments", async () => {
     setup();
-    await createCompetition("token", "u1", {
+    await create({
       name: "Mine hold", mode: "team",
       teams: [
         { leagueId: "L1", seasonId: "S1", teamId: "T1" },
@@ -677,7 +692,7 @@ describe("createCompetition", () => {
 
   it("afviser en teams-liste uden gyldige hold — uden at skrive noget", async () => {
     setup();
-    await expect(createCompetition("token", "u1", {
+    await expect(create({
       name: "A", mode: "team", teams: [{ leagueId: "L1", seasonId: null, teamId: null }],
     })).rejects.toThrow("Vælg mindst ét hold");
     expect(db.insert).not.toHaveBeenCalled();
@@ -687,13 +702,13 @@ describe("createCompetition", () => {
 
   it("random skriver rounds i mode_params — men KUN når > 1, så gamle rækkers form er uændret", async () => {
     setup();
-    await createCompetition("token", "u1", {
+    await create({
       name: "Quick League", mode: "random", matchIds: ["x1"], randomCount: 8, rounds: 6,
     });
     expect(insertedRow("competitions").mode_params).toEqual({ count: 8, rounds: 6 });
 
     db.insert.mockClear();
-    await createCompetition("token", "u1", {
+    await create({
       name: "Quick Pick", mode: "random", matchIds: ["x1"], randomCount: 8, rounds: 1,
     });
     expect(insertedRow("competitions").mode_params).toEqual({ count: 8 });
@@ -703,25 +718,25 @@ describe("createCompetition", () => {
 
   it("awards: true lander i mode_params i alle grene — og udelades helt uden tilvalg", async () => {
     setup();
-    await createCompetition("token", "u1", {
+    await create({
       name: "Sæson", mode: "full_season", awards: true,
       tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     });
     expect(insertedRow("competitions").mode_params).toEqual({ awards: true });
 
     db.insert.mockClear();
-    await createCompetition("token", "u1", {
+    await create({
       name: "Hold", mode: "team", awards: true,
       teams: [{ leagueId: "L1", seasonId: "S1", teamId: "T1" }],
     });
     expect(insertedRow("competitions").mode_params).toEqual({ team_id: "T1", awards: true });
 
     db.insert.mockClear();
-    await createCompetition("token", "u1", { name: "Custom", mode: "custom", awards: true, matchIds: ["x1"] });
+    await create({ name: "Custom", mode: "custom", awards: true, matchIds: ["x1"] });
     expect(insertedRow("competitions").mode_params).toEqual({ awards: true });
 
     db.insert.mockClear();
-    await createCompetition("token", "u1", { name: "Custom uden", mode: "custom", matchIds: ["x1"] });
+    await create({ name: "Custom uden", mode: "custom", matchIds: ["x1"] });
     expect(insertedRow("competitions").mode_params).toEqual({});
   });
 });
@@ -730,10 +745,19 @@ describe("createCompetition", () => {
 describe("joinByInviteCode", () => {
   it("trækker koden ud af et helt indsat link — og lader en rå kode passere", () => {
     // Nye brugere indsætter det, de fik i beskedtråden, ikke en renskrevet kode.
-    expect(inviteCodeFrom("https://app.dk/?liga=ABC123")).toBe("ABC123");
-    expect(inviteCodeFrom("https://app.dk/?join=XYZ789&x=1")).toBe("XYZ789");
-    expect(inviteCodeFrom("  ABC123  ")).toBe("ABC123");
+    expect(inviteCodeFrom("https://app.dk/?liga=abc123")).toBe("abc123");
+    expect(inviteCodeFrom("https://app.dk/?join=xyz789&x=1")).toBe("xyz789");
+    expect(inviteCodeFrom("  abc123  ")).toBe("abc123");
     expect(inviteCodeFrom("")).toBe("");
+  });
+
+  // Begge koder er otte hex-tegn med små bogstaver (`substr(md5(...), 1, 8)`),
+  // og opslaget er `eq.`. En kode tastet af med versaler — eller rettet af
+  // iOS-tastaturets automatik — ramte derfor nul rækker og lignede en forkert
+  // kode. Ingen gyldig kode kan indeholde et stort bogstav.
+  it("sænker koden, så en aftastet eller autokorrigeret kode stadig rammer", () => {
+    expect(inviteCodeFrom("ABC123DE")).toBe("abc123de");
+    expect(inviteCodeFrom("https://app.dk/?liga=ABC123DE")).toBe("abc123de");
   });
 
   it("prøver liga-koden først og melder ind i ligaen", async () => {

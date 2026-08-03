@@ -259,6 +259,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
             <Card>
               <div style={{ display: "flex", gap: 8 }}>
                 <input className="field" style={{ flex: 1 }} placeholder="Invitationskode…" value={inviteCode} autoFocus
+                  autoCapitalize="none" autoCorrect="off" spellCheck={false}
                   onChange={(e) => setInviteCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && joinByCode()} />
                 <button style={{ ...btnGold, opacity: busy || !inviteCode ? 0.5 : 1 }} onClick={joinByCode} disabled={busy || !inviteCode}>Deltag</button>
               </div>
@@ -282,7 +283,9 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
         <Card>
           <Eyebrow>Deltag med kode</Eyebrow>
           <div style={{ display: "flex", gap: 8 }}>
-            <input className="field" style={{ flex: 1 }} placeholder="Invitationskode…" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && joinByCode()} />
+            <input className="field" style={{ flex: 1 }} placeholder="Invitationskode…" value={inviteCode}
+              autoCapitalize="none" autoCorrect="off" spellCheck={false}
+              onChange={(e) => setInviteCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && joinByCode()} />
             <button style={{ ...btnGold, opacity: busy || !inviteCode ? 0.5 : 1 }} onClick={joinByCode} disabled={busy || !inviteCode}>Deltag</button>
           </div>
           {joinErr && <p style={{ color: C.red, fontSize: 13, margin: "8px 0 0" }}>{joinErr}</p>}

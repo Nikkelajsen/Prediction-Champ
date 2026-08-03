@@ -29,7 +29,7 @@ import { loadGroupByCode, joinGroup, joinCompetition } from "./groups.js";
 //
 // `spec`:
 //   name                  påkrævet
-//   groupId               liga-tilhør (null = liga-løs)
+//   groupId               liga-tilhør — PÅKRÆVET (se guarden nedenfor)
 //   mode                  full_season | team | time_range | custom | random
 //   tournaments           full_season: [{ leagueId, seasonId }]
 //   leagueId, seasonId    team (legacy-form) | time_range
@@ -54,6 +54,23 @@ async function createCompetition(token, userId, spec) {
     teamId = null, teams = null, startDate = null, endDate = null,
     matchIds = [], randomCount = null, rounds = null, awards = false,
   } = spec;
+
+  // En NY konkurrence skal høre til en liga (august 2026).
+  //
+  // Liga-løs var indtil nu et lovligt valg ("Ingen liga" i opret-skærmen), og
+  // det er den tilstand, hele liga-laget handlede om at komme væk fra: ingen
+  // medlemsliste, intet permanent invite-link, og intet der består, når
+  // sæsonen slutter. Onboarding-guiden har altid oprettet ligaen først; den
+  // frie opret-skærm var det ene sted, man kunne ende uden.
+  //
+  // Reglen står HER og ikke kun i skærmen, fordi det er den ene skrivning,
+  // begge kaldesteder går igennem — præcis dét, A7 kostede, da de to veje ind
+  // havde hver sin kopi. Den kan derimod IKKE være et `not null` i databasen:
+  // `competitions.group_id` er `on delete set null`, så en slettet liga gør
+  // sine konkurrencer liga-løse, og de gamle liga-løse rækker fra før
+  // liga-laget skal blive ved med at virke (§18, blød migrering). Reglen
+  // gælder oprettelsen, ikke rækkens levetid.
+  if (!groupId) throw new Error("Vælg eller opret den liga, konkurrencen skal høre til.");
 
   // Faste pointregler. Feltet er historisk konfigurerbart, men `pc_points()`
   // hardkoder 3/1 (F2, juli 2026), og det rullende gætte-vindue — den eneste
@@ -189,10 +206,18 @@ async function createCompetition(token, userId, spec) {
 // Ny brugere indsætter det, de fik i beskedtråden — hele linket, ikke en
 // renskrevet kode. Træk koden ud af `?liga=`/`?join=`, og lad alt andet passere
 // som en rå kode.
+//
+// Koden sænkes til små bogstaver, fordi begge koder ER små bogstaver: de
+// genereres som `substr(md5(...), 1, 8)`, altså otte hex-tegn, og opslaget er
+// `eq.` (case-sensitivt). En kode, der er tastet af — eller som iOS har
+// forsynet med et stort forbogstav i tastaturets automatik — ramte derfor nul
+// rækker og gav "Ingen liga eller konkurrence fundet med den kode", selv om
+// koden var rigtig. Ingen gyldig kode kan indeholde et stort bogstav, så
+// sænkningen kan ikke ramme forbi.
 function inviteCodeFrom(raw) {
   const s = String(raw || "").trim();
   const m = s.match(/[?&](?:liga|join)=([^&#\s]+)/i);
-  return m ? decodeURIComponent(m[1]) : s;
+  return (m ? decodeURIComponent(m[1]) : s).toLowerCase();
 }
 
 // Deltag ud fra én kode, der kan være enten en liga- eller en konkurrence-kode
