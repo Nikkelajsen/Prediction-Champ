@@ -10,7 +10,8 @@ og kan køres igen.
 `public`-skemaet, som det så ud ved seneste eksport. Den redigeres aldrig i hånden;
 den regenereres med guiden nedenfor.
 
-> ✅ **Øjebliksbilledet er FRISK pr. 3. august 2026.** Eksporten er kørt efter
+> ⚠️ **Øjebliksbilledet er BAGUD igen (aften, 3. august 2026).** Eksporten blev
+> kørt samme dag og var frisk indtil migreringerne nedenfor — den er kørt efter
 > `predictions_match_lock.sql` (#25), `competition_awards.sql` (#26),
 > `security_hardening.sql` (#27), `matches_kickoff_tbd.sql` (#28), `feedback.sql`
 > (#29), `api_id_uniqueness.sql` (#30) og `account_anonymization.sql` (#31), og
@@ -18,9 +19,11 @@ den regenereres med guiden nedenfor.
 > den?" — ikke en dato skrevet i hånden her, som var dét, der drev tre steder
 > fra hinanden indtil `G21`.
 >
-> **Den eneste migrering, dumpet IKKE kender, er #32**
-> (`competitions_rules_cleanup.sql`), som ikke rører skemaet — den fjerner en
-> død nøgle inde i en `jsonb`.
+> **Bagud igen efter 3. august-kørslerne.** Dumpet kender hverken #33
+> (`round_key()`s nye krop), #34 (`anon`s grants er væk) eller Story Engine
+> v1.2's `generate_stories()`. #32 rører ikke skemaet. Kør
+> [`schema-export.yml`](../.github/workflows/schema-export.yml), eller lad
+> mandagskørslen gøre det — datoen ovenfor gælder indtil da.
 >
 > **Adgangskontrakten kan igen læses af filen:** de gamle, åbne
 > `matches`-policies og `grant … to anon` på `recompute_ratings()` er væk, som
@@ -58,7 +61,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 5 | `rating_trigger_optimization.sql` | Statement-level triggere på `matches`; kalder `recompute_ratings()` + `generate_stories()` | Aktiv — forudsætter `rating_core.sql` (#0) |
 | 6 | `matches_stage.sql` | `matches.stage_name` (grundspil/slutspil) | Aktiv |
 | 7 | `push_notifications.sql` | `push_subscriptions` + `notification_log` | Aktiv |
-| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — ~~v1.1 skal gen-køres i produktion~~ **gen-kørt 31. juli 2026** (både v1.1's 14 regler og `scope = 'ALL'`-filtreringen efter #20). Kun funktionen ændres, tabel og view er uændrede. **v1.2 (3. august 2026, `B10`): skal gen-køres igen** — to nye regler (`AWARD_WEEK`, `AWARD_MONTH`) læser `competition_awards`, og regel 70 tier, hvor en kåring dækker. Forudsætter #26. Køres den ikke, sker der intet andet, end at kåringerne bliver ved med kun at stå på boardet |
+| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — ~~v1.1 skal gen-køres i produktion~~ **gen-kørt 31. juli 2026** (både v1.1's 14 regler og `scope = 'ALL'`-filtreringen efter #20). Kun funktionen ændres, tabel og view er uændrede. **v1.2 gen-kørt 3. august 2026** (`B10`): to nye regler (`AWARD_WEEK`, `AWARD_MONTH`) læser `competition_awards`, og regel 70 tier, hvor en kåring dækker. Forudsætter #26 |
 | 9 | `groups.sql` | Liga-laget: `groups`, `group_members`, `is_group_member()`, `move_competition_to_group()` | ⚠️ Aktiv, men **to af dens policies er afløst** — se advarslen nedenfor |
 | 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv — ~~gen-kør efter #20~~ **gen-kørt 31. juli 2026**: rundesejre og "bedste runde" filtrerer nu `scope = 'ALL'` (ellers tælles hver sejr én gang pr. turnering), og samme kørsel gav `titles.by_tournament` (K2) |
 | 11 | `live_scores.sql` | `matches.live_*`-kolonner + live-indekser | Aktiv |
@@ -83,10 +86,10 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 30 | `api_id_uniqueness.sql` | Unique-constraints på leverandør-id'erne (`G7`): `leagues (provider, api_league_id)`, `seasons (league_id, api_season_id)`, `teams (league_id, api_team_id)` | Aktiv — tilføjet 2. august 2026. Idempotent. **Fejler højlydt, hvis der allerede findes dubletter** — det er med vilje, og fejlteksten nævner rækkerne. Ingen kodeændring hører til; se filens eget hoved for, hvorfor `api/sync-matches.js` bevidst IKKE er lavet om til et upsert |
 | 31 | `account_anonymization.sql` | Luk din egen konto (`B4`): kolonnen `profiles.anonymized_at` + RPC'en `anonymize_my_account()` | Aktiv — tilføjet 3. august 2026. Idempotent. **Funktionen har NUL parametre med vilje** — der findes ikke et bruger-id at forfalske. Den rører ikke `auth.users`; selve kontolukningen gør `api/delete-account.js` bagefter med service-nøglen. **Skal køres FØR frontend-mergen**, ellers fejler knappen. Går et forløb i stykker mellem de to trin, er bagstopperen manuel: find brugeren i Supabase → Authentication og slet den blødt dér; RPC'en er allerede kørt og er idempotent |
 
-| 32 | `competitions_rules_cleanup.sql` | Fjerner den døde nøgle `openDaysBefore` fra `competitions.rules` (`G3`) | Aktiv — tilføjet 3. august 2026. Idempotent. **Den eneste fil i listen, det ikke gør nogen forskel at springe over:** ingen adfærdsændring, intet en bruger kan se, og ingen kode afhænger af den. Frontenden holdt op med at LÆSE `rules` i samme leverance, så nøglen er misvisende og ikke farlig. Kolonnen droppes bevidst ikke |
+| 32 | `competitions_rules_cleanup.sql` | Fjerner den døde nøgle `openDaysBefore` fra `competitions.rules` (`G3`) | Aktiv — tilføjet og **kørt 3. august 2026**. Idempotent. **Den eneste fil i listen, det ikke gør nogen forskel at springe over:** ingen adfærdsændring, intet en bruger kan se, og ingen kode afhænger af den. Frontenden holdt op med at LÆSE `rules` i samme leverance, så nøglen er misvisende og ikke farlig. Kolonnen droppes bevidst ikke |
 
-| 33 | `round_key_timezone.sql` | `round_key()` aflæser datoen i dansk tid frem for i sessionens (`G11`) | Aktiv — tilføjet 3. august 2026. Idempotent. **Flytter kun de rækker, den nye regel er uenig med** — i praksis forventeligt nul, da ingen af de syv turneringer spiller mellem midnat og 02.00 dansk tid; tællingen står i filens hoved. Rører den rækker, genberegner matches-triggeren rating og historier af sig selv, så kør den **mellem to runder**. Skal køres sammen med frontend-mergen: klienten regner fra samme dag efter `G32` |
-| 34 | `anon_grants.sql` | Fjerner `anon`s tabel-privilegier i `public` og lukker kilden (Supabases default privileges) — `G50` | Aktiv — tilføjet 3. august 2026. Idempotent. **Ingen adfærdsændring for en indlogget bruger:** appen sender altid brugerens JWT (rollen `authenticated`), og det eneste kald før login rører en `SECURITY DEFINER`-funktion. Ændrer intet i RLS — den giver dybde, hvor policyen stod alene. Tilbagerulningen er to linjer og står i filen. Dækket af `sql/tests/anon_grants.sql` i CI |
+| 33 | `round_key_timezone.sql` | `round_key()` aflæser datoen i dansk tid frem for i sessionens (`G11`) | Aktiv — tilføjet og **kørt 3. august 2026**. Idempotent. **Flytter kun de rækker, den nye regel er uenig med** — i praksis forventeligt nul, da ingen af de syv turneringer spiller mellem midnat og 02.00 dansk tid; tællingen står i filens hoved. Rører den rækker, genberegner matches-triggeren rating og historier af sig selv, så kør den **mellem to runder**. Skal køres sammen med frontend-mergen: klienten regner fra samme dag efter `G32` |
+| 34 | `anon_grants.sql` | Fjerner `anon`s tabel-privilegier i `public` og lukker kilden (Supabases default privileges) — `G50` | Aktiv — tilføjet og **kørt 3. august 2026**. Idempotent. **Ingen adfærdsændring for en indlogget bruger:** appen sender altid brugerens JWT (rollen `authenticated`), og det eneste kald før login rører en `SECURITY DEFINER`-funktion. Ændrer intet i RLS — den giver dybde, hvor policyen stod alene. Tilbagerulningen er to linjer og står i filen. Dækket af `sql/tests/anon_grants.sql` i CI |
 
 ### ⚠️ Fire filer må ikke gen-køres blindt
 
