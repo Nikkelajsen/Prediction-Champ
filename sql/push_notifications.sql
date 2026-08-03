@@ -31,6 +31,9 @@ create index if not exists push_subscriptions_user_idx
 --   'deadline:<dato>'          maks. én påmindelse pr. bruger pr. DAG
 --   'result:<round_key>'       rundens resultat, én pr. runde
 --   'newcomp:<competition_id>' ny konkurrence i din liga (B5)
+--   'award:<competition_id>:<period_type>:<period_key>'
+--                              lokal kåring — Ugens/Månedens bedste (B11)
+--   'newleague:<id>'           ny turnering kan tippes (B9)
 --
 -- Deadline-nøglen stod her som 'deadline:<round_key>:<dato>', hvilket koden
 -- aldrig har skrevet. Nøglen ER dedup-garantien, så en forkert beskrivelse af

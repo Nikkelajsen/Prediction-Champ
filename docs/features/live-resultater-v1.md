@@ -29,7 +29,7 @@ Derfor skrives live-scoren **aldrig** i `home_score`/`away_score`, men i separat
 | Kolonne | Indhold |
 |---|---|
 | `live_home_score` / `live_away_score` | nuværende mål |
-| `live_state` | Sportmonks-state (`INPLAY_1ST_HALF`, `HT`, …) — `null` = ikke i gang |
+| `live_state` | leverandørens state (`INPLAY_1ST_HALF`, `HT`, …) — `null` = ikke i gang. *(Rettet efter levering, `flere-datakilder-v1`: kolonnen er leverandør-agnostisk og bærer også football-data.org-statusser som `IN_PLAY`/`PAUSED`, når en liga har `live_enabled = true`.)* |
 | `live_minute` | spilleminut fra den tikkende periode (`null` i pauser) |
 | `live_updated_at` | hvornår live-syncen sidst skrev |
 
@@ -47,13 +47,13 @@ Alternativet — at skrive live i `home_score` og filtrere det fra alle steder �
 
 1. Slår i **vores egen** database op, hvilke kampe der kan være i gang: uden endeligt resultat med kickoff i [nu − 6 t; nu + 15 min], plus alle kampe der stadig står markeret som live.
 2. Er der ingen — de fleste minutter i døgnet — returneres uden at kalde Sportmonks. Det er hele grunden til, at et minut-interval er forsvarligt på en gratis plan.
-3. Ellers hentes præcis de kampe: `fixtures/multi/{ids}?include=scores;state;periods`, ét kald pr. 40 kampe.
+3. Ellers hentes præcis de kampe: `fixtures/multi/{ids}?include=scores;state;periods`, ét kald pr. 40 kampe. *(Rettet efter levering, `flere-datakilder-v1`: trin 2–3 beskriver én-leverandør-verdenen. I dag grupperes kampene pr. `leagues.provider`, og hver leverandør spørges for sig — football-data.org henter et **datovindue** (`/matches?dateFrom=…&dateTo=…`), ikke et fixture-id-opslag. Den fulde to-leverandør-beskrivelse står i `DOCUMENTATION.md` §8.)*
 4. Pr. kamp: **FT/AET/FT_PEN** → skriv endeligt resultat + ryd live-felterne · **i gang** → skriv kun live-felterne · **hverken/eller** (ikke startet, udsat, aflyst) → ryd live-felterne.
 5. Alt skrives i **én** upsert, så statement-triggeren på `matches` kører netop én gang.
 
 Uændrede skrivninger springes over, så databasen ikke bankes på hvert minut uden grund.
 
-**Sidegevinst:** funktionen færdigmelder også kampe. Før ventede en færdigspillet kamp op til 15 minutter på næste `sync-matches`-kørsel; nu opdaterer stillinger og rating inden for et minut efter slutfløjt. `sync-matches` bevares uændret (ét job pr. liga; kadencen er siden skruet ned til hver 12. time) og passer kampprogram, flyttede kampe og nye hold.
+**Sidegevinst:** funktionen færdigmelder også kampe. Før ventede en færdigspillet kamp på næste `sync-matches`-kørsel (dengang hvert 10.-15. minut, i dag hver 12. time); nu opdaterer stillinger og rating inden for et minut efter slutfløjt. `sync-matches` bevares uændret (ét job pr. liga; kadencen er siden skruet ned til hver 12. time) og passer kampprogram, flyttede kampe og nye hold.
 
 ## 5. Brugerfladen
 
@@ -138,7 +138,7 @@ Gem med **Create**.
 
 - **Status 200** på hver kørsel.
 - Svarteksten `{"checked":0,...,"note":"Ingen kampe i tidsvinduet"}` uden for kamptid.
-- Under en kamp: `{"checked":3,"live":3,"finished":0,"cleared":0,"written":3}`.
+- Under en kamp: `{"checked":3,"live":3,"finished":0,"cleared":0,"written":3}`. *(Svaret bærer i dag også `liveSuppressed` og `providers` — og `rateLimit`, når Sportmonks melder sit forbrug.)*
 
 Den endelige test er appen: åbn Hjem-fanen under en kamp — "Indeværende runde" skal vise den nuværende stilling og et rødt **LIVE**-mærke, og tallet skal opdatere af sig selv cirka hvert minut.
 
@@ -155,9 +155,9 @@ Uanset tallet er pointen den samme: på Sportmonks' gratis-plan (**3.000 kald i 
 | Svar | Årsag | Løsning |
 |---|---|---|
 | `401 {"error":"Ikke autoriseret"}` | Header mangler, er stavet forkert, eller `SYNC_SECRET` er ikke sat i Vercels **Production**-miljø | Tjek headernavnet er præcis `x-sync-secret`, og at værdien matcher Vercel-variablen |
-| `500 "Miljøvariabler mangler …"` | `SPORTMONKS_TOKEN`, `SUPABASE_URL` eller `SUPABASE_SERVICE_ROLE_KEY` mangler i Vercel | Sæt dem, og redeploy |
+| `500 {"error":"Serveren er ikke sat rigtigt op."}` | `SUPABASE_URL` eller `SUPABASE_SERVICE_ROLE_KEY` mangler i Vercel (svaret navngiver bevidst ikke variabler, `G38`; detaljen står i Vercels log). En manglende API-nøgle er IKKE denne fejl — den tjekkes pr. leverandør og dukker op i `providerErrors` | Sæt dem, og redeploy |
 | `500 Supabase …: 42703 column "live_state" does not exist` | `sql/live_scores.sql` er ikke kørt | Kør scriptet ("Run without RLS") |
-| `500 Sportmonks (live): 429` | Rate limit ramt | Skru `sync-matches` ned (trin 4) |
+| `500 Sportmonks (live): 429` | Rate limit ramt **to gange i træk** — siden `G48` gen-forsøges et 429 én gang efter `Retry-After`, før fejlen kan nå hertil | Aflæs `rateLimit` i seneste kørsler (grænsen er 3.000/time pr. entitet); sker det stadig, så find ud af, hvad der kalder for ofte |
 | `404` fra Vercel | Funktionen er ikke deployet | Merge branchen til `main`, eller peg jobbet på preview-URL'en |
 | `200`, men `checked` er altid `0` under en kamp | Kampen mangler `api_fixture_id`, eller `kickoff_at` er forkert | Kør `sync-matches` for ligaen og tjek kampen i Admin |
 | Kampen vises live uden minuttal | `periods`-include er ikke i dit abonnement — funktionen prøver automatisk igen uden | Ingen handling; stillingen er korrekt, kun minuttet mangler |

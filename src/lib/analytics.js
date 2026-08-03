@@ -66,7 +66,7 @@ function logEventOnce(token, name, key, opts) {
 // ---------- Dashboard: read-helpers ----------
 // Modsat logEvent* KASTER disse (samme mønster som loadUserStats/
 // loadCareerProfile) — AnalyticsPanel fanger fejl pr. sektion, så én langsom
-// eller fejlende sektion ikke blokerer de tre andre.
+// eller fejlende sektion ikke blokerer de fem andre.
 const loadAnalyticsHealth = (token, days = 30) =>
   restFetch(`/rest/v1/rpc/admin_analytics_health`, { method: "POST", token, body: { p_days: days } });
 

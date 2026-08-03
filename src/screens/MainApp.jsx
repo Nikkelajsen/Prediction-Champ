@@ -32,8 +32,8 @@ import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
 // og deres tabeller, før den første skærm kunne tegnes. `React.lazy` om netop
 // dette træ er den største enkeltgevinst, der ikke kræver, at noget deles op.
 //
-// Kun Admin er delt ud, ikke fanerne: de fire faner er dét, appen ER, og at
-// hente dem enkeltvis ville bytte én ventetid ud med fire.
+// Kun Admin er delt ud, ikke fanerne: de fem faner er dét, appen ER, og at
+// hente dem enkeltvis ville bytte én ventetid ud med fem.
 const AdminScreen = lazy(() => import("./AdminScreen.jsx"));
 
 function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoinCode, pendingLigaCode, clearPendingLigaCode }) {

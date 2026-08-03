@@ -97,15 +97,17 @@ create table group_members (
 alter table competitions add column if not exists group_id uuid references groups(id) on delete set null;
 ```
 
+> **Rettet efter levering:** `invite_code`-defaulten blev leveret som `substr(md5(random()::text || clock_timestamp()::text), 1, 8)` (se `sql/groups.sql`) — skitsen ovenfor mangler `clock_timestamp()`-saltet.
+
 **RLS:**
 
 | Objekt | Regel |
 |---|---|
 | `groups` SELECT | `authenticated` (åben læsning — nødvendig for join-med-kode-opslag; samme bevidste valg som for `competitions` i dag, jf. fejlfindingsloggen "Kunne ikke joine med kode") |
 | `groups` INSERT | `created_by = auth.uid()` |
-| `groups` UPDATE/DELETE | kun liga-admin (via hjælpefunktion, se nedenfor). DELETE kaskaderer til `group_members`; konkurrencer får `group_id = null` (bliver liga-løse, slettes IKKE) |
+| `groups` UPDATE/DELETE | kun liga-admin (via hjælpefunktion, se nedenfor); DELETE kræver desuden, at ligaen er **tom** (ingen konkurrencer — jf. afsnit 8 og `DOCUMENTATION.md` §18). DELETE kaskaderer til `group_members`; konkurrencer får `group_id = null` (bliver liga-løse, slettes IKKE) |
 | `group_members` SELECT | egne rækker + rækker i ligaer, man selv er medlem af — **via `security definer`-hjælpefunktionen `is_group_member(gid uuid)`**, aldrig ved at policy'en slår op i `group_members` direkte (kendt "infinite recursion"-fælde, jf. fejlfindingsloggen) |
-| `group_members` INSERT | `user_id = auth.uid()` (man melder sig selv ind — koden er adgangsbilletten) |
+| `group_members` INSERT | `user_id = auth.uid()` (man melder sig selv ind — koden er adgangsbilletten); `admin`-rollen tillades kun for ligaens skaber (`created_by = auth.uid()`) |
 | `group_members` DELETE | `user_id = auth.uid()` **og** man deltager ikke i nogen af ligaens konkurrencer (`sql/group_membership_invariant.sql`, A8). Admin-fjernelse af andre er bevidst udskudt (afsnit 8) |
 | `competition_participants` DELETE | **ny policy**: egen række, og **enten** har alle konkurrencens kampe resultat (forløbet er forbi), **eller** brugeren har ingen forudsigelser på allerede låste kampe (samme lås-udtryk som `predictions`-policyerne — runde-baseret indtil `A21`, per kamp siden 1. august 2026, hvor udtrykket blev opdateret i `sql/predictions_match_lock.sql`) — så framelding ikke kan bruges til at slette en dårlig, synlig historik midt i et forløb. Første gren kom til i `sql/group_membership_invariant.sql`, fordi den oprindelige regel var permanent og ikke "midt i et forløb" |
 
@@ -119,7 +121,7 @@ Opretteren indsættes som `role='admin'` i samme flow som liga-oprettelsen (fron
 
 | Fil | Ændring | Omfang |
 |---|---|---|
-| `src/lib/data.js` | Nye helpers — leveret som `loadMyGroups`, `loadGroupDetail`, `createGroup`, `loadGroupByCode`, `joinGroup`, `leaveGroup`, `deleteGroup`, `joinCompetition`, `leaveCompetition`, `moveCompetitionToGroup`. *(Udkastets `joinGroupByCode`/`joinCompetitionInGroup` blev til `loadGroupByCode` + `joinGroup` og et fælles `joinCompetition(token, userId, compId, groupId)`, så begge veje ind i en konkurrence bruger samme funktion — A7 viste, hvad der sker, når de ikke gør.)* | Mellem |
+| `src/lib/data/groups.js` + `src/lib/data/competitions.js` *(oprindeligt `src/lib/data.js`; helpers flyttet ved opsplitningen, `G1`)* | Nye helpers — leveret som `loadMyGroups`, `loadGroupDetail`, `createGroup`, `loadGroupByCode`, `joinGroup`, `leaveGroup`, `deleteGroup`, `joinCompetition`, `leaveCompetition`, `moveCompetitionToGroup`. *(Udkastets `joinGroupByCode`/`joinCompetitionInGroup` blev til `loadGroupByCode` + `joinGroup` og et fælles `joinCompetition(token, userId, compId, groupId)`, så begge veje ind i en konkurrence bruger samme funktion — A7 viste, hvad der sker, når de ikke gør.)* | Mellem |
 | `src/screens/LigaerTab.jsx` | Omstruktureres: liga-kort øverst, "Øvrige konkurrencer" nedenunder (genbruger `LeagueCard`), "Opret liga", fælles join-felt | Mellem |
 
 > **Rettet efter levering (onboarding v1, juli 2026):** "Ny konkurrence"-knappen lå inde i "Øvrige konkurrencer"-blokken, som kun renderes, når man HAR liga-løse konkurrencer. En bruger uden nogen havde dermed slet ingen vej til at oprette en konkurrence fra fanen — præcis den bruger, der havde mest brug for den. Knappen ligger nu fast i "Dine ligaer"-rækken øverst. **Rettet igen (`G54`, 3. august 2026):** flytningen efterlod betingelsen `groups.length > 0`, som stammede fra dengang en liga-løs konkurrence var mulig — så knappen var stadig usynlig for den bruger, der ikke havde en liga endnu. Ligaen er nu et krav og kan oprettes inde i opret-flowet, så betingelsen er væk: samme fejl, halvt rettet to gange. Join-feltet bruger nu `joinByInviteCode` (`data.js`) frem for sin egen kopi, jf. [`onboarding-v1.md`](./onboarding-v1.md) §8.

@@ -33,7 +33,7 @@ den regenereres med guiden nedenfor.
 > grund heller ikke lukket (`job_runs_id_seq` + begge `ON SEQUENCES`-defaults).
 >
 > **Det, eksporten samtidig afgjorde (`G5`):** funktionskroppene i produktion
-> indeholder CRLF — alle 25 af dem. Advarslen i `rating_core.sql`s hoved var
+> indeholder CRLF — alle funktionskroppe med `$$`-body. Advarslen i `rating_core.sql`s hoved var
 > altså sand om databasen, mens selve filen var blevet normaliseret til LF.
 > Kroppene er hentet ordret tilbage, og `.gitattributes` (`*.sql -text`) holder
 > dem der.
@@ -59,12 +59,12 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 0 | `rating_core.sql` | `pc_points()`, `round_key()`, `recompute_ratings()` + tabellerne `ratings`/`rating_history` | Aktiv — **skal køres før #5**. Tilføjet 30. juli 2026 med optimeringen fra samme dag (logistikken i `double precision`, ~175× hurtigere). **Skal gen-køres efter #20** (31. juli 2026, A17): `_rs` joiner nu `seasons`/`leagues` og tæller kun **officielle** turneringer. ⚠️ **Gen-kørslen ændrer kun funktionen, ikke tallene** — `ratings` står uændret, til noget kalder `recompute_ratings()`. Tryk "Opdater ratings" i Admin bagefter, ellers ligger de gamle tal og venter på næste kampresultat |
 | 1 | `standings_views.superseded.sql` | Første udgave af `round_standings` + `season_standings` | ⚠️ **Afløst af `standings_tiebreakers.sql`** — kør den aldrig. Omdøbt 30. juli 2026, så filnavnet selv advarer; kun bevaret for historikken |
 | 2 | `user_stats.sql` | `user_activity_days`, `touch_activity()`, `admin_user_stats()` | Aktiv |
-| 3 | `username_constraints.sql` | Længde-constraint på `profiles.display_name` (2–20), `username_available()` | Aktiv |
+| 3 | `username_constraints.sql` | Længde-constraint på `profiles.display_name` (2–20) | Aktiv — filen rummer KUN længde-constrainten. `username_available()` og `profiles_display_name_lower_idx` findes kun i skema-eksporten; der er ingen versioneret migrering for dem (noteret i backloggen) |
 | 4 | `predictions_round_lock_policies.sql` | Runde-baseret lås på `predictions` for **SELECT + DELETE** | ⚠️ **Afløst af #25** — kør den aldrig igen. En gen-kørsel ruller tavst låsen tilbage fra kamp til runde |
 | 5 | `rating_trigger_optimization.sql` | Statement-level triggere på `matches`; kalder `recompute_ratings()` + `generate_stories()` | Aktiv — forudsætter `rating_core.sql` (#0) |
 | 6 | `matches_stage.sql` | `matches.stage_name` (grundspil/slutspil) | Aktiv |
 | 7 | `push_notifications.sql` | `push_subscriptions` + `notification_log` | Aktiv |
-| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — ~~v1.1 skal gen-køres i produktion~~ **gen-kørt 31. juli 2026** (både v1.1's 14 regler og `scope = 'ALL'`-filtreringen efter #20). Kun funktionen ændres, tabel og view er uændrede. **v1.2 gen-kørt 3. august 2026** (`B10`): to nye regler (`AWARD_WEEK`, `AWARD_MONTH`) læser `competition_awards`, og regel 70 tier, hvor en kåring dækker. Forudsætter #26 |
+| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — ~~v1.1 skal gen-køres i produktion~~ **gen-kørt 31. juli 2026** (både v1.1's 14 regler og `scope = 'ALL'`-filtreringen efter #20). Kun funktionen ændres, tabel og view er uændrede. **v1.2 gen-kørt 3. august 2026** (`B10`): to nye regler (`AWARD_WEEK`, `AWARD_MONTH`) læser `competition_awards`, og regel 70 tier, hvor en kåring dækker. Forudsætter #26. Dækket af `sql/tests/story_engine_awards.sql` i CI |
 | 9 | `groups.sql` | Liga-laget: `groups`, `group_members`, `is_group_member()`, `move_competition_to_group()` | ⚠️ Aktiv, men **to af dens policies er afløst** — se advarslen nedenfor |
 | 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv — ~~gen-kør efter #20~~ **gen-kørt 31. juli 2026**: rundesejre og "bedste runde" filtrerer nu `scope = 'ALL'` (ellers tælles hver sejr én gang pr. turnering), og samme kørsel gav `titles.by_tournament` (K2) |
 | 11 | `live_scores.sql` | `matches.live_*`-kolonner + live-indekser | Aktiv |
@@ -73,7 +73,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 14 | `predictions_write_lock.sql` | Runde-låsen også på **INSERT + UPDATE**; rydder den gamle `"read predictions"` op | ⚠️ **Afløst af #25** — kør den aldrig igen, af samme grund som #4 |
 | 15 | `story_engine_backfill.sql` | Kalder `generate_stories()` for alle fuldt afsluttede runder | **Engangs-/ad hoc-kørsel**, ikke en migrering. Kør efter #8, når nye regler skal gælde bagud |
 | 16 | `analytics_events.sql` | Analytics v1: `analytics_events` (hændelseslog), RLS (kun INSERT, egne rækker), indekser, hændelseskatalog-constraint | Aktiv — kør én gang, gen-kør kun ved ny event i kataloget |
-| 17 | `analytics_dashboard.sql` | Analytics v1: `analytics_round_locks`/`analytics_completion_facts`-views + `admin_analytics_health/engagement/league_health/retention`-RPC'er | Aktiv — **sikker og forventet at blive gen-kørt**. **Gen-kør efter 30. juli 2026-omlægningen** (Liga Health Score fjernet, `admin_analytics_league_health` returnerer nu signaler i stedet for en score) sammen med frontend-mergen; en gammel klient mod en ny RPC — eller omvendt — viser en tom liga-sektion, ikke forkerte tal |
+| 17 | `analytics_dashboard.sql` | Analytics v1: tre views (`analytics_match_locks`, `analytics_round_locks`, `analytics_completion_facts`) + seks dashboard-RPC'er (`admin_analytics_health/engagement/league_health/retention/funnel/stories`) + gaten `analytics_require_admin()` | Aktiv — **sikker og forventet at blive gen-kørt**. **Gen-kør efter 30. juli 2026-omlægningen** (Liga Health Score fjernet, `admin_analytics_league_health` returnerer nu signaler i stedet for en score) sammen med frontend-mergen; en gammel klient mod en ny RPC — eller omvendt — viser en tom liga-sektion, ikke forkerte tal |
 | 18 | `job_runs.sql` | Overvågning: tabellen `job_runs`, `admin_job_health()` og `prune_job_runs()` | Aktiv — tilføjet 30. juli 2026 |
 | 19 | `cleanup_orphans.sql` | Fjerner `trg_recompute_ratings()`, `leagues.country` og `seasons.end_date` | **Engangs-oprydning**, men idempotent. Filen dokumenterer også, hvad der bevidst IKKE blev fjernet, og hvorfor |
 | 20 | `tournament_scope.sql` | `leagues.is_official` + `round_standings`/`monthly_standings` med **scope** (samlet + pr. turnering) | Aktiv — **afløser de to views i #12**. **Kørt 31. juli 2026**, sammen med #8 og #10, som filtrerer `scope = 'ALL'` og derfor ikke må stå tilbage i en ældre udgave |
@@ -87,18 +87,16 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 28 | `matches_kickoff_tbd.sql` | **"Tid ikke fastlagt"**: kolonnen `matches.kickoff_tbd` + låsen samlet i `public.match_lock_at()`/`match_locked()`, som alle fem policies og `analytics_match_locks` nu kalder | Aktiv — tilføjet august 2026. Idempotent. **Afløser låseudtrykket i #25**, som stod 1:1 fem steder. **Ingen adfærdsændring ved kørsel:** kolonnen får `default false`, så udtrykket er bogstaveligt det gamle, indtil `sync-matches` har sat flaget — derfor behøver den *ikke* køres mellem to runder. Skal køres FØR frontend-mergen; ellers viser klienten stadig pladsholder-tider. Forudsætter #25 |
 | 29 | `feedback.sql` | Feedback fra brugerne (`B14`): tabellen `feedback` + RPC'erne `admin_feedback()` og `admin_feedback_set_handled()` | Aktiv — tilføjet 2. august 2026. Idempotent. Ingen adfærdsændring for eksisterende data. **Skal køres FØR frontend-mergen** — omvendt får brugeren en fejl, når de trykker Send, og Admin → Feedback siger "Er sql/feedback.sql kørt?" |
 | 30 | `api_id_uniqueness.sql` | Unique-constraints på leverandør-id'erne (`G7`): `leagues (provider, api_league_id)`, `seasons (league_id, api_season_id)`, `teams (league_id, api_team_id)` | Aktiv — tilføjet 2. august 2026. Idempotent. **Fejler højlydt, hvis der allerede findes dubletter** — det er med vilje, og fejlteksten nævner rækkerne. Ingen kodeændring hører til; se filens eget hoved for, hvorfor `api/sync-matches.js` bevidst IKKE er lavet om til et upsert |
-| 31 | `account_anonymization.sql` | Luk din egen konto (`B4`): kolonnen `profiles.anonymized_at` + RPC'en `anonymize_my_account()` | Aktiv — tilføjet 3. august 2026. Idempotent. **Funktionen har NUL parametre med vilje** — der findes ikke et bruger-id at forfalske. Den rører ikke `auth.users`; selve kontolukningen gør `api/delete-account.js` bagefter med service-nøglen. **Skal køres FØR frontend-mergen**, ellers fejler knappen. Går et forløb i stykker mellem de to trin, er bagstopperen manuel: find brugeren i Supabase → Authentication og slet den blødt dér; RPC'en er allerede kørt og er idempotent |
-
+| 31 | `account_anonymization.sql` | Luk din egen konto (`B4`): kolonnen `profiles.anonymized_at` + RPC'en `anonymize_my_account()` | Aktiv — tilføjet 3. august 2026. Idempotent. **Udvidet senere samme dag: nuller nu også `client_errors.user_id`** (#36 kom til efter filen, og politikken lover, at fejlrapporter mister koblingen) — **gen-kør filen i Supabase**, hvis den kun er kørt i den oprindelige form. **Funktionen har NUL parametre med vilje** — der findes ikke et bruger-id at forfalske. Den rører ikke `auth.users`; selve kontolukningen gør `api/delete-account.js` bagefter med service-nøglen. **Skal køres FØR frontend-mergen**, ellers fejler knappen. Går et forløb i stykker mellem de to trin, er bagstopperen manuel: find brugeren i Supabase → Authentication og slet den blødt dér; RPC'en er allerede kørt og er idempotent |
 | 32 | `competitions_rules_cleanup.sql` | Fjerner den døde nøgle `openDaysBefore` fra `competitions.rules` (`G3`) | Aktiv — tilføjet og **kørt 3. august 2026**. Idempotent. **Den eneste fil i listen, det ikke gør nogen forskel at springe over:** ingen adfærdsændring, intet en bruger kan se, og ingen kode afhænger af den. Frontenden holdt op med at LÆSE `rules` i samme leverance, så nøglen er misvisende og ikke farlig. Kolonnen droppes bevidst ikke |
-
 | 33 | `round_key_timezone.sql` | `round_key()` aflæser datoen i dansk tid frem for i sessionens (`G11`) | Aktiv — tilføjet og **kørt 3. august 2026**. Idempotent. **Flytter kun de rækker, den nye regel er uenig med** — i praksis forventeligt nul, da ingen af de syv turneringer spiller mellem midnat og 02.00 dansk tid; tællingen står i filens hoved. Rører den rækker, genberegner matches-triggeren rating og historier af sig selv, så kør den **mellem to runder**. Skal køres sammen med frontend-mergen: klienten regner fra samme dag efter `G32` |
 | 34 | `anon_grants.sql` | Fjerner `anon`s tabel-privilegier i `public` og lukker kilden (Supabases default privileges) — `G50` | Aktiv — tilføjet og **kørt 3. august 2026**. Idempotent. **Ingen adfærdsændring for en indlogget bruger:** appen sender altid brugerens JWT (rollen `authenticated`), og det eneste kald før login rører en `SECURITY DEFINER`-funktion. Ændrer intet i RLS — den giver dybde, hvor policyen stod alene. Tilbagerulningen er to linjer og står i filen. Dækket af `sql/tests/anon_grants.sql` i CI |
 | 35 | `predictions_updated_at.sql` | Trigger, så `predictions.updated_at` flytter sig ved en RETTELSE (`G13`) | Aktiv — tilføjet 3. august 2026. Idempotent. **Ændrer, hvad to Analytics-tal måler:** "Aktive konkurrencer/ligaer" og retention tæller fra nu af også rettede tips, altså aktivitet frem for kun afgivne tips. Måle-ordbogen er rettet i samme ombæring. En gen-skrivning af samme score flytter intet. Dækket af `sql/tests/predictions_updated_at.sql` i CI |
 | 36 | `client_errors.sql` | Fejltelemetri for frontenden (`G42`): tabellen `client_errors`, `admin_client_errors()` og `prune_client_errors()` | Aktiv — tilføjet 3. august 2026. Idempotent. **Skal køres FØR frontend-mergen** — ellers fejler hver rapportering tavst (den er fire-and-forget, så brugeren mærker intet, men sporet er væk). Samme RLS-form som #29: kun insert, kun egne rækker, ingen select. Dækket af `sql/tests/client_errors.sql` i CI |
 
-### ⚠️ Fire filer må ikke gen-køres blindt
+### ⚠️ Seks filer må ikke gen-køres blindt
 
-Alle fire bruger `drop policy … create policy` / `drop view … create view`, så en
+Alle seks bruger `drop policy … create policy` / `drop view … create view`, så en
 gen-kørsel **erstatter tavst** en nyere definition med en ældre. Der kommer ingen
 fejl — reglen bliver bare den gamle igen.
 
@@ -126,6 +124,14 @@ fejl — reglen bliver bare den gamle igen.
 - **`standings_views.superseded.sql`** genskaber `round_standings`/`season_standings` **uden**
   tiebreaker-kolonnerne. Kør `standings_tiebreakers.sql` efter — eller lad være med
   at røre filen; den er kun bevaret for historikken.
+- **`predictions_round_lock_policies.sql`** (#4) genskaber SELECT- og DELETE-policyen
+  på `predictions` med den gamle **runde-baserede** lås og ruller dermed to af de fem
+  per-kamp-policies fra `predictions_match_lock.sql` (#25) tilbage. "Kør aldrig igen"
+  pr. sin egen tabelrække — skal den alligevel køres, så kør #25 (og #28) umiddelbart
+  efter.
+- **`predictions_write_lock.sql`** (#14) gør det samme for INSERT- og UPDATE-policyen:
+  en gen-kørsel ruller per-kamp-låsen tilbage til runde-lås. "Kør aldrig igen" af samme
+  grund som #4 — rettelsen er igen #25 (og #28) bagefter.
 
 ### Tests
 
@@ -210,20 +216,49 @@ funktionen har nul parametre (den mekaniske udgave af "kan ikke ramme en anden
 bruger"), at brugssporet er væk, at feedback-rækken overlever uden afsender, at
 en anden bruger er urørt, og at andet kald er et no-op.
 
+**`sql/tests/story_engine_awards.sql`** (samme CI-job, egen database) kører
+`rating_core.sql`, `competition_awards.sql` og `story_engine.sql` i én tom
+database og efterprøver kæden fra kåringsrække til historie-kort (Story Engine
+v1.2's regler `AWARD_WEEK`/`AWARD_MONTH`, `B10`). Kæden fejler TAVST i
+produktion — matches-triggeren er exception-guarded — så testen er det eneste
+sted, et manglende kort bliver rødt.
+
+**`sql/tests/client_errors.sql`** (samme CI-job, egen database) kører migreringen
+`client_errors.sql` (#36) og efterprøver begge retninger: en bruger kan skrive
+sin egen fejlrapport og ikke andres, og INGEN kan læse tabellen uden om den
+admin-gatede RPC `admin_client_errors()`.
+
+**`sql/tests/predictions_updated_at.sql`** (samme CI-job, egen database)
+efterprøver triggeren fra `predictions_updated_at.sql` (#35): `updated_at`
+flytter sig ved en rettelse. En manglende trigger er usynlig — feltet har en
+default, så en frisk række ser rigtig ud, og fejlen ville ellers først vise sig
+som et Analytics-tal, der er lidt for lavt.
+
+**`sql/tests/anon_grants.sql`** (samme CI-job, egen database) kører migreringen
+`anon_grants.sql` (#34) og efterprøver begge halvdele: at `anon` mister
+tabel-adgangen i `public`, og at kilden (Supabases default privileges) er
+lukket, så en tabel oprettet bagefter heller ikke får den. Den anden halvdel er
+den, der betyder noget på sigt — bredden var en regel og ikke en liste.
+
 Testene kan køres lokalt mod enhver tom database:
 
 ```bash
-createdb ratingtest && createdb awardstest && createdb sectest && createdb fbtest && createdb idtest && createdb anontest
+createdb ratingtest && createdb awardstest && createdb cetest && createdb putest && createdb anongrants && createdb storytest && createdb sectest && createdb fbtest && createdb idtest && createdb anontest
 cd sql/tests && psql -d ratingtest -v ON_ERROR_STOP=1 -b -f rating_equivalence.sql
 psql -d awardstest -v ON_ERROR_STOP=1 -b -f competition_awards.sql
+psql -d cetest -v ON_ERROR_STOP=1 -b -f client_errors.sql
+psql -d putest -v ON_ERROR_STOP=1 -b -f predictions_updated_at.sql
+psql -d anongrants -v ON_ERROR_STOP=1 -b -f anon_grants.sql
+psql -d storytest -v ON_ERROR_STOP=1 -b -f story_engine_awards.sql
 psql -d sectest -v ON_ERROR_STOP=1 -b -f security_hardening.sql
 psql -d fbtest -v ON_ERROR_STOP=1 -b -f feedback.sql
 psql -d idtest -v ON_ERROR_STOP=1 -b -f api_id_uniqueness.sql
 psql -d anontest -v ON_ERROR_STOP=1 -b -f account_anonymization.sql
 ```
 
-Samme mønster gælder mildere for `predictions_round_lock_policies.sql`: den rører
-kun SELECT/DELETE, så den kan gen-køres uden at ødelægge skrive-låsen fra #14.
+`predictions_round_lock_policies.sql` er IKKE en mild undtagelse, selv om den kun
+rører SELECT/DELETE: en gen-kørsel ruller tavst de to policies tilbage fra
+per-kamp-låsen (#25) til runde-lås — se listen over de seks filer ovenfor.
 
 ---
 

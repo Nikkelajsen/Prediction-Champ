@@ -157,7 +157,7 @@ create policy group_members_delete_self on public.group_members
   );
 
 -- ============================================================================
--- 4. Verifikation — skal give 0 rækker efter kørsel
+-- 5. Verifikation — skal give 0 rækker efter kørsel
 -- ============================================================================
 -- select cp.user_id, c.group_id, c.name
 -- from public.competition_participants cp

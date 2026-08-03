@@ -3,7 +3,7 @@
 //
 // useSection er grunden til, at sektionerne kan være uafhængige: hver har sit
 // eget { data, loading, err }, så én langsom eller fejlende sektion aldrig
-// blokerer de tre andre.
+// blokerer de fem andre.
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { metricInfo } from "../../lib/analyticsMetrics.js";

@@ -1,10 +1,10 @@
 # Feature: Story Engine v1
 
-**Status: ✅ Leveret — live for alle brugere (juli 2026) · udvidet til v1.1 (juli 2026, se afsnit 10)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 1*
+**Status: ✅ Leveret — live for alle brugere (juli 2026) · udvidet til v1.1 (juli 2026, se afsnit 10) · udvidet til v1.2 (august 2026, se afsnit 12)** · *Filosofi: [`../PRODUCT_BOOK.md`](../PRODUCT_BOOK.md), kapitel 6 · Prioritering: [`../ROADMAP.md`](../ROADMAP.md), trin 1*
 
 *Regelbaseret første version. Ingen AI. Bygget på data, der allerede findes i databasen.*
 
-> **Læsevejledning.** Dokumentet beskriver v1 som leveret. Afsnit 10 er **v1.1**, som blev bygget efter den første rigtige runde, hvor stort set ingen fik en historie. v1.1 tilføjer regler, sænker tærskler og indfører et **dæmpet tier** — dvs. den ændrer afsnit 3, 4 og 8. Hvor afsnittene modsiger hinanden, gælder afsnit 10.
+> **Læsevejledning.** Dokumentet beskriver v1 som leveret. Afsnit 10 er **v1.1**, som blev bygget efter den første rigtige runde, hvor stort set ingen fik en historie. v1.1 tilføjer regler, sænker tærskler og indfører et **dæmpet tier** — dvs. den ændrer afsnit 3, 4 og 8. Afsnit 12 er **v1.2** (august 2026), som lægger de to lokale kårings-regler til. Hvor afsnittene modsiger hinanden, gælder afsnit 10 og 12.
 
 ---
 
@@ -43,7 +43,7 @@ Så vises **intet kort** — ikke et "status quo"-kort, bare stilhed. Det gør d
 
 ## 3. Regelkataloget (prioriteret)
 
-> **Rettet efter levering (v1.1, afsnit 10):** kataloget er udvidet til 14 regler, tre tærskler er sænket, og "stilhed" er erstattet af et dæmpet tier. Tabellen nedenfor er v1 som leveret.
+> **Rettet efter levering (v1.1, afsnit 10):** kataloget er udvidet til 14 regler, tre tærskler er sænket, og "stilhed" er erstattet af et dæmpet tier. **Rettet igen (v1.2, august 2026, afsnit 12):** kataloget er nu **16 regler** — `AWARD_WEEK` (prio 65) og `AWARD_MONTH` (prio 15) kom til. Tabellen nedenfor er v1 som leveret.
 
 Hver regel har et prioritetstal. Pr. bruger pr. runde vælges historien med lavest tal; ved lighed vinder historien fra den største liga (flest deltagere). Er en bruger med i flere ligaer, udløses typisk flere kandidater (én eller flere pr. liga + de globale) — alle gemmes, men kun én vises. Den fulde, deterministiske udvælgelses­regel (og hvorfor global-vs-liga aldrig kan gå lige op) står i afsnit 6.
 
@@ -161,6 +161,8 @@ order by priority asc, league_size desc nulls last, competition_id asc
 limit 1   -- fx via distinct on (user_id, round_key) med denne order
 -- vis kun ikke-afviste: where dismissed_at is null
 ```
+
+> **Rettet efter levering:** skitsens sidste kommentar-linje blev ikke leveret sådan — `dismissed_at` filtreres bevidst **ikke** i viewet; frontenden håndterer afvisningen. Skitsen står, som udkastet var.
 
 1. **`priority asc`** — laveste tal (vigtigst) vinder.
 2. **`league_size desc nulls last`** — ved samme prio vinder den største liga. `nulls last` betyder, at en global historie (uden ligastørrelse) taber en lighed til en liga-historie — men det sker aldrig i praksis, for de globale prioriteter (10, 30) er unikke på stigen og kan ikke gå lige op med en liga-historie. Reglen er derfor entydig, og `nulls last` er blot et sikkerhedsnet.

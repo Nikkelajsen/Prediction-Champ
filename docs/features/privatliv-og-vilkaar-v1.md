@@ -55,6 +55,7 @@ Anonymisering går uden om begge, fordi `profiles`-rækken bliver stående.
 | `profiles` | pseudonym (`Slettet <8 hex>`), `anonymized_at`, `is_admin = false`, `last_seen_at = null` |
 | `push_subscriptions`, `notification_log`, `stories`, `analytics_events`, `user_activity_days` | slettes |
 | `feedback.user_id` | → `null` (samme valg som tabellens egen `on delete set null`) |
+| `client_errors.user_id` | → `null` *(tilføjet 3. august 2026 — tabellen kom til efter leveringen (#36), og kontoen soft-lukkes, så FK'ens `on delete set null` aldrig udløses; uden dette holdt politikkens løfte om fejlrapporter ikke)* |
 | `predictions`, `ratings`, `rating_history`, `competition_awards`, `competition_participants`, `group_members` | **bevares** — de er grundlaget for andres stillinger |
 | `groups`, `competitions` | røres ikke; overlever fordi `profiles` gør |
 
@@ -88,7 +89,7 @@ Fejler trin 3 efter trin 2, svares `kode: "kun_anonymiseret"`. Brugeren skal vid
 | `src/screens/Auth.jsx` | `jura`-tilstand, `AuthShell`s `bred`, `TekstLink`, `JuraLinje` |
 | `src/screens/HowItWorksScreen.jsx` | Nyt emne "Privatliv og vilkår" med to knapper. *(Rettet efter levering: skærmen blev samme dag lagt om til fem foldbare emner på `main`, så tilføjelsen er et `Topic` og ikke et kort. Den oprindelige udgave flyttede desuden `Section` til modulniveau og sænkede lint-loftet fra 23 til 14 — omlægningen opnåede det samme, og loftet står stadig på 14.)* |
 | `src/screens/MainApp.jsx` | `openLegal` + `screen.type === "legal"` |
-| `src/lib/supabase.js` | `clearAllLocalState()` + `LOKALE_NØGLER` |
+| `src/lib/supabase.js` | `clearAllLocalState()` (`LOKALE_NØGLER` bor i dag i `src/lib/localFlags.js` og re-eksporteres herfra) |
 | `src/lib/data/account.js` | **Ny.** `deleteMyAccount()` |
 | `sql/account_anonymization.sql` | **Ny.** Migrering #31 |
 | `api/delete-account.js` | **Ny.** Fjerde serverless-funktion (loftet er 12) |

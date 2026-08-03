@@ -50,6 +50,7 @@ create table public.stories            (id uuid primary key default gen_random_u
 create table public.analytics_events   (id uuid primary key default gen_random_uuid(), user_id uuid references auth.users(id) on delete cascade, event_name text);
 create table public.user_activity_days (user_id uuid not null references auth.users(id) on delete cascade, day date, primary key (user_id, day));
 create table public.feedback           (id uuid primary key default gen_random_uuid(), user_id uuid references auth.users(id) on delete set null, message text);
+create table public.client_errors      (id uuid primary key default gen_random_uuid(), user_id uuid references auth.users(id) on delete set null, message text);
 
 -- Det, der SKAL overleve.
 create table public.predictions     (user_id uuid not null references public.profiles(id) on delete cascade, match_id uuid, pred_home int, pred_away int, primary key (user_id, match_id));
@@ -97,6 +98,7 @@ begin
   insert into public.analytics_events (user_id, event_name) values (a, 'login'), (b, 'login');
   insert into public.user_activity_days (user_id, day) values (a, current_date), (b, current_date);
   insert into public.feedback (user_id, message) values (a, 'Push virker ikke på min iPhone');
+  insert into public.client_errors (user_id, message) values (a, 'TypeError hos Anna'), (b, 'TypeError hos Bo');
 end $blk$;
 
 -- ---------- 1) funktionen har nul parametre ----------
@@ -152,6 +154,13 @@ begin
   if not exists (select 1 from public.feedback where user_id is null and message like 'Push virker%') then
     raise exception 'feedback-rækken overlevede ikke uden user_id';
   end if;
+
+  -- fejlrapporten overlever uden kobling til personen. Kontoen soft-lukkes,
+  -- så FK'ens `on delete set null` udløses aldrig — funktionen SKAL selv nulle,
+  -- ellers holder privatlivspolitikkens løfte ikke.
+  if not exists (select 1 from public.client_errors where user_id is null and message = 'TypeError hos Anna') then
+    raise exception 'fejlrapporten beholdt koblingen til den lukkede konto';
+  end if;
 end $blk$;
 
 -- ---------- 4) spillet står uændret ----------
@@ -192,6 +201,7 @@ begin
   if (select count(*) from public.stories where user_id = b) <> 1 then raise exception 'B mistede sin historie'; end if;
   if (select count(*) from public.analytics_events where user_id = b) <> 1 then raise exception 'B mistede sine hændelser'; end if;
   if (select count(*) from public.push_subscriptions where user_id = b) <> 1 then raise exception 'B mistede sit abonnement'; end if;
+  if (select count(*) from public.client_errors where user_id = b) <> 1 then raise exception 'B mistede koblingen til sin fejlrapport'; end if;
 end $blk$;
 
 -- ---------- 7) idempotens + to lukkede konti kolliderer ikke ----------

@@ -18,7 +18,7 @@ I dag findes der ingen personlig profil-/karrierevisning (MVP-kravet "Grundlægg
 
 **Designprincip (ufravigeligt):** Produktbogen siger "Stories over Statistics", og det er allerede besluttet, at head-to-head bygges som Story Engine-regler, *ikke* som statistikside (ROADMAP, juli 2026). Karriereprofilen følger samme ånd:
 
-1. **Fortælling frem for tabel.** Profilen læses oppefra som en karriere: titler → milepæle → kurve → rivaler. Rå tal optræder diskret og sekundært.
+1. **Fortælling frem for tabel.** Profilen læses oppefra som en karriere: titler → milepæle → kurve → rivaler. Rå tal optræder diskret og sekundært. *(Rettet efter levering: den leverede rækkefølge har flere sektioner — se rettelsen i afsnit 2.)*
 2. **Genbrug af eksisterende fortælle-data.** `stories`-rækkerne gemmer allerede *alle* udløste kandidater pr. runde (ikke kun den viste) — netop som råmateriale til et minde-arkiv. Karriereprofilen er det arkivs første aftager.
 3. **Driller, ydmyger aldrig.** Samme regel som Story Engine: ingen "din dårligste måned", ingen bundplaceringer. Profilen viser det, man har opnået — ikke det, man ikke har.
 
@@ -28,11 +28,13 @@ I dag findes der ingen personlig profil-/karrierevisning (MVP-kravet "Grundlægg
 
 Oppefra og ned på profilsiden:
 
+> **Rettet efter levering (K2/K4, 30.–31. juli 2026):** den leverede skærm har flere sektioner end udkastet, og rækkefølgen er i dag: **hoved → H2H → titler → titler pr. turnering → rekorder → milepæle → ratingkurve → rivaler → basistal**. H2H, Rekorder og Fodaftryk er beskrevet i tabellens K4-rækker nedenfor; "Titler pr. turnering" er K2 — se afsnit 8 frem for en ekstra tabelrække her.
+
 | Sektion | Indhold | Datakilde |
 |---|---|---|
 | **Hoved** | Navn, "medlem siden", aktuel rating + ▲/▼ og "NY"-badge (samme visning som Rating-fanen) | `profiles`, `ratings`, `rating_history` |
 | **Titler** | Sæsontitler ("Sæsonens Prediction Champ — Superligaen 2026/27", *tilføjet 30. juli 2026*), månedstitler ("Månedens Prediction Champ, marts 2027") og rundetitler (antal rundesejre). Vises som badges/trofæer, nyeste først | `season_standings`, `monthly_standings`, `round_standings` (historik) |
-| **Milepæle** | Kronologisk minde-liste fra story-arkivet: comebacks, stimer, ratingrekorder, H2H-overhalinger — genbrug af `headline` fra gemte `stories`-rækker | `stories` (alle kandidater, ikke kun viste) |
+| **Milepæle** | Kronologisk minde-liste fra story-arkivet: comebacks, stimer, ratingrekorder, H2H-overhalinger — genbrug af `headline` fra gemte `stories`-rækker. *(Tilføjet efter levering, `I5`, august 2026: hvert milepælskort har en Del-knap — deler med samme tekst som historie-kortet (`storyShareText`) og logger `story_shared` med `metadata: { rule, from: "milestone" }`.)* | `stories` (alle kandidater, ikke kun viste) |
 | **Ratingkurve** | Rating over tid (én prik pr. runde), med provisorisk periode markeret. *(30. juli 2026:* toppunktet ringes ind (◎), og kurven har akser — y som neutralt interval, x som første/sidste runde*)* | `rating_history` |
 | **Rivaler** | De 2–3 brugere, man har de mest **jævnbyrdige** opgør med — vist som fortælling ("Din tætteste rival: Jimmy. I har mødt hinanden 7 gange — du fører 4-3"). Navnet er tryk-flade. **[Rettet 30. juli 2026, K3 lukket]:** rangeres på `abs(sejre − nederlag)` fra faktiske møder, ikke på antal historier; udkastets `rating_history.rnk` er afvist — se afsnit 12 | `competition_participants` + `predictions` + `pc_points()` (møder) · `stories` (regel 40/60, kun som farve) |
 | **Basistal (diskret)** | Samlede point, præcise hits (🎯), korrekte udfald *(tilføjet 30. juli 2026 — feltet blev hentet uden at blive vist, så halvdelen af pointene var usynlige)*, hit-rate, antal tippede kampe. Én kompakt linje/række nederst — bevidst ikke øverst | samme kilder som stillingerne (se afsnit 4) |
@@ -56,11 +58,11 @@ Oppefra og ned på profilsiden:
 
 **Ingen nye tabeller i v1.** Alt kan afledes af eksisterende data. I tråd med beslutningen "PostgreSQL som kilde til sandhed" samles læsningen i DB frem for klient-beregning:
 
-- Ét nyt view/RPC, fx `career_profile(profile_user_id uuid)`, der returnerer jsonb med: titler (aggregeret fra `monthly_standings`/`round_standings`-historik), ratingkurve (`rating_history`), basistal og rival-aggregatet. Mønster: som `admin_user_stats()` (ét kald, `security definer` hvor RLS ellers ville blokere), men **uden** admin-gate — i stedet gated på relationen fra K1 (deler liga/konkurrence, eller egen profil).
+- Ét nyt view/RPC, fx `career_profile(profile_user_id uuid)`, der returnerer jsonb med: titler (aggregeret fra `monthly_standings`/`round_standings`-historik), ratingkurve (`rating_history`), basistal og rival-aggregatet. Mønster: som `admin_user_stats()` (ét kald, `security definer` hvor RLS ellers ville blokere), men **uden** admin-gate — i stedet gated på relationen fra K1 (deler liga/konkurrence, eller egen profil). *(Rettet efter levering: K1 blev siden udvidet — adgangen er i dag blot login, og kun et ukendt id giver "not found". Se afsnit 8, K1.)*
 - Milepæle hentes separat via eksisterende RLS-læsning af `stories` (kun egne rækker) — ingen ny adgang nødvendig.
 - **Vigtigt — samme pointkilde som stillingerne:** basistallene skal beregnes af de samme views/samme SQL som `round_standings`/`season_standings`, ikke af en ny, uafhængig pointberegning. Scoring er i dag hardkodet 3/1 i views'ene, mens frontendens `pointsFor` læser konkurrencens `rules` — den inkonsistens må ikke spredes til et tredje sted (se forudsætning F2).
 
-**Frontend:** ny skærm `src/screens/ProfileScreen.jsx` + loader `loadCareerProfile` i `src/lib/data.js` (samme mønster som `loadUserStats`/`loadRatingHistory`). Ratingkurven tegnes med samme letvægts-tilgang som eksisterende minikurver (ingen chart-bibliotek).
+**Frontend:** ny skærm `src/screens/ProfileScreen.jsx` + loader `loadCareerProfile` i `src/lib/data/career.js` (samme mønster som `loadUserStats`/`loadRatingHistory`). Ratingkurven tegnes med samme letvægts-tilgang som eksisterende minikurver (ingen chart-bibliotek).
 
 ---
 
@@ -156,7 +158,7 @@ Oppefra og ned på profilsiden:
 
 *(Omfanget i info-feltet, 30. juli 2026 — fortsætter nummereringen. Erstatter testcase 23):*
 
-45. **Hver** sektion med tal har en `InfoDot`: Karriere (hoved), H2H, Titler, Rekorder, Milepæle, Rivaler og basistallene. Ingen af dem må mangle.
+45. **Hver** sektion med tal har en `InfoDot`: Karriere (hoved), H2H, Titler, Rekorder, Milepæle, Rivaler og basistallene. Ingen af dem må mangle. **[Rettet efter levering (K2, 31. juli 2026)]:** skærmen fik en ottende sektion, **Titler pr. turnering**, som også har sin egen `InfoDot` — den hører med i opremsningen.
 46. Der står **ingen** forklarende brødtekst på siden — hverken under en overskrift eller som undertekst på et kort. Undtaget er ratingkurvens legende og aksevisning (afsnit 13).
 47. På kort uden overskrift (H2H, basistal) står ikonet **inline efter** indholdet, aldrig foran det.
 48. Tallene navngiver stadig deres eget omfang i sætningen ("i Championships rundeliga", "globale rating", "af N spillere") — det er dét, der bærer førstelæsningen, når brødteksten er væk. Testcase 24 gælder uændret.
@@ -212,7 +214,7 @@ Leveret samlet efter en gennemgang af karrierestatistikken. Alle fem lå inden f
 
 **Problemet var ikke, at der var for få rivaler — det var, at ordet "tætteste" var usandt.** Teksten sagde "Din tætteste rival", men rangeringen var antal `H2H_PASS`/`STREAK`-historier, altså hvor *dramatisk* forholdet havde været. På et testdatasæt gav den gamle metode én rival: den modstander, ejeren slår **4-0**. Den mest jævnbyrdige modstander (2-2) var usynlig, fordi der aldrig var skrevet en historie om hende.
 
-**Hvorfor tragten var så smal.** Kun 2 af 14 Story Engine-regler skriver et rival-navn. Regel 40 (`H2H_PASS`) kræver en overhaling i netop den runde (bagud/lige før, foran efter); regel 60/75 (`STREAK`) kræver en **aktuel** stime på ≥2 sejre mod netop den person. Begge har `distinct on (competition_id, user_id)`, så der gemmes **én** rival pr. konkurrence pr. runde — overhaler man fire personer i én runde, findes der én række. I en lille liga med stabil rækkefølge sker der næsten ingen overhalinger. K3 forudsagde selv udfaldet.
+**Hvorfor tragten var så smal.** Kun 2 af 16 Story Engine-regler skriver et rival-navn. Regel 40 (`H2H_PASS`) kræver en overhaling i netop den runde (bagud/lige før, foran efter); regel 60/75 (`STREAK`) kræver en **aktuel** stime på ≥2 sejre mod netop den person. Begge har `distinct on (competition_id, user_id)`, så der gemmes **én** rival pr. konkurrence pr. runde — overhaler man fire personer i én runde, findes der én række. I en lille liga med stabil rækkefølge sker der næsten ingen overhalinger. K3 forudsagde selv udfaldet.
 
 **Den nye definition.** En rival er nogen, man *veksler slag med*: rangeret på `abs(sejre − nederlag)` blandt faktiske møder, med flest møder som tiebreak og `rival_id` som deterministisk sidste nøgle. Volumen alene ville ikke give rivaler, men blot den ældste medspiller i den største konkurrence.
 
@@ -243,6 +245,7 @@ Leveret samlet efter en gennemgang af karrierestatistikken. Alle fem lå inden f
 | Karriere (hoved) | fandtes | på overskriften |
 | Jeres indbyrdes opgør (H2H) | **ny** | inline efter sætningen (kortet har ingen overskrift) |
 | Titler | **ny** | på overskriften |
+| Titler pr. turnering | **ny** *(rettet efter levering — sektionen kom til med K2, 31. juli 2026, og har sin egen)* | på overskriften |
 | Rekorder | fandtes, udvidet med scope-linjens indhold | på overskriften |
 | Milepæle | **ny** | på overskriften |
 | Rivaler | fandtes, udvidet med scope-linjens indhold | på overskriften |

@@ -5,9 +5,10 @@ import { QUIET_TIER_MIN } from "../stories.js";
 
 // ---------- Karriereprofil ----------
 // Ét RPC-kald samler hele profil-læsningen (hoved, titler, ratingkurve, basistal,
-// rivaler) i databasen — mønster som loadUserStats. RPC'et er security definer og
-// gated på K1-relationen (egen profil, eller en man deler liga/konkurrence med);
-// forsøg på en fremmed profil kaster 'forbidden', som skærmen viser som pæn tekst.
+// rivaler) i databasen — mønster som loadUserStats. RPC'et er security definer,
+// og adgangen kræver kun login (K1 udvidet): alle profiler kan læses, kun rivaler
+// (og milepælene nedenfor) er private. Eneste afvisning er 'not found' for et
+// ukendt id, som skærmen viser som pæn tekst.
 async function loadCareerProfile(token, profileUserId) {
   return restFetch(`/rest/v1/rpc/career_profile`, {
     method: "POST", token, body: { profile_user_id: profileUserId },

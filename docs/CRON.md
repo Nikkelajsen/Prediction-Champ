@@ -47,15 +47,15 @@ kommer af `leagueId`, som jobbene allerede sender.
 
 | # | Job | Hvor | Skema | Kald | Hemmelighed sendes som | Sidst verificeret |
 |---|---|---|---|---|---|---|
-| 1 | Kampprogram + endelige resultater Superliga | cron-job.org | hver 12. time | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | — |
+| 1 | Kampprogram + endelige resultater Superliga | cron-job.org | hver 12. time, ved **minut 00** | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | 3. august 2026 — kørsel aflæst på cron-job.org (12:00, næste 00:00), lykkedes |
 | 2 | Live-resultater | cron-job.org | hvert minut | `GET https://<app>/api/sync-live` | ? | — |
 | 3 | Push-notifikationer | cron-job.org | hver 15.–30. minut, **hele døgnet** | `GET https://<app>/api/send-notifications` (valgfrit `&hours=`) | ? | — |
 | 4 | Skema-eksport | GitHub Actions | `0 6 * * 1` (mandag 06:00 UTC) + manuelt | `.github/workflows/schema-export.yml` | — (bruger repo-secret `SUPABASE_DB_URL`) | 30. juli 2026 |
-| 5 | Kampprogram + endelige resultater Scotland | cron-job.org | hver 12. time | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | **2. august 2026 — kørsel aflæst i Admin → Drift: 198 af 198 kampe, tom `unmatched`, ingen fejl.** Bemærk at netop den kørsel har `authVia: admin-token`, altså et manuelt "Hent nu": den beviser, at *syncen* virker for Scotland, ikke at cron-jobbet selv kalder ind. Kolonnen til venstre er derfor stadig `?` (samme skelnen som i A11-tabellen nedenfor) |
+| 5 | Kampprogram + endelige resultater Scotland | cron-job.org | hver 12. time | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | ? | **2. august 2026 — kørsel aflæst i Admin → Drift: 198 af 198 kampe, tom `unmatched`, ingen fejl.** Bemærk at netop den kørsel har `authVia: admin-token`, altså et manuelt "Hent nu": den beviser, at *syncen* virker for Scotland, ikke at cron-jobbet selv kalder ind. Kolonnen til venstre er derfor stadig `?` (samme skelnen som i A11-tabellen nedenfor). `&smSeason=` i kaldet er reelt dødvægt: `sql/tournament_scotland_premiership.sql` satte `api_season_id` direkte, og parameteren læses kun, når id'et mangler — harmløs, men ikke påkrævet |
 | 6 | Kampprogram + endelige resultater Premier League | cron-job.org | hver 12. time, ved **minut 05** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:05) |
-| 7 | Kampprogram + endelige resultater Champions League | cron-job.org | hver 12. time, ved **minut 11** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:17. **`B8` er afgjort 1. august 2026:** football-data.org har endnu ikke oprettet sæsonen 2026 — deres aktuelle er 2025 — så jobbet henter 0 kampe og melder sig **gennemført** med forklaringen i `emptySeason`, indtil ligafasen er lodtrukket) |
-| 8 | Kampprogram + endelige resultater Bundesliga | cron-job.org | hver 12. time, ved **minut 17** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:23) |
-| 9 | Kampprogram + endelige resultater Serie A | cron-job.org | hver 12. time, ved **minut 23** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | 31. juli 2026 (oprettet; første planlagte kørsel 01:11) |
+| 7 | Kampprogram + endelige resultater Champions League | cron-job.org | hver 12. time, ved **minut 17** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | **3. august 2026 — minuttal aflæst på cron-job.org (kørsel 16:17, næste 00:17): registret sagde minut 11, virkeligheden er 17.** 31. juli 2026 (oprettet; første planlagte kørsel 01:17. **`B8` er afgjort 1. august 2026:** football-data.org har endnu ikke oprettet sæsonen 2026 — deres aktuelle er 2025 — så jobbet henter 0 kampe og melder sig **gennemført** med forklaringen i `emptySeason`, indtil ligafasen er lodtrukket) |
+| 8 | Kampprogram + endelige resultater Bundesliga | cron-job.org | hver 12. time, ved **minut 23** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | **3. august 2026 — minuttal aflæst på cron-job.org (kørsel 16:23, næste 00:23): registret sagde minut 17, virkeligheden er 23.** 31. juli 2026 (oprettet; første planlagte kørsel 01:23) |
+| 9 | Kampprogram + endelige resultater Serie A | cron-job.org | hver 12. time, ved **minut 11** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | **3. august 2026 — minuttal aflæst på cron-job.org (kørsel 16:11, næste 00:11): registret sagde minut 23, virkeligheden er 11.** 31. juli 2026 (oprettet; første planlagte kørsel 01:11) |
 | 10 | Kampprogram + endelige resultater Primera División | cron-job.org | hver 12. time, ved **minut 29** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | **31. juli 2026 — kørt planlagt kl. 00:29, lykkedes (4,31 s)** |
 | 11 | Datasikkerhedskopi | GitHub Actions | `0 3 * * *` (dagligt 03:00 UTC) + manuelt | `.github/workflows/data-backup.yml` | — (repo-secrets `SUPABASE_DB_URL` + `BACKUP_PASSPHRASE`) | 2. august 2026 (oprettet) |
 
@@ -80,13 +80,15 @@ versioneret. Resten er beskrevet her, men lever andetsteds.
 
 ## Hemmeligheden: header frem for query
 
-`SYNC_SECRET` (miljøvariabel i Vercel) er den delte hemmelighed for job 1–3.
+`SYNC_SECRET` (miljøvariabel i Vercel) er den delte hemmelighed for alle
+cron-jobbene mod appens endpoints (job 1–3 og 5–10 — samme `isAuthorized()`).
 Der er to måder at sende den, og begge virker i dag:
 
 | Måde | Status |
 |---|---|
 | Headeren `x-sync-secret: <SYNC_SECRET>` | **Den rigtige.** Brug altid denne til nye jobs. |
-| Query-parameteren `?secret=<SYNC_SECRET>` | Fallback på vej ud (BACKLOG **A11**). Hemmeligheden havner i request-logs. |
+| Query-parameteren `?secret=<SYNC_SECRET>` | Fallback på vej ud (BACKLOG **A11**). Hemmeligheden havner i request-logs. Prøves i øvrigt kun, når headeren er helt udeladt — en sat, men forkert header blokerer fallbacken. |
+| `Authorization: Bearer <admin-JWT>` | Tredje vej ind, kun til mennesker: en admin-brugers eget Supabase-token — det, "Hent nu"-knappen og Drift-forhåndsvisningen bruger (vises som `admin-token` i A11-tabellen nedenfor). Ikke til cron-jobs. |
 
 Reglerne bor ét sted: `isAuthorized()` i `api/_shared.js`.
 
@@ -133,8 +135,10 @@ man kun vil have et hurtigt kig.
 
 Der er to lag, og de dækker hver sin slags fejl.
 
-**1. `job_runs` — hvad der skete.** Hver kørsel af job 1–3 skriver én række
-(`sql/job_runs.sql`, skrevet af `recordRun()` i `api/_shared.js`). Rækken
+**1. `job_runs` — hvad der skete.** Hver kørsel af hvert app-job skriver én række
+— alle `sync-matches`-jobbene (1 og 5–10, som `sync-matches:<liga-uuid>`),
+live-syncen og notifikationsjobbet (`sql/job_runs.sql`, skrevet af
+`recordRun()` i `api/_shared.js`). Rækken
 indeholder varighed, om det gik godt, jobbets eget resumé og fejlteksten.
 Aflæses i **Admin → Drift**. Tørre kørsler (`?dryRun=true`) logges bevidst
 ikke — de laver ikke noget arbejde, og ville ellers nulstille fejlserien.

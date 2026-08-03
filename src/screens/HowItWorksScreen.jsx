@@ -1,7 +1,8 @@
 // "Sådan virker det": reglerne forklaret for brugeren — begreber, point,
 // låsning, rating, Championship og installation. Bærer også versionsnummeret.
 //
-// Skærmen er inddelt i FEM emner, der folder ud, og alt er foldet ved åbning.
+// Skærmen er inddelt i SEKS emner, der folder ud, og alt er foldet ved åbning
+// (jura/Privatliv og vilkår kom til med B4).
 // Før var det ni ligeværdige kort i én kolonne, ~5-6 telefonhøjder lang: den
 // bruger, der åbner ⓘ med ét konkret spørgsmål ("hvornår låser mine tips?"),
 // skulle scrolle forbi otte svar, der ikke var hans. Foldet står hele
