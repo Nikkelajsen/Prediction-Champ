@@ -1,10 +1,11 @@
--- Story Engine v1.1 — genberegn historier for alle FULDT afsluttede runder.
+-- Story Engine v1.2 — genberegn historier for alle FULDT afsluttede runder.
 -- Kør i Supabase SQL-editoren med "Run without RLS".
 --
 -- HVORFOR: generate_stories() kaldes kun, når et resultat ændres (matches-triggeren).
--- Runder, der allerede var afsluttet, da v1.1 blev rullet ud, har derfor stadig
--- historier fra det gamle regelkatalog — typisk ingen historier overhovedet i
--- premiereugen. Dette script kalder funktionen én gang pr. afsluttet runde.
+-- Runder, der allerede var afsluttet, da et nyt regelkatalog blev rullet ud
+-- (senest v1.2), har derfor stadig historier fra kataloget, som det så ud dengang.
+-- Dette script kalder funktionen én gang pr. afsluttet runde, så alle runder
+-- genberegnes efter det AKTUELLE katalog.
 --
 -- KOMPLETHEDSFILTERET ER IKKE VALGFRIT. En runde tælles kun med, hvis ingen af
 -- dens kampe mangler resultat — nøjagtig samme betingelse som triggeren bruger

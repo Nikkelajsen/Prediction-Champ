@@ -14,7 +14,8 @@
 --     rating-genberegning eller generate_stories().
 --   * round_standings / season_standings / monthly_standings summerer kun kampe
 --     med endeligt resultat — stillinger opdaterer først, når kampen er slut.
---   * isLocked()/RLS er uændret (låsningen er runde-baseret og kigger på
+--   * isLocked()/RLS er uændret (siden A21, 1. august 2026, låser hver kamp
+--     for sig — sql/predictions_match_lock.sql — og låsen kigger på
 --     home_score + kickoff, ikke på live-felterne).
 --
 -- Skrives af serverfunktionen api/sync-live.js (service role, cron hvert minut).
@@ -29,6 +30,9 @@ alter table public.matches
 
 comment on column public.matches.live_home_score is 'Nuværende mål (hjemme) mens kampen spilles. Null når kampen ikke er i gang. Tæller ALDRIG point.';
 comment on column public.matches.live_away_score is 'Nuværende mål (ude) mens kampen spilles. Null når kampen ikke er i gang. Tæller ALDRIG point.';
+-- NB: kolonne-kommentaren nedenfor nævner kun Sportmonks-navnene, men siden
+-- flere-datakilder bærer kolonnen også football-data.org-statusser (IN_PLAY,
+-- PAUSED) — kolonnen er leverandør-agnostisk.
 comment on column public.matches.live_state     is 'Sportmonks-state (developer_name), fx INPLAY_1ST_HALF, HT, INPLAY_2ND_HALF. Null = ikke i gang.';
 comment on column public.matches.live_minute    is 'Spilleminut fra den tickende periode. Null i pauser og når minuttet er ukendt.';
 comment on column public.matches.live_updated_at is 'Hvornår live-felterne sidst blev opdateret af api/sync-live.js.';

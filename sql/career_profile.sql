@@ -95,7 +95,7 @@ begin
   --
   -- Før: ren stories-optælling af regel 40 (H2H_PASS) / 60 (STREAK). K3 valgte
   -- den som det billigste udgangspunkt og forudsagde selv problemet: "udvid hvis
-  -- den giver for få rivaler i små ligaer". Tragten var for smal — kun 2 af 14
+  -- den giver for få rivaler i små ligaer". Tragten var for smal — kun 2 af 16
   -- regler skriver et rival-navn, regel 40 kræver en overhaling i netop den
   -- runde og regel 60 en AKTUEL stime på ≥2 sejre, og begge har
   -- `distinct on (competition_id, user_id)`, så der gemmes ÉN rival pr.

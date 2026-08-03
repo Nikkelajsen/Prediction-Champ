@@ -35,7 +35,7 @@
 -- den globale unique-constraint matches_api_fixture_id_unique og tavst
 -- overskrive hinanden. Sportmonks-id'erne står allerede i tusindvis af rækker og
 -- er derfor dem, der IKKE flyttes — præfikset er nyt-leverandør-siden af
--- aftalen. Konventionen ejes af toGlobalId()/fromGlobalId() i api/providers/.
+-- aftalen. Konventionen ejes af toGlobalId()/fromGlobalId() i api/_providers/.
 -- ---------------------------------------------------------------------------
 
 alter table public.leagues
@@ -55,7 +55,7 @@ alter table public.leagues
   add column if not exists live_enabled boolean not null default true;
 
 -- Et ukendt providernavn er en tastefejl, der ellers først ville vise sig som en
--- fejlet sync-kørsel. Listen skal holdes ens med PROVIDERS i api/providers/index.js.
+-- fejlet sync-kørsel. Listen skal holdes ens med PROVIDERS i api/_providers/index.js.
 alter table public.leagues drop constraint if exists leagues_provider_check;
 alter table public.leagues
   add constraint leagues_provider_check check (provider in ('sportmonks', 'footballdata'));

@@ -17,6 +17,12 @@
 --                               konkurrence, men ikke med tips på låste kampe)
 --
 -- Kan køres igen når som helst. Ingen ændring i predictions/matches/ratings/views/triggere.
+--
+-- ⚠️ TO POLICIES ER AFLØST: `group_members_delete_self` (afsnit 4) og
+-- `comp_participants_delete_own_unlocked` (afsnit 5) er AFLØST af
+-- sql/group_membership_invariant.sql. Gen-kør ikke denne fil efter
+-- invariant-filen — ellers rulles de to policies tavst tilbage. Sker det
+-- alligevel, så kør group_membership_invariant.sql umiddelbart efter.
 
 -- ======================= 1. Tabeller =======================
 create table if not exists public.groups (
