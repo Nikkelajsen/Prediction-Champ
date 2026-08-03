@@ -8,6 +8,7 @@ import { touchActivity } from "./lib/data.js";
 import { logEvent } from "./lib/analytics.js";
 import { disablePush } from "./lib/push.js";
 import { registerServiceWorker } from "./lib/pwa.js";
+import { installGlobalErrorReporting, setTelemetryToken, telemetryScreen, telemetryToken } from "./lib/telemetry.js";
 import { C, globalCss, wrapOuter } from "./ui/theme.js";
 import { AuthScreen, ResetPasswordScreen } from "./screens/Auth.jsx";
 import MainApp from "./screens/MainApp.jsx";
@@ -92,6 +93,22 @@ export default function App() {
   // Registreringen cacher intet (se src/lib/pwa.js og public/sw.js) og kan ikke
   // vælte opstarten: fejler den, mister man push og prompten, ikke appen.
   useEffect(() => { registerServiceWorker(); }, []);
+
+  // Fejltelemetri (G42). To ting, og de skal ske i den rækkefølge:
+  //
+  //   1. tokenen gøres tilgængelig for dem, der står uden for React-træet —
+  //      error boundaryen om roden (main.jsx) og de globale håndterere. Uden
+  //      den ville en rapport blive afvist af RLS, som kræver
+  //      `user_id = auth.uid()`.
+  //   2. `window.onerror` og `unhandledrejection` lyttes på. De fanger dét,
+  //      React ikke gør: fejl i event handlers, i timere og afviste promises,
+  //      som i denne kodebase ellers kun efterlader en tom skærm.
+  //
+  // Håndtererne installeres ÉN gang og læser tokenen gennem en funktion frem
+  // for at være afhængige af den — ellers ville de skulle af- og påmeldes ved
+  // hvert login, og en fejl i mellemrummet ville ingen fange.
+  useEffect(() => { setTelemetryToken(session?.access_token || null); }, [session?.access_token]);
+  useEffect(() => installGlobalErrorReporting(telemetryToken, telemetryScreen), []);
 
   useEffect(() => {
     // Adressen er allerede læst (se readUrlIntent ovenfor). Tilbage står den ene

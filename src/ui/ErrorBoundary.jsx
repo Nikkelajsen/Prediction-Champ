@@ -7,6 +7,7 @@
 // getDerivedStateFromError eller componentDidCatch som hooks.
 import React from "react";
 import { C, font, globalCss, wrapOuter } from "./theme.js";
+import { reportClientError, telemetryScreen, telemetryToken } from "../lib/telemetry.js";
 
 // Fallbacken må ikke selv kunne kaste. Den læser derfor kun statiske
 // theme-objekter — ingen props, ingen data, intet netværk. Og den bærer sin
@@ -72,9 +73,19 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
-    // Konsollen er det eneste sted, en fejl kan lande i dag — der er ingen
-    // fejltelemetri i frontenden (G42). Når den kommer, er det HER, den kobles på.
+    // Konsollen først, og altid: den virker uden login, uden netværk og uden
+    // database, og den er det eneste, en udvikler med enheden i hånden har.
     console.error("[ErrorBoundary]", error, info?.componentStack);
+    // Og siden G42 (3. august 2026) også en RÆKKE, der kan læses i Admin →
+    // Drift. Kaldet henter selv token og skærmnavn (se lib/telemetry.js):
+    // boundaryen om roden ligger uden for App og har ingen af delene som props.
+    // Rapporteringen kan ikke kaste og kan ikke blokere fallbacken.
+    reportClientError(telemetryToken(), {
+      kind: "render",
+      error,
+      componentStack: info?.componentStack,
+      screen: telemetryScreen(),
+    });
   }
 
   render() {

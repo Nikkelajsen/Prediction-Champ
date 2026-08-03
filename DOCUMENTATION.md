@@ -32,6 +32,7 @@ hele. `CLAUDE.md` har en rutetabel fra opgave til afsnit.
 - [22. Backup og gendannelse (`docs/RESTORE.md`)](#22-backup-og-gendannelse-docsrestoremd)
 - [23. Feedback fra brugerne (`sql/feedback.sql`)](#23-feedback-fra-brugerne-sqlfeedbacksql)
 - [24. Privatliv, vilkår og kontolukning (`src/lib/legal.js`, `sql/account_anonymization.sql`)](#24-privatliv-vilkår-og-kontolukning-srclibegaljs-sqlaccount_anonymizationsql)
+- [25. Fejltelemetri (`src/lib/telemetry.js`, `sql/client_errors.sql`)](#25-fejltelemetri-srclibtelemetryjs-sqlclient_errorssql)
 
 Se også: [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) · [`docs/CRON.md`](./docs/CRON.md) · [`docs/RESTORE.md`](./docs/RESTORE.md) · [`sql/README.md`](./sql/README.md)
 
@@ -762,6 +763,29 @@ Klienten rydder ved lukning **alle nio `localStorage`-nøgler** (`clearAllLocalS
 **Det, anonymiseringen ikke når** — og som politikken derfor siger højt: den daglige sikkerhedskopi lever 90 dage med den gamle e-mail, Supabase og Vercel har egne kopier og serverlogs, notifikationer på andres telefoner kan ikke kaldes tilbage, og navne på ligaer og konkurrencer, brugeren har oprettet, bliver stående, fordi andre er afhængige af dem.
 
 Engangsopsætning: kør `sql/account_anonymization.sql` i Supabase ("Run without RLS") **før** frontend-mergen. Dækket af `sql/tests/account_anonymization.sql` i CI.
+
+---
+
+## 25. Fejltelemetri (`src/lib/telemetry.js`, `sql/client_errors.sql`)
+Et crash hos en bruger efterlod indtil `G42` (3. august 2026) **nul spor**. Backenden har `job_runs` — hver kørsel skriver en række, og Admin → Drift kan aflæse den — mens frontenden kun havde `console.error` på en telefon, ingen udvikler har i hånden. `G20` gav appen en error boundary, så fejlen bliver **fanget**; dette afsnit er det sted, den bliver **rapporteret**.
+
+**Tre kilder, fordi de fanger hver sin slags fejl.** `render` kommer fra `ErrorBoundary.componentDidCatch` (et kast under render). `error` og `rejection` kommer fra `window.onerror` og `unhandledrejection`, som fanger det, React ikke ser: fejl i event handlers, i timere, og den afviste promise, ingen `catch` tog — den sidste er i denne kodebase den klasse, der ellers kun efterlader en tom skærm, fordi et fejlet `await` i en indlæsning ikke tegner noget.
+
+**Postgres og ikke en fejltjeneste.** Tre grunde, i den rækkefølge de vejer: (1) **privatliv** — `B4` gav appen en politik, der opremser, hvem der behandler data, og en ekstern tjeneste ville være en ny databehandler, som modtager stakspor fra en app, hvor brugernes indhold ER dataene; (2) **samme arkitekturvalg som Analytics v1** ("kun Postgres, intet Google Analytics") — to måle-lag med hver sin leverandør er to steder at kigge og to steder at rydde op ved en kontolukning; (3) **ingen ny afhængighed** i en app med fire runtime-deps. Prisen er kendt: ingen gruppering, ingen søgning, ingen alarm ud af boksen. Ved otte brugere, hvor ÉN fejlrække er en nyhed, er det den rigtige byttehandel — og en tjeneste kan tilføjes senere, mens den modsatte vej er dyrere.
+
+**To grænser gør telemetrien sikker at have.** En render-fejl er sjældent én fejl: en boundary kan remountes og kaste igen, og en afvist promise i en timer kan gentage sig hvert sekund. Derfor **dedup** på `(kind + besked + første stak-linje)` — samme fejl rapporteres én gang pr. sideliv — og et **loft** på ti pr. sideliv, som fanger den fejl, der er forskellig hver gang. Uden begge ville ét uheld hos én bruger skrive tusindvis af rækker, og listen ville vise ét problem gentaget frem for de fem forskellige, der findes.
+
+**Rækken bærer skærm, version og browser.** Skærmnavnet er `tab:screen` — samme nøgle, som nulstiller error boundaryen — og versionen er commit-SHA'en fra buildet (`G42`s første halvdel). De to besvarer tilsammen "hvor stod du, og hvilken version så du?", som ellers er de første to spørgsmål i enhver fejlmelding. Token og skærmnavn hentes fra to modul-holdere i `telemetry.js`, fordi boundaryen om roden ligger i `main.jsx`, altså uden for `App` og uden adgang til begge dele som props.
+
+**Source maps udgives** (`vite.config.js`, `build.sourcemap`). Et minificeret stakspor kan ikke bruges til noget, og indvendingen mod source maps i produktion — at de udstiller kildekoden — gælder ikke her: repoet er offentligt. Prisen er kun størrelsen på `.map`-filerne, som browseren først henter, når devtools er åbne.
+
+**Adgang som `feedback`:** kun INSERT, kun egne rækker, **ingen** select-policy og ingen select-grant — en almindelig bruger afvises på rettighedsniveau, ikke som en tom filtrering. Læsningen går ét sted igennem: `admin_client_errors()`, en `SECURITY DEFINER`-RPC med `is_admin`-tjekket som første sætning. Vises i Admin → Drift under "Fejl i appen"; kortet henter først ved tryk og siger højt, at en tom liste betyder *ingen crash* og ikke *vi måler ikke*.
+
+**Rydning:** `prune_client_errors(90)`, kaldt af job-heartbeat'en sammen med `prune_job_runs(30)` — samme sted og samme grund. 90 dage og ikke 30: en fejl, ingen har set på tre måneder, er enten rettet eller ikke værd at gemme, men et crash fra sidste måned er stadig en ledetråd.
+
+**Det, telemetrien IKKE fanger:** et crash **før login**. RLS kræver `user_id = auth.uid()`, så en rapport uden token ville blive afvist alligevel — login-skærmen efterlader derfor fortsat kun et spor i konsollen.
+
+Engangsopsætning: kør `sql/client_errors.sql` i Supabase ("Run without RLS"). Dækket af `sql/tests/client_errors.sql` i CI.
 
 ---
 Bed Claude om at opdatere denne fil, når der sker større ændringer.

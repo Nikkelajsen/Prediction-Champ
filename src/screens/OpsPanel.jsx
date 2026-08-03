@@ -9,10 +9,11 @@
 // .github/workflows/job-heartbeat.yml. Denne skærm er den hurtige aflæsning;
 // heartbeat-workflowen er den, der råber, når ingen kigger.
 import { useState, useEffect } from "react";
-import { RefreshCw, Loader2, Eye } from "lucide-react";
+import { RefreshCw, Loader2, Eye, Bug } from "lucide-react";
 import { C, btnGhost, muted } from "../ui/theme.js";
 import { Card, H, StateChip, SignalRow } from "../ui/components.jsx";
 import {
+  loadClientErrors,
   loadJobHealth,
   mergeJobHealth,
   previewNotifications,
@@ -213,6 +214,82 @@ function OutboxPreview({ res }) {
 // `leagues` kommer ind som prop og hentes ikke her: AdminScreen har dem i
 // forvejen (Kampe- og Resultat-panelerne bruger dem), og de er selve den
 // forventning, listen fletter mod — ét kampprogram-job pr. turnering (G44).
+// Frontendens fejlrapporter (G42). Ét kort med de nyeste; tomt er den normale
+// tilstand og siges derfor højt — en tom liste her betyder "ingen crash", ikke
+// "vi måler ikke".
+//
+// Beskeden og stakken står i en <pre>, fordi et stakspor er kolonneopdelt tekst
+// og bliver ulæseligt, når det ombrydes. Kortet henter først ved åbning, som
+// forhåndsvisningen ovenfor: en admin, der kigger på jobbene, skal ikke betale
+// for et opslag, de ikke bad om.
+function ErrorsCard({ token }) {
+  const [rows, setRows] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function load() {
+    setLoading(true); setErr("");
+    try {
+      setRows(await loadClientErrors(token, 50));
+    } catch (e) {
+      setErr(
+        String(e?.message ?? e).includes("admin_client_errors")
+          ? "Kunne ikke læse fejlrapporter. Er sql/client_errors.sql kørt i Supabase?"
+          : String(e?.message ?? e)
+      );
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <Bug size={15} color={C.muted} />
+          <span style={{ fontWeight: 600, fontSize: 14 }}>Fejl i appen</span>
+        </div>
+        <button style={btnGhost} onClick={load} disabled={loading}>
+          {loading ? <Loader2 size={14} /> : <RefreshCw size={14} />} {rows ? "Opdatér" : "Hent"}
+        </button>
+      </div>
+      <p style={{ ...muted, fontSize: 12, margin: "8px 0 0" }}>
+        Crash i brugernes browsere, som de selv aldrig ville melde. Hver række bærer skærm,
+        version og browser. Samme fejl rapporteres kun én gang pr. sideliv, og højst ti pr.
+        bruger pr. sideliv — listen er derfor forskellige problemer, ikke gentagelser.
+      </p>
+      {err && <p style={{ color: C.red, fontSize: 12, margin: "8px 0 0" }}>{err}</p>}
+      {rows && rows.length === 0 && (
+        <p style={{ ...muted, fontSize: 12, margin: "8px 0 0" }}>
+          Ingen fejl rapporteret. Det er den forventede tilstand — listen er tom, fordi der
+          ikke er sket noget, ikke fordi der ikke måles.
+        </p>
+      )}
+      {rows && rows.length > 0 && (
+        <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+          {rows.map((r) => (
+            <div key={r.id} style={{ background: C.surface2, borderRadius: 8, padding: "8px 10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ color: C.red, fontSize: 13, fontWeight: 600, minWidth: 0 }}>{r.message}</span>
+                <span style={{ ...muted, fontSize: 11, whiteSpace: "nowrap" }}>
+                  {new Date(r.created_at).toLocaleString("da-DK")}
+                </span>
+              </div>
+              <div style={{ ...muted, fontSize: 11, marginTop: 3 }}>
+                {r.kind} · {r.screen || "ukendt skærm"} · v{r.app_version || "?"}
+                {r.display_name ? ` · ${r.display_name}` : ""}
+              </div>
+              {(r.stack || r.component_stack) && (
+                <pre style={{ margin: "6px 0 0", fontSize: 10, color: C.muted, overflowX: "auto" }}>
+                  {r.stack || r.component_stack}
+                </pre>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function OpsPanel({ token, leagues }) {
   const [jobs, setJobs] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -273,9 +350,10 @@ function OpsPanel({ token, leagues }) {
       {jobs && jobs.map((j) => <JobCard key={j.job} j={j} />)}
 
       <PreviewCard token={token} />
+      <ErrorsCard token={token} />
     </div>
   );
 }
 
 export default OpsPanel;
-export { PreviewCard, OutboxPreview };
+export { PreviewCard, OutboxPreview, ErrorsCard };

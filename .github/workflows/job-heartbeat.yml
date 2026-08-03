@@ -77,6 +77,14 @@ jobs:
           slettet=$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -c "select public.prune_job_runs(30);")
           echo "Ryddede $slettet rækker ældre end 30 dage fra job_runs."
 
+          # Fejltelemetrien ryddes samme sted og af samme grund (G42): en tabel
+          # uden loft bliver langsom at læse længe før nogen opdager det. 90
+          # dage og ikke 30 — en fejl, ingen har set på tre måneder, er enten
+          # rettet eller ikke værd at gemme, men et crash fra sidste måned er
+          # stadig en ledetråd.
+          fejl=$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -c "select public.prune_client_errors(90);")
+          echo "Ryddede $fejl fejlrapporter ældre end 90 dage."
+
       # ---- Migreringernes VIRKNING (B16) ----
       #
       # Fire filer i sql/README.md ruller tavst noget nyere tilbage, hvis de
@@ -160,6 +168,11 @@ jobs:
                    'Kør sql/round_key_timezone.sql igen (#33)'
             union all
             -- #35: rettede tips flytter updated_at
+            -- #36: fejltelemetrien har et sted at lande
+            select 'client_errors-tabellen',
+                   to_regclass('public.client_errors') is not null,
+                   'Kør sql/client_errors.sql igen (#36)'
+            union all
             select 'predictions_touch_updated_at',
                    exists (select 1 from pg_trigger
                             where tgrelid = 'public.predictions'::regclass
