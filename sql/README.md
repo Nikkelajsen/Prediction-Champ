@@ -10,24 +10,27 @@ og kan køres igen.
 `public`-skemaet, som det så ud ved seneste eksport. Den redigeres aldrig i hånden;
 den regenereres med guiden nedenfor.
 
-> ⚠️ **Øjebliksbilledet er BAGUD igen (aften, 3. august 2026).** Eksporten blev
-> kørt samme dag og var frisk indtil migreringerne nedenfor — den er kørt efter
-> `predictions_match_lock.sql` (#25), `competition_awards.sql` (#26),
-> `security_hardening.sql` (#27), `matches_kickoff_tbd.sql` (#28), `feedback.sql`
-> (#29), `api_id_uniqueness.sql` (#30) og `account_anonymization.sql` (#31), og
-> den viser dem alle. Filens eget datostempel i git er svaret på "hvor gammel er
-> den?" — ikke en dato skrevet i hånden her, som var dét, der drev tre steder
-> fra hinanden indtil `G21`.
+> ✅ **Øjebliksbilledet er FRISKT (3. august 2026, efter #36).** Eksporten er
+> kørt efter alle migreringer til og med `client_errors.sql` (#36) og viser dem
+> alle: `round_key()`s danske krop (#33), `anon`s tomme tabel-grants (#34),
+> `predictions_touch_updated_at` (#35), tabellen `client_errors` (#36) og Story
+> Engine v1.2's `generate_stories()`. #32 rører ikke skemaet. Filens eget
+> datostempel i git er svaret på "hvor gammel er den?" — ikke en dato skrevet i
+> hånden her, som var dét, der drev tre steder fra hinanden indtil `G21`.
 >
-> **Bagud igen efter 3. august-kørslerne.** Dumpet kender hverken #33
-> (`round_key()`s nye krop), #34 (`anon`s grants er væk) eller Story Engine
-> v1.2's `generate_stories()`. #32 rører ikke skemaet. Kør
-> [`schema-export.yml`](../.github/workflows/schema-export.yml), eller lad
-> mandagskørslen gøre det — datoen ovenfor gælder indtil da.
+> **Adgangskontrakten kan læses af filen:** de gamle, åbne `matches`-policies og
+> `grant … to anon` på `recompute_ratings()` er væk, som #27 gjorde dem, og
+> `anon` har nul tabel-privilegier efter #34.
 >
-> **Adgangskontrakten kan igen læses af filen:** de gamle, åbne
-> `matches`-policies og `grant … to anon` på `recompute_ratings()` er væk, som
-> #27 gjorde dem.
+> ⚠️ **Med én undtagelse, som eksporten selv afslørede:** #34 lukkede kilden for
+> grantor-rollen `postgres`, men **ikke** for `supabase_admin` — dens
+> `ALTER DEFAULT PRIVILEGES … GRANT ALL ON TABLES TO anon` står der stadig.
+> Migreringens `do`-blok forudså det og swallowede fejlen med en `notice`, så
+> kørslen ikke væltede; eksporten er beviset på, at netop dén gren fyrede. Følgen
+> er snæver — en tabel oprettet **af** `supabase_admin` ville få grants til
+> `anon` igen, mens alt, vi selv opretter i SQL-editoren, ejes af `postgres` —
+> men den står i backloggens indbakke frem for kun her. Sekvenserne er af samme
+> grund heller ikke lukket (`job_runs_id_seq` + begge `ON SEQUENCES`-defaults).
 >
 > **Det, eksporten samtidig afgjorde (`G5`):** funktionskroppene i produktion
 > indeholder CRLF — alle 25 af dem. Advarslen i `rating_core.sql`s hoved var
