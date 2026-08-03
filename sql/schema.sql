@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict JbGv5OzmCjQIfI781LRtKqO3h1O3Pkrfwb6QJPjUJyWxqxV2QisI8BA8WEgR6pJ
+\restrict 6SgIhMFzvlrBNk5S1ZbBciwTjKGGZ0xmdeQjZEUhyQ27POaH4ikYB5FWJVuKrXb
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
@@ -927,6 +927,33 @@ begin
   ) into result;
 
   return result;
+end;
+$$;
+
+
+--
+-- Name: admin_client_errors(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admin_client_errors(max_rows integer DEFAULT 100) RETURNS TABLE(id uuid, user_id uuid, display_name text, kind text, message text, stack text, component_stack text, screen text, app_version text, url text, user_agent text, created_at timestamp with time zone)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if not exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid() and coalesce(p.is_admin, false)
+  ) then
+    raise exception 'Kun administratorer kan læse fejlrapporter';
+  end if;
+
+  return query
+  select e.id, e.user_id, p.display_name, e.kind, e.message, e.stack,
+         e.component_stack, e.screen, e.app_version, e.url, e.user_agent, e.created_at
+  from public.client_errors e
+  left join public.profiles p on p.id = e.user_id
+  order by e.created_at desc
+  limit greatest(1, least(coalesce(max_rows, 100), 500));
 end;
 $$;
 
@@ -1918,6 +1945,8 @@ declare
   v_month text;
   v_month_name text;
   v_month_last boolean;
+  v_prev_month text;
+  v_prev_month_name text;
   v_rating_total int;
   -- VIGTIGT — round_key har TO typer i skemaet, og de må ikke blandes:
   --   date: matches.round_key (genereret kolonne) og alt afledt af den
@@ -2028,7 +2057,51 @@ begin
     on cnt.competition_id = t.competition_id
   join _se_size sz on sz.competition_id = t.competition_id and sz.n >= 2
   join public.competitions c on c.id = t.competition_id
-  where t.round_won = 1 and t.rpts > 0;
+  where t.round_won = 1 and t.rpts > 0
+    -- Har konkurrencen tilvalgt lokale kåringer, og er runden kåret, fortæller
+    -- regel 65 nedenfor det samme øjeblik med det navn, konkurrencen selv
+    -- bruger ("Ugens bedste"). To kort om én sejr ville betyde, at brugerens
+    -- ENE kort pr. runde kunne blive den svageste af de to formuleringer — og
+    -- at milepæls-arkivet fik dubletter. Kåringen vinder, fordi den er den
+    -- persisterede sandhed, boardet allerede viser.
+    and not exists (
+      select 1 from public.competition_awards aw
+      where aw.competition_id = t.competition_id
+        and aw.period_type = 'round' and aw.period_key = p_round_key
+        and aw.user_id = t.user_id
+    );
+
+  -- ======== Regel 65 · Ugens bedste (lokal kåring, pr. konkurrence) ========
+  -- Læser den PERSISTEREDE kåring (competition_awards, A22) frem for at regne
+  -- den om. Det er ikke en genvej: kåringen er frossen ved sit eget kriterie
+  -- (alle konkurrencens kampe i runden har resultat) og vises allerede på
+  -- boardet, så en historie, der regnede sit eget svar, ville kunne modsige den
+  -- tabel, brugeren kan slå op i. Samme regel som stigen: én kilde pr. påstand.
+  --
+  -- HVEM SKRIVER RÆKKEN? Klienten ved board-åbning — og siden august 2026 også
+  -- notifikations-jobbet som `service_role` ved hver kørsel (B11). Det sidste er
+  -- det, der gør denne regel pålidelig: uden det ville kortet afhænge af, at et
+  -- menneske havde åbnet boardet, FØR runden blev genereret. Rækkefølgen er
+  -- alligevel ikke garanteret, men historier gendannes ved hvert resultat i
+  -- runden (delete + insert øverst), så kortet indhentes af sig selv.
+  --
+  -- Navnereglen (turnering-2 §3.6): lokalt hedder det "Ugens bedste" — aldrig
+  -- "rundevinder", som er den globale titel.
+  insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
+  select p_round_key, aw.user_id, aw.competition_id, 'AWARD_WEEK', 65, sz.n,
+    jsonb_build_object('league', c.name, 'points', aw.points, 'shared', aw.shared,
+                       'others', (count(*) over (partition by aw.competition_id))::int - 1,
+                       'exact', coalesce((aw.stats ->> 'exact')::int, 0)),
+    '🏅 Du er ' || case when aw.shared then 'delt ' else '' end || 'Ugens bedste i ' || c.name,
+    aw.points || ' point — flest af alle i ' || c.name || ' i runden ' || v_label ||
+      case when not aw.shared then '.'
+           when (count(*) over (partition by aw.competition_id)) > 2
+             then ' (delt med ' || ((count(*) over (partition by aw.competition_id))::int - 1) || ' andre).'
+           else ' (delt med 1 anden).' end
+  from public.competition_awards aw
+  join public.competitions c on c.id = aw.competition_id
+  join _se_size sz on sz.competition_id = aw.competition_id and sz.n >= 2
+  where aw.period_type = 'round' and aw.period_key = p_round_key;
 
   -- ======== Regel 20 · Førsteplads overtaget (pr. konkurrence) ========
   -- Kræver, at konkurrencen HAR en runde før denne. Uden den betingelse udløste
@@ -2281,6 +2354,39 @@ begin
     ) sec on true;
   end if;
 
+  -- ======== Regel 15 · Månedens bedste (lokal kåring, pr. konkurrence) ========
+  -- Kortet hører til den FØRSTE runde i en ny måned, og det er en anden regel
+  -- end regel 10 ovenfor, som fyrer i den sidste runde MED kampe i måneden.
+  -- Forskellen er ikke kosmetisk: `award_competition_periods()` kårer først en
+  -- måned, når kalendermåneden er forbi (ellers kunne efterfyldningen lægge en
+  -- udsat kamp ind i en allerede kåret måned), så rækken FINDES ikke endnu, når
+  -- regel 10 fyrer. Den første runde i den nye måned er det tidligste
+  -- tidspunkt, hvor kåringen både er sand og skrevet.
+  --
+  -- Prioritet 15 ligger mellem den globale månedstitel (10) og en overtaget
+  -- førsteplads (20): en lokal månedstitel er større end alt, hvad en enkelt
+  -- runde kan producere, men mindre end at være Månedens Prediction Champ.
+  v_prev_month := to_char(v_round - 7, 'YYYY-MM');
+  if v_prev_month <> to_char(v_round, 'YYYY-MM') then
+    v_prev_month_name := months[cast(substring(v_prev_month from 6 for 2) as int)];
+    insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
+    select p_round_key, aw.user_id, aw.competition_id, 'AWARD_MONTH', 15, sz.n,
+      jsonb_build_object('league', c.name, 'month', v_prev_month_name, 'points', aw.points,
+                         'shared', aw.shared,
+                         'others', (count(*) over (partition by aw.competition_id))::int - 1),
+      '👑 Du er ' || case when aw.shared then 'delt ' else '' end
+        || 'Månedens bedste i ' || c.name || ' — ' || v_prev_month_name,
+      aw.points || ' point — flest af alle i ' || c.name || ' i ' || v_prev_month_name ||
+        case when not aw.shared then '.'
+             when (count(*) over (partition by aw.competition_id)) > 2
+               then ' (delt med ' || ((count(*) over (partition by aw.competition_id))::int - 1) || ' andre).'
+             else ' (delt med 1 anden).' end
+    from public.competition_awards aw
+    join public.competitions c on c.id = aw.competition_id
+    join _se_size sz on sz.competition_id = aw.competition_id and sz.n >= 2
+    where aw.period_type = 'month' and aw.period_key = v_prev_month;
+  end if;
+
   -- ======== Regel 80/85 · Perfekt træfsikkerhed (global, ≥2 præcise i runden) ========
   -- A4-kalibrering (v1.1): tælles fra 2 præcise, men 2 giver prioritet 85 — den
   -- lander dermed under alt andet på højdepunkt-stigen og fungerer som den
@@ -2480,6 +2586,25 @@ $$;
 
 
 --
+-- Name: prune_client_errors(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prune_client_errors(keep_days integer DEFAULT 90) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  n integer;
+begin
+  delete from public.client_errors
+   where created_at < now() - make_interval(days => greatest(1, keep_days));
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+
+--
 -- Name: prune_job_runs(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2669,7 +2794,8 @@ CREATE FUNCTION public.round_key(ts timestamp with time zone) RETURNS date
     LANGUAGE plpgsql IMMUTABLE
     AS $$
 declare
-  d date := ts::date;
+  -- G11: datoen aflæses i DANSK tid og ikke i sessionens.
+  d date := (ts at time zone 'Europe/Copenhagen')::date;
   dow int := extract(dow from d)::int; -- 0=søn .. 2=tir .. 6=lør
   diff int := (dow - 2 + 7) % 7;
 begin
@@ -2698,6 +2824,27 @@ begin
   insert into public.user_activity_days (user_id, day)
   values (auth.uid(), (now() at time zone 'utc')::date)
   on conflict (user_id, day) do nothing;
+end;
+$$;
+
+
+--
+-- Name: touch_prediction_updated_at(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.touch_prediction_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  -- Kun ved en RIGTIG ændring. Et upsert, der skriver den samme score igen
+  -- (klienten gemmer ved hvert tastetryk-ophold), er ikke en rettelse, og et
+  -- felt, der flytter sig uden at noget skete, ville gøre "aktiv" til "åbnede
+  -- skærmen" — præcis den udvanding, målene skal undgå.
+  if new.pred_home is distinct from old.pred_home
+     or new.pred_away is distinct from old.pred_away then
+    new.updated_at := now();
+  end if;
+  return new;
 end;
 $$;
 
@@ -2914,6 +3061,29 @@ CREATE VIEW public.analytics_round_locks AS
    FROM public.matches m
   WHERE (kickoff_at IS NOT NULL)
   GROUP BY season_id, round_key;
+
+
+--
+-- Name: client_errors; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_errors (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid DEFAULT auth.uid(),
+    kind text NOT NULL,
+    message text NOT NULL,
+    stack text,
+    component_stack text,
+    screen text,
+    app_version text,
+    url text,
+    user_agent text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT client_errors_component_stack_len CHECK (((component_stack IS NULL) OR (char_length(component_stack) <= 8000))),
+    CONSTRAINT client_errors_kind_check CHECK ((kind = ANY (ARRAY['render'::text, 'error'::text, 'rejection'::text]))),
+    CONSTRAINT client_errors_message_len CHECK (((char_length(message) >= 1) AND (char_length(message) <= 2000))),
+    CONSTRAINT client_errors_stack_len CHECK (((stack IS NULL) OR (char_length(stack) <= 8000)))
+);
 
 
 --
@@ -3315,6 +3485,14 @@ ALTER TABLE ONLY public.analytics_events
 
 
 --
+-- Name: client_errors client_errors_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_errors
+    ADD CONSTRAINT client_errors_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: competition_awards competition_awards_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3592,6 +3770,13 @@ CREATE INDEX analytics_events_user_time_idx ON public.analytics_events USING btr
 
 
 --
+-- Name: client_errors_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX client_errors_created_idx ON public.client_errors USING btree (created_at DESC);
+
+
+--
 -- Name: competitions_group_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3718,6 +3903,13 @@ CREATE TRIGGER matches_recompute_ratings_upd AFTER UPDATE ON public.matches REFE
 
 
 --
+-- Name: predictions predictions_touch_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER predictions_touch_updated_at BEFORE UPDATE ON public.predictions FOR EACH ROW EXECUTE FUNCTION public.touch_prediction_updated_at();
+
+
+--
 -- Name: analytics_events analytics_events_competition_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3739,6 +3931,14 @@ ALTER TABLE ONLY public.analytics_events
 
 ALTER TABLE ONLY public.analytics_events
     ADD CONSTRAINT analytics_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: client_errors client_errors_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_errors
+    ADD CONSTRAINT client_errors_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 
 
 --
@@ -4001,6 +4201,19 @@ CREATE POLICY analytics_events_insert_own ON public.analytics_events FOR INSERT 
 CREATE POLICY awards_select_participants ON public.competition_awards FOR SELECT USING ((EXISTS ( SELECT 1
    FROM public.competition_participants cp
   WHERE ((cp.competition_id = competition_awards.competition_id) AND (cp.user_id = auth.uid())))));
+
+
+--
+-- Name: client_errors; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.client_errors ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: client_errors client_errors_insert_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY client_errors_insert_own ON public.client_errors FOR INSERT TO authenticated WITH CHECK ((user_id = auth.uid()));
 
 
 --
@@ -4476,6 +4689,15 @@ GRANT ALL ON FUNCTION public.admin_analytics_stories(p_days integer) TO service_
 
 
 --
+-- Name: FUNCTION admin_client_errors(max_rows integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.admin_client_errors(max_rows integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.admin_client_errors(max_rows integer) TO authenticated;
+GRANT ALL ON FUNCTION public.admin_client_errors(max_rows integer) TO service_role;
+
+
+--
 -- Name: FUNCTION admin_feedback(only_open boolean, max_rows integer); Type: ACL; Schema: public; Owner: -
 --
 
@@ -4629,6 +4851,14 @@ GRANT ALL ON FUNCTION public.pc_points(ph integer, pa integer, hs integer, as_ i
 
 
 --
+-- Name: FUNCTION prune_client_errors(keep_days integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.prune_client_errors(keep_days integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.prune_client_errors(keep_days integer) TO service_role;
+
+
+--
 -- Name: FUNCTION prune_job_runs(keep_days integer); Type: ACL; Schema: public; Owner: -
 --
 
@@ -4673,6 +4903,15 @@ GRANT ALL ON FUNCTION public.touch_activity() TO service_role;
 
 
 --
+-- Name: FUNCTION touch_prediction_updated_at(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.touch_prediction_updated_at() TO anon;
+GRANT ALL ON FUNCTION public.touch_prediction_updated_at() TO authenticated;
+GRANT ALL ON FUNCTION public.touch_prediction_updated_at() TO service_role;
+
+
+--
 -- Name: FUNCTION username_available(name text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -4685,7 +4924,6 @@ GRANT ALL ON FUNCTION public.username_available(name text) TO service_role;
 -- Name: TABLE matches; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,REFERENCES,TRIGGER,MAINTAIN ON TABLE public.matches TO anon;
 GRANT SELECT,INSERT,REFERENCES,TRIGGER,MAINTAIN,UPDATE ON TABLE public.matches TO authenticated;
 GRANT ALL ON TABLE public.matches TO service_role;
 
@@ -4701,7 +4939,6 @@ GRANT ALL ON TABLE public.analytics_match_locks TO service_role;
 -- Name: TABLE competition_matches; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.competition_matches TO anon;
 GRANT ALL ON TABLE public.competition_matches TO authenticated;
 GRANT ALL ON TABLE public.competition_matches TO service_role;
 
@@ -4710,7 +4947,6 @@ GRANT ALL ON TABLE public.competition_matches TO service_role;
 -- Name: TABLE competition_participants; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.competition_participants TO anon;
 GRANT ALL ON TABLE public.competition_participants TO authenticated;
 GRANT ALL ON TABLE public.competition_participants TO service_role;
 
@@ -4719,7 +4955,6 @@ GRANT ALL ON TABLE public.competition_participants TO service_role;
 -- Name: TABLE competitions; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.competitions TO anon;
 GRANT ALL ON TABLE public.competitions TO authenticated;
 GRANT ALL ON TABLE public.competitions TO service_role;
 
@@ -4728,7 +4963,6 @@ GRANT ALL ON TABLE public.competitions TO service_role;
 -- Name: TABLE predictions; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.predictions TO anon;
 GRANT ALL ON TABLE public.predictions TO authenticated;
 GRANT ALL ON TABLE public.predictions TO service_role;
 
@@ -4756,10 +4990,17 @@ GRANT ALL ON TABLE public.analytics_round_locks TO service_role;
 
 
 --
+-- Name: TABLE client_errors; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.client_errors TO authenticated;
+GRANT ALL ON TABLE public.client_errors TO service_role;
+
+
+--
 -- Name: TABLE competition_awards; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.competition_awards TO anon;
 GRANT ALL ON TABLE public.competition_awards TO authenticated;
 GRANT ALL ON TABLE public.competition_awards TO service_role;
 
@@ -4776,7 +5017,6 @@ GRANT ALL ON TABLE public.feedback TO service_role;
 -- Name: TABLE group_members; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.group_members TO anon;
 GRANT ALL ON TABLE public.group_members TO authenticated;
 GRANT ALL ON TABLE public.group_members TO service_role;
 
@@ -4785,7 +5025,6 @@ GRANT ALL ON TABLE public.group_members TO service_role;
 -- Name: TABLE groups; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.groups TO anon;
 GRANT ALL ON TABLE public.groups TO authenticated;
 GRANT ALL ON TABLE public.groups TO service_role;
 
@@ -4794,7 +5033,6 @@ GRANT ALL ON TABLE public.groups TO service_role;
 -- Name: TABLE job_runs; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.job_runs TO anon;
 GRANT ALL ON TABLE public.job_runs TO authenticated;
 GRANT ALL ON TABLE public.job_runs TO service_role;
 
@@ -4812,7 +5050,6 @@ GRANT ALL ON SEQUENCE public.job_runs_id_seq TO service_role;
 -- Name: TABLE stories; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.stories TO anon;
 GRANT ALL ON TABLE public.stories TO authenticated;
 GRANT ALL ON TABLE public.stories TO service_role;
 
@@ -4821,7 +5058,6 @@ GRANT ALL ON TABLE public.stories TO service_role;
 -- Name: TABLE latest_story; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.latest_story TO anon;
 GRANT ALL ON TABLE public.latest_story TO authenticated;
 GRANT ALL ON TABLE public.latest_story TO service_role;
 
@@ -4830,7 +5066,6 @@ GRANT ALL ON TABLE public.latest_story TO service_role;
 -- Name: TABLE leagues; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.leagues TO anon;
 GRANT ALL ON TABLE public.leagues TO authenticated;
 GRANT ALL ON TABLE public.leagues TO service_role;
 
@@ -4839,7 +5074,6 @@ GRANT ALL ON TABLE public.leagues TO service_role;
 -- Name: TABLE seasons; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.seasons TO anon;
 GRANT ALL ON TABLE public.seasons TO authenticated;
 GRANT ALL ON TABLE public.seasons TO service_role;
 
@@ -4848,7 +5082,6 @@ GRANT ALL ON TABLE public.seasons TO service_role;
 -- Name: TABLE monthly_standings; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.monthly_standings TO anon;
 GRANT ALL ON TABLE public.monthly_standings TO authenticated;
 GRANT ALL ON TABLE public.monthly_standings TO service_role;
 
@@ -4857,7 +5090,6 @@ GRANT ALL ON TABLE public.monthly_standings TO service_role;
 -- Name: TABLE notification_log; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.notification_log TO anon;
 GRANT ALL ON TABLE public.notification_log TO authenticated;
 GRANT ALL ON TABLE public.notification_log TO service_role;
 
@@ -4866,7 +5098,6 @@ GRANT ALL ON TABLE public.notification_log TO service_role;
 -- Name: TABLE profiles; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.profiles TO anon;
 GRANT ALL ON TABLE public.profiles TO authenticated;
 GRANT ALL ON TABLE public.profiles TO service_role;
 
@@ -4875,7 +5106,6 @@ GRANT ALL ON TABLE public.profiles TO service_role;
 -- Name: TABLE push_subscriptions; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.push_subscriptions TO anon;
 GRANT ALL ON TABLE public.push_subscriptions TO authenticated;
 GRANT ALL ON TABLE public.push_subscriptions TO service_role;
 
@@ -4884,7 +5114,6 @@ GRANT ALL ON TABLE public.push_subscriptions TO service_role;
 -- Name: TABLE rating_history; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.rating_history TO anon;
 GRANT ALL ON TABLE public.rating_history TO authenticated;
 GRANT ALL ON TABLE public.rating_history TO service_role;
 
@@ -4893,7 +5122,6 @@ GRANT ALL ON TABLE public.rating_history TO service_role;
 -- Name: TABLE ratings; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.ratings TO anon;
 GRANT ALL ON TABLE public.ratings TO authenticated;
 GRANT ALL ON TABLE public.ratings TO service_role;
 
@@ -4902,7 +5130,6 @@ GRANT ALL ON TABLE public.ratings TO service_role;
 -- Name: TABLE round_standings; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.round_standings TO anon;
 GRANT ALL ON TABLE public.round_standings TO authenticated;
 GRANT ALL ON TABLE public.round_standings TO service_role;
 
@@ -4911,7 +5138,6 @@ GRANT ALL ON TABLE public.round_standings TO service_role;
 -- Name: TABLE season_standings; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.season_standings TO anon;
 GRANT ALL ON TABLE public.season_standings TO authenticated;
 GRANT ALL ON TABLE public.season_standings TO service_role;
 
@@ -4920,7 +5146,6 @@ GRANT ALL ON TABLE public.season_standings TO service_role;
 -- Name: TABLE teams; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.teams TO anon;
 GRANT ALL ON TABLE public.teams TO authenticated;
 GRANT ALL ON TABLE public.teams TO service_role;
 
@@ -4929,7 +5154,6 @@ GRANT ALL ON TABLE public.teams TO service_role;
 -- Name: TABLE user_activity_days; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.user_activity_days TO anon;
 GRANT ALL ON TABLE public.user_activity_days TO authenticated;
 GRANT ALL ON TABLE public.user_activity_days TO service_role;
 
@@ -4979,7 +5203,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON F
 --
 
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO anon;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO service_role;
 
@@ -4998,5 +5221,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict JbGv5OzmCjQIfI781LRtKqO3h1O3Pkrfwb6QJPjUJyWxqxV2QisI8BA8WEgR6pJ
+\unrestrict 6SgIhMFzvlrBNk5S1ZbBciwTjKGGZ0xmdeQjZEUhyQ27POaH4ikYB5FWJVuKrXb
 
