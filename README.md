@@ -38,7 +38,8 @@ i stedet, så valget skal træffes.
 
 | Variabel | Hvor | Hvornår |
 |---|---|---|
-| `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` | `.env.local` / Vercel | Kun for at pege på en anden database end produktion |
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` | `.env.local` / Vercel | Påkrævet i lokal udvikling siden `G4` (`npm run dev` kaster uden dem); i produktions-buildet bruges den indbyggede nøgle, hvis de udelades |
+| `VITE_API_PROXY` | `.env.local` | Valgfri; videresender `/api/*` i `npm run dev` til en kørende deploy |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Vercel | Kræves af alt i `api/` |
 | `SYNC_SECRET` | Vercel | Den delte hemmelighed, cron-jobbene kalder med |
 | `SPORTMONKS_TOKEN`, `FOOTBALLDATA_TOKEN` | Vercel | Én pr. datakilde; kun den, ligaen bruger |
@@ -50,6 +51,7 @@ Fuld tabel med formål og fald-tilbage: `DOCUMENTATION.md` §9.
 
 ```bash
 npm run dev          # udviklingsserver
+npm run dev:api      # vercel dev — /api/* lokalt
 npm run build        # produktions-build
 npm test             # Vitest (én kørsel)
 npm run test:watch   # Vitest i watch
@@ -58,8 +60,9 @@ npm run lint         # ESLint (loft på antal advarsler — det må falde, aldri
 npm run format       # Prettier
 ```
 
-CI (`.github/workflows/ci.yml`) kører lint + test + build ved hver pull request,
-plus en SQL-ækvivalenstest for ratingberegningen mod en rigtig PostgreSQL.
+CI (`.github/workflows/ci.yml`) kører lint + test + build ved hver pull request
+og ved push til `main`, plus et `sql`-job med ti SQL-tests (bl.a.
+rating-ækvivalensen) mod en rigtig PostgreSQL.
 **Den erstatter ikke "Tjekliste før merge" i `DOCUMENTATION.md` §11**, som dækker
 det, en maskine ikke kan se: rigtig browser, push på iOS, safe-area på iPhone,
 RLS mod produktionsdata.
@@ -75,6 +78,7 @@ Sportmonks / football-data.org
   api/sync-matches.js ──► Supabase (Postgres + Auth + RLS)
   api/sync-live.js           ▲
   api/send-notifications.js  │
+  api/delete-account.js      │   (kontolukning, B4)
                              │
                     React-app (Vercel)
 ```
@@ -83,7 +87,7 @@ Sportmonks / football-data.org
 |---|---|
 | `src/lib/` | Data-loadere, point/runde-logik, analytics, REST-klient. Ingen React |
 | `src/ui/` | Designtokens og delkomponenter |
-| `src/screens/` | Én fil pr. fane/skærm + `MainApp.jsx` som skal |
+| `src/screens/` | Én fil pr. fane/skærm + `MainApp.jsx` som skal; fem undermapper (`analytics/`, `championship/`, `create/`, `predictions/`, `profile/`) efter opsplitningen (`G1`) |
 | `api/` | Serverless-funktioner. **Kun endpoints ligger uden `_`-præfiks** — `_shared.js`, `_backfill.js` og `_providers/` er biblioteker, som Vercel derfor ikke router |
 | `sql/` | Migreringer, der køres **manuelt** i Supabase SQL-editor med "Run without RLS". **Læs `sql/README.md` først** — to af dem ruller tavst nyere regler tilbage, hvis de gen-køres |
 | `docs/` | Se nedenfor |
@@ -120,8 +124,10 @@ Fem vilkår, der har kostet tid før, og som ikke er til at gætte:
    en gyldig reference, hvis eksporten er kørt efter seneste migrering.
 3. **Cron-jobbene bor på cron-job.org**, ikke i repoet. `docs/CRON.md` er listen,
    man holder kontoen op imod.
-4. **`/api/*` findes ikke i `npm run dev`.** Der er ingen Vite-proxy; brug
-   `npx vercel dev`, eller test mod en preview-deploy.
+4. **`/api/*` findes ikke i `npm run dev` som udgangspunkt.** Brug
+   `npm run dev:api` (`vercel dev`), eller sæt `VITE_API_PROXY=<url>` i
+   `.env.local` for at videresende `/api/*` til en kørende deploy
+   (`vite.config.js`).
 5. **Vercels Hobby-plan tillader 12 serverless functions.** Hver `.js`-fil under
    `api/` uden `_`-præfiks tæller med. Rammes loftet, fejler deployet på 11
    sekunder uden byggelog — og appen kører videre på forrige version, så `main`

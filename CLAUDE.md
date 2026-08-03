@@ -10,8 +10,8 @@
 | rating, månedsliga, rundeliga, championship | §5 · kode i `sql/rating_core.sql` |
 | brugernavne | §6 |
 | navigation, faner, layout | §7 |
-| kampsynkronisering, live-resultater | §8 · `api/sync-matches.js`, `api/sync-live.js` |
-| datakilder (Sportmonks / football-data.org), API-nøgler, kaldbudget | §8 · `api/providers/` · `docs/features/flere-datakilder-v1.md` |
+| kampsynkronisering, live-resultater | §8 · `api/sync-matches.js`, `api/sync-live.js` · `docs/features/live-resultater-v1.md` |
+| datakilder (Sportmonks / football-data.org), API-nøgler, kaldbudget | §8 · `api/_providers/` · `docs/features/flere-datakilder-v1.md` |
 | miljøvariabler, deploy, tjekliste før merge | §9, §11 |
 | ny turnering | §10 · `docs/features/turnering-2.md` |
 | kendte begrænsninger (vilkår, der ikke laves om) | §12 |
@@ -28,7 +28,7 @@
 | planlagte jobs (cron) | `docs/CRON.md` |
 | backup, gendannelse efter tabt data | `docs/RESTORE.md` · §22 · `.github/workflows/data-backup.yml` |
 | feedback fra brugerne | §23 · `sql/feedback.sql` · `src/screens/FeedbackCard.jsx` |
-| privatliv, vilkår, kontolukning | §24 · `src/lib/legal.js` · `docs/features/privatliv-og-vilkaar-v1.md` |
+| privatliv, vilkår, kontolukning | §24 · `src/lib/legal.js` · `api/delete-account.js` · `docs/features/privatliv-og-vilkaar-v1.md` |
 | fejl hos en bruger (crash, hvid skærm) | §25 · `src/lib/telemetry.js` · `sql/client_errors.sql` |
 | historik over ændringer | `docs/CHANGELOG.md` |
 
@@ -55,7 +55,7 @@ Støder du undervejs på noget, der burde bygges, ryddes op eller besluttes, men
 
 - `npm run dev` — udviklingsserver · `npm run build` — produktions-build
 - `npm test` — Vitest · `npm run lint` — ESLint · `npm run format` — Prettier
-- CI (`.github/workflows/ci.yml`) kører lint + test + build ved hver pull request og ved push til `main`, plus en SQL-ækvivalenstest for ratingberegningen mod en rigtig PostgreSQL. **"Tjekliste før merge" i `DOCUMENTATION.md` §11 gælder stadig** — den dækker det, en maskine ikke kan se (rigtig browser, push på iOS, RLS mod produktionsdata).
+- CI (`.github/workflows/ci.yml`) kører lint + test + build ved hver pull request og ved push til `main`, plus et `sql`-job med ti SQL-tests (bl.a. rating-ækvivalensen) mod en rigtig PostgreSQL. **"Tjekliste før merge" i `DOCUMENTATION.md` §11 gælder stadig** — den dækker det, en maskine ikke kan se (rigtig browser, push på iOS, RLS mod produktionsdata).
 - `npm run lint` har et loft på antal advarsler, så tallet kan falde, men aldrig vokse ubemærket. Falder det, sænkes loftet i `package.json` tilsvarende.
 - **Venter du på CI, så spørg jobbet, ikke kørslen.** GitHubs check-runs-svar kan stå `in_progress` et kvarter efter et job er færdigt — brug `actions_get`/`get_workflow_job` med job-id'et, som er ajour med det samme. Hele fælden står i `DOCUMENTATION.md` §13. `verify` tager typisk under et minut, `sql` halvandet; er du ude over det, er det næsten altid svaret der er gammelt.
 
