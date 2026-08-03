@@ -2,19 +2,23 @@
 // Samlet her, fordi de alle er små, uafhængige opslag knyttet til én bruger.
 
 import { db, restFetch } from "../supabase.js";
+import { readUserFlag, writeUserFlag, PING_KEY } from "../localFlags.js";
 
 // ---------- Aktivitets-sporing + brugerstatistik ----------
 // touchActivity: letvægts-"ping" ved app-start. RPC'en registrerer, at brugeren har
 // været inde i dag (last_seen_at + user_activity_days). Throttlet til maks. 1×/time via
 // localStorage, så gentagne genstarter/refresh ikke spammer. Fejl ignoreres stille —
 // sporing må aldrig blokere appen.
-const PING_KEY = "pc_last_ping";
-async function touchActivity(token) {
+//
+// Throttlen er pr. BRUGER: var tidsstemplet enhedens, kunne den ene bruger på en
+// delt telefon spærre den andens ping, og dagen ville mangle i statistikken for
+// en, der faktisk var inde.
+async function touchActivity(token, userId) {
   try {
-    const last = Number(localStorage.getItem(PING_KEY) || 0);
+    const last = Number(readUserFlag(PING_KEY, userId) || 0);
     if (Date.now() - last < 60 * 60 * 1000) return; // maks. 1 ping pr. time
     await restFetch(`/rest/v1/rpc/touch_activity`, { method: "POST", token, body: {} });
-    localStorage.setItem(PING_KEY, String(Date.now()));
+    writeUserFlag(PING_KEY, userId, String(Date.now()));
   } catch { /* ignorer — sporing er best-effort */ }
 }
 

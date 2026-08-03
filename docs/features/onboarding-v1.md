@@ -63,6 +63,8 @@ Tilstanden **udledes af rigtige data** (`src/lib/onboarding.js`, `deriveOnboardi
 
 `localStorage` bruges kun til det, der ikke kan udledes: `pc_onboarding_v1_flow` (sprunget over) · `pc_onboarding_v1_card` (kortet skjult) · `pc_onboarding_v1_complete` (færdig — proben springes helt over ved næste opstart, så en etableret bruger ikke betaler ekstra netværkskald).
 
+**Rettet efter levering (august 2026):** de tre nøgler bærer nu et bruger-id i værdien (`"1@<userId>"`), og læses via `readUserFlag`/`writeUserFlag` i `src/lib/localFlags.js`. Uden det slog en tidligere kontos `pc_onboarding_v1_complete` hele onboardingen fra for den næste bruger på samme enhed — proben blev sprunget over, `onboarding` blev stående som `null`, og dermed udeblev **både** guiden og checklisten. Se §14.
+
 To RLS-forudsætninger, verificeret før implementering:
 
 - **`predictions`-SELECT-policyen er `user_id = auth.uid() or (…locked…)`** — en bruger kan altid læse sine egne tips, også ulåste. `hasPrediction`-proben (`limit=1`) er derfor sikker.
@@ -152,3 +154,21 @@ Markeret her frem for slettet, jf. `CLAUDE.md`:
 
 - **Checklistens `liga`-knap genåbner ikke guiden.** Udkastet foreslog det. Men en bruger med liga-løse konkurrencer har `liga.done === false`, og guidens trin 2 ville da oprette en *ny* konkurrence oveni. Knappen går i stedet til Ligaer-fanen, hvor både "Opret en liga" og "Deltag med kode" står øverst.
 - **`HowItWorksScreen` blev ikke omstruktureret.** Udkastet antog, at ordbogen skulle flyttes op — den var allerede sektion 1. Kun **Karriere** manglede reelt.
+
+## 14. Rettelse efter levering: onboardingen kunne slukkes af en anden bruger
+
+*August 2026.* En nyoprettet konto mødte en Hjem-skærm med kun dato og eget navn — intet indhold, ingen vej videre.
+
+**Årsag.** Alle tre localStorage-nøgler beskrev en *bruger*, men lå på *enheden*. `clearAllLocalState()` ryddede dem, men kun ved kontolukning (B4); begrundelsen i `src/lib/supabase.js` var, at et log ud efterlader den samme person ved telefonen. Det holder for log ud → log ind, men ikke for log ud → **ny konto**, som er den vej en tester og en delt telefon går. Ét arvet `pc_onboarding_v1_complete` slukkede begge onboarding-lag på én gang, fordi `refreshOnboarding` returnerede før proben og efterlod `onboarding === null`.
+
+**Tre rettelser:**
+
+1. **Flagene bærer en ejer.** Bruger-id'et lægges i *værdien* og ikke i nøglenavnet, fordi navnene har tre andre aftagere: `LOKALE_NØGLER`s oprydning på eksakte navne, guard-testen i `src/lib/data/account.test.js` og privatlivspolitikkens opremsning i `src/lib/legal.js`. Nøgler og adgang samlet i **`src/lib/localFlags.js`**. Samme greb er lagt på de fem øvrige bruger-flag (`pc_liga_nudge_dismissed`, `pc_push_dismissed`, `pc_pwa_onboarded`, `pc_season_league`, `pc_last_ping`) — hele fejlklassen, ikke kun det symptom, der blev set. `pc_session` forbliver enheds-globalt; den *er* identiteten.
+2. **Gamle flag uden ejer ignoreres**, frem for at blive tildelt den, der logger ind først. Netop dén migrering ville gen-indføre fejlen for en, der opretter en ny konto lige efter et log ud. Prisen er en engangsudgift for eksisterende brugere: PWA-modalen, liga-forslaget og push-kortet vises én gang mere, og Championship-filteret falder tilbage til standard.
+3. **Hjem kan ikke længere stå tom.** Alle kortene på Hjem lå bag `tips.hasComps`, så checklisten var det eneste indhold for en bruger uden konkurrencer — og den kan udeblive ad to veje (brugeren trykker X, eller proben fejler stille). Der ligger nu et fallback-kort under checklisten, gated på `!showChecklist && competitions.length === 0`, som peger på Ligaer-fanen.
+
+**Hvorfor fallback-kortet peger på Ligaer og ikke på opret-skærmen:** en bruger uden liga ville dér kunne lave en liga-løs konkurrence, og det er præcis den overgangstilstand, §6 forbyder. Ligaer-fanen viser både "Opret en liga" og "Deltag med kode" for den, der ingen har. Af samme grund er `EmptyCompetitions` bevidst *ikke* genbrugt her, selvom den findes.
+
+Dette afviger fra §7's *"checklisten erstatter de to dashed tom-tilstande"*: Hjem har igen en tom-tilstand — men **under** checklisten, ikke i stedet for den, og kun som sidste værn.
+
+Tests: `src/lib/localFlags.test.js` (10) · nye cases i `src/screens/HjemTab.test.jsx` (3).

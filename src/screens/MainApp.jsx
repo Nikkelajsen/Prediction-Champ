@@ -5,7 +5,8 @@ import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut,
 import { db } from "../lib/supabase.js";
 import { loadGroupByCode, joinGroup, joinCompetition } from "../lib/data.js";
 import { logEvent } from "../lib/analytics.js";
-import { deriveOnboarding, loadOnboardingSignals, readFlag, writeFlag, COMPLETE_KEY, FLOW_KEY } from "../lib/onboarding.js";
+import { deriveOnboarding, loadOnboardingSignals } from "../lib/onboarding.js";
+import { readUserFlag, writeUserFlag, COMPLETE_KEY, FLOW_KEY, PWA_ONBOARDED_KEY } from "../lib/localFlags.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
 import { Modal } from "../ui/components.jsx";
 import { ErrorBoundary, ScreenFallback } from "../ui/ErrorBoundary.jsx";
@@ -34,8 +35,6 @@ import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
 // hente dem enkeltvis ville bytte én ventetid ud med fire.
 const AdminScreen = lazy(() => import("./AdminScreen.jsx"));
 
-const PWA_ONBOARDED_KEY = "pc_pwa_onboarded";
-
 function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoinCode, pendingLigaCode, clearPendingLigaCode }) {
   const token = session.access_token;
   const userId = session.user.id;
@@ -58,7 +57,13 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   // på Hjem, gaten for det guidede flow og gaten for installations-modalen.
   // Er brugeren først færdig, huskes det lokalt, og proben køres aldrig igen —
   // så en etableret bruger betaler ingen ekstra netværkskald ved hver opstart.
-  const onboardingDone = useRef(readFlag(COMPLETE_KEY) === "1");
+  //
+  // Flaget er bundet til BRUGEREN og ikke til enheden (src/lib/localFlags.js).
+  // Var det ikke det, ville en ny konto på en brugt telefon arve "færdig" fra
+  // den forrige, proben blev sprunget over, `onboarding` blev stående som
+  // `null` — og så udeblev BÅDE guiden og checklisten. Resultatet var en
+  // Hjem-skærm med kun brugerens eget navn på og ingen vej videre.
+  const onboardingDone = useRef(readUserFlag(COMPLETE_KEY, userId) === "1");
   const [showFlow, setShowFlow] = useState(false);
   const flowOpened = useRef(false); // guiden åbner højst én gang pr. session
 
@@ -70,7 +75,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     try {
       const signals = await loadOnboardingSignals(token, userId);
       const state = deriveOnboarding({ ...signals, competitions: comps || competitions });
-      if (state.complete) { onboardingDone.current = true; writeFlag(COMPLETE_KEY, "1"); }
+      if (state.complete) { onboardingDone.current = true; writeUserFlag(COMPLETE_KEY, userId, "1"); }
       setOnboarding(state);
     } catch { /* onboarding må aldrig blokere appen — kortet udebliver bare */ }
   }
@@ -136,15 +141,15 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   // de også reelt en kold selvstarter.
   useEffect(() => {
     if (flowOpened.current || loading) return;
-    if (readFlag(FLOW_KEY)) return;
+    if (readUserFlag(FLOW_KEY, userId)) return;
     if (pendingJoinCode || pendingLigaCode || pendingJoin || pendingGroupJoin || joinError) return;
     if (!onboarding || onboarding.hasCompetition || onboarding.hasGroup) return;
     flowOpened.current = true;
     setShowFlow(true);
-  }, [loading, onboarding, pendingJoinCode, pendingLigaCode, pendingJoin, pendingGroupJoin, joinError]);
+  }, [loading, onboarding, pendingJoinCode, pendingLigaCode, pendingJoin, pendingGroupJoin, joinError, userId]);
 
   function closeFlow(mark) {
-    writeFlag(FLOW_KEY, mark);
+    writeUserFlag(FLOW_KEY, userId, mark);
     setShowFlow(false);
   }
 
@@ -176,15 +181,15 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
   // har en grund til at beholde den. Modalen må aldrig lægge sig oven på det
   // guidede flow eller en invitations-bekræftelse.
   useEffect(() => {
-    if (readFlag(PWA_ONBOARDED_KEY)) return;
+    if (readUserFlag(PWA_ONBOARDED_KEY, userId)) return;
     if (isStandalone()) return;
     if (pendingJoinCode || pendingLigaCode || pendingJoin || pendingGroupJoin || showFlow) return;
     // onboardingDone: en etableret bruger (som aldrig prober) har for længst tippet.
     if (!onboarding?.hasPrediction && !onboardingDone.current) return;
     setShowInstall(true);
-  }, [onboarding, pendingJoinCode, pendingLigaCode, pendingJoin, pendingGroupJoin, showFlow]);
+  }, [onboarding, pendingJoinCode, pendingLigaCode, pendingJoin, pendingGroupJoin, showFlow, userId]);
   function dismissInstall() {
-    writeFlag(PWA_ONBOARDED_KEY, "1");
+    writeUserFlag(PWA_ONBOARDED_KEY, userId, "1");
     setShowInstall(false);
   }
 

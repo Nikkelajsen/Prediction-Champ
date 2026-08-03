@@ -1,5 +1,7 @@
 // REST-klienten mod Supabase. Ingen SDK — kun `fetch` plus de få helpers,
 // resten af appen har brug for: db-opslag, auth-endpoints og den gemte session.
+import { LOKALE_NØGLER, SESSION_KEY, readFlag, removeFlag, writeFlag } from "./localFlags.js";
+
 // ---------- Supabase config ----------
 // Produktionsværdierne er hårdkodede fallbacks (offentlig publishable-nøgle,
 // beskyttet af RLS — by design). Sæt VITE_SUPABASE_URL/VITE_SUPABASE_KEY
@@ -110,43 +112,23 @@ const auth = {
   checkUsername: (name) =>
     restFetch(`/rest/v1/rpc/username_available`, { method: "POST", body: { name } }),
 };
-const SESSION_KEY = "pc_session";
 function saveSession(session) {
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch {}
+  writeFlag(SESSION_KEY, JSON.stringify(session));
 }
 function loadSession() {
-  try { const raw = localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  const raw = readFlag(SESSION_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
 }
 function clearSession() {
-  try { localStorage.removeItem(SESSION_KEY); } catch {}
+  removeFlag(SESSION_KEY);
 }
 
-// Alt, appen har lagt på enheden — ikke kun sessionen.
-//
-// Bruges når en konto LUKKES (B4), ikke ved et almindeligt log ud. Forskellen
-// er, hvem der sidder med telefonen bagefter: ved et log ud er det den samme
-// person, som gerne må slippe for introduktionen igen. Ved en lukket konto er
-// der ingen at huske noget for, og de resterende seks nøgler ville følge den
-// NÆSTE bruger på samme enhed — så de så en halvfærdig introduktion, de aldrig
-// havde set, og et liga-forslag, de aldrig havde lukket.
-//
-// Listen skal holdes i trit med privatlivspolitikkens afsnit om lokale data
-// (src/lib/legal.js): står en nøgle ikke her, bliver den heller ikke ryddet.
-const LOKALE_NØGLER = [
-  SESSION_KEY,
-  "pc_last_ping",
-  "pc_onboarding_v1_flow",
-  "pc_onboarding_v1_card",
-  "pc_onboarding_v1_complete",
-  "pc_push_dismissed",
-  "pc_liga_nudge_dismissed",
-  "pc_season_league",
-  "pc_pwa_onboarded",
-];
+// Rydder alt, appen har lagt på enheden — ikke kun sessionen. Bruges når en
+// konto LUKKES (B4), ikke ved et almindeligt log ud. Nøglerne og begrundelsen
+// for listen bor i src/lib/localFlags.js.
 function clearAllLocalState() {
-  for (const n of LOKALE_NØGLER) {
-    try { localStorage.removeItem(n); } catch { /* privat browsing */ }
-  }
+  for (const n of LOKALE_NØGLER) removeFlag(n);
 }
 
 export { restError, isAborted, restFetch, restCount, db, auth, saveSession, loadSession, clearSession, clearAllLocalState, LOKALE_NØGLER };

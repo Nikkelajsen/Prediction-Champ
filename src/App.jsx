@@ -48,7 +48,7 @@ export default function App() {
     }
     setSession({ access_token, refresh_token, user });
     saveSession({ refresh_token, user });
-    touchActivity(access_token); // best-effort aktivitets-ping (throttlet, fejler stille)
+    touchActivity(access_token, user.id); // best-effort aktivitets-ping (throttlet pr. bruger, fejler stille)
     if (source === "signup") { logEvent(access_token, "account_created"); logEvent(access_token, "login"); }
     else if (source === "signin") { logEvent(access_token, "login"); }
   }
