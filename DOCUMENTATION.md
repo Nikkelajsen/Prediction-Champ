@@ -374,6 +374,7 @@ Deploy: Vercel auto-deployer ved hver commit til `main`. Hver branch får desude
 
   `x-vercel-id` bærer regionskoderne. `dub1` = override\'et tog effekt; kun `iad1` = det gjorde ikke.
 * Cache-headere på `sw.js` og `manifest.json` (`max-age=0, must-revalidate`). En cachet service worker kan ellers holde en gammel version i live, længe efter et deploy.
+* `Cache-Control: public, max-age=31536000, immutable` på `/fonts/(.*)` (august 2026, `B4`). Fontfilerne ligger i `public/` og får derfor **ikke** et indholdshash af Vite, som `dist/assets/` gør — versionen bæres i stedet af filnavnet selv (`barlow-400-latin.woff2`). `immutable` er derfor kun et sandt løfte, så længe reglen holdes: **skiftes en fontfil ud, skal filnavnet skifte med**, og både `@font-face`-blokkene i `src/ui/theme.js` og de to `<link rel="preload">` i `index.html` skal rettes i samme ombæring. Gør man det ikke, sidder brugerne på den gamle fil i et år.
 
 JSON tillader ikke kommentarer, så begrundelsen står her og ingen andre steder. Ændrer du filen, så ret dette afsnit i samme ombæring.
 
