@@ -46,8 +46,48 @@ export function seasonFetchVerdict(fetchError, emptySeason) {
 // ambiguousTeamNames() bruger PRÆCIS samme normalisering som findByName()
 // nedenfor — en kontrol, der normaliserer anderledes end det, den kontrollerer,
 // ville melde noget andet end det, der faktisk sker.
+//
+// ÉN REGEL, ÉN RETNING: alt foldes ned mod GRUNDBOGSTAVET (G52, august 2026).
+//
+// NFD gjorde det halve i forvejen — den splitter en accent fra sit grundbogstav,
+// så "Häcken" bliver til "hacken". Men ø, æ og å er selvstændige tegn uden
+// grundbogstav, så de overlevede NFD og blev derefter SLETTET af tegn-filteret:
+// "FC København" blev `fckbenhavn`, mens "FC Kobenhavn" blev `fckobenhavn`. To
+// skrivemåder af samme klub var dermed to forskellige hold — og fordi navnet er
+// fald-tilbagen, når leverandørens id ikke kendes, endte det som en DUBLET i
+// `teams` frem for som en fejl, nogen kunne se.
+//
+// Retningen er ikke et smagsvalg; den følger af NFD. Når "ä" allerede er blevet
+// til "a", er den eneste konsistente behandling af den udskrevne form ("ae")
+// også "a" — ellers ville "Häcken" og "Haecken" stadig være to hold, og vi ville
+// have byttet én halv regel ud med en anden. Derfor foldes både bogstaverne
+// (ø→o, æ→a, å→a) og de NORDISKE skrevne former (oe→o, ae→a, aa→a) til det samme.
+//
+// "ue" er bevidst IKKE med, selvom det er den tyske pendant. Forskellen er, hvad
+// tegnfølgen betyder i de navne, vi faktisk har: "aa" og "oe" er stort set altid
+// en udskrevet å/ø, mens "ue" er to almindelige bogstaver i det sprog, de fleste
+// klubnavne står på — "Queen's Park" ville blive til `quensparkrangers`, altså en
+// nøgle, der ikke ligner sit eget hold, når den skal læses i Admin → Drift.
+// Prisen er kendt og afgrænset: skriver en leverandør "Muenchen" frem for
+// "München", er de to stadig to hold. Selve umlauten er dækket af NFD; kun den
+// udskrevne form står tilbage, og den er fastholdt i en test frem for at være
+// uskrevet.
+//
+// Prisen for foldningen er en større flade for FALSKE sammenfald — to
+// forskellige klubber, hvis navne kun adskiller sig ved præcis de bogstaver. Den
+// betales med åbne øjne: `ambiguousTeamNames()` nedenfor melder netop den slags
+// sammenfald i hver eneste kørsel, så en over-foldning kan aflæses i Admin →
+// Drift. Den manglende foldning kunne kun ses som en dublet, ingen ledte efter.
 export function normalizeTeamName(s) {
-  return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    // Rækkefølgen betyder noget: bogstaverne først, så de skrevne former bagefter
+    // fanger både "Koebenhavn" og det "oe", ø netop er blevet til.
+    .replace(/ø/g, "o").replace(/æ/g, "ae").replace(/å/g, "aa")
+    .replace(/oe/g, "o").replace(/ae/g, "a").replace(/aa/g, "a")
+    .replace(/[^a-z0-9]/g, "");
 }
 
 // Holdpar, som den fuzzy navnematch ikke kan skelne.

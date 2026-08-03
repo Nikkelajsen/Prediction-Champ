@@ -2,6 +2,63 @@
 // Ingen netværkskald og ingen React — kun input ind, tal ud, hvilket er
 // grunden til, at det er den tungest testede fil i src/.
 
+// ---------- appens tidszone ----------
+// HELE appen regner og viser i dansk tid — også når telefonen står et andet
+// sted (G32, august 2026).
+//
+// Det er ikke et sprogvalg, det er en konsistensbeslutning. Runden er defineret
+// i databasen af `round_key()`, som efter `G11` aflæser datoen i
+// `Europe/Copenhagen`; låsen for en kamp uden fastlagt tid er "midnat på
+// spilledagen" i `public.match_lock_at()`, også dansk. Regnede klienten i
+// enhedens zone, ville de to sider være uenige om, hvilken DAG en kamp ligger
+// på og hvornår den låser — identisk for en dansk bruger, forkert for en
+// rejsende, og umuligt at opdage for den, der bygger det.
+//
+// Prisen er kendt og valgt: en bruger i Californien ser kampens danske
+// klokkeslæt og ikke sit eget. Det er den rigtige vej at tage fejl for et
+// produkt, hvis runder, deadlines og stillinger alle er danske — og for en
+// vennegruppe, der taler sammen om "søndagskampen".
+const APP_TZ = "Europe/Copenhagen";
+
+// Zonens forskydning fra UTC på et givet tidspunkt (ms). Aflæses via Intl frem
+// for hårdkodet, fordi Danmark skifter mellem +1 og +2 to gange om året.
+function zoneOffsetMs(ms) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: APP_TZ, hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }).formatToParts(new Date(ms)).map((x) => [x.type, x.value])
+  );
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - ms;
+}
+
+// Midnat på DEN DANSKE dag, tidspunktet ligger på (ms). To gennemløb: først
+// aflæses dagen, som spilleren ser den, derefter korrigeres gættet (UTC-midnat
+// på den dato) med zonens forskydning. Ét gennemløb ville ramme dagen før i
+// timerne omkring midnat. Samme regel som `public.match_lock_at()` i SQL og
+// `matchLockAtMs()` i api/_backfill.js — tre steder, fordi hverken klienten,
+// api/ eller databasen kan importere fra hinanden, men ÉN regel.
+function zonedMidnightMs(ms) {
+  const day = new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(ms));
+  const utcMidnight = Date.parse(`${day}T00:00:00Z`);
+  return utcMidnight - zoneOffsetMs(utcMidnight - zoneOffsetMs(utcMidnight));
+}
+
+// Den danske kalenderdato (ÅÅÅÅ-MM-DD) for et tidspunkt. Bruges som nøgle, hvor
+// to kampe skal ligge på samme dag — og hvor "samme dag" skal betyde det samme
+// for alle, uanset hvor telefonen står.
+function zonedDateKey(iso) {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(t));
+}
+
 // ---------- scoring helpers ----------
 // Simpelt, straffrit pointsystem:
 //   +3 korrekt resultat · +1 korrekt udfald · 0 forkert gæt
@@ -25,10 +82,18 @@ function pointsFor(pred, actual) {
   if (outcome(pred.pred_home, pred.pred_away) === outcome(actual.home_score, actual.away_score)) return POINTS.outcome;
   return 0;
 }
+// Rundens dato-interval, fx "04.08 – 10.08".
+//
+// Nøglen er en ren dato, så den skal forankres på et klokkeslæt for at kunne
+// formatteres. **Middag UTC og ikke middag lokalt** (G32): en enhed langt vest
+// for Danmark ville ellers parse "T12:00:00" i sin egen zone og få et
+// tidspunkt, der er dansk NÆSTE dag — så rundens etiket ville stå en dag
+// forkert netop dér, hvor den skulle berolige. Middag ligger langt nok fra
+// begge døgnskift til, at ingen zone kan flytte datoen.
 function roundLabel(key) {
-  const start = new Date(key + "T12:00:00");
-  const end = new Date(start); end.setDate(start.getDate() + 6);
-  const fmt = (x) => x.toLocaleDateString("da-DK", { day: "2-digit", month: "2-digit" });
+  const start = new Date(key + "T12:00:00Z");
+  const end = new Date(start.getTime() + 6 * 86400000);
+  const fmt = (x) => x.toLocaleDateString("da-DK", { timeZone: APP_TZ, day: "2-digit", month: "2-digit" });
   return `${fmt(start)} – ${fmt(end)}`;
 }
 // Kampenes rækkefølge: kickoff først, derefter holdnavn.
@@ -71,13 +136,16 @@ function filterFromNextUnfinishedRound(matches) {
   return matches.filter((m) => m.round_key >= nextUnfinished);
 }
 // indeks for den runde, der indeholder i dag — eller den nærmeste kommende
+//
+// "I dag" er den DANSKE dato (G32). Før var det UTC-datoen, hvilket er den
+// samme for en dansk bruger i 22-23 af døgnets timer og forkert i resten —
+// mellem midnat og 02.00 dansk tid pegede skærmen på gårsdagens runde.
 function currentRoundIndex(rounds) {
   if (!rounds.length) return 0;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = zonedDateKey(new Date().toISOString());
   for (let i = 0; i < rounds.length; i++) {
-    const end = new Date(rounds[i].key + "T12:00:00");
-    end.setDate(end.getDate() + 6);
-    if (end.toISOString().slice(0, 10) >= today) return i;
+    const end = new Date(new Date(rounds[i].key + "T12:00:00Z").getTime() + 6 * 86400000);
+    if (zonedDateKey(end.toISOString()) >= today) return i;
   }
   return rounds.length - 1;
 }
@@ -179,9 +247,9 @@ function modeLabel(mode, modeParams) {
 function formatKickoff(iso, tbd = false) {
   if (!iso) return "";
   const d = new Date(iso);
-  const date = d.toLocaleDateString("da-DK", { weekday: "short", day: "2-digit", month: "2-digit" });
+  const date = d.toLocaleDateString("da-DK", { timeZone: APP_TZ, weekday: "short", day: "2-digit", month: "2-digit" });
   if (tbd) return date;
-  return date + " kl. " + d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
+  return date + " kl. " + d.toLocaleTimeString("da-DK", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit" });
 }
 const LOCK_LEAD_MS = 60 * 60 * 1000; // 1 time før kampens eget kickoff
 
@@ -207,8 +275,11 @@ function lockAtOf(m) {
   const t = new Date(m.kickoff_at).getTime();
   if (Number.isNaN(t)) return null;
   if (!m.kickoff_tbd) return t - LOCK_LEAD_MS;
-  const d = new Date(t);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  // Midnat i DANSK tid — samme som `public.match_lock_at()`, som er den, der
+  // faktisk håndhæver låsen i RLS. Indtil G32 stod her enhedens midnat, så en
+  // rejsende bruger kunne se en kamp som åben, mens databasen afviste tippet
+  // (eller omvendt) — de to var enige for en dansk bruger og kun for den.
+  return zonedMidnightMs(t);
 }
 
 // En kamp er låst hvis den har fået resultat, ELLER hvis vi er inden for 1 time
@@ -266,4 +337,4 @@ function liveInfo(m) {
   };
 }
 
-export { outcome, POINTS, pointsFor, roundLabel, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };
+export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };

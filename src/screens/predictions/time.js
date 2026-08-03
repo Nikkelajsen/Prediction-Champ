@@ -3,7 +3,7 @@
 // Ren logik uden React — udskilt så den kan testes direkte, hvilket den ikke
 // kunne, da den lå midt i en 705-linjers skærmfil.
 
-import { byKickoffThenTeams, formatKickoff } from "../../lib/scoring.js";
+import { APP_TZ, byKickoffThenTeams, formatKickoff, zonedDateKey } from "../../lib/scoring.js";
 
 // Datoen står i dagens overskrift; rækken viser kun klokkeslæt.
 //
@@ -13,19 +13,19 @@ import { byKickoffThenTeams, formatKickoff } from "../../lib/scoring.js";
 // dagsoverskriften, hvor der er plads til den.
 function hhmm(iso, tbd = false) {
   if (!iso || tbd) return "";
-  return new Date(iso).toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("da-DK", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit" });
 }
-function dayKey(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-}
+// Dagsnøglen er den DANSKE kalenderdato (G32). Med enhedens dato kunne en
+// søndagskamp kl. 20 dansk lande i lørdagens gruppe for en bruger vestpå — og
+// dagsgrupperingen er netop det sted, hvor "hvilken dag spilles den?" bliver
+// besvaret på skærmen.
+const dayKey = zonedDateKey;
 // Dag-overskrift, fx "lør 25. jul" (uppercase sættes i style). Danske korte navne
 // ender på punktum ("lør." / "jul."), som bliver støjende i en versal overskrift.
 function dayLabel(iso) {
   const d = new Date(iso);
-  const wd = d.toLocaleDateString("da-DK", { weekday: "short" }).replace(/\.$/, "");
-  const dm = d.toLocaleDateString("da-DK", { day: "numeric", month: "short" }).replace(/\.$/, "");
+  const wd = d.toLocaleDateString("da-DK", { timeZone: APP_TZ, weekday: "short" }).replace(/\.$/, "");
+  const dm = d.toLocaleDateString("da-DK", { timeZone: APP_TZ, day: "numeric", month: "short" }).replace(/\.$/, "");
   return `${wd} ${dm}`;
 }
 // Gruppér rundens kampe pr. kampdag, så datoen står ÉN gang i stedet for på hver

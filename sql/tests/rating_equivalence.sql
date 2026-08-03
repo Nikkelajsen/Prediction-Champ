@@ -276,3 +276,40 @@ begin
   where m.season_id = '22222222-2222-2222-2222-222222222222';
   raise notice 'OK: % præcise tips i en uofficiel turnering flyttede hverken rating eller historik, og spilleren, der kun tipper den, har ingen rating (A17).', n_uoff;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- G11: round_key() er markeret IMMUTABLE og skal FAKTISK være det
+-- ---------------------------------------------------------------------------
+-- Kroppen brugte `ts::date`, som læser sessionens `TimeZone` — funktionen var
+-- altså reelt STABLE, mens `matches.round_key` er en genereret kolonne, der
+-- kræver immutabilitet. Følgen kunne kun ses, hvis en writer havde en anden
+-- zone end resten: to kampe i samme uge kunne ende i hver sin runde.
+--
+-- Testen skifter sessionens zone og kræver det samme svar. Den er skrevet på
+-- et tidspunkt INDE i vinduet, hvor de to læsninger er uenige (00.30 dansk
+-- tirsdag = 22.30 UTC mandag) — uden for det ville enhver implementering bestå.
+do $$
+declare
+  utc_svar date;
+  ny_york_svar date;
+  kbh_svar date;
+  grænsetid timestamptz := '2026-08-10T22:30:00Z';
+begin
+  set local timezone = 'UTC';              utc_svar := public.round_key(grænsetid);
+  set local timezone = 'America/New_York'; ny_york_svar := public.round_key(grænsetid);
+  set local timezone = 'Europe/Copenhagen'; kbh_svar := public.round_key(grænsetid);
+  reset timezone;
+
+  if utc_svar is distinct from kbh_svar or ny_york_svar is distinct from kbh_svar then
+    raise exception 'round_key er ikke zone-uafhængig: UTC=%, New York=%, København=%',
+      utc_svar, ny_york_svar, kbh_svar;
+  end if;
+
+  -- Og svaret skal være den DANSKE læsning: 00.30 dansk tirsdag hører til den
+  -- runde, der begynder samme tirsdag — ikke til ugen før.
+  if kbh_svar <> date '2026-08-11' then
+    raise exception 'round_key gav % for 00.30 dansk tirsdag, forventede 2026-08-11', kbh_svar;
+  end if;
+
+  raise notice 'OK: round_key() giver % i alle tre sessionszoner (G11).', kbh_svar;
+end $$;

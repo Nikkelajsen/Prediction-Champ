@@ -103,15 +103,42 @@ describe("normalizeTeamName", () => {
     expect(normalizeTeamName(null)).toBe("");
   });
 
-  // Fastholdt, fordi det er en GRÆNSE og ikke en detalje: NFD splitter kun
-  // accenter fra deres grundbogstav, mens ø, æ og å er selvstændige tegn, der
-  // derfor forsvinder helt. "FC København" og "FC Kobenhavn" normaliserer altså
-  // IKKE ens, og hverken findByName() eller ambiguousTeamNames() kan parre dem.
-  // Ufarligt i dag — ingen af de syv turneringer har to skrivemåder af samme
-  // klub — men reglen skal ikke kunne ændre sig ubemærket.
-  it("folder ikke ø, æ og å ned til deres nærmeste latinske bogstav", () => {
-    expect(normalizeTeamName("FC København")).toBe("fckbenhavn");
+  // G52 (august 2026): før foldede NFD kun accenter, mens ø, æ og å overlevede
+  // og derefter blev SLETTET af tegn-filteret — "FC København" blev
+  // `fckbenhavn`, "FC Kobenhavn" blev `fckobenhavn`, og de to skrivemåder var
+  // dermed to forskellige hold. Alle tre former skal nu ramme samme nøgle.
+  it("folder ø, æ og å ned til grundbogstavet — også når de er skrevet ud", () => {
+    expect(normalizeTeamName("FC København")).toBe("fckobenhavn");
     expect(normalizeTeamName("FC Kobenhavn")).toBe("fckobenhavn");
+    expect(normalizeTeamName("FC Koebenhavn")).toBe("fckobenhavn");
+    expect(normalizeTeamName("Brøndby")).toBe(normalizeTeamName("Brondby"));
+    expect(normalizeTeamName("Århus")).toBe(normalizeTeamName("Aarhus"));
+  });
+
+  // Retningen følger af NFD, som har foldet "ä" til "a" hele tiden — så den
+  // udskrevne form skal folde det samme sted hen.
+  it("behandler den udskrevne ä som NFD behandler selve ä'et", () => {
+    expect(normalizeTeamName("Häcken")).toBe("hacken");
+    expect(normalizeTeamName("Haecken")).toBe("hacken");
+    expect(normalizeTeamName("Hacken")).toBe("hacken");
+  });
+
+  // Den bevidste GRÆNSE: "ue" foldes ikke, fordi det er to almindelige bogstaver
+  // i de sprog, klubnavnene står på — "Queen's Park" ville ellers blive til en
+  // nøgle, der ikke ligner sit hold. Prisen er, at den udskrevne tyske umlaut
+  // står tilbage som to hold, og det skal stå skrevet frem for at blive
+  // genopdaget som en dublet.
+  it("folder IKKE 'ue' — og det koster den udskrevne tyske umlaut", () => {
+    expect(normalizeTeamName("Queen's Park Rangers")).toBe("queensparkrangers");
+    expect(normalizeTeamName("Bayern München")).toBe("bayernmunchen");
+    expect(normalizeTeamName("Bayern Muenchen")).not.toBe(normalizeTeamName("Bayern München"));
+  });
+
+  // Foldningen må ikke koste den kontrol, den er nabo til: delstrengs-fælden
+  // ("Rangers" inde i "Queen's Park Rangers") skal stadig kunne ses.
+  it("ændrer ikke, hvad delstrengs-kontrollen kan se", () => {
+    const nøgler = ["Queen's Park Rangers", "Rangers"].map(normalizeTeamName);
+    expect(nøgler[0]).toContain(nøgler[1]);
   });
 });
 

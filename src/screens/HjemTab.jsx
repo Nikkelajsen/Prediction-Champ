@@ -2,7 +2,7 @@
 // live-oversigt, dine placeringer, rundens historie og opt-in til notifikationer.
 import { useState, useEffect } from "react";
 import { Bell, ChevronRight, Clock, Check, X, Share2, RefreshCw } from "lucide-react";
-import { formatKickoff } from "../lib/scoring.js";
+import { APP_TZ, formatKickoff } from "../lib/scoring.js";
 import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { logEvent, logEventOnce } from "../lib/analytics.js";
@@ -79,8 +79,8 @@ function StoryCard({ story, onDismiss, token, groupId }) {
 function shortKick(iso) {
   if (!iso) return "";
   const d = new Date(iso);
-  const day = d.toLocaleDateString("da-DK", { weekday: "short", day: "2-digit", month: "2-digit" });
-  const t = d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
+  const day = d.toLocaleDateString("da-DK", { timeZone: APP_TZ, weekday: "short", day: "2-digit", month: "2-digit" });
+  const t = d.toLocaleTimeString("da-DK", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit" });
   return `${day} ${t}`;
 }
 
