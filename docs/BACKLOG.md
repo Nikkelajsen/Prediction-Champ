@@ -34,6 +34,8 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
+- `LigaerTab` har sin egen 2-tegns-kontrol af liganavnet inline, mens `validateGroupName` (`onboarding.js`) nu bruges af både guiden og opret-skærmen — tre kaldesteder, to regler, og kun den ene kender 40-tegns-grænsen
+- Ligaer-fanens "Ny konkurrence"-knap vises stadig kun, når man har mindst én liga; betingelsen stammer fra dengang en liga-løs konkurrence var mulig, og ligaen kan nu oprettes inde i opret-flowet
 - `Content-Security-Policy: font-src 'self'` ville gøre "vi fjernede kaldet til Google" til "browseren nægter kaldet" — én direktiv, ingen anden virkning; udskudt fra `B4` frem for bygget halvt
 - Antallet af lukkede konti kan tælles på `profiles.anonymized_at`, men der findes ingen visning; en ny analytics-hændelse ville kræve at udvide kataloget i `sql/analytics_events.sql` OG logge om en person, der netop har bedt om at forsvinde
 - En lukket konto bliver stående som deltager i konkurrencer, der endnu ikke er begyndt — dér ville en framelding hverken omskrive historik eller bryde `group_membership_invariant`, men `B4` valgte den simple regel: alt bevares

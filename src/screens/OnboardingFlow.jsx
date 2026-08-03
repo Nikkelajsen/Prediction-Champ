@@ -177,7 +177,8 @@ function OnboardingFlow({ token, userId, profile, leagues, onJoined, onCreated, 
           </p>
           <div style={{ display: "flex", gap: 8 }}>
             <input className="field" style={{ flex: 1, minWidth: 0 }} placeholder="Indsæt link eller kode…"
-              value={code} onChange={(e) => setCode(e.target.value)}
+              value={code} autoCapitalize="none" autoCorrect="off" spellCheck={false}
+              onChange={(e) => setCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submitCode()} />
             <button style={{ ...btnGreen, width: "auto", padding: "8px 16px", opacity: busy || !code.trim() ? 0.5 : 1 }}
               disabled={busy || !code.trim()} onClick={submitCode}>
