@@ -76,13 +76,12 @@ versionsstempel → `G42`).*
 
 ## Prioriteret rækkefølge
 
-Alle 36 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 35 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
-*Tier 2 er kørt 3. august 2026: syv af dens otte punkter er leveret og slettet
-(`G54`, `G53`, `G3`, `B15`, `G55`, `G56`, `G57`). Tilbage står `G5`, som ikke
-kunne afgøres fra repoet — den venter på, at skema-eksporten har kørt.*
+*Tier 2 er kørt 3. august 2026 og er tom: alle otte punkter er leveret og
+slettet.*
 
 Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
@@ -108,15 +107,21 @@ dem har ventet på en aflæsning i flere uger, mens spørgsmålet stod som åben
 | `I16` | Tæl `profiles.anonymized_at is not null` | Billigste punkt på hele listen, og det eneste, der giver `A25` en udløser. Ingen ny hændelse — kun en tælling på et felt, der allerede står der. |
 | `A5` | Læs Story Engine-regelstatistikken | Uret har kørt siden 31. juli. Kræver kun, at Analytics-fanen åbnes med spørgsmålet "beholder højdepunkterne deres emoji?" i hånden. |
 
-### Tier 2 — Billige rettelser, hvor koden lyver
+### Tier 2 — Billige rettelser, hvor koden lyver ✅ tomt
 
-Tieret er **kørt 3. august 2026** og næsten tomt. Tilbage står det ene punkt, der
-ikke kunne afgøres fra repoet: svaret ligger i produktionsdatabasen og skal
-hentes af skema-eksporten.
+**Kørt 3. august 2026.** Alle otte punkter er leveret og slettet: `G54`, `G53`,
+`G3`, `B15`, `G55`, `G56`, `G57` — og til sidst `G5`, som ikke kunne afgøres fra
+repoet. Skema-eksporten blev kørt, og svaret var, at advarslen havde ret om
+databasen og uret om filen: produktionens 25 funktionskroppe indeholder alle
+CRLF, mens `rating_core.sql` selv var blevet normaliseret til LF. Kroppene er
+hentet ordret tilbage fra eksporten og er nu byte-identiske med `prosrc`;
+`.gitattributes` holder dem der. Samme eksport lukkede `G21`s sidste punkt —
+`schema.sql` er frisk, og filens eget datostempel er nu svaret på, hvor gammel
+den er.
 
-| # | Hvad | Hvorfor her |
-|---|---|---|
-| `G5` | `rating_core.sql`s hoved advarer mod noget, filen ikke gør | Kræver en frisk `schema.sql`-eksport, som **også** lukker `G21`s sidste punkt. Kør [`schema-export.yml`](../.github/workflows/schema-export.yml) og læs derefter begge: bærer funktionskroppene i dumpet CR-tegn, er advarslen sand og filen bare normaliseret ved checkout; gør de ikke, er advarslen forældet og skal slettes. |
+Tieret bliver stående som en tom overskrift indtil næste gennemgang: det er
+billigere at se, at kategorien findes og er tom, end at genopdage, at den skulle
+have været der.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -222,7 +227,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | G1 | **De resterende store skærmfiler** — `MainApp.jsx` ~480 linjer, `HjemTab.jsx` ~450, `CreateCompetitionScreen.jsx` ~356, `AdminScreen.jsx` ~310. **De største utestede skærme er nu `ProfileScreen.jsx` (584) og `ChampionshipTab.jsx` (515)** (gennemgang aug. 2026) — de bør med i splitrækkefølgen. | Anden halvdel af fil-opdelingen fra 30. juli 2026 (`data.js`, `PredictionsScreen.jsx` og `AnalyticsPanel.jsx` er delt). Mønstret er bevist: barrel eller ren flytning bag uændret flade, så et grønt build er beviset for, at ingen eksport er tabt. Gevinsten er ikke kosmetisk — tip-skærmens tids-logik kunne ikke testes, før den blev flyttet ud, og har nu 18 tests. | Mellem |
 | G2 | **14 ESLint-advarsler fra React Compiler** (`set-state-in-effect`, `static-components`, `immutability`). | Står som advarsel frem for fejl, fordi hvert fund kræver en gennemtænkt omskrivning, ikke en rettelse. Loftet i `package.json` (`--max-warnings 14`) gør, at tallet kan falde, men aldrig vokse ubemærket — gælden er synlig i stedet for tavs. **Falder tallet, sænkes loftet i samme ombæring.** **Faldt fra 23 til 14 (3. august 2026, som sidegevinst ved `B4`):** `Section` i `HowItWorksScreen` var defineret inde i komponenten og udløste én advarsel pr. brugssted — ti stykker. Den slags er det billigste, der er tilbage på listen: se efter komponenter defineret inde i andre komponenter, før du kaster dig over effekterne. | Mellem |
 | G4 | **Preview, lokal udvikling og produktion deler database**, medmindre staging-variablerne er sat (`DOCUMENTATION.md` §9). | Selve staging-projektet skal oprettes manuelt i Supabase; indtil det sker, kan en preview-deploy skrive i produktionsdata. Vilkåret er dokumenteret, men det er en risiko, ikke en beslutning. **Skærpelse (aug. 2026):** fallbacken i `supabase.js:7-8` er produktions-URL'en, så `npm run dev` uden `.env.local` også udvikler direkte mod produktionsdata — uden at sige det. Der findes desuden ingen seed-SQL til en tom database, så en tom staging er i dag ikke et brugbart alternativ. De tre skrive-/læsehuller, der gjorde ethvert preview-miljø til en fuldgyldig angrebsflade mod produktion, er lukket (`G14`–`G16`, august 2026) — men det ændrer kun, hvor slemt et uheld er, ikke at miljøerne deler database. | Lille |
-| G5 | **`sql/rating_core.sql`s hoved advarer mod noget, filen ikke gør.** Kommentaren siger, at funktionskroppene indeholder CRLF og "MED VILJE" ikke må normaliseres (linje 26-30) — filen har i dag nul CR-tegn. | Enten er advarslen forældet (kroppene blev normaliseret ubemærket, uden at kommentaren blev rettet), eller også ligger CRLF kun i `prosrc` i selve databasen og forsvinder ved eksport/checkout — i så fald er advarslen korrekt for produktion, men vildledende for enhver, der læser filen i repoet. Skal afklares mod en frisk `sql/schema.sql`-eksport, før nogen stoler på hverken advarslen eller fraværet af den. **Samme eksport afgør `G21`s sidste punkt (august 2026):** hvor frisk `schema.sql` er, står med tre forskellige datoer rundtom, og det kan ikke rettes fra repoet — kun ved at køre eksporten og lade filens eget datostempel være svaret. | Lille |
 | G7 | **Præfikset `fd:` er stadig det eneste, der holder de to leverandørers id-rum fra hinanden** — databasen gør det ikke. | **Halveret 2. august 2026:** `sql/api_id_uniqueness.sql` gav `leagues (provider, api_league_id)`, `seasons (league_id, api_season_id)` og `teams (league_id, api_team_id)`, så to samtidige sync-kørsler ikke længere kan skrive den samme række to gange. **Men rækken kunne ikke lukkes som skrevet:** de tre unikke var formuleret globalt pr. kolonne, og to af de tre ville have fejlet på produktionsdata (Arsenal findes i både Premier League og Champions League med samme `fd:57`; alle fem football-data-turneringer deler sæson-id'et `2026`). **Tilbage står den oprindelige begrundelse:** glemmer syncen præfikset på et hold, skriver den `57` inde i sin egen turnering, hvor ingen constraint kan se det. Den fejl er til gengæld selvhelende (næste kørsel finder rækken på navn og PATCHer id'et på plads), og på kampe var hullet lukket i forvejen af `matches_api_fixture_id_unique`. Det, der ville lukke resten, er en kontrol af id'ets FORM mod ligaens `provider` — og den kræver en trigger eller en kopi af provider-kolonnen ned på `teams`, fordi en check-constraint ikke kan læse en anden tabel. Spørgsmålet er derfor blevet et **valg**: er en permanent trigger prisen værd for en fejl, der retter sig selv? | Lille |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen er formentlig allerede faldet (3. august 2026):** `B2`s testcase 3 er *præcis* denne kodesti — "`full_season`-konkurrence med begge turneringer (multivalg) → kampe fra begge materialiseres, stilling korrekt" — og ejeren har kørt og godkendt den mod produktionsdata 2. august ([`features/turnering-2.md`](./features/turnering-2.md) §6). Blev konkurrencen oprettet frem for kun gennemklikket, er "nul rækker i `mode_params.tournaments`" ikke længere sandt, og rækken skal slettes. **Rækken er derfor skrumpet til ét opslag:** `select id, name, mode_params from competitions where mode_params ? 'tournaments'` — svarer den med rækker, er stien kørt mod rigtige data, og det eneste tilbage er at se stillingen efter. | Lille (opslag) |
 | G11 | **`round_key()` er markeret `IMMUTABLE`, men er reelt `STABLE`** (`sql/rating_core.sql:125`). | `ts::date` på en `timestamptz` afhænger af sessionens `TimeZone`. Værdierne fryses ved insert i den genererede kolonne `matches.round_key`, så en writer med afvigende TZ ville skrive en anden runde end resten — og under UTC ligger rundegrænsen mandag 00:00 UTC, hvilket rammer kickoff mellem 00:00 og 02:00 dansk tirsdag. Rettelsen er ikke bare at ændre volatiliteten: en genereret kolonne *kræver* `IMMUTABLE`, så funktionen skal gøres ægte tidszone-uafhængig (fx `(ts at time zone 'Europe/Copenhagen')::date`), og et skift i grænsen flytter historiske `round_key`-værdier og kræver genberegning. | Mellem |

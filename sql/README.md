@@ -10,26 +10,33 @@ og kan køres igen.
 `public`-skemaet, som det så ud ved seneste eksport. Den redigeres aldrig i hånden;
 den regenereres med guiden nedenfor.
 
-> ⚠️ **Øjebliksbilledet er BAGUD pr. august 2026**: `predictions_match_lock.sql` (#25),
-> den omlagte `analytics_dashboard.sql` (nye `analytics_match_locks`, omdøbte kolonner i
-> `analytics_round_locks`), `competition_awards.sql` (#26), `security_hardening.sql`
-> (#27) og `matches_kickoff_tbd.sql` (#28 — kolonnen `matches.kickoff_tbd` og
-> låsefunktionerne) er kørt/tilføjet siden. Eksporten skal køres, og datoen nedenfor rettes.
+> ✅ **Øjebliksbilledet er FRISK pr. 3. august 2026.** Eksporten er kørt efter
+> `predictions_match_lock.sql` (#25), `competition_awards.sql` (#26),
+> `security_hardening.sql` (#27), `matches_kickoff_tbd.sql` (#28), `feedback.sql`
+> (#29), `api_id_uniqueness.sql` (#30) og `account_anonymization.sql` (#31), og
+> den viser dem alle. Filens eget datostempel i git er svaret på "hvor gammel er
+> den?" — ikke en dato skrevet i hånden her, som var dét, der drev tre steder
+> fra hinanden indtil `G21`.
 >
-> **Netop nu er den også misvisende om sikkerhed.** Filen viser stadig de gamle,
-> åbne `matches`-policies (`auth.role() = 'authenticated'`) og `grant … to anon` på
-> `recompute_ratings()` — de blev lukket med #27. Læser man `schema.sql` som
-> adgangskontrakten, læser man altså tre huller, der ikke findes længere.
+> **Den eneste migrering, dumpet IKKE kender, er #32**
+> (`competitions_rules_cleanup.sql`), som ikke rører skemaet — den fjerner en
+> død nøgle inde i en `jsonb`.
 >
-> **Øjebliksbilledet var friskt pr. 31. juli 2026** — eksporten er kørt efter
-> `multi_provider.sql` (#22) og indeholder `leagues.provider`, `leagues.live_enabled`
-> og `leagues.is_official`. Et staging-projekt bygget op fra `schema.sql` alene får
-> altså det skema, koden faktisk kører imod.
+> **Adgangskontrakten kan igen læses af filen:** de gamle, åbne
+> `matches`-policies og `grant … to anon` på `recompute_ratings()` er væk, som
+> #27 gjorde dem.
 >
-> Reglen er uændret: **eksport efter hver migrering, og datoen ovenfor rettet i
-> samme ombæring** — ellers ved næste læser ikke, om filen kan stoles på.
-> Verificér mod databasen, ikke mod filen, hvis der er tvivl; til gengæld er netop
-> det den hurtigste måde at se, om en migrering faktisk **er** kørt i produktion.
+> **Det, eksporten samtidig afgjorde (`G5`):** funktionskroppene i produktion
+> indeholder CRLF — alle 25 af dem. Advarslen i `rating_core.sql`s hoved var
+> altså sand om databasen, mens selve filen var blevet normaliseret til LF.
+> Kroppene er hentet ordret tilbage, og `.gitattributes` (`*.sql -text`) holder
+> dem der.
+>
+> Reglen er uændret: **eksport efter hver migrering** — kør
+> [`schema-export.yml`](../.github/workflows/schema-export.yml) manuelt, eller
+> lad mandagskørslen gøre det. Verificér mod databasen, ikke mod filen, hvis der
+> er tvivl; til gengæld er netop det den hurtigste måde at se, om en migrering
+> faktisk **er** kørt i produktion.
 
 ---
 

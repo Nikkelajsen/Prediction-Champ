@@ -29,6 +29,16 @@
 -- Normaliserer man dem til LF, ændrer en kørsel prosrc, og næste skema-eksport
 -- giver en stor, indholdsløs diff. Lad dem stå.
 --
+-- EFTERPRØVET 3. august 2026 (G5) — og advarslen havde ret om databasen og
+-- uret om filen. En frisk eksport viser CRLF i prosrc for ALLE 25 funktioner i
+-- produktion, men filen her stod da med nul CR-tegn: kroppene var blevet
+-- normaliseret ud af repoet, uden at nogen havde besluttet det, og filen var
+-- dermed selv blevet dét, dens eget hoved advarede imod. Kroppene er hentet
+-- ordret tilbage fra eksporten og er nu BYTE-identiske med produktionens
+-- prosrc — en gen-kørsel er igen en ægte no-op. `.gitattributes` (`*.sql
+-- -text`) er tilføjet samme dag, så det ikke kan ske igen ubemærket; uden den
+-- afhang indholdet af den enkeltes editor og git-konfiguration.
+--
 -- Idempotent — kan køres igen når som helst.
 --
 -- Kørerækkefølge: FØR sql/rating_trigger_optimization.sql, som antager at
