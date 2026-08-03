@@ -34,6 +34,12 @@
 --   feedback.user_id              → null       samme valg som tabellens egen
 --                                              `on delete set null`; teksten er
 --                                              stadig sand
+--   client_errors.user_id         → null       samme mønster som feedback
+--                                              (tilføjet 3. august 2026 — #36
+--                                              kom til EFTER denne fil, og
+--                                              privatlivspolitikken lover, at
+--                                              fejlrapporter mister koblingen;
+--                                              gen-kør filen i Supabase)
 --   predictions, ratings,         BEVARES      andres stillinger, ratinghistorik
 --   rating_history,                            og kåringer er REGNET ud fra dem
 --   competition_awards
@@ -120,6 +126,9 @@ begin
   delete from public.user_activity_days where user_id = v_uid;
 
   update public.feedback set user_id = null where user_id = v_uid;
+  -- Kontoen soft-lukkes (auth.users-rækken består), så client_errors' egen
+  -- `on delete set null` udløses aldrig — koblingen skal fjernes her.
+  update public.client_errors set user_id = null where user_id = v_uid;
 
   update public.profiles
      set display_name  = v_navn,

@@ -52,6 +52,7 @@ eller en linje i "Forkastede ideer".
 - gen-kørsel af `tournament_scope.sql` eller `standings_tiebreakers.sql` re-granter `anon` select på stillings-viewene — i konflikt med `G50`
 - Tier 2–5-beslutningerne står kun i ROADMAP'ens beslutningslog — `DECISIONS.md` fik dem aldrig, selvom begge filer udråber sig som arkivet
 - `rnk` i `rating_history` rangerer kun på score uden exacts-tiebreak — to spillere kan dele gemt runde-placering, selvom Elo-duellen skiller dem
+- `account_anonymization.sql` er udvidet med `client_errors.user_id → null` (3. august 2026) — filen skal gen-køres i Supabase, før privatlivspolitikkens løfte om fejlrapporter holder
 
 *Ryddet 3. august 2026: de elleve linjer blev til `A25`–`A26`, `B15`–`B16`,
 `G53`–`G57` og `I16`. Én fik ikke eget ID: `B2`s testcase 3 er foldet ind i

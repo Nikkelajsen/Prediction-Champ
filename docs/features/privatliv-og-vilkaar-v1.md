@@ -55,6 +55,7 @@ Anonymisering går uden om begge, fordi `profiles`-rækken bliver stående.
 | `profiles` | pseudonym (`Slettet <8 hex>`), `anonymized_at`, `is_admin = false`, `last_seen_at = null` |
 | `push_subscriptions`, `notification_log`, `stories`, `analytics_events`, `user_activity_days` | slettes |
 | `feedback.user_id` | → `null` (samme valg som tabellens egen `on delete set null`) |
+| `client_errors.user_id` | → `null` *(tilføjet 3. august 2026 — tabellen kom til efter leveringen (#36), og kontoen soft-lukkes, så FK'ens `on delete set null` aldrig udløses; uden dette holdt politikkens løfte om fejlrapporter ikke)* |
 | `predictions`, `ratings`, `rating_history`, `competition_awards`, `competition_participants`, `group_members` | **bevares** — de er grundlaget for andres stillinger |
 | `groups`, `competitions` | røres ikke; overlever fordi `profiles` gør |
 
