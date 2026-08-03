@@ -38,6 +38,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
+- `#34` lukkede kun kilden for grantor-rollen `postgres`: skema-eksporten efter #36 viser, at `alter default privileges for role supabase_admin … grant all on tables to anon` stadig står der (migreringens `do`-blok swallowede fejlen, som den var skrevet til), og sekvenserne blev aldrig dækket — `grant all on sequence public.job_runs_id_seq to anon` plus begge `on sequences`-defaults står tilbage
 - `competitions.rules` har efter `G3` ingen læsere overhovedet — hverken i klienten eller i SQL, hvor `pc_points()` altid har hardkodet 3/1 — så kolonnen står tilbage som ren historik; et `drop column` er uigenkaldeligt og er et produktspørgsmål (skal point nogensinde kunne variere pr. konkurrence?) og ikke en oprydning
 
 *Ryddet 3. august 2026: de elleve linjer blev til `A25`–`A26`, `B15`–`B16`,
