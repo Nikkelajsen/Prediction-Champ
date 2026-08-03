@@ -11,6 +11,11 @@
 //      konkurrence, der lige er oprettet i deres liga (B5). Beskeden dybdelinker
 //      til konkurrencens invitationskode, så trykket lander i den samme
 //      bekræftelse som et invitationslink.
+//   4) Kåring: "du blev Ugens/Månedens bedste" i en konkurrence (B11) — læst
+//      fra competition_awards, som jobbet selv skriver først via
+//      award_competition_periods().
+//   5) Ny turnering: en ny, synlig turnering med mindst én tipbar kamp (B9) —
+//      den eneste beskedtype uden modtager-afgrænsning, se newTournamentMessages().
 // notification_log sikrer, at samme besked aldrig sendes to gange.
 //
 // Kald med: /api/send-notifications  med headeren  x-sync-secret: <SYNC_SECRET>  (ekstern cron)
@@ -402,7 +407,7 @@ export function awardMessages({ awards, competitions }, isSubscribed) {
 
 // Modtagerne af "ny turnering"-beskeden (B9).
 //
-// Den eneste af de fire beskedtyper UDEN en modtager-afgrænsning: en ny
+// Den eneste af de fem beskedtyper UDEN en modtager-afgrænsning: en ny
 // turnering er tilgængelig for alle, så der findes ingen medlemsliste at
 // skære efter. Til gengæld er de to andre betingelser hårde:
 //   * turneringen skal være SYNLIG. `is_visible = false` er den tilstand, en
@@ -707,9 +712,9 @@ export default async function handler(req, res) {
 
     // ================= 3) Ny konkurrence i en liga (B5) =================
     // Et liga-medlem opdagede før kun en ny konkurrence ved selv at åbne ligaen.
-    // Beskeden er dermed den eneste af de tre, der handler om FÆLLESSKABET frem
-    // for om kampe — og den eneste, der beder om en handling, brugeren ellers
-    // ikke ville vide fandtes.
+    // Beskeden er dermed den eneste af de fem, der handler om FÆLLESSKABET frem
+    // for om kampe eller kåringer — og sammen med "ny turnering" (B9) en af de
+    // to, der beder om en handling, brugeren ellers ikke ville vide fandtes.
     //
     // Modsat de to andre sektioner er der ingen kamp- eller stillingsafgrænsning
     // her: en konkurrence i en uofficiel turnering er lige så meget en invitation

@@ -114,7 +114,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
   }
 
   // Samlet join: prøv liga-kode først, dernæst konkurrence-kode (bagudkompatibelt).
-  // Selve opslaget og skrivningen bor i `joinByInviteCode` (data.js), så denne vej
+  // Selve opslaget og skrivningen bor i `joinByInviteCode` (data/competitions.js), så denne vej
   // og deep-link-vejen (?join=/?liga=) ikke kan divergere igen — jf. A7.
   async function joinByCode() {
     if (!inviteCode.trim()) return;

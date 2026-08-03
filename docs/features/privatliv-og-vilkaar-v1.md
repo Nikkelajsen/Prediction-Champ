@@ -88,7 +88,7 @@ Fejler trin 3 efter trin 2, svares `kode: "kun_anonymiseret"`. Brugeren skal vid
 | `src/screens/Auth.jsx` | `jura`-tilstand, `AuthShell`s `bred`, `TekstLink`, `JuraLinje` |
 | `src/screens/HowItWorksScreen.jsx` | Nyt emne "Privatliv og vilkår" med to knapper. *(Rettet efter levering: skærmen blev samme dag lagt om til fem foldbare emner på `main`, så tilføjelsen er et `Topic` og ikke et kort. Den oprindelige udgave flyttede desuden `Section` til modulniveau og sænkede lint-loftet fra 23 til 14 — omlægningen opnåede det samme, og loftet står stadig på 14.)* |
 | `src/screens/MainApp.jsx` | `openLegal` + `screen.type === "legal"` |
-| `src/lib/supabase.js` | `clearAllLocalState()` + `LOKALE_NØGLER` |
+| `src/lib/supabase.js` | `clearAllLocalState()` (`LOKALE_NØGLER` bor i dag i `src/lib/localFlags.js` og re-eksporteres herfra) |
 | `src/lib/data/account.js` | **Ny.** `deleteMyAccount()` |
 | `sql/account_anonymization.sql` | **Ny.** Migrering #31 |
 | `api/delete-account.js` | **Ny.** Fjerde serverless-funktion (loftet er 12) |

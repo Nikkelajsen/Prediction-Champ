@@ -19,7 +19,7 @@
 
 ## 1. Formål
 
-Produktet havde indtil nu kun `admin_user_stats()` (DAU/WAU/MAU, tilmeldinger, frafald) — nyttigt, men uden en samlet North Star-metrik, uden liga-niveau-indsigt og uden funktions-niveau-brug (hvad bruges faktisk: Story Engine, karriere, rating?). Analytics v1 tilføjer et hændelseskatalog og et 4-sektions admin-dashboard, der samlet besvarer de fem spørgsmål i indledningen.
+Produktet havde indtil nu kun `admin_user_stats()` (DAU/WAU/MAU, tilmeldinger, frafald) — nyttigt, men uden en samlet North Star-metrik, uden liga-niveau-indsigt og uden funktions-niveau-brug (hvad bruges faktisk: Story Engine, karriere, rating?). Analytics v1 tilføjer et hændelseskatalog og et 4-sektions admin-dashboard, der samlet besvarer de fem spørgsmål i indledningen. *(Rettet efter levering: dashboardet har i dag **6 sektioner** — Tragt (5C) og Story Engine-regler (5D) kom til 30.–31. juli 2026, jf. udvidelses-linjen i headeren.)*
 
 **Hvorfor internt måle-lag ikke strider mod "Stories over Statistics" (PRODUCT_BOOK kapitel 6):** det princip gælder brugerens overflade — hvad *de* ser. Man kan ikke beskytte et produkts identitet mod en metrik, man ikke måler. Dette dashboard er internt (admin-kun), ændrer intet i brugerens oplevelse, og er selv et redskab til at holde produktet tro mod "fastholdelse før vækst" (PRODUCT_BOOK kapitel 3).
 
@@ -28,7 +28,7 @@ Produktet havde indtil nu kun `admin_user_stats()` (DAU/WAU/MAU, tilmeldinger, f
 1. **Kun Postgres/Supabase — intet Google Analytics.** North Star-metrikken (Prediction Completion Rate) kræver joins mod liga-/konkurrencedata, som GA ikke kan lave; at sende brugerdata til en tredjepart for internt, ikke-markedsføringsformål har ingen gevinst, der opvejer GDPR-overheadet. Data forbliver i egen database — samme mønster som `admin_user_stats()` — og kan trækkes ud via Supabase SQL-editor eller et BI-værktøj (Metabase/Grafana) forbundet direkte til connection-stringen. Det opfylder kravet "skal kunne trækkes ud, ikke kun i appen" uden en ny leverandør.
 2. **Håndrullet dashboard-stil — intet nyt chart-bibliotek.** Genbruger `StatTile`/`StatGroup`/`MiniBars` (flyttet fra `AdminScreen.jsx` til `src/ui/components.jsx`, nu delt af "Statistik" og "Analytics"). Appens eneste dependencies var `lucide-react` + `web-push` — det forbliver sådan.
 3. **Udledte KPI'er, intet nyt cron.** `prediction_locked`, `story_generated` og `push_sent` logges IKKE som diskrete events (se afsnit 3) — de beregnes/genbruges fra eksisterende data. Ingen ny scheduled job, ingen ny risiko tæt på den kritiske rundelås- eller Story Engine-kode.
-4. **Samlet levering.** Events-tabel, fuld instrumentering og alle 4 dashboard-sektioner er leveret i én omgang.
+4. **Samlet levering.** Events-tabel, fuld instrumentering og alle 4 dashboard-sektioner er leveret i én omgang. *(Rettet efter levering: siden udvidet til 6 sektioner — afsnit 5C/5D.)*
 
 To yderligere præciseringer, fundet under implementeringen, som afviger fra den oprindelige rå specifikation:
 
@@ -48,7 +48,7 @@ Mulige tips
 Beregnes pr. bruger, pr. liga, pr. konkurrence, pr. uge og pr. måned — alle fra ét view, `public.analytics_completion_facts` (`sql/analytics_dashboard.sql`), én række pr. **muligt tip**:
 
 1. **"Mulige tips"** = kampene i de konkurrencer, brugeren deltager i, i runder der allerede er **låst** (en ulåst runde er ikke et muligt tip — man kan ikke have misset en deadline, der ikke er indtruffet), og kun runder der låste **efter** brugeren meldte sig til konkurrencen (`lock_at >= competition_participants.joined_at`). Uden det sidste ville alle, der joiner en igangværende `full_season`-konkurrence, starte ved ~0 % og aldrig komme sig — metrikken ville måle anciennitet, ikke deltagelse.
-2. **"Afgivne tips"** = at rækken findes i `predictions`. Pålideligt uden et tidsstempel-tjek: `sql/predictions_write_lock.sql` blokerer INSERT/UPDATE efter rundelåsen, og ingen serverkode skriver `predictions` (`api/send-notifications.js` læser kun) — en eksisterende række KAN ikke være skrevet efter deadline.
+2. **"Afgivne tips"** = at rækken findes i `predictions`. Pålideligt uden et tidsstempel-tjek: `sql/predictions_write_lock.sql` blokerer INSERT/UPDATE efter rundelåsen *(rettet efter levering, `A21`, jf. banneret øverst: afløst af `sql/predictions_match_lock.sql` — låsen er i dag pr. kamp, og garantien gælder uændret)*, og ingen serverkode skriver `predictions` (`api/send-notifications.js` læser kun) — en eksisterende række KAN ikke være skrevet efter deadline.
 3. **Grain-reglen** (den letteste ting at få galt): pr. bruger/liga/uge/måned/globalt bruges `count(distinct (user_id, match_id))` — ét tip kan optræde i flere konkurrencer (delt `predictions`-tabel) og må ikke tælles dobbelt. Pr. konkurrence er almindeligt `count(*)` korrekt.
 
 North Star-KPI'en beregnes **altid** direkte fra `predictions`/`matches` via dette view — **aldrig** fra hændelsesloggen (`analytics_events`), som er lossy by design (se afsnit 7).
@@ -62,7 +62,7 @@ Logges via én generisk klient-helper, `logEvent(token, name, { groupId, competi
 | Kategori | Events | Kaldested |
 |---|---|---|
 | Account | `account_created`, `login`, `logout` | `src/App.jsx` (`completeAuth` med `source`-parameter, `handleLogout`) |
-| Liga | `league_created`, `league_joined`, `league_invite_sent`, `league_invite_accepted` | `src/lib/data.js` (`createGroup`, `joinGroup`, `joinByInviteCode`), `src/screens/GroupScreen.jsx`/`BoardScreen.jsx` (`shareInvite`), `src/screens/MainApp.jsx` (`confirmGroupJoin`) |
+| Liga | `league_created`, `league_joined`, `league_invite_sent`, `league_invite_accepted` | `src/lib/data/groups.js` (`createGroup`, `joinGroup`) + `src/lib/data/competitions.js` (`joinByInviteCode`) — *oprindeligt `data.js`; flyttet ved `G1`*, `src/screens/GroupScreen.jsx`/`BoardScreen.jsx` (`shareInvite`), `src/screens/MainApp.jsx` (`confirmGroupJoin`) |
 | Konkurrence | `competition_created`, `competition_joined`, `competition_opened` | `src/lib/data.js` (`createCompetition` — alle 3 return-veje, `joinCompetition`), `src/screens/MainApp.jsx` (`openBoard`/`openPredictions`) |
 | Tip | `prediction_started`, `prediction_saved`, `prediction_updated`, `prediction_submitted` | `src/screens/PredictionsScreen.jsx` (`save()`, efter vellykket upsert) |
 | Navigation | `opened_home`, `opened_tip`, `opened_league`, `opened_standings`, `opened_rating`, `opened_career`, `opened_story`, `opened_championship` | `src/screens/MainApp.jsx` (`goTab`/`open*`, ét sted for al navigation) |
@@ -110,7 +110,7 @@ To views i `sql/analytics_dashboard.sql`, begge revoked fra klienter (kun læst 
 
 ## 5. Nøgletal og formler
 
-### Dashboard — 4 sektioner (Admin → Analytics, RPC'er i parentes)
+### Dashboard — 6 sektioner (Admin → Analytics, RPC'er i parentes) *(rettet efter levering: 4 ved leveringen; Tragt og Story Engine-regler kom til 30.–31. juli 2026)*
 
 1. **Produktets sundhed** (`admin_analytics_health`): aktive brugere (7 dage), aktive ligaer, aktive konkurrencer, Prediction Completion Rate (med retning mod forrige vindue), Deadline Miss Rate, missede runder, gennemførte spillerunder (alt tid).
 2. **Engagement** (`admin_analytics_engagement`): Story/Karriere/Rating/Liga/Tip Views, Push Notification Open Rate (i alt og pr. type), sessionstid (gennemsnit, median, kun-flere-hændelser og hændelser pr. session).
@@ -155,7 +155,7 @@ Hvert nøgletal på dashboardet har en **ⓘ**, der svarer på fire ting i fast 
 | **Kilde** | hvilke tabeller/views tallet kommer fra, så det kan efterprøves i Supabase SQL-editoren uden at læse RPC'en |
 | **Forbehold** | hvad tallet **ikke** kan bruges til — medtaget hver gang der findes en kendt faldgrube |
 
-Teksterne lever i `src/lib/analyticsMetrics.js` (27 metrikker) og hentes med `metricInfo(id)`; et ukendt id giver `null` frem for at kaste, så en tastefejl koster ⓘ'en og ikke sektionen. Komponenten `M` i `AnalyticsPanel.jsx` renderer dem i en `InfoDot`.
+Teksterne lever i `src/lib/analyticsMetrics.js` (36 metrikker pr. august 2026; 27 ved leveringen) og hentes med `metricInfo(id)`; et ukendt id giver `null` frem for at kaste, så en tastefejl koster ⓘ'en og ikke sektionen. Komponenten `M` i `AnalyticsPanel.jsx` renderer dem i en `InfoDot`.
 
 **Hvorfor det ikke gør etiketterne overflødige.** Reglen fra karriereprofilen (ROADMAP, 30. juli 2026) gælder også her: *et tal skal navngive sit eget omfang i den sætning, det står i; en ⓘ må uddybe, men aldrig alene bære det, der skal til for at læse tallet rigtigt.* Derfor bliver etiketter og hints ved med at sige "seneste 7 dage", "alt tid", "af dem der havde en deadline" — også når forklaringen findes i ordbogen.
 
@@ -220,7 +220,7 @@ Open rate siger, om beskeden blev **åbnet**. Den siger intet om, hvorvidt den *
 
 **Enheden er (bruger, runde)** — én modtaget deadline-påmindelse for én runde. "Tippede" = mindst ét tip i netop den runde, læst fra `analytics_completion_facts`, altså fra `predictions`.
 
-Modtagerne findes ved at parse `notification_log.key` (`deadline:<season_id>:<round_key>:<dato>`; `season_id` kan være tom, men indeholder aldrig et kolon, så felt 3 er altid runde-nøglen). Parsingen er defensiv med et regex-tjek: en nøgle i uventet format udelades frem for at kaste og tage hele Engagement-sektionen med sig.
+Modtagerne findes ved at parse `notification_log.key` (`deadline:<season_id>:<round_key>:<dato>`; `season_id` kan være tom, men indeholder aldrig et kolon, så felt 3 er altid runde-nøglen). Parsingen er defensiv med et regex-tjek: en nøgle i uventet format udelades frem for at kaste og tage hele Engagement-sektionen med sig. *(Rettet efter levering, `A21` — jf. banneret øverst: nøglen er i dag `deadline:<dato>`, felt 2 er datoen, og det gamle 4-felts-format udelades bevidst af regex-tjekket.)*
 
 > ⚠️ **Korrelation, ikke årsag.** De, der åbner notifikationer, er de engagerede i forvejen. Forskellen er et **loft** over pushets reelle effekt, ikke et estimat af den. Et push, der aldrig blev åbnet, kan desuden godt have virket — beskeden er synlig på låseskærmen, uden at linket bliver trykket.
 

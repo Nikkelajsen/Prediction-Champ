@@ -143,7 +143,8 @@ async function loadRoundBoard(token, roundKey, scope = ALL) {
 
 // ---------- Sæsonchampionship: samlede point for hele en ligas sæson ----------
 // Alle er automatisk med (alle der har tippet en spillet kamp i sæsonen).
-// Stillingen læses fra DB-viewet season_standings (sql/standings_views.sql);
+// Stillingen læses fra DB-viewet season_standings (gældende definition i
+// sql/standings_tiebreakers.sql — standings_views.sql er afløst, nu .superseded.sql);
 // kampene hentes kun til fremdrifts-tælleren (spillet/total).
 async function loadSeasonBoard(token, leagueId) {
   const seasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=id,name,start_date&order=start_date.desc&limit=1`);

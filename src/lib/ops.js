@@ -102,7 +102,8 @@ const KIND_LABEL = {
 // fordi wouldSend ikke bærer `kind` med — endpointet returnerer bevidst kun de
 // fire felter, et menneske skal læse. En ukendt type vises med sit præfiks
 // frem for at blive skjult: en ny beskedtype skal kunne ses her, før nogen
-// husker at opdatere denne fil.
+// husker at opdatere denne fil. Det er præcis dét, der sker for de nyere typer
+// (`award:`, `newleague:`), indtil KIND_LABEL udvides.
 function summarizeOutbox(wouldSend) {
   const byKey = new Map();
   for (const m of wouldSend || []) {

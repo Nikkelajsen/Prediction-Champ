@@ -360,9 +360,10 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           samme tomme liste) — men prop'en er her allerede ved første tegning,
           så kortet ikke blinker ind efter et netværkskald.
 
-          Destinationen er Ligaer og ikke opret-skærmen: en bruger uden liga
-          ville dér kunne lave en liga-løs konkurrence, og det er netop den
-          overgangstilstand, onboarding-spec §6 forbyder. Ligaer-fanen viser
+          Destinationen er Ligaer og ikke opret-skærmen: en konkurrence kræver
+          en liga (guarden bor i createCompetition, siden 3. august), så vejen
+          frem går altid gennem at oprette eller vælge en liga først.
+          Ligaer-fanen viser
           både "Opret en liga" og "Deltag med kode" for den, der ingen har. */}
       {!showChecklist && competitions.length === 0 && (
         <Card style={{ borderStyle: "dashed", background: "transparent" }}>

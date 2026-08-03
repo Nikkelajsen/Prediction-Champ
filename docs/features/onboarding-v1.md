@@ -70,7 +70,7 @@ To RLS-forudsætninger, verificeret før implementering:
 - **`predictions`-SELECT-policyen er `user_id = auth.uid() or (…locked…)`** — en bruger kan altid læse sine egne tips, også ulåste. `hasPrediction`-proben (`limit=1`) er derfor sikker.
 - **A8-triggeren indsætter med `on conflict (group_id, user_id) do nothing`** (`sql/group_membership_invariant.sql`) — opretterens `admin`-række overlever deltager-insertet. Rækkefølgen `createGroup` → deltager-insert er dermed bindende; omvendt ville triggeren nå at lave en `member`-række først.
 
-Trinnene: `liga` · `konkurrence` · `tip` · `invitér`. Notifikationer og PWA-installation er **ekstra** rækker på kortet og tæller ikke med i "X af Y" — ellers ville tælleren hoppe mellem enheder.
+Trinnene: `liga` · `konkurrence` · `tip` · `invitér`. Notifikationer og PWA-installation er **ekstra** rækker på kortet og tæller ikke med i "X af Y" — ellers ville tælleren hoppe mellem enheder. **Rettet efter levering:** kortet fik kun **push-rækken** som ekstra række — PWA-installationen (`InstallGuide`) blev ikke en række på kortet. Begrundelsen (tæller ikke med i "X af Y") gælder uændret for push.
 
 **Hvorfor "Invitér en ven" er et krav og ikke pynt:** produktets North Star er sunde, aktive ligaer (produktbogen kap. 3), og en liga med ét medlem er en død liga. Et tip afgivet alene er ikke en gennemført onboarding.
 
@@ -81,7 +81,7 @@ Trinnene: `liga` · `konkurrence` · `tip` · `invitér`. Notifikationer og PWA-
 Derfor:
 
 - guiden opretter liga **og** konkurrence i én handling (`createStarterLeague`);
-- opret-skærmens hurtig-sti viser liga-feltet **altid** og defaulter til brugerens første liga.
+- ~~opret-skærmens hurtig-sti viser liga-feltet **altid** og defaulter til brugerens første liga.~~ *(Afløst — se udvidelsen nedenfor: liga er nu et **krav** i `createCompetition`, "Ingen liga" findes ikke som valg, og en bruger uden liga opretter den i selve opret-flowet.)*
 
 Kontrol efter udrulning: `select count(*) from competitions where group_id is null and created_at > <udrulning>` skal være **0**.
 
@@ -91,7 +91,7 @@ Kontrol efter udrulning: `select count(*) from competitions where group_id is nu
 
 | Fil | Ændring |
 |---|---|
-| `src/lib/onboarding.js` | **Ny.** `deriveOnboarding` (ren) · `loadOnboardingSignals` · `loadHasPrediction` · `loadStarterTournaments` · `createStarterLeague` · `defaultLeagueName` · `validateGroupName` · localStorage-nøgler |
+| `src/lib/onboarding.js` | **Ny.** `deriveOnboarding` (ren) · `loadOnboardingSignals` · `loadHasPrediction` · `loadStarterTournaments` · `createStarterLeague` · `defaultLeagueName` · `validateGroupName` · localStorage-nøgler *(nøglerne bor i dag i `src/lib/localFlags.js`, se §14)* |
 | `src/lib/data.js` | `createCompetition` og `joinByInviteCode` udtrukket fra skærmene (se §8) |
 | `src/lib/scoring.js` | `MODE_HINTS` ved siden af `MODE_LABELS` |
 | `src/screens/OnboardingFlow.jsx` | **Ny.** Fuldskærms-overlay, tre trin |
@@ -100,7 +100,7 @@ Kontrol efter udrulning: `select count(*) from competitions where group_id is nu
 | `src/ui/components.jsx` | **Ny** `EmptyCompetitions`, delt af Tip og stillingen |
 | `src/screens/MainApp.jsx` | Onboarding-tilstand, flow-gate, PWA-gate, prop-føring |
 | `src/screens/HjemTab.jsx` | Checklisten erstatter de to dashed tom-tilstande; eget `loadMyGroups` flyttet op; ⓘ ved rating og placeringer |
-| `src/screens/CreateCompetitionScreen.jsx` | "Flere valg"-udfolder; liga defaulter til første liga; navn forudfyldes |
+| `src/screens/CreateCompetitionScreen.jsx` | "Flere valg"-udfolder; liga defaulter til første liga; navn forudfyldes. *(Rettet efter levering: afløst af opret-flow v2 — skærmen er i dag galleri-først, og navnet forudfyldes **kun** for Ugens kupon (`B6`); liga-defaulten består. Se [`opret-flow-v2.md`](./opret-flow-v2.md).)* |
 | `src/screens/LigaerTab.jsx` | "Ny konkurrence"-knappen flyttet ud af "Øvrige"-blokken |
 | `src/screens/PredictionsScreen.jsx` | ⓘ ved runden; `EmptyCompetitions` |
 | `src/screens/BoardScreen.jsx` | `EmptyCompetitions` |
@@ -125,10 +125,10 @@ Guiden fik brug for de samme to skrivninger, som lå inline i skærmene. To kopi
 | **Ingen turnering med kampprogram** | Ligaen oprettes alene. Fællesskabet er det, der består |
 | **Oprettet midt i en runde** | Første tipbare runde er næste uge. Landing forgrenes på `matchCount`, ikke på et løfte |
 | **Liga oprettet, konkurrence fejlede** | Rulles **ikke** tilbage — en tom liga er brugbar og kan slettes af sin admin. Brugeren sendes til liga-siden med besked |
-| **`profile` er `null`** (`App.jsx:28-31`) | `defaultLeagueName` falder tilbage til `"Min liga"`; guiden hilser "Hej der" — aldrig `"undefineds liga"` |
+| **`profile` er `null`** (`completeAuth`s catch, `App.jsx:70-73`) | `defaultLeagueName` falder tilbage til `"Min liga"`; guiden hilser "Hej der" — aldrig `"undefineds liga"` |
 | **`localStorage` utilgængelig** | `readFlag`/`writeFlag` fejler stille; onboarding må aldrig blokere appen |
 
-**Turneringen findes via data**, ikke via navn: `loadStarterTournaments` vælger nyeste sæson med kampe uden resultat. Regexet `/superliga/i` i `ChampionshipTab.jsx:147-151` er bevidst **ikke** kopieret ind — det hører til `turnering-2`.
+**Turneringen findes via data**, ikke via navn: `loadStarterTournaments` vælger nyeste sæson med kampe uden resultat. Championship-fanens eget valg bor i dag i `src/screens/championship/scope.js` (`pickSeasonLeague`, vælger ældste `created_at` — navne-regexet `/superliga/i` findes ikke længere) og er bevidst **ikke** kopieret ind — det hører til `turnering-2`.
 
 ## 10. Bevidst ikke med i v1
 
@@ -169,7 +169,7 @@ Markeret her frem for slettet, jf. `CLAUDE.md`:
 2. **Gamle flag uden ejer ignoreres**, frem for at blive tildelt den, der logger ind først. Netop dén migrering ville gen-indføre fejlen for en, der opretter en ny konto lige efter et log ud. Prisen er en engangsudgift for eksisterende brugere: PWA-modalen, liga-forslaget og push-kortet vises én gang mere, og Championship-filteret falder tilbage til standard.
 3. **Hjem kan ikke længere stå tom.** Alle kortene på Hjem lå bag `tips.hasComps`, så checklisten var det eneste indhold for en bruger uden konkurrencer — og den kan udeblive ad to veje (brugeren trykker X, eller proben fejler stille). Der ligger nu et fallback-kort under checklisten, gated på `!showChecklist && competitions.length === 0`, som peger på Ligaer-fanen.
 
-**Hvorfor fallback-kortet peger på Ligaer og ikke på opret-skærmen:** en bruger uden liga ville dér kunne lave en liga-løs konkurrence, og det er præcis den overgangstilstand, §6 forbyder. Ligaer-fanen viser både "Opret en liga" og "Deltag med kode" for den, der ingen har. Af samme grund er `EmptyCompetitions` bevidst *ikke* genbrugt her, selvom den findes.
+**Hvorfor fallback-kortet peger på Ligaer og ikke på opret-skærmen:** en bruger uden liga ville dér kunne lave en liga-løs konkurrence, og det er præcis den overgangstilstand, §6 forbyder. Ligaer-fanen viser både "Opret en liga" og "Deltag med kode" for den, der ingen har. Af samme grund er `EmptyCompetitions` bevidst *ikke* genbrugt her, selvom den findes. **Rettet efter levering (3. august 2026):** den fare findes ikke længere — liga er nu påkrævet i `createCompetition`, og opret-skærmen kan ikke lave en liga-løs konkurrence (se udvidelsen i §6) — men destinationen står: Ligaer-fanen er stadig det rigtige sted for den, der ingen liga har.
 
 Dette afviger fra §7's *"checklisten erstatter de to dashed tom-tilstande"*: Hjem har igen en tom-tilstand — men **under** checklisten, ikke i stedet for den, og kun som sidste værn.
 

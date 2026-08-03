@@ -6,8 +6,9 @@ Udskilt fra `docs/ROADMAP.md` den 30. juli 2026: loggen var vokset til
 hovedparten af filens 104 KB, og ROADMAP'en skal kunne læses for at *træffe* en
 beslutning — ikke for at læse alle de gamle.
 
-**Åbne** beslutninger står fortsat i [`ROADMAP.md`](./ROADMAP.md). Når en af dem
-afgøres, flyttes den hertil med dato og begrundelse.
+**Åbne** beslutninger bor i [`BACKLOG.md`](./BACKLOG.md) (flyttet dertil
+31. juli 2026). Når en af dem afgøres, flyttes den hertil med dato og
+begrundelse.
 
 Begrundelsen er det vigtige. En beslutning uden den kan ikke revideres senere:
 man ved ikke, om forudsætningen stadig holder.

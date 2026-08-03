@@ -23,7 +23,9 @@ Det eneste, der findes, er derfor det, repoet selv tager:
 | **Bevist gendannelig** | Ja — hver kørsel gendanner sit eget dump i en tom PostgreSQL og efterprøver rækketallene mod produktion |
 
 **Første kørsel: 2. august 2026 — bestået.** 22 tabeller (20 i `public` plus
-`auth.users` og `auth.identities`), 8.434 rækker, 316 kB krypteret. Kørslen
+`auth.users` og `auth.identities`), 8.434 rækker, 316 kB krypteret. *(Siden er
+`feedback` (#34) og `client_errors` (#36) kommet til, så forvent 24 tabeller —
+22 i `public` — i nyere dumps.)* Kørslen
 besvarede samtidig det ene, der ikke kunne afgøres fra repoet: **pooler-rollen må
 læse `auth`**, så brugerkontiene er faktisk med i kopien. Tallene står her som
 udgangspunkt, ikke som et krav — men et dump, der pludselig er markant *mindre*

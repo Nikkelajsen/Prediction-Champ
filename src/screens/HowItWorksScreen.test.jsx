@@ -16,9 +16,9 @@ import HowItWorksScreen from "./HowItWorksScreen.jsx";
 const html = () => renderToStaticMarkup(<HowItWorksScreen onBack={() => {}} token="tok" />);
 
 describe("HowItWorksScreen — foldet som standard", () => {
-  it("viser de fem emner som overskrifter", () => {
+  it("viser de seks emner som overskrifter", () => {
     const out = html();
-    for (const title of ["Begreberne", "Point og stilling", "Under kampene", "Din udvikling", "Installér som app"]) {
+    for (const title of ["Begreberne", "Point og stilling", "Under kampene", "Din udvikling", "Installér som app", "Privatliv og vilkår"]) {
       expect(out).toContain(title);
     }
   });
