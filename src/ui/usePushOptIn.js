@@ -6,8 +6,7 @@
 // og spørge om det samme samtidig.
 import { useState, useEffect } from "react";
 import { enablePush, getExistingSubscription, isPushSupported } from "../lib/push.js";
-
-const PUSH_DISMISS_KEY = "pc_push_dismissed";
+import { readUserFlag, writeUserFlag, PUSH_DISMISS_KEY } from "../lib/localFlags.js";
 
 // { state: null | "available" | "hidden", busy, error, enable(), dismiss() }
 // `state === null` betyder "ved det ikke endnu" — kalderen viser intet imens,
@@ -21,7 +20,9 @@ function usePushOptIn(token, userId) {
     let cancelled = false;
     (async () => {
       try {
-        if (!isPushSupported() || Notification.permission === "denied" || localStorage.getItem(PUSH_DISMISS_KEY)) {
+        // "Nej tak" er den ENKELTE brugers svar, ikke telefonens: en delt enhed
+        // må ikke kunne skjule spørgsmålet for den næste, der logger ind.
+        if (!isPushSupported() || Notification.permission === "denied" || readUserFlag(PUSH_DISMISS_KEY, userId)) {
           if (!cancelled) setState("hidden");
           return;
         }
@@ -30,7 +31,7 @@ function usePushOptIn(token, userId) {
       } catch { if (!cancelled) setState("hidden"); }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [userId]);
 
   async function enable() {
     setBusy(true); setError("");
@@ -43,7 +44,7 @@ function usePushOptIn(token, userId) {
   }
 
   function dismiss() {
-    try { localStorage.setItem(PUSH_DISMISS_KEY, "1"); } catch {}
+    writeUserFlag(PUSH_DISMISS_KEY, userId, "1");
     setState("hidden");
   }
 

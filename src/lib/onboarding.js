@@ -9,23 +9,11 @@
 // ved start, og checklisten siger det af sig selv.
 //
 // localStorage bruges KUN til de valg, der ikke kan udledes: har brugeren
-// sprunget guiden over, og har de skjult kortet. Samme mønster som de
-// eksisterende pc_pwa_onboarded / pc_liga_nudge_dismissed.
+// sprunget guiden over, og har de skjult kortet. Nøglerne og de bruger-bundne
+// læse/skrive-helpers bor i src/lib/localFlags.js — flagene skal bære et
+// bruger-id, ellers arver den næste konto på samme telefon svarene.
 import { db } from "./supabase.js";
 import { loadMyGroups, createGroup, createCompetition } from "./data.js";
-
-const FLOW_KEY = "pc_onboarding_v1_flow";       // "done" | "skipped"
-const CARD_KEY = "pc_onboarding_v1_card";       // "1" = kortet er skjult
-const COMPLETE_KEY = "pc_onboarding_v1_complete"; // "1" = færdig, spring proben over
-
-// localStorage kan være utilgængelig (privat browsing, blokerede cookies).
-// Onboarding må aldrig fejle på dét, så begge veje er stille.
-function readFlag(key) {
-  try { return localStorage.getItem(key); } catch { return null; }
-}
-function writeFlag(key, value) {
-  try { localStorage.setItem(key, value); } catch { /* utilgængelig — spring over */ }
-}
 
 // ---------- den rene tilstandsmaskine ----------
 
@@ -181,5 +169,4 @@ async function createStarterLeague(token, userId, { groupName, competitionName, 
 export {
   deriveOnboarding, loadOnboardingSignals, loadHasPrediction,
   defaultLeagueName, validateGroupName, createStarterLeague, loadStarterTournaments,
-  readFlag, writeFlag, FLOW_KEY, CARD_KEY, COMPLETE_KEY,
 };

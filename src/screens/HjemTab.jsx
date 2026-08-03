@@ -7,7 +7,7 @@ import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { logEvent, logEventOnce } from "../lib/analytics.js";
 import { isQuiet } from "../lib/stories.js";
-import { readFlag, writeFlag, CARD_KEY } from "../lib/onboarding.js";
+import { readUserFlag, writeUserFlag, CARD_KEY } from "../lib/localFlags.js";
 import { C, btnGhost, btnGreen, font, iconBtn } from "../ui/theme.js";
 import { usePushOptIn } from "../ui/usePushOptIn.js";
 import { Card, Eyebrow, H, InfoDot, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
@@ -155,7 +155,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
   const [reloadKey, setReloadKey] = useState(0);
   // Kortet kan skjules permanent; onboarding-tilstanden selv kommer fra MainApp,
   // så Hjem ikke skal hente brugerens ligaer en ekstra gang.
-  const [cardHidden, setCardHidden] = useState(() => readFlag(CARD_KEY) === "1");
+  const [cardHidden, setCardHidden] = useState(() => readUserFlag(CARD_KEY, userId) === "1");
   const push = usePushOptIn(token, userId);
   const showChecklist = !!onboarding && !onboarding.complete && !cardHidden;
 
@@ -338,7 +338,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         <GetStartedCard
           onboarding={onboarding}
           push={push}
-          onDismiss={() => { writeFlag(CARD_KEY, "1"); setCardHidden(true); }}
+          onDismiss={() => { writeUserFlag(CARD_KEY, userId, "1"); setCardHidden(true); }}
           actions={{
             liga: () => goTab("ligaer"),
             konkurrence: () => (onboarding.groups.length === 1 ? openGroup?.(onboarding.groups[0].id) : goTab("ligaer")),
@@ -349,8 +349,37 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         />
       )}
 
-      {/* Signatur: næste deadline */}
-      {tips === null && <Card><span style={{ color: C.muted, fontSize: 13 }}>Henter din næste deadline…</span></Card>}
+      {/* Sidste værn: Hjem må ALDRIG stå tom.
+          Alle kortene nedenfor ligger bag `tips.hasComps`, og checklisten var
+          derfor det eneste indhold, en bruger uden konkurrencer fik. Den kan
+          udeblive ad to veje — brugeren trykker X på den, eller onboarding-
+          proben fejler stille (MainApp) — og så stod skærmen bogstaveligt talt
+          med dato og navn og intet andet. Ingen fejl at se, ingen vej videre.
+
+          Betingelsen hænger på `competitions` og ikke på `tips`, fordi de siger
+          præcis det samme (computeHomeTips returnerer {hasComps:false} på den
+          samme tomme liste) — men prop'en er her allerede ved første tegning,
+          så kortet ikke blinker ind efter et netværkskald.
+
+          Destinationen er Ligaer og ikke opret-skærmen: en bruger uden liga
+          ville dér kunne lave en liga-løs konkurrence, og det er netop den
+          overgangstilstand, onboarding-spec §6 forbyder. Ligaer-fanen viser
+          både "Opret en liga" og "Deltag med kode" for den, der ingen har. */}
+      {!showChecklist && competitions.length === 0 && (
+        <Card style={{ borderStyle: "dashed", background: "transparent" }}>
+          <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Kom i gang</div>
+          <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>
+            Du er ikke med i en konkurrence endnu. Start med en liga — dit faste
+            fællesskab — og opret eller deltag i en konkurrence derinde.
+          </div>
+          <button style={{ ...btnGreen, marginTop: 12 }} onClick={() => goTab("ligaer")}>Opret eller deltag i en liga</button>
+        </Card>
+      )}
+
+      {/* Signatur: næste deadline. Kun for den, der HAR konkurrencer — ellers
+          lovede kortet at hente en deadline, der ikke findes, og stod side om
+          side med "Kom i gang" ovenfor, indtil kaldet kom tilbage. */}
+      {tips === null && competitions.length > 0 && <Card><span style={{ color: C.muted, fontSize: 13 }}>Henter din næste deadline…</span></Card>}
       {/* Intet at tippe lige nu — IKKE det samme som "alle tips er inde".
           Alle kampe i brugerens konkurrencer er låst eller spillet. */}
       {tips && tips.hasComps && tips.nothingToTip && (

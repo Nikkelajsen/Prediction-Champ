@@ -9,8 +9,7 @@ import { leaders } from "../lib/standings.js";
 import { modeLabel } from "../lib/scoring.js";
 import { C, btnGhost, btnGold, btnGreen, font } from "../ui/theme.js";
 import { Card, Eyebrow, H, InfoDot, Modal, PlayerName } from "../ui/components.jsx";
-
-const NUDGE_KEY = "pc_liga_nudge_dismissed";
+import { readUserFlag, writeUserFlag, NUDGE_KEY } from "../lib/localFlags.js";
 
 function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGroup, reload, openProfile }) {
   const [groups, setGroups] = useState(null);
@@ -27,7 +26,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
   const [pendingDelete, setPendingDelete] = useState(null); // konkurrencen, der afventer bekræftelse (G31)
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState(""); // fejl fra arkivér/gendan/slet
-  const [nudgeGone, setNudgeGone] = useState(() => { try { return !!localStorage.getItem(NUDGE_KEY); } catch { return false; } });
+  const [nudgeGone, setNudgeGone] = useState(() => !!readUserFlag(NUDGE_KEY, userId));
 
   async function reloadGroups() {
     try { setGroups(await loadMyGroups(token, userId)); } catch { setGroups([]); }
@@ -131,7 +130,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
   const active = visible.filter((c) => !statusMap[c.id]?.isComplete);
   const completed = visible.filter((c) => statusMap[c.id]?.isComplete);
   const canNudge = !nudgeGone && groups && groups.length === 0 && loose.some((c) => c.created_by === userId);
-  function dismissNudge() { try { localStorage.setItem(NUDGE_KEY, "1"); } catch {} setNudgeGone(true); }
+  function dismissNudge() { writeUserFlag(NUDGE_KEY, userId, "1"); setNudgeGone(true); }
 
   const LeagueCard = ({ c, isArchived }) => {
     const s = statusMap[c.id];

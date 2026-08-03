@@ -85,6 +85,7 @@ const PRIVATLIV = {
             "Hvilken turnering du sidst kiggede på i Championship.",
           ],
         },
+        "Alt på nær sessionen er mærket med din konto. Deler du enhed med andre, ser de derfor deres egen introduktion og deres egne valg — ikke dine.",
         "Rydder du din browsers data, forsvinder alt det — du bliver logget ud og ser introduktionen igen, men dine tips og din rating ligger i databasen og er upåvirkede.",
       ],
     },

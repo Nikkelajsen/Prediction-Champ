@@ -39,7 +39,9 @@ function Shell({ children, onSkip, skipLabel = "Spring over" }) {
         </div>
         {children}
         {/* "Spring over" er synlig hele vejen. Guiden er et tilbud, ikke en dør,
-            der låser — checklisten på Hjem kan altid genåbne den. */}
+            der låser: springer man over, tager "Kom godt i gang"-checklisten på
+            Hjem over og peger på næste trin. Guiden selv åbner ikke igen — se
+            hvorfor i onboarding-spec §13. */}
         <button onClick={onSkip} style={{
           background: "none", border: "none", color: C.muted, fontSize: 13,
           fontFamily: font.body, cursor: "pointer", padding: "6px 0", marginTop: -4,

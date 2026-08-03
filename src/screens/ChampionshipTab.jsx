@@ -7,6 +7,7 @@ import { roundLabel } from "../lib/scoring.js";
 import { joinNames, leaders } from "../lib/standings.js";
 import { C, font, muted, pagerBtn, thStyle } from "../ui/theme.js";
 import { Card, Eyebrow, H, InfoDot, Modal, PlayerName } from "../ui/components.jsx";
+import { readUserFlag, writeUserFlag, SEASON_LEAGUE_KEY } from "../lib/localFlags.js";
 
 // Kolonne-forklaringen under stillingerne. Hele tiebreaker-stigen står i InfoDot'en
 // og på "Sådan virker det" — her nævnes kun det, tabellen faktisk viser, og først
@@ -152,16 +153,11 @@ export function pickSeasonLeague(leagues, savedId) {
     || list.slice().sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))[0];
 }
 
-// Brugerens valg i sæsonvælgeren. localStorage kan være utilgængelig (privat
-// browsing, blokerede cookies), så begge veje er pakket ind — samme greb som
-// LigaerTab's nudge.
-const SEASON_LEAGUE_KEY = "pc_season_league";
-function readSeasonLeagueId() {
-  try { return localStorage.getItem(SEASON_LEAGUE_KEY); } catch { return null; }
-}
-function writeSeasonLeagueId(id) {
-  try { localStorage.setItem(SEASON_LEAGUE_KEY, id); } catch { /* utilgængelig — spring over */ }
-}
+// Brugerens valg i sæsonvælgeren — BRUGERENS, ikke telefonens: to personer på
+// samme enhed skal ikke arve hinandens filter. Læse/skrive er stille, hvis
+// localStorage er utilgængelig (privat browsing, blokerede cookies).
+const readSeasonLeagueId = (userId) => readUserFlag(SEASON_LEAGUE_KEY, userId);
+const writeSeasonLeagueId = (userId, id) => writeUserFlag(SEASON_LEAGUE_KEY, userId, id);
 
 // Championship har to niveauer, og navnet bærer forskellen: kun den SAMLEDE
 // stilling hedder "Prediction Champ". En turneringsstilling er "Månedens bedste
@@ -286,7 +282,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
   const unofficialLeagues = useMemo(() => leagues.filter((l) => l.is_official === false), [leagues]);
   const note = useMemo(() => scopeNote(officialLeagues, unofficialLeagues), [officialLeagues, unofficialLeagues]);
 
-  const [seasonLeagueId, setSeasonLeagueId] = useState(readSeasonLeagueId);
+  const [seasonLeagueId, setSeasonLeagueId] = useState(() => readSeasonLeagueId(userId));
   const seasonLeague = useMemo(() => pickSeasonLeague(officialLeagues, seasonLeagueId), [officialLeagues, seasonLeagueId]);
 
   const [roundScope, setRoundScope] = useState(ALL_SCOPE);
@@ -355,7 +351,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
 
   function changeSeasonLeague(id) {
     setSeasonLeagueId(id);
-    writeSeasonLeagueId(id);
+    writeSeasonLeagueId(userId, id);
   }
 
   const isPast = month < currentMonthKey();
