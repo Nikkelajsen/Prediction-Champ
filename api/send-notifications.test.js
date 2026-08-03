@@ -12,7 +12,7 @@
 // Plus sendevinduet (A24). Det er den ene regel her, der er umulig at afprøve i
 // drift: fejler den, opdages det ved, at nogen bliver vækket kl. 03.
 import { describe, it, expect } from "vitest";
-import { finishedRoundKeys, lastClosedRoundKey, pushRunVerdict, sendWithBudget, releaseClaims, officialSeasonIds, newCompetitionMessages, hourInZone, dateInZone, withinSendWindow } from "./send-notifications.js";
+import { finishedRoundKeys, lastClosedRoundKey, pushRunVerdict, sendWithBudget, releaseClaims, officialSeasonIds, newCompetitionMessages, awardMessages, newTournamentMessages, hourInZone, dateInZone, withinSendWindow } from "./send-notifications.js";
 
 const kamp = (round_key, home_score, away_score) => ({ id: `${round_key}-${home_score}-${away_score}`, round_key, home_score, away_score });
 
@@ -432,5 +432,99 @@ describe("releaseClaims", () => {
   it("kaster ikke, når sletningen fejler", async () => {
     const sb = async () => { throw new Error("boom"); };
     await expect(releaseClaims(sb, [{ userId: "u1", key: "k" }])).resolves.toBe(0);
+  });
+});
+
+// B11 — lokale kåringer. Rækken i competition_awards er allerede afgjort af
+// award_competition_periods(); det, der testes her, er OVERSÆTTELSEN: at
+// nøglen kan skelne to kåringer fra hinanden, og at delt sejr siges højt.
+describe("awardMessages", () => {
+  const konkurrencer = [{ id: "komp-1", name: "Kontorligaen" }, { id: "komp-2", name: "Familien" }];
+  const uge = (over = {}) => ({
+    competition_id: "komp-1", period_type: "round", period_key: "2026-08-04",
+    user_id: "bo", points: 14, shared: false, ...over,
+  });
+  const alle = () => true;
+
+  it("oversætter en ugekåring med konkurrencens navn", () => {
+    const [besked] = awardMessages({ awards: [uge()], competitions: konkurrencer }, alle);
+    expect(besked).toMatchObject({
+      userId: "bo",
+      key: "award:komp-1:round:2026-08-04",
+      title: "Du er Ugens bedste 🏅",
+      kind: "award",
+    });
+    expect(besked.body).toBe('14 point — flest af alle i "Kontorligaen".');
+  });
+
+  it("bruger månedens ordlyd for en månedskåring", () => {
+    const [besked] = awardMessages(
+      { awards: [uge({ period_type: "month", period_key: "2026-07" })], competitions: konkurrencer },
+      alle
+    );
+    expect(besked.title).toBe("Du er Månedens bedste 👑");
+    expect(besked.key).toBe("award:komp-1:month:2026-07");
+  });
+
+  // Delt kåring giver én række pr. vinder. Begge skal have besked, og begge
+  // skal kunne se, at den er delt — ellers ville to personer stå med hver sin
+  // besked om at have vundet alene.
+  it("siger 'delt' til begge vindere ved delt kåring", () => {
+    const beskeder = awardMessages(
+      { awards: [uge({ shared: true }), uge({ user_id: "cille", shared: true })], competitions: konkurrencer },
+      alle
+    );
+    expect(beskeder).toHaveLength(2);
+    for (const b of beskeder) {
+      expect(b.title).toBe("Du er delt Ugens bedste 🏅");
+      expect(b.body).toContain("(delt)");
+    }
+  });
+
+  // To konkurrencer i samme uge er to forskellige fællesskaber — og to
+  // beskeder. Nøglen skal derfor bære konkurrencen og ikke kun perioden.
+  it("giver én besked pr. konkurrence, med hver sin nøgle", () => {
+    const beskeder = awardMessages(
+      { awards: [uge(), uge({ competition_id: "komp-2" })], competitions: konkurrencer },
+      alle
+    );
+    expect(beskeder.map((b) => b.key)).toEqual(["award:komp-1:round:2026-08-04", "award:komp-2:round:2026-08-04"]);
+  });
+
+  it("tier, når konkurrencen er væk eller brugeren ikke har en enhed", () => {
+    expect(awardMessages({ awards: [uge({ competition_id: "slettet" })], competitions: konkurrencer }, alle)).toEqual([]);
+    expect(awardMessages({ awards: [uge()], competitions: konkurrencer }, () => false)).toEqual([]);
+  });
+});
+
+// B9 — ny turnering. Den eneste beskedtype uden modtager-regel, så testene
+// handler om de to betingelser, der skal holde bredden i skak.
+describe("newTournamentMessages", () => {
+  const liga = (over = {}) => ({ id: "liga-1", name: "Premier League", is_visible: true, ...over });
+  const alle = () => true;
+  const brugere = ["anna", "bo"];
+
+  it("sender til alle med en tilmeldt enhed", () => {
+    const beskeder = newTournamentMessages({ leagues: [liga()], playableLeagueIds: ["liga-1"] }, alle, brugere);
+    expect(beskeder.map((b) => b.userId)).toEqual(["anna", "bo"]);
+    expect(beskeder[0]).toMatchObject({ key: "newleague:liga-1", kind: "newleague" });
+    expect(beskeder[0].body).toContain("Premier League");
+  });
+
+  // En turnering sættes op med is_visible = false, mens den verificeres (A10/B2).
+  // En besked derfra ville pege på noget, modtageren ikke kan se.
+  it("tier om en turnering, der ikke er synlig endnu", () => {
+    expect(newTournamentMessages({ leagues: [liga({ is_visible: false })], playableLeagueIds: ["liga-1"] }, alle, brugere)).toEqual([]);
+  });
+
+  // Rækken oprettes før den første sync. Uden kampe er turneringen et navn og
+  // ikke en mulighed — og en push om ingenting er den dyreste slags.
+  it("tier, indtil turneringen har kampe at tippe", () => {
+    expect(newTournamentMessages({ leagues: [liga()], playableLeagueIds: [] }, alle, brugere)).toEqual([]);
+  });
+
+  it("springer brugere uden tilmeldt enhed over", () => {
+    const beskeder = newTournamentMessages({ leagues: [liga()], playableLeagueIds: ["liga-1"] }, (u) => u === "bo", brugere);
+    expect(beskeder.map((b) => b.userId)).toEqual(["bo"]);
   });
 });

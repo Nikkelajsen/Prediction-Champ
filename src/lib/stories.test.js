@@ -63,6 +63,44 @@ describe("renderStory (tekst-skabeloner)", () => {
       .toContain("(delt med 3 andre).");
   });
 
+  // v1.2: skabelonerne skal matche SQL'ens tekster ORDRET — det er hele
+  // grunden til, at de findes to steder (fallback-rendering fra payload). En
+  // afvigelse ses ikke i drift: kortet henter headline/body fra rækken, og
+  // JS-skabelonen bruges kun, når payload skal renderes på ny.
+  it("AWARD_WEEK bruger kåringens navn og siger 'delt' som rundens vinder", () => {
+    const uden = renderStory("AWARD_WEEK", { league: "Kontorligaen", points: 14, label: "04.08 – 10.08" });
+    expect(uden.headline).toBe("🏅 Du er Ugens bedste i Kontorligaen");
+    expect(uden.body).toBe("14 point — flest af alle i Kontorligaen i runden 04.08 – 10.08.");
+    const delt = renderStory("AWARD_WEEK", { league: "Kontorligaen", points: 14, label: "L", shared: true, others: 1 });
+    expect(delt.headline).toBe("🏅 Du er delt Ugens bedste i Kontorligaen");
+    expect(delt.body).toContain("(delt med 1 anden).");
+    expect(renderStory("AWARD_WEEK", { league: "K", points: 1, label: "L", shared: true, others: 2 }).body)
+      .toContain("(delt med 2 andre).");
+  });
+
+  // Navnereglen (turnering-2 §3.6): lokalt hedder det "Månedens bedste" og
+  // ALDRIG "Månedens Prediction Champ", som er den globale titel. To niveauer
+  // må ikke konkurrere om samme navn.
+  it("AWARD_MONTH holder sig fra den globale titels navn", () => {
+    const { headline, body } = renderStory("AWARD_MONTH", { league: "Kontorligaen", month: "juli", points: 42 });
+    expect(headline).toBe("👑 Du er Månedens bedste i Kontorligaen — juli");
+    expect(headline).not.toContain("Prediction Champ");
+    expect(body).toBe("42 point — flest af alle i Kontorligaen i juli.");
+  });
+
+  // Stigen: en lokal månedskåring slår alt, hvad én runde kan producere, men
+  // taber til den globale månedstitel — og ugekåringen ligger lige over
+  // rundens vinder, fordi det er det samme øjeblik med et andet navn.
+  it("kåringernes plads på prioritetsstigen", () => {
+    expect(RULES.MONTH_CHAMP).toBeLessThan(RULES.AWARD_MONTH);
+    expect(RULES.AWARD_MONTH).toBeLessThan(RULES.LEAD_TAKEN);
+    expect(RULES.AWARD_WEEK).toBeLessThan(RULES.ROUND_WON);
+    expect(RULES.STREAK).toBeLessThan(RULES.AWARD_WEEK);
+    // Begge er højdepunkter og må derfor have emoji og Del-knap.
+    expect(isQuiet(RULES.AWARD_WEEK)).toBe(false);
+    expect(isQuiet(RULES.AWARD_MONTH)).toBe(false);
+  });
+
   it("Månedens Champ angiver samlede point (aldrig gennemsnit) — acceptkriterie", () => {
     const { headline, body } = renderStory("MONTH_CHAMP", { month: "juli", points: 31, gap: 3 });
     expect(headline).toContain("Månedens Prediction Champ");

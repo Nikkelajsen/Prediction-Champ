@@ -47,6 +47,20 @@ const LOCK_LEAD_MS = HOUR; // en kamp låser 1 time før sit eget kickoff (A21)
 // til et cron-udfald og stadig kort nok til, at beskeden er nyhed, når den lander.
 const NEW_COMPETITION_WINDOW_MS = 24 * HOUR;
 
+// Hvor længe en turnering tæller som "ny" (B9). Samme rolle som vinduet ovenfor
+// og af samme to grunde — men bredere, fordi en ny turnering er en sjælden
+// begivenhed (syv på et år), og fordi den, modsat en konkurrence, ikke er
+// oprettet af et menneske, der venter på at nogen opdager den. To døgn giver
+// plads til, at turneringen får hentet sine første kampe, før beskeden går ud:
+// et link til en turnering uden kampe er en skuffelse, ikke en invitation.
+const NEW_TOURNAMENT_WINDOW_MS = 48 * HOUR;
+
+// Hvor langt tilbage en lokal kåring stadig kan udløse en besked (B11).
+// Kåringen er allerede FROSSEN i competition_awards, så vinduet handler kun om,
+// hvor gammel en nyhed må være: en uge dækker et cron-udfald og et par dages
+// forsinkelse på en udsat kamp, uden at en udrulning sender hele bagkataloget.
+const AWARD_WINDOW_MS = 7 * 24 * HOUR;
+
 // ---- Sendevindue (A24) ----
 // Der sendes kun mellem 08:00 og 22:00 dansk tid. En push om natten vækker folk;
 // den er ikke bare irrelevant, den er skadelig for den ene tilladelse, produktet
@@ -345,6 +359,73 @@ export function newCompetitionMessages({ competitions, groups, members, particip
         // og en landing — beskeden skal ikke opfinde sin egen (A8: joinet melder
         // ind i begge, hvilket for et medlem er en no-op).
         joinCode: c.invite_code,
+      });
+    }
+  }
+  return out;
+}
+
+// Modtagerne af "du blev Ugens/Månedens bedste"-beskeden (B11).
+//
+// Rækken i competition_awards ER beskeden: den er skrevet af
+// `award_competition_periods()` ud fra grunddata, den er frossen, og den er
+// den samme kåring, boardet og story-kortet viser. Denne funktion oversætter
+// den kun til tekst — den afgør ikke, hvem der vandt.
+//
+// Delt kåring giver én række pr. vinder, alle med `shared = true`; hver af dem
+// får sin egen besked, og nøglen bærer både konkurrence og periode, så en
+// bruger med kåringer i to konkurrencer i samme uge får to beskeder (det er to
+// forskellige fællesskaber) — men aldrig to for den samme.
+export function awardMessages({ awards, competitions }, isSubscribed) {
+  const compName = new Map((competitions || []).map((c) => [c.id, c.name]));
+  const out = [];
+  for (const a of awards || []) {
+    const navn = compName.get(a.competition_id);
+    // Konkurrencen kan være slettet, mens kåringen stadig lå i vinduet
+    // (`on delete cascade` fjerner rækken, men vores kopi er læst før). Uden
+    // navnet har beskeden ingen sætning at sige.
+    if (!navn) continue;
+    if (!isSubscribed(a.user_id)) continue;
+    const uge = a.period_type === "round";
+    const delt = a.shared ? "delt " : "";
+    out.push({
+      userId: a.user_id,
+      key: `award:${a.competition_id}:${a.period_type}:${a.period_key}`,
+      title: uge ? `Du er ${delt}Ugens bedste 🏅` : `Du er ${delt}Månedens bedste 👑`,
+      body: `${a.points} point — flest af alle i "${navn}"${a.shared ? " (delt)" : ""}.`,
+      tag: `award-${a.competition_id}-${a.period_type}`,
+      kind: "award",
+    });
+  }
+  return out;
+}
+
+// Modtagerne af "ny turnering"-beskeden (B9).
+//
+// Den eneste af de fire beskedtyper UDEN en modtager-afgrænsning: en ny
+// turnering er tilgængelig for alle, så der findes ingen medlemsliste at
+// skære efter. Til gengæld er de to andre betingelser hårde:
+//   * turneringen skal være SYNLIG. `is_visible = false` er den tilstand, en
+//     turnering sættes op i, mens den verificeres (A10/B2) — en besked derfra
+//     ville pege på noget, modtageren ikke kan se;
+//   * den skal have mindst én kamp, man kan tippe. En turnering uden
+//     kampprogram er et navn, ikke en mulighed, og en besked om den ville koste
+//     præcis den tilladelse, produktet ikke kan få tilbage.
+export function newTournamentMessages({ leagues, playableLeagueIds }, isSubscribed, userIds) {
+  const spilbar = new Set(playableLeagueIds || []);
+  const out = [];
+  for (const l of leagues || []) {
+    if (!l.is_visible) continue;
+    if (!spilbar.has(l.id)) continue;
+    for (const uid of userIds || []) {
+      if (!isSubscribed(uid)) continue;
+      out.push({
+        userId: uid,
+        key: `newleague:${l.id}`,
+        title: "Ny turnering i Prediction Champ ⚽",
+        body: `${l.name} kan nu tippes. Opret en konkurrence, eller vent på at nogen i din liga gør det.`,
+        tag: `newleague-${l.id}`,
+        kind: "newleague",
       });
     }
   }
@@ -659,6 +740,86 @@ export default async function handler(req, res) {
           ...newCompetitionMessages(
             { competitions, groups, members, participants, creators },
             (uid) => Boolean(subsByUser[uid])
+          )
+        );
+      }
+    }
+
+    // ================= 4) Lokale kåringer (B11) =================
+    // To skridt, og rækkefølgen er hele pointen: FØRST skrives kåringerne,
+    // DEREFTER læses de. `award_competition_periods()` er lazy og blev indtil nu
+    // kun trigget af en klient, der åbnede boardet — så en kåring kunne mangle,
+    // til nogen tilfældigvis kiggede. Jobbet her kører som `service_role`, som
+    // funktionens guard allerede tillader (A22 skrev den med netop dette for
+    // øje), og bliver dermed den pålidelige skriver. Det er også dét, der gør
+    // Story Engines regel 65/15 troværdig: kortet kan ikke længere afhænge af,
+    // om nogen havde åbnet boardet først.
+    //
+    // Kaldet er idempotent (`on conflict do nothing`) og returnerer antallet af
+    // NYE rækker, så det koster ingenting at kalde det hver kørsel.
+    {
+      const optIn = await sbAll(
+        sb,
+        `/rest/v1/competitions?mode_params->>awards=eq.true&select=id,name`,
+        { order: "id.asc" }
+      );
+      if (optIn.length) {
+        // Sekventielt og ikke parallelt: funktionen læser og skriver den samme
+        // tabel for hver konkurrence, og der er ingen hastighed at vinde — hele
+        // pointen er, at kåringerne står der, når outboxen bygges nedenfor.
+        // En fejl på én konkurrence må ikke koste de andre deres besked.
+        //
+        // `dryRun` springer skrivningen over — forhåndsvisningen i Admin → Drift
+        // er en LÆSNING, og et kort, der lover "intet sker", må ikke kåre nogen.
+        // Prisen er, at en kåring, ingen endnu har udløst, mangler i
+        // forhåndsvisningen; det er den rigtige vej at tage fejl.
+        for (const c of dryRun ? [] : optIn) {
+          try {
+            await sb(`/rest/v1/rpc/award_competition_periods`, {
+              method: "POST",
+              body: JSON.stringify({ p_comp_id: c.id }),
+            });
+          } catch (e) {
+            console.warn(`[B11] kåringer kunne ikke beregnes for ${c.id}:`, e?.message ?? e);
+          }
+        }
+        const since = new Date(now - AWARD_WINDOW_MS).toISOString();
+        const awards = await sbAll(
+          sb,
+          `/rest/v1/competition_awards?competition_id=in.(${optIn.map((c) => c.id).join(",")})&awarded_at=gte.${since}&select=competition_id,period_type,period_key,user_id,points,shared`,
+          { order: "competition_id.asc,period_key.asc,user_id.asc" }
+        );
+        outbox.push(...awardMessages({ awards, competitions: optIn }, (uid) => Boolean(subsByUser[uid])));
+      }
+    }
+
+    // ================= 5) Ny turnering (B9) =================
+    // Modsat de fire andre sektioner har denne ingen modtager-regel — en ny
+    // turnering er alles. Prisen for den bredde er, at betingelserne for at
+    // sende skal være strammere: turneringen skal være synlig OG have kampe.
+    {
+      const since = new Date(now - NEW_TOURNAMENT_WINDOW_MS).toISOString();
+      const leagues = await sb(
+        `/rest/v1/leagues?created_at=gte.${since}&select=id,name,is_visible,created_at`
+      );
+      if (leagues.length) {
+        // "Har den kampe?" besvares på sæsonerne og ikke på turneringen selv:
+        // det er kampene, der gør den tipbar, og de kommer først med den første
+        // sync-kørsel — typisk timer efter rækken blev oprettet.
+        const seasons = await sb(`/rest/v1/seasons?league_id=in.(${leagues.map((l) => l.id).join(",")})&select=id,league_id`);
+        const playable = new Set();
+        if (seasons.length) {
+          const ms = await sb(
+            `/rest/v1/matches?season_id=in.(${seasons.map((s) => s.id).join(",")})&home_score=is.null&select=season_id&limit=200`
+          );
+          const leagueOfSeason = new Map(seasons.map((s) => [s.id, s.league_id]));
+          for (const m of ms) playable.add(leagueOfSeason.get(m.season_id));
+        }
+        outbox.push(
+          ...newTournamentMessages(
+            { leagues, playableLeagueIds: [...playable] },
+            (uid) => Boolean(subsByUser[uid]),
+            subscribedUsers
           )
         );
       }

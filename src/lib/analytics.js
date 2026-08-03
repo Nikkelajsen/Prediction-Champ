@@ -178,6 +178,8 @@ const STORY_RULES = {
   STREAK: "Stime",
   SHARP: "Skarpe tips",
   MONTH_CHAMP: "Månedens Prediction Champ",
+  AWARD_WEEK: "Ugens bedste (lokal kåring)",
+  AWARD_MONTH: "Månedens bedste (lokal kåring)",
   SEASON_OPENER: "Premiereugen",
   QUIET_ROUND: "Stille runde",
 };

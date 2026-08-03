@@ -7,6 +7,7 @@ import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { logEvent, logEventOnce } from "../lib/analytics.js";
 import { isQuiet } from "../lib/stories.js";
+import { shareText, storyShareText } from "../lib/share.js";
 import { readUserFlag, writeUserFlag, CARD_KEY } from "../lib/localFlags.js";
 import { C, btnGhost, btnGreen, font, iconBtn } from "../ui/theme.js";
 import { usePushOptIn } from "../ui/usePushOptIn.js";
@@ -54,10 +55,8 @@ function PushOptInCard({ push }) {
 function StoryCard({ story, onDismiss, token, groupId }) {
   const quiet = isQuiet(story.priority);
   async function share() {
-    const text = `${story.headline}\n${story.body}`;
     try {
-      if (navigator.share) await navigator.share({ title: "Prediction Champ", text });
-      else await navigator.clipboard.writeText(text);
+      await shareText(storyShareText(story));
       logEvent(token, "story_shared", { competitionId: story.competition_id || null, groupId, metadata: { rule: story.rule } });
     } catch { /* bruger annullerede — ignorér */ }
   }

@@ -203,7 +203,7 @@ En visningsrate over 100 % er derfor umulig, men en lav rate kan lige så godt b
 
 **`dismissed_at` er den mest interessante kolonne:** den er brugerens eneste *aktive* afvisning af en historie, og den findes pr. række — ikke som event, og derfor uden gulv-forbeholdet.
 
-**Regler, der aldrig udløser.** RPC'en kan per definition kun se regler, der *har* udløst. Katalogen med de 14 regler holdes derfor i klienten (`STORY_RULES` i `src/lib/analytics.js`), og de to tilstande skelnes:
+**Regler, der aldrig udløser.** RPC'en kan per definition kun se regler, der *har* udløst. Katalogen med de 16 regler holdes derfor i klienten (`STORY_RULES` i `src/lib/analytics.js`) — 14 indtil Story Engine v1.2 (august 2026) lagde de to lokale kåringer til — og de to tilstande skelnes:
 
 - **ALDRIG** — har ikke udløst én eneste gang, heller ikke uden for vinduet. Den dyreste slags død kode: den ser ud til at virke.
 - **STILLE** — har udløst før, men ikke i vinduet. Bare en stille periode.

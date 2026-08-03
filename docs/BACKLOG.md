@@ -76,12 +76,12 @@ versionsstempel → `G42`).*
 
 ## Prioriteret rækkefølge
 
-Alle 35 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
-*Tier 2 er kørt 3. august 2026 og er tom: alle otte punkter er leveret og
-slettet.*
+*Tier 2 og Tier 3 er begge kørt 3. august 2026 og er tomme: alle tolv punkter
+er leveret og slettet.*
 
 Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
@@ -123,17 +123,17 @@ Tieret bliver stående som en tom overskrift indtil næste gennemgang: det er
 billigere at se, at kategorien findes og er tom, end at genopdage, at den skulle
 have været der.
 
-### Tier 3 — Brugerværdi oven på noget, der allerede findes
+### Tier 3 — Brugerværdi oven på noget, der allerede findes ✅ tomt
 
-Ingen af de fire kræver ny infrastruktur: tabellen, mønsteret og
-rundedetektionen er der. Det er den billigste fastholdelse, der er tilbage.
+**Kørt 3. august 2026.** Alle fire punkter er leveret og slettet: `B10` og `B11`
+som én leverance (Story Engine v1.2's to kåringsregler + push, hvor
+notifikations-jobbet blev den pålidelige skriver af kåringerne), `B9` (ny
+turnering) og `I5` (deling).
 
-| # | Hvad | Hvorfor her |
-|---|---|---|
-| `B10` | Story-kort for lokale kåringer | `competition_awards` findes med `stats`-jsonb'en; mangler én regel i `story_engine.sql`. Story Engine er produktets motor (kapitel 6), og kåringerne er dens eneste ubrugte kilde. |
-| `B11` | Push ved lokal kåring | Deler fundament med `B10` og bør leveres **sammen med den** — samme række, samme opdagelses-logik (`awarded_at >` sidste kørsel), to udgange. |
-| `B9` | Notifikation ved ny turnering | Mønsteret er `newCompetitionMessages()`. Mindre værdi end `B10`/`B11`, fordi udløseren er sjælden — men den er også nem, netop derfor. |
-| `I5` | Deling af highlights | Kortene findes; det, der mangler, er en udgang. Er `B10` leveret, er der mere at dele — derfor efter, ikke før. |
+`I5` viste sig at være **halvt leveret i forvejen**, og rækken sagde noget
+forkert: historie-kortet på Hjem har haft en Del-knap siden v1.1. Det, der
+manglede, var arkivet — karriereprofilens milepæle, altså netop dét sted, man
+kigger, når kortet er væk fra Hjem igen.
 
 ### Tier 4 — Datarisiko med en lunte
 
@@ -214,9 +214,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Hvad | Hvorfor / hvad den venter på | Omfang |
 |---|---|---|---|
-| B9 | **Notifikation når en ny turnering bliver tilgængelig** | Samme skuffe som "ny konkurrence i din liga" (`B5`, leveret august 2026) — men trigger er en ny turnering, og modtageren er *alle* frem for en liga, så der er ingen medlemsliste at afgrænse med. Mønsteret at kopiere er `newCompetitionMessages()` i `api/send-notifications.js` (§16): et tidsvindue som udløser, en ren funktion med modtager-reglen, `notification_log`-nøgle med eget præfiks. | Lille–mellem |
-| B10 | **Story-kort for lokale kåringer** ("Du blev Ugens bedste i X") | Bygger på `competition_awards` (A22): `stats`-jsonb'en har allerede exact/outcome/matches/goal_error, og RPC'en kan kaldes som `service_role`. Kræver en ny regel i `story_engine.sql`. **Forbeholdet om `G9`/`G10` er faldet (august 2026):** `send-notifications`' rundedetektion er nu `finishedRoundKeys()` afgrænset til de officielle turneringers sæsoner og kan genbruges — bemærk dog, at den dermed er scopet som Championship, mens en lokal kåring er scopet til én konkurrence. Navnereglen gælder: kortet siger "Ugens bedste", aldrig "rundevinder". | Lille–mellem |
-| B11 | **Push-notifikation ved lokal kåring** | Samme fundament som `B10` — kåringsrækken findes allerede, når notifikationen skal sendes, så jobbet er kun at opdage nye rækker (fx `awarded_at > sidste kørsel`) og bruge mønsteret i §16. Samme bemærkning som `B10` om, at rundedetektionen er Championship-scopet. | Lille–mellem |
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. **Forespørgslen er skrevet (august 2026)** — den står klar til at køre i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). Tilbage står at køre den. | Lille (opslag) |
 | B16 | **Heartbeat'en tjekker, at migreringernes virkning står i databasen** | Fire filer i [`sql/README.md`](../sql/README.md) ruller **tavst** noget nyere tilbage, hvis de gen-køres — og advarslen står kun i en README, altså det sted, man læser *hvis* man læser. Opdages i dag kun ved at nogen kigger. `job-heartbeat.yml` har allerede `SUPABASE_DB_URL` og kører hver halve time, så den kan spørge databasen direkte om de virkninger, en gen-kørsel ville fjerne: `scope`-kolonnen på stillings-viewene, `security_invoker` på `monthly_standings`, at de fem `predictions`-policies kalder `match_locked()`, og at A8-policyerne står. Alarmkanalen findes allerede (en fejlende workflow notificerer ejeren). Samme flytning som `G43`: kontrollen bor dér, hvor adgangen og skemaet i forvejen er. | Lille–mellem |
 
@@ -246,7 +243,6 @@ idé bliver til en `B`- eller `A`-række, når den er værd at tage stilling til
 | I1 | **Eksport-knap i Analytics ("kopiér som CSV/JSON")** | [`features/analytics-v1.md`](./features/analytics-v1.md) siger, at SQL-editoren *er* eksport-mekanismen. Det passer for ad hoc-analyse, men ikke for "send tallene videre" — og en knap koster ingen ny afhængighed. | Ny |
 | I2 | **Diagnose-historik** | Liga-diagnosen er et øjebliksbillede. Uden historik kan man ikke se, at en liga gik fra "Sund" til "Kun en del tipper" for tre uger siden. Kræver et sted at gemme snapshottet — første gang noget i Analytics ville have brug for et cron eller en tidsserie-tabel, hvilket arkitekturvalg #3 i spec'en lukkede døren for. | Afventer behov |
 | I3 | **Alarm ved tilstandsskifte i en liga** | Naturlig følge af `I2`: en liga, der skifter til rød, er interessant i det øjeblik det sker, ikke næste gang nogen åbner admin. | Afhænger af `I2` |
-| I5 | **Del-mulighed for highlights** (Rundevinder, Ratingrekord, Ny rival, Månedsmester, Sæsonvinder m.fl.) | Naturlig forlængelse af Story Engine (§17): kortene findes allerede, men kan i dag ikke deles ud af appen. | Ny |
 | I6 | **Ambassadørprogram ved oprettelse af ligaer/konkurrencer** (evt. med synligt deltagerantal) | Vækstkanal, der bygger på strukturen, der allerede findes (ligaer/konkurrencer), men ingen mekanik eller incitament er designet endnu. | Ny |
 | I7 | **Finpuds invitationsflowet** | Invitationer er nøglen til nye brugere (delt konkurrence-/liga-link, §7), men er ikke selv blevet gennemgået som en samlet oplevelse. | Ny |
 | I8 | **Professionel hjemmeside** (4–6 sider: forside, hvordan virker det, features, om os, kontakt, download app) | Giver troværdighed, kan deles og vises til virksomheder/brugere, og gør produktet indekserbart for Google. Ingen hjemmeside findes i dag ud over selve appen. | Ny |

@@ -2,10 +2,12 @@
 // ratingkurve → rivaler), med rå basistal diskret nederst. Spec:
 // docs/features/karriereprofil-v1.md. Drill-in-skærm (som BoardScreen).
 import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Share2 } from "lucide-react";
 import { loadCareerProfile, loadCareerMilestones, monthName } from "../lib/data.js";
 import { roundLabel } from "../lib/scoring.js";
-import { C, font } from "../ui/theme.js";
+import { logEvent } from "../lib/analytics.js";
+import { shareText, storyShareText } from "../lib/share.js";
+import { C, font, iconBtn } from "../ui/theme.js";
 import { BackBar, Card, Eyebrow, InfoDot, Move, PlayerName } from "../ui/components.jsx";
 
 // Karriereskærmen blander bevidst TO omfang: Titler, Rekorder og basistallene er
@@ -256,6 +258,18 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
 
   const visibleMilestones = milestoneExpanded ? milestones : milestones.slice(0, MILESTONE_PAGE);
 
+  // Milepælen deles med samme tekst som historie-kortet (`storyShareText`), så
+  // en milepæl, der er delt to gange med et halvt år imellem, ser ens ud.
+  // `competitionId` er ikke i milepæls-opslaget (det henter kun id, runde,
+  // regel og tekst), så hændelsen bærer reglen alene — det er også den, A5
+  // skal bruge for at kunne se, HVILKE korttyper der bliver delt.
+  async function shareMilestone(m) {
+    try {
+      await shareText(storyShareText(m));
+      logEvent(token, "story_shared", { metadata: { rule: m.rule, from: "milestone" } });
+    } catch { /* bruger annullerede — ignorér */ }
+  }
+
   const hasTitles = monthly.length > 0 || seasonTitles.length > 0 || roundWins > 0;
   const hasTournamentTitles = byTournament.length > 0;
   const hasMilestones = isOwn && milestones.length > 0;
@@ -474,8 +488,24 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {visibleMilestones.map((m) => (
               <Card key={m.id} style={{ padding: 12 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{m.headline}</div>
-                {m.body && <div style={{ color: C.muted, fontSize: 13, marginTop: 3, lineHeight: 1.45 }}>{m.body}</div>}
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{m.headline}</div>
+                    {m.body && <div style={{ color: C.muted, fontSize: 13, marginTop: 3, lineHeight: 1.45 }}>{m.body}</div>}
+                  </div>
+                  {/* Del (I5). Historie-kortet på Hjem har haft en Del-knap
+                      siden v1.1, men kortet forsvinder efter en uge — og det er
+                      typisk EFTER en uge, man har lyst til at vise en milepæl
+                      frem. Arkivet var dermed det ene sted, hvor et højdepunkt
+                      kunne ses og ikke deles. Samme tekst og samme
+                      `story_shared`-hændelse som kortet, så tallet i Analytics
+                      fortsat måler "et højdepunkt blev delt" og ikke to ting. */}
+                  <button type="button" onClick={() => shareMilestone(m)}
+                    aria-label={`Del milepælen: ${m.headline}`}
+                    style={{ ...iconBtn, flexShrink: 0, color: C.gold }}>
+                    <Share2 size={15} />
+                  </button>
+                </div>
               </Card>
             ))}
           </div>

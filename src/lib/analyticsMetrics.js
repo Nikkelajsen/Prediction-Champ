@@ -252,7 +252,7 @@ const METRICS = {
   story_never: {
     title: "Regler der aldrig udløser",
     what: "Regler i motorens katalog, som ikke har genereret en eneste historie — hverken i perioden eller nogensinde.",
-    how: "Katalogen med de 14 regler holdes i klienten (`STORY_RULES`) og sammenholdes med, hvad databasen faktisk indeholder. En regel, der har udløst før, men ikke i perioden, markeres 'Stille' i stedet — det er to forskellige ting.",
+    how: "Katalogen med de 16 regler holdes i klienten (`STORY_RULES`) og sammenholdes med, hvad databasen faktisk indeholder. En regel, der har udløst før, men ikke i perioden, markeres 'Stille' i stedet — det er to forskellige ting.",
     source: "src/lib/analytics.js sammenholdt med public.stories. En test læser sql/story_engine.sql og fejler, hvis katalogen driver fra motoren.",
     caveat: "En regel, der aldrig udløser, er den dyreste slags død kode: den ser ud til at virke. Men en tærskel kan også bare være for stram — se `docs/features/story-engine-v1.md` afsnit 10 før du fjerner noget.",
   },

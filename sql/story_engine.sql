@@ -1,4 +1,12 @@
--- Story Engine v1.1 — stories-tabel, latest_story-view og generate_stories().
+-- Story Engine v1.2 — stories-tabel, latest_story-view og generate_stories().
+--
+-- v1.2 (august 2026) — LOKALE KÅRINGER (B10). To nye regler læser den
+-- persisterede kåring i competition_awards (A22) frem for at regne den om:
+--   65 AWARD_WEEK  "Du er Ugens bedste i <konkurrence>"   (pr. færdig runde)
+--   15 AWARD_MONTH "Du er Månedens bedste i <konkurrence>" (første runde i ny måned)
+-- Regel 70 (ROUND_WON) er samtidig gjort tavs, når en kåring dækker det samme
+-- øjeblik — ellers ville ét øjeblik have to kort, og brugerens ENE kort pr.
+-- runde kunne blive den svageste af de to formuleringer.
 -- Idempotent — kan køres igen når som helst (kør med "Run without RLS";
 -- scriptet sætter selv RLS, jf. DOCUMENTATION.md afsnit 13).
 --
@@ -100,6 +108,8 @@ declare
   v_month text;
   v_month_name text;
   v_month_last boolean;
+  v_prev_month text;
+  v_prev_month_name text;
   v_rating_total int;
   -- VIGTIGT — round_key har TO typer i skemaet, og de må ikke blandes:
   --   date: matches.round_key (genereret kolonne) og alt afledt af den
@@ -210,7 +220,51 @@ begin
     on cnt.competition_id = t.competition_id
   join _se_size sz on sz.competition_id = t.competition_id and sz.n >= 2
   join public.competitions c on c.id = t.competition_id
-  where t.round_won = 1 and t.rpts > 0;
+  where t.round_won = 1 and t.rpts > 0
+    -- Har konkurrencen tilvalgt lokale kåringer, og er runden kåret, fortæller
+    -- regel 65 nedenfor det samme øjeblik med det navn, konkurrencen selv
+    -- bruger ("Ugens bedste"). To kort om én sejr ville betyde, at brugerens
+    -- ENE kort pr. runde kunne blive den svageste af de to formuleringer — og
+    -- at milepæls-arkivet fik dubletter. Kåringen vinder, fordi den er den
+    -- persisterede sandhed, boardet allerede viser.
+    and not exists (
+      select 1 from public.competition_awards aw
+      where aw.competition_id = t.competition_id
+        and aw.period_type = 'round' and aw.period_key = p_round_key
+        and aw.user_id = t.user_id
+    );
+
+  -- ======== Regel 65 · Ugens bedste (lokal kåring, pr. konkurrence) ========
+  -- Læser den PERSISTEREDE kåring (competition_awards, A22) frem for at regne
+  -- den om. Det er ikke en genvej: kåringen er frossen ved sit eget kriterie
+  -- (alle konkurrencens kampe i runden har resultat) og vises allerede på
+  -- boardet, så en historie, der regnede sit eget svar, ville kunne modsige den
+  -- tabel, brugeren kan slå op i. Samme regel som stigen: én kilde pr. påstand.
+  --
+  -- HVEM SKRIVER RÆKKEN? Klienten ved board-åbning — og siden august 2026 også
+  -- notifikations-jobbet som `service_role` ved hver kørsel (B11). Det sidste er
+  -- det, der gør denne regel pålidelig: uden det ville kortet afhænge af, at et
+  -- menneske havde åbnet boardet, FØR runden blev genereret. Rækkefølgen er
+  -- alligevel ikke garanteret, men historier gendannes ved hvert resultat i
+  -- runden (delete + insert øverst), så kortet indhentes af sig selv.
+  --
+  -- Navnereglen (turnering-2 §3.6): lokalt hedder det "Ugens bedste" — aldrig
+  -- "rundevinder", som er den globale titel.
+  insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
+  select p_round_key, aw.user_id, aw.competition_id, 'AWARD_WEEK', 65, sz.n,
+    jsonb_build_object('league', c.name, 'points', aw.points, 'shared', aw.shared,
+                       'others', (count(*) over (partition by aw.competition_id))::int - 1,
+                       'exact', coalesce((aw.stats ->> 'exact')::int, 0)),
+    '🏅 Du er ' || case when aw.shared then 'delt ' else '' end || 'Ugens bedste i ' || c.name,
+    aw.points || ' point — flest af alle i ' || c.name || ' i runden ' || v_label ||
+      case when not aw.shared then '.'
+           when (count(*) over (partition by aw.competition_id)) > 2
+             then ' (delt med ' || ((count(*) over (partition by aw.competition_id))::int - 1) || ' andre).'
+           else ' (delt med 1 anden).' end
+  from public.competition_awards aw
+  join public.competitions c on c.id = aw.competition_id
+  join _se_size sz on sz.competition_id = aw.competition_id and sz.n >= 2
+  where aw.period_type = 'round' and aw.period_key = p_round_key;
 
   -- ======== Regel 20 · Førsteplads overtaget (pr. konkurrence) ========
   -- Kræver, at konkurrencen HAR en runde før denne. Uden den betingelse udløste
@@ -461,6 +515,39 @@ begin
       order by total_points desc, exact_count desc, outcome_count desc,
                round_wins desc, avg_goal_error asc limit 1
     ) sec on true;
+  end if;
+
+  -- ======== Regel 15 · Månedens bedste (lokal kåring, pr. konkurrence) ========
+  -- Kortet hører til den FØRSTE runde i en ny måned, og det er en anden regel
+  -- end regel 10 ovenfor, som fyrer i den sidste runde MED kampe i måneden.
+  -- Forskellen er ikke kosmetisk: `award_competition_periods()` kårer først en
+  -- måned, når kalendermåneden er forbi (ellers kunne efterfyldningen lægge en
+  -- udsat kamp ind i en allerede kåret måned), så rækken FINDES ikke endnu, når
+  -- regel 10 fyrer. Den første runde i den nye måned er det tidligste
+  -- tidspunkt, hvor kåringen både er sand og skrevet.
+  --
+  -- Prioritet 15 ligger mellem den globale månedstitel (10) og en overtaget
+  -- førsteplads (20): en lokal månedstitel er større end alt, hvad en enkelt
+  -- runde kan producere, men mindre end at være Månedens Prediction Champ.
+  v_prev_month := to_char(v_round - 7, 'YYYY-MM');
+  if v_prev_month <> to_char(v_round, 'YYYY-MM') then
+    v_prev_month_name := months[cast(substring(v_prev_month from 6 for 2) as int)];
+    insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
+    select p_round_key, aw.user_id, aw.competition_id, 'AWARD_MONTH', 15, sz.n,
+      jsonb_build_object('league', c.name, 'month', v_prev_month_name, 'points', aw.points,
+                         'shared', aw.shared,
+                         'others', (count(*) over (partition by aw.competition_id))::int - 1),
+      '👑 Du er ' || case when aw.shared then 'delt ' else '' end
+        || 'Månedens bedste i ' || c.name || ' — ' || v_prev_month_name,
+      aw.points || ' point — flest af alle i ' || c.name || ' i ' || v_prev_month_name ||
+        case when not aw.shared then '.'
+             when (count(*) over (partition by aw.competition_id)) > 2
+               then ' (delt med ' || ((count(*) over (partition by aw.competition_id))::int - 1) || ' andre).'
+             else ' (delt med 1 anden).' end
+    from public.competition_awards aw
+    join public.competitions c on c.id = aw.competition_id
+    join _se_size sz on sz.competition_id = aw.competition_id and sz.n >= 2
+    where aw.period_type = 'month' and aw.period_key = v_prev_month;
   end if;
 
   -- ======== Regel 80/85 · Perfekt træfsikkerhed (global, ≥2 præcise i runden) ========

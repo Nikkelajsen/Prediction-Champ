@@ -59,6 +59,8 @@ kommer af `leagueId`, som jobbene allerede sender.
 | 10 | Kampprogram + endelige resultater Primera División | cron-job.org | hver 12. time, ved **minut 29** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` * | **31. juli 2026 — kørt planlagt kl. 00:29, lykkedes (4,31 s)** |
 | 11 | Datasikkerhedskopi | GitHub Actions | `0 3 * * *` (dagligt 03:00 UTC) + manuelt | `.github/workflows/data-backup.yml` | — (repo-secrets `SUPABASE_DB_URL` + `BACKUP_PASSPHRASE`) | 2. august 2026 (oprettet) |
 
+> **Job 3 skriver også, og ikke kun til `notification_log` (3. august 2026, `B11`).** Hver kørsel kalder `award_competition_periods()` som `service_role` for hver konkurrence med `mode_params.awards`, FØR den læser kåringerne. Funktionen er lazy og blev indtil da kun trigget af en klient, der åbnede boardet, så en kåring — og dermed Story Engines kort for den — kunne mangle, til nogen tilfældigvis kiggede. Kaldet er idempotent (`on conflict do nothing`), og `&dryRun=true` springer det over, fordi forhåndsvisningen er en læsning. Det betyder også, at et stoppet job 3 ikke længere kun koster beskeder: kåringerne skrives da først, når nogen åbner boardet.
+
 **Kolonnen "Hemmelighed sendes som" står med `?` med vilje.** Den kan ikke
 udfyldes fra repoet — kun ved at kigge i cron-job.org eller ved at aflæse
 loggene, se nedenfor. Udfyld den, når du ved det.
