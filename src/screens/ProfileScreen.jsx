@@ -1,15 +1,6 @@
 // Karriereprofil v1 — brugerens karriere som fortælling (titler → milepæle →
 // ratingkurve → rivaler), med rå basistal diskret nederst. Spec:
 // docs/features/karriereprofil-v1.md. Drill-in-skærm (som BoardScreen).
-import { useState, useEffect } from "react";
-import { Loader2, Share2 } from "lucide-react";
-import { loadCareerProfile, loadCareerMilestones, monthName } from "../lib/data.js";
-import { roundLabel } from "../lib/scoring.js";
-import { logEvent } from "../lib/analytics.js";
-import { shareText, storyShareText } from "../lib/share.js";
-import { C, font, iconBtn } from "../ui/theme.js";
-import { BackBar, Card, Eyebrow, InfoDot, Move, PlayerName } from "../ui/components.jsx";
-
 // Karriereskærmen blander bevidst TO omfang: Titler, Rekorder og basistallene er
 // globale (Championship + global rating — alle brugere er med), mens Milepælene er
 // øjeblikke fra brugerens egne konkurrencer. En bruger læste derfor "8. plads" som
@@ -23,163 +14,18 @@ import { BackBar, Card, Eyebrow, InfoDot, Move, PlayerName } from "../ui/compone
 // "globale rating"), og forklaringen ligger ét klik væk. Ny sektion med tal ⇒ ny
 // InfoDot, ikke ny brødtekst.
 //
-// Rundenøgler kommer som tekst fra to kilder (rating_history.round_key er text,
-// matches.round_key er date), så nøglen valideres, før den bliver en etiket —
-// roundLabel på en ikke-dato giver "Invalid Date – Invalid Date".
-function safeRoundLabel(key) {
-  return typeof key === "string" && /^\d{4}-\d{2}-\d{2}$/.test(key) ? roundLabel(key) : null;
-}
-
-// Letvægts ratingkurve (ingen chart-bibliotek, jf. spec). Én prik pr. runde.
-// De første <5 runder (provisorisk K-faktor) tegnes dæmpet/stiplet.
-//
-// `peakRoundKey` ringer toppunktet ind, så Rekordernes "højeste rating
-// nogensinde" kan genfindes i kurven i stedet for at være et løsrevet tal.
-//
-// Akse-etiketterne står som HTML uden om SVG'en, ikke som <text> inde i den:
-// viewBox'en skaleres med preserveAspectRatio="none", så tekst inde i grafen
-// ville blive vandret forvrænget på brede skærme.
-export function Sparkline({ curve, peakRoundKey }) {
-  if (!curve || curve.length < 2) return null;
-  const W = 300, Hgt = 90, pad = 8;
-  const vals = curve.map((p) => p.rating_after);
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const span = max - min || 1;
-  const n = curve.length;
-  const x = (i) => pad + (i * (W - 2 * pad)) / (n - 1);
-  const y = (v) => pad + (1 - (v - min) / span) * (Hgt - 2 * pad);
-  const PROV = 5; // foreløbig periode = de første 5 runder
-  const provEnd = Math.min(PROV, n); // antal provisoriske punkter (1-indekseret grænse)
-
-  // to polyline-segmenter: provisorisk (dæmpet, stiplet) og fast (guld)
-  const provPts = curve.slice(0, provEnd).map((p, i) => `${x(i).toFixed(1)},${y(p.rating_after).toFixed(1)}`).join(" ");
-  const firmStart = Math.max(0, provEnd - 1); // overlap ét punkt så linjen hænger sammen
-  const firmPts = curve.slice(firmStart).map((p, i) => `${x(firmStart + i).toFixed(1)},${y(p.rating_after).toFixed(1)}`).join(" ");
-
-  // Toppunktet: brug RPC'ets round_key, så ring og rekord-linje altid peger på
-  // samme runde. Falder tilbage til kurvens egen maksimumsprik, hvis nøglen
-  // mangler (fx før migreringen) — så ringen aldrig bare forsvinder.
-  const peakIdx = peakRoundKey != null
-    ? curve.findIndex((p) => p.round_key === peakRoundKey)
-    : vals.indexOf(max);
-  const peak = peakIdx >= 0 ? peakIdx : vals.indexOf(max);
-
-  const firstLabel = safeRoundLabel(curve[0]?.round_key);
-  const lastLabel = safeRoundLabel(curve[n - 1]?.round_key);
-  const axis = { color: C.muted, fontSize: 11, whiteSpace: "nowrap" };
-
-  return (
-    <div>
-      {/* Y-akse som neutral skala-angivelse frem for "din laveste rating":
-          intervallet gør kurvens udsving læsbare uden at udpege et lavpunkt. */}
-      <div style={{ ...axis, marginBottom: 2 }}>Skala {min}–{max}</div>
-      <div style={{ overflowX: "auto" }}>
-        <svg viewBox={`0 0 ${W} ${Hgt}`} width="100%" height={Hgt} preserveAspectRatio="none" style={{ display: "block" }}>
-          {provEnd >= 2 && (
-            <polyline points={provPts} fill="none" stroke={C.muted} strokeWidth="1.6" strokeDasharray="3 3" strokeLinejoin="round" strokeLinecap="round" />
-          )}
-          {n - firmStart >= 2 && (
-            <polyline points={firmPts} fill="none" stroke={C.gold} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-          )}
-          {curve.map((p, i) => (
-            <circle key={i} cx={x(i)} cy={y(p.rating_after)} r={i < PROV ? 2 : 2.6}
-              fill={i < PROV ? C.muted : C.gold} />
-          ))}
-          {peak >= 0 && (
-            <circle cx={x(peak)} cy={y(curve[peak].rating_after)} r="5.5"
-              fill="none" stroke={C.gold} strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
-          )}
-        </svg>
-      </div>
-      {/* X-akse: kun første og sidste runde. Alle etiketter ville ikke kunne
-          læses på en telefon, og kurven skal give et forløb, ikke aflæsninger. */}
-      {(firstLabel || lastLabel) && (
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 4 }}>
-          <span style={axis}>{firstLabel || ""}</span>
-          <span style={axis}>{lastLabel || ""}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Feature 1 (K4): narrativ H2H-sætning ved fremmed profil. Vises uanset om
-// viewer fører eller taber — kun tælletal, ingen superlativer ("aldrig",
-// "værst"). Se sql/career_profile.sql for begrundelsen.
-//
-// Sætningen navngiver sit eget omfang ("I jeres fælles konkurrencer"): tallet
-// dækker KUN kampe fra konkurrencer, begge er deltager i — ikke hele
-// Championship, og ikke alt hvad de hver især har tippet. Uden den indledning
-// læses "I har mødt hinanden 12 gange" som en global opgørelse.
-export function h2hSentence(h2h, name) {
-  const { meetings, wins, losses, draws } = h2h;
-  const drawNote = draws > 0 ? ` (${draws} uafgjort)` : "";
-  const lead = `I jeres fælles konkurrencer har I mødt hinanden ${meetings} ${meetings === 1 ? "gang" : "gange"}`;
-  if (wins > losses) return `${lead} — du fører ${wins}-${losses}${drawNote}.`;
-  if (wins < losses) return `${lead} — ${name} fører ${losses}-${wins}${drawNote}.`;
-  return `${lead} — I står lige, ${wins}-${losses}${drawNote}.`;
-}
-
-// Normaliserer `records`-nøglen til præcis det, Rekorder-sektionen skal vise.
-// Ren funktion, så reglerne kan enhedstestes uden at rendere skærmen.
-export function recordFacts(records, currentRating) {
-  const r = records || {};
-  const bestRating = r.best_rating ?? null;
-  const rank = r.best_round_rank ?? null;
-  const field = r.best_round_rank_field ?? null;
-  const streak = r.longest_round_streak || 0;
-
-  // Rundeplaceringen vises kun, når den ikke er 1 — nr. 1 er redundant med
-  // "🥇 N rundesejre"-badget under Titler.
-  const showRank = rank != null && rank > 1;
-
-  // Feltstørrelsen ("af 34") er det, der gør rangen læsbar — men den må ALDRIG
-  // afsløre en sidsteplads: "8. plads af 8" er en bundplacering, og profilen
-  // viser aldrig bundplaceringer (karriereprofil-v1.md §1, punkt 3). Ved
-  // rank >= field falder linjen tilbage til rangen alene. Feltet mangler også,
-  // indtil migreringen er kørt i produktion — samme, tomme udfald.
-  const showField = showRank && field != null && rank < field;
-
-  // Ratingtoppen får sin runde med, når round_key ser ud som en rundenøgle
-  // (uge-startdato). Feltet fandtes allerede i RPC-svaret uden at blive vist —
-  // "1247" alene siger ikke, hvornår toppen blev sat.
-  const bestRatingRound = safeRoundLabel(r.best_rating_round);
-
-  // "Din bedste runde nogensinde" — flest point i én runde. Kun ved MINDST ét
-  // point: en runde uden point er ingen rekord, og "din bedste runde
-  // nogensinde: 0 point" ville drille præcis den bruger, der har mindst brug
-  // for det. Fundet på rigtige data (en spiller med én runde og nul point).
-  const roundPts = r.best_round_points ?? null;
-  const showRoundPts = roundPts != null && roundPts > 0;
-
-  return {
-    bestRating,
-    bestRatingIsCurrent: bestRating != null && currentRating === bestRating,
-    bestRatingRound,
-    bestRoundPoints: showRoundPts ? roundPts : null,
-    bestRoundExact: showRoundPts ? (r.best_round_exact || 0) : 0,
-    bestRoundRound: showRoundPts ? safeRoundLabel(r.best_round_points_round) : null,
-    rank: showRank ? rank : null,
-    rankCount: r.best_round_rank_count || 0,
-    rankField: showField ? field : null,
-    streak: streak >= 2 ? streak : 0,
-    hasAny: bestRating != null || showRank || streak >= 2 || showRoundPts,
-  };
-}
-
-// Rival-linjens tal. Rivaler rangeres på jævnbyrdighed fra faktiske møder
-// (K3 lukket, 30. juli 2026), så sætningen skal sige mødetallet og stillingen —
-// ikke, hvor mange historier der tilfældigvis er skrevet om personen.
-// Vises kun på egen profil, så samme privathedsargument som K4's H2H gælder:
-// stillingen står også, når man er bagud, men altid som rene tælletal.
-export function rivalTally(r) {
-  const { meetings, wins, losses, draws } = r;
-  const drawNote = draws > 0 ? ` (${draws} uafgjort)` : "";
-  const met = `I har mødt hinanden ${meetings} ${meetings === 1 ? "gang" : "gange"}`;
-  if (wins === losses) return `${met} — det står lige, ${wins}-${losses}${drawNote}.`;
-  if (wins > losses) return `${met} — du fører ${wins}-${losses}${drawNote}.`;
-  return `${met} — du er bagud ${wins}-${losses}${drawNote}.`;
-}
+// Skærmen er delt op 3. august 2026 (G1): de rene regler bor i profile/facts.js
+// og ratingkurven i profile/Sparkline.jsx. Tilbage her står dét, en skærm er —
+// hent profilen, og sæt sektionerne sammen. Flytningen er ren.
+import { useState, useEffect } from "react";
+import { Loader2, Share2 } from "lucide-react";
+import { loadCareerProfile, loadCareerMilestones, monthName } from "../lib/data.js";
+import { logEvent } from "../lib/analytics.js";
+import { shareText, storyShareText } from "../lib/share.js";
+import { C, font, iconBtn } from "../ui/theme.js";
+import { BackBar, Card, Eyebrow, InfoDot, Move, PlayerName } from "../ui/components.jsx";
+import { Sparkline } from "./profile/Sparkline.jsx";
+import { h2hSentence, recordFacts, rivalTally } from "./profile/facts.js";
 
 const MILESTONE_PAGE = 20;
 

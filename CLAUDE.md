@@ -29,6 +29,7 @@
 | backup, gendannelse efter tabt data | `docs/RESTORE.md` · §22 · `.github/workflows/data-backup.yml` |
 | feedback fra brugerne | §23 · `sql/feedback.sql` · `src/screens/FeedbackCard.jsx` |
 | privatliv, vilkår, kontolukning | §24 · `src/lib/legal.js` · `docs/features/privatliv-og-vilkaar-v1.md` |
+| fejl hos en bruger (crash, hvid skærm) | §25 · `src/lib/telemetry.js` · `sql/client_errors.sql` |
 | historik over ændringer | `docs/CHANGELOG.md` |
 
 Ved produktbeslutninger og nye features læses desuden:

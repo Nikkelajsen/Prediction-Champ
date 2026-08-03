@@ -106,6 +106,30 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database awardstest;'
           psql -h localhost -U postgres -d awardstest -v ON_ERROR_STOP=1 -b -f competition_awards.sql
 
+      # Fejltelemetri (G42): tabellen client_errors + den admin-gatede RPC.
+      # Kontrollerer BEGGE retninger — at en bruger kan skrive sin egen fejl og
+      # ikke andres, og at ingen kan læse tabellen uden om RPC'en.
+      - name: Test af fejltelemetrien
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database cetest;'
+          psql -h localhost -U postgres -d cetest -v ON_ERROR_STOP=1 -b -f client_errors.sql
+
+      # predictions.updated_at-triggeren (G13). En manglende trigger er usynlig
+      # — feltet har en default, så en frisk række ser rigtig ud, og fejlen
+      # viser sig først som et Analytics-tal, der er lidt for lavt.
+      - name: Test af updated_at-triggeren
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database putest;'
+          psql -h localhost -U postgres -d putest -v ON_ERROR_STOP=1 -b -f predictions_updated_at.sql
+
       # anon-grants (G50): kører migreringen og efterprøver BEGGE halvdele —
       # at anon mister tabel-adgangen, og at kilden (Supabases default
       # privileges for public) er lukket, så en tabel oprettet bagefter heller

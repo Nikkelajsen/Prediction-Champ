@@ -77,6 +77,129 @@ jobs:
           slettet=$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -c "select public.prune_job_runs(30);")
           echo "Ryddede $slettet rækker ældre end 30 dage fra job_runs."
 
+          # Fejltelemetrien ryddes samme sted og af samme grund (G42): en tabel
+          # uden loft bliver langsom at læse længe før nogen opdager det. 90
+          # dage og ikke 30 — en fejl, ingen har set på tre måneder, er enten
+          # rettet eller ikke værd at gemme, men et crash fra sidste måned er
+          # stadig en ledetråd.
+          fejl=$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -c "select public.prune_client_errors(90);")
+          echo "Ryddede $fejl fejlrapporter ældre end 90 dage."
+
+      # ---- Migreringernes VIRKNING (B16) ----
+      #
+      # Fire filer i sql/README.md ruller tavst noget nyere tilbage, hvis de
+      # gen-køres: #4 og #14 (runde-lås i stedet for kamp-lås), #9 (to policies
+      # afløst af A8-invarianten) og #12 (stillings-views uden `scope`). Der
+      # kommer ingen fejl — reglen bliver bare den gamle igen, og advarslen står
+      # kun i en README, altså det sted, man læser HVIS man læser.
+      #
+      # Denne workflow er stedet af samme grund som rydningen ovenfor: den har
+      # allerede databaseadgangen og kører allerede på et skema. Den spørger
+      # ikke, om filerne er kørt — den spørger, om deres VIRKNING står i
+      # databasen. Et tjek af "hvilke filer er kørt" ville kræve et register,
+      # ingen vedligeholder; et tjek af virkningen kan aflæses direkte.
+      #
+      # Kører FØR helbredstjekket, så en rulle-tilbage ses, selv når et job er tavst.
+      - name: Tjek migreringernes virkning i databasen
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::error::Secret SUPABASE_DB_URL mangler. Tilføj den under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -F'|' > virkning.txt <<'SQL'
+          -- Hver række: navn | ok | hvad man gør, hvis den ikke er ok
+          with tjek(navn, ok, rettelse) as (
+            -- #20: stillings-viewene har scope-kolonnen (rullet tilbage af #12)
+            select 'round_standings.scope',
+                   exists (select 1 from information_schema.columns
+                            where table_schema = 'public' and table_name = 'round_standings'
+                              and column_name = 'scope'),
+                   'Kør sql/tournament_scope.sql igen (#20 afløser #12)'
+            union all
+            select 'monthly_standings.scope',
+                   exists (select 1 from information_schema.columns
+                            where table_schema = 'public' and table_name = 'monthly_standings'
+                              and column_name = 'scope'),
+                   'Kør sql/tournament_scope.sql igen (#20 afløser #12)'
+            union all
+            -- #27: monthly_standings kører som kalderen og ikke som ejeren
+            -- Værdien sammenlignes ORDRET og ikke med `like '%security_invoker%'`:
+            -- `= true` og `= on` gemmes som hver sin streng, og en delstrengs-
+            -- test på "on" ville melde MANGLER for en fuldt gyldig `= true`.
+            -- Migreringen skriver `= on`, og det er dét, der tjekkes.
+            select 'monthly_standings.security_invoker',
+                   coalesce((select 'security_invoker=on' = any(reloptions)
+                               from pg_class where relname = 'monthly_standings'
+                                and relnamespace = 'public'::regnamespace), false),
+                   'Kør sql/security_hardening.sql igen (#27)'
+            union all
+            -- #28: alle predictions-policies går gennem den fælles lås. Fem
+            -- policies, og tallet er en del af kontrollen: forsvinder én, er
+            -- låsen væk ét sted, hvilket er præcis det, #4/#14 gør ved en
+            -- gen-kørsel.
+            select 'de fem laas-policies kalder match_locked()',
+                   (select count(*) from pg_policies
+                     where schemaname = 'public'
+                       and tablename in ('predictions', 'competition_participants')
+                       and coalesce(qual, '') || coalesce(with_check, '') like '%match_locked%') = 5,
+                   'Kør sql/matches_kickoff_tbd.sql igen (#28 afløser låseudtrykket i #25)'
+            union all
+            -- #13: A8-invarianten (auto-indmeldelse + strammet liga-exit)
+            select 'group_membership_invariant-trigger',
+                   exists (select 1 from pg_trigger
+                            where tgrelid = 'public.competition_participants'::regclass
+                              and not tgisinternal),
+                   'Kør sql/group_membership_invariant.sql igen (#13 afløser to policies i #9)'
+            union all
+            -- #34: anon har ingen tabel-adgang, og kilden er lukket
+            select 'anon uden tabel-grants',
+                   (select count(*) from information_schema.role_table_grants
+                     where grantee = 'anon' and table_schema = 'public') = 0,
+                   'Kør sql/anon_grants.sql igen (#34) — en ny tabel kan have arvet grants'
+            union all
+            -- #33: round_key() aflæser dansk tid og ikke sessionens
+            select 'round_key() i dansk tid',
+                   (select prosrc like '%Europe/Copenhagen%' from pg_proc
+                     where proname = 'round_key' and pronamespace = 'public'::regnamespace),
+                   'Kør sql/round_key_timezone.sql igen (#33)'
+            union all
+            -- #35: rettede tips flytter updated_at
+            -- #36: fejltelemetrien har et sted at lande
+            select 'client_errors-tabellen',
+                   to_regclass('public.client_errors') is not null,
+                   'Kør sql/client_errors.sql igen (#36)'
+            union all
+            select 'predictions_touch_updated_at',
+                   exists (select 1 from pg_trigger
+                            where tgrelid = 'public.predictions'::regclass
+                              and tgname = 'predictions_touch_updated_at'),
+                   'Kør sql/predictions_updated_at.sql igen (#35)'
+          )
+          select navn, case when ok then 'ok' else 'MANGLER' end, rettelse from tjek order by navn;
+          SQL
+
+          echo "Migrering | Tilstand"
+          echo "----------------------"
+          fail=0
+          while IFS='|' read -r navn tilstand rettelse; do
+            [ -z "$navn" ] && continue
+            printf '%-44s %s\n' "$navn" "$tilstand"
+            if [ "$tilstand" != "ok" ]; then
+              echo "::error::$navn står ikke i databasen. $rettelse"
+              fail=1
+            fi
+          done < virkning.txt
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::En migrerings virkning mangler i produktionsdatabasen — se sql/README.md."
+            exit 1
+          fi
+          echo "Alle kontroller står som forventet i databasen."
+
       - name: Tjek jobbenes helbred
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}

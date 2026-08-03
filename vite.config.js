@@ -31,6 +31,20 @@ const apiProxy = process.env.VITE_API_PROXY;
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // Source maps udgives (G42, 3. august 2026).
+    //
+    // Stakspor i `client_errors` er minificerede, og en linje som
+    // `index-Bd4x.js:1:48213` kan ikke bruges til noget. Med `.map`-filerne ved
+    // siden af kan browserens devtools — og et opslag i hånden — oversætte den
+    // til fil og linje.
+    //
+    // Indvendingen mod source maps i produktion er, at de udstiller kildekoden.
+    // Den gælder ikke her: **repoet er offentligt**, så koden kan læses i
+    // forvejen af enhver, der vil. Prisen er derfor kun størrelsen på de
+    // ekstra filer, som browseren kun henter, når devtools er åbne.
+    sourcemap: true,
+  },
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },

@@ -10,6 +10,7 @@ import { readUserFlag, writeUserFlag, COMPLETE_KEY, FLOW_KEY, PWA_ONBOARDED_KEY 
 import { C, btnGhost, btnGreen, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
 import { Modal } from "../ui/components.jsx";
 import { ErrorBoundary, ScreenFallback } from "../ui/ErrorBoundary.jsx";
+import { setTelemetryScreen } from "../lib/telemetry.js";
 import HjemTab from "./HjemTab.jsx";
 import LigaerTab from "./LigaerTab.jsx";
 import GroupScreen from "./GroupScreen.jsx";
@@ -42,6 +43,13 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
 
   const [tab, setTab] = useState("hjem");
   const [screen, setScreen] = useState(null); // null | {type, ...params}
+  // Hvor står brugeren? Bruges kun af fejltelemetrien (G42): en fejlrapport
+  // uden skærmnavn kræver, at nogen gætter ud fra stakken, og en minificeret
+  // stak er netop det, der er svært at læse. `tab:screen` er samme nøgle, som
+  // nulstiller error boundaryen længere nede — den beskriver dermed præcis det
+  // sted, en fejl hører til.
+  useEffect(() => { setTelemetryScreen(`${tab}:${screen?.type ?? ""}`); }, [tab, screen?.type]);
+
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(""); // fejl fra opstarts-indlæsningen (G23)
   const [leagues, setLeagues] = useState([]);

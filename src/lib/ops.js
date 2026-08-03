@@ -58,6 +58,12 @@ function expectedJobs(leagues) {
 const loadJobHealth = (token) =>
   restFetch(`/rest/v1/rpc/admin_job_health`, { method: "POST", token, body: {} });
 
+// Frontendens fejlrapporter (G42). Samme form som ovenfor: admin-gatet RPC,
+// som kaster, hvis kalderen ikke er admin — adgangen står i funktionen og ikke
+// i en policy-betingelse.
+const loadClientErrors = (token, maxRows = 50) =>
+  restFetch(`/rest/v1/rpc/admin_client_errors`, { method: "POST", token, body: { max_rows: maxRows } });
+
 // Forhåndsvisning af, hvad notifikations-jobbet ville sende lige nu.
 //
 // Adgangen er admin-brugerens eget token — `isAuthorized()` i api/_shared.js
@@ -194,4 +200,4 @@ function fmtSince(ms) {
   return `${Math.floor(t / 24)} d siden`;
 }
 
-export { BASE_JOBS, expectedJobs, loadJobHealth, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince };
+export { BASE_JOBS, expectedJobs, loadJobHealth, loadClientErrors, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince };

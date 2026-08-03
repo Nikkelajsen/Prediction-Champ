@@ -76,13 +76,13 @@ versionsstempel → `G42`).*
 
 ## Prioriteret rækkefølge
 
-Alle 26 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 22 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
-*Tier 2, 3 og 4 er alle kørt 3. august 2026 og er tomme: 17 punkter leveret og
-slettet på én dag. Tier 1 (fem aflæsninger) står tilbage som det næste — den
-kræver adgang til produktionsdata og ikke kode.*
+*Tier 2, 3, 4 og 5 er alle kørt 3. august 2026: 21 punkter leveret og slettet på
+én dag. Tier 1 (fem aflæsninger) står tilbage som det næste — den kræver adgang
+til produktionsdata og ikke kode.*
 
 Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
@@ -151,19 +151,20 @@ som allerede folder "ä" til "a" — så den udskrevne form skal folde samme ste
 hen. "ue" er bevidst ikke med, fordi det er to almindelige bogstaver i de sprog,
 klubnavnene står på.
 
-### Tier 5 — Robusthed og vedligehold
+### Tier 5 — Robusthed og vedligehold ✅ næsten tomt
 
-Det, der gør de næste seks måneders arbejde billigere. Ingen af dem er synlige
-for en bruger, og præcis derfor udskydes de let for længe.
+**Kørt 3. august 2026.** Fire af de seks er leveret og slettet: `G42`
+(fejltelemetri + source maps), `B16` (heartbeat'en tjekker migreringernes
+virkning), `G13` (rettede tips flytter `updated_at`) og `G7`, som blev lukket
+som et **nej** — en permanent trigger er ikke prisen værd for en fejl, der
+retter sig selv, og begrundelsen står i `DECISIONS.md`.
 
-| # | Hvad | Hvorfor her |
+To rækker skrumpede i stedet for at forsvinde, og begge er ærligere nu:
+
+| # | Hvad står tilbage | Hvorfor det ikke bare er mere af det samme |
 |---|---|---|
-| `G42` | Fejltelemetri + source maps | Den halvdel, der er tilbage, er den, der kræver et svar: hvor skal et crash rapporteres hen? Øverst i tieret, fordi den er forudsætningen for at opdage alt det andet — i dag efterlader en hvid skærm hos en bruger **nul** spor. |
-| `B16` | Heartbeat'en tjekker migreringernes virkning | Fire SQL-filer ruller tavst tilbage ved gen-kørsel, og advarslen står kun i en README. Adgangen og skemaet findes allerede i workflowen. |
-| `G2` | 14 ESLint-advarsler fra React Compiler | Loftet gør, at tallet ikke kan vokse ubemærket. Det billigste er komponenter defineret inde i andre komponenter — dét mønster tog tallet fra 23 til 14 på én dag. |
-| `G1` | De resterende store skærmfiler | Anden halvdel af fil-opdelingen. Rækkefølgen bør være `ProfileScreen` (584) og `ChampionshipTab` (515) først — de er de største **utestede**, og gevinsten er testbarhed, ikke linjetal. |
-| `G7` | `fd:`-præfikset holder id-rummene fra hinanden | Halveret 2. august. Resten er et **valg**: er en permanent trigger prisen værd for en fejl, der retter sig selv? Kan lukkes som "nej" uden kodeændring. |
-| `G13` | `predictions.updated_at` opdateres aldrig | Den tilbageværende halvdel er en beslutning om, hvad man vil vide (revisionsspor for rettede gæt), ikke en oprydning — måle-ordbogen siger allerede sandheden om tallene. |
+| `G2` | 7 advarsler, alle `set-state-in-effect` | De billige mønstre er brugt op. Det, der er tilbage, er ÉT mønster — "hent data i en effekt og sæt state" — som resten af skærmene bruger, og som ikke kan undgås uden et data-bibliotek, projektet bevidst ikke har. Næste skridt er en beslutning om det mønster, ikke en oprydning. |
+| `G1` | `MainApp` (~530) og fire mindre | `ChampionshipTab` og `ProfileScreen` er delt. `MainApp` er den næste og den sværeste: navigations-tilstandsmaskinen bor der, og den er også `A23`s emne — de to bør formentlig ses sammen. |
 
 ### Tier 6 — Venter på en udløser
 
@@ -219,18 +220,14 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | # | Hvad | Hvorfor / hvad den venter på | Omfang |
 |---|---|---|---|
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. **Forespørgslen er skrevet (august 2026)** — den står klar til at køre i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). Tilbage står at køre den. | Lille (opslag) |
-| B16 | **Heartbeat'en tjekker, at migreringernes virkning står i databasen** | Fire filer i [`sql/README.md`](../sql/README.md) ruller **tavst** noget nyere tilbage, hvis de gen-køres — og advarslen står kun i en README, altså det sted, man læser *hvis* man læser. Opdages i dag kun ved at nogen kigger. `job-heartbeat.yml` har allerede `SUPABASE_DB_URL` og kører hver halve time, så den kan spørge databasen direkte om de virkninger, en gen-kørsel ville fjerne: `scope`-kolonnen på stillings-viewene, `security_invoker` på `monthly_standings`, at de fem `predictions`-policies kalder `match_locked()`, og at A8-policyerne står. Alarmkanalen findes allerede (en fejlende workflow notificerer ejeren). Samme flytning som `G43`: kontrollen bor dér, hvor adgangen og skemaet i forvejen er. | Lille–mellem |
 
 ## Teknisk gæld
 
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
-| G1 | **De resterende store skærmfiler** — `MainApp.jsx` ~480 linjer, `HjemTab.jsx` ~450, `CreateCompetitionScreen.jsx` ~356, `AdminScreen.jsx` ~310. **De største utestede skærme er nu `ProfileScreen.jsx` (584) og `ChampionshipTab.jsx` (515)** (gennemgang aug. 2026) — de bør med i splitrækkefølgen. | Anden halvdel af fil-opdelingen fra 30. juli 2026 (`data.js`, `PredictionsScreen.jsx` og `AnalyticsPanel.jsx` er delt). Mønstret er bevist: barrel eller ren flytning bag uændret flade, så et grønt build er beviset for, at ingen eksport er tabt. Gevinsten er ikke kosmetisk — tip-skærmens tids-logik kunne ikke testes, før den blev flyttet ud, og har nu 18 tests. | Mellem |
-| G2 | **14 ESLint-advarsler fra React Compiler** (`set-state-in-effect`, `static-components`, `immutability`). | Står som advarsel frem for fejl, fordi hvert fund kræver en gennemtænkt omskrivning, ikke en rettelse. Loftet i `package.json` (`--max-warnings 14`) gør, at tallet kan falde, men aldrig vokse ubemærket — gælden er synlig i stedet for tavs. **Falder tallet, sænkes loftet i samme ombæring.** **Faldt fra 23 til 14 (3. august 2026, som sidegevinst ved `B4`):** `Section` i `HowItWorksScreen` var defineret inde i komponenten og udløste én advarsel pr. brugssted — ti stykker. Den slags er det billigste, der er tilbage på listen: se efter komponenter defineret inde i andre komponenter, før du kaster dig over effekterne. | Mellem |
-| G7 | **Præfikset `fd:` er stadig det eneste, der holder de to leverandørers id-rum fra hinanden** — databasen gør det ikke. | **Halveret 2. august 2026:** `sql/api_id_uniqueness.sql` gav `leagues (provider, api_league_id)`, `seasons (league_id, api_season_id)` og `teams (league_id, api_team_id)`, så to samtidige sync-kørsler ikke længere kan skrive den samme række to gange. **Men rækken kunne ikke lukkes som skrevet:** de tre unikke var formuleret globalt pr. kolonne, og to af de tre ville have fejlet på produktionsdata (Arsenal findes i både Premier League og Champions League med samme `fd:57`; alle fem football-data-turneringer deler sæson-id'et `2026`). **Tilbage står den oprindelige begrundelse:** glemmer syncen præfikset på et hold, skriver den `57` inde i sin egen turnering, hvor ingen constraint kan se det. Den fejl er til gengæld selvhelende (næste kørsel finder rækken på navn og PATCHer id'et på plads), og på kampe var hullet lukket i forvejen af `matches_api_fixture_id_unique`. Det, der ville lukke resten, er en kontrol af id'ets FORM mod ligaens `provider` — og den kræver en trigger eller en kopi af provider-kolonnen ned på `teams`, fordi en check-constraint ikke kan læse en anden tabel. Spørgsmålet er derfor blevet et **valg**: er en permanent trigger prisen værd for en fejl, der retter sig selv? | Lille |
+| G1 | **De resterende store skærmfiler** — `MainApp.jsx` ~530 linjer, `HjemTab.jsx` ~500, `ProfileScreen.jsx` 460, `CreateCompetitionScreen.jsx` ~390, `AdminScreen.jsx` ~330. | Anden halvdel af fil-opdelingen fra 30. juli 2026. **To af dem er delt 3. august 2026 (Tier 5):** `ChampionshipTab` gik fra 512 til 272 linjer (`championship/StandingsTable.jsx`, `scope.js`, `CardHead.jsx`) og `ProfileScreen` fra 614 til 460 (`profile/facts.js`, `Sparkline.jsx`) — rene flytninger, hvor testene nu importerer fra modulerne frem for gennem skærmen. Mønstret er dermed bevist tre gange. Gevinsten er testbarhed og læsbarhed, ikke linjetal: `MainApp` er den næste, og den er også den sværeste, fordi navigations-tilstandsmaskinen bor der (`A23`). | Mellem |
+| G2 | **7 ESLint-advarsler fra React Compiler** — alle af typen `set-state-in-effect`, i indlæsningsstier (`ChampionshipTab`, `CreateCompetitionScreen`, `GroupScreen`, `MainApp`, `PredictionsScreen` ×3). | Står som advarsel frem for fejl, fordi hvert fund kræver en gennemtænkt omskrivning, ikke en rettelse. Loftet i `package.json` (`--max-warnings 7`) gør, at tallet kan falde, men aldrig vokse ubemærket. **Faldt fra 23 til 14 (3. august, `B4`) og fra 14 til 7 samme dag (`G2`, Tier 5):** de billige mønstre er brugt op — en komponent defineret inde i en anden (fire advarsler på én rettelse), en akkumulator, der lagde sammen under render, og to effekter i `App.jsx`, som satte tilstand, der lige så godt kunne være initial. **Det, der er tilbage, er ét mønster:** "hent data i en effekt og sæt state", som resten af skærmene bruger, og som ikke kan undgås uden et data-bibliotek, projektet bevidst ikke har. Næste skridt er derfor ikke en oprydning, men en beslutning om det mønster. | Mellem |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen er formentlig allerede faldet (3. august 2026):** `B2`s testcase 3 er *præcis* denne kodesti — "`full_season`-konkurrence med begge turneringer (multivalg) → kampe fra begge materialiseres, stilling korrekt" — og ejeren har kørt og godkendt den mod produktionsdata 2. august ([`features/turnering-2.md`](./features/turnering-2.md) §6). Blev konkurrencen oprettet frem for kun gennemklikket, er "nul rækker i `mode_params.tournaments`" ikke længere sandt, og rækken skal slettes. **Rækken er derfor skrumpet til ét opslag:** `select id, name, mode_params from competitions where mode_params ? 'tournaments'` — svarer den med rækker, er stien kørt mod rigtige data, og det eneste tilbage er at se stillingen efter. | Lille (opslag) |
-| G13 | **`predictions.updated_at` opdateres aldrig ved rettelse.** Ingen trigger på tabellen, og klienten sender ikke feltet (`PredictionsScreen.jsx:181` upserter kun `pred_home`/`pred_away`). | Verificeret mod PostgreSQL 16.13: `on conflict do update` uden feltet i `set` lader det stå. To følger: der findes intet revisionsspor for et rettet gæt, og Analytics' "Aktive konkurrencer" (og "Aktive ligaer") beskriver sig selv som "mindst ét tip **opdateret** i vinduet", mens `p.updated_at` i praksis måler *oprettede* tips. **Halveret (august 2026):** måle-ordbogen siger nu det, tallet faktisk gør — "afgivet", ikke "opdateret" — med forbeholdet skrevet ind. Det ændrer ingen tal. **Tilbage står triggeren**, som ville give et revisionsspor for rettede gæt og ændre, hvad de to Analytics-tal måler; dét er en beslutning om, hvad man vil vide, ikke en oprydning. | Lille–mellem |
-| G42 | **Et crash hos en bruger efterlader nul spor.** Ingen fejltelemetri og ingen source maps i frontenden, og commit-SHA'en stemples hverken i build eller `job_runs`. | Backenden har `job_runs`; frontenden har intet tilsvarende, så en hvid skærm hos en bruger kan hverken ses, reproduceres eller kobles til et deploy. Sammen med `G20` (ingen error boundary) betyder det, at fejlen hverken fanges eller rapporteres. **Halveret (august 2026):** versionsstemplet er leveret — commit-SHA'en står nu både nederst i "Sådan virker det" og i hver `job_runs`-række, så en fejlmelding kan kobles til et deploy. **Tilbage står fejltelemetrien selv** (hvor skal et crash rapporteres hen?) og source maps, som først giver mening, når der er et sted at sende dem hen. `componentDidCatch` i `ui/ErrorBoundary.jsx` er stedet, den kobles på. | Lille–mellem |
 
 ## Ideer
 
