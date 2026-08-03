@@ -75,9 +75,16 @@ mappen flyttes.
 1. **Ejer-godkendelse af copy og udtryk** — dette er et førsteudkast.
 2. **Kontakt-mail** — `om.html` bruger pladsholderen
    `kontakt@prediction-champ.example`; den rigtige adresse er en del af `I10`
-   (professionel e-mail). Står i backloggens indbakke.
+   (professionel e-mail). *(Rettet 3. august 2026: linjen stod i backloggens
+   indbakke og er nu foldet ind i `I10`s række, som lister alle fem steder,
+   adressen skal ind.)*
 3. **Domæne og hosting-beslutning** (`I10`) — eget domæne eller en sti på
-   Vercel-projektet; afgør også, om appens CSP-headere skal justeres.
+   Vercel-projektet. *(Rettet 3. august 2026: udkastet skrev, at valget også
+   afgør, om appens CSP-headere skal justeres. Det gør det ikke — `vercel.json`
+   har kun `font-src 'self'`, og begge mapper hoster deres fonte selv, så
+   headeren er uafhængig af domænet. Det, valget derimod afgør, er, om **appen**
+   skifter origin, hvilket koster hver bruger et log ud, en ny push-tilmelding
+   og en geninstalleret PWA — se `I10` i backloggen.)*
 4. **SEO** (`I9`) — OG-tags, sitemap, indeksering.
 
 ## Verifikation af udkastet
