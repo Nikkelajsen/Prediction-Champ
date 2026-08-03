@@ -3,7 +3,7 @@
 // kun de to bruger.
 
 import { db } from "../supabase.js";
-import { currentRoundIndex, groupIntoRounds, isLocked, lockAtOf, liveInfo, pointsFor, roundLabel } from "../scoring.js";
+import { byKickoffThenTeams, currentRoundIndex, groupIntoRounds, isLocked, lockAtOf, liveInfo, pointsFor, roundLabel } from "../scoring.js";
 
 // ---------- Hjem: næste deadline + manglende tips på tværs af brugerens konkurrencer ----------
 async function computeHomeTips(token, userId, competitions) {
@@ -21,6 +21,11 @@ async function computeHomeTips(token, userId, competitions) {
 
   const now = Date.now();
   const played = (m) => m.home_score !== null && m.home_score !== undefined;
+  // Deler kampene tidsstempel — en hel runde gør det, når tiderne ikke er
+  // fastlagt endnu — afgør holdnavnet rækkefølgen. Ellers ville BÅDE "næste
+  // kamp" og de tre navne på deadline-kortet være et vilkårligt udvalg, der
+  // kunne skifte fra indlæsning til indlæsning.
+  const byTime = byKickoffThenTeams((id) => teamName.get(id));
 
   // En kamp kan tippes fra det øjeblik, den findes, og indtil den låser: det
   // rullende gætte-vindue er fjernet (B1, august 2026).
@@ -31,8 +36,15 @@ async function computeHomeTips(token, userId, competitions) {
   // sted (samme sted som "Tip nu" ved manglende tips).
   const nextUp = (extra) => {
     const future = ms.filter((m) => !played(m) && m.kickoff_at && new Date(m.kickoff_at).getTime() > now)
-      .sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));
-    return { hasComps: true, ...extra, nextOpen: future[0]?.kickoff_at || null, roundKey: future[0]?.round_key || null };
+      .sort(byTime);
+    // nextOpenTbd følger med nextOpen: uden den ville kortet vise et opdigtet
+    // klokkeslæt for en kamp, hvis tid endnu ikke er fastlagt.
+    return {
+      hasComps: true, ...extra,
+      nextOpen: future[0]?.kickoff_at || null,
+      nextOpenTbd: !!future[0]?.kickoff_tbd,
+      roundKey: future[0]?.round_key || null,
+    };
   };
   // "Alle tips er inde" er en påstand om BRUGERENS tips og må kun bruges, når vi
   // faktisk har set, at rundens tipbare kampe er tippet.
@@ -50,7 +62,7 @@ async function computeHomeTips(token, userId, competitions) {
   if (!tippable.length) return nothingToTip();
   const nextRoundKey = tippable.reduce((min, m) => (m.round_key < min ? m.round_key : min), tippable[0].round_key);
   const roundUntipped = tippable.filter((m) => m.round_key === nextRoundKey && !isTipped(m))
-    .sort((a, b) => a.kickoff_at.localeCompare(b.kickoff_at));
+    .sort(byTime);
   if (!roundUntipped.length) return allOk();
 
   // Kortets deadline er den FØRSTE af de utippede kampes egne låse — det er den, der
@@ -82,6 +94,10 @@ async function computeCurrentRound(token, userId, competitions) {
   const teamIds = [...new Set(round.matches.flatMap((m) => [m.home_team_id, m.away_team_id]).filter(Boolean))];
   const teams = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  // Sorteringen sker HER og ikke i groupIntoRounds ovenfor: holdnavnene slås op
+  // ud fra rundens kampe, så de findes først, når runden er valgt. Uden den ville
+  // en runde med ens tidsstempler ligge i vilkårlig orden på Hjem.
+  round.matches.sort(byKickoffThenTeams((id) => teamName.get(id)));
   const roundMatchIds = round.matches.map((m) => m.id);
   const preds = await db.select(token, "predictions", `match_id=in.(${roundMatchIds.join(",")})&user_id=eq.${userId}&select=match_id,pred_home,pred_away`);
   const predByMatch = new Map(preds.map((p) => [p.match_id, p]));

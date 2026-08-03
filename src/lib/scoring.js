@@ -24,12 +24,32 @@ function roundLabel(key) {
   const fmt = (x) => x.toLocaleDateString("da-DK", { day: "2-digit", month: "2-digit" });
   return `${fmt(start)} – ${fmt(end)}`;
 }
-function groupIntoRounds(matches) {
+// Kampenes rækkefølge: kickoff først, derefter holdnavn.
+//
+// Kickoff alene er ikke en TOTAL orden. En hel runde kan dele tidsstempel — det
+// sker hver gang klokkeslættet ikke er fastlagt endnu (`kickoff_tbd`, hvor alle
+// kampe bærer datoens pladsholder), og ellers hver gang to kampe spilles
+// samtidig. `order=kickoff_at` i PostgREST efterlader den rest udefineret, så de
+// samtidige kampe kunne bytte plads mellem to indlæsninger af samme skærm.
+//
+// `teamNameOf` er en opslagsfunktion (id → navn), fordi navnene bor i `teams` og
+// ikke på kampen; uden den falder sammenligningen tilbage på hold-ID'et, som er
+// vilkårligt, men stabilt. Sorteringen er dansk (`"da"`), så æ/ø/å lander efter
+// z og ikke midt i alfabetet.
+function byKickoffThenTeams(teamNameOf) {
+  const name = (id) => (teamNameOf ? teamNameOf(id) : null) || id || "";
+  return (a, b) =>
+    (a.kickoff_at || "").localeCompare(b.kickoff_at || "") ||
+    name(a.home_team_id).localeCompare(name(b.home_team_id), "da") ||
+    name(a.away_team_id).localeCompare(name(b.away_team_id), "da");
+}
+function groupIntoRounds(matches, teamNameOf) {
   const map = {};
   for (const m of matches) { (map[m.round_key] ||= []).push(m); }
+  const cmp = byKickoffThenTeams(teamNameOf);
   return Object.keys(map).sort().map((key) => ({
     key, label: roundLabel(key),
-    matches: map[key].slice().sort((a, b) => (a.kickoff_at || "").localeCompare(b.kickoff_at || "")),
+    matches: map[key].slice().sort(cmp),
   }));
 }
 // beholder kun kampe fra og med den første runde, der IKKE er helt afsluttet endnu
@@ -146,11 +166,15 @@ function modeLabel(mode, modeParams) {
   return MODE_LABELS[mode] || mode;
 }
 
-function formatKickoff(iso) {
+// `tbd` udelader klokkeslættet: er kampens tid ikke fastlagt, bærer kickoff_at
+// kun en dato, og et påhæftet "kl. 02.00" ville være opdigtet. Datoen står
+// stadig — den ER kendt.
+function formatKickoff(iso, tbd = false) {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleDateString("da-DK", { weekday: "short", day: "2-digit", month: "2-digit" }) + " kl. " +
-    d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
+  const date = d.toLocaleDateString("da-DK", { weekday: "short", day: "2-digit", month: "2-digit" });
+  if (tbd) return date;
+  return date + " kl. " + d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
 }
 const LOCK_LEAD_MS = 60 * 60 * 1000; // 1 time før kampens eget kickoff
 
@@ -164,10 +188,20 @@ const LOCK_LEAD_MS = 60 * 60 * 1000; // 1 time før kampens eget kickoff
 // `api/_backfill.js` regel 3 og `analytics_round_locks`.
 
 // Låsetidspunktet for én kamp (ms), eller null hvis kickoff ikke er kendt.
+//
+// Er klokkeslættet ikke fastlagt (kickoff_tbd), er "1 time før kickoff"
+// meningsløst — der er intet kickoff at regne fra, kun en dato. Låsen bliver da
+// MIDNAT PÅ SPILLEDAGEN. Det er det eneste tidspunkt, der holder, når kampen kan
+// ligge hvor som helst på dagen: enhver senere lås ville kunne ligge efter et
+// fløjt. Det er strengere end 1-times reglen, og med vilje — den anden vej ville
+// koste tips, ikke bare præcision.
 function lockAtOf(m) {
   if (!m?.kickoff_at) return null;
   const t = new Date(m.kickoff_at).getTime();
-  return Number.isNaN(t) ? null : t - LOCK_LEAD_MS;
+  if (Number.isNaN(t)) return null;
+  if (!m.kickoff_tbd) return t - LOCK_LEAD_MS;
+  const d = new Date(t);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
 // En kamp er låst hvis den har fået resultat, ELLER hvis vi er inden for 1 time
@@ -225,4 +259,4 @@ function liveInfo(m) {
   };
 }
 
-export { outcome, pointsFor, roundLabel, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };
+export { outcome, pointsFor, roundLabel, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };

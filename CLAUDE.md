@@ -25,8 +25,9 @@
 | karriereprofil | §19 · `docs/features/karriereprofil-v1.md` |
 | onboarding | §20 · `docs/features/onboarding-v1.md` |
 | analytics og måle-ordbogen | §21 · `docs/features/analytics-v1.md` |
-| feedback fra brugerne | §22 · `sql/feedback.sql` · `src/screens/FeedbackCard.jsx` |
 | planlagte jobs (cron) | `docs/CRON.md` |
+| backup, gendannelse efter tabt data | `docs/RESTORE.md` · §22 · `.github/workflows/data-backup.yml` |
+| feedback fra brugerne | §23 · `sql/feedback.sql` · `src/screens/FeedbackCard.jsx` |
 | historik over ændringer | `docs/CHANGELOG.md` |
 
 Ved produktbeslutninger og nye features læses desuden:

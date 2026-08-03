@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, pointsFor, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { outcome, pointsFor, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 const RULES = { exact: 3, outcome: 1 };
 
@@ -149,6 +149,104 @@ describe("per-kamp-låsning (isLocked / lockAtOf)", () => {
     // Uden kendt kickoff er kampen åben for tips — spejler skrivegrenen i
     // sql/predictions_match_lock.sql, hvor `kickoff_at is null` behandles eksplicit.
     expect(isLocked({ ...r1, home_score: null, kickoff_at: null })).toBe(false);
+  });
+
+  // Tid ikke fastlagt: kickoff_at bærer kun en dato, og "1 time før kickoff" er
+  // derfor ikke et rigtigt tidspunkt. Låsen bliver midnat på spilledagen.
+  //
+  // Testene er skrevet som EGENSKABER frem for et fast tidsstempel, fordi låsen
+  // følger enhedens tidszone: CI kører UTC og en dansk telefon UTC+2, og et
+  // hårdkodet ms-tal ville måle maskinen i stedet for reglen.
+  it("en kamp uden fastlagt tid låser ved midnat på spilledagen, ikke kickoff minus én time", () => {
+    const kickoff = "2026-09-13T00:00:00Z"; // pladsholderen fra datakilden
+    const lockAt = lockAtOf({ kickoff_at: kickoff, kickoff_tbd: true });
+
+    const d = new Date(lockAt);
+    expect([d.getHours(), d.getMinutes(), d.getSeconds()]).toEqual([0, 0, 0]);
+    expect(d.getDate()).toBe(new Date(kickoff).getDate()); // samme dag som kampen
+    expect(lockAt).not.toBe(new Date(kickoff).getTime() - 60 * 60 * 1000);
+  });
+
+  it("kickoff_tbd ændrer intet for en kamp med rigtigt klokkeslæt", () => {
+    const kickoff = "2026-09-13T14:00:00Z";
+    expect(lockAtOf({ kickoff_at: kickoff, kickoff_tbd: false }))
+      .toBe(new Date("2026-09-13T13:00:00Z").getTime());
+    // Feltet mangler helt på gamle rækker og skal opføre sig som false.
+    expect(lockAtOf({ kickoff_at: kickoff })).toBe(new Date("2026-09-13T13:00:00Z").getTime());
+  });
+
+  it("en TBD-kamp er åben dagen før og låst på selve spilledagen", () => {
+    const m = { ...r1, home_score: null, kickoff_at: "2026-09-13T00:00:00Z", kickoff_tbd: true };
+
+    vi.useFakeTimers({ now: new Date("2026-09-11T12:00:00Z") });
+    expect(isLocked(m)).toBe(false);
+
+    vi.useFakeTimers({ now: new Date("2026-09-13T12:00:00Z") });
+    expect(isLocked(m)).toBe(true);
+  });
+});
+
+describe("byKickoffThenTeams", () => {
+  const navne = { a: "AGF", b: "Brøndby IF", s: "Silkeborg IF", aa: "Aalborg BK" };
+  const kamp = (id, kickoff, home, away) => ({ id, kickoff_at: kickoff, home_team_id: home, away_team_id: away });
+
+  it("sorterer på kickoff først", () => {
+    const ud = [kamp("sen", "2026-09-13T18:00:00Z", "a", "b"), kamp("tidlig", "2026-09-13T14:00:00Z", "s", "aa")]
+      .sort(byKickoffThenTeams((id) => navne[id]));
+    expect(ud.map((m) => m.id)).toEqual(["tidlig", "sen"]);
+  });
+
+  // Kernen: en hel runde deler tidsstempel, når klokkeslættet ikke er fastlagt.
+  // Uden tiebreaker efterlader `order=kickoff_at` den rest udefineret, og listen
+  // kunne skifte orden mellem to visninger af samme runde.
+  it("falder tilbage på hjemmeholdets navn ved samme kickoff", () => {
+    const t = "2026-09-13T00:00:00Z";
+    const ud = [kamp("s", t, "s", "a"), kamp("a", t, "a", "b"), kamp("b", t, "b", "s")]
+      .sort(byKickoffThenTeams((id) => navne[id]));
+    expect(ud.map((m) => m.id)).toEqual(["a", "b", "s"]); // AGF, Brøndby, Silkeborg
+  });
+
+  it("bruger udeholdet, når hjemmeholdet er det samme", () => {
+    const t = "2026-09-13T00:00:00Z";
+    const ud = [kamp("mod-s", t, "a", "s"), kamp("mod-b", t, "a", "b")]
+      .sort(byKickoffThenTeams((id) => navne[id]));
+    expect(ud.map((m) => m.id)).toEqual(["mod-b", "mod-s"]);
+  });
+
+  // Dansk sortering, ikke maskinens: "Aa" alfabetiseres som "Å" og lander derfor
+  // EFTER Z — det er Dansk Sprognævns regel, og den er grunden til at `"da"`
+  // står i localeCompare. Under standard-collation ville Aalborg stå først, og
+  // Brøndby ville lande mellem to b-navne i stedet for efter dem.
+  it("sorterer efter dansk alfabet: Aa som Å, altså sidst", () => {
+    const t = "2026-09-13T00:00:00Z";
+    const ud = [kamp("aalborg", t, "aa", "a"), kamp("broendby", t, "b", "a"), kamp("agf", t, "a", "s")]
+      .sort(byKickoffThenTeams((id) => navne[id]));
+    expect(ud.map((m) => m.id)).toEqual(["agf", "broendby", "aalborg"]);
+  });
+
+  // Navnene hentes efter kampene, så der findes et render, hvor de mangler.
+  // Rækkefølgen skal stadig være den samme hver gang — bare på id i stedet.
+  it("er stabil uden holdnavne", () => {
+    const t = "2026-09-13T00:00:00Z";
+    const kampe = [kamp("x", t, "s", "a"), kamp("y", t, "a", "b")];
+    const en = kampe.slice().sort(byKickoffThenTeams(undefined)).map((m) => m.id);
+    const to = kampe.slice().reverse().sort(byKickoffThenTeams(undefined)).map((m) => m.id);
+    expect(en).toEqual(to);
+  });
+});
+
+describe("formatKickoff", () => {
+  it("udelader klokkeslættet, når tiden ikke er fastlagt", () => {
+    const iso = "2026-09-13T00:00:00Z";
+    expect(formatKickoff(iso)).toContain(" kl. ");
+    expect(formatKickoff(iso, true)).not.toContain("kl.");
+    // Datoen bliver stående — den ER kendt; det er kun tiden, der mangler.
+    expect(formatKickoff(iso, true)).toBe(formatKickoff(iso).split(" kl. ")[0]);
+  });
+
+  it("giver tom streng uden kickoff, uanset flaget", () => {
+    expect(formatKickoff(null)).toBe("");
+    expect(formatKickoff(null, true)).toBe("");
   });
 });
 

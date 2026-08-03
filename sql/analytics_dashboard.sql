@@ -61,19 +61,27 @@ drop view if exists public.analytics_round_locks;
 -- En kamp uden kendt kickoff giver ingen række → regnes aldrig som låst,
 -- ligesom policyen (`matches.kickoff_at` er i dag `not null`, så dette er kun
 -- en defensiv detalje). VIGTIGT: denne fil må ALDRIG bruges til at ÆNDRE selve
--- låsen — den lever udelukkende i predictions_match_lock.sql.
+-- låsen — den lever udelukkende i public.match_lock_at()
+-- (sql/matches_kickoff_tbd.sql), som viewet kalder. Kør den fil FØR denne på en
+-- frisk database; ellers findes funktionen ikke endnu.
 --
 -- Bevidst UDEN security_invoker=on (modsat round_standings/latest_story, som
 -- klienter læser direkte): dette view kører med EJERENS rettigheder inde i
 -- RPC'erne nedenfor, og revokes derfor fra alle klient-roller.
+-- KOLONNEREKKEFØLGEN ER BINDENDE: `kickoff_tbd` skal stå sidst, og den skal stå
+-- samme sted her som i matches_kickoff_tbd.sql (#28). `create or replace view` må
+-- kun føje kolonner til enden, så en ny kolonne i midten fejler med "cannot change
+-- name of view column"; og giver de to filer viewet hver sin rækkefølge, fejler den
+-- af dem, der køres sidst. Samme fælde kostede en kørsel under A21.
 create or replace view public.analytics_match_locks as
 select
-  m.id                                      as match_id,
+  m.id                                              as match_id,
   m.season_id,
   m.round_key,
   m.kickoff_at,
-  m.kickoff_at - interval '1 hour'          as lock_at,
-  (m.kickoff_at - interval '1 hour') <= now() as is_locked
+  public.match_lock_at(m.kickoff_at, m.kickoff_tbd)  as lock_at,
+  public.match_locked(m.kickoff_at, m.kickoff_tbd)   as is_locked,
+  m.kickoff_tbd
 from public.matches m
 where m.kickoff_at is not null;
 

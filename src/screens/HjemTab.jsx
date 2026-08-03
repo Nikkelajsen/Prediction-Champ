@@ -357,7 +357,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         <Card>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Intet at tippe lige nu</div>
           <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
-            {tips.nextOpen ? `Næste kamp: ${formatKickoff(tips.nextOpen)}` : "Der er ingen kommende kampe i dine konkurrencer."}
+            {tips.nextOpen ? `Næste kamp: ${formatKickoff(tips.nextOpen, tips.nextOpenTbd)}` : "Der er ingen kommende kampe i dine konkurrencer."}
           </div>
           {tips.roundKey && (
             <button style={{ ...btnGhost, marginTop: 12 }} onClick={() => openPredictions("all", tips.roundKey)}>Se runden</button>
@@ -386,7 +386,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
             <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", color: C.green }}>Alt ok — alle tips er inde</div>
           </div>
           <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
-            {tips.nextOpen ? `Næste kamp: ${formatKickoff(tips.nextOpen)}` : "Vi giver besked, når næste runde åbner."}
+            {tips.nextOpen ? `Næste kamp: ${formatKickoff(tips.nextOpen, tips.nextOpenTbd)}` : "Vi giver besked, når næste runde åbner."}
           </div>
           {tips.roundKey && (
             <button style={{ ...btnGhost, marginTop: 12, borderColor: C.green, color: C.green }} onClick={() => openPredictions("all", tips.roundKey)}>Se tips</button>

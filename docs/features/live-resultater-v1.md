@@ -148,7 +148,7 @@ Den endelige test er appen: åbn Hjem-fanen under en kamp — "Indeværende rund
 
 ~~Sæt dem til **hver 6. time**.~~ **Rettet efter levering (august 2026, `G6`):** de blev sat til **hver 12. time**, ikke hver 6., og dét er tallet, der gælder. Afvigelsen stod uopdaget, fordi overvågningen — heartbeat'en og `ops.js` — beholdt spec'ens 6 timer med alarm efter 14, altså en grænse, der var strammere end det skema, den skulle overvåge. Registeret i [`../CRON.md`](../CRON.md) er kilden til kadencen; alarmgrænsen er nu 26 timer.
 
-Uanset tallet er pointen den samme: på Sportmonks' gratis-plan (180 kald i timen pr. entitet) falder det konstante forbrug fra ~24 kald/time til under 1, og hele budgettet er frit til live-syncens 60 kald/time på kampdage. Ren indstillingsændring hos cron-job.org — ingen kodeændring.
+Uanset tallet er pointen den samme: på Sportmonks' gratis-plan (**3.000 kald i timen pr. entitet** — her stod 180, indtil `A15` blev aflæst 2. august 2026; se [`../DECISIONS.md`](../DECISIONS.md)) falder det konstante forbrug fra ~24 kald/time til under 1, og hele budgettet er frit til live-syncens 60 kald/time på kampdage. Ren indstillingsændring hos cron-job.org — ingen kodeændring.
 
 ### Fejlfinding
 

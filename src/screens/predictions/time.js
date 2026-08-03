@@ -3,11 +3,16 @@
 // Ren logik uden React — udskilt så den kan testes direkte, hvilket den ikke
 // kunne, da den lå midt i en 705-linjers skærmfil.
 
-import { formatKickoff } from "../../lib/scoring.js";
+import { byKickoffThenTeams, formatKickoff } from "../../lib/scoring.js";
 
 // Datoen står i dagens overskrift; rækken viser kun klokkeslæt.
-function hhmm(iso) {
-  if (!iso) return "";
+//
+// Er tiden ikke fastlagt, er der intet klokkeslæt at vise: kickoff_at bærer en
+// pladsholder, som ville stå som "02.00" og se ud som en rigtig kampstart.
+// Tomt svar lader kalderens `|| "–"` slå igennem; forklaringen står i
+// dagsoverskriften, hvor der er plads til den.
+function hhmm(iso, tbd = false) {
+  if (!iso || tbd) return "";
   return new Date(iso).toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
 }
 function dayKey(iso) {
@@ -26,7 +31,16 @@ function dayLabel(iso) {
 // Gruppér rundens kampe pr. kampdag, så datoen står ÉN gang i stedet for på hver
 // række. Kampene er allerede sorteret på kickoff (groupIntoRounds); kampe uden
 // kickoff samles i en sidste bucket.
-function groupIntoDays(matches) {
+//
+// En kamp uden fastlagt klokkeslæt bliver i sin RIGTIGE dag — datoen er kendt,
+// det er kun tiden, der mangler. Står hele dagen uden tider, siger overskriften
+// det; det er dér, rækkernes tomme tidskolonne får sin forklaring.
+//
+// `teamNameOf` sorterer dagens kampe på holdnavn, når de deler tidsstempel. Det
+// er reglen frem for undtagelsen på en dag uden fastlagte tider: dér bærer ALLE
+// kampe det samme, og uden en tiebreaker kunne listen skifte orden mellem to
+// visninger af den samme runde.
+function groupIntoDays(matches, teamNameOf) {
   const days = [];
   const byKey = new Map();
   for (const m of matches) {
@@ -38,6 +52,13 @@ function groupIntoDays(matches) {
       days.push(bucket);
     }
     bucket.matches.push(m);
+  }
+  const cmp = byKickoffThenTeams(teamNameOf);
+  for (const day of days) {
+    day.matches.sort(cmp);
+    if (day.key !== "?" && day.matches.every((m) => m.kickoff_tbd)) {
+      day.label += " · Tid ikke fastlagt";
+    }
   }
   return days.sort((a, b) => (a.key === "?" ? 1 : b.key === "?" ? -1 : 0));
 }

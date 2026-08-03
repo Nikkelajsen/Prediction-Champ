@@ -1,0 +1,379 @@
+name: Datasikkerhedskopi
+
+# Tager en krypteret sikkerhedskopi af HELE databasen — skema OG data — og
+# beviser i samme kørsel, at kopien kan gendannes.
+#
+# HVORFOR DEN FINDES
+# Supabase-planen er Free (aflæst 2. august 2026), og Free giver hverken
+# automatiske backups eller PITR. Repoets eneste eksport indtil nu er
+# sql/schema.sql, som er --schema-only: strukturen kan genskabes, historikken
+# kan ikke. Og historikken ER produktet (tips, ratings, rating_history,
+# stories, kåringer). Runbogen står i docs/RESTORE.md.
+#
+# HVORFOR DUMPET ER KRYPTERET
+# Repoet er OFFENTLIGT, og artefakter fra et offentligt repo kan hentes af
+# enhver. Dumpet indeholder auth.users — e-mails og password-hashes. Krypteringen
+# er derfor forudsætningen for overhovedet at lægge filen her, ikke et ekstra lag.
+#
+# HVORFOR auth ER MED
+# Fem fremmednøgler i public peger på auth.users (profiles, push_subscriptions,
+# notification_log, user_activity_days, analytics_events). Et dump uden auth er
+# ikke en delvis sikkerhedskopi — det er en, der ikke kan gendannes.
+#
+# HVORFOR DUMPET IKKE AFHÆNGER AF sql/schema.sql
+# Kopien er selvstændig (skema + data i ét custom-format-dump). En sikkerhedskopi,
+# hvis gendannelse hænger på, at nogen har husket at køre en ANDEN workflow, er
+# ikke en sikkerhedskopi — og sql/README.md siger selv, at øjebliksbilledet er bagud.
+#
+# Krav: repo-secrets SUPABASE_DB_URL (samme som skema-eksporten og job-heartbeat
+# bruger) og BACKUP_PASSPHRASE. Sidstnævnte SKAL også ligge i en passwordmanager
+# uden for GitHub — se docs/RESTORE.md.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Dagligt kl. 03:00 UTC (05:00 dansk sommertid). Kadencen ER tabsgrænsen:
+    # uden PITR kan der i værste fald gå 24 timer tabt. Vilkåret står i
+    # DOCUMENTATION.md afsnit 12 og i runbogen, så det er et valg og ikke en
+    # overraskelse. GitHub kører planlagte workflows med forsinkelse under
+    # belastning, så tidspunktet er omtrentligt.
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    # Gendannelsestesten kører mod en tom database i en service-container.
+    # postgres:17 og ikke :16 som CI's sql-job: dumpet er skrevet af pg_dump 17
+    # mod en PG 17-server, og en ældre server kan ikke læse det.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Tjek at begge hemmeligheder findes
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          fail=0
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::error::Secret SUPABASE_DB_URL mangler. Tilføj den under Settings → Secrets and variables → Actions."
+            fail=1
+          fi
+          if [ -z "${BACKUP_PASSPHRASE:-}" ]; then
+            echo "::error::Secret BACKUP_PASSPHRASE mangler. Uden den kan dumpet ikke krypteres, og et ukrypteret dump må ALDRIG uploades fra et offentligt repo."
+            fail=1
+          fi
+          [ "$fail" -eq 0 ] || exit 1
+          echo "Begge hemmeligheder er til stede."
+
+      - name: Installér pg_dump (PostgreSQL 17-klient)
+        run: |
+          set -euo pipefail
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          # Runneren har pg_dump 16 forudinstalleret på PATH; læg pg17-binæren forrest,
+          # ellers fejler dumpet med "server version mismatch" mod Supabases PG 17-server.
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      # Rækketallene er facitlisten for gendannelsestesten længere nede. De tælles
+      # EKSAKT (count(*)), ikke med pg_class.reltuples eller n_live_tup — begge er
+      # estimater, og et estimat kan ikke bevise, at intet gik tabt.
+      #
+      # Samme fil bruges på begge sider (produktion og den gendannede database),
+      # så de to lister pr. konstruktion dækker de samme tabeller. \gexec kører
+      # den genererede forespørgsel; det er kun tallene, der kommer ud.
+      #
+      # Bemærk det manglende semikolon før \gexec — det er ikke en slåfejl.
+      # \gexec ER afslutteren. Står der et semikolon, køres forespørgslen FØRST
+      # som en almindelig select, hvis resultat printes, og DEREFTER som
+      # kommandoer: output bliver da både tallene og den genererede SQL, og
+      # sammenligningen med produktion ville måle to forskellige ting.
+      - name: Skriv tælle-forespørgslen
+        run: |
+          set -euo pipefail
+          cat > /tmp/counts.sql <<'SQL'
+          select format('select %L, count(*) from %I.%I', n.nspname || '.' || c.relname, n.nspname, c.relname)
+            from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+           where c.relkind = 'r'
+             and (n.nspname = 'public' or (n.nspname = 'auth' and c.relname in ('users', 'identities')))
+           order by 1
+          \gexec
+          SQL
+
+      - name: Tæl rækker i produktion (før dumpet)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p ud
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -F'|' -f /tmp/counts.sql | sort > /tmp/counts-foer.txt
+          echo "Talte $(wc -l < /tmp/counts-foer.txt) tabeller."
+
+      # Skema OG data, begge skemaer, i custom-format. Custom-format frem for ren
+      # SQL, fordi det holder gendannelsen åben: pg_restore -l viser indholdet uden
+      # at pakke ud, og pg_restore --data-only -t <tabel> henter ÉN tabel tilbage.
+      # Det er det hyppigste rigtige scenarie (en fejlkørt migrering, en admin-fejl)
+      # og ville kræve håndredigering af en 100 MB tekstfil i ren SQL.
+      #
+      # --no-owner som i skema-eksporten; grants beholdes bevidst (de er en del af
+      # sikkerhedskontrakten, jf. sql/README.md).
+      #
+      # Kan pooler-rollen læse auth? JA — aflæst ved første kørsel 2. august 2026:
+      # dumpet gik igennem, og facitlisten talte 22 tabeller (20 i public plus
+      # auth.users og auth.identities). Spørgsmålet stod åbent, indtil kørslen
+      # svarede, frem for at blive gættet. Fejler trinnet på auth en dag alligevel
+      # (Supabase kan stramme rollens rettigheder), er vejen at indsnævre til
+      # -t auth.users -t auth.identities og skrive begrænsningen i docs/RESTORE.md.
+      - name: Dump database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          pg_dump "$SUPABASE_DB_URL" \
+            --schema=public \
+            --schema=auth \
+            --no-owner \
+            --format=custom \
+            -f /tmp/backup.dump
+          echo "Dump: $(du -h /tmp/backup.dump | cut -f1) ($(stat -c%s /tmp/backup.dump) bytes)"
+          # Et tomt eller absurd lille dump er en fejl, ikke en lille database.
+          if [ "$(stat -c%s /tmp/backup.dump)" -lt 10000 ]; then
+            echo "::error::Dumpet er under 10 kB. Det er ikke en lille database — det er et mislykket dump."
+            exit 1
+          fi
+
+      # Produktionen tælles på BEGGE sider af dumpet, og det er ikke overdreven
+      # grundighed — det er den eneste måde at undgå en test, der er rød uden
+      # grund. sync-live skriver en job_runs-række hvert minut, og job-heartbeat
+      # rydder de gamle hver halve time, så databasen bevæger sig, mens vi
+      # arbejder. Et krav om ét bestemt tal ville derfor jævnligt fejle på noget
+      # helt rigtigt — og et job, der ofte er rødt uden grund, lærer én at holde
+      # op med at kigge (samme lære som B8's tolerance for season-not-published).
+      #
+      # Kriteriet er i stedet, at det gendannede tal skal ligge INDEN FOR det
+      # vindue, produktionen bevægede sig i: min(før, efter) ≤ gendannet ≤ max(…).
+      # Dumpet er taget i vinduet, så et rigtigt dump kan ikke lande uden for det;
+      # en gendannelse, der tabte rækker, kan.
+      - name: Tæl rækker i produktion (efter dumpet)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -F'|' -f /tmp/counts.sql | sort > /tmp/counts-efter.txt
+
+          serverversion=$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -c 'show server_version')
+          {
+            echo "# Prediction Champ — sikkerhedskopi"
+            echo "dato_utc:       $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "commit:         ${GITHUB_SHA:0:7}"
+            echo "kørsel:         ${GITHUB_RUN_ID:-lokal}"
+            echo "serverversion:  $serverversion"
+            echo "pg_dump:        $(pg_dump --version)"
+            echo "skemaer:        public, auth"
+            echo "format:         pg_dump custom (pg_restore)"
+            echo
+            echo "# Rækketal målt FØR og EFTER dumpet. Dumpet ligger i vinduet"
+            echo "# mellem de to; derfor er det de to tal, gendannelsen holdes op imod."
+            echo "# tabel|før|efter"
+            join -t'|' /tmp/counts-foer.txt /tmp/counts-efter.txt
+          } > ud/manifest.txt
+
+      # Krypteres FØR gendannelsestesten, så en fejlende test ikke koster selve
+      # kopien: en sikkerhedskopi, der ikke bestod sin prøve, er stadig langt bedre
+      # end ingen, og den er det eneste, man har at fejlsøge på.
+      #
+      # Passphrasen går via fil og ikke som argument — argumenter står i
+      # procestabellen på runneren.
+      - name: Krypter
+        id: krypter
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          dato=$(date -u +'%Y-%m-%d')
+          umask 077
+          printf '%s' "$BACKUP_PASSPHRASE" > /tmp/pp
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+              --pinentry-mode loopback --passphrase-file /tmp/pp \
+              --output "ud/prediction-champ-$dato.dump.gpg" /tmp/backup.dump
+          shred -u /tmp/pp
+          test -s "ud/prediction-champ-$dato.dump.gpg"
+          # Kontrollér at filen faktisk ER krypteret og ikke bare omdøbt: et
+          # pg_dump-arkiv i custom-format begynder med de fem tegn "PGDMP".
+          if [ "$(head -c 5 "ud/prediction-champ-$dato.dump.gpg" | tr -d '\0')" = "PGDMP" ]; then
+            echo "::error::Filen i ud/ er et rå pg_dump-arkiv. Den må ikke uploades fra et offentligt repo."
+            exit 1
+          fi
+          echo "Krypteret: $(du -h "ud/prediction-champ-$dato.dump.gpg" | cut -f1)"
+
+      # Beviset. En sikkerhedskopi, der aldrig er prøvet gendannet, er en
+      # formodning — så den prøves ved HVER kørsel, mod en tom PostgreSQL.
+      #
+      # Trinnet fejler bevidst IKKE selv: udfaldet afgøres til sidst, efter at
+      # kopien er uploadet. Ellers ville en mislykket prøve også koste kopien.
+      - name: Gendannelsestest
+        id: gendan
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database gendantest;'
+
+          # Dumpet indeholder "CREATE SCHEMA public", som kolliderer med den, en
+          # frisk database allerede har. Uden dette ville hver eneste kørsel melde
+          # præcis én pg_restore-fejl — og en test, der altid har én tålt fejl,
+          # holder op med at kunne skelne den fra fejl nr. to. Så skemaet fjernes
+          # først, og dumpet får lov at oprette sit eget.
+          psql -h localhost -U postgres -d gendantest -v ON_ERROR_STOP=1 -c 'drop schema public cascade;'
+
+          # Rollerne findes ikke i en tom container, og dumpets GRANT-linjer
+          # nævner dem. Her er det kun EKSISTENS, der betyder noget — ingen af
+          # rollernes egenskaber (bypassrls m.v.) har indflydelse på en
+          # gendannelse. Derfor er den betingede oprettelse forsvarlig her,
+          # modsat fælden i sql/README.md, hvor det var egenskaberne, der blev
+          # sat tavst forkert.
+          psql -h localhost -U postgres -d gendantest -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          declare r text;
+          begin
+            foreach r in array array['anon','authenticated','service_role','authenticator',
+                                     'supabase_auth_admin','supabase_admin','supabase_storage_admin',
+                                     'dashboard_user','supabase_realtime_admin','pgbouncer']
+            loop
+              if not exists (select 1 from pg_roles where rolname = r) then
+                execute format('create role %I', r);
+              end if;
+            end loop;
+          end $$;
+          SQL
+
+          ok=true
+
+          # pg_restore fortsætter efter en fejl ("errors ignored on restore: N")
+          # og melder det kun med en exit-kode til sidst, så udfaldet kan ikke
+          # aflæses af koden alene — den siger hvor mange, ikke hvad. Begge
+          # kriterier skal holde: nul fejllinjer OG rækketal i vinduet. (Samme
+          # lære som DOCUMENTATION.md afsnit 13: mål på rækketal, ikke på om der
+          # blev kastet.)
+          set +e
+          pg_restore -h localhost -U postgres -d gendantest --no-owner /tmp/backup.dump 2> /tmp/restore.err
+          set -e
+
+          fejl=$(grep -c '^pg_restore: error' /tmp/restore.err || true)
+          if [ "$fejl" -ne 0 ]; then
+            echo "::error::pg_restore meldte $fejl fejl under gendannelsen."
+            sed -n '1,60p' /tmp/restore.err
+            ok=false
+          else
+            echo "OK: pg_restore gennemførte uden fejl."
+          fi
+
+          psql -h localhost -U postgres -d gendantest -v ON_ERROR_STOP=1 -At -F'|' -f /tmp/counts.sql | sort > /tmp/counts-gendan.txt
+          if awk -F'|' -v f1=/tmp/counts-foer.txt -v f2=/tmp/counts-efter.txt '
+               FILENAME == f1 { foer[$1] = $2; n1++; next }
+               FILENAME == f2 { efter[$1] = $2; n2++; next }
+               {
+                 n3++
+                 if (!($1 in foer) || !($1 in efter)) {
+                   printf "UKENDT TABEL: %s findes i den gendannede database, men blev ikke talt i produktion\n", $1
+                   d++; next
+                 }
+                 lav  = (foer[$1] < efter[$1]) ? foer[$1] : efter[$1]
+                 hoej = (foer[$1] > efter[$1]) ? foer[$1] : efter[$1]
+                 if ($2 < lav || $2 > hoej) {
+                   printf "AFVIGER: %s — gendannet %d, produktion målt %d → %d\n", $1, $2, foer[$1], efter[$1]
+                   d++
+                 }
+               }
+               END {
+                 if (n1 != n3 || n2 != n3) {
+                   printf "TABELANTAL: før=%d efter=%d gendannet=%d\n", n1, n2, n3
+                   d++
+                 }
+                 exit (d > 0)
+               }
+             ' /tmp/counts-foer.txt /tmp/counts-efter.txt /tmp/counts-gendan.txt
+          then
+            echo "OK: alle rækketal ligger i produktionens vindue ($(wc -l < /tmp/counts-gendan.txt) tabeller)."
+          else
+            echo "::error::Rækketallene efter gendannelse ligger uden for det, produktionen viste før og efter dumpet."
+            ok=false
+          fi
+
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Sikkerhedskopi $(date -u +'%Y-%m-%d')"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Krypteret fil | \`$(basename ud/*.dump.gpg)\` ($(du -h ud/*.dump.gpg | cut -f1)) |"
+            echo "| Tabeller | $(wc -l < /tmp/counts-efter.txt) |"
+            echo "| Rækker i alt | $(awk -F'|' '{s+=$2} END {print s}' /tmp/counts-efter.txt) |"
+            echo "| Gendannelsestest | $([ "$ok" = true ] && echo 'bestået' || echo 'FEJLET') |"
+            echo
+            echo "<details><summary>Rækketal pr. tabel</summary>"
+            echo
+            echo '```'
+            echo "tabel|før|efter|gendannet"
+            join -t'|' <(join -t'|' /tmp/counts-foer.txt /tmp/counts-efter.txt) /tmp/counts-gendan.txt
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Kun ud/ uploades, og der ligger udelukkende den krypterede fil og
+      # manifestet. Det ukrypterede dump har aldrig ligget i den mappe.
+      - name: Slet det ukrypterede dump
+        if: always()
+        run: rm -f /tmp/backup.dump
+
+      # Betingelsen er "krypteringen lykkedes", ikke "alt lykkedes": en mislykket
+      # gendannelsestest må ikke koste selve kopien. Fejlede dumpet derimod, er
+      # der intet at uploade, og et tomt upload-forsøg ville kun larme oven i den
+      # fejl, der faktisk betyder noget.
+      - name: Upload krypteret sikkerhedskopi
+        if: always() && steps.krypter.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: ud/
+          # 90 dage er GitHubs loft for et offentligt repo. Derfor beder
+          # docs/RESTORE.md om, at ét artefakt hentes ned og gemmes andetsteds
+          # hvert kvartal — det er den eneste kopi, der overlever et tabt login.
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Afgør udfald
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.gendan.outputs.ok }}" != "true" ]; then
+            echo "::error::Sikkerhedskopien er gemt, men kunne IKKE gendannes. Se docs/RESTORE.md."
+            exit 1
+          fi
+          echo "Sikkerhedskopien er taget og bevist gendannelig."

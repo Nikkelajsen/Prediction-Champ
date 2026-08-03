@@ -18,6 +18,13 @@ describe("hhmm", () => {
     expect(hhmm(undefined)).toBe("");
     expect(hhmm("")).toBe("");
   });
+
+  // Pladsholderen fra datakilden ville ellers stå som et rigtigt klokkeslæt
+  // ("02.00" i dansk sommertid) på en kamp, hvis tid slet ikke er fastsat.
+  it("giver tom streng, når tiden ikke er fastlagt", () => {
+    expect(hhmm("2026-09-13T00:00:00Z", true)).toBe("");
+    expect(hhmm("2026-09-13T00:00:00Z", false)).not.toBe("");
+  });
 });
 
 describe("dayKey", () => {
@@ -74,6 +81,48 @@ describe("groupIntoDays", () => {
 
   it("giver en tom liste for ingen kampe", () => {
     expect(groupIntoDays([])).toEqual([]);
+  });
+
+  // En kamp med ukendt klokkeslæt har stadig en kendt DATO og skal blive i sin
+  // rigtige dag. Det er kun overskriften, der bærer forbeholdet — rækkerne har
+  // ikke plads til det i tidskolonnen.
+  it("markerer en dag, hvor ingen kampe har fastlagt tid", () => {
+    const tbd = (kickoff, id) => ({ id, kickoff_at: kickoff, kickoff_tbd: true });
+    const dage = groupIntoDays([
+      tbd("2026-09-13T00:00:00Z", "a"),
+      tbd("2026-09-13T00:00:00Z", "b"),
+    ]);
+    expect(dage).toHaveLength(1);
+    expect(dage[0].matches).toHaveLength(2);
+    expect(dage[0].label).toMatch(/· Tid ikke fastlagt$/);
+    expect(dage[0].label).not.toBe("Tid ikke fastlagt"); // dagen står stadig først
+  });
+
+  // Hele pointen med tiebreakeren: en dag uden fastlagte tider har ét og samme
+  // tidsstempel på alle kampe, så uden holdnavnene ville rækkefølgen være den,
+  // databasen tilfældigvis returnerede — og den kan skifte mellem to visninger.
+  it("sorterer dagens kampe på holdnavn, når de deler tidsstempel", () => {
+    const t = "2026-09-13T00:00:00Z";
+    const navne = { s: "Silkeborg IF", n: "Nordsjælland", f: "FC København", l: "Lyngby Boldklub" };
+    const kampe = [
+      { id: "s", kickoff_at: t, kickoff_tbd: true, home_team_id: "s", away_team_id: "n" },
+      { id: "l", kickoff_at: t, kickoff_tbd: true, home_team_id: "l", away_team_id: "f" },
+      { id: "f", kickoff_at: t, kickoff_tbd: true, home_team_id: "f", away_team_id: "s" },
+    ];
+    const orden = () => groupIntoDays(kampe.slice(), (id) => navne[id])[0].matches.map((m) => m.id);
+    expect(orden()).toEqual(["f", "l", "s"]); // FC København, Lyngby, Silkeborg
+    // Samme svar uanset hvilken rækkefølge kampene kom ind i.
+    kampe.reverse();
+    expect(orden()).toEqual(["f", "l", "s"]);
+  });
+
+  it("markerer ikke en dag, hvor bare én kamp har et rigtigt tidspunkt", () => {
+    const dage = groupIntoDays([
+      { id: "a", kickoff_at: "2026-09-13T00:00:00Z", kickoff_tbd: true },
+      { id: "b", kickoff_at: "2026-09-13T14:00:00Z", kickoff_tbd: false },
+    ]);
+    expect(dage).toHaveLength(1);
+    expect(dage[0].label).not.toMatch(/Tid ikke fastlagt/);
   });
 
   it("taber ingen kampe", () => {

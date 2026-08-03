@@ -46,8 +46,8 @@ const MAX_IDS_PER_CALL = 40;
 //
 // Mønsteret er lånt fra footballdata.js, som gjorde det rigtigt fra starten,
 // og ÉT gen-forsøg er med vilje: to ville sløre, at forbruget reelt er for
-// højt, og det er dét, `A15` (hvor går Sportmonks' grænse egentlig?) venter på
-// at få afklaret.
+// højt. Grænsen selv er nu kendt (`A15`, aflæst 2. august 2026: 3.000 kald i
+// timen pr. entitet), men en 429 er stadig den ene besked, der ikke må dæmpes.
 const RETRY_AFTER_MAX_S = 30;
 const RETRY_AFTER_FALLBACK_S = 5;
 
@@ -88,6 +88,13 @@ export async function smFetch(url, fetchImpl, sleep = defaultSleep) {
 // Feltet er VALGFRIT: er det der ikke (anden plan, ændret svarformat), skrives
 // intet, og alt fungerer som før. En aflæsning, der kræver en ændring i
 // leverandørens svar for at fejle stille, er ikke værd at have.
+//
+// AFLÆST 2. august 2026 — `A15` er lukket. En Scotland-kørsel svarede
+// `{ entity: "Fixture", remaining: 2996, resetsInSeconds: 3600 }` efter fire
+// kald: enheden er pr. entitet (som dokumentationen sagde), og tallet er 3.000
+// i timen (som kontosiden sagde), ikke 180. Loftet står ikke i svaret — det er
+// udledt af 2996 + 4. Funktionen bliver stående: den er nu den løbende
+// måling af, hvor tæt forbruget ligger på et loft, vi kender.
 function readRateLimit(data, meta) {
   const rl = data?.rate_limit;
   if (!meta || !rl) return;
@@ -130,6 +137,28 @@ function liveMinute(fx) {
   return Number.isFinite(p?.minutes) ? p.minutes : null;
 }
 
+// "Tid ikke fastlagt". Sportmonks har ingen status for "dato kendt, klokkeslæt
+// ukendt" — det er præcis den tilstand, en Superliga-runde står i, indtil
+// TV-tiderne er fastsat nogle uger før. To markører fanger den:
+//
+//   TBA      leverandørens egen state for en kamp uden bekræftet dato OG tid.
+//   midnat   pladsholderen i `starting_at`, når kun datoen er kendt.
+//
+// Midnat-testen er aflæst, ikke antaget: en kamp gemt med 00:00 UTC vises som
+// 02.00 i dansk sommertid, og `starting_at` skrives ordret hele vejen til
+// matches.kickoff_at (normalize → sync-matches). Intet led tilføjer midnat, så
+// værdien kommer fra leverandøren.
+//
+// Prisen er en falsk positiv for en kamp, der FAKTISK starter 00:00 UTC (02.00
+// dansk sommertid). Ingen af de turneringer, appen dækker, spiller på det
+// tidspunkt; kommer en til, er det her, den skal tages højde for.
+function kickoffTbdOf(fx) {
+  if (stateNames(fx).includes("TBA")) return true;
+  const ts = fx.starting_at;
+  if (typeof ts !== "string") return false;
+  return /[ T]00:00:00/.test(ts);
+}
+
 function participant(fx, location) {
   const p = (fx.participants || []).find((x) => x?.meta?.location === location);
   if (!p?.id || !p?.name) return null;
@@ -143,6 +172,7 @@ function participant(fx, location) {
 //     providerId  string   leverandørens eget kamp-id
 //     globalId    string   værdien i matches.api_fixture_id
 //     kickoffAt   string    | null
+//     kickoffTbd  boolean            klokkeslættet i kickoffAt er en PLADSHOLDER
 //     stageName   string    | null   (rå, engelsk — oversættes i src/lib/scoring.js)
 //     home/away   { providerId, globalId, name } | null
 //     status      "scheduled" | "live" | "finished"
@@ -150,6 +180,10 @@ function participant(fx, location) {
 //     liveState   string | null   rå state-navn til matches.live_state
 //     liveMinute  number | null
 //   }
+//
+// `kickoffTbd` siger, at DATOEN i kickoffAt er kendt, men klokkeslættet ikke er.
+// Hver leverandør udleder det på sin egen måde — formen er fælles, kilden er det
+// ikke. Kalderen skal behandle tidsdelen som ukendt, ikke som 00.00.
 //
 // `score` er den AKTUELLE stilling, ikke nødvendigvis den endelige. Kalderen
 // afgør, om den må skrives i home_score/away_score — og det må den kun, når
@@ -161,6 +195,7 @@ function normalize(fx) {
     providerId: String(fx.id),
     globalId: String(fx.id),
     kickoffAt: fx.starting_at ?? null,
+    kickoffTbd: kickoffTbdOf(fx),
     stageName: fx.stage?.name ?? null,
     home: participant(fx, "home"),
     away: participant(fx, "away"),

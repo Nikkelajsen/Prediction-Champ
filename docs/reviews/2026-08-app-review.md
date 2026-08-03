@@ -257,7 +257,7 @@ konkrete tal er drevet fra hinanden. Tabellen viser påstande, der kan efterprø
 | Sync-kadence | `DOCUMENTATION.md` §8 (`:241`) "hvert 10.-15. minut"; §8 (`:255`) "hver 6. time"; `ROADMAP.md:17` "pt. hver time"; `CRON.md:39` "hver 12. time" | **Fire forskellige svar** for samme job | ❌ Intern modsigelse |
 | `schema.sql`-friskhed | `sql/README.md` (1. aug: "BAGUD"); `DOCUMENTATION.md` §12 ("friskt pr. 31. juli"); `ROADMAP.md` ("eksport fra 30. juli") | **Tre forskellige datoer** for samme fil | ❌ Intern modsigelse |
 | North Star hviler på `predictions_write_lock.sql` | `DOCUMENTATION.md` §21 (`:535`) | §2 (`:85`) siger udtrykket "er siden afløst af `predictions_match_lock.sql`" | ❌ Reference ikke opdateret |
-| Sportmonks-kvote "180 kald/time pr. entitet" | `DOCUMENTATION.md` §8; `live-resultater-v1.md` | Sportmonks' egen kontoside siger 3000 (dokumenteret uafklaret som **A15**) | ⚠️ Bestridt i egne docs |
+| Sportmonks-kvote "180 kald/time pr. entitet" | `DOCUMENTATION.md` §8; `live-resultater-v1.md` | Sportmonks' egen kontoside siger 3000 (dokumenteret uafklaret som **A15**) | ✅ **Afgjort 2. august 2026** — kontosiden havde ret: leverandørens eget `rate_limit` i en kørsel viser `Fixture`, 2996 tilbage efter fire kald, 3600 s vindue. Enheden (pr. entitet) var rigtig, tallet var forkert. Begge steder rettet |
 
 **Verificeret korrekt (stikprøver):** teamfarver `C.green = #22C55E` (`src/ui/theme.js`),
 K-faktorer 32/24 (`sql/rating_core.sql`), 14 story-regler (`src/lib/analytics.js`),

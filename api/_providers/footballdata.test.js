@@ -66,6 +66,20 @@ describe("normalize", () => {
     expect(normalize(match({ status: raw })).status).toBe(expected);
   });
 
+  // SCHEDULED vs TIMED er den ENESTE kilde til "tid ikke fastlagt" hos
+  // football-data.org: en terminsliste lægges med grove datoer og times først
+  // uger senere. `utcDate` bærer en pladsholder indtil da og kan ikke skelnes
+  // fra en ægte kampstart, så går status tabt, er informationen væk for altid.
+  it.each([
+    ["SCHEDULED", true],
+    ["TIMED", false],
+    ["IN_PLAY", false],
+    ["FINISHED", false],
+    ["POSTPONED", false],
+  ])("sætter kickoffTbd til %s → %s", (raw, expected) => {
+    expect(normalize(match({ status: raw })).kickoffTbd).toBe(expected);
+  });
+
   it("giver null-score når kampen ikke har et resultat endnu", () => {
     const n = normalize(match({ status: "TIMED", score: { fullTime: { home: null, away: null } } }));
     expect(n.score).toEqual({ home: null, away: null });
