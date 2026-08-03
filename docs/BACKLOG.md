@@ -38,7 +38,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(tom)*
+Kontakt-mail til hjemmesiden skal afklares før publicering — `site/om.html` bruger en pladsholder-adresse (hænger sammen med `I10`).
 
 *Ryddet 3. august 2026 (anden runde): de femten linjer fra dokumentations-gennemgangen
 blev til `A27`, `B17`–`B18` og `G58`–`G68`. **To linjer blev til én række:** `#34`s
@@ -225,7 +225,7 @@ gater hvad, ikke efter værdi.
 
 | # | Hvad | Bemærkning |
 |---|---|---|
-| `I8` | Professionel hjemmeside | Gater `I9` og `I10`. Den første, der skal besluttes, hvis der overhovedet satses udadtil. |
+| `I8` | Professionel hjemmeside | **Første udkast leveret i `site/` (3. august 2026, [`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md)) — ikke publiceret.** Tilbage står ejer-godkendelse af copy, kontakt-mail, domæne og publicering. Gater fortsat `I9` og `I10`, men de har nu noget konkret at hænge på. |
 | `I10` | Domæne og professionel e-mail | Forudsætning for troværdighed i invitationer og kontakt. |
 | `I9` | SEO | Der er ingen side at optimere, før `I8` findes. |
 | `I7` | Finpuds invitationsflowet | Det eneste punkt i tieret, der virker på **eksisterende** brugere — kunne argumenteres op i Tier 3, hvis vækst bliver målet. |
@@ -291,7 +291,7 @@ idé bliver til en `B`- eller `A`-række, når den er værd at tage stilling til
 | I3 | **Alarm ved tilstandsskifte i en liga** | Naturlig følge af `I2`: en liga, der skifter til rød, er interessant i det øjeblik det sker, ikke næste gang nogen åbner admin. | Afhænger af `I2` |
 | I6 | **Ambassadørprogram ved oprettelse af ligaer/konkurrencer** (evt. med synligt deltagerantal) | Vækstkanal, der bygger på strukturen, der allerede findes (ligaer/konkurrencer), men ingen mekanik eller incitament er designet endnu. | Ny |
 | I7 | **Finpuds invitationsflowet** | Invitationer er nøglen til nye brugere (delt konkurrence-/liga-link, §7), men er ikke selv blevet gennemgået som en samlet oplevelse. | Ny |
-| I8 | **Professionel hjemmeside** (4–6 sider: forside, hvordan virker det, features, om os, kontakt, download app) | Giver troværdighed, kan deles og vises til virksomheder/brugere, og gør produktet indekserbart for Google. Ingen hjemmeside findes i dag ud over selve appen. | Ny |
+| I8 | **Professionel hjemmeside** (4–6 sider: forside, hvordan virker det, features, om os, kontakt, download app) | Giver troværdighed, kan deles og vises til virksomheder/brugere, og gør produktet indekserbart for Google. | Første udkast i `site/` (3. august 2026, [`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md)) — mangler ejer-godkendelse, kontakt-mail, domæne og publicering |
 | I9 | **SEO for hjemmesiden** | Afhænger af `I8` — der er ingen side at optimere, før den findes. | Afhænger af I8 |
 | I10 | **Domæne og professionel e-mail** | Forudsætning for troværdighed udadtil (hjemmeside, invitationer, kontakt) — hænger sammen med `I8`. | Afhænger af I8 |
 | I11 | **LinkedIn-side**, hvis der satses på indtægt via virksomheder | Betinget af en B2B-retning, der ikke er besluttet endnu. | Betinget af B2B-retning |
