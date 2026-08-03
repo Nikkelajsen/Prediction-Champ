@@ -20,7 +20,7 @@ import { lockLabel } from "./time.js";
 // Der findes ikke længere en femte tilstand ("Åbner {dato}"): det rullende
 // gætte-vindue er fjernet (B1, august 2026), så en kamp er tipbar fra det
 // øjeblik, den findes, og indtil den låser.
-function roundStatus({ matches, preds = {}, rules }) {
+function roundStatus({ matches, preds = {} }) {
   const ms = matches || [];
   if (!ms.length) return null;
 
@@ -35,7 +35,7 @@ function roundStatus({ matches, preds = {}, rules }) {
   const showFinal = !allPlayed;
 
   if (allPlayed) {
-    const pts = ms.reduce((sum, m) => sum + (pointsFor(preds[m.id], m, rules) ?? 0), 0);
+    const pts = ms.reduce((sum, m) => sum + (pointsFor(preds[m.id], m) ?? 0), 0);
     return { status: `Spillet · ${pts} point`, showFinal };
   }
 

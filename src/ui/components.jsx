@@ -2,8 +2,8 @@
 // spillernavne, dialoger, tal-felter og de små signal-visninger til Analytics
 // og Drift. Alt her er rent visuelt — ingen komponent henter data selv.
 import { useState, useEffect, useRef, useId } from "react";
-import { ChevronRight, ChevronLeft, ArrowUp, ArrowDown, Minus, Info, X, Copy, Check } from "lucide-react";
-import { pointsFor } from "../lib/scoring.js";
+import { ChevronRight, ChevronLeft, ChevronDown, ArrowUp, ArrowDown, Minus, Info, X, Copy, Check } from "lucide-react";
+import { POINTS, pointsFor } from "../lib/scoring.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, pagerBtn } from "./theme.js";
 
 const Card = ({ children, style, onClick }) => (
@@ -307,7 +307,7 @@ const predLabel = {
 };
 
 // én brugers forudsigelser pr. LÅST runde (kalderen filtrerer til låste kampe)
-function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, rules, initialKey, onClose, onOpenProfile }) {
+function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, initialKey, onClose, onOpenProfile }) {
   const startIdx = (() => {
     if (initialKey) { const i = lockedRounds.findIndex((r) => r.key === initialKey); if (i >= 0) return i; }
     return lockedRounds.length - 1;
@@ -376,11 +376,11 @@ function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, ru
         <div style={{ display: "grid", gap: 6 }}>
           {round.matches.map((m) => {
             const pred = predsByKey.get(`${m.id}:${userId}`);
-            const pts = pointsFor(pred, m, rules);
+            const pts = pointsFor(pred, m);
             if (pts !== null) roundTotal += pts;
             const has = pred && pred.pred_home !== null && pred.pred_home !== undefined;
             const played = m.home_score !== null && m.home_score !== undefined;
-            const ptColor = pts === (rules?.exact ?? 3) ? C.green : pts === (rules?.outcome ?? 1) ? C.greenSoft : C.muted;
+            const ptColor = pts === POINTS.exact ? C.green : pts === POINTS.outcome ? C.greenSoft : C.muted;
             return (
               <div key={m.id} style={{ ...predCols, background: C.surface2, borderRadius: 8, padding: "8px 10px" }}>
                 <span style={{ color: C.muted, fontSize: 12, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -418,6 +418,65 @@ function UserRoundPredictions({ playerName, userId, lockedRounds, predsByKey, ru
 // etiketten — se måle-ordbogen i src/lib/analyticsMetrics.js. Etiketten og
 // hint'et skal fortsat kunne læses ALENE: ⓘ'en uddyber, den bærer aldrig det,
 // der skal til for at forstå tallet.
+// ---------- fold ----------
+// Ét sted for det, der folder ud (G57, august 2026).
+//
+// Mønstret var håndrullet fem steder — HjemTab, LigaerTab, MatchRow,
+// LigaDiagnoseSection og HowItWorksScreen — med hver sin blanding: to brugte en
+// rigtig `<button>`, én en `div role="button"` med sin egen `onKeyDown`, og én
+// en `<tr onClick>` uden hverken tastaturadgang eller aria overhovedet. Chevronen
+// pegede tre forskellige veje. Ingen af delene var et VALG; de var fem
+// uafhængige gæt på det samme.
+//
+// Det, der samles her, er semantikken: en rigtig knap, `aria-expanded`, en
+// etiket der siger både handlingen og hvad den handler om, og et panel der
+// slet ikke renderes, når det er lukket (husets konvention — indhold, der
+// læser `navigator` eller regner på tid, må ikke køre i en lukket fold).
+//
+// PLACERINGEN af chevronen er derimod layout og bliver hos kalderen: HjemTabs
+// kort har en to-linjers header, hvor pilen hører til på den første linje ved
+// tælleren. Derfor kan `chevron` slås fra og `FoldChevron` sættes ind i
+// headeren i stedet — stadig den samme pil med den samme rotation.
+function FoldChevron({ open, size = 14, color = C.muted }) {
+  return (
+    <ChevronDown size={size} style={{
+      flexShrink: 0, color,
+      transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s",
+    }} />
+  );
+}
+
+function Collapsible({
+  open, onToggle, label, header, children,
+  chevron = true, chevronSize = 14, chevronColor = C.muted,
+  grow = true, className = "tiprow", style,
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        className={className}
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-label={`${open ? "Skjul" : "Vis"} ${label}`}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+          width: "100%", background: "none", border: "none", padding: 0,
+          color: C.text, textAlign: "left", cursor: "pointer", font: "inherit",
+          ...style,
+        }}
+      >
+        {/* `grow` styrer, om headeren fylder resten af bredden og skubber
+           chevronen helt ud til kanten (et kort), eller lige netop sig selv, så
+           pilen står klos op ad teksten (en lille linkagtig knap). */}
+        <span style={{ minWidth: 0, flex: grow ? 1 : "0 1 auto" }}>{header}</span>
+        {chevron && <FoldChevron open={open} size={chevronSize} color={chevronColor} />}
+      </button>
+      {open && children}
+    </>
+  );
+}
+
 function StatTile({ label, value, hint, info }) {
   return (
     <div style={{ background: C.surface2, border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px" }}>
@@ -554,4 +613,4 @@ function PctGrid({ columns, rows }) {
   );
 }
 
-export { Card, Eyebrow, H, PlayerName, FormDots, Move, Modal, InfoDot, InviteCode, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill, EmptyCompetitions, StatTile, StatGroup, MiniBars, StateChip, SignalRow, PctGrid };
+export { Card, Collapsible, FoldChevron, Eyebrow, H, PlayerName, FormDots, Move, Modal, InfoDot, InviteCode, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill, EmptyCompetitions, StatTile, StatGroup, MiniBars, StateChip, SignalRow, PctGrid };

@@ -5,17 +5,24 @@
 // ---------- scoring helpers ----------
 // Simpelt, straffrit pointsystem:
 //   +3 korrekt resultat · +1 korrekt udfald · 0 forkert gæt
+//
+// Tallene er FASTE og har aldrig været andet (F2, juli 2026): `pc_points()` i
+// databasen hardkoder 3/1 og er den kilde, rating, alle tre stillings-views og
+// kåringerne regner efter. Indtil G3 (august 2026) tog denne funktion et
+// `rules`-argument, som seks skærme hentede fra `competitions.rules` og sendte
+// videre — et argument, der aldrig kunne have en anden værdi, men som fik
+// enhver læser til at tro, at point var noget, en konkurrence kunne vælge.
+// Konstanten står her, fordi de steder, der FARVELÆGGER efter point, skal
+// kunne spørge om det samme tal som det, der blev givet.
+const POINTS = { exact: 3, outcome: 1 };
 function outcome(h, a) { return h === a ? "X" : h > a ? "1" : "2"; }
-function pointsFor(pred, actual, rules) {
+function pointsFor(pred, actual) {
   if (!pred
     || actual.home_score == null || actual.away_score == null
     || pred.pred_home == null || pred.pred_away == null) return null;
 
-  const exact = rules?.exact ?? 3;
-  const out = rules?.outcome ?? 1;
-
-  if (pred.pred_home === actual.home_score && pred.pred_away === actual.away_score) return exact;
-  if (outcome(pred.pred_home, pred.pred_away) === outcome(actual.home_score, actual.away_score)) return out;
+  if (pred.pred_home === actual.home_score && pred.pred_away === actual.away_score) return POINTS.exact;
+  if (outcome(pred.pred_home, pred.pred_away) === outcome(actual.home_score, actual.away_score)) return POINTS.outcome;
   return 0;
 }
 function roundLabel(key) {
@@ -259,4 +266,4 @@ function liveInfo(m) {
   };
 }
 
-export { outcome, pointsFor, roundLabel, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };
+export { outcome, POINTS, pointsFor, roundLabel, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };

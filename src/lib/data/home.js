@@ -101,13 +101,12 @@ async function computeCurrentRound(token, userId, competitions) {
   const roundMatchIds = round.matches.map((m) => m.id);
   const preds = await db.select(token, "predictions", `match_id=in.(${roundMatchIds.join(",")})&user_id=eq.${userId}&select=match_id,pred_home,pred_away`);
   const predByMatch = new Map(preds.map((p) => [p.match_id, p]));
-  const rules = { exact: 3, outcome: 1 };
 
   let myPoints = 0, playedCount = 0;
   const matches = round.matches.map((m) => {
     const played = m.home_score != null && m.away_score != null;
     const pred = predByMatch.get(m.id) || null;
-    const points = played ? pointsFor(pred, m, rules) : null;
+    const points = played ? pointsFor(pred, m) : null;
     if (played) { playedCount++; if (points != null) myPoints += points; }
     // Live-stilling (live_*-kolonnerne, skrevet af api/sync-live.js hvert minut).
     // Den tæller ikke point — kun det endelige resultat gør. inProgress er fallback:

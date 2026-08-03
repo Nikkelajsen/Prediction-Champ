@@ -470,7 +470,7 @@ describe("dato-helpers", () => {
 // endnu ikke havde åbnet.
 describe("computeHomeTips: allTipped vs. nothingToTip", () => {
   const HOUR = 3600 * 1000;
-  const comp = (rules) => ({ id: "c1", rules });
+  const comp = () => ({ id: "c1" });
   const setup = ({ matches, predictions = [] }) =>
     mockTables({
       competition_matches: matches.map((m) => ({ competition_id: "c1", match_id: m.id })),
@@ -489,7 +489,7 @@ describe("computeHomeTips: allTipped vs. nothingToTip", () => {
       matches: [match({ kickoff_at: kickoff })],
       predictions: [{ match_id: "m1", pred_home: 2, pred_away: 1 }],
     });
-    const tips = await computeHomeTips("token", "u1", [comp(null)]);
+    const tips = await computeHomeTips("token", "u1", [comp()]);
     expect(tips.allTipped).toBe(true);
     expect(tips.nothingToTip).toBeUndefined();
   });
@@ -498,7 +498,7 @@ describe("computeHomeTips: allTipped vs. nothingToTip", () => {
     // kickoff om 30 min ⇒ runden låste for en halv time siden (lås = kickoff − 1 t)
     const kickoff = new Date(Date.now() + 0.5 * HOUR).toISOString();
     setup({ matches: [match({ kickoff_at: kickoff })] });
-    const tips = await computeHomeTips("token", "u1", [comp(null)]);
+    const tips = await computeHomeTips("token", "u1", [comp()]);
     expect(tips.nothingToTip).toBe(true);
     expect(tips.allTipped).toBeUndefined();
   });
@@ -508,7 +508,7 @@ describe("computeHomeTips: allTipped vs. nothingToTip", () => {
     // en kamp tipbar fra det øjeblik, den findes, og indtil den låser.
     const kickoff = new Date(Date.now() + 30 * 24 * HOUR).toISOString();
     setup({ matches: [match({ kickoff_at: kickoff })] });
-    const tips = await computeHomeTips("token", "u1", [comp(null)]);
+    const tips = await computeHomeTips("token", "u1", [comp()]);
     expect(tips.nothingToTip).toBeUndefined();
     expect(tips.allTipped).toBe(false);
   });
@@ -516,7 +516,7 @@ describe("computeHomeTips: allTipped vs. nothingToTip", () => {
   it("siger allTipped: false, når en tipbar kamp mangler tips", async () => {
     const kickoff = new Date(Date.now() + 48 * HOUR).toISOString();
     setup({ matches: [match({ kickoff_at: kickoff })] });
-    const tips = await computeHomeTips("token", "u1", [comp(null)]);
+    const tips = await computeHomeTips("token", "u1", [comp()]);
     expect(tips.allTipped).toBe(false);
     expect(tips.missingCount).toBe(1);
   });
@@ -555,7 +555,7 @@ describe("createCompetition", () => {
 
     expect(insertedRow("competitions")).toMatchObject({
       name: "Superligaen 2026/27", league_id: "L1", season_id: "S1", group_id: "g1",
-      mode: "full_season", mode_params: {}, rules: { exact: 3, outcome: 1 }, created_by: "u1",
+      mode: "full_season", mode_params: {}, created_by: "u1",
     });
     expect(matchRows().map((r) => r.match_id)).toEqual(["m3", "m4"]);
     expect(res.matchCount).toBe(2);
@@ -613,14 +613,18 @@ describe("createCompetition", () => {
     expect(insertedRow("competition_participants")).toEqual({ competition_id: "c1", user_id: "u1" });
   });
 
-  // `rules` har ingen variation længere: det rullende gætte-vindue var det eneste,
-  // der nogensinde blev skrevet ud over pointreglerne, og det er fjernet (B1).
-  // En ukendt nøgle i spec'en må derfor ikke kunne snige sig ind i rules igen.
-  it("skriver altid de faste pointregler i rules", async () => {
+  // `rules` sendes slet ikke længere (G3, august 2026). Kolonnen er `not null`
+  // med defaulten {"exact": 3, "outcome": 1}, så rækken får den samme værdi som
+  // før — fra databasen, som er det eneste sted, der nogensinde har afgjort
+  // point. Testen stod her før som "skriver altid de faste pointregler" og
+  // vogtede, at en ukendt nøgle fra spec'en (fx det fjernede `openDaysBefore`)
+  // ikke kunne snige sig ind i feltet igen. Den vogter nu det samme ét skridt
+  // tidligere: sendes feltet ikke, kan der heller ikke komme noget med i det.
+  it("sender ikke rules — databasens default er den eneste kilde til pointreglerne", async () => {
     setup();
     const t = [{ leagueId: "L1", seasonId: "S1" }];
     await create({ name: "A", mode: "full_season", tournaments: t, openDaysBefore: 7 });
-    expect(insertedRow("competitions").rules).toEqual({ exact: 3, outcome: 1 });
+    expect(insertedRow("competitions")).not.toHaveProperty("rules");
   });
 
   it("custom bruger de valgte kampe og er turneringsløs", async () => {

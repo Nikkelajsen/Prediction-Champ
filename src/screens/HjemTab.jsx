@@ -1,7 +1,7 @@
 // Hjem-fanen: dagens overblik. Deadline-kort, rating-snapshot, rundens
 // live-oversigt, dine placeringer, rundens historie og opt-in til notifikationer.
 import { useState, useEffect } from "react";
-import { Bell, ChevronRight, ChevronDown, Clock, Check, X, Share2, RefreshCw } from "lucide-react";
+import { Bell, ChevronRight, Clock, Check, X, Share2, RefreshCw } from "lucide-react";
 import { formatKickoff } from "../lib/scoring.js";
 import { db } from "../lib/supabase.js";
 import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
@@ -10,7 +10,7 @@ import { isQuiet } from "../lib/stories.js";
 import { readUserFlag, writeUserFlag, CARD_KEY } from "../lib/localFlags.js";
 import { C, btnGhost, btnGreen, font, iconBtn } from "../ui/theme.js";
 import { usePushOptIn } from "../ui/usePushOptIn.js";
-import { Card, Eyebrow, H, InfoDot, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
+import { Card, Collapsible, Eyebrow, FoldChevron, H, InfoDot, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
 import GetStartedCard from "./GetStartedCard.jsx";
 
 // Opt-in-kort til push-notifikationer. Vises kun hvor det giver mening:
@@ -244,7 +244,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         const [monthly, compStates, groupRows] = await Promise.all([
           loadMonthlyBoard(token, currentMonthKey()),
           Promise.all(comps.map((c) =>
-            computeCompetitionState(token, c.id, c.rules || { exact: 3, outcome: 1 }).catch(() => null)
+            computeCompetitionState(token, c.id).catch(() => null)
           )),
           groupIds.length ? db.select(token, "groups", `id=in.(${groupIds.join(",")})&select=id,name`).catch(() => []) : Promise.resolve([]),
         ]);
@@ -445,28 +445,33 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           et klik på header folder den fulde kamp-for-kamp-visning ud. */}
       {round && round.totalCount > 0 && (
         <Card>
-          <div role="button" tabIndex={0} aria-expanded={roundOpen}
-            aria-label={roundOpen ? "Skjul rundens kampe" : "Vis rundens kampe"}
-            onClick={() => setRoundOpen((v) => !v)}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setRoundOpen((v) => !v); } }}
-            style={{ cursor: "pointer" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <Eyebrow>Indeværende runde</Eyebrow>
-              <span style={{ color: C.muted, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                {/* Er der kampe i gang, siges det allerede på det FOLDEDE kort */}
-                {round.liveCount > 0 && <LiveBadge text={round.liveCount > 1 ? `${round.liveCount} kampe` : ""} />}
-                {round.playedCount}/{round.totalCount} spillet
-                <ChevronDown size={14} style={{ transform: roundOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
-              </span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Runde {round.roundLabelText}</span>
-              {round.playedCount > 0 && (
-                <span style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, color: C.gold }}>{round.myPoints} p</span>
-              )}
-            </div>
-          </div>
-          {roundOpen && (
+          {/* Folden er `Collapsible` (G57): headeren var en `div role="button"`
+              med sin egen `onKeyDown`, altså en knap bygget af dele. Chevronen
+              bliver derimod stående i headerens FØRSTE linje ved tælleren —
+              placeringen er layout, og et to-linjers kort har ikke sin pil i
+              midten til højre. Derfor `chevron={false}` + `FoldChevron`. */}
+          <Collapsible
+            open={roundOpen} onToggle={() => setRoundOpen((v) => !v)}
+            label="rundens kampe" chevron={false}
+            style={{ display: "block" }}
+            header={<>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <Eyebrow>Indeværende runde</Eyebrow>
+                <span style={{ color: C.muted, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {/* Er der kampe i gang, siges det allerede på det FOLDEDE kort */}
+                  {round.liveCount > 0 && <LiveBadge text={round.liveCount > 1 ? `${round.liveCount} kampe` : ""} />}
+                  {round.playedCount}/{round.totalCount} spillet
+                  <FoldChevron open={roundOpen} />
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Runde {round.roundLabelText}</span>
+                {round.playedCount > 0 && (
+                  <span style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, color: C.gold }}>{round.myPoints} p</span>
+                )}
+              </div>
+            </>}
+          >
             <>
               <div style={{ marginTop: 6 }}>
                 {round.matches.map((m) => (
@@ -499,7 +504,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
               </div>
               <button style={{ ...btnGhost, marginTop: 12 }} onClick={() => openPredictions("all", round.roundKey)}>Åbn tip <ChevronRight size={14} /></button>
             </>
-          )}
+          </Collapsible>
         </Card>
       )}
 

@@ -1,10 +1,10 @@
 // Én kamps række i tip-skærmen — både den låste visning og den åbne med
 // score-input — plus holdnavnenes elastiske typografi og de delte kolonnebredder.
 import { useLayoutEffect, useRef } from "react";
-import { Check, ChevronUp, ChevronRight, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { pointsFor, stageBadgeLabel } from "../../lib/scoring.js";
 import { C, font } from "../../ui/theme.js";
-import { FinalBadge, PlayerName, PointsPill, ScoreInput } from "../../ui/components.jsx";
+import { FinalBadge, FoldChevron, PlayerName, PointsPill, ScoreInput } from "../../ui/components.jsx";
 import { hhmm } from "./time.js";
 
 const scoreChip = (extra) => ({
@@ -80,11 +80,11 @@ function TeamNames({ home, away }) {
 // unmountede rækken hvert minut (live-tikket) og et fokuseret scorefelt mistede fokus
 // midt i indtastningen.
 function MatchRow({
-  m, pred, rules, homeName, awayName, locked, played, live,
+  m, pred, homeName, awayName, locked, played, live,
   showFinal, saved, err, onSave, expanded, onToggleExpanded, participants, matchPreds, userId, last, openProfile,
 }) {
   const hasPred = pred.pred_home !== null && pred.pred_away !== null;
-  const pts = played ? pointsFor(pred, m, rules) : null;
+  const pts = played ? pointsFor(pred, m) : null;
   const exact = played && hasPred && pred.pred_home === m.home_score && pred.pred_away === m.away_score;
   const correctOutcome = played && pts !== null && pts > 0;
   const stage = stageBadgeLabel(m.stage_name);
@@ -142,7 +142,10 @@ function MatchRow({
       </span>
       <span style={{ textAlign: "center" }}>{played && hasPred && <PointsPill pts={pts} />}</span>
       <span style={{ color: C.gold, display: "inline-flex", justifyContent: "flex-end" }}>
-        {canExpand && (expanded ? <ChevronUp size={14} /> : <ChevronRight size={14} />)}
+        {/* Samme pil og samme rotation som alt andet, der folder ud (G57).
+            Rækken er selv knappen — cellerne ligger i et grid inde i den — så
+            det er kun chevronen, der kan deles her, ikke hele `Collapsible`. */}
+        {canExpand && <FoldChevron open={expanded} color={C.gold} />}
       </span>
     </>
   );
@@ -207,7 +210,7 @@ function MatchRow({
         <div style={{ margin: "2px 0 8px", padding: "8px 10px", background: C.surface2, borderRadius: 10 }}>
           {participants.map((p) => {
             const pp = matchPreds.find((x) => x.user_id === p.id);
-            const ppts = played && pp ? pointsFor(pp, m, rules) : null;
+            const ppts = played && pp ? pointsFor(pp, m) : null;
             return (
               <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "3px 0", fontSize: 12 }}>
                 <span style={{ color: p.id === userId ? C.gold : C.text, fontWeight: p.id === userId ? 700 : 400, flex: 1, minWidth: 0 }}>

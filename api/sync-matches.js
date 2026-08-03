@@ -82,6 +82,35 @@ export function ambiguousTeamNames(teams) {
   return out;
 }
 
+// Én normaliseret kamp → én række i `matches`, klar til upserten.
+//
+// Ligger på modulniveau og ikke inde i løkken, fordi det er den ENESTE måde,
+// rækkens form kan testes på (G56, august 2026): handleren kan ikke nås uden et
+// HTTP-mock-apparat, filen ikke har, så indtil nu var der ingen test på, at fx
+// `kickoff_tbd` overhovedet kom med i skrivningen. Feltet afgør, hvornår kampen
+// låser — det beregnes i providerne og bruges af tre andre steder (klientens
+// `lockAtOf`, RLS-policyerne og efterfyldningens regel 3) — og alle tre er
+// afhængige af, at netop denne linje findes.
+//
+// `finished` afgør, om score må skrives: hele appen læser "home_score is not
+// null" som "kampen er spillet", så en LIVE-stilling i den kolonne ville udløse
+// point midt i en kamp.
+export function matchUpsertRow(fx, { seasonId, homeTeamId, awayTeamId }) {
+  const finished = fx.status === "finished";
+  return {
+    season_id: seasonId,
+    home_team_id: homeTeamId,
+    away_team_id: awayTeamId,
+    kickoff_at: fx.kickoffAt,
+    kickoff_tbd: !!fx.kickoffTbd,
+    home_score: finished ? fx.score.home : null,
+    away_score: finished ? fx.score.away : null,
+    status: finished ? "finished" : "scheduled",
+    stage_name: fx.stageName,
+    api_fixture_id: fx.globalId,
+  };
+}
+
 export default async function handler(req, res) {
   // Sættes så snart autorisationen er i hus. Ligger uden for try'et, fordi
   // catch'en skal kunne bruge den — en kørsel, der vælter, er netop den, der
@@ -330,20 +359,7 @@ export default async function handler(req, res) {
         continue;
       }
 
-      const finished = fx.status === "finished";
-
-      toUpsert.push({
-        season_id: seasonId,
-        home_team_id: homeTeamId,
-        away_team_id: awayTeamId,
-        kickoff_at: fx.kickoffAt,
-        kickoff_tbd: !!fx.kickoffTbd,
-        home_score: finished ? fx.score.home : null,
-        away_score: finished ? fx.score.away : null,
-        status: finished ? "finished" : "scheduled",
-        stage_name: fx.stageName,
-        api_fixture_id: fx.globalId,
-      });
+      toUpsert.push(matchUpsertRow(fx, { seasonId, homeTeamId, awayTeamId }));
     }
 
     if (toUpsert.length) {

@@ -11,7 +11,7 @@
 // eneste kamp), og en for smal gør Champions League rød i seks uger for noget
 // forventeligt. Begge fejl ender samme sted — at ingen kigger på driftsloggen.
 import { describe, it, expect } from "vitest";
-import { seasonFetchVerdict, ambiguousTeamNames, normalizeTeamName } from "./sync-matches.js";
+import { seasonFetchVerdict, ambiguousTeamNames, normalizeTeamName, matchUpsertRow } from "./sync-matches.js";
 
 const fejl = new Error("football-data.org: 404 {\"message\":\"The resource you are looking for does not exist.\"}");
 
@@ -112,5 +112,49 @@ describe("normalizeTeamName", () => {
   it("folder ikke ø, æ og å ned til deres nærmeste latinske bogstav", () => {
     expect(normalizeTeamName("FC København")).toBe("fckbenhavn");
     expect(normalizeTeamName("FC Kobenhavn")).toBe("fckobenhavn");
+  });
+});
+
+// G56 (august 2026): der fandtes ingen test på, hvad syncen faktisk SKRIVER.
+// De tre andre describe-blokke dækker regler, der afgør, om noget skrives —
+// ikke hvad rækken indeholder, når den gør. Det er dét, `matchUpsertRow` er
+// trukket ud for: feltet `kickoff_tbd` beregnes i providerne og forbruges tre
+// helt andre steder (klientens `lockAtOf`, RLS-policyerne og efterfyldningens
+// regel 3), og hele den kæde hviler på, at værdien kommer med i skrivningen.
+describe("matchUpsertRow", () => {
+  const IDS = { seasonId: "S1", homeTeamId: "H", awayTeamId: "A" };
+  const fx = (over = {}) => ({
+    globalId: "fd:1", kickoffAt: "2026-08-18T00:00:00Z", kickoffTbd: false,
+    stageName: "REGULAR_SEASON", status: "scheduled", score: { home: null, away: null }, ...over,
+  });
+
+  it("bærer kickoff_tbd med over i rækken", () => {
+    expect(matchUpsertRow(fx({ kickoffTbd: true }), IDS).kickoff_tbd).toBe(true);
+    expect(matchUpsertRow(fx(), IDS).kickoff_tbd).toBe(false);
+  });
+
+  // Providerne må gerne udelade feltet (en tredje leverandør, en ældre
+  // normalize) — kolonnen er `not null`, så rækken skal bære en boolean og
+  // ikke en undefined, der ville blive til databasens default ad omveje.
+  it("gør et manglende flag til false frem for undefined", () => {
+    const row = matchUpsertRow(fx({ kickoffTbd: undefined }), IDS);
+    expect(row.kickoff_tbd).toBe(false);
+    expect("kickoff_tbd" in row).toBe(true);
+  });
+
+  it("skriver kun score for en færdigspillet kamp", () => {
+    const live = matchUpsertRow(fx({ status: "live", score: { home: 1, away: 0 } }), IDS);
+    expect(live).toMatchObject({ home_score: null, away_score: null, status: "scheduled" });
+    const done = matchUpsertRow(fx({ status: "finished", score: { home: 2, away: 1 } }), IDS);
+    expect(done).toMatchObject({ home_score: 2, away_score: 1, status: "finished" });
+  });
+
+  it("tager id'erne fra kalderen og resten fra den normaliserede kamp", () => {
+    expect(matchUpsertRow(fx(), IDS)).toEqual({
+      season_id: "S1", home_team_id: "H", away_team_id: "A",
+      kickoff_at: "2026-08-18T00:00:00Z", kickoff_tbd: false,
+      home_score: null, away_score: null, status: "scheduled",
+      stage_name: "REGULAR_SEASON", api_fixture_id: "fd:1",
+    });
   });
 });

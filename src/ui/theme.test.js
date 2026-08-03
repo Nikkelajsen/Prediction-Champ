@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { globalCss, font } from "./theme.js";
 
 // Skrifterne selv-hostes (B4). Det er den slags, der kan glide tilbage uden at
@@ -34,6 +35,34 @@ describe("globalCss henter ikke skrifter udefra", () => {
   // den henter browseren begge filer for hver vægt.
   it("afgrænser hver blok med unicode-range", () => {
     expect(globalCss.match(/unicode-range:/g)).toHaveLength(10);
+  });
+});
+
+// Anden halvdel af det samme løfte (B15, august 2026). Testen ovenfor holder
+// KODEN fri for eksterne skrifter; denne holder browseren i at hente dem, hvis
+// koden alligevel beder om det en dag. De to hører sammen og står derfor i
+// samme fil: "vi fjernede kaldet til Google" er en hensigt, "browseren nægter
+// kaldet" er en garanti.
+describe("CSP nægter skrifter fra andre domæner", () => {
+  const vercel = JSON.parse(readFileSync(new URL("../../vercel.json", import.meta.url), "utf8"));
+
+  it("sætter font-src 'self' på hver rute", () => {
+    const alle = vercel.headers.find((h) => h.source === "/(.*)");
+    expect(alle).toBeTruthy();
+    const csp = alle.headers.find((h) => h.key === "Content-Security-Policy");
+    expect(csp?.value).toContain("font-src 'self'");
+  });
+
+  // Direktivet er bevidst ALENE. En fuld CSP (script-src, connect-src, style-src)
+  // er en anden opgave med en anden risiko — den kan brække appen på måder, der
+  // først ses i produktion — og den må ikke kunne snige sig med i en ændring,
+  // der handlede om skrifter. Vokser værdien, er det en beslutning, ikke en
+  // udvidelse: rettelsen her skal være synlig i diff'en.
+  it("indeholder kun font-src — resten er ikke besluttet", () => {
+    const csp = vercel.headers
+      .find((h) => h.source === "/(.*)").headers
+      .find((h) => h.key === "Content-Security-Policy").value;
+    expect(csp.split(";").filter((d) => d.trim())).toHaveLength(1);
   });
 });
 

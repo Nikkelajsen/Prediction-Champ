@@ -15,9 +15,8 @@
 // Flere emner må være åbne samtidig: et tryk skal aldrig lukke noget, man var
 // i gang med at læse, og point + tiebreak skal kunne stå ved siden af hinanden.
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { C, btnGhost, font } from "../ui/theme.js";
-import { BackBar, Card, Eyebrow } from "../ui/components.jsx";
+import { BackBar, Card, Collapsible, Eyebrow } from "../ui/components.jsx";
 import InstallGuide from "./InstallGuide.jsx";
 import FeedbackCard from "./FeedbackCard.jsx";
 
@@ -28,29 +27,21 @@ import FeedbackCard from "./FeedbackCard.jsx";
 // Indholdet renderes slet ikke, når emnet er lukket (husets konvention — se
 // MatchRow og HjemTab). Det er også dét, der holder InstallGuide, som læser
 // `navigator` under render, ude af den foldede skærm.
+// Selve folden er `Collapsible` (G57) — knap, aria og panel ét sted. Tilbage
+// står det, der er emne-specifikt: kortets ramme og overskriftens typografi.
 const Topic = ({ title, open, onToggle, children }) => (
   <Card style={{ padding: 0, overflow: "hidden" }}>
-    <button
-      type="button"
-      className="tiprow"
-      onClick={onToggle}
-      aria-expanded={open}
-      aria-label={open ? `Skjul ${title}` : `Vis ${title}`}
+    <Collapsible
+      open={open} onToggle={onToggle} label={title} header={title} chevronSize={16}
       style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        width: "100%", gap: 10, padding: 16, background: "none", border: "none",
-        color: C.text, textAlign: "left", cursor: "pointer",
+        padding: 16,
         fontFamily: font.display, fontSize: 18, fontWeight: 700, textTransform: "uppercase",
       }}
     >
-      {title}
-      <ChevronDown size={16} style={{ flexShrink: 0, color: C.muted, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
-    </button>
-    {open && (
       <div style={{ padding: "0 16px 16px", color: C.text, fontSize: 14, lineHeight: 1.55, display: "flex", flexDirection: "column", gap: 14 }}>
         {children}
       </div>
-    )}
+    </Collapsible>
   </Card>
 );
 

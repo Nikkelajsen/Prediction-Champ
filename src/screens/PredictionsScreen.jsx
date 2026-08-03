@@ -42,7 +42,6 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
   const [, setTick] = useState(0);
   const startedRef = useRef(new Set()); // matchIds hvor prediction_started allerede er logget denne sideliv
   const comp = compFilter !== "all" ? competitions.find((c) => c.id === compFilter) : null;
-  const rules = comp?.rules || { exact: 3, outcome: 1 };
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 60000);
@@ -222,7 +221,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
   // Rundens ÉNE statuslinje. Logikken bor i predictions/roundStatus.js, så den kan
   // testes uden at rendere skærmen — den var utestet, netop mens per-kamp-låsen (A21)
   // ændrede den mest.
-  const roundInfo = round ? roundStatus({ matches: round.matches, preds, rules }) : null;
+  const roundInfo = round ? roundStatus({ matches: round.matches, preds }) : null;
 
   // teamsById er med i afhængighederne, fordi holdnavnene AFGØR rækkefølgen, når
   // kampene deler tidsstempel. De hentes efter kampene, så uden den ville listen
@@ -330,7 +329,6 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
                         key={m.id}
                         m={m}
                         pred={preds[m.id] || { pred_home: null, pred_away: null }}
-                        rules={rules}
                         homeName={teamsById[m.home_team_id]}
                         awayName={teamsById[m.away_team_id]}
                         locked={locked}

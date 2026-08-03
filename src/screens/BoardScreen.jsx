@@ -68,9 +68,8 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
       setLoading(true);
       setLoadError("");
       setShowAllRounds(false);
-      const rules = comp.rules || { exact: 3, outcome: 1 };
       try {
-        const result = await computeCompetitionState(token, selectedCompId, rules, { signal: ctrl.signal });
+        const result = await computeCompetitionState(token, selectedCompId, { signal: ctrl.signal });
         try {
           const ratingMap = await loadRatingMap(token);
           result.rows.forEach((row) => {
@@ -341,8 +340,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
 
       {viewUser && state && (
         <UserRoundPredictions playerName={viewUser.playerName} userId={viewUser.userId}
-          lockedRounds={lockedRounds} predsByKey={state.predsByKey}
-          rules={comp?.rules || { exact: 3, outcome: 1 }} initialKey={viewUser.initialKey}
+          lockedRounds={lockedRounds} predsByKey={state.predsByKey} initialKey={viewUser.initialKey}
           onClose={() => setViewUser(null)} onOpenProfile={openProfile} />
       )}
     </div>

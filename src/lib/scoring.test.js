@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, pointsFor, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
-
-const RULES = { exact: 3, outcome: 1 };
+import { outcome, POINTS, pointsFor, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 describe("outcome", () => {
   it("giver 1 ved hjemmesejr, X ved uafgjort, 2 ved udesejr", () => {
@@ -15,37 +13,39 @@ describe("pointsFor", () => {
   const match = { home_score: 2, away_score: 1 };
 
   it("giver +3 for præcist resultat", () => {
-    expect(pointsFor({ pred_home: 2, pred_away: 1 }, match, RULES)).toBe(3);
+    expect(pointsFor({ pred_home: 2, pred_away: 1 }, match)).toBe(3);
   });
 
   it("giver +1 for korrekt udfald med forkert resultat", () => {
-    expect(pointsFor({ pred_home: 3, pred_away: 0 }, match, RULES)).toBe(1);
+    expect(pointsFor({ pred_home: 3, pred_away: 0 }, match)).toBe(1);
   });
 
   it("giver 0 for forkert udfald — aldrig minuspoint", () => {
-    expect(pointsFor({ pred_home: 0, pred_away: 0 }, match, RULES)).toBe(0);
-    expect(pointsFor({ pred_home: 0, pred_away: 2 }, match, RULES)).toBe(0);
+    expect(pointsFor({ pred_home: 0, pred_away: 0 }, match)).toBe(0);
+    expect(pointsFor({ pred_home: 0, pred_away: 2 }, match)).toBe(0);
   });
 
   it("giver null uden forudsigelse eller uden resultat", () => {
-    expect(pointsFor(null, match, RULES)).toBeNull();
-    expect(pointsFor({ pred_home: null, pred_away: 1 }, match, RULES)).toBeNull();
-    expect(pointsFor({ pred_home: 2, pred_away: 1 }, { home_score: null, away_score: null }, RULES)).toBeNull();
+    expect(pointsFor(null, match)).toBeNull();
+    expect(pointsFor({ pred_home: null, pred_away: 1 }, match)).toBeNull();
+    expect(pointsFor({ pred_home: 2, pred_away: 1 }, { home_score: null, away_score: null })).toBeNull();
   });
 
-  it("respekterer konkurrencens egne pointregler", () => {
-    const rules = { exact: 5, outcome: 2 };
-    expect(pointsFor({ pred_home: 2, pred_away: 1 }, match, rules)).toBe(5);
-    expect(pointsFor({ pred_home: 1, pred_away: 0 }, match, rules)).toBe(2);
-  });
-
-  it("falder tilbage til +3/+1 for ældre konkurrencer uden rules-felt", () => {
-    expect(pointsFor({ pred_home: 2, pred_away: 1 }, match, undefined)).toBe(3);
-    expect(pointsFor({ pred_home: 1, pred_away: 0 }, match, undefined)).toBe(1);
+  // De to tests, der stod her, hed "respekterer konkurrencens egne pointregler"
+  // og "falder tilbage til +3/+1 for ældre konkurrencer uden rules-felt". Begge
+  // beskrev en konfigurerbarhed, der aldrig har eksisteret uden for denne
+  // funktion — databasen har hardkodet 3/1 hele vejen (F2) — og de holdt derfor
+  // et argument i live, som ingen kaldte med andet end 3/1 (G3, august 2026).
+  // Tilbage står dét, de reelt beskyttede: at tallene er dem, de skal være, og
+  // at de kan læses ét sted af den, der farvelægger efter dem.
+  it("bruger de faste point 3/1 — der er ikke noget at konfigurere", () => {
+    expect(POINTS).toEqual({ exact: 3, outcome: 1 });
+    expect(pointsFor({ pred_home: 2, pred_away: 1 }, match)).toBe(POINTS.exact);
+    expect(pointsFor({ pred_home: 1, pred_away: 0 }, match)).toBe(POINTS.outcome);
   });
 
   it("håndterer 0-0 korrekt (0 er ikke 'manglende gæt')", () => {
-    expect(pointsFor({ pred_home: 0, pred_away: 0 }, { home_score: 0, away_score: 0 }, RULES)).toBe(3);
+    expect(pointsFor({ pred_home: 0, pred_away: 0 }, { home_score: 0, away_score: 0 })).toBe(3);
   });
 });
 
@@ -337,7 +337,7 @@ describe("liveInfo", () => {
   });
 
   it("live-stilling giver ingen point (kun home_score tæller)", () => {
-    expect(pointsFor({ pred_home: 2, pred_away: 1 }, live, RULES)).toBeNull();
+    expect(pointsFor({ pred_home: 2, pred_away: 1 }, live)).toBeNull();
     expect(isPlayed(live)).toBe(false);
     expect(isPlayed({ home_score: 0, away_score: 0 })).toBe(true);
   });

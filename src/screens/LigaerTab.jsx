@@ -8,8 +8,9 @@ import { computeCompetitionState, loadMyGroups, createGroup, joinByInviteCode } 
 import { leaders } from "../lib/standings.js";
 import { modeLabel } from "../lib/scoring.js";
 import { C, btnGhost, btnGold, btnGreen, font } from "../ui/theme.js";
-import { Card, Eyebrow, H, InfoDot, Modal, PlayerName } from "../ui/components.jsx";
+import { Card, Collapsible, Eyebrow, H, InfoDot, Modal, PlayerName } from "../ui/components.jsx";
 import { readUserFlag, writeUserFlag, NUDGE_KEY } from "../lib/localFlags.js";
+import { validateGroupName } from "../lib/onboarding.js";
 
 function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGroup, reload, openProfile }) {
   const [groups, setGroups] = useState(null);
@@ -41,7 +42,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
     (async () => {
       const entries = await Promise.all(loose.map(async (c) => {
         try {
-          const state = await computeCompetitionState(token, c.id, c.rules || { exact: 3, outcome: 1 });
+          const state = await computeCompetitionState(token, c.id);
           // Placeringen er rækkens ÆGTE rang (sat af assignRanks i computeCompetitionState),
           // ikke listeindekset: to spillere, der står ægte lige, er begge nr. 2 — ikke 2 og 3.
           const me = state.rows.find((r) => r.userId === userId);
@@ -95,11 +96,14 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
   }
 
   async function createNewGroup() {
-    const trimmed = newName.trim();
-    if (!trimmed) return;
-    // Samme grænse som check-constrainten på groups.name (sql/groups.sql): 2-40 tegn.
-    // Uden tjekket her lækkede databasens rå fejltekst ud i catch-blokken nedenfor.
-    if (trimmed.length < 2) { setJoinErr("Ligaens navn skal være mindst 2 tegn."); return; }
+    // Reglen er `validateGroupName` (lib/onboarding.js) og ingen andre steder
+    // (G53, august 2026). Her stod en håndrullet kopi, der kun kendte den ene
+    // af de to grænser: 41 tegn slap forbi og blev til databasens rå fejltekst
+    // i catch-blokken nedenfor — altså præcis dét, kopien var skrevet for at
+    // undgå. Guiden og opret-skærmen kaldte den fælles regel i forvejen, så
+    // rettelsen var at slette den tredje udgave, ikke at rette den.
+    const problem = validateGroupName(newName);
+    if (problem) { setJoinErr(problem); return; }
     setCreating(true); setJoinErr("");
     try {
       const g = await createGroup(token, userId, newName);
@@ -219,12 +223,19 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
         {/* Knappen lå før inde i "Øvrige konkurrencer"-blokken, som kun renderes,
             når man HAR liga-løse konkurrencer. En bruger uden nogen havde dermed
             slet ingen vej til at oprette en — præcis den bruger, der havde brug
-            for den. Ligger nu fast øverst. */}
-        {groups && groups.length > 0 && (
-          <button style={btnGhost} onClick={() => openCreate(groups.length === 1 ? groups[0].id : null)}>
-            <Plus size={14} /> Ny konkurrence
-          </button>
-        )}
+            for den. Ligger nu fast øverst.
+            Den samme fejl overlevede halvt i betingelsen `groups.length > 0`
+            (G54, august 2026): den stammede fra dengang en konkurrence kunne
+            være liga-løs, hvor det gav mening at kræve en liga først. I dag ER
+            ligaen et krav (`createCompetition` kaster uden `groupId`), og
+            opret-skærmen kan oprette den to felter fra "Opret" — så betingelsen
+            skjulte kernehandlingen for netop den nye bruger, den engang
+            beskyttede. Vises nu også, mens ligalisten hentes: `openCreate(null)`
+            er en gyldig start, og en knap, der popper op et sekund senere, er
+            sin egen slags forvirring. */}
+        <button style={btnGhost} onClick={() => openCreate(groups?.length === 1 ? groups[0].id : null)}>
+          <Plus size={14} /> Ny konkurrence
+        </button>
       </div>
 
       {/* Opret liga + deltag med kode (I4). To tilstande med hver sin målgruppe:
@@ -332,13 +343,16 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
             </>
           )}
           {archived.length > 0 && (
-            <>
-              <button type="button" aria-expanded={showArchived} onClick={() => setShowArchived(!showArchived)}
-                style={{ background: "none", border: "none", display: "flex", alignItems: "center", gap: 6, color: C.muted, fontSize: 13, padding: "4px 2px", cursor: "pointer" }}>
-                <Archive size={14} /> Arkiverede ({archived.length}) <ChevronRight size={14} style={{ transform: showArchived ? "rotate(90deg)" : "none" }} />
-              </button>
-              {showArchived && archived.map((c) => <LeagueCard key={c.id} c={c} isArchived />)}
-            </>
+            <Collapsible
+              open={showArchived} onToggle={() => setShowArchived(!showArchived)}
+              label="arkiverede konkurrencer" grow={false}
+              style={{ color: C.muted, fontSize: 13, padding: "4px 2px", justifyContent: "flex-start", gap: 6 }}
+              header={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Archive size={14} /> Arkiverede ({archived.length})
+              </span>}
+            >
+              {archived.map((c) => <LeagueCard key={c.id} c={c} isArchived />)}
+            </Collapsible>
           )}
         </>
       )}

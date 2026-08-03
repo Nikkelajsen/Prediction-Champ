@@ -6,14 +6,12 @@ import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MatchRow } from "./PredictionsScreen.jsx";
 
-const RULES = { exact: 3, outcome: 1 };
 const PARTS = [{ id: "u1", display_name: "Nikolaj" }, { id: "u2", display_name: "Jimmy" }];
 
 function row(over = {}) {
   const props = {
     m: { id: 1, kickoff_at: "2026-07-24T17:00:00Z", home_score: null, away_score: null },
     pred: { pred_home: 1, pred_away: 1 },
-    rules: RULES,
     homeName: "Viborg FF",
     awayName: "Odense BK",
     locked: true, played: false, live: null,
