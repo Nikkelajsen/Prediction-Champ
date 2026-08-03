@@ -26,7 +26,9 @@
 //    siger, hvilke rækker der må vokse.
 //
 // 3. EN RUNDE, DER ER GÅET I GANG, VOKSER ALDRIG. En kamp må kun tilføjes, hvis
-//    dens RUNDE endnu ikke har haft sin første kickoff (minus en time). Så kan
+//    ingen kamp i dens RUNDE er låst endnu — altså før rundens tidligste
+//    låsetidspunkt, som for langt de fleste kampe er kickoff minus en time og
+//    for en kamp uden fastlagt klokkeslæt er midnat på spilledagen (G55). Så kan
 //    en efterfyldning aldrig give point for et tip, der allerede er afgivet —
 //    den fejl, `filterFromNextUnfinishedRound` findes for at forhindre ved
 //    oprettelsen.
@@ -57,7 +59,56 @@ export function coversSeason(competition, seasonId) {
   return Array.isArray(list) && list.some((t) => t?.season_id === seasonId);
 }
 
-// Tidligste kickoff pr. runde over HELE sæsonen — det er den, regel 3 regnes af.
+// Tidszonen er FAST og dansk, ikke serverens (Vercel kører UTC) — samme
+// forudsætning som `public.match_lock_at()` i SQL og som sendevinduet i
+// send-notifications.js: brugerne er én vennegruppe i én tidszone.
+const TZ = "Europe/Copenhagen";
+
+// Zonens forskydning fra UTC på et givet tidspunkt, i ms. Aflæst via Intl frem
+// for hårdkodet, fordi Danmark skifter mellem +1 og +2 to gange om året.
+function zoneOffsetMs(ms) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: TZ, hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }).formatToParts(new Date(ms)).map((x) => [x.type, x.value])
+  );
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - ms;
+}
+
+// Midnat på spilledagen, dansk tid — som ms. To gennemløb: først aflæses DAGEN,
+// som spilleren ser den, og derefter korrigeres gættet (UTC-midnat på den dato)
+// med zonens forskydning. Ét gennemløb ville være forkert i timerne omkring
+// midnat, hvor UTC-datoen og den danske dato er forskellige.
+function zonedMidnightMs(ms) {
+  const day = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(ms));
+  const utcMidnight = Date.parse(`${day}T00:00:00Z`);
+  return utcMidnight - zoneOffsetMs(utcMidnight - zoneOffsetMs(utcMidnight));
+}
+
+// Låsetidspunktet for én kamp (ms), eller null hvis kickoff ikke er kendt.
+//
+// Dette er den fælles regel, oversat til api/ (som ikke importerer fra src/):
+// `lockAtOf()` i src/lib/scoring.js og `public.match_lock_at()` i SQL siger
+// præcis det samme. Indtil G55 (august 2026) kendte efterfyldningen kun den ene
+// halvdel: den regnede altid `kickoff_at − 1 time` og vidste ikke, at en kamp
+// uden fastlagt klokkeslæt bærer en PLADSHOLDER i det felt. En TBD-kamps
+// pladsholder er typisk midnat — men midnat i leverandørens zone, ikke i vores
+// — så rundestarten kunne lande på den forkerte side af den lås, både klienten
+// og databasen håndhæver for den samme kamp. Afvigelsen er timer, og regel 3
+// måler i dage, så den har aldrig gjort skade; men den var det sidste sted, hvor
+// låsen blev regnet i hånden i stedet for at følge reglen.
+export function matchLockAtMs(m, lockLeadMs = LOCK_LEAD_MS) {
+  if (!m?.kickoff_at) return null;
+  const t = Date.parse(m.kickoff_at);
+  if (Number.isNaN(t)) return null;
+  return m.kickoff_tbd ? zonedMidnightMs(t) : t - lockLeadMs;
+}
+
+// Tidligste LÅS pr. runde over HELE sæsonen — det er den, regel 3 regnes af.
 // Kampe uden kickoff springes over; en runde uden kendte kickoffs får ingen
 // entry og regnes som endnu ikke gået i gang.
 //
@@ -66,12 +117,11 @@ export function coversSeason(competition, seasonId) {
 // gætte-vindue, som var dens eneste bruger. Regel 3 er en anden regel med sin
 // egen begrundelse og beholder både sin runde-grain og sin scoping pr. turnering
 // — kaldet henter kun kampe for én `season_id` ad gangen.
-function earliestByRound(matches) {
+function earliestLockByRound(matches, lockLeadMs) {
   const map = new Map();
   for (const m of matches) {
-    if (!m.kickoff_at) continue;
-    const t = Date.parse(m.kickoff_at);
-    if (Number.isNaN(t)) continue;
+    const t = matchLockAtMs(m, lockLeadMs);
+    if (t === null) continue;
     const cur = map.get(m.round_key);
     if (cur === undefined || t < cur) map.set(m.round_key, t);
   }
@@ -104,14 +154,14 @@ function matchesRule(competition, m) {
 export function matchesToBackfill({ competition, matches, existingIds, nowMs, lockLeadMs = LOCK_LEAD_MS }) {
   if (!BACKFILLABLE_MODES.includes(competition.mode)) return [];
   if (competition.mode_params?.stages) return []; // afgrænset i hånden — regel 2
-  const earliest = earliestByRound(matches);
+  const earliest = earliestLockByRound(matches, lockLeadMs);
   const have = existingIds instanceof Set ? existingIds : new Set(existingIds || []);
   return matches
     .filter((m) => !have.has(m.id))
     .filter((m) => m.home_score === null || m.home_score === undefined)
     .filter((m) => {
       const first = earliest.get(m.round_key);
-      return first === undefined || nowMs < first - lockLeadMs; // regel 3
+      return first === undefined || nowMs < first; // regel 3: runden må vokse, indtil dens første kamp låser
     })
     .filter((m) => matchesRule(competition, m))
     .map((m) => m.id);
@@ -138,7 +188,7 @@ export async function backfillCompetitionMatches(sb, seasonId, { now = Date.now(
 
     const matches = await sbAll(
       sb,
-      `/rest/v1/matches?season_id=eq.${seasonId}&select=id,round_key,kickoff_at,home_score,home_team_id,away_team_id`,
+      `/rest/v1/matches?season_id=eq.${seasonId}&select=id,round_key,kickoff_at,kickoff_tbd,home_score,home_team_id,away_team_id`,
       { order: "id.asc" }
     );
     if (!matches?.length) return { added: 0, competitions: 0 };

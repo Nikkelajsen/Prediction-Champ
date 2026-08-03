@@ -377,4 +377,43 @@ Regressionskørsel på 8 deltagere / 3 runder med to fremmede i en parallel konk
 
 ---
 
-*Status: v1.1 live (juli 2026). A3 (stille runder) og A4 (tærskler) er lukket med denne leverance; A5 (emojis) er delvist besvaret — emoji er nu et signal, der adskiller de to tiers, frem for et spørgsmål om til/fra.*
+## 12. v1.2 — de lokale kåringer får deres eget kort (august 2026)
+
+`B10`. Motoren havde 14 regler, og ingen af dem kendte til `competition_awards` — tabellen fra `A22`, hvor en opt-in-konkurrence får sin "Ugens/Månedens bedste" persisteret. Kåringen kunne ses på boardet og ingen andre steder: den havde ingen historie, intet arkiv i karriereprofilen og ingen besked.
+
+### 12.1 To regler
+
+| Prioritet | Regel | Hvornår | Tekst |
+|---|---|---|---|
+| 15 | `AWARD_MONTH` | Den **første** runde i en ny måned, når forrige måned er kåret | 👑 Du er (delt) Månedens bedste i {konkurrence} — {måned} |
+| 65 | `AWARD_WEEK` | Runden er kåret i `competition_awards` | 🏅 Du er (delt) Ugens bedste i {konkurrence} |
+
+**Placeringen på stigen er selve designet.** 65 ligger lige over rundens vinder (70), fordi det er *det samme øjeblik* set fra konkurrencens eget navnesystem; 15 ligger lige under den globale månedstitel (10), fordi en lokal månedstitel er større end alt, hvad én runde kan producere, men mindre end at være Månedens Prediction Champ.
+
+### 12.2 Reglerne LÆSER kåringen — de regner den ikke
+
+Begge henter tal og delt-status fra `competition_awards`. Kåringen er frossen ved sit eget kriterie (alle konkurrencens kampe i perioden har resultat), og en historie, der udregnede sit eget svar, ville kunne modsige den tabel, brugeren kan slå op i på boardet. Det er samme princip som tiebreaker-stigen: **én kilde pr. påstand.**
+
+Prisen er en afhængighed af, at rækken er skrevet, når runden genereres. Den er betalt af `B11`: notifikations-jobbet kalder `award_competition_periods()` som `service_role` ved hver kørsel, så kåringen ikke længere afhænger af, at et menneske havde åbnet boardet. Skulle den alligevel komme for sent, indhenter motoren sig selv — historier gendannes ved hvert resultat i runden.
+
+### 12.3 Regel 70 tier, hvor en kåring dækker
+
+Rundens vinder (`ROUND_WON`) springer over for præcis den `(bruger, konkurrence, runde)`, der har en ugekåring. Uden det ville ét øjeblik have to kort: brugerens ene kort pr. runde kunne blive den svageste af de to formuleringer, og milepæls-arkivet i karriereprofilen ville få dubletter. En konkurrence **uden** opt-in er upåvirket — dér er regel 70 fortsat den, der fortæller om rundens sejr.
+
+### 12.4 Hvorfor månedskortet ligger i den første runde af den nye måned
+
+Regel 10 (den globale månedstitel) fyrer i den sidste runde **med kampe** i måneden. Det kan ikke genbruges: `award_competition_periods()` kårer først en måned, når kalendermåneden er forbi — ellers kunne efterfyldningen (`A20`) lægge en udsat kamp ind i en allerede kåret måned. Rækken findes derfor slet ikke, når regel 10 fyrer. Den første runde i den nye måned er det tidligste tidspunkt, hvor kåringen både er sand og skrevet.
+
+### 12.5 Verifikation
+
+`sql/tests/story_engine_awards.sql` kører i CI mod en rigtig PostgreSQL og efterprøver hele kæden — fra `award_competition_periods()` som `service_role` til det færdige kort: delt ugekåring giver to kort med "delt" i overskriften, regel 70 tier i opt-in-konkurrencen og virker i den uden, månedskortet findes kun i den første runde af en ny måned, `latest_story` vælger 15 over 65 over 70, og en gen-kørsel giver byte-identiske rækker.
+
+Testen findes, fordi kæden går gennem tre filer og to skrivetidspunkter — og fejler **tavst**: matches-triggeren er exception-guarded, så et manglende kort ikke kan skelnes fra en stille uge.
+
+### 12.6 Engangsopsætning
+
+Gen-kør `sql/story_engine.sql` ("Run without RLS"). Triggeren er uændret, og `competition_awards.sql` (#26) skal være kørt i forvejen.
+
+---
+
+*Status: v1.2 live (august 2026). A3 (stille runder) og A4 (tærskler) blev lukket med v1.1; A5 (emojis) er delvist besvaret — emoji er nu et signal, der adskiller de to tiers, frem for et spørgsmål om til/fra.*

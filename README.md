@@ -16,18 +16,23 @@ Vercel til kampsynkronisering og push-notifikationer. Ingen SDK'er — kun `fetc
 git clone https://github.com/Nikkelajsen/Prediction-Champ.git
 cd Prediction-Champ
 npm install
+cp .env.example .env.local   # udfyld de to VITE_SUPABASE_*-variabler
 npm run dev          # http://localhost:5173
 ```
 
-Appen kører **uden opsætning**: `src/lib/supabase.js` har produktionens URL og
-den offentlige `publishable`-nøgle som fallback. Nøglen er offentlig by design og
-beskyttet af RLS.
+**`.env.local` er påkrævet fra 3. august 2026 (`G4`).** Før faldt appen tavst
+tilbage på produktionens URL og den offentlige `publishable`-nøgle, så enhver
+lokal udvikling skrev direkte i produktionsdata — uden at sige det. Nøglen er
+offentlig by design og beskyttet af RLS, så det farlige var ikke adgangen, men
+tavsheden: et halvfærdigt tip eller en test-liga er lige så virkelig for de
+rigtige brugere, som hvis den var lavet i appen. `src/lib/supabase.js` kaster nu
+i stedet, så valget skal træffes.
 
-> ⚠️ **Det betyder også, at `npm run dev` uden videre skriver i PRODUKTIONSDATA.**
-> Vil du undgå det, skal du oprette et Supabase-projekt og pege dertil — se
-> [`.env.example`](.env.example) og `DOCUMENTATION.md` §9. Der findes i dag ingen
-> seed-SQL til en tom database, så en tom staging er ikke et brugbart alternativ
-> endnu (`G4` i backloggen).
+> ⚠️ **Peger du på produktion, skriver du i produktionsdata.** Det er stadig det
+> eneste rigtige svar, indtil et staging-projekt findes — der er i dag ingen
+> seed-SQL til en tom database — men det er nu et bevidst valg. Værdierne står i
+> `DOCUMENTATION.md` §9. I et produktions-build gælder fallbacken uændret: Vercel
+> sætter ikke variablerne, og dér SKAL appen pege på produktion.
 
 ### Miljøvariabler
 

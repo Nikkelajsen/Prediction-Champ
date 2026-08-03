@@ -4,7 +4,7 @@
 // vokser.
 
 import { describe, it, expect } from "vitest";
-import { matchesToBackfill, coversSeason, LOCK_LEAD_MS } from "./_backfill.js";
+import { matchesToBackfill, matchLockAtMs, coversSeason, LOCK_LEAD_MS } from "./_backfill.js";
 
 const NOW = Date.parse("2026-08-10T12:00:00Z");
 const iso = (ms) => new Date(ms).toISOString();
@@ -97,6 +97,70 @@ describe("matchesToBackfill", () => {
     const noKickoff = [{ id: "x1", round_key: "2026-09-01", kickoff_at: null, home_score: null }];
     const ids = matchesToBackfill({ competition: fullSeason, matches: noKickoff, existingIds: [], nowMs: NOW });
     expect(ids).toEqual(["x1"]);
+  });
+});
+
+// G55 (august 2026): efterfyldningen regnede altid `kickoff_at − 1 time` og
+// kendte ikke `kickoff_tbd`. En kamp uden fastlagt klokkeslæt bærer en
+// PLADSHOLDER i kickoff_at, og både klienten (`lockAtOf`) og databasen
+// (`public.match_lock_at()`) låser den ved midnat på spilledagen, dansk tid.
+// Reglen her følger nu de to andre — testene er skrevet mod ØJEBLIKKE og ikke
+// mod strengene, netop fordi hele fejlen bestod i at tage en pladsholder for
+// pålydende.
+describe("matchLockAtMs — den fælles lås, oversat til api/", () => {
+  it("låser en almindelig kamp én time før kickoff", () => {
+    const kickoff = Date.parse("2026-08-10T18:00:00Z");
+    expect(matchLockAtMs({ kickoff_at: iso(kickoff) })).toBe(kickoff - LOCK_LEAD_MS);
+    expect(matchLockAtMs({ kickoff_at: iso(kickoff), kickoff_tbd: false })).toBe(kickoff - LOCK_LEAD_MS);
+  });
+
+  // Sommertid: dansk midnat er 22:00 UTC dagen før. Pladsholderen ligger på
+  // 00:00 UTC den 10., altså 02.00 dansk — samme DAG for spilleren, men to timer
+  // efter den lås, resten af appen håndhæver.
+  it("låser en TBD-kamp ved dansk midnat på spilledagen (sommertid)", () => {
+    expect(matchLockAtMs({ kickoff_at: "2026-08-10T00:00:00Z", kickoff_tbd: true }))
+      .toBe(Date.parse("2026-08-09T22:00:00Z"));
+  });
+
+  // Vintertid: dansk midnat er 23:00 UTC dagen før. Offsettet aflæses og er
+  // ikke hårdkodet — ellers ville reglen flytte sig to gange om året.
+  it("låser en TBD-kamp ved dansk midnat på spilledagen (vintertid)", () => {
+    expect(matchLockAtMs({ kickoff_at: "2026-12-05T12:00:00Z", kickoff_tbd: true }))
+      .toBe(Date.parse("2026-12-04T23:00:00Z"));
+  });
+
+  // Timerne efter midnat dansk tid er den ene, hvor UTC-datoen og den danske
+  // dato er forskellige — og hvor et enkelt gennemløb ville ramme dagen før.
+  it("bruger den DANSKE dato, ikke UTC-datoen", () => {
+    expect(matchLockAtMs({ kickoff_at: "2026-08-09T23:30:00Z", kickoff_tbd: true }))
+      .toBe(Date.parse("2026-08-09T22:00:00Z")); // dansk 10. aug. kl. 01.30 → midnat samme danske dag
+  });
+
+  it("giver null uden kendt kickoff", () => {
+    expect(matchLockAtMs({ kickoff_at: null, kickoff_tbd: true })).toBeNull();
+    expect(matchLockAtMs({ kickoff_at: "ikke en dato" })).toBeNull();
+    expect(matchLockAtMs(null)).toBeNull();
+  });
+});
+
+// Regel 3 læser nu låsen og ikke kickoff. For en TBD-kamp betyder det, at
+// runden lukker for efterfyldning ved dansk midnat frem for en time før
+// pladsholderen — dét er hele forskellen, og den er kun synlig for TBD-kampe.
+describe("regel 3 med en TBD-kamp i runden", () => {
+  const tbdRound = "2026-08-18";
+  const tbd = [{ id: "t1", round_key: tbdRound, kickoff_at: "2026-08-18T00:00:00Z", kickoff_tbd: true, home_score: null, home_team_id: "T1", away_team_id: "T2" },
+               { id: "t2", round_key: tbdRound, kickoff_at: "2026-08-19T17:00:00Z", home_score: null, home_team_id: "T3", away_team_id: "T4" }];
+  const at = (isoStr) => matchesToBackfill({ competition: fullSeason, matches: tbd, existingIds: [], nowMs: Date.parse(isoStr) });
+
+  it("efterfylder indtil dansk midnat på spilledagen", () => {
+    expect(at("2026-08-17T21:59:00Z")).toEqual(["t1", "t2"]); // dansk 23.59 den 17.
+  });
+
+  it("stopper fra dansk midnat — også selvom pladsholderen først er to timer senere", () => {
+    expect(at("2026-08-17T22:01:00Z")).toEqual([]); // dansk 00.01 den 18.
+    // Den gamle regel (kickoff − 1 time) ville have haft runden åben helt frem
+    // til 23:00 UTC, altså en time inde i spilledagen.
+    expect(at("2026-08-17T22:59:00Z")).toEqual([]);
   });
 });
 

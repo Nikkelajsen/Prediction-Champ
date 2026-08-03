@@ -4,7 +4,7 @@ import { useState, Fragment } from "react";
 import { loadAnalyticsLeagueHealth, diagnoseLeagues, summarizeDiagnoses } from "../../lib/analytics.js";
 
 import { C, muted } from "../../ui/theme.js";
-import { StateChip, SignalRow } from "../../ui/components.jsx";
+import { FoldChevron, StateChip, SignalRow } from "../../ui/components.jsx";
 import { M, Section, useSection, dtFmt, pctFmt } from "./shared.jsx";
 
 // ---------- 3. Liga-diagnose ----------
@@ -33,8 +33,25 @@ function LigaDiagnoseSection({ token, days }) {
           </tr>
           {leagues.map((l) => (
             <Fragment key={l.group_id}>
+              {/* Rækken er stadig klikbar i hele sin bredde — det er den
+                  hurtigste flade på en telefon — men SEMANTIKKEN bor nu i en
+                  rigtig knap i første celle (G57). Før var folden en
+                  `<tr onClick>` uden hverken tastaturadgang eller aria: den
+                  eneste af appens fem folde, hvor indholdet var helt
+                  uopnåeligt uden mus. En `<tr>` kan ikke selv være en knap, og
+                  `Collapsible` kan ikke lægges om en tabelrække uden at bryde
+                  tabellen — derfor knappen om navnet frem for om rækken. */}
               <tr className="rowline" style={{ cursor: "pointer" }} onClick={() => setOpenId(openId === l.group_id ? null : l.group_id)}>
-                <td style={{ fontWeight: 600, padding: "8px 6px" }}>{l.name}</td>
+                <td style={{ fontWeight: 600, padding: "8px 6px" }}>
+                  <button type="button"
+                    onClick={(e) => { e.stopPropagation(); setOpenId(openId === l.group_id ? null : l.group_id); }}
+                    aria-expanded={openId === l.group_id}
+                    aria-label={`${openId === l.group_id ? "Skjul" : "Vis"} diagnose for ${l.name}`}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, font: "inherit", color: "inherit", cursor: "pointer", textAlign: "left" }}>
+                    {l.name}
+                    <FoldChevron open={openId === l.group_id} size={13} />
+                  </button>
+                </td>
                 <td style={{ padding: "8px 6px" }}><StateChip label={l.diagnosis.label} tone={l.diagnosis.tone} /></td>
                 <td style={{ textAlign: "right", color: C.muted, fontSize: 13, padding: "8px 6px" }}>{l.predictors}/{l.members}</td>
                 <td style={{ textAlign: "right", color: C.muted, fontSize: 13, padding: "8px 6px" }}>{pctFmt(l.completion_rate)}</td>

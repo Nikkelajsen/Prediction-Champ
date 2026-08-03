@@ -34,6 +34,18 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },
+  // Testene importerer `src/lib/supabase.js`, som efter `G4` KASTER i udvikling,
+  // hvis Supabase-variablerne mangler — netop for at en lokal kørsel ikke tavst
+  // rammer produktion. En testkørsel er "udvikling" for Vite, så den skal have
+  // værdier at importere med. De er med vilje åbenlyst falske: intet i
+  // testsuiten laver netværkskald, og et rigtigt projekt-id her ville være den
+  // samme tavse kobling til produktion i en anden forklædning.
+  test: {
+    env: {
+      VITE_SUPABASE_URL: "http://localhost:54321",
+      VITE_SUPABASE_KEY: "test-key-ikke-en-rigtig-nøgle",
+    },
+  },
   server: apiProxy
     ? { proxy: { "/api": { target: apiProxy, changeOrigin: true } } }
     : undefined,

@@ -3,7 +3,7 @@
 // bygger på.
 
 import { db } from "../supabase.js";
-import { groupIntoRounds, pointsFor } from "../scoring.js";
+import { groupIntoRounds, POINTS, pointsFor } from "../scoring.js";
 import { assignRanks, avgGoalError, compareStandings, sortStandings } from "../standings.js";
 import { roundRow, without } from "./_shared.js";
 
@@ -15,7 +15,7 @@ import { roundRow, without } from "./_shared.js";
 // midtvejs, fortsætter den gamle indlæsning ellers hele vejen igennem — og et
 // sent svar kan overskrive et nyere. Signalet sendes til hvert enkelt kald, så
 // kæden brydes ved det FØRSTE kald efter afbrydelsen frem for at løbe færdig.
-async function computeCompetitionState(token, competitionId, rules, { signal } = {}) {
+async function computeCompetitionState(token, competitionId, { signal } = {}) {
   const o = { signal };
   const participants = await db.select(token, "competition_participants", `competition_id=eq.${competitionId}&select=user_id`, o);
   const userIds = participants.map((p) => p.user_id);
@@ -52,12 +52,12 @@ async function computeCompetitionState(token, competitionId, rules, { signal } =
       let rPlayed = false;
       for (const m of round.matches) {
         const pred = predsByKey.get(`${m.id}:${p.id}`);
-        const pts = pointsFor(pred, m, rules);
+        const pts = pointsFor(pred, m);
         if (pts !== null) {
           rs.total += pts; rs.matches++; rPlayed = true;
           rs.goalError += Math.abs(pred.pred_home - m.home_score) + Math.abs(pred.pred_away - m.away_score);
           if (pred.pred_home === m.home_score && pred.pred_away === m.away_score) rs.exact++;
-          else if (pts === rules.outcome) rs.outcome++;
+          else if (pts === POINTS.outcome) rs.outcome++;
         }
       }
       if (rPlayed) { perRound[round.key] = rs.total; perRoundStats[round.key] = rs; }

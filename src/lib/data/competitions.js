@@ -72,11 +72,15 @@ async function createCompetition(token, userId, spec) {
   // gælder oprettelsen, ikke rækkens levetid.
   if (!groupId) throw new Error("Vælg eller opret den liga, konkurrencen skal høre til.");
 
-  // Faste pointregler. Feltet er historisk konfigurerbart, men `pc_points()`
-  // hardkoder 3/1 (F2, juli 2026), og det rullende gætte-vindue — den eneste
-  // reelle variation, der nogensinde blev skrevet her — er fjernet igen (B1).
-  const rules = { exact: 3, outcome: 1 };
-  const base = { name, group_id: groupId || null, rules, created_by: userId };
+  // `rules` skrives IKKE længere (G3, august 2026). Kolonnen er `not null` med
+  // defaulten `{"exact": 3, "outcome": 1}`, så rækken får præcis den samme
+  // værdi som før — den kommer bare fra databasen, som er det eneste sted, der
+  // nogensinde har afgjort point (`pc_points()` hardkoder 3/1, F2). Så længe
+  // klienten sendte feltet, så det ud som et valg, den traf: der stod en
+  // pointregel i opret-kaldet, og en læser kunne med rette spørge, hvad der
+  // ville ske, hvis den var en anden. Svaret var "ingenting", og det er den
+  // slags sætning, koden ikke skal have brug for.
+  const base = { name, group_id: groupId || null, created_by: userId };
   // Kårings-tilvalget spredes ind i mode_params i ALLE grene — men kun når det
   // er valgt, så en konkurrence uden tilvalg har præcis samme rækkeform som før.
   const awardsParams = awards ? { awards: true } : {};

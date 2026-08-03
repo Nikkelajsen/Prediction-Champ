@@ -29,6 +29,23 @@
 -- Normaliserer man dem til LF, ændrer en kørsel prosrc, og næste skema-eksport
 -- giver en stor, indholdsløs diff. Lad dem stå.
 --
+-- ÉN BEVIDST AFVIGELSE FRA PRODUKTION FRA 3. august 2026 (G11): `round_key()`
+-- aflæser nu datoen i dansk tid frem for i sessionens tidszone. Kroppen er
+-- dermed IKKE længere identisk med produktionens `prosrc`, før migreringen
+-- `sql/round_key_timezone.sql` er kørt — og den fil er det eneste sted,
+-- ændringen må komme fra, fordi den også skal flytte de rækker, hvis værdi
+-- ændrer sig. Resten af filen er uændret.
+--
+-- EFTERPRØVET 3. august 2026 (G5) — og advarslen havde ret om databasen og
+-- uret om filen. En frisk eksport viser CRLF i prosrc for ALLE 25 funktioner i
+-- produktion, men filen her stod da med nul CR-tegn: kroppene var blevet
+-- normaliseret ud af repoet, uden at nogen havde besluttet det, og filen var
+-- dermed selv blevet dét, dens eget hoved advarede imod. Kroppene er hentet
+-- ordret tilbage fra eksporten og er nu BYTE-identiske med produktionens
+-- prosrc — en gen-kørsel er igen en ægte no-op. `.gitattributes` (`*.sql
+-- -text`) er tilføjet samme dag, så det ikke kan ske igen ubemærket; uden den
+-- afhang indholdet af den enkeltes editor og git-konfiguration.
+--
 -- Idempotent — kan køres igen når som helst.
 --
 -- Kørerækkefølge: FØR sql/rating_trigger_optimization.sql, som antager at
@@ -126,7 +143,13 @@ CREATE OR REPLACE FUNCTION public.round_key(ts timestamp with time zone) RETURNS
     LANGUAGE plpgsql IMMUTABLE
     AS $$
 declare
-  d date := ts::date;
+  -- G11 (august 2026): datoen aflæses i DANSK tid og ikke i sessionens.
+  -- `ts::date` bruger `TimeZone`-indstillingen, så funktionen var reelt STABLE
+  -- og ikke IMMUTABLE, som den er markeret — og en writer med en anden zone
+  -- ville skrive en anden runde end resten. `timezone(text, timestamptz)` er
+  -- selv IMMUTABLE (`pg_proc.provolatile = 'i'`), så markeringen er nu sand,
+  -- og den genererede kolonne matches.round_key må fortsat bruge funktionen.
+  d date := (ts at time zone 'Europe/Copenhagen')::date;
   dow int := extract(dow from d)::int; -- 0=søn .. 2=tir .. 6=lør
   diff int := (dow - 2 + 7) % 7;
 begin

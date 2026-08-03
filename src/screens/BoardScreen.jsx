@@ -6,6 +6,7 @@ import { lockedRoundsOf, roundLabel } from "../lib/scoring.js";
 import { computeCompetitionState, loadRatingMap, ensureCompetitionAwards, loadCompetitionAwards, monthName } from "../lib/data.js";
 import { isAborted } from "../lib/supabase.js";
 import { logEvent } from "../lib/analytics.js";
+import { shareText } from "../lib/share.js";
 import { C, btnGhost, btnGold, font, muted, thStyle } from "../ui/theme.js";
 import { BackBar, Card, EmptyCompetitions, InviteCode, PlayerName, UserRoundPredictions } from "../ui/components.jsx";
 
@@ -68,9 +69,8 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
       setLoading(true);
       setLoadError("");
       setShowAllRounds(false);
-      const rules = comp.rules || { exact: 3, outcome: 1 };
       try {
-        const result = await computeCompetitionState(token, selectedCompId, rules, { signal: ctrl.signal });
+        const result = await computeCompetitionState(token, selectedCompId, { signal: ctrl.signal });
         try {
           const ratingMap = await loadRatingMap(token);
           result.rows.forEach((row) => {
@@ -126,10 +126,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
       : `Du er inviteret til ${target} på Prediction Champ ⚽`;
     const text = `${intro}\nGæt resultater, saml point og se hvem der er bedst. Tryk her for at være med:\n${link}`;
     try {
-      if (navigator.share) {
-        await navigator.share({ title: "Prediction Champ", text });
-      } else {
-        await navigator.clipboard.writeText(text);
+      if (await shareText(text) === "clipboard") {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }
@@ -341,8 +338,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
 
       {viewUser && state && (
         <UserRoundPredictions playerName={viewUser.playerName} userId={viewUser.userId}
-          lockedRounds={lockedRounds} predsByKey={state.predsByKey}
-          rules={comp?.rules || { exact: 3, outcome: 1 }} initialKey={viewUser.initialKey}
+          lockedRounds={lockedRounds} predsByKey={state.predsByKey} initialKey={viewUser.initialKey}
           onClose={() => setViewUser(null)} onOpenProfile={openProfile} />
       )}
     </div>

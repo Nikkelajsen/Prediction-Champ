@@ -7,8 +7,32 @@ import { LOKALE_NØGLER, SESSION_KEY, readFlag, removeFlag, writeFlag } from "./
 // beskyttet af RLS — by design). Sæt VITE_SUPABASE_URL/VITE_SUPABASE_KEY
 // (fx i Vercels Preview-miljø eller .env.local) for at pege på en
 // staging-database i stedet — se .env.example og DOCUMENTATION.md afsnit 9.
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://qfcjbpvttburccdyfnkx.supabase.co";
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || "sb_publishable_Et9Dahm8LOhZk6cS1XRqhA_9RuNmnvC";
+//
+// FALLBACKEN GÆLDER IKKE I UDVIKLING (G4, august 2026).
+//
+// Den er rigtig i et produktions-build: Vercel sætter ikke variablerne, og
+// appen SKAL pege på produktion. Men den gjaldt også `npm run dev`, og dermed
+// skrev enhver lokal udvikling direkte i produktionsdata — uden at sige det.
+// Det er ikke det samme som at være farligt: nøglen er offentlig, og RLS
+// gælder. Det farlige er tavsheden. Et halvfærdigt tip, en test-liga eller en
+// slettet konkurrence er lige så virkelig for de otte rigtige brugere, som hvis
+// den var lavet i appen.
+//
+// Derfor: mangler variablerne i udvikling, KASTER modulet med det samme frem
+// for at gætte. Kopiér `.env.example` til `.env.local` og træf valget selv —
+// også hvis valget er produktion, hvilket det er, indtil et staging-projekt
+// findes. Et bevidst valg og et tavst default ser ens ud i data; forskellen er,
+// om nogen kan huske at have truffet det.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || (import.meta.env.DEV ? "" : "https://qfcjbpvttburccdyfnkx.supabase.co");
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || (import.meta.env.DEV ? "" : "sb_publishable_Et9Dahm8LOhZk6cS1XRqhA_9RuNmnvC");
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  throw new Error(
+    "Manglende VITE_SUPABASE_URL/VITE_SUPABASE_KEY.\n\n" +
+    "Lokal udvikling peger ikke længere på produktion af sig selv (G4). " +
+    "Kopiér .env.example til .env.local og udfyld de to variabler — værdierne " +
+    "til produktion står i DOCUMENTATION.md §9, hvis det er dem, du vil bruge."
+  );
+}
 
 // ---------- tiny REST helpers (no SDK needed) ----------
 // Fejlen bærer sin HTTP-status videre (G26).

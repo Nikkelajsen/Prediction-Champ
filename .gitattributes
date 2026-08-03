@@ -1,0 +1,19 @@
+# Linjeafslutninger må ikke normaliseres i sql/.
+#
+# HVORFOR (G5, 3. august 2026)
+# Funktionskroppene i sql/rating_core.sql indeholder CRLF, fordi de i sin tid
+# blev indsat i Supabases SQL-editor fra en kilde med Windows-linjeskift og
+# derfor ligger sådan i Postgres' `prosrc`. En frisk skema-eksport samme dag
+# bekræftede det: ALLE 25 funktioner i produktion har CRLF i kroppen.
+#
+# Filens hoved har hele tiden advaret mod at normalisere dem — men CR-tegnene
+# var alligevel forsvundet ud af repoet, uden at nogen havde besluttet det.
+# Følgen var ikke synlig og derfor værre: en gen-kørsel af den idempotente fil
+# ville have skrevet LF-kroppe i databasen, og næste skema-eksport ville give
+# ~2.400 linjers ren linjeskifts-diff — hvor en rigtig ændring kunne gemme sig.
+#
+# Kroppene er nu byte-identiske med produktionens `prosrc` igen, og denne fil
+# er dét, der holder dem sådan: uden den afhænger indholdet af, hvad den
+# enkeltes editor, git-konfiguration eller formatteringsværktøj gør ved
+# linjeskift.
+*.sql -text

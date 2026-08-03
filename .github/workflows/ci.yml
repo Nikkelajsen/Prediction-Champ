@@ -106,6 +106,36 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database awardstest;'
           psql -h localhost -U postgres -d awardstest -v ON_ERROR_STOP=1 -b -f competition_awards.sql
 
+      # anon-grants (G50): kører migreringen og efterprøver BEGGE halvdele —
+      # at anon mister tabel-adgangen, og at kilden (Supabases default
+      # privileges for public) er lukket, så en tabel oprettet bagefter heller
+      # ikke får den. Den anden halvdel er den, der betyder noget på sigt:
+      # bredden var en regel og ikke en liste.
+      - name: Test af anon-grants
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database anongrants;'
+          psql -h localhost -U postgres -d anongrants -v ON_ERROR_STOP=1 -b -f anon_grants.sql
+
+      # Story Engine v1.2's kåringsregler (B10): kører rating_core +
+      # competition_awards + story_engine i én tom database og efterprøver
+      # kæden fra kåringsrække til historie-kort. Egen database, som de andre.
+      #
+      # Kæden går gennem tre filer og to skrivetidspunkter, og fejler den,
+      # fejler den TAVST: matches-triggeren er exception-guarded, så et
+      # manglende kort ikke kan skelnes fra en stille uge.
+      - name: Test af Story Engines kåringsregler
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database storytest;'
+          psql -h localhost -U postgres -d storytest -v ON_ERROR_STOP=1 -b -f story_engine_awards.sql
+
       # Sikkerhedsstramningen (G14/G15/G16): kører selve migreringen
       # security_hardening.sql og efterprøver BEGGE retninger — at anon og en
       # almindelig bruger er lukket ude af matches, recompute_ratings() og

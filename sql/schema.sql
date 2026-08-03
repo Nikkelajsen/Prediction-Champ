@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ChWEDhHTxkyxlbBM1m0fu48inMBs2Obaw5GyjHVOIyfcUElWNxRNUREAFLbZDR7
+\restrict JbGv5OzmCjQIfI781LRtKqO3h1O3Pkrfwb6QJPjUJyWxqxV2QisI8BA8WEgR6pJ
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
@@ -120,9 +120,10 @@ begin
         -- fastholdelses-værktøj, så det spørgsmål er værd at kunne svare på:
         -- tippede de, der åbnede den, oftere end de, der ikke gjorde?
         --
-        -- Enheden er (bruger, runde): én modtaget deadline-påmindelse for én
-        -- runde. "Tippede" = mindst ét tip i netop den runde, læst fra
-        -- analytics_completion_facts — altså fra predictions, ikke fra loggen.
+        -- Enheden er (bruger, senddag): én modtaget deadline-påmindelse. "Tippede"
+        -- = mindst ét tip på en kamp, der låste efter beskeden og inden for syv
+        -- dage, læst fra analytics_completion_facts — altså fra predictions, ikke
+        -- fra loggen.
         --
         -- ⚠️ KORRELATION, IKKE ÅRSAG. Folk, der åbner notifikationer, er de
         -- engagerede i forvejen; forskellen er derfor et LOFT over pushets
@@ -130,47 +131,62 @@ begin
         -- (src/lib/analyticsMetrics.js, `push_effect`), fordi det er den
         -- eneste måde, tallet kan læses forkert på.
         'effect', (
-          with sent_rounds as (
-            -- Nøglen er `deadline:<season_id>:<round_key>:<dato>` (se
-            -- api/send-notifications.js). season_id kan være tom, men indeholder
-            -- aldrig et kolon, så felt 3 er altid runde-nøglen. Regex-tjekket
-            -- gør parsingen defensiv: en nøgle i et uventet format udelades
-            -- frem for at kaste og tage hele Engagement-sektionen med sig.
-            select nl.user_id, split_part(nl.key, ':', 3)::date as round_key, min(nl.sent_at) as sent_at
+          with sent as (
+            -- Nøglen er `deadline:<dato>` (se api/send-notifications.js). Efter A21
+            -- er beskeden samlet pr. BRUGER PR. DAG i stedet for pr. runde, fordi en
+            -- runde ikke længere har ét låsetidspunkt at varsle om. Enheden her er
+            -- derfor (bruger, senddag).
+            --
+            -- ⚠️ SERIEN STARTER FORFRA 1. AUGUST 2026. Gamle rækker har formatet
+            -- `deadline:<season_id>:<round_key>:<dato>`, hvis felt 2 er et uuid og
+            -- ikke en dato — de falder derfor ud af regex-tjekket frem for at blive
+            -- fejltolket. Det er med vilje: at parse dem ind ville blande to
+            -- definitioner i samme kurve.
+            select nl.user_id, split_part(nl.key, ':', 2)::date as sent_day, min(nl.sent_at) as sent_at
             from public.notification_log nl
             where nl.key like 'deadline:%'
               and nl.sent_at >= now() - make_interval(days => p_days)
-              and split_part(nl.key, ':', 3) ~ '^\d{4}-\d{2}-\d{2}$'
+              and split_part(nl.key, ':', 2) ~ '^\d{4}-\d{2}-\d{2}$'
             group by 1, 2
-          ), opened_rounds as (
-            select distinct e.user_id, (e.metadata->>'round_key')::date as round_key
+          ), opened as (
+            -- push_opened bærer stadig et round_key i sin metadata (deep-linket
+            -- peger på den runde, den første manglende kamp ligger i), men det kan
+            -- ikke længere joines mod afsendelsen — dén kender kun dagen. Åbningen
+            -- bindes derfor til dagen, den skete.
+            select distinct e.user_id, e.created_at::date as sent_day
             from public.analytics_events e
             where e.event_name = 'push_opened'
               and e.metadata->>'kind' = 'deadline'
-              and e.metadata->>'round_key' ~ '^\d{4}-\d{2}-\d{2}$'
               and e.created_at >= now() - make_interval(days => p_days)
-          ), predicted_rounds as (
-            select user_id, round_key, bool_or(predicted) as any_predicted
-            from public.analytics_completion_facts
+          ), followed as (
+            -- De kampe, brugeren stadig kunne NÅ, da beskeden blev sendt: dem der
+            -- låste efter sent_at. "Fulgte op" = tippede mindst én af dem. Vinduet
+            -- på syv dage svarer til en spillerunde og forhindrer, at en besked får
+            -- æren for et tip afgivet en uge senere.
+            select s.user_id, s.sent_day,
+              bool_or(f.predicted) as did_predict,
+              min(f.lock_at)       as next_lock_at
+            from sent s
+            join public.analytics_completion_facts f
+              on f.user_id = s.user_id
+             and f.lock_at >  s.sent_at
+             and f.lock_at <  s.sent_at + interval '7 days'
             group by 1, 2
-          ), locks as (
-            select round_key, min(lock_at) as lock_at from public.analytics_round_locks group by 1
           ), j as (
-            select s.user_id, s.round_key, s.sent_at, l.lock_at,
+            select s.user_id, s.sent_day, s.sent_at, fw.next_lock_at,
               (o.user_id is not null)                as did_open,
-              coalesce(p2.any_predicted, false)      as did_predict,
+              coalesce(fw.did_predict, false)        as did_predict,
               case
-                when l.lock_at is null or l.lock_at <= s.sent_at then null
-                when l.lock_at - s.sent_at <  interval '3 hours'  then 1
-                when l.lock_at - s.sent_at <  interval '6 hours'  then 2
-                when l.lock_at - s.sent_at <  interval '12 hours' then 3
-                when l.lock_at - s.sent_at <  interval '24 hours' then 4
+                when fw.next_lock_at is null then null
+                when fw.next_lock_at - s.sent_at <  interval '3 hours'  then 1
+                when fw.next_lock_at - s.sent_at <  interval '6 hours'  then 2
+                when fw.next_lock_at - s.sent_at <  interval '12 hours' then 3
+                when fw.next_lock_at - s.sent_at <  interval '24 hours' then 4
                 else 5
               end as lead_bucket
-            from sent_rounds s
-            left join opened_rounds    o  on o.user_id  = s.user_id and o.round_key  = s.round_key
-            left join predicted_rounds p2 on p2.user_id = s.user_id and p2.round_key = s.round_key
-            left join locks            l  on l.round_key = s.round_key
+            from sent s
+            left join opened   o  on o.user_id  = s.user_id and o.sent_day = s.sent_day
+            left join followed fw on fw.user_id = s.user_id and fw.sent_day = s.sent_day
           )
           select jsonb_build_object(
             'recipients', (select count(*) from j),
@@ -184,8 +200,9 @@ begin
             'not_opened_rate', (select case when count(*) = 0 then null
                                  else round(100.0 * count(*) filter (where did_predict) / count(*), 1) end
                                from j where not did_open),
-            -- Varsel: hvor lang tid før rundelåsen blev beskeden sendt. Den
-            -- eneste knap, der reelt kan drejes på — cron-tidspunktet.
+            -- Varsel: hvor lang tid før den FØRSTE lås, brugeren stadig kunne nå,
+            -- blev beskeden sendt. Den eneste knap, der reelt kan drejes på —
+            -- cron-tidspunktet.
             'by_lead_time', coalesce((
               select jsonb_agg(jsonb_build_object(
                 'bucket', bucket, 'sort', sort, 'n', n, 'predicted', pred,
@@ -398,7 +415,7 @@ begin
       join public.matches m on m.id = cm.match_id
       join public.analytics_round_locks rl
         on rl.season_id is not distinct from m.season_id and rl.round_key = m.round_key
-      where not rl.is_locked
+      where not rl.has_started
     ),
 
     -- Prediction Completion Rate (North Star) — se analytics_completion_facts
@@ -478,11 +495,15 @@ begin
       ) mth
     ),
 
-    -- Deadline Miss Rate. Enheden er RUNDEN, ikke kampen — det er dér, låsen
-    -- og deadline-push'en er forankret. En bruger "missede deadline i runde
-    -- R", hvis de havde ≥1 muligt tip i R og NUL af dem blev afgivet — en
-    -- bruger der tippede 3 af 5 kampe missede IKKE deadline (det måler
-    -- Completion Rate, som dækker delvis udfyldning). Tre tal returneres:
+    -- Deadline Miss Rate. Enheden er fortsat RUNDEN, men af en ny grund. Før A21
+    -- var runden dér, låsen og deadline-push'en var forankret; efter A21 låser
+    -- hver kamp for sig, og påmindelsen samles pr. dag. Runden er nu valgt, fordi
+    -- den er den enhed, SPØRGSMÅLET har: "sad en bruger en spillerunde over?".
+    -- Alternativet — at tælle hver ubesvaret kamp — er allerede dækket af
+    -- Completion Rate, og ville gøre de to metrikker til det samme tal.
+    -- En bruger "missede deadline i runde R", hvis de havde ≥1 muligt tip i R og
+    -- NUL af dem blev afgivet — en bruger der tippede 3 af 5 kampe missede IKKE
+    -- deadline. Tre tal returneres:
     -- miss_rate (brugerens godkendte formel: missede / AKTIVE brugere,
     -- headline), miss_rate_of_exposed (missede / brugere der reelt HAVDE en
     -- deadline — forhindrer at raten falder kunstigt, når brugerbasen vokser
@@ -677,7 +698,7 @@ begin
         join public.competition_matches cm on cm.competition_id = c.id
         join public.matches m on m.id = cm.match_id
         join public.analytics_round_locks rl on rl.season_id is not distinct from m.season_id and rl.round_key = m.round_key
-        where c.group_id = g.id and not rl.is_locked) as competitions_active,
+        where c.group_id = g.id and not rl.has_started) as competitions_active,
       case when coalesce(pa.slots, 0) = 0 then null
         else round(100.0 * pa.done / pa.slots, 1) end as completion_rate,
       -- Trend-nøglen er null, når det foregående vindue havde under 5 mulige
@@ -911,6 +932,62 @@ $$;
 
 
 --
+-- Name: admin_feedback(boolean, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admin_feedback(only_open boolean DEFAULT false, max_rows integer DEFAULT 200) RETURNS TABLE(id uuid, user_id uuid, display_name text, kind text, message text, context jsonb, created_at timestamp with time zone, handled_at timestamp with time zone)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  -- `pr.` og ikke bare `id`: returtabellen ovenfor erklærer en OUT-parameter,
+  -- der HEDDER id, og plpgsql kan ikke se forskel på den og profiles-kolonnen.
+  -- Uden aliasset fejler funktionen med "column reference id is ambiguous" —
+  -- ikke ved oprettelsen, men først når den kaldes. admin_job_health() slipper
+  -- for det, fordi ingen af dens kolonner deler navn med en tabel-kolonne i
+  -- vagten; det er ikke en forskel, man kan se ved at kopiere mønstret.
+  if not exists (select 1 from public.profiles pr where pr.id = auth.uid() and pr.is_admin) then
+    raise exception 'forbidden';
+  end if;
+
+  return query
+  select f.id, f.user_id, p.display_name, f.kind, f.message, f.context, f.created_at, f.handled_at
+  from public.feedback f
+  left join public.profiles p on p.id = f.user_id
+  where not only_open or f.handled_at is null
+  order by f.created_at desc
+  -- Loftet er eksplicit og ikke PostgREST's tavse 1000: en liste, der bare
+  -- holder op, ligner en tom liste. `max_rows` kan hæves fra kaldestedet den
+  -- dag, det bliver nødvendigt.
+  limit greatest(max_rows, 1);
+end $$;
+
+
+--
+-- Name: admin_feedback_set_handled(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admin_feedback_set_handled(feedback_id uuid, handled boolean) RETURNS timestamp with time zone
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare v_at timestamptz;
+begin
+  if not exists (select 1 from public.profiles pr where pr.id = auth.uid() and pr.is_admin) then
+    raise exception 'forbidden';
+  end if;
+
+  update public.feedback
+     set handled_at = case when handled then now() else null end,
+         handled_by = case when handled then auth.uid() else null end
+   where id = feedback_id
+  returning handled_at into v_at;
+
+  return v_at;
+end $$;
+
+
+--
 -- Name: admin_job_health(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -949,6 +1026,23 @@ begin
   from seneste s
   left join seneste_ok o on o.job = s.job
   order by s.job;
+end;
+$$;
+
+
+--
+-- Name: admin_recompute_ratings(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admin_recompute_ratings() RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if not exists (select 1 from public.profiles where id = auth.uid() and is_admin) then
+    raise exception 'Kun administratorer kan genberegne ratings';
+  end if;
+  perform public.recompute_ratings();
 end;
 $$;
 
@@ -1040,6 +1134,218 @@ begin
   if not exists (select 1 from public.profiles where id = auth.uid() and is_admin) then
     raise exception 'forbidden';
   end if;
+end;
+$$;
+
+
+--
+-- Name: anonymize_my_account(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.anonymize_my_account() RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_uid   uuid := auth.uid();
+  v_navn  text;
+  v_hex   int := 8;
+begin
+  if v_uid is null then
+    raise exception 'forbidden';
+  end if;
+
+  -- Allerede lukket: gør ingenting, men svar det samme, så klienten kan
+  -- gentage kaldet uden at skulle skelne.
+  select display_name into v_navn from public.profiles where id = v_uid and anonymized_at is not null;
+  if found then
+    return v_navn;
+  end if;
+
+  -- Navnet er unikt på lower(display_name) (profiles_display_name_lower_idx) og
+  -- skal være 2–20 tegn (profiles_display_name_len). "Slettet bruger" kan
+  -- derfor kun bruges ÉN gang. Otte hex-tegn af brugerens eget id giver 16 tegn
+  -- og er unikt — men "unikt nok" er ikke godt nok, når fejlen ville ramme
+  -- netop den, der har bedt om at forsvinde, så der forlænges ved kollision.
+  loop
+    v_navn := 'Slettet ' || left(replace(v_uid::text, '-', ''), v_hex);
+    exit when not exists (
+      select 1 from public.profiles
+      where lower(display_name) = lower(v_navn) and id <> v_uid
+    );
+    v_hex := v_hex + 2;
+    if v_hex > 12 then
+      raise exception 'kunne ikke danne et ledigt pseudonym';
+    end if;
+  end loop;
+
+  delete from public.push_subscriptions where user_id = v_uid;
+  delete from public.notification_log   where user_id = v_uid;
+  delete from public.stories            where user_id = v_uid;
+  delete from public.analytics_events   where user_id = v_uid;
+  delete from public.user_activity_days where user_id = v_uid;
+
+  update public.feedback set user_id = null where user_id = v_uid;
+
+  update public.profiles
+     set display_name  = v_navn,
+         anonymized_at = now(),
+         is_admin      = false,
+         last_seen_at  = null
+   where id = v_uid;
+
+  return v_navn;
+end $$;
+
+
+--
+-- Name: award_competition_periods(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.award_competition_periods(p_comp_id uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_rounds integer := 0;
+  v_months integer := 0;
+begin
+  -- Guard: en deltager (eller service_role, jf. B10/B11) — fremmede kan ikke
+  -- engang trigge beregningen. Uden opt-in ved oprettelsen sker der intet.
+  if auth.role() is distinct from 'service_role' and not exists (
+    select 1 from competition_participants cp
+    where cp.competition_id = p_comp_id and cp.user_id = auth.uid()
+  ) then
+    return 0;
+  end if;
+
+  if not exists (
+    select 1 from competitions c
+    where c.id = p_comp_id and (c.mode_params ->> 'awards') = 'true'
+  ) then
+    return 0;
+  end if;
+
+  -- ---------- Ugens bedste (pr. færdigspillet runde) ----------
+  with comp_matches as (
+    select m.id, m.round_key, m.home_score, m.away_score
+    from competition_matches cm
+    join matches m on m.id = cm.match_id
+    where cm.competition_id = p_comp_id
+  ),
+  complete_rounds as (
+    select round_key
+    from comp_matches
+    group by round_key
+    having count(*) filter (where home_score is null or away_score is null) = 0
+  ),
+  scored as (
+    select m.round_key, pr.user_id,
+           pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) as pts,
+           abs(pr.pred_home - m.home_score) + abs(pr.pred_away - m.away_score) as goal_err
+    from comp_matches m
+    join complete_rounds r on r.round_key = m.round_key
+    join predictions pr on pr.match_id = m.id
+    join competition_participants cp
+      on cp.competition_id = p_comp_id and cp.user_id = pr.user_id
+    where pr.pred_home is not null and pr.pred_away is not null
+  ),
+  totals as (
+    select round_key, user_id,
+           sum(pts)::int as points,
+           count(*)::int as matches,
+           (count(*) filter (where pts = 3))::int as exact_count,
+           (count(*) filter (where pts = 1))::int as outcome_count,
+           round(sum(goal_err)::numeric / count(*), 4) as avg_goal_error,
+           rank() over (
+             partition by round_key
+             order by sum(pts) desc,
+                      (count(*) filter (where pts = 3)) desc,
+                      (count(*) filter (where pts = 1)) desc,
+                      round(sum(goal_err)::numeric / count(*), 4) asc
+           ) as rnk
+    from scored
+    group by round_key, user_id
+  ),
+  winners as (
+    select *, (count(*) over (partition by round_key)) > 1 as is_shared
+    from totals where rnk = 1
+  ),
+  ins as (
+    insert into competition_awards
+      (competition_id, period_type, period_key, user_id, points, shared, stats)
+    select p_comp_id, 'round', w.round_key::text, w.user_id, w.points, w.is_shared,
+           jsonb_build_object('exact', w.exact_count, 'outcome', w.outcome_count,
+                              'matches', w.matches, 'goal_error', w.avg_goal_error)
+    from winners w
+    on conflict do nothing
+    returning 1
+  )
+  select count(*) into v_rounds from ins;
+
+  -- ---------- Månedens bedste (pr. afsluttet kalendermåned) ----------
+  with comp_matches as (
+    select m.id,
+           to_char(m.kickoff_at at time zone 'Europe/Copenhagen', 'YYYY-MM') as month_key,
+           m.home_score, m.away_score
+    from competition_matches cm
+    join matches m on m.id = cm.match_id
+    where cm.competition_id = p_comp_id
+  ),
+  complete_months as (
+    select month_key
+    from comp_matches
+    group by month_key
+    having count(*) filter (where home_score is null or away_score is null) = 0
+       -- Kalendermåneden skal være forbi — ellers kunne en kåring falde, mens
+       -- måneden stadig kan få nye kampe (efterfyldning, udsatte kampe).
+       and month_key < to_char(now() at time zone 'Europe/Copenhagen', 'YYYY-MM')
+  ),
+  scored as (
+    select m.month_key, pr.user_id,
+           pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) as pts,
+           abs(pr.pred_home - m.home_score) + abs(pr.pred_away - m.away_score) as goal_err
+    from comp_matches m
+    join complete_months cm on cm.month_key = m.month_key
+    join predictions pr on pr.match_id = m.id
+    join competition_participants cp
+      on cp.competition_id = p_comp_id and cp.user_id = pr.user_id
+    where pr.pred_home is not null and pr.pred_away is not null
+  ),
+  totals as (
+    select month_key, user_id,
+           sum(pts)::int as points,
+           count(*)::int as matches,
+           (count(*) filter (where pts = 3))::int as exact_count,
+           (count(*) filter (where pts = 1))::int as outcome_count,
+           round(sum(goal_err)::numeric / count(*), 4) as avg_goal_error,
+           rank() over (
+             partition by month_key
+             order by sum(pts) desc,
+                      (count(*) filter (where pts = 3)) desc,
+                      (count(*) filter (where pts = 1)) desc,
+                      round(sum(goal_err)::numeric / count(*), 4) asc
+           ) as rnk
+    from scored
+    group by month_key, user_id
+  ),
+  winners as (
+    select *, (count(*) over (partition by month_key)) > 1 as is_shared
+    from totals where rnk = 1
+  ),
+  ins as (
+    insert into competition_awards
+      (competition_id, period_type, period_key, user_id, points, shared, stats)
+    select p_comp_id, 'month', w.month_key, w.user_id, w.points, w.is_shared,
+           jsonb_build_object('exact', w.exact_count, 'outcome', w.outcome_count,
+                              'matches', w.matches, 'goal_error', w.avg_goal_error)
+    from winners w
+    on conflict do nothing
+    returning 1
+  )
+  select count(*) into v_months from ins;
+
+  return v_rounds + v_months;
 end;
 $$;
 
@@ -2094,6 +2400,37 @@ $$;
 
 
 --
+-- Name: match_lock_at(timestamp with time zone, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.match_lock_at(kickoff_at timestamp with time zone, kickoff_tbd boolean) RETURNS timestamp with time zone
+    LANGUAGE sql STABLE
+    AS $$
+  select case
+    when kickoff_at is null then null
+    -- Tid ikke fastlagt: midnat på spilledagen, dansk tid. Dagen aflæses i
+    -- Europe/Copenhagen og ikke i UTC, fordi det er den dag, spilleren ser.
+    when kickoff_tbd then
+      date_trunc('day', kickoff_at at time zone 'Europe/Copenhagen')
+        at time zone 'Europe/Copenhagen'
+    -- Tid fastlagt: 1 time før kampens eget kickoff (A21).
+    else kickoff_at - interval '1 hour'
+  end;
+$$;
+
+
+--
+-- Name: match_locked(timestamp with time zone, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.match_locked(kickoff_at timestamp with time zone, kickoff_tbd boolean) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  select coalesce(public.match_lock_at(kickoff_at, kickoff_tbd) <= now(), false);
+$$;
+
+
+--
 -- Name: move_competition_to_group(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2263,7 +2600,8 @@ $$;
 --
 
 CREATE FUNCTION public.recompute_ratings_if_scores_changed() RETURNS trigger
-    LANGUAGE plpgsql
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
     AS $$
 declare
   -- date, ikke text: matches.round_key er en genereret date-kolonne, og Postgres
@@ -2403,7 +2741,8 @@ CREATE TABLE public.matches (
     live_away_score integer,
     live_state text,
     live_minute integer,
-    live_updated_at timestamp with time zone
+    live_updated_at timestamp with time zone,
+    kickoff_tbd boolean DEFAULT false NOT NULL
 );
 
 
@@ -2443,20 +2782,26 @@ COMMENT ON COLUMN public.matches.live_updated_at IS 'Hvornår live-felterne sids
 
 
 --
--- Name: analytics_round_locks; Type: VIEW; Schema: public; Owner: -
+-- Name: COLUMN matches.kickoff_tbd; Type: COMMENT; Schema: public; Owner: -
 --
 
-CREATE VIEW public.analytics_round_locks AS
- SELECT season_id,
+COMMENT ON COLUMN public.matches.kickoff_tbd IS 'Klokkeslættet i kickoff_at er en pladsholder — kun datoen er kendt. Sættes af api/sync-matches ud fra leverandørens egen markør.';
+
+
+--
+-- Name: analytics_match_locks; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.analytics_match_locks AS
+ SELECT id AS match_id,
+    season_id,
     round_key,
-    min(kickoff_at) AS first_kickoff,
-    (min(kickoff_at) - '01:00:00'::interval) AS lock_at,
-    ((min(kickoff_at) - '01:00:00'::interval) <= now()) AS is_locked,
-    count(*) AS match_count,
-    count(*) FILTER (WHERE ((home_score IS NOT NULL) AND (away_score IS NOT NULL))) AS finished_count
+    kickoff_at,
+    public.match_lock_at(kickoff_at, kickoff_tbd) AS lock_at,
+    public.match_locked(kickoff_at, kickoff_tbd) AS is_locked,
+    kickoff_tbd
    FROM public.matches m
-  WHERE (kickoff_at IS NOT NULL)
-  GROUP BY season_id, round_key;
+  WHERE (kickoff_at IS NOT NULL);
 
 
 --
@@ -2533,7 +2878,7 @@ CREATE VIEW public.analytics_completion_facts AS
      JOIN public.competitions c ON ((c.id = cp.competition_id)))
      JOIN public.competition_matches cm ON ((cm.competition_id = c.id)))
      JOIN public.matches m ON ((m.id = cm.match_id)))
-     JOIN public.analytics_round_locks rl ON (((NOT (rl.season_id IS DISTINCT FROM m.season_id)) AND (rl.round_key = m.round_key))))
+     JOIN public.analytics_match_locks rl ON ((rl.match_id = m.id)))
      LEFT JOIN public.predictions p ON (((p.user_id = cp.user_id) AND (p.match_id = m.id))))
   WHERE ((rl.lock_at <= now()) AND (rl.lock_at >= cp.joined_at));
 
@@ -2551,6 +2896,58 @@ CREATE TABLE public.analytics_events (
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT analytics_events_name_check CHECK ((event_name = ANY (ARRAY['account_created'::text, 'login'::text, 'logout'::text, 'league_created'::text, 'league_joined'::text, 'league_invite_sent'::text, 'league_invite_accepted'::text, 'competition_created'::text, 'competition_joined'::text, 'competition_opened'::text, 'prediction_started'::text, 'prediction_saved'::text, 'prediction_updated'::text, 'prediction_submitted'::text, 'opened_home'::text, 'opened_tip'::text, 'opened_league'::text, 'opened_standings'::text, 'opened_rating'::text, 'opened_career'::text, 'opened_story'::text, 'opened_championship'::text, 'story_viewed'::text, 'story_shared'::text, 'push_opened'::text])))
+);
+
+
+--
+-- Name: analytics_round_locks; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.analytics_round_locks AS
+ SELECT season_id,
+    round_key,
+    min(kickoff_at) AS first_kickoff,
+    (min(kickoff_at) - '01:00:00'::interval) AS round_start_at,
+    ((min(kickoff_at) - '01:00:00'::interval) <= now()) AS has_started,
+    count(*) AS match_count,
+    count(*) FILTER (WHERE ((home_score IS NOT NULL) AND (away_score IS NOT NULL))) AS finished_count
+   FROM public.matches m
+  WHERE (kickoff_at IS NOT NULL)
+  GROUP BY season_id, round_key;
+
+
+--
+-- Name: competition_awards; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.competition_awards (
+    competition_id uuid NOT NULL,
+    period_type text NOT NULL,
+    period_key text NOT NULL,
+    user_id uuid NOT NULL,
+    points integer NOT NULL,
+    shared boolean DEFAULT false NOT NULL,
+    stats jsonb DEFAULT '{}'::jsonb NOT NULL,
+    awarded_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT competition_awards_period_type_check CHECK ((period_type = ANY (ARRAY['round'::text, 'month'::text])))
+);
+
+
+--
+-- Name: feedback; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.feedback (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid DEFAULT auth.uid(),
+    kind text NOT NULL,
+    message text NOT NULL,
+    context jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    handled_at timestamp with time zone,
+    handled_by uuid,
+    CONSTRAINT feedback_kind_check CHECK ((kind = ANY (ARRAY['problem'::text, 'idea'::text, 'other'::text]))),
+    CONSTRAINT feedback_message_len CHECK (((char_length(message) >= 4) AND (char_length(message) <= 2000)))
 );
 
 
@@ -2687,7 +3084,7 @@ CREATE TABLE public.seasons (
 -- Name: monthly_standings; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.monthly_standings AS
+CREATE VIEW public.monthly_standings WITH (security_invoker='on') AS
  WITH scored AS (
          SELECT to_char(date_trunc('month'::text, m.kickoff_at), 'YYYY-MM'::text) AS month,
             m.round_key,
@@ -2759,7 +3156,8 @@ CREATE TABLE public.profiles (
     display_name text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     is_admin boolean DEFAULT false NOT NULL,
-    last_seen_at timestamp with time zone
+    last_seen_at timestamp with time zone,
+    anonymized_at timestamp with time zone
 );
 
 
@@ -2917,6 +3315,14 @@ ALTER TABLE ONLY public.analytics_events
 
 
 --
+-- Name: competition_awards competition_awards_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.competition_awards
+    ADD CONSTRAINT competition_awards_pkey PRIMARY KEY (competition_id, period_type, period_key, user_id);
+
+
+--
 -- Name: competition_matches competition_matches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2946,6 +3352,14 @@ ALTER TABLE ONLY public.competitions
 
 ALTER TABLE ONLY public.competitions
     ADD CONSTRAINT competitions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: feedback feedback_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.feedback
+    ADD CONSTRAINT feedback_pkey PRIMARY KEY (id);
 
 
 --
@@ -2994,6 +3408,14 @@ ALTER TABLE ONLY public.leagues
 
 ALTER TABLE ONLY public.leagues
     ADD CONSTRAINT leagues_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: leagues leagues_provider_api_id_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.leagues
+    ADD CONSTRAINT leagues_provider_api_id_unique UNIQUE (provider, api_league_id);
 
 
 --
@@ -3077,6 +3499,14 @@ ALTER TABLE ONLY public.ratings
 
 
 --
+-- Name: seasons seasons_league_api_id_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seasons
+    ADD CONSTRAINT seasons_league_api_id_unique UNIQUE (league_id, api_season_id);
+
+
+--
 -- Name: seasons seasons_league_name_unique; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3106,6 +3536,14 @@ ALTER TABLE ONLY public.stories
 
 ALTER TABLE ONLY public.stories
     ADD CONSTRAINT stories_round_key_user_id_rule_competition_id_key UNIQUE (round_key, user_id, rule, competition_id);
+
+
+--
+-- Name: teams teams_league_api_id_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.teams
+    ADD CONSTRAINT teams_league_api_id_unique UNIQUE (league_id, api_team_id);
 
 
 --
@@ -3158,6 +3596,20 @@ CREATE INDEX analytics_events_user_time_idx ON public.analytics_events USING btr
 --
 
 CREATE INDEX competitions_group_idx ON public.competitions USING btree (group_id);
+
+
+--
+-- Name: feedback_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX feedback_created_idx ON public.feedback USING btree (created_at DESC);
+
+
+--
+-- Name: feedback_open_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX feedback_open_idx ON public.feedback USING btree (created_at DESC) WHERE (handled_at IS NULL);
 
 
 --
@@ -3290,6 +3742,22 @@ ALTER TABLE ONLY public.analytics_events
 
 
 --
+-- Name: competition_awards competition_awards_competition_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.competition_awards
+    ADD CONSTRAINT competition_awards_competition_id_fkey FOREIGN KEY (competition_id) REFERENCES public.competitions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: competition_awards competition_awards_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.competition_awards
+    ADD CONSTRAINT competition_awards_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: competition_matches competition_matches_competition_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3351,6 +3819,22 @@ ALTER TABLE ONLY public.competitions
 
 ALTER TABLE ONLY public.competitions
     ADD CONSTRAINT competitions_season_id_fkey FOREIGN KEY (season_id) REFERENCES public.seasons(id);
+
+
+--
+-- Name: feedback feedback_handled_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.feedback
+    ADD CONSTRAINT feedback_handled_by_fkey FOREIGN KEY (handled_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: feedback feedback_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.feedback
+    ADD CONSTRAINT feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 
 
 --
@@ -3511,6 +3995,15 @@ CREATE POLICY analytics_events_insert_own ON public.analytics_events FOR INSERT 
 
 
 --
+-- Name: competition_awards awards_select_participants; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY awards_select_participants ON public.competition_awards FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM public.competition_participants cp
+  WHERE ((cp.competition_id = competition_awards.competition_id) AND (cp.user_id = auth.uid())))));
+
+
+--
 -- Name: competition_participants comp_participants_delete_own_unlocked; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3521,10 +4014,14 @@ CREATE POLICY comp_participants_delete_own_unlocked ON public.competition_partic
    FROM ((public.competition_matches cm
      JOIN public.matches m ON ((m.id = cm.match_id)))
      JOIN public.predictions p ON (((p.match_id = m.id) AND (p.user_id = auth.uid()))))
-  WHERE ((cm.competition_id = competition_participants.competition_id) AND ((m.home_score IS NOT NULL) OR (EXISTS ( SELECT 1
-           FROM public.matches m2
-          WHERE ((m2.round_key = m.round_key) AND (NOT (m2.season_id IS DISTINCT FROM m.season_id)) AND (m2.kickoff_at IS NOT NULL) AND (m2.kickoff_at <= (now() + '01:00:00'::interval)))))))))))));
+  WHERE ((cm.competition_id = competition_participants.competition_id) AND ((m.home_score IS NOT NULL) OR public.match_locked(m.kickoff_at, m.kickoff_tbd)))))))));
 
+
+--
+-- Name: competition_awards; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.competition_awards ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: competition_matches; Type: ROW SECURITY; Schema: public; Owner: -
@@ -3565,6 +4062,19 @@ CREATE POLICY "creator deletes competitions" ON public.competitions FOR DELETE U
 CREATE POLICY "creator inserts competition_matches" ON public.competition_matches FOR INSERT WITH CHECK ((EXISTS ( SELECT 1
    FROM public.competitions c
   WHERE ((c.id = competition_matches.competition_id) AND (c.created_by = auth.uid())))));
+
+
+--
+-- Name: feedback; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: feedback feedback_insert_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY feedback_insert_own ON public.feedback FOR INSERT TO authenticated WITH CHECK ((user_id = auth.uid()));
 
 
 --
@@ -3636,13 +4146,6 @@ CREATE POLICY groups_update_admin ON public.groups FOR UPDATE TO authenticated U
 
 
 --
--- Name: matches insert matches; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "insert matches" ON public.matches FOR INSERT WITH CHECK ((auth.role() = 'authenticated'::text));
-
-
---
 -- Name: profiles insert own profile; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3684,6 +4187,26 @@ ALTER TABLE public.leagues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.matches ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: matches matches_insert_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY matches_insert_admin ON public.matches FOR INSERT TO authenticated WITH CHECK ((EXISTS ( SELECT 1
+   FROM public.profiles p
+  WHERE ((p.id = auth.uid()) AND p.is_admin))));
+
+
+--
+-- Name: matches matches_update_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY matches_update_admin ON public.matches FOR UPDATE TO authenticated USING ((EXISTS ( SELECT 1
+   FROM public.profiles p
+  WHERE ((p.id = auth.uid()) AND p.is_admin)))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM public.profiles p
+  WHERE ((p.id = auth.uid()) AND p.is_admin))));
+
+
+--
 -- Name: notification_log; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3701,9 +4224,7 @@ ALTER TABLE public.predictions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY predictions_delete_own_unlocked ON public.predictions FOR DELETE TO authenticated USING (((user_id = auth.uid()) AND (EXISTS ( SELECT 1
    FROM public.matches m
-  WHERE ((m.id = predictions.match_id) AND (m.home_score IS NULL) AND (NOT (EXISTS ( SELECT 1
-           FROM public.matches m2
-          WHERE ((m2.round_key = m.round_key) AND (NOT (m2.season_id IS DISTINCT FROM m.season_id)) AND (m2.kickoff_at IS NOT NULL) AND (m2.kickoff_at <= (now() + '01:00:00'::interval)))))))))));
+  WHERE ((m.id = predictions.match_id) AND (m.home_score IS NULL) AND (NOT public.match_locked(m.kickoff_at, m.kickoff_tbd)))))));
 
 
 --
@@ -3712,9 +4233,7 @@ CREATE POLICY predictions_delete_own_unlocked ON public.predictions FOR DELETE T
 
 CREATE POLICY predictions_insert_own_unlocked ON public.predictions FOR INSERT TO authenticated WITH CHECK (((user_id = auth.uid()) AND (EXISTS ( SELECT 1
    FROM public.matches m
-  WHERE ((m.id = predictions.match_id) AND (m.home_score IS NULL) AND (NOT (EXISTS ( SELECT 1
-           FROM public.matches m2
-          WHERE ((m2.round_key = m.round_key) AND (NOT (m2.season_id IS DISTINCT FROM m.season_id)) AND (m2.kickoff_at IS NOT NULL) AND (m2.kickoff_at <= (now() + '01:00:00'::interval)))))))))));
+  WHERE ((m.id = predictions.match_id) AND (m.home_score IS NULL) AND (NOT public.match_locked(m.kickoff_at, m.kickoff_tbd)))))));
 
 
 --
@@ -3723,9 +4242,7 @@ CREATE POLICY predictions_insert_own_unlocked ON public.predictions FOR INSERT T
 
 CREATE POLICY predictions_select_visible ON public.predictions FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR (EXISTS ( SELECT 1
    FROM public.matches m
-  WHERE ((m.id = predictions.match_id) AND ((m.home_score IS NOT NULL) OR (EXISTS ( SELECT 1
-           FROM public.matches m2
-          WHERE ((m2.round_key = m.round_key) AND (NOT (m2.season_id IS DISTINCT FROM m.season_id)) AND (m2.kickoff_at IS NOT NULL) AND (m2.kickoff_at <= (now() + '01:00:00'::interval)))))))))));
+  WHERE ((m.id = predictions.match_id) AND ((m.home_score IS NOT NULL) OR public.match_locked(m.kickoff_at, m.kickoff_tbd)))))));
 
 
 --
@@ -3734,13 +4251,9 @@ CREATE POLICY predictions_select_visible ON public.predictions FOR SELECT TO aut
 
 CREATE POLICY predictions_update_own_unlocked ON public.predictions FOR UPDATE TO authenticated USING (((user_id = auth.uid()) AND (EXISTS ( SELECT 1
    FROM public.matches m
-  WHERE ((m.id = predictions.match_id) AND (m.home_score IS NULL) AND (NOT (EXISTS ( SELECT 1
-           FROM public.matches m2
-          WHERE ((m2.round_key = m.round_key) AND (NOT (m2.season_id IS DISTINCT FROM m.season_id)) AND (m2.kickoff_at IS NOT NULL) AND (m2.kickoff_at <= (now() + '01:00:00'::interval))))))))))) WITH CHECK (((user_id = auth.uid()) AND (EXISTS ( SELECT 1
+  WHERE ((m.id = predictions.match_id) AND (m.home_score IS NULL) AND (NOT public.match_locked(m.kickoff_at, m.kickoff_tbd))))))) WITH CHECK (((user_id = auth.uid()) AND (EXISTS ( SELECT 1
    FROM public.matches m
-  WHERE ((m.id = predictions.match_id) AND (m.home_score IS NULL) AND (NOT (EXISTS ( SELECT 1
-           FROM public.matches m2
-          WHERE ((m2.round_key = m.round_key) AND (NOT (m2.season_id IS DISTINCT FROM m.season_id)) AND (m2.kickoff_at IS NOT NULL) AND (m2.kickoff_at <= (now() + '01:00:00'::interval)))))))))));
+  WHERE ((m.id = predictions.match_id) AND (m.home_score IS NULL) AND (NOT public.match_locked(m.kickoff_at, m.kickoff_tbd)))))));
 
 
 --
@@ -3879,13 +4392,6 @@ CREATE POLICY stories_update_own ON public.stories FOR UPDATE TO authenticated U
 ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: matches update matches; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "update matches" ON public.matches FOR UPDATE USING ((auth.role() = 'authenticated'::text));
-
-
---
 -- Name: competition_participants update own participation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3970,12 +4476,39 @@ GRANT ALL ON FUNCTION public.admin_analytics_stories(p_days integer) TO service_
 
 
 --
+-- Name: FUNCTION admin_feedback(only_open boolean, max_rows integer); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.admin_feedback(only_open boolean, max_rows integer) TO anon;
+GRANT ALL ON FUNCTION public.admin_feedback(only_open boolean, max_rows integer) TO authenticated;
+GRANT ALL ON FUNCTION public.admin_feedback(only_open boolean, max_rows integer) TO service_role;
+
+
+--
+-- Name: FUNCTION admin_feedback_set_handled(feedback_id uuid, handled boolean); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.admin_feedback_set_handled(feedback_id uuid, handled boolean) TO anon;
+GRANT ALL ON FUNCTION public.admin_feedback_set_handled(feedback_id uuid, handled boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.admin_feedback_set_handled(feedback_id uuid, handled boolean) TO service_role;
+
+
+--
 -- Name: FUNCTION admin_job_health(); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.admin_job_health() TO anon;
 GRANT ALL ON FUNCTION public.admin_job_health() TO authenticated;
 GRANT ALL ON FUNCTION public.admin_job_health() TO service_role;
+
+
+--
+-- Name: FUNCTION admin_recompute_ratings(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.admin_recompute_ratings() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.admin_recompute_ratings() TO authenticated;
+GRANT ALL ON FUNCTION public.admin_recompute_ratings() TO service_role;
 
 
 --
@@ -3994,6 +4527,24 @@ GRANT ALL ON FUNCTION public.admin_user_stats() TO service_role;
 GRANT ALL ON FUNCTION public.analytics_require_admin() TO anon;
 GRANT ALL ON FUNCTION public.analytics_require_admin() TO authenticated;
 GRANT ALL ON FUNCTION public.analytics_require_admin() TO service_role;
+
+
+--
+-- Name: FUNCTION anonymize_my_account(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.anonymize_my_account() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.anonymize_my_account() TO authenticated;
+GRANT ALL ON FUNCTION public.anonymize_my_account() TO service_role;
+
+
+--
+-- Name: FUNCTION award_competition_periods(p_comp_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.award_competition_periods(p_comp_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.award_competition_periods(p_comp_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.award_competition_periods(p_comp_id uuid) TO service_role;
 
 
 --
@@ -4042,6 +4593,24 @@ GRANT ALL ON FUNCTION public.is_group_member(gid uuid) TO service_role;
 
 
 --
+-- Name: FUNCTION match_lock_at(kickoff_at timestamp with time zone, kickoff_tbd boolean); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.match_lock_at(kickoff_at timestamp with time zone, kickoff_tbd boolean) TO anon;
+GRANT ALL ON FUNCTION public.match_lock_at(kickoff_at timestamp with time zone, kickoff_tbd boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.match_lock_at(kickoff_at timestamp with time zone, kickoff_tbd boolean) TO service_role;
+
+
+--
+-- Name: FUNCTION match_locked(kickoff_at timestamp with time zone, kickoff_tbd boolean); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.match_locked(kickoff_at timestamp with time zone, kickoff_tbd boolean) TO anon;
+GRANT ALL ON FUNCTION public.match_locked(kickoff_at timestamp with time zone, kickoff_tbd boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.match_locked(kickoff_at timestamp with time zone, kickoff_tbd boolean) TO service_role;
+
+
+--
 -- Name: FUNCTION move_competition_to_group(p_comp_id uuid, p_group_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -4072,8 +4641,7 @@ GRANT ALL ON FUNCTION public.prune_job_runs(keep_days integer) TO service_role;
 -- Name: FUNCTION recompute_ratings(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.recompute_ratings() TO anon;
-GRANT ALL ON FUNCTION public.recompute_ratings() TO authenticated;
+REVOKE ALL ON FUNCTION public.recompute_ratings() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.recompute_ratings() TO service_role;
 
 
@@ -4117,16 +4685,16 @@ GRANT ALL ON FUNCTION public.username_available(name text) TO service_role;
 -- Name: TABLE matches; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.matches TO anon;
-GRANT ALL ON TABLE public.matches TO authenticated;
+GRANT SELECT,REFERENCES,TRIGGER,MAINTAIN ON TABLE public.matches TO anon;
+GRANT SELECT,INSERT,REFERENCES,TRIGGER,MAINTAIN,UPDATE ON TABLE public.matches TO authenticated;
 GRANT ALL ON TABLE public.matches TO service_role;
 
 
 --
--- Name: TABLE analytics_round_locks; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE analytics_match_locks; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.analytics_round_locks TO service_role;
+GRANT ALL ON TABLE public.analytics_match_locks TO service_role;
 
 
 --
@@ -4178,6 +4746,30 @@ GRANT ALL ON TABLE public.analytics_completion_facts TO service_role;
 
 GRANT ALL ON TABLE public.analytics_events TO authenticated;
 GRANT ALL ON TABLE public.analytics_events TO service_role;
+
+
+--
+-- Name: TABLE analytics_round_locks; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.analytics_round_locks TO service_role;
+
+
+--
+-- Name: TABLE competition_awards; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.competition_awards TO anon;
+GRANT ALL ON TABLE public.competition_awards TO authenticated;
+GRANT ALL ON TABLE public.competition_awards TO service_role;
+
+
+--
+-- Name: TABLE feedback; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.feedback TO authenticated;
+GRANT ALL ON TABLE public.feedback TO service_role;
 
 
 --
@@ -4406,5 +4998,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ChWEDhHTxkyxlbBM1m0fu48inMBs2Obaw5GyjHVOIyfcUElWNxRNUREAFLbZDR7
+\unrestrict JbGv5OzmCjQIfI781LRtKqO3h1O3Pkrfwb6QJPjUJyWxqxV2QisI8BA8WEgR6pJ
 

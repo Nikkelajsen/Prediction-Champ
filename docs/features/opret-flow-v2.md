@@ -114,7 +114,7 @@ første, man ser. Med 0 ligaer vises de to fulde kort som før: dér ER de opgav
   opretter konkurrencen af sig selv. Ugens kupon-kortet leverer indholdet
   manuelt; det, der mangler, er kun gentagelsen. RPC'ens guard tillader
   allerede `service_role`, så et fremtidigt job kan kalde den uden migrering.
-- **Story-kort og push for lokale kåringer** — backloggens `B10`/`B11`.
+- ~~**Story-kort og push for lokale kåringer** — backloggens `B10`/`B11`.~~ **Leveret 3. august 2026:** Story Engine v1.2 giver kåringen to kort (`AWARD_WEEK` 65, `AWARD_MONTH` 15), og notifikations-jobbet sender beskeden — og skriver samtidig kåringerne som `service_role` ved hver kørsel, hvilket gør `award_competition_periods()` uafhængig af, om nogen åbner boardet. Guarden i `sql/competition_awards.sql` var skrevet med netop dette for øje. Se [`story-engine-v1.md`](./story-engine-v1.md) §12.
   `stats`-feltet og `service_role`-adgangen er forberedelsen.
 - **Match-picker-forbedringer** (søgning, vælg-hel-runde, holdfilter) — pickeren
   er flyttet uændret ind under Custom-kortet.

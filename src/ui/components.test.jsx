@@ -58,7 +58,7 @@ describe("UserRoundPredictions: pointvisning", () => {
   ]);
   const html = () => renderToStaticMarkup(
     <UserRoundPredictions playerName="Nikolaj" userId="u1" lockedRounds={[round]}
-      predsByKey={predsByKey} rules={{ exact: 3, outcome: 1 }} onClose={() => {}} />
+      predsByKey={predsByKey} onClose={() => {}} />
   );
 
   it("viser 0 point som \"0\", ikke \"+0\"", () => {

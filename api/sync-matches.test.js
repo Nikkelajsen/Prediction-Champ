@@ -11,7 +11,7 @@
 // eneste kamp), og en for smal gør Champions League rød i seks uger for noget
 // forventeligt. Begge fejl ender samme sted — at ingen kigger på driftsloggen.
 import { describe, it, expect } from "vitest";
-import { seasonFetchVerdict, ambiguousTeamNames, normalizeTeamName } from "./sync-matches.js";
+import { seasonFetchVerdict, ambiguousTeamNames, normalizeTeamName, matchUpsertRow } from "./sync-matches.js";
 
 const fejl = new Error("football-data.org: 404 {\"message\":\"The resource you are looking for does not exist.\"}");
 
@@ -103,14 +103,85 @@ describe("normalizeTeamName", () => {
     expect(normalizeTeamName(null)).toBe("");
   });
 
-  // Fastholdt, fordi det er en GRÆNSE og ikke en detalje: NFD splitter kun
-  // accenter fra deres grundbogstav, mens ø, æ og å er selvstændige tegn, der
-  // derfor forsvinder helt. "FC København" og "FC Kobenhavn" normaliserer altså
-  // IKKE ens, og hverken findByName() eller ambiguousTeamNames() kan parre dem.
-  // Ufarligt i dag — ingen af de syv turneringer har to skrivemåder af samme
-  // klub — men reglen skal ikke kunne ændre sig ubemærket.
-  it("folder ikke ø, æ og å ned til deres nærmeste latinske bogstav", () => {
-    expect(normalizeTeamName("FC København")).toBe("fckbenhavn");
+  // G52 (august 2026): før foldede NFD kun accenter, mens ø, æ og å overlevede
+  // og derefter blev SLETTET af tegn-filteret — "FC København" blev
+  // `fckbenhavn`, "FC Kobenhavn" blev `fckobenhavn`, og de to skrivemåder var
+  // dermed to forskellige hold. Alle tre former skal nu ramme samme nøgle.
+  it("folder ø, æ og å ned til grundbogstavet — også når de er skrevet ud", () => {
+    expect(normalizeTeamName("FC København")).toBe("fckobenhavn");
     expect(normalizeTeamName("FC Kobenhavn")).toBe("fckobenhavn");
+    expect(normalizeTeamName("FC Koebenhavn")).toBe("fckobenhavn");
+    expect(normalizeTeamName("Brøndby")).toBe(normalizeTeamName("Brondby"));
+    expect(normalizeTeamName("Århus")).toBe(normalizeTeamName("Aarhus"));
+  });
+
+  // Retningen følger af NFD, som har foldet "ä" til "a" hele tiden — så den
+  // udskrevne form skal folde det samme sted hen.
+  it("behandler den udskrevne ä som NFD behandler selve ä'et", () => {
+    expect(normalizeTeamName("Häcken")).toBe("hacken");
+    expect(normalizeTeamName("Haecken")).toBe("hacken");
+    expect(normalizeTeamName("Hacken")).toBe("hacken");
+  });
+
+  // Den bevidste GRÆNSE: "ue" foldes ikke, fordi det er to almindelige bogstaver
+  // i de sprog, klubnavnene står på — "Queen's Park" ville ellers blive til en
+  // nøgle, der ikke ligner sit hold. Prisen er, at den udskrevne tyske umlaut
+  // står tilbage som to hold, og det skal stå skrevet frem for at blive
+  // genopdaget som en dublet.
+  it("folder IKKE 'ue' — og det koster den udskrevne tyske umlaut", () => {
+    expect(normalizeTeamName("Queen's Park Rangers")).toBe("queensparkrangers");
+    expect(normalizeTeamName("Bayern München")).toBe("bayernmunchen");
+    expect(normalizeTeamName("Bayern Muenchen")).not.toBe(normalizeTeamName("Bayern München"));
+  });
+
+  // Foldningen må ikke koste den kontrol, den er nabo til: delstrengs-fælden
+  // ("Rangers" inde i "Queen's Park Rangers") skal stadig kunne ses.
+  it("ændrer ikke, hvad delstrengs-kontrollen kan se", () => {
+    const nøgler = ["Queen's Park Rangers", "Rangers"].map(normalizeTeamName);
+    expect(nøgler[0]).toContain(nøgler[1]);
+  });
+});
+
+// G56 (august 2026): der fandtes ingen test på, hvad syncen faktisk SKRIVER.
+// De tre andre describe-blokke dækker regler, der afgør, om noget skrives —
+// ikke hvad rækken indeholder, når den gør. Det er dét, `matchUpsertRow` er
+// trukket ud for: feltet `kickoff_tbd` beregnes i providerne og forbruges tre
+// helt andre steder (klientens `lockAtOf`, RLS-policyerne og efterfyldningens
+// regel 3), og hele den kæde hviler på, at værdien kommer med i skrivningen.
+describe("matchUpsertRow", () => {
+  const IDS = { seasonId: "S1", homeTeamId: "H", awayTeamId: "A" };
+  const fx = (over = {}) => ({
+    globalId: "fd:1", kickoffAt: "2026-08-18T00:00:00Z", kickoffTbd: false,
+    stageName: "REGULAR_SEASON", status: "scheduled", score: { home: null, away: null }, ...over,
+  });
+
+  it("bærer kickoff_tbd med over i rækken", () => {
+    expect(matchUpsertRow(fx({ kickoffTbd: true }), IDS).kickoff_tbd).toBe(true);
+    expect(matchUpsertRow(fx(), IDS).kickoff_tbd).toBe(false);
+  });
+
+  // Providerne må gerne udelade feltet (en tredje leverandør, en ældre
+  // normalize) — kolonnen er `not null`, så rækken skal bære en boolean og
+  // ikke en undefined, der ville blive til databasens default ad omveje.
+  it("gør et manglende flag til false frem for undefined", () => {
+    const row = matchUpsertRow(fx({ kickoffTbd: undefined }), IDS);
+    expect(row.kickoff_tbd).toBe(false);
+    expect("kickoff_tbd" in row).toBe(true);
+  });
+
+  it("skriver kun score for en færdigspillet kamp", () => {
+    const live = matchUpsertRow(fx({ status: "live", score: { home: 1, away: 0 } }), IDS);
+    expect(live).toMatchObject({ home_score: null, away_score: null, status: "scheduled" });
+    const done = matchUpsertRow(fx({ status: "finished", score: { home: 2, away: 1 } }), IDS);
+    expect(done).toMatchObject({ home_score: 2, away_score: 1, status: "finished" });
+  });
+
+  it("tager id'erne fra kalderen og resten fra den normaliserede kamp", () => {
+    expect(matchUpsertRow(fx(), IDS)).toEqual({
+      season_id: "S1", home_team_id: "H", away_team_id: "A",
+      kickoff_at: "2026-08-18T00:00:00Z", kickoff_tbd: false,
+      home_score: null, away_score: null, status: "scheduled",
+      stage_name: "REGULAR_SEASON", api_fixture_id: "fd:1",
+    });
   });
 });

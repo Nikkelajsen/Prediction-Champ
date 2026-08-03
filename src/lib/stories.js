@@ -9,12 +9,19 @@
 // v1.1 (juli 2026): tre nye regler (PODIUM_ENTER, CLOSING_IN, PERSONAL_BEST),
 // sænkede tærskler med svag prioritet (SOFT_PRIORITY) og et dæmpet tier
 // (SEASON_OPENER, QUIET_ROUND), der kun genereres, når intet andet udløses.
+//
+// v1.2 (august 2026): to regler for de LOKALE kåringer (AWARD_WEEK,
+// AWARD_MONTH). De læser `competition_awards` i SQL'en frem for at regne noget
+// om, så et kort aldrig kan modsige den kåring, boardet viser.
 
 // Prioritetsstige (lavere tal = vigtigere). Én kilde til sandhed for regel-metadata.
 // Værdien her er reglens STÆRKE prioritet; tre regler har også en svag variant,
 // se SOFT_PRIORITY og priorityFor() nedenfor.
 export const RULES = {
   MONTH_CHAMP: 10,
+  // Lokal månedstitel: større end alt, hvad én runde kan producere, mindre end
+  // den globale månedstitel.
+  AWARD_MONTH: 15,
   LEAD_TAKEN: 20,
   LEAD_LOST: 21,
   PODIUM_ENTER: 22,
@@ -24,6 +31,10 @@ export const RULES = {
   COMEBACK: 50,
   PERSONAL_BEST: 55,
   STREAK: 60,
+  // Lokal ugetitel. Ligger LIGE over rundens vinder, fordi det er det samme
+  // øjeblik set fra konkurrencens eget navnesystem — og når den findes, springer
+  // ROUND_WON over (se sql/story_engine.sql regel 70).
+  AWARD_WEEK: 65,
   ROUND_WON: 70,
   SHARP: 80,
   // Dæmpet tier (≥ QUIET_TIER_MIN): genereres KUN for brugere, der ellers ville
@@ -93,6 +104,22 @@ export function renderStory(rule, payload = {}) {
         headline: `👑 Du er ${p.shared ? "delt " : ""}Månedens Prediction Champ — ${p.month}`,
         body: `${p.points} point — flest af alle i ${p.month}${p.shared ? " (delt)" : ""}.` +
           (p.gap != null && p.gap > 0 ? ` Nr. 2 var ${p.gap} point efter.` : ""),
+      };
+    case "AWARD_WEEK":
+      return {
+        headline: `🏅 Du er ${p.shared ? "delt " : ""}Ugens bedste i ${p.league}`,
+        body: `${p.points} point — flest af alle i ${p.league} i runden ${L}` +
+          (!p.shared ? "."
+            : p.others > 1 ? ` (delt med ${p.others} andre).`
+            : " (delt med 1 anden)."),
+      };
+    case "AWARD_MONTH":
+      return {
+        headline: `👑 Du er ${p.shared ? "delt " : ""}Månedens bedste i ${p.league} — ${p.month}`,
+        body: `${p.points} point — flest af alle i ${p.league} i ${p.month}` +
+          (!p.shared ? "."
+            : p.others > 1 ? ` (delt med ${p.others} andre).`
+            : " (delt med 1 anden)."),
       };
     case "LEAD_TAKEN":
       return {

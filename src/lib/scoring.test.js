@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, pointsFor, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
-
-const RULES = { exact: 3, outcome: 1 };
+import { outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 describe("outcome", () => {
   it("giver 1 ved hjemmesejr, X ved uafgjort, 2 ved udesejr", () => {
@@ -15,37 +13,39 @@ describe("pointsFor", () => {
   const match = { home_score: 2, away_score: 1 };
 
   it("giver +3 for præcist resultat", () => {
-    expect(pointsFor({ pred_home: 2, pred_away: 1 }, match, RULES)).toBe(3);
+    expect(pointsFor({ pred_home: 2, pred_away: 1 }, match)).toBe(3);
   });
 
   it("giver +1 for korrekt udfald med forkert resultat", () => {
-    expect(pointsFor({ pred_home: 3, pred_away: 0 }, match, RULES)).toBe(1);
+    expect(pointsFor({ pred_home: 3, pred_away: 0 }, match)).toBe(1);
   });
 
   it("giver 0 for forkert udfald — aldrig minuspoint", () => {
-    expect(pointsFor({ pred_home: 0, pred_away: 0 }, match, RULES)).toBe(0);
-    expect(pointsFor({ pred_home: 0, pred_away: 2 }, match, RULES)).toBe(0);
+    expect(pointsFor({ pred_home: 0, pred_away: 0 }, match)).toBe(0);
+    expect(pointsFor({ pred_home: 0, pred_away: 2 }, match)).toBe(0);
   });
 
   it("giver null uden forudsigelse eller uden resultat", () => {
-    expect(pointsFor(null, match, RULES)).toBeNull();
-    expect(pointsFor({ pred_home: null, pred_away: 1 }, match, RULES)).toBeNull();
-    expect(pointsFor({ pred_home: 2, pred_away: 1 }, { home_score: null, away_score: null }, RULES)).toBeNull();
+    expect(pointsFor(null, match)).toBeNull();
+    expect(pointsFor({ pred_home: null, pred_away: 1 }, match)).toBeNull();
+    expect(pointsFor({ pred_home: 2, pred_away: 1 }, { home_score: null, away_score: null })).toBeNull();
   });
 
-  it("respekterer konkurrencens egne pointregler", () => {
-    const rules = { exact: 5, outcome: 2 };
-    expect(pointsFor({ pred_home: 2, pred_away: 1 }, match, rules)).toBe(5);
-    expect(pointsFor({ pred_home: 1, pred_away: 0 }, match, rules)).toBe(2);
-  });
-
-  it("falder tilbage til +3/+1 for ældre konkurrencer uden rules-felt", () => {
-    expect(pointsFor({ pred_home: 2, pred_away: 1 }, match, undefined)).toBe(3);
-    expect(pointsFor({ pred_home: 1, pred_away: 0 }, match, undefined)).toBe(1);
+  // De to tests, der stod her, hed "respekterer konkurrencens egne pointregler"
+  // og "falder tilbage til +3/+1 for ældre konkurrencer uden rules-felt". Begge
+  // beskrev en konfigurerbarhed, der aldrig har eksisteret uden for denne
+  // funktion — databasen har hardkodet 3/1 hele vejen (F2) — og de holdt derfor
+  // et argument i live, som ingen kaldte med andet end 3/1 (G3, august 2026).
+  // Tilbage står dét, de reelt beskyttede: at tallene er dem, de skal være, og
+  // at de kan læses ét sted af den, der farvelægger efter dem.
+  it("bruger de faste point 3/1 — der er ikke noget at konfigurere", () => {
+    expect(POINTS).toEqual({ exact: 3, outcome: 1 });
+    expect(pointsFor({ pred_home: 2, pred_away: 1 }, match)).toBe(POINTS.exact);
+    expect(pointsFor({ pred_home: 1, pred_away: 0 }, match)).toBe(POINTS.outcome);
   });
 
   it("håndterer 0-0 korrekt (0 er ikke 'manglende gæt')", () => {
-    expect(pointsFor({ pred_home: 0, pred_away: 0 }, { home_score: 0, away_score: 0 }, RULES)).toBe(3);
+    expect(pointsFor({ pred_home: 0, pred_away: 0 }, { home_score: 0, away_score: 0 })).toBe(3);
   });
 });
 
@@ -115,6 +115,33 @@ describe("filterFromNextUnfinishedRound", () => {
   });
 });
 
+// G32: alt, brugeren ser af tid, står i DANSK tid — også når enheden ikke gør.
+// CI kører UTC, så en manglende `timeZone` ville give 18.00 i stedet for 20.00
+// og dermed fejle her; det er præcis den fejl, en dansk udvikler på en dansk
+// maskine aldrig ville se.
+describe("visningen står i dansk tid, ikke enhedens", () => {
+  it("formatKickoff viser dansk klokkeslæt", () => {
+    expect(formatKickoff("2026-08-10T18:00:00Z")).toBe("man. 10.08 kl. 20.00");
+    expect(formatKickoff("2026-12-05T18:00:00Z")).toBe("lør. 05.12 kl. 19.00"); // vintertid
+  });
+
+  it("formatKickoff udelader klokkeslættet for en kamp uden fastlagt tid", () => {
+    expect(formatKickoff("2026-08-10T22:30:00Z", true)).toBe("tirs. 11.08");
+  });
+
+  // Rundens etiket forankres på middag UTC og ikke middag lokalt: en enhed
+  // langt vest for Danmark ville ellers få en dato, der er dansk næste dag.
+  it("roundLabel giver samme interval uanset enhedens zone", () => {
+    expect(roundLabel("2026-08-04")).toBe("04.08 – 10.08");
+  });
+
+  it("zonedDateKey giver den danske kalenderdato", () => {
+    expect(zonedDateKey("2026-08-10T22:30:00Z")).toBe("2026-08-11"); // 00.30 dansk
+    expect(zonedDateKey("2026-08-10T21:30:00Z")).toBe("2026-08-10"); // 23.30 dansk
+    expect(zonedDateKey(null)).toBe("");
+  });
+});
+
 describe("per-kamp-låsning (isLocked / lockAtOf)", () => {
   afterEach(() => vi.useRealTimers());
 
@@ -154,17 +181,29 @@ describe("per-kamp-låsning (isLocked / lockAtOf)", () => {
   // Tid ikke fastlagt: kickoff_at bærer kun en dato, og "1 time før kickoff" er
   // derfor ikke et rigtigt tidspunkt. Låsen bliver midnat på spilledagen.
   //
-  // Testene er skrevet som EGENSKABER frem for et fast tidsstempel, fordi låsen
-  // følger enhedens tidszone: CI kører UTC og en dansk telefon UTC+2, og et
-  // hårdkodet ms-tal ville måle maskinen i stedet for reglen.
-  it("en kamp uden fastlagt tid låser ved midnat på spilledagen, ikke kickoff minus én time", () => {
-    const kickoff = "2026-09-13T00:00:00Z"; // pladsholderen fra datakilden
-    const lockAt = lockAtOf({ kickoff_at: kickoff, kickoff_tbd: true });
+  // Testene stod indtil G32 som EGENSKABER ("time 0, minut 0") og ikke som et
+  // tidsstempel, netop fordi låsen fulgte ENHEDENS tidszone og et fast ms-tal
+  // ville have målt maskinen. Det er ikke længere sandt: låsen er dansk midnat
+  // — samme regel som `public.match_lock_at()`, der håndhæver den i RLS — og
+  // dermed ét bestemt øjeblik, uanset hvor telefonen står. At testen nu KAN
+  // skrives som et tidsstempel, er hele forskellen.
+  it("en kamp uden fastlagt tid låser ved DANSK midnat på spilledagen (sommertid)", () => {
+    const lockAt = lockAtOf({ kickoff_at: "2026-09-13T00:00:00Z", kickoff_tbd: true });
+    expect(lockAt).toBe(Date.parse("2026-09-12T22:00:00Z")); // midnat 13. sep. dansk = 22:00 UTC den 12.
+  });
 
-    const d = new Date(lockAt);
-    expect([d.getHours(), d.getMinutes(), d.getSeconds()]).toEqual([0, 0, 0]);
-    expect(d.getDate()).toBe(new Date(kickoff).getDate()); // samme dag som kampen
-    expect(lockAt).not.toBe(new Date(kickoff).getTime() - 60 * 60 * 1000);
+  // Vintertid: dansk midnat er 23:00 UTC dagen før. Offsettet aflæses og er
+  // ikke hårdkodet, ellers ville låsen flytte sig en time to gange om året.
+  it("følger sommertid/vintertid frem for et fast offset", () => {
+    expect(lockAtOf({ kickoff_at: "2026-12-05T12:00:00Z", kickoff_tbd: true }))
+      .toBe(Date.parse("2026-12-04T23:00:00Z"));
+  });
+
+  // Timerne lige efter midnat dansk tid er dem, hvor UTC-datoen og den danske
+  // dato er forskellige — og hvor en naiv udregning rammer dagen før.
+  it("bruger den danske dag og ikke UTC-dagen", () => {
+    expect(lockAtOf({ kickoff_at: "2026-09-12T23:30:00Z", kickoff_tbd: true }))
+      .toBe(Date.parse("2026-09-12T22:00:00Z")); // dansk 13. sep. kl. 01.30 → midnat samme danske dag
   });
 
   it("kickoff_tbd ændrer intet for en kamp med rigtigt klokkeslæt", () => {
@@ -337,7 +376,7 @@ describe("liveInfo", () => {
   });
 
   it("live-stilling giver ingen point (kun home_score tæller)", () => {
-    expect(pointsFor({ pred_home: 2, pred_away: 1 }, live, RULES)).toBeNull();
+    expect(pointsFor({ pred_home: 2, pred_away: 1 }, live)).toBeNull();
     expect(isPlayed(live)).toBe(false);
     expect(isPlayed({ home_score: 0, away_score: 0 })).toBe(true);
   });

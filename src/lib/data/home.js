@@ -3,7 +3,7 @@
 // kun de to bruger.
 
 import { db } from "../supabase.js";
-import { byKickoffThenTeams, currentRoundIndex, groupIntoRounds, isLocked, lockAtOf, liveInfo, pointsFor, roundLabel } from "../scoring.js";
+import { APP_TZ, byKickoffThenTeams, currentRoundIndex, groupIntoRounds, isLocked, lockAtOf, liveInfo, pointsFor, roundLabel } from "../scoring.js";
 
 // ---------- Hjem: næste deadline + manglende tips på tværs af brugerens konkurrencer ----------
 async function computeHomeTips(token, userId, competitions) {
@@ -101,13 +101,12 @@ async function computeCurrentRound(token, userId, competitions) {
   const roundMatchIds = round.matches.map((m) => m.id);
   const preds = await db.select(token, "predictions", `match_id=in.(${roundMatchIds.join(",")})&user_id=eq.${userId}&select=match_id,pred_home,pred_away`);
   const predByMatch = new Map(preds.map((p) => [p.match_id, p]));
-  const rules = { exact: 3, outcome: 1 };
 
   let myPoints = 0, playedCount = 0;
   const matches = round.matches.map((m) => {
     const played = m.home_score != null && m.away_score != null;
     const pred = predByMatch.get(m.id) || null;
-    const points = played ? pointsFor(pred, m, rules) : null;
+    const points = played ? pointsFor(pred, m) : null;
     if (played) { playedCount++; if (points != null) myPoints += points; }
     // Live-stilling (live_*-kolonnerne, skrevet af api/sync-live.js hvert minut).
     // Den tæller ikke point — kun det endelige resultat gør. inProgress er fallback:
@@ -132,8 +131,11 @@ async function computeCurrentRound(token, userId, competitions) {
 }
 
 // ---------- dato/tid-formattering til Hjem ----------
+// Dagens dato i Hjems hoved — i DANSK tid (G32). En bruger, der åbner appen
+// klokken 23 lokalt et andet sted i verden, skal se den dag, rundens deadlines
+// hører til, og ikke sin egen.
 function daFullDate(d = new Date()) {
-  const s = d.toLocaleDateString("da-DK", { weekday: "long", day: "numeric", month: "long" });
+  const s = d.toLocaleDateString("da-DK", { timeZone: APP_TZ, weekday: "long", day: "numeric", month: "long" });
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 function fmtCountdown(ts) {
@@ -145,10 +147,14 @@ function fmtCountdown(ts) {
   return `${m} min`;
 }
 
+// Månedsnøgle ("2026-08") → "August 2026". Forankres på middag UTC den 1. og
+// ikke på midnat lokalt: en enhed øst for Danmark ville ellers få et tidspunkt,
+// der er dansk den SIDSTE i forrige måned — og så ville månedsligaen stå med
+// den forkerte måned i overskriften (G32).
 function monthName(monthKey) {
   const [y, m] = monthKey.split("-");
-  const d = new Date(Number(y), Number(m) - 1, 1);
-  const s = d.toLocaleDateString("da-DK", { month: "long", year: "numeric" });
+  const d = new Date(Date.UTC(Number(y), Number(m) - 1, 1, 12));
+  const s = d.toLocaleDateString("da-DK", { timeZone: APP_TZ, month: "long", year: "numeric" });
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
