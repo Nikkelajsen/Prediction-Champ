@@ -16,7 +16,7 @@
 // i gang med at læse, og point + tiebreak skal kunne stå ved siden af hinanden.
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { C, font } from "../ui/theme.js";
+import { C, btnGhost, font } from "../ui/theme.js";
 import { BackBar, Card, Eyebrow } from "../ui/components.jsx";
 import InstallGuide from "./InstallGuide.jsx";
 import FeedbackCard from "./FeedbackCard.jsx";
@@ -64,7 +64,7 @@ const Sub = ({ title, first = false, children }) => (
   </div>
 );
 
-function HowItWorksScreen({ onBack, token }) {
+function HowItWorksScreen({ onBack, token, openLegal }) {
   // Nøglet på emne-id frem for ét åbent id, fordi flere må være åbne samtidig.
   // Ingen persistering mellem besøg: skærmen skal møde alle ens.
   const [open, setOpen] = useState({});
@@ -142,6 +142,32 @@ function HowItWorksScreen({ onBack, token }) {
       <Topic {...topic("install", "Installér som app")}>
         <InstallGuide />
       </Topic>
+
+      {/* Privatliv og vilkår (B4). Et EMNE og ikke et permanent kort som
+          feedback nedenfor: forskellen er handling mod opslag. "Sig til" er
+          noget, man gør, og skal kunne findes uden at gætte et emne; det her
+          er noget, man slår op, og hører derfor hjemme i menuen på lige fod
+          med point og rating. Knappen "Luk min konto" bor inde på selve
+          teksten — samme sted som beskrivelsen af, hvad lukningen gør. */}
+      <Topic {...topic("jura", "Privatliv og vilkår")}>
+        <Sub title="Hvad vi gemmer, og hvad du kan forlange" first>
+          <div>
+            Privatlivspolitikken siger, hvilke oplysninger appen gemmer om dig,
+            hvem de deles med, og hvor længe de bliver. Brugervilkårene er
+            reglerne for at bruge appen. Vil du lukke din konto, står knappen
+            samme sted.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+            <button type="button" style={btnGhost} onClick={() => openLegal("privatliv")}>
+              Privatlivspolitik
+            </button>
+            <button type="button" style={btnGhost} onClick={() => openLegal("vilkaar")}>
+              Brugervilkår
+            </button>
+          </div>
+        </Sub>
+      </Topic>
+
 
       {/* Feedback-kortet (B14) står lige over versionsstemplet, og de to hører
           sammen: stemplet svarer på "hvilken version så du?", kortet er stedet,

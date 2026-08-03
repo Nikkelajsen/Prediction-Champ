@@ -10,6 +10,19 @@
          gør den øverste inset nødvendig. Rettes derfor kun sammen (G29). -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Prediction Champ</title>
+    <!-- Forvarmning af de to skrifter, første maling faktisk bruger: brødteksten
+         og wordmarket. @font-face-blokkene selv står i src/ui/theme.js, fordi
+         designtokens kun må findes ét sted — men de findes først, når React har
+         renderet, altså efter en 370 kB bundle. Uden disse to linjer ville
+         skriften stadig skifte sent, selv om filerne nu er vores egne.
+
+         `crossorigin` er PÅKRÆVET, også for vores eget domæne: fonte hentes i
+         CORS-tilstand, og uden attributten henter browseren filen to gange.
+
+         Filnavnene er de samme som i theme.js og er cachet `immutable` i
+         vercel.json — skiftes en fontfil ud, skal navnet skifte begge steder. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/barlow-400-latin.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/barlow-condensed-700-latin.woff2" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/png" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

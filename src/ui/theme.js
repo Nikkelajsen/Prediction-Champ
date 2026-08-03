@@ -16,7 +16,9 @@ const C = {
 };
 const font = {
   display: "'Barlow Condensed', sans-serif",
-  body: "'Barlow', 'Inter', sans-serif",
+  // Ingen 'Inter' i kæden: den blev aldrig hentet nogen steder, så den
+  // lovede en skrift, ingen bruger fik. Fallbacken er systemets egen.
+  body: "'Barlow', sans-serif",
 };
 
 // ---------- fælles knap-styles (nyt tema) ----------
@@ -54,8 +56,127 @@ const pagerBtn = (enabled) => ({
 const wrapOuter = { minHeight: "100vh", background: "#060B12", display: "flex", justifyContent: "center", fontFamily: font.body };
 const phone = { width: "100%", maxWidth: 430, background: C.bg, color: C.text, minHeight: "100vh", display: "flex", flexDirection: "column" };
 const thStyle = { color: C.muted, fontSize: 12, fontWeight: 600, fontFamily: font.display, textTransform: "uppercase", letterSpacing: "0.04em" };
+// SKRIFTERNE HENTES FRA VORES EGEN SERVER (B4, august 2026).
+//
+// Her stod før en `@import` mod Googles fontværter, og den sendte hver eneste
+// besøgendes IP-adresse dertil — også på login-skærmen, altså FØR nogen havde
+// oprettet en konto eller accepteret noget. En privatlivspolitik kan beskrive
+// en videregivelse; den kan ikke gøre den rimelig. Derfor er den fjernet frem
+// for dokumenteret.
+//
+// To ting fulgte med i købet. Fonten skiftede sent, fordi reglen først fandtes,
+// når React havde renderet — nu ligger filerne på vores eget domæne og
+// forvarmes af to `<link rel="preload">` i index.html. Og en bredde-måling mod
+// fallback-skriften har allerede kostet tid én gang (docs/DECISIONS.md, juli
+// 2026, tip-skærmens tabel): med filerne i repoet kan enhver container måle
+// mod den ægte skrift.
+//
+// KUN DE VÆGTE, DER BRUGES. Barlow 400/600/700 og Barlow Condensed 600/700 —
+// talt i src/. Vægt 500 blev hentet før uden at blive brugt nogen steder. Vægt
+// 800 bruges to steder, men blev heller ikke hentet før, så den syntetiseres
+// af browseren nu som før; det er en uændret adfærd, ikke en ny mangel.
+//
+// LATIN-EXT ER IKKE PYNT. Champions League har klubber med tegn uden for
+// latin-1 (fx Ş i Şahtar). `unicode-range` gør, at en dansk bruger kun henter
+// latin-filerne — latin-ext koster først noget, når et tegn kræver den.
+//
+// Filnavnene er STABILE og cachet `immutable` i vercel.json. Skiftes en fil
+// nogensinde ud, skal navnet skifte med, og de to preload-linjer i index.html
+// skal rettes i samme ombæring.
+//
+// Forklaringen står HER og ikke inde i skabelonstrengen nedenfor: en
+// CSS-kommentar sendes til hver eneste bruger i hver eneste bundle.
 const globalCss = `
-  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap');
+  /* Barlow 400 · latin */
+  @font-face {
+    font-family: 'Barlow';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/barlow-400-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  /* Barlow 400 · latin-ext */
+  @font-face {
+    font-family: 'Barlow';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/barlow-400-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  /* Barlow 600 · latin */
+  @font-face {
+    font-family: 'Barlow';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/fonts/barlow-600-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  /* Barlow 600 · latin-ext */
+  @font-face {
+    font-family: 'Barlow';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/fonts/barlow-600-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  /* Barlow 700 · latin */
+  @font-face {
+    font-family: 'Barlow';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/barlow-700-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  /* Barlow 700 · latin-ext */
+  @font-face {
+    font-family: 'Barlow';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/barlow-700-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  /* Barlow Condensed 600 · latin */
+  @font-face {
+    font-family: 'Barlow Condensed';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/fonts/barlow-condensed-600-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  /* Barlow Condensed 600 · latin-ext */
+  @font-face {
+    font-family: 'Barlow Condensed';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/fonts/barlow-condensed-600-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  /* Barlow Condensed 700 · latin */
+  @font-face {
+    font-family: 'Barlow Condensed';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/barlow-condensed-700-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  /* Barlow Condensed 700 · latin-ext */
+  @font-face {
+    font-family: 'Barlow Condensed';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/barlow-condensed-700-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
   * { box-sizing: border-box; }
   html, body, #root { min-height: 100%; }
   body { margin: 0; background: #060B12; }

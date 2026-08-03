@@ -74,6 +74,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 28 | `matches_kickoff_tbd.sql` | **"Tid ikke fastlagt"**: kolonnen `matches.kickoff_tbd` + låsen samlet i `public.match_lock_at()`/`match_locked()`, som alle fem policies og `analytics_match_locks` nu kalder | Aktiv — tilføjet august 2026. Idempotent. **Afløser låseudtrykket i #25**, som stod 1:1 fem steder. **Ingen adfærdsændring ved kørsel:** kolonnen får `default false`, så udtrykket er bogstaveligt det gamle, indtil `sync-matches` har sat flaget — derfor behøver den *ikke* køres mellem to runder. Skal køres FØR frontend-mergen; ellers viser klienten stadig pladsholder-tider. Forudsætter #25 |
 | 29 | `feedback.sql` | Feedback fra brugerne (`B14`): tabellen `feedback` + RPC'erne `admin_feedback()` og `admin_feedback_set_handled()` | Aktiv — tilføjet 2. august 2026. Idempotent. Ingen adfærdsændring for eksisterende data. **Skal køres FØR frontend-mergen** — omvendt får brugeren en fejl, når de trykker Send, og Admin → Feedback siger "Er sql/feedback.sql kørt?" |
 | 30 | `api_id_uniqueness.sql` | Unique-constraints på leverandør-id'erne (`G7`): `leagues (provider, api_league_id)`, `seasons (league_id, api_season_id)`, `teams (league_id, api_team_id)` | Aktiv — tilføjet 2. august 2026. Idempotent. **Fejler højlydt, hvis der allerede findes dubletter** — det er med vilje, og fejlteksten nævner rækkerne. Ingen kodeændring hører til; se filens eget hoved for, hvorfor `api/sync-matches.js` bevidst IKKE er lavet om til et upsert |
+| 31 | `account_anonymization.sql` | Luk din egen konto (`B4`): kolonnen `profiles.anonymized_at` + RPC'en `anonymize_my_account()` | Aktiv — tilføjet 3. august 2026. Idempotent. **Funktionen har NUL parametre med vilje** — der findes ikke et bruger-id at forfalske. Den rører ikke `auth.users`; selve kontolukningen gør `api/delete-account.js` bagefter med service-nøglen. **Skal køres FØR frontend-mergen**, ellers fejler knappen. Går et forløb i stykker mellem de to trin, er bagstopperen manuel: find brugeren i Supabase → Authentication og slet den blødt dér; RPC'en er allerede kørt og er idempotent |
 
 ### ⚠️ Fire filer må ikke gen-køres blindt
 
@@ -178,15 +179,27 @@ ville et hvilket som helst unique-indeks bestå; kun det rigtige omfang består
 den første halvdel. Kørslen støjer bevidst med to forventede fejl til sidst
 (vagten mod dubletter, der findes i forvejen).
 
+**`sql/tests/account_anonymization.sql`** (samme CI-job, egen database) kører
+migreringen `account_anonymization.sql` mod et minimalt skema og efterprøver den
+påstand, hele valget af anonymisering frem for sletning hviler på: at brugerens
+**tips, rating, ratinghistorik og kåringer står uændret**, at de stadig er
+deltager og ligamedlem, og at **den liga, de oprettede, findes med alle sine
+medlemmer**. En rigtig sletning ville have kaskaderet ligaen væk via
+`groups.created_by` og dermed opløst fællesskabet for alle andre. Dertil: at
+funktionen har nul parametre (den mekaniske udgave af "kan ikke ramme en anden
+bruger"), at brugssporet er væk, at feedback-rækken overlever uden afsender, at
+en anden bruger er urørt, og at andet kald er et no-op.
+
 Testene kan køres lokalt mod enhver tom database:
 
 ```bash
-createdb ratingtest && createdb awardstest && createdb sectest && createdb fbtest && createdb idtest
+createdb ratingtest && createdb awardstest && createdb sectest && createdb fbtest && createdb idtest && createdb anontest
 cd sql/tests && psql -d ratingtest -v ON_ERROR_STOP=1 -b -f rating_equivalence.sql
 psql -d awardstest -v ON_ERROR_STOP=1 -b -f competition_awards.sql
 psql -d sectest -v ON_ERROR_STOP=1 -b -f security_hardening.sql
 psql -d fbtest -v ON_ERROR_STOP=1 -b -f feedback.sql
 psql -d idtest -v ON_ERROR_STOP=1 -b -f api_id_uniqueness.sql
+psql -d anontest -v ON_ERROR_STOP=1 -b -f account_anonymization.sql
 ```
 
 Samme mønster gælder mildere for `predictions_round_lock_policies.sql`: den rører

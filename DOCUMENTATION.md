@@ -31,6 +31,7 @@ hele. `CLAUDE.md` har en rutetabel fra opgave til afsnit.
 - [21. Analytics v1 (`sql/analytics_events.sql`, `sql/analytics_dashboard.sql`)](#21-analytics-v1-sqlanalytics_eventssql-sqlanalytics_dashboardsql)
 - [22. Backup og gendannelse (`docs/RESTORE.md`)](#22-backup-og-gendannelse-docsrestoremd)
 - [23. Feedback fra brugerne (`sql/feedback.sql`)](#23-feedback-fra-brugerne-sqlfeedbacksql)
+- [24. Privatliv, vilkår og kontolukning (`src/lib/legal.js`, `sql/account_anonymization.sql`)](#24-privatliv-vilkår-og-kontolukning-srclibegaljs-sqlaccount_anonymizationsql)
 
 Se også: [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) · [`docs/CRON.md`](./docs/CRON.md) · [`docs/RESTORE.md`](./docs/RESTORE.md) · [`sql/README.md`](./sql/README.md)
 
@@ -64,7 +65,7 @@ Tabel	Formål
 `seasons`	Sæson pr. liga. `api_season_id` gemmes automatisk af sync-funktionen første gang, så fremtidige kørsler ikke behøver navne-opslag. Betydningen følger leverandøren: et sæson-id hos Sportmonks, STARTÅRET (`2026`) hos football-data.org.
 `teams`	Hold. `api_team_id` = holdets id hos ligaens datakilde, sat automatisk — præfikset `fd:` for football-data.org (se id-præfikset i afsnit 8). Tabellen er scopet til `league_id`, så samme klub i to turneringer er to rækker. **Unique `(league_id, api_team_id)`** siden `G7` (`sql/api_id_uniqueness.sql`) — omfanget er per turnering og ikke globalt, netop fordi Arsenal findes i både Premier League og Champions League med samme `fd:57`. Tilsvarende har `leagues` unique `(provider, api_league_id)` og `seasons` unique `(league_id, api_season_id)`; sidstnævnte kan ikke være global, fordi alle fem football-data-turneringer deler sæson-id'et `2026`.
 `matches`	Kampe. `round_key` (tirsdag–mandag, auto-beregnet), `home_score`/`away_score` (**endeligt** resultat — `not null` betyder "kampen er spillet"), `kickoff_tbd` (**klokkeslættet i `kickoff_at` er en pladsholder** — kun datoen er kendt; sættes af syncen, se afsnit 8), `stage_name` (leverandørens rå stage-navn, fx "Regular Season"/"Championship Round"/"Relegation Round" — se afsnit 8/10), `api_fixture_id` (unik). Desuden live-kolonnerne `live_home_score`, `live_away_score`, `live_state`, `live_minute`, `live_updated_at` (`sql/live_scores.sql`), der viser den *nuværende* stilling mens kampen spilles og aldrig giver point — se afsnit 8.
-`profiles`	Brugerprofiler. `display_name`, `is_admin`, `created_at` (tilmelding, backfillet fra `auth.users`), `last_seen_at` (senest aktiv, sat af `touch_activity()`). `display_name` er unikt (case-insensitivt) — se afsnit 6.
+`profiles`	Brugerprofiler. `display_name`, `is_admin`, `created_at` (tilmelding, backfillet fra `auth.users`), `last_seen_at` (senest aktiv, sat af `touch_activity()`). `display_name` er unikt (case-insensitivt) — se afsnit 6. **`anonymized_at`** sættes, når brugeren selv lukker sin konto (`B4`, afsnit 24) — rækken bliver stående med et pseudonym, fordi hele kaskaden hænger i den.
 `competitions`	`mode` ∈ `full_season / team / time_range / custom / random`. `league_id`/`season_id` er nullable — `custom` og `random` kan spænde over flere ligaer. `group_id` (nullable, `on delete set null`) = liga-tilhør (liga-laget, afsnit 18); `null` = liga-løs konkurrence. `rules` (jsonb) indeholder pointregler og skrives altid som `{ exact: 3, outcome: 1 }` — `openDaysBefore` (det rullende gætte-vindue) er fjernet august 2026 og læses ikke længere; nøglen kan stadig ligge i gamle rækker, hvor den er inert.
 `competition_participants`	Deltagere. `hidden` = brugerens egen arkivering (påvirker ikke andre deltagere). **`hidden` gælder kun LIGA-LØSE konkurrencer** — kun der findes Arkivér/Gendan (`LigaerTab`). For konkurrencer i en liga ignoreres flaget (`MainApp.loadCompetitions`: `_hidden = c.group_id ? false : hidden`), så et forældet flag fra før en flytning (`move_competition_to_group`) ikke skjuler en tilmeldt konkurrence på Hjem/Tip, mens liga-siden viser den som "Med". DELETE-policy (liga-laget, `sql/group_membership_invariant.sql`): man kan framelde sig en konkurrence, når **enten** alle konkurrencens kampe har resultat (forløbet er forbi og kan ikke skjules), **eller** man ingen tips har på allerede låste kampe. Den oprindelige regel var kun den sidste gren og var derfor i praksis permanent — se afsnit 18.
 `groups`	Liga-laget: den permanente liga-enhed (fællesskabet). `name` (2–40 tegn), `invite_code` (unikt, ét delbart link pr. liga), `created_by`. UI kalder den en "liga"; `leagues` (fodbold) hedder en "turnering". Se afsnit 18.
@@ -374,6 +375,7 @@ Deploy: Vercel auto-deployer ved hver commit til `main`. Hver branch får desude
 
   `x-vercel-id` bærer regionskoderne. `dub1` = override\'et tog effekt; kun `iad1` = det gjorde ikke.
 * Cache-headere på `sw.js` og `manifest.json` (`max-age=0, must-revalidate`). En cachet service worker kan ellers holde en gammel version i live, længe efter et deploy.
+* `Cache-Control: public, max-age=31536000, immutable` på `/fonts/(.*)` (august 2026, `B4`). Fontfilerne ligger i `public/` og får derfor **ikke** et indholdshash af Vite, som `dist/assets/` gør — versionen bæres i stedet af filnavnet selv (`barlow-400-latin.woff2`). `immutable` er derfor kun et sandt løfte, så længe reglen holdes: **skiftes en fontfil ud, skal filnavnet skifte med**, og både `@font-face`-blokkene i `src/ui/theme.js` og de to `<link rel="preload">` i `index.html` skal rettes i samme ombæring. Gør man det ikke, sidder brugerne på den gamle fil i et år.
 
 JSON tillader ikke kommentarer, så begrundelsen står her og ingen andre steder. Ændrer du filen, så ret dette afsnit i samme ombæring.
 
@@ -411,6 +413,10 @@ Fast tjekliste inden en branch merges til `main` (test på preview-URL, både mo
 - [ ] En ikke-admin kan hverken kalde `admin_analytics_*`-RPC'erne (skal give `forbidden`) eller læse `analytics_events` (skal give 0 rækker).
 - [ ] **Feedback (`B14`):** send en melding fra Sådan virker det → "Skriv til os". Kvitteringen skal blive STÅENDE på kortet, efter dialogen er lukket, og rækken skal stå i Admin → Feedback med rigtig version og skærm. Markér den som behandlet, slå "Kun ubehandlede" fra og til — den skal forsvinde og komme igen.
 - [ ] En ikke-admin kan hverken kalde `admin_feedback()`/`admin_feedback_set_handled()` (skal give `forbidden`) eller læse `feedback` (skal give en tilladelsesfejl, ikke 0 rækker — der findes ingen select-policy).
+- [ ] **Fonten (`B4`):** åbn preview-deployet med netværksfanen filtreret på `google` — listen skal være **tom**. Sammenlign derefter en tip-skærm med produktion: holdnavnene må ikke ombryde anderledes (bredde-målingen i afsnit 8 forudsætter den ægte skrift).
+- [ ] **Jura fra login (`B4`):** begynd en kontooprettelse, skriv brugernavn og e-mail, åbn begge dokumenter fra linjen nederst, og gå tilbage. Felterne skal stå med det, du skrev. Enter i formularen må ikke kunne udløses fra jura-siden.
+- [ ] **Kontolukning (`B4`):** luk en TESTKONTO fra Sådan virker det → Privatlivspolitik. Bagefter: kontoen kan ikke logge ind, navnet er et pseudonym i den konkurrence, den deltog i, stillingen har samme antal deltagere som før, og den liga, kontoen oprettede, findes stadig med sine øvrige medlemmer.
+- [ ] `[NAVN]` og `[KONTAKT-E-MAIL]` i `src/lib/legal.js` er udfyldt, **før teksten regnes som offentliggjort**. En test håndhæver, hvor de står — ikke at de er væk.
 ---
 ## 12. Kendte begrænsninger
 Dette afsnit beskriver **vilkår** — det, der er sådan, og som ingen har tænkt sig at lave om. Det, der skal gøres noget ved, står som `G#`-rækker i [`docs/BACKLOG.md`](docs/BACKLOG.md), så en opgave ikke bor to steder. *(Skellet er indført 31. juli 2026, fordi afsnittet ikke havde det: det beskrev en fil-opdeling som "næste naturlige oprydning" tre uger efter den var leveret, og henviste til Liga Health Score og beslutning A12, som begge var fjernet. En begrænsning ældes ikke — en to-do gør.)*
@@ -710,6 +716,33 @@ Skrivningen er **ikke** fire-and-forget, modsat `analytics.js`. Forskellen er, h
 
 Engangsopsætning: kør `sql/feedback.sql` i Supabase ("Run without RLS") **før** frontend-mergen — ellers får brugeren en fejl, når de trykker Send. Dækket af `sql/tests/feedback.sql` i CI.
 
+
+---
+## 24. Privatliv, vilkår og kontolukning (`src/lib/legal.js`, `sql/account_anonymization.sql`)
+
+Leveret 3. august 2026 (`B4`). Fuld spec: `docs/features/privatliv-og-vilkaar-v1.md`.
+
+**Teksten er data, ikke JSX.** `src/lib/legal.js` eksporterer `PRIVATLIV` og `VILKAAR` som `{ id, titel, afsnit: [{ titel, tekst }] }`, hvor et tekst-element enten er en streng eller `{ punkter: [...] }`. Tre grunde: `src/lib/` er uden React (husets regel), en datastruktur kan efterprøves uden at rendre noget, og de to dokumenter skal kunne vises **to steder med vidt forskellige forudsætninger** — inde i login-skærmen, hvor hverken session eller `MainApp` findes, og som en almindelig skærm. `LegalDocument` tager derfor hverken `token` eller callbacks, og `LegalDocument.test.jsx` fastholder netop det.
+
+⚠️ **Ufravigelig vedligeholdelsesregel:** *en ny tabel med persondata, en ny tredjepart eller en ny `localStorage`-nøgle skal have en linje i `src/lib/legal.js` i **samme ombæring**.* En politik, der er forældet, er værre end ingen — den er en påstand, der ikke passer. `legal.test.js` har et emnetjek, der fanger den hyppigste form for forfald (et helt emne, der forsvinder under en omskrivning), men det kan ikke se en tabel, ingen har skrevet om. Samme slags regel som `CRON.md`s.
+
+**To pladsholdere skal udfyldes før offentliggørelse:** `[NAVN]` og `[KONTAKT-E-MAIL]`. En test håndhæver, at de kun står i kontakt- og rettigheds-afsnittene, men den kan pr. konstruktion ikke fange, at de *stadig* er pladsholdere.
+
+**Samtykke ved oprettelse.** `JuraLinje` i `Auth.jsx` står under login-formularen i alle tilstande — dokumenterne skal kunne læses **uden** at oprette en konto, og login-skærmen er det eneste sted, en ikke-indlogget person kan nå dem. Ved `mode === "signup"` bærer den desuden selve samtykket og aldersgrænsen på 13 år.
+
+Jura-visningen er en **egen tilstand** (`jura`) og ikke en fjerde `mode`. `mode` styrer fem ting, og tre af dem er kæder med `forgot` som fallback — en fjerde værdi ville give overskriften "Nulstil adgangskode", knapteksten "Send nulstillingslink" og, værst, `submit()`s `else`-gren, som kalder `auth.signIn()`: et Enter-tryk på en politik ville forsøge et login. Med et tidligt return afmonteres kun formularen, mens `email`, `username` og `password` bliver i `AuthScreen`s state — man kommer tilbage til præcis den oprettelse, man forlod.
+
+**Kontolukning er ANONYMISERING, ikke sletning**, og det er ikke en billigere løsning — det er den, der ikke ødelægger noget for andre. En rigtig sletning af `auth.users` er i dette skema en fælde: `groups.created_by` er `on delete cascade`, så brugerens **ligaer** ville forsvinde sammen med alle de andre medlemmers medlemskab; og `competitions.created_by` har slet ingen `on delete`-regel, så sletningen ville blive **blokeret** for enhver, der har oprettet en konkurrence.
+
+`anonymize_my_account()` (`sql/account_anonymization.sql`) har **nul parametre** — det er hele svaret på "kan den udføres for en anden bruger?": der findes ikke et argument at forfalske. Den rydder `push_subscriptions`, `notification_log`, `stories`, `analytics_events` og `user_activity_days`, sætter `feedback.user_id` til `null`, og giver `display_name` et pseudonym (`Slettet <8 hex>`; navnet er unikt på `lower(display_name)` og højst 20 tegn, så "Slettet bruger" kunne kun bruges én gang). **Bevaret:** tips, ratings, ratinghistorik, kåringer, deltagelser og ligamedlemskaber — de er grundlaget for andres stillinger. Medlemskaberne kan i øvrigt ikke fjernes hver for sig: `group_membership_invariant.sql` håndhæver, at en konkurrence-deltager altid er ligamedlem.
+
+`api/delete-account.js` gør resten i tre trin, og **rækkefølgen er ikke til forhandling**: (1) hvem er du — id'et udledes af tokenen og intet andet sted, og body læses aldrig; (2) anonymisér med **brugerens egen token**, så funktionens `auth.uid()`-vagt stadig bestemmer; (3) `DELETE /auth/v1/admin/users/<id>` med `should_soft_delete: true` og service-nøglen. En **hård** sletning ville kaskadere og fjerne præcis det, trin 2 lige har bevaret. Fejler trin 3 efter trin 2, svares `kode: "kun_anonymiseret"` — brugeren skal vide, at deres data ER væk, og at kun lukningen mangler; begge trin er idempotente, så et nyt forsøg er ufarligt.
+
+Klienten rydder ved lukning **alle nio `localStorage`-nøgler** (`clearAllLocalState()`), ikke kun sessionen: ved et log ud er det samme person, der sidder med telefonen, men efter en lukning ville flagene følge den næste bruger.
+
+**Det, anonymiseringen ikke når** — og som politikken derfor siger højt: den daglige sikkerhedskopi lever 90 dage med den gamle e-mail, Supabase og Vercel har egne kopier og serverlogs, notifikationer på andres telefoner kan ikke kaldes tilbage, og navne på ligaer og konkurrencer, brugeren har oprettet, bliver stående, fordi andre er afhængige af dem.
+
+Engangsopsætning: kør `sql/account_anonymization.sql` i Supabase ("Run without RLS") **før** frontend-mergen. Dækket af `sql/tests/account_anonymization.sql` i CI.
 
 ---
 Bed Claude om at opdatere denne fil, når der sker større ændringer.
