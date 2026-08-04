@@ -9,12 +9,14 @@
 // .github/workflows/job-heartbeat.yml. Denne skærm er den hurtige aflæsning;
 // heartbeat-workflowen er den, der råber, når ingen kigger.
 import { useState, useEffect } from "react";
-import { RefreshCw, Loader2, Eye, Bug } from "lucide-react";
+import { RefreshCw, Loader2, Eye, Bug, CalendarCheck } from "lucide-react";
 import { C, btnGhost, muted } from "../ui/theme.js";
 import { Card, H, StateChip, SignalRow } from "../ui/components.jsx";
 import {
   loadClientErrors,
   loadJobHealth,
+  loadSeasons,
+  setSeasonFinished,
   mergeJobHealth,
   previewNotifications,
   summarizeOutbox,
@@ -290,6 +292,94 @@ function ErrorsCard({ token }) {
   );
 }
 
+// Sæsonernes slutning — bagstopperen for sæson-gaten (sql/season_end.sql).
+//
+// Gaten holder en konkurrence åben, indtil sæsonen selv siger, at den er slut.
+// Datakilden svarer normalt: Sportmonks har et `finished`-felt,
+// football-data.org går videre til næste sæson. Men gør den det ikke, er der
+// ingen anden vej end at vente på 30-dages ventilen — og det er dét, denne
+// tabel og dens ene knap findes for.
+//
+// Kortet er derfor ikke en oversigt over sæsoner. Det er et sted at se, om
+// NOGET HÆNGER: en sæson med nul uspillede kampe, ingen slutdato og et flag,
+// der stadig er falsk, er den ene, nogen skal røre.
+function SeasonsCard({ token }) {
+  const [rows, setRows] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [err, setErr] = useState("");
+
+  async function load() {
+    setLoading(true); setErr("");
+    try {
+      setRows(await loadSeasons(token));
+    } catch (e) {
+      setErr(
+        String(e?.message ?? e).includes("admin_seasons")
+          ? "Kunne ikke læse sæsonerne. Er sql/season_end.sql kørt i Supabase?"
+          : String(e?.message ?? e)
+      );
+    } finally { setLoading(false); }
+  }
+
+  async function toggle(row) {
+    setBusyId(row.season_id); setErr("");
+    try { await setSeasonFinished(token, row.season_id, !row.is_finished); await load(); }
+    catch (e) { setErr(String(e?.message ?? e)); }
+    finally { setBusyId(null); }
+  }
+
+  const dato = (v) => (v ? String(v).slice(0, 10) : "—");
+
+  return (
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <CalendarCheck size={15} color={C.muted} />
+          <span style={{ fontWeight: 600, fontSize: 14 }}>Sæsonernes slutning</span>
+        </div>
+        <button style={btnGhost} onClick={load} disabled={loading}>
+          {loading ? <Loader2 size={14} /> : <RefreshCw size={14} />} {rows ? "Opdatér" : "Hent"}
+        </button>
+      </div>
+      <p style={{ ...muted, fontSize: 12, margin: "8px 0 0" }}>
+        En konkurrence meldes først færdig, når dens sæson er det — ellers ville en sæson med
+        flere stages afslutte den, hver gang grundspillet sluttede. Sync sætter flaget, når
+        datakilden siger det. Gør den ikke, kan det sættes her.
+      </p>
+      {err && <p role="alert" style={{ color: C.red, fontSize: 12, margin: "8px 0 0" }}>{err}</p>}
+      {rows && rows.length === 0 && (
+        <p style={{ ...muted, fontSize: 12, margin: "8px 0 0" }}>Ingen sæsoner endnu.</p>
+      )}
+      {rows && rows.length > 0 && (
+        <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+          {rows.map((r) => {
+            // "Venter" = alt er spillet, men intet siger, at sæsonen er slut.
+            // Det er den eneste tilstand, der kræver et menneske.
+            const venter = !r.is_finished && !r.ends_at && r.matches > 0 && r.unplayed === 0;
+            return (
+              <div key={r.season_id} style={{ background: C.surface2, borderRadius: 8, padding: "8px 10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{r.league_name} · {r.season_name}</span>
+                  <StateChip label={r.is_finished ? "Slut" : venter ? "Venter" : "I gang"}
+                    tone={r.is_finished ? "green" : venter ? "gold" : null} />
+                </div>
+                <div style={{ ...muted, fontSize: 11, marginTop: 3 }}>
+                  Slutdato {dato(r.ends_at)} · sidste kamp {dato(r.last_kickoff)} · {r.unplayed} af {r.matches} uspillet
+                </div>
+                <button style={{ ...btnGhost, marginTop: 6, opacity: busyId === r.season_id ? 0.6 : 1 }}
+                  disabled={busyId === r.season_id} onClick={() => toggle(r)}>
+                  {r.is_finished ? "Åbn sæsonen igen" : "Markér som slut"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function OpsPanel({ token, leagues }) {
   const [jobs, setJobs] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -350,10 +440,11 @@ function OpsPanel({ token, leagues }) {
       {jobs && jobs.map((j) => <JobCard key={j.job} j={j} />)}
 
       <PreviewCard token={token} />
+      <SeasonsCard token={token} />
       <ErrorsCard token={token} />
     </div>
   );
 }
 
 export default OpsPanel;
-export { PreviewCard, OutboxPreview, ErrorsCard };
+export { PreviewCard, OutboxPreview, ErrorsCard, SeasonsCard };

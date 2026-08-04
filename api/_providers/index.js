@@ -25,6 +25,12 @@
 //                  Hvorfor kom sæsonen tom hjem? Svarer { code, message, … }.
 //                  Findes den ikke, står der bare `totalFixtures: 0` som før.
 //
+//   fetchSeasonMeta({ apiLeagueId, apiSeasonId, token })
+//                  Kan sæsonen stadig få flere kampe? Svarer
+//                  { endsAt, finished } eller null. Findes den ikke, står
+//                  seasons.ends_at/is_finished urørt, og sql/season_end.sql
+//                  falder tilbage på sin 30-dages ventil.
+//
 // De to fetch-funktioner returnerer NORMALISEREDE kampe (se normaliseret form
 // nederst i sportmonks.js). Alt hvad sync-matches og sync-live rører, er den
 // form — de kender ingen leverandørs feltnavne.

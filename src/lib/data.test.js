@@ -91,6 +91,29 @@ describe("loadRoundBoard (round_standings-view)", () => {
     expect(board).toEqual({ rows: [], totalMatches: 0, playedMatches: 0, isComplete: false });
   });
 
+  // En lukket konto ("Slettet a1b2c3d4") skal ikke stå på en offentlig
+  // rangliste. Den bliver til gengæld i private konkurrencer, hvor deltagelsen
+  // er en del af vennernes fælles historik — se kommentaren i data/standings.js.
+  it("udelader lukkede konti, og placeringerne lukker sig om hullet", async () => {
+    mockTables({
+      ...OFFICIAL,
+      matches: [{ id: "m1", home_score: 2, away_score: 1 }],
+      round_standings: [
+        { user_id: "u1", total_points: 9, matches: 1, exact_count: 3, outcome_count: 0, avg_goal_error: "0.5000" },
+        { user_id: "lukket", total_points: 6, matches: 1, exact_count: 2, outcome_count: 0, avg_goal_error: "1.0000" },
+        { user_id: "u2", total_points: 3, matches: 1, exact_count: 1, outcome_count: 0, avg_goal_error: "1.5000" },
+      ],
+      profiles: [
+        { id: "u1", display_name: "Anna", anonymized_at: null },
+        { id: "lukket", display_name: "Slettet a1b2c3d4", anonymized_at: "2026-08-01T10:00:00Z" },
+        { id: "u2", display_name: "Bo", anonymized_at: null },
+      ],
+    });
+    const board = await loadRoundBoard("token", "2026-07-14");
+    expect(board.rows.map((r) => r.player)).toEqual(["Anna", "Bo"]);
+    expect(board.rows.map((r) => r.rank)).toEqual([1, 2]); // ikke 1 og 3
+  });
+
   // De to niveauer i Championship: 'ALL' er den samlede stilling (den store
   // titel), et liga-id er stillingen for netop den turnering. Både stillingen
   // OG kampantallet skal følge scopet — ellers kan de to ikke tale sammen.
@@ -197,13 +220,14 @@ describe("computeCompetitionState (konkurrence-stillingen)", () => {
     { id: "m3", kickoff_at: "2026-07-13T18:00:00Z", round_key: "2026-07-13", home_score: 1, away_score: 1 },
     { id: "m4", kickoff_at: "2026-07-14T18:00:00Z", round_key: "2026-07-13", home_score: 3, away_score: 0 },
   ];
-  const mockComp = (predictions, profiles) => mockTables({
+  const mockComp = (predictions, profiles, status = [{ concluded: true }]) => mockTables({
     competition_participants: profiles.map((p) => ({ user_id: p.id })),
     profiles,
     competition_matches: MATCHES.map((m) => ({ match_id: m.id })),
     matches: MATCHES,
     predictions,
     teams: [],
+    competition_status: status,
   });
 
   it("bruger hele stigen: rundesejre slår en bedre målafvigelse", async () => {
@@ -257,6 +281,33 @@ describe("computeCompetitionState (konkurrence-stillingen)", () => {
     expect(first.rows.map((r) => r.userId)).toEqual(["u1", "u9"]);
     expect(second.rows.map((r) => r.userId)).toEqual(["u1", "u9"]);
     expect(first.rows.map((r) => r.rank)).toEqual([1, 1]); // rækkefølgen er stabil, placeringen delt
+  });
+
+  // Sæson-gaten (sql/season_end.sql). Alle fire kampe HAR resultat i MATCHES, så
+  // klientens gamle regel ville sige "afsluttet" — og det var netop fejlen for en
+  // sæson med flere stages, hvor slutspillet endnu ikke er skemalagt.
+  it("lader databasen afgøre, om konkurrencen er slut — ikke kamptællingen", async () => {
+    const preds = [{ match_id: "m1", user_id: "u1", pred_home: 2, pred_away: 1 }];
+    const profiles = [{ id: "u1", display_name: "Anna" }];
+
+    await mockComp(preds, profiles, [{ concluded: false }]);
+    const igang = await computeCompetitionState("token", "c1", RULES);
+    expect(igang.playedMatches).toBe(4);
+    expect(igang.totalMatches).toBe(4);
+    expect(igang.isComplete).toBe(false);
+
+    await mockComp(preds, profiles, [{ concluded: true }]);
+    expect((await computeCompetitionState("token", "c1", RULES)).isComplete).toBe(true);
+  });
+
+  it("falder tilbage til kamptællingen, hvis status-opslaget fejler", async () => {
+    // Et kort uden status er værre end et kort med en lidt for optimistisk
+    // status — og fremdriften er sand uanset hvad.
+    await mockComp([{ match_id: "m1", user_id: "u1", pred_home: 2, pred_away: 1 }],
+      [{ id: "u1", display_name: "Anna" }],
+      () => { throw new Error("nede"); });
+    const state = await computeCompetitionState("token", "c1", RULES);
+    expect(state.isComplete).toBe(true); // alle fire kampe har resultat
   });
 });
 

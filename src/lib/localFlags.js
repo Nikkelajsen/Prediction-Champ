@@ -38,6 +38,14 @@ const PUSH_DISMISS_KEY = "pc_push_dismissed";
 const NUDGE_KEY = "pc_liga_nudge_dismissed";
 const SEASON_LEAGUE_KEY = "pc_season_league";
 const PWA_ONBOARDED_KEY = "pc_pwa_onboarded";
+// Hvilke konkurrencer har brugeren allerede set slutte? Værdien er en
+// KOMMASEPARERET liste af id'er — ikke én nøgle pr. konkurrence.
+//
+// Formen er ikke tilfældig: navnene har tre andre aftagere (LOKALE_NØGLER
+// rydder på eksakte navne, guard-testen opremser dem, og privatlivspolitikken
+// nævner dem), så et suffiks på NØGLEN ville bryde alle tre — mens et suffiks
+// på værdien ikke rører nogen af dem. Samme argument som bruger-id'et nedenfor.
+const COMP_DONE_KEY = "pc_comp_done_seen";
 
 // Alt, appen har lagt på enheden — ikke kun sessionen.
 //
@@ -59,6 +67,7 @@ const LOKALE_NØGLER = [
   NUDGE_KEY,
   SEASON_LEAGUE_KEY,
   PWA_ONBOARDED_KEY,
+  COMP_DONE_KEY,
 ];
 
 // ---------- de rå, enheds-globale læse/skrive ----------
@@ -107,9 +116,36 @@ function writeUserFlag(key, userId, value = "1") {
   writeFlag(key, `${value}${OWNER_SEP}${userId}`);
 }
 
+// ---------- listeflaget: sete konkurrence-afslutninger ----------
+//
+// Læse/skrive-parret bor her og ikke hos kalderen, fordi FORMATET er det, der
+// skal holdes ét sted: to skærme viser fejringen (Ligaer-fanen og liga-siden),
+// og en kommasepareret liste, der parses to steder, er én kommasepareret liste
+// for meget.
+const MAX_SEEN = 50; // en liste, der kun vokser, ender som et localStorage-loft
+
+function readSeenCompletions(userId) {
+  const raw = readUserFlag(COMP_DONE_KEY, userId);
+  if (!raw || raw === "1") return new Set(); // "1" = sat uden indhold (se readUserFlag)
+  return new Set(raw.split(",").filter(Boolean));
+}
+
+// Returnerer den opdaterede mængde, så kalderen kan gentegne uden at læse igen.
+function markCompletionSeen(userId, competitionId) {
+  const seen = readSeenCompletions(userId);
+  if (seen.has(competitionId)) return seen;
+  seen.add(competitionId);
+  // De ÆLDSTE ryger først. At tabe en gammel post koster i værste fald én
+  // gentaget fejring for en konkurrence, brugeren ikke har set i lang tid.
+  const ids = [...seen].slice(-MAX_SEEN);
+  writeUserFlag(COMP_DONE_KEY, userId, ids.join(","));
+  return new Set(ids);
+}
+
 export {
   SESSION_KEY, PING_KEY, FLOW_KEY, CARD_KEY, COMPLETE_KEY,
-  PUSH_DISMISS_KEY, NUDGE_KEY, SEASON_LEAGUE_KEY, PWA_ONBOARDED_KEY,
+  PUSH_DISMISS_KEY, NUDGE_KEY, SEASON_LEAGUE_KEY, PWA_ONBOARDED_KEY, COMP_DONE_KEY,
   LOKALE_NØGLER,
   readFlag, writeFlag, removeFlag, readUserFlag, writeUserFlag,
+  readSeenCompletions, markCompletionSeen,
 };

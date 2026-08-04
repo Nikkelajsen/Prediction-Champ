@@ -34,4 +34,27 @@ async function deleteMyAccount(token) {
   throw new Error(data?.error || "Kontoen kunne ikke lukkes. Prøv igen.");
 }
 
-export { deleteMyAccount, KUN_ANONYMISERET };
+// ---------- administratorens vej: luk en ANDEN konto ----------
+//
+// Samme forløb, samme halve tilstand, andet endpoint — og med en parameter,
+// hvor den egne vej bevidst ingen har. Vagten sidder i databasen
+// (`admin_anonymize_account`, sql/liga_admin.sql), ikke her: klienten kan kun
+// spørge.
+async function closeUserAccount(token, userId) {
+  let res;
+  try {
+    res = await fetch(`/api/admin-close-account?userId=${encodeURIComponent(userId)}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    throw new Error("Kunne ikke nå serveren. Tjek forbindelsen og prøv igen.");
+  }
+
+  const data = await res.json().catch(() => null);
+  if (res.ok && data?.ok) return true;
+  if (data?.kode === "kun_anonymiseret") throw new Error(KUN_ANONYMISERET);
+  throw new Error(data?.error || "Kontoen kunne ikke lukkes. Prøv igen.");
+}
+
+export { deleteMyAccount, closeUserAccount, KUN_ANONYMISERET };

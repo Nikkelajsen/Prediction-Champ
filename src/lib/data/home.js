@@ -3,7 +3,7 @@
 // kun de to bruger.
 
 import { db } from "../supabase.js";
-import { APP_TZ, byKickoffThenTeams, currentRoundIndex, groupIntoRounds, isLocked, lockAtOf, liveInfo, pointsFor, roundLabel } from "../scoring.js";
+import { APP_TZ, byKickoffThenTeams, currentRoundIndex, groupIntoRounds, lockAtOf, liveInfo, nextRoundTips, pointsFor, roundLabel } from "../scoring.js";
 
 // ---------- Hjem: næste deadline + manglende tips på tværs af brugerens konkurrencer ----------
 async function computeHomeTips(token, userId, competitions) {
@@ -27,10 +27,6 @@ async function computeHomeTips(token, userId, competitions) {
   // kunne skifte fra indlæsning til indlæsning.
   const byTime = byKickoffThenTeams((id) => teamName.get(id));
 
-  // En kamp kan tippes fra det øjeblik, den findes, og indtil den låser: det
-  // rullende gætte-vindue er fjernet (B1, august 2026).
-  const tippable = ms.filter((m) => !played(m) && !isLocked(m) && m.kickoff_at);
-  const isTipped = (m) => { const p = predByMatch.get(m.id); return !!(p && p.pred_home != null && p.pred_away != null); };
   // Fælles hale til de to "der er intet at gøre lige nu"-tilstande: nærmeste
   // kommende kamp + dens runde, så kortets knap kan åbne Tip landet det rigtige
   // sted (samme sted som "Tip nu" ved manglende tips).
@@ -54,23 +50,21 @@ async function computeHomeTips(token, userId, competitions) {
   // så en bruger med NUL tips fik at vide, at alle tips var inde.
   const nothingToTip = () => nextUp({ nothingToTip: true });
 
-  // "Næste runde" = den TIDLIGSTE runde, der stadig har kampe man kan tippe. Vi viser
-  // KUN status for den runde: er den fuldt tippet, er alt ok (grøn) — også selvom senere
-  // runder mangler tips (de bliver "næste runde" i tur, efterhånden som runderne spilles).
-  // (Før valgte vi den tidligste UTIPPEDE kamp, så en runde langt ude kunne fejlagtigt
-  // vise rødt, selvom de nærmeste runder var tippet.)
-  if (!tippable.length) return nothingToTip();
-  const nextRoundKey = tippable.reduce((min, m) => (m.round_key < min ? m.round_key : min), tippable[0].round_key);
-  const roundUntipped = tippable.filter((m) => m.round_key === nextRoundKey && !isTipped(m))
-    .sort(byTime);
-  if (!roundUntipped.length) return allOk();
+  // "Næste runde" og "er den tippet?" er ÉN regel, og den bor i
+  // `nextRoundTips` (src/lib/scoring.js) sammen med det grønne flueben på
+  // konkurrence-kortene. Den udgave, der stod her, var den oprindelige — den
+  // blev flyttet, ikke ændret.
+  const next = nextRoundTips(ms, predByMatch);
+  if (!next) return nothingToTip();
+  if (next.allTipped) return allOk();
+  const roundUntipped = next.untipped.slice().sort(byTime);
 
   // Kortets deadline er den FØRSTE af de utippede kampes egne låse — det er den, der
   // løber ud først, og dermed den, brugeren skal nå. Efter A21 er det ikke længere
   // én fælles rundelås, men de utippede kampe i runden ligger typisk tæt.
   const deadline = Math.min(...roundUntipped.map((m) => lockAtOf(m)).filter((t) => t !== null));
   const names = roundUntipped.slice(0, 3).map((m) => `${teamName.get(m.home_team_id) || "?"} – ${teamName.get(m.away_team_id) || "?"}`);
-  return { hasComps: true, allTipped: false, roundKey: nextRoundKey, roundLabelText: roundLabel(nextRoundKey), deadline, missingCount: roundUntipped.length, names };
+  return { hasComps: true, allTipped: false, roundKey: next.roundKey, roundLabelText: roundLabel(next.roundKey), deadline, missingCount: roundUntipped.length, names };
 }
 
 // ---------- Hjem: live-oversigt over indeværende runde ----------

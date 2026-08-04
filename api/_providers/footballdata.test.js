@@ -252,3 +252,35 @@ describe("fetchLive", () => {
     expect(footballdata.fromGlobalId("fd:537654")).toBe("537654");
   });
 });
+
+describe("fetchSeasonMeta", () => {
+  const comp = (current, seasons) => ({
+    currentSeason: current ? { startDate: current.start, endDate: current.end } : null,
+    seasons: seasons.map(([start, end]) => ({ startDate: start, endDate: end })),
+  });
+
+  it("henter slutdatoen fra turneringens sæsonliste", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(
+      comp({ start: "2026-08-14", end: "2027-05-23" }, [["2026-08-14", "2027-05-23"], ["2025-08-15", "2026-05-24"]])
+    ));
+    const out = await footballdata.fetchSeasonMeta({ apiLeagueId: "PL", apiSeasonId: "2026", token: "t", fetchImpl });
+    expect(out).toEqual({ endsAt: "2027-05-23", finished: false });
+    expect(fetchImpl.mock.calls[0][0]).toBe("https://api.football-data.org/v4/competitions/PL");
+  });
+
+  // Leverandøren har intet `finished`-flag. At sæsonen ikke længere er den
+  // AKTUELLE er den erklæring, vi har — og vi gætter ikke ud fra datoen.
+  it("melder en sæson færdig, når leverandøren er gået videre til den næste", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(
+      comp({ start: "2026-08-14", end: "2027-05-23" }, [["2026-08-14", "2027-05-23"], ["2025-08-15", "2026-05-24"]])
+    ));
+    const out = await footballdata.fetchSeasonMeta({ apiLeagueId: "PL", apiSeasonId: "2025", token: "t", fetchImpl });
+    expect(out).toEqual({ endsAt: "2026-05-24", finished: true });
+  });
+
+  it("svarer null for en sæson, leverandøren ikke kender", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(comp({ start: "2026-08-14", end: "2027-05-23" }, [])));
+    await expect(footballdata.fetchSeasonMeta({ apiLeagueId: "PL", apiSeasonId: "2019", token: "t", fetchImpl }))
+      .resolves.toBeNull();
+  });
+});

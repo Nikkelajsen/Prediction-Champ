@@ -98,7 +98,28 @@ async function computeCompetitionState(token, competitionId, { signal } = {}) {
 
   const totalMatches = ms.length;
   const playedMatches = ms.filter((m) => m.home_score !== null && m.home_score !== undefined).length;
-  const isComplete = totalMatches > 0 && playedMatches === totalMatches;
+
+  // "Afsluttet" er DATABASENS svar og ikke klientens.
+  //
+  // Her stod `playedMatches === totalMatches`, og det er forkert for enhver
+  // konkurrence, der stadig kan vokse: en sæson med flere stages (Superligaens
+  // slutspil, CL's knockout) får kampene skemalagt undervejs og efterfyldt af
+  // `api/_backfill.js`. Mellem sidste grundspilsrunde og udgivelsen af næste
+  // stage var betingelsen trivielt sand — og konkurrencen blev erklæret slut
+  // med pokal og vinder midt i sin egen sæson.
+  //
+  // `public.competition_status.concluded` (sql/season_end.sql) kender forskellen
+  // og er samme svar, milepælene og kåringerne bruger. To svar på ét spørgsmål
+  // var selve fejlen, så klienten stiller ikke sit eget længere.
+  //
+  // Fejler opslaget, falder vi tilbage til den gamle regel: et kort uden status
+  // er værre end et kort med en lidt for optimistisk status, og fremdriften
+  // (`playedMatches`/`totalMatches`) er sand uanset hvad.
+  let isComplete = totalMatches > 0 && playedMatches === totalMatches;
+  try {
+    const st = await db.select(token, "competition_status", `competition_id=eq.${competitionId}&select=concluded`, o);
+    if (st.length) isComplete = !!st[0].concluded;
+  } catch { /* behold fallbacken */ }
 
   return { userId: undefined, rows: ranked, rounds: playedRounds, allRounds: rounds, predsByKey, totalMatches, playedMatches, isComplete };
 }
