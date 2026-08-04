@@ -481,12 +481,21 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
           borderBottom: `1px solid ${C.line}`,
           paddingTop: "calc(14px + env(safe-area-inset-top, 0px))",
         }}>
-          <Wordmark size={15} />
+          {/* 20 og ikke 15: bredden er ikke det, der binder — på en 320 px skærm
+              med admin-knappen fylder mærket 98 px og knapperne 107, så der er
+              stadig ~80 px luft. Det, der binder, er hierarkiet: sidens egen
+              overskrift er 30 (`H` i HjemTab), og mærket skal blive ved med at
+              være chrome frem for indhold. Over ~22 vejer "LEAGLY" lige så tungt
+              som "HEJ <navn>", og så konkurrerer brandbaren med siden.
+              Ikonerne følger med fra 18 til 20 — ellers ser højresiden krympet
+              ud ved siden af et større mærke. Log ud står 1 px under de andre
+              som før: glyffen fylder mere af sit felt. */}
+          <Wordmark size={20} />
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-            <button onClick={() => openProfile(userId)} aria-label="Min karriereprofil" style={iconBtn}><User size={18} /></button>
-            <button onClick={openHow} aria-label="Sådan virker det" style={iconBtn}><Info size={18} /></button>
-            {isAdmin && <button onClick={openAdmin} aria-label="Admin" style={iconBtn}><Settings size={18} /></button>}
-            <button onClick={onLogout} aria-label="Log ud" style={iconBtn}><LogOut size={17} /></button>
+            <button onClick={() => openProfile(userId)} aria-label="Min karriereprofil" style={iconBtn}><User size={20} /></button>
+            <button onClick={openHow} aria-label="Sådan virker det" style={iconBtn}><Info size={20} /></button>
+            {isAdmin && <button onClick={openAdmin} aria-label="Admin" style={iconBtn}><Settings size={20} /></button>}
+            <button onClick={onLogout} aria-label="Log ud" style={iconBtn}><LogOut size={19} /></button>
           </div>
         </div>
 
