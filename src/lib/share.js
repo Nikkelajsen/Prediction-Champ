@@ -16,7 +16,7 @@
 // Den fanger IKKE fejl. En bruger, der annullerer systemets deleark, giver et
 // afvist promise, og det er kaldstedet, der ved, om det er værd at sige noget
 // om — for alle fire er svaret nej.
-async function shareText(text, { title = "Prediction Champ" } = {}) {
+async function shareText(text, { title = "Leagly" } = {}) {
   if (navigator.share) {
     await navigator.share({ title, text });
     return "share";

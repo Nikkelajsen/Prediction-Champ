@@ -12,10 +12,10 @@
 //
 // Hvorfor målafvigelsen er et gennemsnit og ikke en sum: en sum ville straffe den,
 // der tipper flest kampe (flere kampe = flere afvigelser), og det strider mod
-// beslutning A2 ("Månedsligaen må gerne belønne deltagelse"). Gennemsnittet
+// beslutning A2 ("Månedschampionshippet må gerne belønne deltagelse"). Gennemsnittet
 // normaliserer deltagelsesomfang på samme måde som ratingen (point pr. kamp).
 //
-// Rundeligaen har ingen rundesejre (den ér én runde) — feltet er der bare ikke,
+// Rundechampionshippet har ingen rundesejre (den ér én runde) — feltet er der bare ikke,
 // og `?? 0` gør trinnet neutralt i stedet for at kræve en separat komparator.
 //
 // Modulet er bevidst uden imports, så det også kan bruges uden for browseren.

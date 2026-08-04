@@ -32,7 +32,7 @@ describe("compareStandings (tiebreaker-stigen)", () => {
     expect(compareStandings(base({ userId: "a" }), base({ userId: "b" }))).toBe(0);
   });
 
-  it("manglende rundesejre (Rundeligaen) er neutralt, ikke afgørende", () => {
+  it("manglende rundesejre (Rundechampionshippet) er neutralt, ikke afgørende", () => {
     const a = { userId: "a", total: 10, exactCount: 2, outcomeCount: 4, avgGoalError: 1.0 };
     const b = { userId: "b", total: 10, exactCount: 2, outcomeCount: 4, avgGoalError: 2.0 };
     expect(compareStandings(a, b)).toBeLessThan(0); // målafvigelsen afgør, ikke det manglende felt

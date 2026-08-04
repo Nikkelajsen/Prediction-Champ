@@ -34,7 +34,7 @@ const STEPS = {
   ],
   desktop: [
     "I Chrome/Edge: klik installér-ikonet yderst i adresselinjen,",
-    "eller åbn menuen og vælg “Installér Prediction Champ”.",
+    "eller åbn menuen og vælg “Installér Leagly”.",
   ],
 };
 
@@ -44,11 +44,11 @@ function InstallGuide() {
   const install = useInstallPrompt();
   const note = platform === "ios"
     ? "På iPhone/iPad virker push-notifikationer først, når appen er føjet til hjemmeskærmen."
-    : "Så åbner Prediction Champ som en rigtig app — uden browser-linjen.";
+    : "Så åbner Leagly som en rigtig app — uden browser-linjen.";
   return (
     <div>
       <p style={{ margin: "0 0 10px", color: C.muted, fontSize: 14, lineHeight: 1.5 }}>
-        Føj Prediction Champ til hjemmeskærmen, så den åbner som en app og altid er ét tryk væk.
+        Føj Leagly til hjemmeskærmen, så den åbner som en app og altid er ét tryk væk.
       </p>
       {/* Har browseren en rigtig installations-prompt, er ÉT tryk bedre end tre
           trin (G27). Den vises kun, når `beforeinstallprompt` faktisk er fyret —

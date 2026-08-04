@@ -1,4 +1,4 @@
--- Prediction Champ — Runde-baseret lås også for SKRIVNING (INSERT + UPDATE)
+-- Leagly — Runde-baseret lås også for SKRIVNING (INSERT + UPDATE)
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
 --
 -- BAGGRUND. sql/predictions_round_lock_policies.sql indførte den runde-baserede

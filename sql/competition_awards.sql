@@ -6,7 +6,7 @@
 --
 -- Runde- og månedskåringer fandtes kun globalt: Championship-fanens virtuelle
 -- ligaer summerer på tværs af OFFICIELLE turneringer og kårer "Rundens/Månedens
--- Prediction Champ". En liga, der kører sin egen konkurrence, kunne ikke kåre
+-- Leagly". En liga, der kører sin egen konkurrence, kunne ikke kåre
 -- nogen internt. Denne migrering giver konkurrencer, der har tilvalgt det
 -- (`mode_params.awards = true` ved oprettelsen), en PERSISTERET kåring pr.
 -- færdigspillet runde og kalendermåned.

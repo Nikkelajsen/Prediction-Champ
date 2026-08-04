@@ -10,7 +10,7 @@
 // desuden en synlig brødtekstlinje under hver overskrift, men den løsning blev
 // afvist af brugeren — fem forklarende afsnit gjorde siden tungere at skimme end
 // den tvivl, de skulle fjerne, var værd. Skærmen bærer derfor kun de tal, der
-// navngiver deres eget omfang i selve sætningen ("i Championships rundeliga",
+// navngiver deres eget omfang i selve sætningen ("i Championships rundechampionship",
 // "globale rating"), og forklaringen ligger ét klik væk. Ny sektion med tal ⇒ ny
 // InfoDot, ikke ny brødtekst.
 //
@@ -206,7 +206,7 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
         <div>
           <Eyebrow>Titler · Championship <InfoDot title="Titler">
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div>Titler kommer fra <b>Championships</b> sæson-, måneds- og rundeliga, hvor <b>alle brugere</b> automatisk er med.</div>
+              <div>Titler kommer fra <b>Championships</b> sæson-, måneds- og rundechampionship, hvor <b>alle brugere</b> automatisk er med.</div>
               <div>De kommer altså <b>ikke</b> fra dine egne konkurrencer — dem du selv opretter og inviterer til.</div>
               <div>En titel gives kun for en <b>afsluttet</b> sæson, måned eller runde. Er to spillere helt lige, deles titlen.</div>
             </div>
@@ -217,17 +217,17 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
                 efterlod intet spor i karrieren. */}
             {seasonTitles.map((t) => (
               <span key={t.season_id} style={badge} title={`${t.points} point`}>
-                🏆 Sæsonens Prediction Champ — {t.season_name}
+                🏆 Sæsonens Champion — {t.season_name}
               </span>
             ))}
             {monthly.map((t) => (
               <span key={t.month} style={badge} title={`${t.points} point`}>
-                👑 Månedens Prediction Champ — {t.month_name}
+                👑 Månedens Champion — {t.month_name}
               </span>
             ))}
             {roundWins > 0 && (
-              <span style={badge} title="Runder vundet i Championships rundeliga">
-                🥇 {roundWins} {roundWins === 1 ? "rundesejr" : "rundesejre"} i rundeligaen
+              <span style={badge} title="Runder vundet i Championships rundechampionship">
+                🥇 {roundWins} {roundWins === 1 ? "rundesejr" : "rundesejre"} i rundechampionshippet
               </span>
             )}
           </div>
@@ -236,8 +236,8 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
 
       {/* Per-turnering-titler (K2) — ADSKILT fra de samlede med vilje.
           Championship kårer på to niveauer, og kun det samlede bærer ordet
-          "Prediction Champ". Blandede man dem, ville et karrieretal skifte
-          betydning, hver gang en turnering kom til: "Månedens Prediction Champ
+          "Champion". Blandede man dem, ville et karrieretal skifte
+          betydning, hver gang en turnering kom til: "Månedens Champion
           ×5" skal betyde det samme før og efter turnering #3. Derfor egen
           overskrift, egen InfoDot og dæmpede badges — de er titler, men mindre
           titler, og rangordenen skal kunne ses uden at læse noget. */}
@@ -245,7 +245,7 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
         <div>
           <Eyebrow>Titler pr. turnering <InfoDot title="Titler pr. turnering">
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div>Championship kårer på <b>to niveauer</b>. Titlerne ovenfor er de <b>samlede</b> — på tværs af alle officielle turneringer — og kun de kaldes <b>Prediction Champ</b>.</div>
+              <div>Championship kårer på <b>to niveauer</b>. Titlerne ovenfor er de <b>samlede</b> — på tværs af alle officielle turneringer — og kun de kaldes <b>Champion</b>.</div>
               <div>Her står sejrene i <b>én enkelt turnering</b>, hvor alle er målt på de samme kampe. De tæller som titler, men de er ikke det samme som en samlet titel.</div>
               <div>En turnering vises kun, hvis du har vundet noget i den.</div>
             </div>
@@ -274,14 +274,14 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
 
       {/* Rekorder ("bedste nogensinde") — GLOBALT omfang: Championship + global
           rating, ikke brugerens egne konkurrencer. Omfanget forklares i InfoDot'en
-          og navngives i hver enkelt linje ("i Championships rundeliga", "globale
+          og navngives i hver enkelt linje ("i Championships rundechampionship", "globale
           rating"); der står bevidst INGEN forklarende brødtekst på selve siden. */}
       {hasRecords && (
         <div>
           <Eyebrow>Rekorder · Championship <InfoDot title="Rekorder">
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div>Rekorderne gælder <b>Championship</b> og din <b>globale rating</b> — de to steder, hvor <b>alle brugere</b> automatisk er med. Altså <b>ikke</b> dine egne konkurrencer.</div>
-              <div>Rundeplacering og stime måles i <b>Championships rundeliga</b>, altså mod samtlige brugere med point i runden — ikke mod deltagerne i én af dine egne konkurrencer.</div>
+              <div>Rundeplacering og stime måles i <b>Championships rundechampionship</b>, altså mod samtlige brugere med point i runden — ikke mod deltagerne i én af dine egne konkurrencer.</div>
               <div>Ratingen er den samme, du ser på <b>Rating-fanen</b> (én global rating på tværs af alle konkurrencer og turneringer).</div>
               <div><b>Milepælene</b> nedenfor er derimod konkrete øjeblikke, de fleste i en navngiven konkurrence.</div>
             </div>
@@ -296,13 +296,13 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
                   {rec.bestRoundRound ? <span style={{ color: C.muted }}> — runden {rec.bestRoundRound}</span> : null}.</div>
               )}
               {rec.rank != null && (
-                <div>Din bedste placering i <b>Championships rundeliga</b>:{" "}
+                <div>Din bedste placering i <b>Championships rundechampionship</b>:{" "}
                   <b style={{ color: C.gold }}>{rec.rank}. plads</b>
                   {rec.rankField != null ? ` af ${rec.rankField} spillere` : ""}
                   {rec.rankCount > 1 ? ` (${rec.rankCount} gange)` : ""}.</div>
               )}
               {rec.streak > 0 && (
-                <div>Din længste stime af rundesejre i <b>Championships rundeliga</b>:{" "}
+                <div>Din længste stime af rundesejre i <b>Championships rundechampionship</b>:{" "}
                   <b style={{ color: C.gold }}>{rec.streak} runder</b> i træk.</div>
               )}
               {rec.bestRating != null && (

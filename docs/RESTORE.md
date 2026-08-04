@@ -74,6 +74,11 @@ gendannelse, et menneske har prøvet — maskinen prøver kun sin egen.
 
 ## Fælles første skridt: hent og dekryptér
 
+> **Filnavnet skiftede ved navneskiftet til Leagly (4. august 2026).** Kørsler fra
+> før den dato hedder `prediction-champ-<dato>.dump.gpg` — samme format, samme
+> passphrase, kun præfikset er et andet. Kommandoerne nedenfor virker på begge,
+> når navnet rettes til det, artefaktet faktisk indeholder.
+
 ```bash
 # 1. Hent artefaktet: Actions → Datasikkerhedskopi → vælg kørsel → Artifacts.
 #    manifest.txt i samme artefakt viser dato, commit og rækketal pr. tabel
@@ -81,7 +86,7 @@ gendannelse, et menneske har prøvet — maskinen prøver kun sin egen.
 unzip db-backup-<nummer>.zip
 
 # 2. Dekryptér (passphrasen indtastes, ikke skrevet i kommandoen)
-gpg --output backup.dump --decrypt prediction-champ-<dato>.dump.gpg
+gpg --output backup.dump --decrypt leagly-<dato>.dump.gpg
 
 # 3. Se hvad der er i dumpet, uden at pakke det ud
 pg_restore -l backup.dump | less

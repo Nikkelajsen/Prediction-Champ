@@ -101,7 +101,7 @@ export function renderStory(rule, payload = {}) {
   switch (rule) {
     case "MONTH_CHAMP":
       return {
-        headline: `👑 Du er ${p.shared ? "delt " : ""}Månedens Prediction Champ — ${p.month}`,
+        headline: `👑 Du er ${p.shared ? "delt " : ""}Månedens Champion — ${p.month}`,
         body: `${p.points} point — flest af alle i ${p.month}${p.shared ? " (delt)" : ""}.` +
           (p.gap != null && p.gap > 0 ? ` Nr. 2 var ${p.gap} point efter.` : ""),
       };

@@ -1,4 +1,4 @@
--- Prediction Champ — Liga-laget (permanente fællesskaber), fase 1: DB-fundament
+-- Leagly — Liga-laget (permanente fællesskaber), fase 1: DB-fundament
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS"
 -- (scriptet sætter selv RLS på de tabeller, der skal have det).
 --

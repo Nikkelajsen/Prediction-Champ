@@ -1,4 +1,4 @@
--- Prediction Champ — Sikkerhedsstramning (G14, G15, G16 — august 2026)
+-- Leagly — Sikkerhedsstramning (G14, G15, G16 — august 2026)
 -- Idempotent — kan køres igen når som helst. Kør i Supabase SQL-editor med
 -- "Run without RLS".
 --

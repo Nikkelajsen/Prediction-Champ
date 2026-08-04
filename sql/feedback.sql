@@ -1,4 +1,4 @@
--- Prediction Champ — feedback fra brugerne (B14)
+-- Leagly — feedback fra brugerne (B14)
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
 --
 -- ---------------------------------------------------------------------------

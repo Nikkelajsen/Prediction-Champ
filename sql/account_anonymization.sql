@@ -1,4 +1,4 @@
--- Prediction Champ — luk din egen konto ved ANONYMISERING (B4)
+-- Leagly — luk din egen konto ved ANONYMISERING (B4)
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
 --
 -- ---------------------------------------------------------------------------

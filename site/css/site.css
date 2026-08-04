@@ -1,4 +1,4 @@
-/* Prediction Champ — marketing-sitets ene stylesheet.
+/* Leagly — marketing-sitets ene stylesheet.
    Tokens og formsprog spejler appens src/ui/theme.js; afviger et tal her,
    er det sitet, der skal rettes — appen er kilden. Fontfilerne er en KOPI
    af public/fonts/, så mappen kan flyttes til eget domæne uden appen. */
@@ -97,7 +97,7 @@
   --green: #22C55E;
   --green-soft: #7fd48a;
   --cta-text: #06110A;
-  --gold: #F0B429;
+  --gold: #F2C14E;
   --red: #EF5B5B;
   --font-body: 'Barlow', system-ui, sans-serif;
   --font-display: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
@@ -445,7 +445,7 @@ p { margin: 0 0 16px; }
 
 /* ---------- CTA-bånd ---------- */
 .cta-band { text-align: center; padding: 96px 0; }
-.cta-band .crown-large { margin-bottom: 20px; }
+.cta-band .mark-large { margin-bottom: 20px; }
 
 /* ---------- Responsivt ---------- */
 @media (max-width: 880px) {

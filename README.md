@@ -1,4 +1,4 @@
-# Prediction Champ
+# Leagly
 
 Gæt resultater mod dine venner. Opret en liga, tip ugens kampe, og se hvem der
 er bedst.

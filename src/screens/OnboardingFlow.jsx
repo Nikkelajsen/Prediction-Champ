@@ -9,11 +9,12 @@
 // ikke må stå aktiv under en first-run-oplevelse — der er endnu ikke noget at
 // navigere til.
 import { useState, useEffect } from "react";
-import { Crown, Loader2, Users, Trophy, Ticket } from "lucide-react";
+import { Loader2, Users, Trophy, Ticket } from "lucide-react";
 import { defaultLeagueName, validateGroupName, createStarterLeague, loadStarterTournaments } from "../lib/onboarding.js";
 import { joinByInviteCode, createGroup } from "../lib/data.js";
 import { C, btnGhost, btnGreen, chip, font, muted } from "../ui/theme.js";
 import { Card } from "../ui/components.jsx";
+import { Wordmark } from "../ui/Wordmark.jsx";
 
 // Ordbogen ved første kontakt. De tre ord ligner hinanden og forveksles let, så
 // de forklares dér, hvor de først møder brugeren — ikke bag et ⓘ-ikon.
@@ -32,10 +33,7 @@ function Shell({ children, onSkip, skipLabel = "Spring over" }) {
     }}>
       <div style={{ width: "100%", maxWidth: 430, padding: "28px 18px 40px", display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Crown size={17} color={C.gold} />
-          <span style={{ fontFamily: font.display, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", fontSize: 15 }}>
-            Prediction Champ
-          </span>
+          <Wordmark size={15} />
         </div>
         {children}
         {/* "Spring over" er synlig hele vejen. Guiden er et tilbud, ikke en dør,

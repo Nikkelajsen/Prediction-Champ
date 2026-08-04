@@ -11,7 +11,7 @@ import { avgGoalError } from "../standings.js";
 // placering — den sikrer bare, at rækker ikke bytter plads mellem to hentninger).
 // Stigen selv bor i src/lib/standings.js; kolonnerne i sql/standings_tiebreakers.sql.
 const TIEBREAK_ORDER = "total_points.desc,exact_count.desc,outcome_count.desc,round_wins.desc,avg_goal_error.asc,user_id.asc";
-// Rundeligaen ér én runde og har derfor ingen rundesejre at bryde lighed med.
+// Rundechampionshippet ér én runde og har derfor ingen rundesejre at bryde lighed med.
 const TIEBREAK_ORDER_ROUND = "total_points.desc,exact_count.desc,outcome_count.desc,avg_goal_error.asc,user_id.asc";
 
 // Én rundes tal i stigens feltnavne (uden rundesejre — inde i én runde findes de ikke).

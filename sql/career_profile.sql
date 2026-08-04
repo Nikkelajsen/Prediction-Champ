@@ -1,4 +1,4 @@
--- Prediction Champ — Karriereprofil v1
+-- Leagly — Karriereprofil v1
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS"
 -- (funktionen er security definer og læser på tværs af RLS — jf. DOCUMENTATION.md afsnit 13).
 --
@@ -35,7 +35,7 @@
 --     Genbruger samme rank()-stige som round_wins.
 --     OMFANG (tydeliggjort 30. juli 2026): records er GLOBALT — rating er
 --     scope='ALL' (samme tal som Rating-fanen), og rundeplacering/stime måles i
---     round_standings, altså Championships rundeliga, hvor ALLE brugere er med.
+--     round_standings, altså Championships rundechampionship, hvor ALLE brugere er med.
 --     Det er IKKE en opgørelse pr. brugerens egne konkurrencer.
 --   - footprint: antal ligaer/konkurrencer (group_members/competition_participants).
 --
@@ -358,7 +358,7 @@ begin
             group by round_key
             having bool_and(home_score is not null and away_score is not null)
           ) rc on rc.round_key = rs.round_key
-          -- Kun den SAMLEDE rundeliga. round_standings har siden
+          -- Kun den SAMLEDE rundechampionship. round_standings har siden
           -- sql/tournament_scope.sql også en række pr. turnering, og uden dette
           -- filter ville én rundesejr tælle to gange (samlet + i sin turnering).
           -- Per-turnering-titler hører til i titles.by_tournament, ikke her.
@@ -369,7 +369,7 @@ begin
 
       -- ---------- Per-turnering-titler (K2, 31. juli 2026) ----------
       -- Championship kårer på to niveauer (sql/tournament_scope.sql). Grenene
-      -- ovenfor er og forbliver KUN de samlede, så "Månedens Prediction Champ ×5"
+      -- ovenfor er og forbliver KUN de samlede, så "Månedens Champion ×5"
       -- betyder det samme før og efter turnering #3 — et karrieretal, hvis
       -- betydning skifter, når produktet vokser, kan ikke sammenlignes med sig
       -- selv. Per-turnering-sejre tælles derfor med, men i deres egen gren, som
@@ -494,9 +494,9 @@ begin
           -- Feltstørrelsen for runden: hvor mange spillere placeringen blev sat imod.
           -- "8. plads" alene siger intet om, hvor stærk præstationen var — og var
           -- netop den linje, en bruger læste som en placering i én af sine EGNE
-          -- konkurrencer (30. juli 2026). Rundeligaen er global, så feltet er
+          -- konkurrencer (30. juli 2026). Rundechampionshippet er global, så feltet er
           -- alle brugere med mindst ét scoret tip i runden — samme kreds som
-          -- Championship-fanens rundeliga viser.
+          -- Championship-fanens rundechampionship viser.
           count(*) over (partition by rs.round_key) as field
         from public.round_standings rs
         join (
@@ -505,7 +505,7 @@ begin
           group by round_key
           having bool_and(home_score is not null and away_score is not null)
         ) rc on rc.round_key = rs.round_key
-        -- Kun den samlede rundeliga (sql/tournament_scope.sql). Uden filteret
+        -- Kun den samlede rundechampionship (sql/tournament_scope.sql). Uden filteret
         -- ville feltstørrelsen tælle hver spiller én gang pr. turnering, og
         -- "4. plads af 31" blive til "af 62".
         where rs.scope = 'ALL'

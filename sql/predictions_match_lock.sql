@@ -1,4 +1,4 @@
--- Prediction Champ — Per-kamp-lås for predictions (A21, 1. august 2026)
+-- Leagly — Per-kamp-lås for predictions (A21, 1. august 2026)
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
 --
 -- Afløser sql/predictions_round_lock_policies.sql (#4) og

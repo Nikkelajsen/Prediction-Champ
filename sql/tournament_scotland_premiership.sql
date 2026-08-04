@@ -31,7 +31,7 @@
 -- stadig testes. Generalprøven køres altså i åbent land. Skal turneringen skjules
 -- igen, er det én sætning:
 --    update leagues set is_visible = false where api_league_id = '501';
--- Rundeligaen tæller kun kampe i synlige turneringer (src/lib/data/standings.js),
+-- Rundechampionshippet tæller kun kampe i synlige turneringer (src/lib/data/standings.js),
 -- så en skjult turnering holder ikke runderne kunstigt åbne.
 --
 -- ---------------------------------------------------------------------------

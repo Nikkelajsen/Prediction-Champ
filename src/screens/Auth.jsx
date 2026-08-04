@@ -14,10 +14,11 @@
 // designet, og to synlige etiketter oven på hinanden ville være støj. Reglen er
 // "et felt SKAL have et navn", ikke "et navn skal kunne ses".
 import { useState } from "react";
-import { Crown, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { auth } from "../lib/supabase.js";
-import { C, btnGreen, fieldFull, font, muted, wrapOuter } from "../ui/theme.js";
+import { C, btnGreen, fieldFull, muted, wrapOuter } from "../ui/theme.js";
 import { Card } from "../ui/components.jsx";
+import { Wordmark } from "../ui/Wordmark.jsx";
 import { findDokument, MINDSTEALDER } from "../lib/legal.js";
 import LegalDocument from "./LegalDocument.jsx";
 
@@ -117,10 +118,7 @@ function AuthShell({ children, bred }) {
       <div style={{ width: "100%", maxWidth: 430, padding: "60px 18px", display: "flex", justifyContent: "center" }}>
         <Card style={{ width: bred ? "100%" : 320 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <Crown size={18} color={C.gold} />
-            <span style={{ fontFamily: font.display, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", fontSize: 16 }}>
-              Prediction Champ
-            </span>
+            <Wordmark size={16} />
           </div>
           {/* Hvad er det her? — besvaret FØR der bedes om en e-mail. */}
           <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.45, margin: "0 0 14px" }}>

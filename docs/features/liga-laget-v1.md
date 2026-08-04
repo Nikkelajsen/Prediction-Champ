@@ -169,7 +169,7 @@ Rækkefølgen respekterer roadmappens tommelfingerregel: Story Engine-kalibrerin
 
 - **Medlems-administration** (admin fjerner/forfremmer medlemmer) — lille brugerbase af venner; udskydes til behovet opstår.
 - **Liga-identitet** (ikon, farve, beskrivelse) — navn er nok til at bevise strukturen.
-- **Per-liga-rating og per-liga-månedsliga** — `scope`-kolonnen er forberedt; egen feature senere (åben beslutning A2 hænger sammen).
+- **Per-liga-rating og per-liga-månedschampionship** — `scope`-kolonnen er forberedt; egen feature senere (åben beslutning A2 hænger sammen).
 - **Offentlige/søgbare ligaer** — invite-link er eneste indgang (bogen: vækst gennem eksisterende fællesskaber).
 - **Sletning af ligaer med indhold i UI** — v1 tillader kun sletning af tomme ligaer (ingen konkurrencer); ellers via admin/DB. Undgår destruktive fejlklik på fællesskabets kerne.
 
@@ -184,7 +184,7 @@ Rækkefølgen respekterer roadmappens tommelfingerregel: Story Engine-kalibrerin
 - Flytning af en konkurrence til en liga bevarer stilling, tips og deltagere 1:1, og deltagerne bliver liga-medlemmer.
 - En bruger, der ikke er medlem af en liga, kan ikke læse dens medlemsliste (RLS), men kan slå navnet op via invite-koden.
 - Ingen "infinite recursion"-fejl fra `group_members`-policies (verificér eksplicit — kendt fælde).
-- Rating, Championship, månedsliga, tipslåsen og Story Engine er upåvirkede (regressions-tjeklisten består).
+- Rating, Championship, månedschampionship, tipslåsen og Story Engine er upåvirkede (regressions-tjeklisten består).
 
 ## 10. Testcases
 

@@ -1,4 +1,4 @@
--- Prediction Champ — Brugerstatistik & aktivitets-sporing
+-- Leagly — Brugerstatistik & aktivitets-sporing
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS"
 -- (scriptet sætter selv RLS på de tabeller, der skal have det).
 --

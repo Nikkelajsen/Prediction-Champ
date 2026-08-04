@@ -1,5 +1,5 @@
 // Championship-fanen: de officielle konkurrencer, hvor alle er med automatisk.
-// Rundeliga, månedsliga og sæsonchampionship — hver med sin kåring.
+// Runde-, måneds- og sæsonchampionship — hver med sin kåring.
 //
 // Skærmen er delt op 3. august 2026 (G1): stillings- og kårings-visningerne bor
 // i championship/StandingsTable.jsx, omfangs-valget og titlerne i
@@ -132,14 +132,14 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
         <H>Championship</H>
       </div>
 
-      {/* Rundeliga — Rundens Prediction Champ */}
+      {/* Rundechampionship — Rundens Champion */}
       <Card>
         <CardHead title={boardTitle("round", roundLeague)} info={
           <InfoDot title={boardTitle("round", roundLeague)}>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div>Dine samlede point for én enkelt spillerunde. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, og til sidst hvem der var tættest på — er to helt lige, deles titlen. Vælg en runde i dropdownen.</div>
               {officialLeagues.length > 1 && (
-                <div><b>To niveauer:</b> "Alle turneringer" samler ugens kampe på tværs og kårer <b>Rundens Prediction Champ</b> — den store titel. Vælger du én turnering, ser du stillingen for netop den, hvor alle er målt på de samme kampe; dens vinder er "Rundens bedste i turneringen".</div>
+                <div><b>To niveauer:</b> "Alle turneringer" samler ugens kampe på tværs og kårer <b>Rundens Champion</b> — den store titel. Vælger du én turnering, ser du stillingen for netop den, hvor alle er målt på de samme kampe; dens vinder er "Rundens bedste i turneringen".</div>
               )}
               {note && <div><b>Hvilke turneringer tæller:</b> {note} {WHY_NOT_ALL}</div>}
             </div>
@@ -166,7 +166,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
           <>
             <Champions rows={roundBoard.rows} title={boardTitle("round", roundLeague)} isComplete={roundBoard.isComplete} openProfile={openProfile} />
             <Standings rows={roundBoard.rows} userId={userId} isComplete={roundBoard.isComplete} ratingMap={ratingMap}
-              title={`Rundeliga${roundLeague ? ` · ${roundLeague.name}` : ""} · runde ${roundKey ? roundLabel(roundKey) : ""}`} onOpenFull={setFull} openProfile={openProfile} />
+              title={`Rundechampionship${roundLeague ? ` · ${roundLeague.name}` : ""} · runde ${roundKey ? roundLabel(roundKey) : ""}`} onOpenFull={setFull} openProfile={openProfile} />
           </>
         )}
         {/* Står uden for stillingen med vilje: den tomme stilling ("Ingen point i
@@ -176,14 +176,14 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
         {note && roundScope === ALL_SCOPE && <p style={{ ...muted, margin: "10px 0 0", fontSize: 11 }}>{note}</p>}
       </Card>
 
-      {/* Månedsliga */}
+      {/* Månedschampionship */}
       <Card>
         <CardHead title={boardTitle("month", monthLeague)} info={
           <InfoDot title={boardTitle("month", monthLeague)}>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div>Dine samlede point for alle månedens kampe (hver kamp tælles én gang). Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på — er to helt lige, deles titlen. Alle er automatisk med, og stillingen nulstilles den 1. i hver måned.</div>
               {officialLeagues.length > 1 && (
-                <div><b>To niveauer:</b> "Alle turneringer" samler månedens kampe på tværs og kårer <b>Månedens Prediction Champ</b> — den store titel. Vælger du én turnering, ser du stillingen for netop den, hvor alle er målt på de samme kampe.</div>
+                <div><b>To niveauer:</b> "Alle turneringer" samler månedens kampe på tværs og kårer <b>Månedens Champion</b> — den store titel. Vælger du én turnering, ser du stillingen for netop den, hvor alle er målt på de samme kampe.</div>
               )}
               {note && <div><b>Hvilke turneringer tæller:</b> {note} {WHY_NOT_ALL}</div>}
             </div>
@@ -206,7 +206,7 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
         {!loading && rows && rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen point i denne måned endnu.</p>}
         {!loading && rows && rows.length > 0 && (
           <Standings rows={rows} userId={userId} isComplete={isPast} ratingMap={ratingMap}
-            title={`Månedsliga${monthLeague ? ` · ${monthLeague.name}` : ""} · ${monthName(month)}`} onOpenFull={setFull} openProfile={openProfile} />
+            title={`Månedschampionship${monthLeague ? ` · ${monthLeague.name}` : ""} · ${monthName(month)}`} onOpenFull={setFull} openProfile={openProfile} />
         )}
         {note && monthScope === ALL_SCOPE && <p style={{ ...muted, margin: "10px 0 0", fontSize: 11 }}>{note}</p>}
       </Card>
@@ -218,8 +218,8 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
             værdien ind, hvor kun fallbacken ("Superligaens") passede.
             Sidste sætning: uden den ser vælgeren ud til at mangle en
             turnering, brugeren kan se og tippe alle andre steder i appen. */}
-        <CardHead title="Sæsonens Prediction Champ" info={
-          <InfoDot title="Sæsonens Prediction Champ">Dine samlede point for alle kampe i {seasonLeague?.name || "turneringen"} i hele sæsonen. Én sæsonstilling pr. turnering i Championship — er der flere, vælges de i dropdownen. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Sæsonens bedste kåres som Sæsonens Prediction Champ — er to helt lige, deles titlen.
+        <CardHead title={boardTitle("season")} info={
+          <InfoDot title={boardTitle("season")}>Dine samlede point for alle kampe i {seasonLeague?.name || "turneringen"} i hele sæsonen. Én sæsonstilling pr. turnering i Championship — er der flere, vælges de i dropdownen. Alle er automatisk med. Ved pointlighed afgør flest præcise resultater, så flest korrekte udfald, så flest rundesejre, og til sidst hvem der var tættest på. Sæsonens bedste kåres som Sæsonens Champion — er to helt lige, deles titlen.
             {unofficialLeagues.length > 0 && ` ${joinNames(unofficialLeagues.map((l) => l.name))} har ingen sæsonstilling.`}</InfoDot>
         }>
           {/* Vælgeren dukker først op, når der ér mere end én turnering — med kun
@@ -242,12 +242,12 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
         </div>
 
         {season === null && <p style={{ ...muted, margin: 0 }}>Henter…</p>}
-        {season === undefined && <p style={{ ...muted, margin: 0 }}>Sæsonens Prediction Champ er ikke tilgængelig endnu.</p>}
+        {season === undefined && <p style={{ ...muted, margin: 0 }}>{boardTitle("season")} er ikke tilgængelig endnu.</p>}
         {season && season.rows && season.rows.length === 0 && <p style={{ ...muted, margin: 0 }}>Ingen point i sæsonen endnu — stillingen fyldes, når kampene spilles.</p>}
 
         {season && season.rows && season.rows.length > 0 && (
           <>
-            <Champions rows={season.rows} title="Sæsonens Prediction Champ" isComplete={season.isComplete} openProfile={openProfile} />
+            <Champions rows={season.rows} title={boardTitle("season")} isComplete={season.isComplete} openProfile={openProfile} />
             <Standings rows={season.rows} userId={userId} isComplete={season.isComplete} ratingMap={ratingMap}
               title={`Sæsonchampionship · ${seasonLeague?.name || "Turneringen"}`} onOpenFull={setFull} openProfile={openProfile} />
           </>

@@ -49,7 +49,7 @@ Hver regel har et prioritetstal. Pr. bruger pr. runde vælges historien med lave
 
 | Prio | Regel | Udløses når | Datakilde |
 |---|---|---|---|
-| 10 | Månedens Champ | Måneden slutter, og brugeren vandt Månedsligaen | `monthly_standings` |
+| 10 | Månedens Champ | Måneden slutter, og brugeren vandt Månedschampionshippet | `monthly_standings` |
 | 20 | Førsteplads overtaget | Brugeren gik fra ikke-1. til 1. i en liga | rundestillinger |
 | 21 | Førsteplads mistet | Brugeren gik fra 1. til ikke-1. (nævn hvor længe de førte) | rundestillinger |
 | 30 | Ny ratingrekord | Rating oversteg personlig all-time high (kun efter provisorisk periode) | `rating_history` |
@@ -74,7 +74,7 @@ Teksterne bor to steder og **skal holdes i sync**: `sql/story_engine.sql` skrive
 
 | Prio | Regel | Headline | Body |
 |---|---|---|---|
-| 10 | `MONTH_CHAMP` | 👑 Du er {delt }Månedens Prediction Champ — {month} | {points} point — flest af alle i {month}{ (delt)}. {evt: Nr. 2 var {gap} point efter.} |
+| 10 | `MONTH_CHAMP` | 👑 Du er {delt }Månedens Champion — {month} | {points} point — flest af alle i {month}{ (delt)}. {evt: Nr. 2 var {gap} point efter.} |
 | 20 | `LEAD_TAKEN` | 🏆 Du overtog førstepladsen i {league} | Efter runden {L} fører du {league}. Forspring til nr. 2: {gap} point. |
 | 21 | `LEAD_LOST` | ⚡ {rival} vippede dig af førstepladsen i {league} | Du førte {league}, men {rival} gik forbi i runden {L}. Afstand op: {gap} point. |
 | 30 | `RATING_HIGH` | 📈 Ny personlig ratingrekord: {rating} | Din runde {L} sendte dig forbi din hidtidige rekord på {old}. Du er nu nr. {rank} af {total} på ranglisten. |
@@ -102,9 +102,9 @@ Tre brugere, samme mål, tre historier:
 
 ### Situation B — Månedsafslutning
 
-*Juli slutter. Vinderen af Månedsligaen har 31 point over 4 runder (samlede point, tiebreak: flest præcise).*
+*Juli slutter. Vinderen af Månedschampionshippet har 31 point over 4 runder (samlede point, tiebreak: flest præcise).*
 
-- **Vinderen (prio 10):** 👑 *Du er Månedens Prediction Champ — juli* — "31 point over 4 runder — flest af alle i juli. Jimmy var tættest på med 3 point færre."
+- **Vinderen (prio 10):** 👑 *Du er Månedens Champion — juli* — "31 point over 4 runder — flest af alle i juli. Jimmy var tættest på med 3 point færre."
 
 Alle andre ser deres normale rundehistorie — månedshistorien genereres kun til vinderen i v1. (Senere kan nr. 2 få en "3 point fra titlen"-variant.)
 
@@ -390,7 +390,7 @@ Regressionskørsel på 8 deltagere / 3 runder med to fremmede i en parallel konk
 | 15 | `AWARD_MONTH` | Den **første** runde i en ny måned, når forrige måned er kåret | 👑 Du er (delt) Månedens bedste i {konkurrence} — {måned} |
 | 65 | `AWARD_WEEK` | Runden er kåret i `competition_awards` | 🏅 Du er (delt) Ugens bedste i {konkurrence} |
 
-**Placeringen på stigen er selve designet.** 65 ligger lige over rundens vinder (70), fordi det er *det samme øjeblik* set fra konkurrencens eget navnesystem; 15 ligger lige under den globale månedstitel (10), fordi en lokal månedstitel er større end alt, hvad én runde kan producere, men mindre end at være Månedens Prediction Champ.
+**Placeringen på stigen er selve designet.** 65 ligger lige over rundens vinder (70), fordi det er *det samme øjeblik* set fra konkurrencens eget navnesystem; 15 ligger lige under den globale månedstitel (10), fordi en lokal månedstitel er større end alt, hvad én runde kan producere, men mindre end at være Månedens Champion.
 
 ### 12.2 Reglerne LÆSER kåringen — de regner den ikke
 

@@ -51,17 +51,17 @@ describe("Champions (kåringen)", () => {
   const text = (el) => renderToStaticMarkup(el).replace(/<[^>]*>/g, "");
 
   it("nævner én vinder, når titlen ikke deles", () => {
-    expect(text(<Champions rows={solo} title="Månedens Prediction Champ" isComplete />))
-      .toContain("Anna er Månedens Prediction Champ");
+    expect(text(<Champions rows={solo} title="Månedens Champion" isComplete />))
+      .toContain("Anna er Månedens Champion");
   });
 
   it("nævner begge og siger 'delt', når titlen deles", () => {
-    expect(text(<Champions rows={tied} title="Månedens Prediction Champ" isComplete />))
-      .toContain("Anna og Bo er delt Månedens Prediction Champ");
+    expect(text(<Champions rows={tied} title="Månedens Champion" isComplete />))
+      .toContain("Anna og Bo er delt Månedens Champion");
   });
 
   it("sætter tre navne sammen på dansk", () => {
-    expect(text(<Champions rows={three} title="Månedens Prediction Champ" isComplete />))
+    expect(text(<Champions rows={three} title="Månedens Champion" isComplete />))
       .toContain("Anna, Bo og Carl er delt");
   });
 
@@ -82,7 +82,7 @@ describe("Champions (kåringen)", () => {
 // senere oprydning af inline-styles uden at nogen opdager det.
 describe("CardHead (titel + filtre på en 430 px skærm)", () => {
   const head = (children, info) => renderToStaticMarkup(
-    <CardHead title="Rundens Prediction Champ" info={info}>{children}</CardHead>,
+    <CardHead title="Rundens Champion" info={info}>{children}</CardHead>,
   );
 
   it("lader rækken bryde, så filtrene falder ned under titlen frem for ud over kanten", () => {
@@ -102,13 +102,13 @@ describe("CardHead (titel + filtre på en 430 px skærm)", () => {
   });
 
   it("skriver titlen ud, som den er", () => {
-    expect(head(false).replace(/<[^>]*>/g, "")).toContain("Rundens Prediction Champ");
+    expect(head(false).replace(/<[^>]*>/g, "")).toContain("Rundens Champion");
   });
 
   // ⓘ'en må aldrig kunne brydes ned på en linje for sig selv: den er en fodnote
   // til titlen, og alene på en linje ligner den en knap uden tekst.
   it("binder ⓘ sammen med titlens sidste ord", () => {
-    expect(head(false, <b>i</b>)).toMatch(/<span style="white-space:nowrap">Champ <b>i<\/b><\/span>/);
+    expect(head(false, <b>i</b>)).toMatch(/<span style="white-space:nowrap">Champion <b>i<\/b><\/span>/);
   });
 
   it("klarer en titel på ét ord", () => {
@@ -146,14 +146,14 @@ describe("pickSeasonLeague (hvilken turnering vises)", () => {
 });
 
 // Navnet bærer forskellen mellem de to niveauer: kun den SAMLEDE stilling hedder
-// "Prediction Champ". Reglen skal kunne læses ét sted og testes for sig, fordi
+// "Champion". Reglen skal kunne læses ét sted og testes for sig, fordi
 // den optræder fire steder i fanen (overskrift, InfoDot-titel, kåring, modal).
 describe("boardTitle (samlet vs. pr. turnering)", () => {
   const superliga = { id: "L1", name: "Superligaen" };
 
   it("giver den store titel, når ingen turnering er valgt", () => {
-    expect(boardTitle("round", null)).toBe("Rundens Prediction Champ");
-    expect(boardTitle("month", null)).toBe("Månedens Prediction Champ");
+    expect(boardTitle("round", null)).toBe("Rundens Champion");
+    expect(boardTitle("month", null)).toBe("Månedens Champion");
   });
 
   it("bruger 'bedste i', så en turneringsstilling ikke låner titlen", () => {
@@ -161,8 +161,16 @@ describe("boardTitle (samlet vs. pr. turnering)", () => {
     expect(boardTitle("month", superliga)).toBe("Månedens bedste i Superligaen");
   });
 
-  it("nævner aldrig 'Prediction Champ' på et turneringsniveau", () => {
-    expect(boardTitle("month", superliga)).not.toContain("Prediction Champ");
+  it("nævner aldrig 'Champion' på et turneringsniveau", () => {
+    expect(boardTitle("round", superliga)).not.toContain("Champion");
+    expect(boardTitle("month", superliga)).not.toContain("Champion");
+  });
+
+  // Sæsonen er undtagelsen (turnering-2 §3.6): den ér turneringsbunden, så den
+  // beholder den store titel, uanset om en turnering er valgt.
+  it("giver sæsonen den store titel, også med en valgt turnering", () => {
+    expect(boardTitle("season")).toBe("Sæsonens Champion");
+    expect(boardTitle("season", superliga)).toBe("Sæsonens Champion");
   });
 });
 

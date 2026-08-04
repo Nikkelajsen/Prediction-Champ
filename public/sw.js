@@ -7,12 +7,12 @@ self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim(
 self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch {}
-  const title = data.title || "Prediction Champ";
+  const title = data.title || "Leagly";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || "",
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
+      icon: "/leagly-icon-192.png",
+      badge: "/leagly-icon-192.png",
       tag: data.tag || undefined, // samme tag = erstat i stedet for at stable
       data: { url: data.url || "/" },
     })
