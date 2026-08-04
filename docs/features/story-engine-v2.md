@@ -40,7 +40,7 @@ Ingen kampe på en dag ⇒ ingen kort. Det var et krav fra begyndelsen.
 
 Tærsklerne er ikke pynt. Uden `is distinct from` på afstanden ville duellen fyre hver eneste dag med identisk tekst for alle i den øverste halvdel; uden "≥2 nærmisser" ville `SO_CLOSE` ramme næsten alle, fordi én målfejl er ~⅓ af alle tips; og uden "≥4 tippede" er "den eneste, der troede på Randers" trivielt sandt i en 3-mands konkurrence.
 
-`STREAK_STATUS` er global (`competition_id` null) og katalogets dyre regel — fuld historik-scanning med to vinduesfunktioner. Bliver dagsmotoren for langsom, er det den første, der skal ryge.
+`STREAK_STATUS` er global (`competition_id` null) og ser dyrest ud — fuld historik-scanning med to vinduesfunktioner. **Målingen frikendte den:** 2,5 ms af dagsmotorens 23 i produktion (§11). Den mistænkte var ikke problemet.
 
 ### Loftet: to snit, i den rækkefølge
 
@@ -113,4 +113,18 @@ Karusellen filtrerer på den **klient-beregnede** rundenøgle (`currentRoundKey`
 - **Dagens afgrænsning er global.** Se afsnit 5. Bagstopperen dækker, men først efter to døgn.
 - **`STREAK_STATUS` er dyr.** Se afsnit 3.
 - **Teksterne står to steder.** `src/lib/stories.js` og SQL'en skal være byte-identiske. Syv nye regler er syv nye chancer for at drive fra hinanden — samme vilkår som v1.
-- **Trigger-omkostningen er steget.** Dagsmotoren kører 3–5× oftere end runde-motoren, og alt kører synkront inde i den sætning, `api/sync-live.js` bruger til at afslutte en kamp. Overstiger den ~1 s på produktionsdata, er rækkefølgen: drop `STREAK_STATUS`, og flyt derefter dagsmotoren helt ud i cron — den skal alligevel kun køre én gang i døgnet.
+- **Trigger-omkostningen er målt (august 2026), og den holder.** Alt kører synkront inde i den sætning, `api/sync-live.js` bruger til at afslutte en kamp, så tallet betyder noget.
+
+  Produktionsmålingen var beroligende og uden informationsværdi: 23 ms i gennemsnit, men databasen havde kun **18 spillede kampe**. Dagsmotorens tunge del er opbygningen af `_sd_pts`, som er kumulativ og vokser hele sæsonen. Spørgsmålet var ikke, hvad den koster i august, men hvad den koster i maj — og det kan besvares uden at vente, med `sql/tests/story_engine_scale.sql` (syntetisk fuld sæson: 1800 kampe, 40 spillere, 33.000 rækker i `competition_match_points`, altså 116× produktionens datamængde):
+
+  | | fuld sæson |
+  |---|---|
+  | `generate_daily_stories`, sidste dag | ~320 ms |
+  | `generate_daily_stories`, første dag | ~45 ms |
+  | `generate_stories` (runde-motoren) | ~105 ms |
+  | `recompute_ratings` (**referencen**) | ~145 ms |
+  | **hele trigger-sætningen ved rundeafslutning** | **~570 ms** |
+
+  116× data giver kun ~14× tid, fordi den faste omkostning (otte temp-tabeller, syv regel-forespørgsler) dominerer ved små datamængder. Dagsmotoren er ~2,2× referencen, men kører kun når en dag bliver færdig, mens ratingen genberegnes ved **hver** resultatændring. Der er derfor intet at flytte — og `STREAK_STATUS`, som var den mistænkte, viste sig at koste 2,5 ms af de 23 i produktion.
+
+  **De absolutte tal er maskinafhængige; forholdet til `recompute_ratings()` er ikke.** Det er derfor, målingen altid kører referencen med.

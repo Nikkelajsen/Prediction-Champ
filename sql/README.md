@@ -249,6 +249,16 @@ hele kæden ligger bag matches-triggerens exception-guard, og den mest sandsynli
 fejl — en `date`/`text`-sammenligning, jf. de tre nøgletyper i `stories` — fejler
 TAVST. Uden den påstand ville en motor, der intet producerer, være grøn i CI.
 
+**`sql/tests/story_engine_scale.sql`** er ikke en test, men et **lokalt
+benchmark** — den påstår ingenting og kører ikke i CI. Den bygger en syntetisk
+fuld sæson (1800 kampe, 40 spillere, 33.000 faktarækker) og måler, hvad
+motorerne koster, når datamængden er den, produktionen har om ni måneder.
+Baggrunden: den første produktionsmåling gav 23 ms, men databasen indeholdt 18
+spillede kampe — betryggende og uden informationsværdi. Forsøget flyttede
+mistanken fra `STREAK_STATUS` (2,5 ms) til `award_milestones()` (1.087 ms,
+heraf 726 i `COMP_COMEBACK`) og førte til, at milepælene blev taget ud af
+matches-triggeren. **Kør den igen, hver gang en motor får en ny regel.**
+
 **`sql/tests/milestones.sql`** vogter de guards, der gør en milepæl noget værd:
 feltstørrelse på ranglisten ("top 3 af 3" må ikke uddeles), peak frem for
 nuværende rating, ≥5 kampe for en perfekt runde, og at en konkurrence, der stadig

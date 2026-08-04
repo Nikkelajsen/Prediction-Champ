@@ -143,11 +143,25 @@ begin
            )
         then
           perform public.generate_stories(v_round::text);
-          -- Milepæle hører til rundeafslutningen, ikke til hver resultatændring:
-          -- alt kampdrevet (rating, præcision, perfekte runder, stimer) bliver
-          -- sandt netop her, hvor ratings lige er genberegnet. De ikke-kampdrevne
-          -- familier fanges af api/send-notifications.js.
-          perform public.award_milestones(null);
+          -- MILEPÆLE KALDES IKKE HERFRA (v2.1, august 2026).
+          --
+          -- De gjorde det i første udgave, med den begrundelse at alt kampdrevet
+          -- bliver sandt netop her, hvor ratings lige er genberegnet — og at
+          -- brugeren kigger på sit kort i samme øjeblik. Et skaleringsforsøg på
+          -- en syntetisk fuld sæson (sql/tests/story_engine_scale.sql) målte
+          -- prisen: `award_milestones()` kostede ~505 ms og bragte hele
+          -- trigger-sætningen op på ~1,07 s — inde i den sætning,
+          -- api/sync-live.js bruger til at afslutte en kamp. Uden den er
+          -- sætningen ~565 ms.
+          --
+          -- Prisen for at flytte den er, at en milepæl vises op til én
+          -- cron-kørsel senere (15–30 min) i stedet for med det samme. Den pris
+          -- er lille: kortet ligger i karusellen resten af runden. Prisen for at
+          -- blive var et halvt sekund oven på hver eneste rundeafslutning, for
+          -- et kald der næsten altid ikke uddeler noget.
+          --
+          -- api/send-notifications.js er nu ENESTE kalder — den var i forvejen
+          -- den pålidelige skriver for de tre ikke-kampdrevne familier.
         end if;
       end loop;
     exception when others then

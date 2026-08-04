@@ -808,14 +808,19 @@ export default async function handler(req, res) {
     // (afbrudt/annulleret), og en runde med en udsat kamp uden ny dato. Uden
     // den ville karusellen mangle dagen for altid.
     //
-    // award_milestones() kaldes her OG fra triggeren, og opdelingen er ikke
-    // vilkårlig: alt kampdrevet (rating, præcision, perfekte runder, stimer)
-    // bliver sandt, når en runde afsluttes, og dér kalder triggeren den. Tre
-    // familier er derimod IKKE kampdrevne og ses aldrig af triggeren —
-    // oprettede ligaer/konkurrencer (skriver til `groups`/`competitions`),
-    // deltagne sæsoner (sandt når en sæson starter) og konkurrence-familien
-    // (afhænger af, at `competition_status` vipper, hvilket kan være
-    // kalenderdrevet).
+    // award_milestones() kaldes KUN herfra (v2.1). Første udgave kaldte den
+    // også fra matches-triggeren, så en milepæl landede i samme øjeblik som
+    // rundens kort — men et skaleringsforsøg på en syntetisk fuld sæson
+    // (sql/tests/story_engine_scale.sql) målte den til ~500 ms og bragte hele
+    // trigger-sætningen op på ~1,07 s, inde i den sætning sync-live bruger til
+    // at afslutte en kamp. Prisen for at flytte den er, at en milepæl vises op
+    // til én kørsel senere; kortet ligger i karusellen resten af runden.
+    //
+    // Jobbet var i forvejen eneste vej for de tre familier, triggeren aldrig
+    // kunne se: oprettede ligaer/konkurrencer (skriver til `groups`/
+    // `competitions`), deltagne sæsoner (sandt når en sæson starter) og
+    // konkurrence-familien (afhænger af, at `competition_status` vipper,
+    // hvilket kan være kalenderdrevet).
     //
     // Begge er idempotente og koster ingenting, når der intet er at gøre.
     // dryRun springer dem over af samme grund som kåringerne: en

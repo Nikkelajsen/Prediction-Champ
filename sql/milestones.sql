@@ -389,6 +389,47 @@ begin
   -- mellemliggende førsteplads usynlig. Konsekvensen er konservativ i den
   -- forkerte retning (milepælen kan uddeles lidt for let), men aldrig at en
   -- ægte comeback-sejr overses.
+  --
+  -- YDELSE: rangene bygges ÉN GANG for alle afsluttede konkurrencer og lægges i
+  -- en temp-tabel. Første udgave havde genopbygningen som en korreleret
+  -- `not exists` pr. vinder-række, altså én fuld gennemregning af konkurrencens
+  -- historik pr. kandidat. Et skaleringsforsøg på en syntetisk fuld sæson
+  -- (sql/tests/story_engine_scale.sql) målte den til **726 ms af funktionens
+  -- 1087** — to tredjedele af hele milepæls-beregningen lå i denne ene regel.
+  drop table if exists _ms_lead;
+  create temporary table _ms_lead as
+  with per_round as (
+    select p.competition_id, p.user_id, p.round_key,
+           sum(p.pts) as rpts,
+           count(*) filter (where p.pts = 3) as rex,
+           count(*) filter (where p.pts = 1) as rout,
+           sum(p.goal_err) as rerr, count(*) as rm
+    from public.competition_match_points p
+    join public.competition_status cs
+      on cs.competition_id = p.competition_id and cs.concluded
+    group by p.competition_id, p.user_id, p.round_key
+  ),
+  cum as (
+    select competition_id, user_id, round_key,
+           sum(rpts) over w as pts, sum(rex) over w as ex,
+           sum(rout) over w as outc, sum(rerr) over w as err, sum(rm) over w as m
+    from per_round
+    window w as (partition by competition_id, user_id order by round_key
+                 rows between unbounded preceding and current row)
+  ),
+  ranked as (
+    select competition_id, user_id, round_key,
+           rank() over (partition by competition_id, round_key
+                        order by pts desc, ex desc, outc desc,
+                                 round(err::numeric / m, 4) asc) as rnk,
+           max(round_key) over (partition by competition_id) as last_round
+    from cum
+  )
+  -- Alle, der har ligget nr. 1 i en runde FØR den sidste. Er man ikke i denne
+  -- liste og vandt alligevel, er det per definition et comeback.
+  select distinct competition_id, user_id from ranked
+  where rnk = 1 and round_key < last_round;
+
   insert into _ms_new
   select f.user_id, 'COMP_COMEBACK', 'competition', 4, f.competition_id, null,
          jsonb_build_object('league', c.name, 'points', f.pts)
@@ -397,34 +438,8 @@ begin
   where f.rnk = 1
     and (p_user_id is null or f.user_id = p_user_id)
     and not exists (
-      with per_round as (
-        select user_id, round_key,
-               sum(pts) as rpts,
-               count(*) filter (where pts = 3) as rex,
-               count(*) filter (where pts = 1) as rout,
-               sum(goal_err) as rerr, count(*) as rm
-        from public.competition_match_points
-        where competition_id = f.competition_id
-        group by user_id, round_key
-      ),
-      cum as (
-        select user_id, round_key,
-               sum(rpts) over w as pts, sum(rex) over w as ex,
-               sum(rout) over w as outc, sum(rerr) over w as err, sum(rm) over w as m
-        from per_round
-        window w as (partition by user_id order by round_key
-                     rows between unbounded preceding and current row)
-      ),
-      ranked as (
-        select user_id, round_key,
-               rank() over (partition by round_key
-                            order by pts desc, ex desc, outc desc,
-                                     round(err::numeric / m, 4) asc) as rnk
-        from cum
-      )
-      select 1 from ranked
-      where user_id = f.user_id and rnk = 1
-        and round_key < (select max(round_key) from ranked)
+      select 1 from _ms_lead ml
+      where ml.competition_id = f.competition_id and ml.user_id = f.user_id
     );
 
   -- ================= FAMILIE: community =================
@@ -498,6 +513,14 @@ begin
     select distinct on (user_id, key)
            user_id, key, family, tier, competition_id, round_key, payload
     from _ms_new
+    -- `user_id is not null` er et sikkerhedsnet, ikke en forventning: både
+    -- groups.created_by og competitions.created_by er NOT NULL med fremmednøgle,
+    -- så en null kan ikke opstå i dag. Filteret står her, fordi konsekvensen er
+    -- uforholdsmæssig — funktionen skriver ALLE brugeres milepæle i ét insert,
+    -- så én dårlig række afbryder hele batchen for alle, og den afbrydelse sker
+    -- TAVST bag matches-triggerens exception-guard. Ét filter på den fælles vej
+    -- ud dækker enhver kilde-blok, også dem der tilføjes senere.
+    where user_id is not null
     order by user_id, key, tier desc
     on conflict (user_id, key) do nothing
     returning 1
@@ -506,6 +529,7 @@ begin
 
   drop table if exists _ms_new;
   drop table if exists _ms_final;
+  drop table if exists _ms_lead;
   return v_n;
 end;
 $fn$;

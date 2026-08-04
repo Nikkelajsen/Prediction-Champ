@@ -15,6 +15,22 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## August 2026 — Milepæle flyttes ud af matches-triggeren (v2.1)
+
+**Beslutning:** `award_milestones()` kaldes kun af notifikations-jobbet, ikke længere fra matches-triggeren.
+
+**Begrundelsen er en måling, ikke en fornemmelse.** Produktionsmålingen kort efter udrulningen gav 23 ms for dagsmotoren og så betryggende ud — men databasen indeholdt 18 spillede kampe. Tallet var uden informationsværdi, fordi den tunge del af beregningen er kumulativ og vokser hele sæsonen. Spørgsmålet kunne besvares uden at vente ni måneder: et skaleringsforsøg med en syntetisk fuld sæson (1800 kampe, 40 spillere, 116× produktionens datamængde) i `sql/tests/story_engine_scale.sql`.
+
+**Forsøget flyttede mistanken.** Den regel, jeg havde udpeget som risikoen — `STREAK_STATUS` med sin fulde historik-scanning — kostede 2,5 ms. Dagsmotoren landede på ~320 ms mod ratingens ~145, altså rigeligt inden for det, triggeren allerede betaler ved hver resultatændring. Det dyre var `award_milestones()`: ~1.087 ms, hvoraf `COMP_COMEBACK` alene stod for 726, fordi rang-genopbygningen var korreleret pr. vinder-række. Rangene bygges nu én gang for alle afsluttede konkurrencer, og funktionen faldt til ~500 ms.
+
+**Men 500 ms er stadig for meget dér.** Hele trigger-sætningen lå på ~1,07 s — inde i den sætning, `api/sync-live.js` bruger til at afslutte en kamp — for et kald, der næsten altid ikke uddeler noget (andet kald koster det samme som første). Uden milepælene er sætningen ~570 ms.
+
+**Prisen for at flytte er lille og kendt:** en milepæl vises op til én cron-kørsel senere (15–30 min) frem for med det samme. Kortet ligger i karusellen resten af runden, så ingen går glip af det. Prisen for at blive var et halvt sekund oven på hver eneste rundeafslutning. Den oprindelige begrundelse — "brugeren kigger på sit kort i samme øjeblik" — var en nice-to-have, ikke et krav.
+
+**Den generelle lære, som er værd at tage med videre:** en måling på for lidt data er ikke et svagt svar, det er et *misvisende* svar — den bekræftede en hypotese, der var forkert, og pegede væk fra det, der faktisk kostede. Når et system skal holde over en sæson, kan spørgsmålet stilles med syntetiske data på en time i stedet for at vente på virkeligheden.
+
+---
+
 ## August 2026 — Milepæle skilles fra historier (Story Engine v2)
 
 **Beslutning:** en milepæl er en **engangs-bedrift** i sin egen tabel, ikke et filtreret udsnit af `stories`. Og Story Engine taler nu også dagligt, ikke kun ved rundens slut.
