@@ -430,11 +430,24 @@ begin
   select distinct competition_id, user_id from ranked
   where rnk = 1 and round_key < last_round;
 
+  -- GRÆNSERNE ER IKKE VALGFRIE. Uden dem uddeles milepælen for noget, der ikke
+  -- kan være sket: en konkurrence med ÉN runde har ingen "før sidste runde", så
+  -- `_ms_lead` er tom, `not exists` er sandt, og alle vindere fik et comeback.
+  -- Og man kan ikke komme bagfra mod ingen — reglen manglede helt den
+  -- deltagergrænse, alle de øvrige konkurrence-milepæle har.
+  --   ≥ 3 runder     : der skal være en historie at vende
+  --   ≥ 3 deltagere  : en føring skal betyde noget
   insert into _ms_new
   select f.user_id, 'COMP_COMEBACK', 'competition', 4, f.competition_id, null,
-         jsonb_build_object('league', c.name, 'points', f.pts)
+         jsonb_build_object('league', c.name, 'points', f.pts, 'rounds', rc.n_rounds)
   from _ms_final f
   join public.competitions c on c.id = f.competition_id
+  join (select competition_id, count(*)::int as n
+        from public.competition_participants group by competition_id) sz
+    on sz.competition_id = f.competition_id and sz.n >= 3
+  join (select competition_id, count(distinct round_key)::int as n_rounds
+        from public.competition_match_points group by competition_id) rc
+    on rc.competition_id = f.competition_id and rc.n_rounds >= 3
   where f.rnk = 1
     and (p_user_id is null or f.user_id = p_user_id)
     and not exists (
@@ -483,18 +496,33 @@ begin
   where b.n >= t.tier;
 
   -- Sæsoner deltaget i. Guard `>= 5` tips pr. sæson, så et strøtip ikke tæller.
+  --
+  -- TÆLLER FODBOLDSÆSONER, IKKE RÆKKER I `seasons`. Den fejl var live i to
+  -- dage: `seasons` har én række pr. TURNERING pr. år, så en bruger, der
+  -- tippede Superliga og Premier League i den samme sæson, fik "To sæsoner med"
+  -- efter en uge. Tabellens navn beskriver dens korn, ikke begrebet.
+  --
+  -- Sæsonåret udledes af kampens danske kickoff frem for af `seasons.name`:
+  -- navnet er leverandørens tekst ("2026/27" hos den ene, "2026/2027" hos den
+  -- anden), og to leverandører er allerede i drift. Måneden er skillelinjen —
+  -- en sæson løber juli→juni, så alt før juli hører til året før.
   insert into _ms_new
   select b.user_id, 'SEASONS_' || t.tier, 'community', t.tier, null, null,
          jsonb_build_object('seasons', b.n)
   from (
     select user_id, count(*)::int as n
     from (
-      select pr.user_id, m.season_id
+      select pr.user_id,
+             (case
+                when extract(month from m.kickoff_at at time zone 'Europe/Copenhagen') >= 7
+                then extract(year from m.kickoff_at at time zone 'Europe/Copenhagen')
+                else extract(year from m.kickoff_at at time zone 'Europe/Copenhagen') - 1
+              end)::int as season_year
       from public.predictions pr
       join public.matches m on m.id = pr.match_id
       where pr.pred_home is not null and pr.pred_away is not null
         and (p_user_id is null or pr.user_id = p_user_id)
-      group by pr.user_id, m.season_id
+      group by 1, 2
       having count(*) >= 5
     ) s
     group by user_id

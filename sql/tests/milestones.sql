@@ -178,6 +178,17 @@ begin
   insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at)
     values (sn2, ta, tb, '2026-03-17 12:00:00+00');
 
+  -- ---- Anna tipper i en ANDEN turnering i SAMME fodboldsæson ----
+  -- Fem kampe i sn2 (en anden `seasons`-række), men stadig marts 2026. Det er
+  -- præcis den form, der udløste fejlen: to rækker i `seasons` er to
+  -- TURNERINGER, ikke to sæsoner. Uden dem ville testen ikke kunne se fejlen.
+  for i in 1..5 loop
+    insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at, home_score, away_score)
+      values (sn2, ta, tb, ('2026-03-10 12:00:00+00'::timestamptz + (i || ' hours')::interval), 2, 1)
+      returning id into mid;
+    insert into public.predictions (user_id, match_id, pred_home, pred_away) values (u1, mid, 2, 1);
+  end loop;
+
   -- ---- 100 tips til Bo (TIPS_100), alle forkerte, så intet andet udløses ----
   for i in 1..100 loop
     insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at, home_score, away_score)
@@ -295,6 +306,33 @@ do $$ begin
              where competition_id = '10000000-0000-0000-0000-000000000002'
                and key like 'COMP\_%') then
     raise exception 'FEJL 6c: milepæl uddelt for en konkurrence, der stadig kan vokse';
+  end if;
+end $$;
+
+-- ---------- 6b. Comeback kræver en historie at vende ----------
+-- c1 har ÉN runde (alle fem kampe samme dag) og tre deltagere. Begge dele er
+-- under grænsen, og hver for sig er de nok til at afvise. Uden runde-grænsen
+-- udløste reglen for ENHVER vinder af en afsluttet konkurrence: med kun én
+-- runde findes der ingen tidligere runde, så mængden af tidligere førere er
+-- tom, og `not exists` er trivielt sandt. Fejlen var live i to dage.
+do $$ begin
+  if exists (select 1 from public.milestones where key = 'COMP_COMEBACK') then
+    raise exception 'FEJL 6d: comeback uddelt i en konkurrence med én runde';
+  end if;
+end $$;
+
+-- ---------- 6c. Sæsoner er fodboldsæsoner, ikke rækker i `seasons` ----------
+-- `seasons` har én række pr. TURNERING pr. år. Anna tipper i to forskellige
+-- season_id (sn1 og sn2), men begge ligger i marts 2026 — altså ÉN fodboldsæson.
+-- Bo har derimod kampe i både marts og juli 2026, som er to.
+do $$ begin
+  if exists (select 1 from public.milestones
+             where user_id = '00000000-0000-0000-0000-000000000001' and key = 'SEASONS_2') then
+    raise exception 'FEJL 6e: to turneringer i SAMME sæson blev talt som to sæsoner';
+  end if;
+  if not exists (select 1 from public.milestones
+                 where user_id = '00000000-0000-0000-0000-000000000002' and key = 'SEASONS_2') then
+    raise exception 'FEJL 6f: to ægte fodboldsæsoner gav ingen milepæl';
   end if;
 end $$;
 

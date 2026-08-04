@@ -38,6 +38,8 @@ Fire familier, som karriereprofilen grupperer efter.
 - **Perfekt runde kræver ≥5 kampe.** Fire rigtige er ikke en perfekt runde, og en runde med én kamp er slet ikke en.
 - **Sæsoner kræver ≥5 tips pr. sæson**, så et strøtip ikke tæller som "en sæson med".
 - **Rating måles mod peak**, ikke mod nuværende: en bedrift kan ikke tabes igen.
+- **Comeback kræver ≥3 runder og ≥3 deltagere.** Der skal være en historie at vende, og en føring skal betyde noget.
+- **Sæsoner tælles som fodboldsæsoner**, ikke som rækker i `seasons` — se §10.
 
 ## 5. Hvornår er en konkurrence slut?
 
@@ -87,6 +89,11 @@ Milepælen er derfor **erstattet** af `LEAGUE_GREW_5/10`: "5/10 medlemmer i en l
 
 ## 10. Kendte begrænsninger
 
+- **To fejl var live i to dage (rettet i v1.1).** Begge uddelte en milepæl for noget, der ikke kunne være sket, og begge blev fundet af ejeren på hans egen profil — ikke af en test:
+  - `COMP_COMEBACK` i en konkurrence med **én runde**. Definitionen er "vandt uden at have ligget nr. 1 før sidste runde"; med kun én runde findes der ingen tidligere runde, mængden af tidligere førere er tom, og `not exists` var trivielt sandt for enhver vinder. Reglen manglede desuden helt den deltagergrænse, alle de øvrige konkurrence-milepæle har — man kan ikke komme bagfra mod ingen.
+  - `SEASONS_2/3` talte **rækker i `seasons`**, som har én række pr. TURNERING pr. år. En bruger, der tippede Superliga og Premier League i samme sæson, fik "To sæsoner med" efter en uge. Sæsonåret udledes nu af kampens danske kickoff (juli→juni) frem for af `seasons.name`, som er leverandørens tekst og allerede har to formater i drift.
+
+  Fællesnævneren er værd at holde fast i: **et katalog af tærskler skal afprøves med den mindst mulige verden, ikke kun med en rig fixture.** Én runde, én sæson, én deltager — det er dér, en tærskel, der mangler, viser sig. Oprydningen i `sql/milestones_cleanup_v1_1.sql` sletter de forkerte rækker og uddeler forfra; at slette dér modsiger ikke den frosne semantik i §6, som beskytter mod *datakorrektioner*, ikke mod en regel, der aldrig var sand.
 - **Deltagerantal er nutidigt, ikke et øjebliksbillede.** Forlader nogen konkurrencen inden scanningen, udløses `COMP_WIN_BIG_8` aldrig. Ikke løsbart uden en snapshot-kolonne; accepteret vilkår.
 - **`COMP_COMEBACK` var to tredjedele af hele beregningen.** Første udgave havde rang-genopbygningen som en korreleret `not exists` pr. vinder-række — altså én fuld gennemregning af konkurrencens historik pr. kandidat. Skaleringsforsøget målte den til 726 ms af funktionens 1087. Rangene bygges nu ÉN gang for alle afsluttede konkurrencer i en temp-tabel; funktionen faldt til ~500 ms.
 - **`COMP_COMEBACK` er upræcis i én retning.** En bruger uden tips i en given runde har ingen række dér og indgår ikke i den rundes rangering, så en mellemliggende førsteplads kan være usynlig. Konsekvensen er, at milepælen kan uddeles lidt for let — aldrig at en ægte comeback-sejr overses.
