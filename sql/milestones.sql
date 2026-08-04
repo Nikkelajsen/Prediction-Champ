@@ -476,7 +476,7 @@ begin
   -- competition_participants har en invited_by-kolonne; og analytics_events er
   -- erklæret lossy by design (sql/analytics_events.sql) og må aldrig bære noget,
   -- en bruger kan bestride — hvilket en permanent bedrift per definition er.
-  -- Personlige invite-links er en selvstændig feature (se backloggens indbakke);
+  -- Personlige invite-links er en selvstændig feature (backloggens B20);
   -- indtil da tæller vi det, der ER sandt: hvor mange der kom med i en liga, du
   -- har oprettet. Det er en anden bedrift, og den hedder noget andet.
   insert into _ms_new

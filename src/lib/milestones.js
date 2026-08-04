@@ -121,7 +121,8 @@ export const MILESTONES = {
   // HVORFOR IKKE "5/10 venner tilmeldt via dit link": den attribution findes
   // ikke i skemaet — `groups.invite_code` er én kode pr. liga og ikke pr.
   // bruger, og hverken `group_members` eller `competition_participants` gemmer,
-  // hvem der inviterede. Se sql/milestones.sql for den fulde begrundelse.
+  // hvem der inviterede. Se sql/milestones.sql for den fulde begrundelse og
+  // backloggens B20 for den feature, der ville lukke den.
   // Dette er en ANDEN bedrift, og den hedder derfor noget andet.
   LEAGUE_GREW_5: {
     family: "community", icon: "🤝", title: "5 med i din liga",
