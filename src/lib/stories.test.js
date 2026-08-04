@@ -79,12 +79,12 @@ describe("renderStory (tekst-skabeloner)", () => {
   });
 
   // Navnereglen (turnering-2 §3.6): lokalt hedder det "Månedens bedste" og
-  // ALDRIG "Månedens Prediction Champ", som er den globale titel. To niveauer
+  // ALDRIG "Månedens Champion", som er den globale titel. To niveauer
   // må ikke konkurrere om samme navn.
   it("AWARD_MONTH holder sig fra den globale titels navn", () => {
     const { headline, body } = renderStory("AWARD_MONTH", { league: "Kontorligaen", month: "juli", points: 42 });
     expect(headline).toBe("👑 Du er Månedens bedste i Kontorligaen — juli");
-    expect(headline).not.toContain("Prediction Champ");
+    expect(headline).not.toContain("Champion");
     expect(body).toBe("42 point — flest af alle i Kontorligaen i juli.");
   });
 
@@ -103,7 +103,7 @@ describe("renderStory (tekst-skabeloner)", () => {
 
   it("Månedens Champ angiver samlede point (aldrig gennemsnit) — acceptkriterie", () => {
     const { headline, body } = renderStory("MONTH_CHAMP", { month: "juli", points: 31, gap: 3 });
-    expect(headline).toContain("Månedens Prediction Champ");
+    expect(headline).toContain("Månedens Champion");
     expect(headline).toContain("juli");
     expect(body).toContain("31 point");
     expect(body).not.toMatch(/gennemsnit/i);

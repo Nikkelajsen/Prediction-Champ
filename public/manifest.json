@@ -1,13 +1,14 @@
 {
-  "name": "Prediction Champ",
-  "short_name": "Prediction Champ",
+  "name": "Leagly",
+  "short_name": "Leagly",
   "description": "Forudsig fodboldresultater og konkurrér med vennerne.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0C1622",
   "theme_color": "#0C1622",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "/leagly-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/leagly-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/leagly-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

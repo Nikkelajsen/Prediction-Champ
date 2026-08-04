@@ -32,7 +32,7 @@ function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard
   async function shareInvite() {
     if (!detail) return;
     const link = `${window.location.origin}${window.location.pathname}?liga=${detail.group.invite_code}`;
-    const text = `Du er inviteret til ligaen "${detail.group.name}" på Prediction Champ ⚽\nGæt resultater, saml point og se hvem der er bedst. Tryk her for at være med:\n${link}`;
+    const text = `Du er inviteret til ligaen "${detail.group.name}" på Leagly ⚽\nGæt resultater, saml point og se hvem der er bedst. Tryk her for at være med:\n${link}`;
     try {
       if (await shareText(text) === "clipboard") { setCopied(true); setTimeout(() => setCopied(false), 2000); }
       logEvent(token, "league_invite_sent", { groupId: detail.group.id, metadata: { via: "liga_link" } });

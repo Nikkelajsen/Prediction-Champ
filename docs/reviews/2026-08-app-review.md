@@ -1,4 +1,4 @@
-# Gennemgang af Prediction-Champ — app og dokumentation (august 2026)
+# Gennemgang af Leagly — app og dokumentation (august 2026)
 
 > Ende-til-ende, evidensbaseret gennemgang bestilt 1. august 2026. Ren analyse:
 > **ingen kode, dokumentation, konfiguration, data eller eksterne systemer er ændret**
@@ -27,7 +27,7 @@
 
 ## 1. Resumé
 
-Prediction-Champ er en gennemarbejdet, usædvanligt veldokumenteret hobby-app: en
+Leagly er en gennemarbejdet, usædvanligt veldokumenteret hobby-app: en
 dansk fodbold-tipkonkurrence som PWA (React 18 + Vite, håndrullet PostgREST-klient
 mod Supabase, fire serverless-funktioner på Vercel, al forretningslogik i Postgres).
 Kodedisciplinen er høj — beslutnings-id'er i kommentarer, en backlog med bevidst

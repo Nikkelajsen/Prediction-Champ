@@ -7,7 +7,7 @@
 | arkitektur, mappestruktur, hosting | `DOCUMENTATION.md` §1 |
 | database-skema, tabeller, views | §2 (aktuelt skema: `sql/schema.sql`) |
 | konkurrence-modes, point, tiebreakers | §3–4 |
-| rating, månedsliga, rundeliga, championship | §5 · kode i `sql/rating_core.sql` |
+| rating, månedschampionship, rundechampionship, championship | §5 · kode i `sql/rating_core.sql` |
 | brugernavne | §6 |
 | navigation, faner, layout | §7 |
 | kampsynkronisering, live-resultater | §8 · `api/sync-matches.js`, `api/sync-live.js` · `docs/features/live-resultater-v1.md` |

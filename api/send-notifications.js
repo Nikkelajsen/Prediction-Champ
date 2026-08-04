@@ -427,7 +427,7 @@ export function newTournamentMessages({ leagues, playableLeagueIds }, isSubscrib
       out.push({
         userId: uid,
         key: `newleague:${l.id}`,
-        title: "Ny turnering i Prediction Champ ⚽",
+        title: "Ny turnering i Leagly ⚽",
         body: `${l.name} kan nu tippes. Opret en konkurrence, eller vent på at nogen i din liga gør det.`,
         tag: `newleague-${l.id}`,
         kind: "newleague",
@@ -453,7 +453,7 @@ export default async function handler(req, res) {
     const SYNC_SECRET = process.env.SYNC_SECRET;
     const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
     const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
-    const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:notifications@prediction-champ.invalid";
+    const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:notifications@leagly.invalid";
 
     // Offentligt endpoint: frontendens tilmelding henter den offentlige VAPID-nøgle her,
     // så nøglen kun findes ét sted (Vercels miljøvariabler).
@@ -639,7 +639,7 @@ export default async function handler(req, res) {
     // ================= 2) Runde-resultater =================
     // Runder fra de seneste 14 dage, hvor ALLE kampe har fået resultat: point + placering
     // fra round_standings-viewet (på tværs af de officielle turneringer, præcis som
-    // Championship-fanens rundeliga ved samlet visning).
+    // Championship-fanens rundechampionship ved samlet visning).
     //
     // BEGGE sider er afgrænset til de OFFICIELLE turneringer, og de skal følges ad.
     // Beskeden rapporterer fra scope = 'ALL', som kun summerer officielle turneringer
@@ -685,7 +685,7 @@ export default async function handler(req, res) {
         : [];
 
       for (const roundKey of finishedRoundKeys(ms, toKey)) {
-        // samme kilde og samme tiebreaker-stige som Championship-fanens rundeliga
+        // samme kilde og samme tiebreaker-stige som Championship-fanens rundechampionship
         // (sql/standings_tiebreakers.sql). En runde har ingen rundesejre at bryde
         // lighed med, så stigen er point → præcise → udfald → målafvigelse.
         const board = await sb(`/rest/v1/round_standings?round_key=eq.${roundKey}&scope=eq.ALL&select=user_id,total_points,exact_count,outcome_count,avg_goal_error&order=total_points.desc,exact_count.desc,outcome_count.desc,avg_goal_error.asc,user_id.asc`);
@@ -699,7 +699,7 @@ export default async function handler(req, res) {
             userId: r.user_id,
             key: `result:${roundKey}`,
             title: champ
-              ? (r.shared ? "Du er delt Rundens Prediction Champ! 🏆" : "Du er Rundens Prediction Champ! 🏆")
+              ? (r.shared ? "Du er delt Rundens Champion! 🏆" : "Du er Rundens Champion! 🏆")
               : "Runden er slut ⚽",
             body: `Runden ${roundLabel(roundKey)}: du fik ${r.total_points} point og blev ${pos} af ${board.length}.`,
             tag: `result-${roundKey}`,

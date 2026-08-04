@@ -32,7 +32,7 @@ const PRIVATLIV = {
     {
       titel: "Hvem står bag",
       tekst: [
-        `Prediction Champ drives af ${DATAANSVARLIG} som et privat fritidsprojekt. Det er mig, der er dataansvarlig for de oplysninger, appen behandler.`,
+        `Leagly drives af ${DATAANSVARLIG} som et privat fritidsprojekt. Det er mig, der er dataansvarlig for de oplysninger, appen behandler.`,
         `Vil du have indsigt i dine data, rettet noget eller slettet din konto, så skriv til ${KONTAKT_EMAIL}. Det er den samme adresse uanset hvad du skriver om, og den virker også, hvis du ikke kan logge ind.`,
       ],
     },
@@ -152,7 +152,7 @@ const VILKAAR = {
   titel: "Brugervilkår",
   afsnit: [
     {
-      titel: "Hvad Prediction Champ er",
+      titel: "Hvad Leagly er",
       tekst: [
         "En gratis tjeneste, hvor du gætter resultater i fodboldkampe mod dine venner. Den drives som et privat fritidsprojekt uden kommercielt formål.",
         "Du kan ikke spille om penge gennem tjenesten, og der er ingen præmier ud over æren.",

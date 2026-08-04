@@ -308,7 +308,7 @@ function StatsPanel({ token }) {
           <div style={{ fontFamily: font.display, fontWeight: 700, fontSize: 22, color: C.text }}>{s.competitions_total ?? 0}</div>
         </div>
         <ModeBars data={s.competitions_by_mode || []} total={s.competitions_total || 0} />
-        <p style={{ ...muted, margin: "12px 0 0" }}>Kun private konkurrencer — de officielle (månedsliga m.fl.) tælles ikke med.</p>
+        <p style={{ ...muted, margin: "12px 0 0" }}>Kun private konkurrencer — de officielle (månedschampionship m.fl.) tælles ikke med.</p>
       </Card>
 
       <Card>

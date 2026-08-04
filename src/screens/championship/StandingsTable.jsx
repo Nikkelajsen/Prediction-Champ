@@ -30,7 +30,7 @@ export function StandingsTable({ rows, userId, isComplete, ratingMap, openProfil
       <thead><tr className="rowline">
         <th style={{ ...thStyle, padding: "8px 2px" }}>#</th>
         <th style={{ ...thStyle, padding: "8px 4px" }}>Spiller</th>
-        <th style={{ ...thStyle, textAlign: "center", padding: "8px 2px" }} title="Prediction Champ Rating">Rating</th>
+        <th style={{ ...thStyle, textAlign: "center", padding: "8px 2px" }} title="Leagly Rating">Rating</th>
         <th style={{ ...thStyle, textAlign: "center", padding: "8px 2px" }} title="Antal præcise resultater">🎯</th>
         <th style={{ ...thStyle, textAlign: "right", padding: "8px 2px" }}>Point</th>
       </tr></thead>

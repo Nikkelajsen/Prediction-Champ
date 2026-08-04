@@ -13,13 +13,13 @@
 --   1. flest point            total_points   desc
 --   2. flest præcise          exact_count    desc
 --   3. flest korrekte udfald  outcome_count  desc   ← ny
---   4. flest rundesejre       round_wins     desc   ← ny (ikke i rundeligaen: den ér én runde)
+--   4. flest rundesejre       round_wins     desc   ← ny (ikke i rundechampionshippet: den ér én runde)
 --   5. mindst målafvigelse    avg_goal_error asc    ← ny
 --   derefter er spillerne ÆGTE lige: delt placering og delt titel. Rækkefølgen
 --   gøres stabil med user_id i klientens order=, som ALDRIG afgør en placering.
 --
 -- Hvorfor målafvigelsen er et GENNEMSNIT og ikke en sum: en sum ville straffe den,
--- der tipper flest kampe, og det strider mod beslutning A2 ("Månedsligaen må gerne
+-- der tipper flest kampe, og det strider mod beslutning A2 ("Månedschampionshippet må gerne
 -- belønne deltagelse"). Gennemsnittet normaliserer deltagelsesomfang på samme måde
 -- som ratingen (point pr. kamp). Der afrundes til 4 decimaler, så SQL og JS altid
 -- er enige om, HVORNÅR to tal er lige.

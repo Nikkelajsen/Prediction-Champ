@@ -40,6 +40,10 @@ eller en linje i "Forkastede ideer".
 
 Kontakt-mail til hjemmesiden skal afklares før publicering — `site/om.html` bruger en pladsholder-adresse (hænger sammen med `I10`).
 
+GitHub-repoet og Vercel-projektet hedder stadig det gamle navn; hjemmesidens 25 links peger derfor på `prediction-champ.vercel.app` og skal rettes, når domænet skifter (hænger sammen med `I10`).
+`public/leagly-wordmark-navy.png` bruges ikke i kode; oplagt som `og:image`/socialt delebillede på hjemmesiden, når domænet er afklaret.
+`manifest.json`s `short_name` er identisk med `name` ("Leagly") — kunne få en rigtig kort form, hvis navnet nogensinde bliver for langt til et ikon.
+
 *Ryddet 3. august 2026 (anden runde): de femten linjer fra dokumentations-gennemgangen
 blev til `A27`, `B17`–`B18` og `G58`–`G68`. **To linjer blev til én række:** `#34`s
 efterladte default privileges og de `grant select … to anon`, der står nederst i

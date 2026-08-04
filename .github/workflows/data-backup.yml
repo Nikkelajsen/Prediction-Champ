@@ -189,7 +189,7 @@ jobs:
 
           serverversion=$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -c 'show server_version')
           {
-            echo "# Prediction Champ — sikkerhedskopi"
+            echo "# Leagly — sikkerhedskopi"
             echo "dato_utc:       $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "commit:         ${GITHUB_SHA:0:7}"
             echo "kørsel:         ${GITHUB_RUN_ID:-lokal}"
@@ -221,16 +221,16 @@ jobs:
           printf '%s' "$BACKUP_PASSPHRASE" > /tmp/pp
           gpg --batch --yes --symmetric --cipher-algo AES256 \
               --pinentry-mode loopback --passphrase-file /tmp/pp \
-              --output "ud/prediction-champ-$dato.dump.gpg" /tmp/backup.dump
+              --output "ud/leagly-$dato.dump.gpg" /tmp/backup.dump
           shred -u /tmp/pp
-          test -s "ud/prediction-champ-$dato.dump.gpg"
+          test -s "ud/leagly-$dato.dump.gpg"
           # Kontrollér at filen faktisk ER krypteret og ikke bare omdøbt: et
           # pg_dump-arkiv i custom-format begynder med de fem tegn "PGDMP".
-          if [ "$(head -c 5 "ud/prediction-champ-$dato.dump.gpg" | tr -d '\0')" = "PGDMP" ]; then
+          if [ "$(head -c 5 "ud/leagly-$dato.dump.gpg" | tr -d '\0')" = "PGDMP" ]; then
             echo "::error::Filen i ud/ er et rå pg_dump-arkiv. Den må ikke uploades fra et offentligt repo."
             exit 1
           fi
-          echo "Krypteret: $(du -h "ud/prediction-champ-$dato.dump.gpg" | cut -f1)"
+          echo "Krypteret: $(du -h "ud/leagly-$dato.dump.gpg" | cut -f1)"
 
       # Beviset. En sikkerhedskopi, der aldrig er prøvet gendannet, er en
       # formodning — så den prøves ved HVER kørsel, mod en tom PostgreSQL.

@@ -17,7 +17,7 @@ describe("shareText", () => {
     navigator.share = share;
     navigator.clipboard = { writeText: vi.fn() };
     expect(await shareText("hej")).toBe("share");
-    expect(share).toHaveBeenCalledWith({ title: "Prediction Champ", text: "hej" });
+    expect(share).toHaveBeenCalledWith({ title: "Leagly", text: "hej" });
     expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
   });
 

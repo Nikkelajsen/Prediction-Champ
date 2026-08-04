@@ -475,7 +475,7 @@ begin
   where rh.scope = 'ALL' and rh.round_key = p_round_key
     and prev.old is not null and rh.rating_after > prev.old;
 
-  -- ======== Regel 10 · Månedens Champ (global, når runden lukker måneden) ========
+  -- ======== Regel 10 · Månedens Champion (global, når runden lukker måneden) ========
   v_month := to_char(v_round, 'YYYY-MM');
   v_month_name := months[cast(to_char(v_round, 'MM') as int)];
   select not exists (
@@ -494,7 +494,7 @@ begin
                          'gap', w.total_points - coalesce(sec.total_points, w.total_points),
                          'shared', w.n_top > 1),
       '👑 Du er ' || case when w.n_top > 1 then 'delt ' else '' end
-        || 'Månedens Prediction Champ — ' || v_month_name,
+        || 'Månedens Champion — ' || v_month_name,
       w.total_points || ' point — flest af alle i ' || v_month_name ||
         case when w.n_top > 1 then ' (delt).' else '.' end ||
         case when sec.total_points is not null and sec.total_points < w.total_points
@@ -528,7 +528,7 @@ begin
   --
   -- Prioritet 15 ligger mellem den globale månedstitel (10) og en overtaget
   -- førsteplads (20): en lokal månedstitel er større end alt, hvad en enkelt
-  -- runde kan producere, men mindre end at være Månedens Prediction Champ.
+  -- runde kan producere, men mindre end at være Månedens Champion.
   v_prev_month := to_char(v_round - 7, 'YYYY-MM');
   if v_prev_month <> to_char(v_round, 'YYYY-MM') then
     v_prev_month_name := months[cast(substring(v_prev_month from 6 for 2) as int)];
@@ -562,7 +562,7 @@ begin
     'Du ramte ' || rs.exact_count || ' kampe præcist i runden ' || v_label ||
       ' — ' || rs.total_points || ' point i alt.'
   from public.round_standings rs
-  -- Kun den samlede rundeliga (sql/tournament_scope.sql). Uden scope-filteret
+  -- Kun den samlede rundechampionship (sql/tournament_scope.sql). Uden scope-filteret
   -- ville hver bruger få ét SHARP-kort pr. turnering med hver sit tal.
   where rs.round_key = v_round and rs.scope = 'ALL' and rs.exact_count >= 2;
 

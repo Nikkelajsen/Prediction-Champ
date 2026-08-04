@@ -20,7 +20,7 @@ function mockTables(tables) {
 // funktion ville blive kørt af vitest som cleanup-hook (uden argumenter)
 beforeEach(() => { db.select.mockReset(); db.del.mockReset(); db.insert.mockReset(); restFetch.mockReset(); });
 
-// Rundeligaen slår først turneringerne op (leagues → seasons), så begge tabeller
+// Rundechampionshippet slår først turneringerne op (leagues → seasons), så begge tabeller
 // skal med i mocken, selv når testen handler om noget andet.
 const OFFICIAL = { leagues: [{ id: "L1" }], seasons: [{ id: "s1" }] };
 

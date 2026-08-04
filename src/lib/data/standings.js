@@ -1,5 +1,5 @@
 // Alle stillingslister, der IKKE hører til én konkurrence: global rating,
-// månedsliga, rundeliga og sæsonchampionship. Fælles træk: de læser DB-views
+// månedschampionship, rundechampionship og sæsonchampionship. Fælles træk: de læser DB-views
 // eller ratings-tabellen direkte og bruger den samme tiebreaker-stige.
 
 import { db } from "../supabase.js";
@@ -72,7 +72,7 @@ function standingsRow(r, nameById) {
     matches: r.matches,
     exactCount: r.exact_count,
     outcomeCount: r.outcome_count ?? 0,
-    roundWins: r.round_wins ?? 0, // findes ikke i rundeligaen — 0 gør trinnet neutralt
+    roundWins: r.round_wins ?? 0, // findes ikke i rundechampionshippet — 0 gør trinnet neutralt
     avgGoalError: Number(r.avg_goal_error ?? 0), // numeric kommer som streng over REST
   };
 }
@@ -100,8 +100,8 @@ async function loadMonthsAvailable(token, scope = ALL) {
   return [...new Set(rows.map((r) => r.month))].sort().reverse();
 }
 
-// ---------- Rundeliga: samlede point for én enkelt spillerunde (round_key) ----------
-// Samme princip som månedsligaen: alle er automatisk med, hver kamp tælles én
+// ---------- Rundechampionship: samlede point for én enkelt spillerunde (round_key) ----------
+// Samme princip som månedschampionshippet: alle er automatisk med, hver kamp tælles én
 // gang. Stillingen læses fra DB-viewet round_standings — kun spillede (låste)
 // kampe indgår i viewet.
 //

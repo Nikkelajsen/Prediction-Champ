@@ -1,4 +1,4 @@
--- Prediction Champ — "tid ikke fastlagt" som egenskab ved kampen (august 2026)
+-- Leagly — "tid ikke fastlagt" som egenskab ved kampen (august 2026)
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
 --
 -- PROBLEMET. En terminsliste offentliggøres med datoer længe før klokkeslæt.

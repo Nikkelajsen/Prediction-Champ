@@ -1,4 +1,4 @@
--- Prediction Champ — Runde-baseret lås for predictions (DELETE + SELECT)
+-- Leagly — Runde-baseret lås for predictions (DELETE + SELECT)
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
 --
 -- Afløser sql/predictions_delete_policy.sql. Tidligere låste hver kamp individuelt

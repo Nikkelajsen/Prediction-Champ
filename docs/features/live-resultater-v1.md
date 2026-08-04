@@ -115,7 +115,7 @@ Log ind på [cron-job.org](https://cron-job.org) → **Cronjobs** → **Create c
 
 | Felt | Værdi |
 |---|---|
-| **Title** | `Prediction Champ — live-resultater` |
+| **Title** | `Leagly — live-resultater` |
 | **URL** | `https://<app>/api/sync-live` |
 | **Schedule** | **Every 1 minute** — vælg "Every minute" i dropdownen, eller sæt alle felter (minut/time/dag/måned/ugedag) til "every" |
 | **Request method** | `GET` |

@@ -35,13 +35,18 @@ const readSeasonLeagueId = (userId) => readUserFlag(SEASON_LEAGUE_KEY, userId);
 const writeSeasonLeagueId = (userId, id) => writeUserFlag(SEASON_LEAGUE_KEY, userId, id);
 
 // Championship har to niveauer, og navnet bærer forskellen: kun den SAMLEDE
-// stilling hedder "Prediction Champ". En turneringsstilling er "Månedens bedste
-// i Superligaen" — rangordenen ligger dermed i sproget og kræver ingen
-// forklaring i UI'et. (Sæsonchampionshippet er en bevidst undtagelse: det er
-// turneringsbundet af natur og har ingen samlet modpart at forveksles med.)
+// stilling hedder "Champion". En turneringsstilling er "Månedens bedste i
+// Superligaen" — rangordenen ligger dermed i sproget og kræver ingen forklaring
+// i UI'et. (Sæsonen er en bevidst undtagelse: den er turneringsbunden af natur
+// og har ingen samlet modpart at forveksles med, så den hedder "Sæsonens
+// Champion", uanset hvilken turnering der er valgt.)
+//
+// Sæsonen kom hertil ved navneskiftet til Leagly: titlen stod hårdkodet fire
+// steder i ChampionshipTab.jsx, og en titel, der findes fem steder, bliver rettet
+// fire af dem næste gang.
 export function boardTitle(kind, league) {
-  const what = kind === "round" ? "Rundens" : "Månedens";
-  return league ? `${what} bedste i ${league.name}` : `${what} Prediction Champ`;
+  const what = kind === "round" ? "Rundens" : kind === "season" ? "Sæsonens" : "Månedens";
+  return league && kind !== "season" ? `${what} bedste i ${league.name}` : `${what} Champion`;
 }
 
 // Scope-værdien, loaderne og DB-viewene bruger: 'ALL' = alle officielle

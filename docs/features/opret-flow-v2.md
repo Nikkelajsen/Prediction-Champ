@@ -14,7 +14,7 @@ bag en "Flere valg"-fold.
   `time_range` under Custom-kortet.
 - **Lokal kåring ≠ global titel.** "Ugens bedste" og "Månedens bedste" er
   konkurrencens egne kåringer (`competition_awards`). "Rundevinder" /
-  "månedsmester" / "Prediction Champ" er Championships og bruges ALDRIG om de
+  "månedsmester" / "Champion" er Championships og bruges ALDRIG om de
   lokale — navnereglen fra [`turnering-2.md`](./turnering-2.md) §3.6 (*to
   niveauer må ikke konkurrere om samme navn*) er bindende her.
 

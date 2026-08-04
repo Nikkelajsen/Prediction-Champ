@@ -74,7 +74,7 @@ mappen flyttes.
 
 1. **Ejer-godkendelse af copy og udtryk** — dette er et førsteudkast.
 2. **Kontakt-mail** — `om.html` bruger pladsholderen
-   `kontakt@prediction-champ.example`; den rigtige adresse er en del af `I10`
+   `kontakt@leagly.example`; den rigtige adresse er en del af `I10`
    (professionel e-mail). Står i backloggens indbakke.
 3. **Domæne og hosting-beslutning** (`I10`) — eget domæne eller en sti på
    Vercel-projektet; afgør også, om appens CSP-headere skal justeres.

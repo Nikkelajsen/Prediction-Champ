@@ -8,7 +8,7 @@
 -- ---------------------------------------------------------------------------
 -- Hvorfor
 --
--- Rundeligaen og månedsligaen joinede kun predictions ↔ matches: intet filter på
+-- Rundechampionshippet og månedschampionshippet joinede kun predictions ↔ matches: intet filter på
 -- turnering, intet på konkurrence. De summerede point for ALT, brugeren havde
 -- tippet — og hvad man har tippet, afgøres af, hvilke FRIVILLIGE konkurrencer man
 -- er meldt ind i.
@@ -19,12 +19,12 @@
 -- er ikke, at deltagelse belønnes; det er, at de eneste konkurrencer, INGEN selv
 -- har valgt, blev afgjort af, hvad man tilfældigvis havde valgt andre steder.
 --
--- Beslutning A2 (juli 2026) svarede "månedsligaen må gerne belønne deltagelse" —
+-- Beslutning A2 (juli 2026) svarede "månedschampionshippet må gerne belønne deltagelse" —
 -- truffet før turnering #2 fandtes, altså om en situation, der ikke kunne afprøves.
 -- Denne migrering afløser den med to niveauer:
 --
 --   scope = 'ALL'      alle OFFICIELLE turneringer under ét
---                      → "Rundens / Månedens Prediction Champ" (den store titel)
+--                      → "Rundens / Månedens Champion" (den store titel)
 --   scope = <league_id> én stilling pr. officiel turnering
 --                      → "Rundens / Månedens bedste i <turnering>"
 --
@@ -197,7 +197,7 @@ grant select on public.monthly_standings to anon, authenticated, service_role;
 --   from round_standings group by round_key, user_id
 -- ) t where pr_turnering is distinct from samlet or p_pr is distinct from p_samlet;
 
--- 3) Samme invariant for månedsligaen. Skal give 0 rækker.
+-- 3) Samme invariant for månedschampionshippet. Skal give 0 rækker.
 -- select month, user_id from (
 --   select month, user_id,
 --          sum(matches) filter (where scope <> 'ALL') as pr_turnering,

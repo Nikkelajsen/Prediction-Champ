@@ -149,7 +149,7 @@ function fmtCountdown(ts) {
 
 // Månedsnøgle ("2026-08") → "August 2026". Forankres på middag UTC den 1. og
 // ikke på midnat lokalt: en enhed øst for Danmark ville ellers få et tidspunkt,
-// der er dansk den SIDSTE i forrige måned — og så ville månedsligaen stå med
+// der er dansk den SIDSTE i forrige måned — og så ville månedschampionshippet stå med
 // den forkerte måned i overskriften (G32).
 function monthName(monthKey) {
   const [y, m] = monthKey.split("-");

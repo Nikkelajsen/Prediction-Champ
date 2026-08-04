@@ -1,4 +1,4 @@
--- Prediction Champ — Analytics v1: dashboard (læse-siden)
+-- Leagly — Analytics v1: dashboard (læse-siden)
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
 -- Spec: docs/features/analytics-v1.md
 --

@@ -1,7 +1,7 @@
 // App-skallen: navigation mellem de fem faner og drill-in-skærmene, plus den
 // fælles indlæsning af ligaer og konkurrencer, alle faner bygger på.
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
-import { Home, ClipboardList, Users, Trophy, TrendingUp, Crown, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
+import { Home, ClipboardList, Users, Trophy, TrendingUp, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { loadGroupByCode, joinGroup, joinCompetition } from "../lib/data.js";
 import { logEvent } from "../lib/analytics.js";
@@ -9,6 +9,7 @@ import { deriveOnboarding, loadOnboardingSignals } from "../lib/onboarding.js";
 import { readUserFlag, writeUserFlag, COMPLETE_KEY, FLOW_KEY, PWA_ONBOARDED_KEY } from "../lib/localFlags.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, phone, wrapOuter } from "../ui/theme.js";
 import { Modal } from "../ui/components.jsx";
+import { Wordmark } from "../ui/Wordmark.jsx";
 import { ErrorBoundary, ScreenFallback } from "../ui/ErrorBoundary.jsx";
 import { setTelemetryScreen } from "../lib/telemetry.js";
 import HjemTab from "./HjemTab.jsx";
@@ -480,13 +481,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
           borderBottom: `1px solid ${C.line}`,
           paddingTop: "calc(14px + env(safe-area-inset-top, 0px))",
         }}>
-          <Crown size={17} color={C.gold} />
-          <span style={{
-            fontFamily: font.display, fontWeight: 700, textTransform: "uppercase",
-            letterSpacing: "0.1em", fontSize: 15,
-          }}>
-            Prediction Champ
-          </span>
+          <Wordmark size={15} />
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
             <button onClick={() => openProfile(userId)} aria-label="Min karriereprofil" style={iconBtn}><User size={18} /></button>
             <button onClick={openHow} aria-label="Sådan virker det" style={iconBtn}><Info size={18} /></button>

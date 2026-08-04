@@ -84,7 +84,7 @@ function shortKick(iso) {
   return `${day} ${t}`;
 }
 
-// "Dine placeringer": månedsliga (global) øverst, dernæst konkurrencer grupperet
+// "Dine placeringer": månedschampionship (global) øverst, dernæst konkurrencer grupperet
 // pr. liga (liga-laget). Har brugeren ingen ligaer, vises konkurrencerne fladt som før.
 function Placements({ placements, goTab, openBoard }) {
   const monthlyRows = placements.filter((r) => r.tab);
@@ -231,9 +231,9 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         }
       } catch { if (!cancelled) setSnapshot({ none: true }); }
 
-      // placeringer: månedsliga + hver privat konkurrence.
-      // Hentes parallelt (månedsliga + alle konkurrencer på én gang); rækkefølgen
-      // på listen bevares (månedsliga først, dernæst konkurrencer i input-orden).
+      // placeringer: månedschampionship + hver privat konkurrence.
+      // Hentes parallelt (månedschampionship + alle konkurrencer på én gang); rækkefølgen
+      // på listen bevares (månedschampionship først, dernæst konkurrencer i input-orden).
       // Bemærk: private konkurrencers stilling findes ikke i standings-views'ene
       // (de er globale pr. runde/sæson), så computeCompetitionState er stadig nødvendig.
       try {
@@ -251,7 +251,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         const list = [];
         // Placeringen er rækkens ægte rank (delt ved lighed) — ikke dens plads i listen.
         const mine = monthly.find((r) => r.userId === userId);
-        if (mine) list.push({ label: "Månedsliga · " + monthName(currentMonthKey()), pos: `${mine.rank}.`, shared: mine.shared, tab: "championship" });
+        if (mine) list.push({ label: "Månedschampionship · " + monthName(currentMonthKey()), pos: `${mine.rank}.`, shared: mine.shared, tab: "championship" });
         comps.forEach((c, i) => {
           const state = compStates[i];
           if (!state) return; // fejlede — spring over
@@ -513,7 +513,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         <Card>
           <Eyebrow>Dine placeringer <InfoDot title="Dine placeringer">
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div>Hvor du ligger lige nu — i månedsligaen og i hver af dine konkurrencer.</div>
+              <div>Hvor du ligger lige nu — i månedschampionshippet og i hver af dine konkurrencer.</div>
               <div>Konkurrencerne er grupperet under den liga, de hører til. Tryk på en række for at se hele stillingen.</div>
             </div>
           </InfoDot></Eyebrow>

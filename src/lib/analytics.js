@@ -177,7 +177,7 @@ const STORY_RULES = {
   H2H_PASS: "Overhalede en rival",
   STREAK: "Stime",
   SHARP: "Skarpe tips",
-  MONTH_CHAMP: "Månedens Prediction Champ",
+  MONTH_CHAMP: "Månedens Champion",
   AWARD_WEEK: "Ugens bedste (lokal kåring)",
   AWARD_MONTH: "Månedens bedste (lokal kåring)",
   SEASON_OPENER: "Premiereugen",

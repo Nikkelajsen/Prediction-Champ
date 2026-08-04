@@ -122,8 +122,8 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
     const link = `${window.location.origin}${window.location.pathname}?join=${comp.invite_code}`;
     const target = `konkurrencen "${comp.name}"`;
     const intro = inviterName
-      ? `${inviterName} har inviteret dig til ${target} på Prediction Champ ⚽`
-      : `Du er inviteret til ${target} på Prediction Champ ⚽`;
+      ? `${inviterName} har inviteret dig til ${target} på Leagly ⚽`
+      : `Du er inviteret til ${target} på Leagly ⚽`;
     const text = `${intro}\nGæt resultater, saml point og se hvem der er bedst. Tryk her for at være med:\n${link}`;
     try {
       if (await shareText(text) === "clipboard") {
@@ -211,7 +211,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
             <thead><tr className="rowline">
               <th style={{ ...thStyle, padding: "8px 2px" }}>#</th>
               <th style={{ ...thStyle, padding: "8px 4px" }}>Spiller</th>
-              <th style={{ ...thStyle, textAlign: "center", padding: "8px 2px" }} title="Prediction Champ Rating">Rating</th>
+              <th style={{ ...thStyle, textAlign: "center", padding: "8px 2px" }} title="Leagly Rating">Rating</th>
               <th style={{ ...thStyle, textAlign: "center", padding: "8px 2px" }} title="Antal præcise resultater">🎯</th>
               <th style={{ ...thStyle, textAlign: "center", padding: "8px 2px" }} title="Point i de seneste 3 runder">Form</th>
               <th style={{ ...thStyle, textAlign: "right", padding: "8px 2px" }}>Point</th>

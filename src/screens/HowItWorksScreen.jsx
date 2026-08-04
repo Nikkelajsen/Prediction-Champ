@@ -83,7 +83,7 @@ function HowItWorksScreen({ onBack, token, openLegal }) {
           <div>
             <b>Championship</b> er officielle konkurrencer, hvor alle automatisk er med — ingen tilmelding og ingen invitation.
             Det er ikke det samme som en <b>konkurrence</b>: den opretter du selv i din liga. Dine tips tæller begge steder
-            på én gang, så du tipper kun én gang pr. kamp.{" "} <b>Månedsligaen</b> samler dine samlede point for månedens kampe (uafgjort afgøres af tiebreak-stigen under Point og stilling). Månedens bedste kåres som <b>Månedens Prediction Champ</b> — er to helt lige, deles titlen. Stillingen nulstilles den 1.
+            på én gang, så du tipper kun én gang pr. kamp.{" "} <b>Månedschampionshippet</b> samler dine samlede point for månedens kampe (uafgjort afgøres af tiebreak-stigen under Point og stilling). Månedens bedste kåres som <b>Månedens Champion</b> — er to helt lige, deles titlen. Stillingen nulstilles den 1.
           </div>
         </Sub>
       </Topic>

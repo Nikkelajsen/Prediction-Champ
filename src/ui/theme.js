@@ -11,7 +11,10 @@ const C = {
   // Blød grøn = +1 / korrekt udfald. Grøn familie, men tydeligt adskilt fra det
   // præcise hit (C.green), så nuancen alene fortæller hvor godt gættet var.
   greenSoft: "#7fd48a",
-  gold: "#F0B429",
+  // Logoets guld (public/leagly-icon-512.png). Var #F0B429 indtil navneskiftet
+  // til Leagly — pokalen i ikonet og guldet i appen skal være samme farve, ellers
+  // ses forskellen som en fejl, når de står ved siden af hinanden i headeren.
+  gold: "#F2C14E",
   red: "#EF5B5B",
 };
 const font = {

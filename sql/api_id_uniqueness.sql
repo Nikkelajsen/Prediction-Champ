@@ -1,4 +1,4 @@
--- Prediction Champ — unique-constraints på leverandør-id'erne (G7)
+-- Leagly — unique-constraints på leverandør-id'erne (G7)
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
 --
 -- ---------------------------------------------------------------------------
