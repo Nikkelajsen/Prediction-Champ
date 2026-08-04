@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { currentRoundKey, roundKeyOfDate, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 describe("outcome", () => {
   it("giver 1 ved hjemmesejr, X ved uafgjort, 2 ved udesejr", () => {
@@ -416,3 +416,39 @@ describe("modeLabel", () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// Rundenøglen på klienten (Story Engine v2's karrusel)
+// ---------------------------------------------------------------------------
+describe("roundKeyOfDate / currentRoundKey", () => {
+  // Runden løber tirsdag→mandag, og nøglen er tirsdagens dato. Fjerde spejling
+  // af public.round_key() — reglen skal give samme svar i SQL og i klienten,
+  // ellers filtrerer karusellen på en anden uge end den, motoren skrev.
+  it("ruller tilbage til rundens tirsdag", () => {
+    expect(roundKeyOfDate("2026-03-03")).toBe("2026-03-03"); // tirsdag → sig selv
+    expect(roundKeyOfDate("2026-03-04")).toBe("2026-03-03"); // onsdag
+    expect(roundKeyOfDate("2026-03-08")).toBe("2026-03-03"); // søndag
+    expect(roundKeyOfDate("2026-03-09")).toBe("2026-03-03"); // mandag — stadig samme runde
+    expect(roundKeyOfDate("2026-03-10")).toBe("2026-03-10"); // ny tirsdag → ny runde
+  });
+
+  it("krydser måneds- og årsskifte", () => {
+    expect(roundKeyOfDate("2026-01-01")).toBe("2025-12-30");
+    expect(roundKeyOfDate("2026-03-01")).toBe("2026-02-24");
+  });
+
+  it("giver tom streng for ugyldigt input frem for at kaste", () => {
+    expect(roundKeyOfDate("")).toBe("");
+    expect(roundKeyOfDate("ikke-en-dato")).toBe("");
+  });
+
+  // Nøglen skal følge den DANSKE dag. En enhed i en anden zone må ikke få en
+  // anden runde — det ville vise en tom karrusel for en rejsende bruger.
+  it("aflæser dagen i dansk tid", () => {
+    // 2026-03-09 23.30 dansk = 22.30 UTC → stadig mandag, altså rundens
+    // sidste dag og ikke den næste runde.
+    expect(currentRoundKey(new Date("2026-03-09T22:30:00Z"))).toBe("2026-03-03");
+    // 2026-03-09 23.30 UTC = 00.30 dansk tirsdag → NY runde.
+    expect(currentRoundKey(new Date("2026-03-09T23:30:00Z"))).toBe("2026-03-10");
+  });
+});

@@ -1,4 +1,20 @@
--- Story Engine v1.2 — stories-tabel, latest_story-view og generate_stories().
+-- Story Engine — stories-tabel, latest_story-view og generate_stories().
+--
+-- v2 (august 2026) — RUNDE-MOTOREN ER NU ÉN AF TO. Dagsmotoren
+-- (generate_daily_stories, sql/story_engine_v2.sql) skriver i den SAMME tabel,
+-- og derfor er to ting ændret her:
+--   · `delete` er periode-afgrænset (`and period = 'round'`). UDEN det sletter
+--     runde-motoren hele ugens dagskort ved hver eneste resultatændring — og de
+--     genskabes aldrig, for dagsmotoren kører kun, når en dag BLIVER færdig.
+--     Det er den farligste linje i hele v2; sql/tests/story_engine_daily.sql
+--     vogter den.
+--   · det dæmpede tiers kandidat-udvælgelse tæller kun runde-kort, så et
+--     dagskort ikke kan gøre en ellers stille runde tavs.
+-- Rækkefølge: sql/story_engine_v2_day.sql → sql/story_engine_v2.sql → DENNE FIL
+-- → sql/rating_trigger_optimization.sql. _se_rp læser nu viewet
+-- competition_match_points, som oprettes i den første af dem.
+--
+-- v1.2 (august 2026)
 --
 -- v1.2 (august 2026) — LOKALE KÅRINGER (B10). To nye regler læser den
 -- persisterede kåring i competition_awards (A22) frem for at regne den om:
@@ -87,14 +103,19 @@ grant select, update on public.stories to authenticated;
 -- liga (snapshottet league_size), dernæst competition_id som garanteret unik
 -- tiebreak. dismissed_at filtreres IKKE her — frontenden henter seneste runde og
 -- viser intet, hvis den er afvist (så en afvist historie ikke afslører en ældre).
-create or replace view public.latest_story with (security_invoker = on) as
-select distinct on (user_id, round_key)
-  id, round_key, user_id, competition_id, rule, priority, league_size,
-  payload, headline, body, created_at, dismissed_at
-from public.stories
-order by user_id, round_key, priority asc, league_size desc nulls last, competition_id asc nulls last;
-
-grant select on public.latest_story to authenticated;
+--
+-- VIEWET DEFINERES I sql/story_engine_v2.sql — IKKE HER.
+--
+-- Det stod her indtil v2, og det var en fælde: v2 gav viewet to kolonner mere
+-- (`day_key`, `period`) og et `where period = 'round'`, og DENNE fil gen-køres
+-- rutinemæssigt (fire gange siden juli 2026). En `create or replace view` med
+-- den gamle, kortere kolonneliste kan ikke fjerne kolonner igen — Postgres
+-- svarer `42P16: cannot drop columns from view` — så gen-kørslen fejlede midt i
+-- filen, præcis når man fulgte den dokumenterede rækkefølge (v2 før denne).
+--
+-- Derfor bor definitionen ét sted: i den fil, der indfører `period`. To
+-- definitioner af samme view i to filer ville i bedste fald skulle holdes i
+-- sync, og i værste fald tavst rulle hinanden tilbage.
 
 -- ======================= 3. generate_stories() =======================
 create or replace function public.generate_stories(p_round_key text)
@@ -122,8 +143,11 @@ declare
   v_round date := p_round_key::date;
   months text[] := array['januar','februar','marts','april','maj','juni','juli','august','september','oktober','november','december'];
 begin
-  -- idempotent: fjern rundens historier og genberegn (stories.round_key er text)
-  delete from public.stories where round_key = p_round_key;
+  -- Idempotent: fjern rundens historier og genberegn (stories.round_key er text).
+  -- `period = 'round'` ER IKKE VALGFRI (v2). Dagskortene bærer samme round_key,
+  -- fordi karusellen grupperer på runden — uden filteret ville hver
+  -- resultatændring i en færdig runde tørre ugens dagskort væk.
+  delete from public.stories where round_key = p_round_key and period = 'round';
 
   v_label := to_char(v_round, 'DD.MM') || ' – ' || to_char(v_round + 6, 'DD.MM');
 
@@ -135,30 +159,20 @@ begin
   -- `round_won` = nr. 1 i runden efter stigen uden rundesejr-trinnet; delt sejr
   -- tæller for alle, hvilket regel 70 nedenfor bruger direkte.
   --
-  -- DELTAGER-AFGRÆNSNINGEN ER IKKE VALGFRI. `predictions` er global pr. (bruger,
-  -- kamp) — den ved intet om konkurrencer. Uden joinet til competition_participants
-  -- tælles ENHVER, der har tippet den samme kamp i en anden konkurrence, med i
-  -- denne konkurrences stilling. To konkurrencer på samme turnering deler alle
-  -- deres kampe, så det er reglen, ikke undtagelsen. Konsekvenserne var alvorlige:
-  -- en fremmed kunne stå som rundens vinder i en konkurrence, vedkommende ikke
-  -- deltager i, rangnumre kunne overstige league_size ("nr. 9 af 8"), og en
-  -- historie kunne nævne en person ved navn, som brugeren aldrig har mødt.
-  -- Appens egen stilling (computeCompetitionState i src/lib/data.js) har altid
-  -- bygget på deltagerlisten — denne join er det, der gør de to enige.
+  -- Grundlaget er viewet competition_match_points (sql/story_engine_v2_day.sql),
+  -- som dagsmotoren læser fra det samme sted. Viewet BÆRER deltager-
+  -- afgrænsningen, og den er ikke valgfri: `predictions` er global pr. (bruger,
+  -- kamp) og ved intet om konkurrencer, så uden joinet til
+  -- competition_participants tælles enhver, der har tippet samme kamp i en anden
+  -- konkurrence, med her (§11 — "nr. 9 af 8" og historier om fremmede).
+  -- Udtrykket stod tidligere inline netop her; det bor nu ét sted, så de to
+  -- motorer ikke kan drive fra hinanden.
   drop table if exists _se_rp;
   create temporary table _se_rp as
   with scored as (
-    select cm.competition_id, pr.user_id, m.round_key,
-      public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) as pts,
-      abs(pr.pred_home - m.home_score) + abs(pr.pred_away - m.away_score) as goal_err
-    from public.competition_matches cm
-    join public.matches m on m.id = cm.match_id
-    join public.predictions pr on pr.match_id = m.id
-    join public.competition_participants cp
-      on cp.competition_id = cm.competition_id and cp.user_id = pr.user_id
-    where m.home_score is not null and m.away_score is not null
-      and pr.pred_home is not null and pr.pred_away is not null
-      and m.round_key <= v_round
+    select competition_id, user_id, round_key, pts, goal_err
+    from public.competition_match_points
+    where round_key <= v_round
   ),
   agg as (
     select competition_id, user_id, round_key,
@@ -593,8 +607,11 @@ begin
   join lateral (select pts from _se_after a2 where a2.competition_id = t.competition_id and a2.rnk = 1
                 order by a2.user_id limit 1) top on true
   where not exists (
+    -- Kun RUNDE-kort tæller (v2). Et dagskort er ikke rundens historie, så det
+    -- må ikke gøre en ellers stille runde tavs — det ville tage det dæmpede
+    -- kort fra netop de brugere, v1.1 indførte tieret for.
     select 1 from public.stories s
-    where s.round_key = p_round_key and s.user_id = t.user_id
+    where s.round_key = p_round_key and s.user_id = t.user_id and s.period = 'round'
   )
   order by t.user_id, sz.n desc, t.competition_id asc;
 

@@ -96,6 +96,30 @@ function roundLabel(key) {
   const fmt = (x) => x.toLocaleDateString("da-DK", { timeZone: APP_TZ, day: "2-digit", month: "2-digit" });
   return `${fmt(start)} – ${fmt(end)}`;
 }
+// Rundenøglen for en dansk kalenderdato: rul tilbage til rundens tirsdag.
+// Fjerde og sidste spejling af `public.round_key()` (SQL), `round_key_of_date()`
+// (SQL) og `matchLockAtMs()`-familien — samme grund som de andre: klienten,
+// api/ og databasen kan ikke importere fra hinanden, men reglen er én.
+//
+// Datoen parses som UTC-middag af samme grund som `roundLabel` ovenfor: en enhed
+// vest for Danmark ville ellers kunne lande en dag forkert.
+function roundKeyOfDate(dateKey) {
+  if (!dateKey) return "";
+  const d = new Date(dateKey + "T12:00:00Z");
+  if (Number.isNaN(d.getTime())) return "";
+  const diff = (d.getUTCDay() - 2 + 7) % 7;   // 0=søn … 2=tir
+  d.setUTCDate(d.getUTCDate() - diff);
+  return d.toISOString().slice(0, 10);
+}
+
+// Rundenøglen lige NU. Karusellen på Hjem skal filtrere på denne og ALDRIG på
+// `max(round_key)` fra tabellen: i en ny rundes første dage findes der endnu
+// ingen rækker, og et max ville derfor vise den forrige runde i stedet for en
+// tom karrusel — stik imod løftet om, at en ny runde starter forfra.
+function currentRoundKey(now = new Date()) {
+  return roundKeyOfDate(zonedDateKey(now.toISOString()));
+}
+
 // Kampenes rækkefølge: kickoff først, derefter holdnavn.
 //
 // Kickoff alene er ikke en TOTAL orden. En hel runde kan dele tidsstempel — det
@@ -337,4 +361,4 @@ function liveInfo(m) {
   };
 }
 
-export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };
+export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, currentRoundKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };

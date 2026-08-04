@@ -97,10 +97,26 @@ create table public.predictions (
   unique (user_id, match_id)
 );
 
--- generate_stories stubbes: rating-triggeren kalder den, men Story Engine er
--- ikke det, denne test måler.
+-- Story Engine v2 stubbes: rating-triggeren kalder tre af dens funktioner, men
+-- historier og milepæle er ikke det, denne test måler.
+--
+-- match_day er derimod en RIGTIG kolonne her og ikke en stub. Triggeren læser
+-- `new_rows.match_day` UDEN FOR sin exception-guard (den samler berørte dage,
+-- før den gør noget), så mangler kolonnen, fejler selve resultat-lagringen —
+-- og det er præcis det, denne test har til opgave at opdage.
+create or replace function public.match_day(ts timestamptz) returns date
+  language sql immutable as $$ select (ts at time zone 'Europe/Copenhagen')::date $$;
+alter table public.matches
+  add column if not exists match_day date generated always as (public.match_day(kickoff_at)) stored;
+
 create or replace function public.generate_stories(p_round text) returns void
   language plpgsql as $$ begin return; end $$;
+create or replace function public.generate_daily_stories(p_day date) returns void
+  language plpgsql as $$ begin return; end $$;
+create or replace function public.match_day_complete(p_day date) returns boolean
+  language sql stable as $$ select false $$;
+create or replace function public.award_milestones(p_user uuid default null) returns integer
+  language plpgsql as $$ begin return 0; end $$;
 
 \ir ../rating_trigger_optimization.sql
 

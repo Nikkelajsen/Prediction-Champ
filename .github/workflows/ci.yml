@@ -160,6 +160,38 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database storytest;'
           psql -h localhost -U postgres -d storytest -v ON_ERROR_STOP=1 -b -f story_engine_awards.sql
 
+      # Story Engine v2's DAGLIGE historier. Den vigtigste påstand i filen er
+      # ikke, at reglerne virker, men at runde-motoren IKKE sletter dagskort:
+      # de to motorer deler tabel og round_key, og v1's uafgrænsede delete ville
+      # tørre hele ugen væk ved hver resultatændring.
+      #
+      # Filen påstår desuden et IKKE-NUL rækkeantal. Det er ikke pedanteri: hele
+      # kæden ligger bag matches-triggerens exception-guard, og den mest
+      # sandsynlige fejl (en date/text-sammenligning) fejler TAVST — uden den
+      # påstand ville en motor, der intet producerer, være grøn.
+      - name: Test af Story Engines daglige historier
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database dailytest;'
+          psql -h localhost -U postgres -d dailytest -v ON_ERROR_STOP=1 -b -f story_engine_daily.sql
+
+      # Milepæle: permanente engangs-bedrifter. Testen vogter især de guards,
+      # der gør en milepæl noget værd — feltstørrelse ("top 3 af 3" må ikke
+      # uddeles), peak frem for nuværende rating, og at en konkurrence, der
+      # stadig kan vokse, ikke meldes færdig. En uddelt milepæl kan ikke tages
+      # tilbage, så fejlen er ikke til at rette bagefter.
+      - name: Test af milepæle
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database mstest;'
+          psql -h localhost -U postgres -d mstest -v ON_ERROR_STOP=1 -b -f milestones.sql
+
       # Sikkerhedsstramningen (G14/G15/G16): kører selve migreringen
       # security_hardening.sql og efterprøver BEGGE retninger — at anon og en
       # almindelig bruger er lukket ude af matches, recompute_ratings() og

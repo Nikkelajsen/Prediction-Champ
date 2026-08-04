@@ -1,12 +1,13 @@
 // Hjem-fanen: dagens overblik. Deadline-kort, rating-snapshot, rundens
 // live-oversigt, dine placeringer, rundens historie og opt-in til notifikationer.
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Bell, ChevronRight, Clock, Check, X, Share2, RefreshCw } from "lucide-react";
-import { APP_TZ, formatKickoff } from "../lib/scoring.js";
+import { APP_TZ, currentRoundKey, formatKickoff } from "../lib/scoring.js";
 import { db } from "../lib/supabase.js";
-import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadLatestStory, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
+import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadRecentMilestones, loadRoundCarousel, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
 import { logEvent, logEventOnce } from "../lib/analytics.js";
-import { isQuiet } from "../lib/stories.js";
+import { CAROUSEL_LIMIT, isQuiet } from "../lib/stories.js";
+import { renderMilestone } from "../lib/milestones.js";
 import { shareText, storyShareText } from "../lib/share.js";
 import { readUserFlag, writeUserFlag, CARD_KEY } from "../lib/localFlags.js";
 import { C, btnGhost, btnGreen, font, iconBtn } from "../ui/theme.js";
@@ -52,26 +53,113 @@ function PushOptInCard({ push }) {
 //    INGEN Del-knap. Det er den stille runde, produktbogens kapitel 6 beder om
 //    ("status quo") — den skal kunne ses uden at ligne en sejr, og der er intet
 //    at prale af. Genereres kun, når brugeren ellers ville stå helt uden kort.
-function StoryCard({ story, onDismiss, token, groupId }) {
-  const quiet = isQuiet(story.priority);
+// Ét kort i karusellen. `kind` afgør udseendet, og der er nu FIRE:
+//   milestone  · guld + ikon. En bedrift, man har opnået én gang og altid har
+//                opnået — den vigtigste ting, der kan stå på forsiden.
+//   highlight  · guld. Rundens historie (prioritet < 90), som før.
+//   day        · almindeligt kort med kampdagens dato i eyebrow'en. Rigtigt
+//                indhold, men ikke ugens konklusion — derfor ikke guld.
+//   quiet      · dæmpet, ingen emoji, ingen Del (prioritet ≥ 90). Produktbogens
+//                "status quo": det skal kunne ses uden at ligne en sejr.
+function CarouselCard({ item, onDismiss, token, groupId }) {
+  const gold = item.kind === "milestone" || item.kind === "highlight";
+  const quiet = item.kind === "quiet";
   async function share() {
     try {
-      await shareText(storyShareText(story));
-      logEvent(token, "story_shared", { competitionId: story.competition_id || null, groupId, metadata: { rule: story.rule } });
+      await shareText(storyShareText(item));
+      // Samme hændelse som før — også for milepæle, så tallet i Analytics
+      // fortsat måler "et højdepunkt blev delt" og ikke to forskellige ting.
+      logEvent(token, "story_shared", {
+        competitionId: item.competition_id || null, groupId,
+        metadata: item.kind === "milestone"
+          ? { rule: item.rule, from: "milestone" }
+          : { rule: item.rule },
+      });
     } catch { /* bruger annullerede — ignorér */ }
   }
   return (
-    <Card style={quiet ? undefined : { borderColor: C.gold, background: "linear-gradient(135deg, #14212F 0%, #221E14 100%)" }}>
+    <Card style={{
+      minWidth: "100%", scrollSnapAlign: "start", margin: 0,
+      ...(gold ? { borderColor: C.gold, background: "linear-gradient(135deg, #14212F 0%, #221E14 100%)" } : null),
+    }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <Eyebrow>{quiet ? "Runden kort" : "Rundens historie"}</Eyebrow>
-        <button style={iconBtn} aria-label="Afvis" onClick={onDismiss}><X size={16} /></button>
+        <Eyebrow>{item.eyebrow}</Eyebrow>
+        {onDismiss && (
+          <button style={iconBtn} aria-label="Afvis" onClick={onDismiss}><X size={16} /></button>
+        )}
       </div>
-      <div style={{ fontFamily: font.display, fontSize: quiet ? 17 : 20, fontWeight: 700, lineHeight: 1.15 }}>{story.headline}</div>
-      <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.5, marginTop: 6 }}>{story.body}</div>
+      <div style={{ fontFamily: font.display, fontSize: quiet ? 17 : 20, fontWeight: 700, lineHeight: 1.15 }}>
+        {item.headline}
+      </div>
+      <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.5, marginTop: 6 }}>{item.body}</div>
       {!quiet && (
-        <button style={{ ...btnGhost, marginTop: 12, borderColor: C.gold, color: C.gold }} onClick={share}><Share2 size={14} /> Del</button>
+        <button style={{ ...btnGhost, marginTop: 12, borderColor: gold ? C.gold : C.line, color: gold ? C.gold : C.text }}
+          onClick={share}><Share2 size={14} /> Del</button>
       )}
     </Card>
+  );
+}
+
+// Rundens karrusel (Story Engine v2). Kortene akkumulerer gennem runden — 0–2
+// pr. kampdag — og vises nyeste først, med rundens afsluttende kort og
+// nyopnåede milepæle øverst. Ny runde ⇒ tom karrusel, fordi round_key skifter.
+//
+// VANDRET SWIPE og ikke en lodret stak: produktbogens kapitel 6 beder forsiden
+// om "næsten altid at fortælle én ting". Karusellen holder det løfte — man ser
+// ét kort ad gangen, og det vigtigste ligger først — men giver plads til, at
+// ugen kan rumme mere end ét øjeblik.
+function StoryCarousel({ items, onDismiss, token, competitions }) {
+  const ref = useRef(null);
+  const [idx, setIdx] = useState(0);
+
+  // Aktivt kort udledes af scroll-positionen frem for af en klik-handler, så
+  // tallet også er rigtigt, når brugeren swiper med fingeren.
+  function onScroll() {
+    const el = ref.current;
+    if (!el || !el.clientWidth) return;
+    const next = Math.round(el.scrollLeft / el.clientWidth);
+    if (next !== idx) setIdx(next);
+  }
+
+  const active = items[Math.min(idx, items.length - 1)];
+  const groupIdOf = (it) => competitions.find((c) => c.id === it?.competition_id)?.group_id || null;
+
+  // story_viewed logges, når kortet BLIVER synligt — ikke for hele listen ved
+  // indlæsning. Ellers ville et kort, ingen swipede hen til, tælle som vist, og
+  // regelstatistikken i Analytics (A5) ville måle noget andet end den påstår.
+  useEffect(() => {
+    if (!active || active.kind === "milestone") return;
+    logEventOnce(token, "story_viewed", active.id, {
+      competitionId: active.competition_id || null, groupId: groupIdOf(active),
+      metadata: { rule: active.rule, priority: active.priority, quiet: active.kind === "quiet" },
+    });
+  }, [active, token]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!items.length) return null;
+
+  return (
+    <div>
+      <div ref={ref} onScroll={onScroll} style={{
+        display: "flex", gap: 12, overflowX: "auto", scrollSnapType: "x mandatory",
+        scrollbarWidth: "none", msOverflowStyle: "none",
+      }}>
+        {items.map((it) => (
+          <CarouselCard key={it.id} item={it} token={token} groupId={groupIdOf(it)}
+            onDismiss={it.kind === "milestone" ? null : () => onDismiss(it)} />
+        ))}
+      </div>
+      {items.length > 1 && (
+        <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 8 }}
+             aria-label={`Kort ${idx + 1} af ${items.length}`}>
+          {items.map((it, i) => (
+            <span key={it.id} style={{
+              width: 6, height: 6, borderRadius: 3,
+              background: i === idx ? C.gold : C.line,
+            }} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -146,7 +234,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
   const [roundOpen, setRoundOpen] = useState(false); // foldet som standard: viser kun X/Y + point
   const [snapshot, setSnapshot] = useState(null); // { rating, move, form, rank, total }
   const [placements, setPlacements] = useState(null); // [{ label, pos, gold, onClick }]
-  const [story, setStory] = useState(null); // Story Engine — seneste historie (live for alle)
+  const [cards, setCards] = useState([]); // Story Engine v2 — rundens karrusel + nye milepæle
   const [, setTick] = useState(0);
   // Manuel genindlæsning (B13). Tælleren står i afhængighedslisterne for de tre
   // dataeffekter nedenfor, så et klik kører præcis de samme kald som en
@@ -158,33 +246,50 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
   const push = usePushOptIn(token, userId);
   const showChecklist = !!onboarding && !onboarding.complete && !cardHidden;
 
-  // Historie-kort: hentes for alle brugere (Story Engine er live, jf. ROADMAP juli 2026).
+  // Karusellen: rundens kort + milepæle opnået i samme runde.
+  //
+  // Rundenøglen beregnes på KLIENTEN (currentRoundKey) og hentes ikke som
+  // `max(round_key)` fra tabellen. Forskellen er synlig hver tirsdag: i en ny
+  // rundes første dage findes der endnu ingen rækker, og et max ville vise den
+  // forrige uges kort i stedet for den tomme karrusel, en ny runde skal have.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const s = await loadLatestStory(token);
-      if (!cancelled) setStory(s);
+      const roundKey = currentRoundKey();
+      const [rows, mds] = await Promise.all([
+        loadRoundCarousel(token, roundKey, CAROUSEL_LIMIT),
+        loadRecentMilestones(token, roundKey),
+      ]);
+      if (cancelled) return;
+
+      // Milepælene forrest: en bedrift, man lige har opnået, er det største,
+      // der kan stå på forsiden — og uden den plads ville de fleste aldrig
+      // opdage, at de havde opnået noget.
+      const milestoneCards = (mds || []).map((m) => {
+        const r = renderMilestone(m.key, m.payload || {});
+        return {
+          id: `ms:${m.key}`, kind: "milestone", rule: m.key,
+          competition_id: m.competition_id || null, priority: -1,
+          eyebrow: "Milepæl", headline: `${r.icon} ${r.title}`, body: r.body,
+        };
+      });
+      const storyCards = (rows || []).map((s) => ({
+        ...s,
+        kind: s.period === "day" ? "day" : isQuiet(s.priority) ? "quiet" : "highlight",
+        eyebrow: s.period === "day"
+          ? `Kampdag ${s.payload?.day || ""}`.trim()
+          : isQuiet(s.priority) ? "Runden kort" : "Rundens historie",
+      }));
+      setCards([...milestoneCards, ...storyCards].slice(0, CAROUSEL_LIMIT));
     })();
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, reloadKey]);
 
-  // story_viewed: logges højst én gang pr. historie pr. sideliv (logEventOnce),
-  // ellers ville et faneskift frem og tilbage til Hjem tælle den samme visning
-  // flere gange. groupId udledes af historiens konkurrence (allerede i props),
-  // så Liga Health kan attribuere story-views til den rigtige liga.
-  const storyGroupId = story ? (competitions.find((c) => c.id === story.competition_id)?.group_id || null) : null;
-  useEffect(() => {
-    if (!story) return;
-    logEventOnce(token, "story_viewed", story.id, {
-      competitionId: story.competition_id || null, groupId: storyGroupId,
-      metadata: { rule: story.rule, priority: story.priority, quiet: isQuiet(story.priority) },
-    });
-  }, [story, storyGroupId, token]);
-
-  async function onDismissStory() {
-    const s = story;
-    setStory(null);
-    if (s?.id) await dismissStory(token, s.id);
+  // Afvis ét kort: det fjernes fra karusellen med det samme, og dismissed_at
+  // sættes i baggrunden. Milepæle kan ikke afvises — de er permanente.
+  async function onDismissCard(item) {
+    setCards((prev) => prev.filter((c) => c.id !== item.id));
+    if (item?.id && item.kind !== "milestone") await dismissStory(token, item.id);
   }
 
   useEffect(() => {
@@ -437,8 +542,9 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         </Card>
       )}
 
-      {/* Rundens historie (Story Engine) — direkte under tips-status, altid synlig */}
-      {story && <StoryCard story={story} onDismiss={onDismissStory} token={token} groupId={storyGroupId} />}
+      {/* Rundens karrusel (Story Engine v2) — direkte under tips-status, altid synlig */}
+      <StoryCarousel items={cards} onDismiss={onDismissCard} token={token} competitions={competitions} />
+
 
       {/* Indeværende runde: live-oversigt der opdaterer løbende.
           Foldet som standard (viser kun X/Y spillet + akkumulerede point);

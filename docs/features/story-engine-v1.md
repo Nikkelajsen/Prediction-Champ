@@ -4,6 +4,8 @@
 
 *Regelbaseret første version. Ingen AI. Bygget på data, der allerede findes i databasen.*
 
+> ⚠️ **Afløst delvist af v2 (august 2026) — læs [`story-engine-v2.md`](story-engine-v2.md).** Runde-motoren, tonen og de 16 regler herunder gælder uændret, men v2 lægger et **dag-lag** under dem: 0–2 kort hver dag, hvor dagens sidste kamp er spillet, som akkumulerer gennem runden i en karrusel på Hjem. Tre ting i dette dokument er dermed blevet forkerte: (1) "ét kort pr. bruger pr. runde" gælder nu kun runde-kortet — `latest_story` er pinnet til `period = 'round'`; (2) `generate_stories`' delete er periode-afgrænset, ellers sletter den dagens kort; (3) sætningen om, at karriereprofilens milepæle er `stories` med `priority < 90`, gælder ikke længere — milepæle er engangs-bedrifter i deres egen tabel, se [`milepaele-v1.md`](milepaele-v1.md).
+
 > **Læsevejledning.** Dokumentet beskriver v1 som leveret. Afsnit 10 er **v1.1**, som blev bygget efter den første rigtige runde, hvor stort set ingen fik en historie. v1.1 tilføjer regler, sænker tærskler og indfører et **dæmpet tier** — dvs. den ændrer afsnit 3, 4 og 8. Afsnit 12 er **v1.2** (august 2026), som lægger de to lokale kårings-regler til. Hvor afsnittene modsiger hinanden, gælder afsnit 10 og 12.
 
 ---

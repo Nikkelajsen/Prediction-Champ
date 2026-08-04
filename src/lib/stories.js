@@ -43,6 +43,50 @@ export const RULES = {
   QUIET_ROUND: 100,
 };
 
+// ---------------------------------------------------------------------------
+// v2 (august 2026) — DAGLIGE historier.
+//
+// Reglerne ovenfor hører til RUNDEN og udløses, når rundens sidste resultat er
+// inde. Reglerne herunder hører til DAGEN og udløses, når dagens sidste kamp er
+// færdigspillet. Kortene akkumulerer gennem runden i karusellen på Hjem, og på
+// rundens sidste dag lægger runde-kortet sig øverst.
+//
+// BÅNDET 110–189 ER VALGT MED VILJE og ikke som en parallel 10–100-stige:
+//   1) karriereprofilens milepæle filtrerede på `priority < QUIET_TIER_MIN`, så
+//      dagskort udelukkes AUTOMATISK fra arkivet. En parallel stige ville have
+//      oversvømmet minde-listen med "Dagens facit: 4 point" — netop den fejl,
+//      v2 er sat i verden for at rette.
+//   2) en forespørgsel, der glemmer at filtrere på periode, men sorterer på
+//      prioritet, sætter stadig runde-kort først. Sikker degradering.
+//   3) isQuiet() beholder sin betydning for latest_story, som nu er runde-only.
+export const DAILY_RULES = {
+  DAY_RESULT: 110,
+  CONTRARIAN: 120,
+  COLLECTIVE_MISS: 125,
+  DAY_TOP: 130,
+  STREAK_STATUS: 140,
+  DUEL: 150,
+  SO_CLOSE: 160,
+};
+
+// Båndets grænser. 180–189 er reserveret til et dæmpet dagstier, hvis det
+// nogensinde bliver nødvendigt; indtil da genereres intet dér.
+export const DAILY_TIER_MIN = 110;
+export const DAILY_QUIET_MIN = 180;
+export function isDaily(priority) {
+  return (priority ?? 0) >= DAILY_TIER_MIN;
+}
+
+// Højst så mange dagskort pr. bruger pr. dag. Spejler v_max_cards i
+// sql/story_engine_v2.sql. Med seks turneringer er der kampe næsten hver dag i
+// en runde, så to kort om dagen bliver til ~10–12 gennem ugen — nok til at
+// karusellen har noget at fortælle, lidt nok til at den kan swipes igennem.
+export const DAILY_MAX_CARDS = 2;
+
+// Karusellens loft. Rundens kort vises nyeste først; resten falder stille af,
+// så forsiden aldrig bliver en uendelig swipe.
+export const CAROUSEL_LIMIT = 10;
+
 // Svage varianter (v1.1). Tærsklen for tre regler er sænket, så de udløses oftere,
 // men den svage udgave får et højere prioritetstal og kan derfor kun vises, når der
 // ikke er noget bedre. Princippet: **tærsklen afgør, om historien findes;
@@ -74,8 +118,46 @@ export function priorityFor(rule, strength) {
     case "COMEBACK": return strength >= THRESHOLDS.comebackStrongPlaces ? RULES.COMEBACK : SOFT_PRIORITY.COMEBACK;
     case "STREAK": return strength >= THRESHOLDS.streakStrongRounds ? RULES.STREAK : SOFT_PRIORITY.STREAK;
     case "SHARP": return strength >= THRESHOLDS.sharpStrongExact ? RULES.SHARP : SOFT_PRIORITY.SHARP;
-    default: return RULES[rule] ?? null;
+    default: return RULES[rule] ?? DAILY_RULES[rule] ?? null;
   }
+}
+
+// Dagens kort: højst DAILY_MAX_CARDS pr. bruger, og højst ÉT pr. regel.
+// Spejler de TO snit i sql/story_engine_v2.sql, og rækkefølgen betyder noget.
+//
+// Uden regel-snittet ville en bruger med tre konkurrencer få to DAY_RESULT-kort
+// og intet andet: reglen udløses i hver konkurrence, og den har den laveste
+// prioritet af dem alle. Karusellen ville miste netop den variation, den findes
+// for. Vinderen inden for en regel er den største liga — samme tiebreak som
+// latest_story-viewet, så valget er deterministisk.
+export function pickDailyStories(candidates, max = DAILY_MAX_CARDS) {
+  if (!candidates || !candidates.length) return [];
+  const better = (a, b) => {
+    const as = a.league_size ?? -1, bs = b.league_size ?? -1;
+    if (as !== bs) return bs - as;                        // største liga først
+    return String(a.competition_id ?? "").localeCompare(String(b.competition_id ?? ""));
+  };
+  const bestOfRule = new Map();
+  for (const c of candidates) {
+    const cur = bestOfRule.get(c.rule);
+    if (!cur || better(c, cur) < 0) bestOfRule.set(c.rule, c);
+  }
+  return [...bestOfRule.values()]
+    .sort((a, b) => (a.priority - b.priority) || better(a, b))
+    .slice(0, max);
+}
+
+// Karusellens rækkefølge: rundens afsluttende kort øverst (det har ingen dag),
+// derefter dagene nyeste først, og inden for en dag den vigtigste først.
+// Spejler PostgREST-forespørgslen i loadRoundCarousel — de to må ikke være
+// uenige, for listen renderes i den rækkefølge, serveren leverer.
+export function sortCarousel(rows, limit = CAROUSEL_LIMIT) {
+  if (!rows || !rows.length) return [];
+  return rows.slice().sort((a, b) => {
+    const ad = a.day_key || "", bd = b.day_key || "";
+    if (ad !== bd) return ad === "" ? -1 : bd === "" ? 1 : bd.localeCompare(ad);
+    return (a.priority ?? 0) - (b.priority ?? 0);
+  }).slice(0, limit);
 }
 
 // Deterministisk udvælgelse: præcis én historie pr. bruger pr. runde.
@@ -178,6 +260,71 @@ export function renderStory(rule, payload = {}) {
       return {
         headline: `📊 Din bedste runde hidtil: ${p.points} point`,
         body: `Runden ${L} er din stærkeste i ${p.league} — din forrige rekord var ${p.old} point.`,
+      };
+    // --- v2 · dagens kort (110–189). `p.day` er dagens etiket ("03.03"), lagt
+    // i payload af generate_daily_stories; `p.label` er rundens interval og
+    // bruges ikke her — et dagskort taler om én dag.
+    case "DAY_RESULT": {
+      // Tonereglen: placeringen nævnes KUN i den øverste halvdel af tabellen.
+      // Nederst står afstanden op til toppen — aldrig "du er nr. 9 af 10".
+      const moved = p.moved || 0;
+      const place =
+        moved > 0 ? ` Du rykkede fra nr. ${p.rank + moved} til nr. ${p.rank}.`
+        : p.rank * 2 <= p.total ? ` Du ligger nr. ${p.rank} af ${p.total}.`
+        : p.gap > 0 ? ` Toppen er ${p.gap} point væk.`
+        : "";
+      return {
+        headline: `📋 Dagens facit: ${p.points} point`,
+        body: `${p.matches}${p.matches === 1 ? " kamp" : " kampe"} i ${p.league}` +
+          (p.exact > 0 ? ` — ${p.exact}${p.exact === 1 ? " præcis." : " præcise."}` : ".") + place,
+      };
+    }
+    case "CONTRARIAN":
+      return {
+        headline: p.draw
+          ? `🧠 Du var den eneste, der troede på uafgjort i ${p.home}–${p.away}`
+          : `🧠 Du var den eneste, der troede på ${p.team}`,
+        body: `I ${p.league} havde ${p.others}${p.others === 1 ? " anden" : " andre"} tippet imod.` +
+          ` Det endte ${p.home} ${p.score} ${p.away} — ${p.points} point til dig.`,
+      };
+    case "COLLECTIVE_MISS":
+      return {
+        headline: `🙈 Ingen ramte ${p.home}–${p.away}`,
+        body: `${p.n} tippede kampen i ${p.league}. Den endte ${p.score} — og ingen havde den.`,
+      };
+    case "DAY_TOP":
+      return {
+        headline: `🔝 Du fik dagens højeste i ${p.league}`,
+        body: `${p.points} point — flest af alle i ${p.league} den ${p.day}` +
+          (!p.shared ? "."
+            : p.others > 1 ? ` (delt med ${p.others} andre).`
+            : " (delt med 1 anden)."),
+      };
+    case "STREAK_STATUS":
+      // Den brudte stime slutter fremadrettet — "driller, ydmyger aldrig".
+      return p.alive
+        ? {
+            headline: `🔥 ${p.n} kampe i træk med point`,
+            body: `Du har fået point i ${p.n} kampe i træk. Stimen lever efter den ${p.day}.`,
+          }
+        : {
+            headline: `💤 Din stime stoppede ved ${p.n}`,
+            body: `Efter ${p.n} kampe i træk med point brød stimen den ${p.day}. En ny begynder i morgen.`,
+          };
+    case "DUEL":
+      return p.above
+        ? {
+            headline: `⚔️ Kun ${p.gap} point op til ${p.rival}`,
+            body: `Efter den ${p.day} er der ${p.gap} point op til ${p.rival} i ${p.league}.`,
+          }
+        : {
+            headline: `⚔️ ${p.rival} er ${p.gap} point efter dig`,
+            body: `Du fører ${p.league} med ${p.gap} point ned til ${p.rival} efter den ${p.day}.`,
+          };
+    case "SO_CLOSE":
+      return {
+        headline: `😤 Ét mål fra ${p.n} eksakte`,
+        body: `${p.n} af dine tips i ${p.league} den ${p.day} ramte målscoren på ét mål nær.`,
       };
     // --- Dæmpet tier: ingen emoji (emoji = højdepunkt), tekst altid fremadrettet.
     // Placeringen nævnes KUN i den øverste halvdel af tabellen; i den nederste står

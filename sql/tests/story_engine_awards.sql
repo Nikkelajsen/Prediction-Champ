@@ -101,7 +101,13 @@ create table public.monthly_standings (
 );
 
 \ir ../competition_awards.sql
+-- Rækkefølgen er bindende (Story Engine v2): v2_day tilføjer matches.match_day
+-- og viewet competition_match_points, som generate_stories' _se_rp læser fra;
+-- v2 tilføjer stories.period, som dens periode-afgrænsede delete filtrerer på.
+-- story_engine.sql skal ligge imellem, fordi den opretter selve stories-tabellen.
+\ir ../story_engine_v2_day.sql
 \ir ../story_engine.sql
+\ir ../story_engine_v2.sql
 
 -- ---------- fixture ----------
 -- To konkurrencer på de samme kampe: c1 har tilvalgt kåringer, c2 har ikke.

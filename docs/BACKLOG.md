@@ -38,6 +38,10 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
+Personlige invite-links (`invite_links` + `invited_by` på `group_members`/`competition_participants`) — forudsætningen for milepælen "5/10 venner tilmeldt via dit link", som ikke kunne bygges: `groups.invite_code` er én kode pr. liga, ikke pr. bruger. Kan først tælle fra udrulningsdagen.
+
+Mål `generate_daily_stories` på produktionsdata — den kører 3–5× oftere end runde-motoren og synkront inde i sync-live's upsert. Over ~1 s: drop `STREAK_STATUS` først, flyt derefter dagsmotoren helt ud i cron.
+
 Kontakt-mail til hjemmesiden skal afklares før publicering — `site/om.html` bruger en pladsholder-adresse (hænger sammen med `I10`).
 
 GitHub-repoet og Vercel-projektet hedder stadig det gamle navn; hjemmesidens 25 links peger derfor på `prediction-champ.vercel.app` og skal rettes, når domænet skifter (hænger sammen med `I10`).
@@ -127,7 +131,7 @@ spørgsmålet stod som åbent.
 | `B12` | Kør §5F-forespørgslen i [`features/analytics-v1.md`](./features/analytics-v1.md) | Forespørgslen er skrevet, forbeholdene er skrevet. Svarer samtidig på `I15`s åbne spørgsmål, om Ugens kupon-kortet overhovedet bruges — to rækker for ét opslag. |
 | `G8` | `select ... from competitions where mode_params ? 'tournaments'` | `B2`s testcase 3 er godkendt 2. august, og den ER denne kodesti. Svarer opslaget med rækker, slettes rækken helt. |
 | `I16` | Tæl `profiles.anonymized_at is not null` | Billigste punkt på hele listen, og det eneste, der giver `A25` en udløser. Ingen ny hændelse — kun en tælling på et felt, der allerede står der. |
-| `A5` | Læs Story Engine-regelstatistikken | Uret har kørt siden 31. juli. Kræver kun, at Analytics-fanen åbnes med spørgsmålet "beholder højdepunkterne deres emoji?" i hånden. |
+| `A5` | Læs Story Engine-regelstatistikken | Uret har kørt siden 31. juli. Kræver kun, at Analytics-fanen åbnes med spørgsmålet "beholder højdepunkterne deres emoji?" i hånden. **Udvidet af v2 (august 2026):** der er nu syv dagsregler mere at aflæse, og spørgsmålet er blevet skarpere — dagskortene har emoji, så tallene kan vise, om signalet stadig virker, når der kommer flere kort. |
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
