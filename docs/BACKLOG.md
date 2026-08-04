@@ -40,8 +40,6 @@ eller en linje i "Forkastede ideer".
 
 Personlige invite-links (`invite_links` + `invited_by` på `group_members`/`competition_participants`) — forudsætningen for milepælen "5/10 venner tilmeldt via dit link", som ikke kunne bygges: `groups.invite_code` er én kode pr. liga, ikke pr. bruger. Kan først tælle fra udrulningsdagen.
 
-Mål `generate_daily_stories` på produktionsdata — den kører 3–5× oftere end runde-motoren og synkront inde i sync-live's upsert. Over ~1 s: drop `STREAK_STATUS` først, flyt derefter dagsmotoren helt ud i cron.
-
 Kontakt-mail til hjemmesiden skal afklares før publicering — `site/om.html` bruger en pladsholder-adresse (hænger sammen med `I10`).
 
 GitHub-repoet og Vercel-projektet hedder stadig det gamle navn; hjemmesidens 25 links peger derfor på `prediction-champ.vercel.app` og skal rettes, når domænet skifter (hænger sammen med `I10`).
