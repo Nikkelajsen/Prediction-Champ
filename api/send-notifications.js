@@ -798,6 +798,43 @@ export default async function handler(req, res) {
       }
     }
 
+    // ============ 5) Story Engine v2 + milepæle: bagstopper ============
+    // Samme mønster som kåringerne ovenfor — jobbet er den pålidelige skriver
+    // for noget, matches-triggeren ikke selv kan nå.
+    //
+    // generate_stories_catchup() dækker de to huller, triggeren PER
+    // KONSTRUKTION er blind for, fordi der ikke skrives noget til `matches`,
+    // når de opstår: en dag, hvis sidste kamp aldrig får et resultat
+    // (afbrudt/annulleret), og en runde med en udsat kamp uden ny dato. Uden
+    // den ville karusellen mangle dagen for altid.
+    //
+    // award_milestones() kaldes her OG fra triggeren, og opdelingen er ikke
+    // vilkårlig: alt kampdrevet (rating, præcision, perfekte runder, stimer)
+    // bliver sandt, når en runde afsluttes, og dér kalder triggeren den. Tre
+    // familier er derimod IKKE kampdrevne og ses aldrig af triggeren —
+    // oprettede ligaer/konkurrencer (skriver til `groups`/`competitions`),
+    // deltagne sæsoner (sandt når en sæson starter) og konkurrence-familien
+    // (afhænger af, at `competition_status` vipper, hvilket kan være
+    // kalenderdrevet).
+    //
+    // Begge er idempotente og koster ingenting, når der intet er at gøre.
+    // dryRun springer dem over af samme grund som kåringerne: en
+    // forhåndsvisning er en LÆSNING og må ikke uddele en permanent milepæl.
+    if (!dryRun) {
+      for (const [label, path, body] of [
+        ["historie-bagstopper", "generate_stories_catchup", {}],
+        ["milepæle", "award_milestones", { p_user_id: null }],
+      ]) {
+        try {
+          await sb(`/rest/v1/rpc/${path}`, { method: "POST", body: JSON.stringify(body) });
+        } catch (e) {
+          // Warn og videre: notifikationerne er jobbets egentlige opgave, og de
+          // må ikke udeblive, fordi et historie-kald fejlede.
+          console.warn(`[v2] ${label} kunne ikke køres:`, e?.message ?? e);
+        }
+      }
+    }
+
     // ================= 5) Ny turnering (B9) =================
     // Modsat de fire andre sektioner har denne ingen modtager-regel — en ny
     // turnering er alles. Prisen for den bredde er, at betingelserne for at

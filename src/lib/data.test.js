@@ -4,7 +4,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn(), insert: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
 import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadRoundsAvailable, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data.js";
-import { QUIET_TIER_MIN } from "./stories.js";
 
 // mock-svar pr. tabel/view. En værdi må være en funktion, når svaret afhænger
 // af selve forespørgslen (fx et filter, testen vil holde loaderen op på).
@@ -287,31 +286,50 @@ describe("karriereprofil", () => {
       expect.objectContaining({ method: "POST", token: "token", body: { profile_user_id: "u1" } }));
   });
 
-  it("loadCareerMilestones returnerer [] for andres profil uden at læse stories", async () => {
+  it("loadCareerMilestones returnerer [] for andres profil uden at læse milestones", async () => {
     const res = await loadCareerMilestones("token", "u2", false);
     expect(res).toEqual([]);
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it("loadCareerMilestones mapper egne stories-rækker (nyeste først)", async () => {
+  it("loadCareerMilestones renderer egne milestones-rækker fra kataloget", async () => {
     mockTables({
-      stories: [
-        { id: "s1", round_key: "2026-07-21", rule: "MONTH_CHAMP", headline: "👑 Månedens", body: "B1", created_at: "2026-07-22" },
-        { id: "s2", round_key: "2026-07-14", rule: "STREAK", headline: "🔥 Stime", body: "B2", created_at: "2026-07-15" },
+      milestones: [
+        { key: "RATING_1200", family: "rating", tier: 1200, competition_id: null,
+          payload: { peak: 1247 }, achieved_at: "2026-07-22" },
+        { key: "TIPS_100", family: "precision", tier: 100, competition_id: null,
+          payload: { tips: 118 }, achieved_at: "2026-07-15" },
       ],
     });
     const res = await loadCareerMilestones("token", "u1", true);
-    expect(res).toEqual([
-      { id: "s1", roundKey: "2026-07-21", rule: "MONTH_CHAMP", headline: "👑 Månedens", body: "B1", createdAt: "2026-07-22" },
-      { id: "s2", roundKey: "2026-07-14", rule: "STREAK", headline: "🔥 Stime", body: "B2", createdAt: "2026-07-15" },
-    ]);
+    expect(res).toHaveLength(2);
+    // Teksten kommer fra kataloget (src/lib/milestones.js) og ikke fra tabellen:
+    // milestones gemmer kun nøgle + payload, så en formulering kan rettes uden
+    // en migrering.
+    expect(res[0]).toMatchObject({
+      id: "RATING_1200", key: "RATING_1200", family: "rating",
+      headline: "Rating 1200", body: "Din rating nåede 1247.", achievedAt: "2026-07-22",
+    });
+    expect(res[1]).toMatchObject({ key: "TIPS_100", body: "Du har afgivet 118 tips." });
   });
 
-  it("loadCareerMilestones henter kun højdepunkt-tieret (dæmpede kort er ikke milepæle)", async () => {
-    let query = "";
-    db.select.mockImplementation(async (t, table, q) => { query = q; return []; });
+  it("loadCareerMilestones læser milestones-tabellen og ikke længere stories", async () => {
+    let table = "", query = "";
+    db.select.mockImplementation(async (t, tbl, q) => { table = tbl; query = q; return []; });
     await loadCareerMilestones("token", "u1", true);
-    expect(query).toContain(`priority=lt.${QUIET_TIER_MIN}`);
+    // Kernen i hele leverancen: milepæle er ikke længere et filtreret udsnit af
+    // story-arkivet. Læste den stadig stories, ville arkivet igen blive en
+    // rundelog, fordi Story Engine gemmer ALLE udløste kandidater hver runde.
+    expect(table).toBe("milestones");
+    expect(query).not.toContain("priority=lt.");
+    expect(query).toContain("user_id=eq.u1");
+  });
+
+  it("loadCareerMilestones overlever en ukendt nøgle fra en nyere SQL-version", async () => {
+    mockTables({ milestones: [{ key: "FRA_FREMTIDEN", family: "rating", payload: {}, achieved_at: "2026-08-01" }] });
+    const res = await loadCareerMilestones("token", "u1", true);
+    expect(res).toHaveLength(1);
+    expect(res[0].headline).toBe("FRA_FREMTIDEN");   // falder tilbage, kaster ikke
   });
 
   it("loadCareerMilestones degraderer stille til [] ved fejl", async () => {

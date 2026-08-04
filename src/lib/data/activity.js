@@ -42,6 +42,45 @@ async function loadLatestStory(token) {
   } catch { return null; }
 }
 
+// ---------- Story Engine v2: rundens karrusel ----------
+// Alle kort i den AKTUELLE runde, nyeste dag først. Kortene akkumulerer gennem
+// runden (0–2 pr. kampdag), og rundens afsluttende kort — som ikke har nogen
+// dag — lægger sig øverst via `nullsfirst`.
+//
+// `roundKey` SKAL være den klient-beregnede nuværende runde (currentRoundKey i
+// src/lib/scoring.js) og ikke `max(round_key)` fra tabellen. Forskellen er
+// synlig hver tirsdag: i en ny rundes første dage findes der endnu ingen
+// rækker, og et max ville derfor vise den forrige uges kort i stedet for den
+// tomme karrusel, en ny runde skal starte med.
+//
+// Afviste kort filtreres væk her (modsat latest_story, hvor frontenden gjorde
+// det): karusellen viser en LISTE, så et afvist kort kan bare udelades uden at
+// afsløre noget ældre.
+async function loadRoundCarousel(token, roundKey, limit = 10) {
+  if (!roundKey) return [];
+  try {
+    const rows = await db.select(token, "stories",
+      `round_key=eq.${roundKey}&dismissed_at=is.null` +
+      `&select=id,round_key,day_key,period,competition_id,rule,priority,league_size,payload,headline,body` +
+      `&order=day_key.desc.nullsfirst,priority.asc&limit=${limit}`);
+    return rows || [];
+  } catch { return []; }
+}
+
+// Milepæle opnået siden et tidspunkt — til karusellen på Hjem, hvor en nyopnået
+// milepæl lægger sig forrest som guldkort. Uden den ville en milepæl kun kunne
+// opdages ved at åbne karriereprofilen, og så ville de fleste aldrig se, at de
+// havde opnået noget. Teksten renderes af klienten (src/lib/milestones.js).
+async function loadRecentMilestones(token, sinceDateKey) {
+  if (!sinceDateKey) return [];
+  try {
+    const rows = await db.select(token, "milestones",
+      `achieved_at=gte.${sinceDateKey}&select=key,family,tier,competition_id,payload,achieved_at` +
+      `&order=achieved_at.desc&limit=3`);
+    return rows || [];
+  } catch { return []; }
+}
+
 // Afvis en historie (sætter dismissed_at). Best-effort.
 async function dismissStory(token, id) {
   try {
@@ -49,4 +88,4 @@ async function dismissStory(token, id) {
   } catch { /* best-effort */ }
 }
 
-export { touchActivity, loadUserStats, loadLatestStory, dismissStory };
+export { touchActivity, loadUserStats, loadLatestStory, loadRoundCarousel, loadRecentMilestones, dismissStory };

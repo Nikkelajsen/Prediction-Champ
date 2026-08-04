@@ -22,6 +22,7 @@ import { Loader2, Share2 } from "lucide-react";
 import { loadCareerProfile, loadCareerMilestones, monthName } from "../lib/data.js";
 import { logEvent } from "../lib/analytics.js";
 import { shareText, storyShareText } from "../lib/share.js";
+import { groupMilestones } from "../lib/milestones.js";
 import { C, font, iconBtn } from "../ui/theme.js";
 import { BackBar, Card, Eyebrow, InfoDot, Move, PlayerName } from "../ui/components.jsx";
 import { Sparkline } from "./profile/Sparkline.jsx";
@@ -102,17 +103,25 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
   const rec = recordFacts(records, head.rating);
   const hasRecords = rec.hasAny;
 
-  const visibleMilestones = milestoneExpanded ? milestones : milestones.slice(0, MILESTONE_PAGE);
+  // Milepælene grupperes i de fire familier (Konkurrence, Rating, Streaks &
+  // præcision, Fællesskab) frem for at stå som én kronologisk liste. Med et
+  // katalog på ~30 engangs-bedrifter er kronologien ikke længere den nyttige
+  // akse: man vil se, hvad man har opnået — og hvad der mangler i den familie,
+  // man er tættest på. Tomme familier udelades helt.
+  const milestoneGroups = groupMilestones(milestones);
+  const visibleMilestones = milestoneExpanded ? milestoneGroups : milestoneGroups.map((g) => ({
+    ...g, items: g.items.slice(0, MILESTONE_PAGE), hidden: Math.max(0, g.items.length - MILESTONE_PAGE),
+  }));
+  const hiddenCount = visibleMilestones.reduce((n, g) => n + (g.hidden || 0), 0);
 
   // Milepælen deles med samme tekst som historie-kortet (`storyShareText`), så
   // en milepæl, der er delt to gange med et halvt år imellem, ser ens ud.
-  // `competitionId` er ikke i milepæls-opslaget (det henter kun id, runde,
-  // regel og tekst), så hændelsen bærer reglen alene — det er også den, A5
-  // skal bruge for at kunne se, HVILKE korttyper der bliver delt.
+  // Hændelsen bærer nøglen som `rule` — det er den, A5 skal bruge for at kunne
+  // se, HVILKE korttyper der bliver delt.
   async function shareMilestone(m) {
     try {
       await shareText(storyShareText(m));
-      logEvent(token, "story_shared", { metadata: { rule: m.rule, from: "milestone" } });
+      logEvent(token, "story_shared", { metadata: { rule: m.key, from: "milestone" } });
     } catch { /* bruger annullerede — ignorér */ }
   }
 
@@ -318,44 +327,55 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
         </div>
       )}
 
-      {/* Milepæle (kun egen profil) — det ANDET omfang på skærmen: konkrete
-          øjeblikke, oftest i en navngiven konkurrence (stories.competition_id er
-          kun null for de globale regler: rating og måned). */}
+      {/* Milepæle (kun egen profil) — engangs-bedrifter, grupperet i fire
+          familier. Indtil august 2026 var dette en kronologisk liste over
+          story-arkivet, hvilket gjorde den til en rundelog: Story Engine gemmer
+          ALLE udløste kandidater hver runde, så "Kun 3 point op til føringen"
+          landede her hver uge. Milepæle har nu deres egen tabel og et katalog,
+          hvor hver bedrift opnås én gang. */}
       {hasMilestones && (
         <div>
           <Eyebrow>Milepæle <InfoDot title="Milepæle">
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div>Milepæle er <b>konkrete øjeblikke</b> fra dine runder — de fleste i <b>en af dine egne konkurrencer</b>, som står nævnt i teksten. Resten kommer fra Championship og din rating.</div>
-              <div>Det er dermed et andet omfang end <b>Rekorder</b> ovenfor, som altid gælder Championship og din globale rating.</div>
-              <div>De skrives automatisk, når noget værd at huske sker i en runde. Kun de <b>nyeste 20</b> vises — resten kan foldes ud nederst.</div>
+              <div>Milepæle er <b>bedrifter, du opnår én gang</b> — at vinde en konkurrence, at nå en ratinggrænse, at afgive 100 tips. De forsvinder aldrig igen.</div>
+              <div>Det er dermed et andet omfang end <b>Rekorder</b> ovenfor, som viser dine bedste tal lige nu og godt kan blive overgået.</div>
+              <div>De skrives automatisk, når du opnår dem. Er du tæt på den næste, dukker den op af sig selv.</div>
               <div>Kun du kan se dine milepæle.</div>
             </div>
           </InfoDot></Eyebrow>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {visibleMilestones.map((m) => (
-              <Card key={m.id} style={{ padding: 12 }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{m.headline}</div>
-                    {m.body && <div style={{ color: C.muted, fontSize: 13, marginTop: 3, lineHeight: 1.45 }}>{m.body}</div>}
-                  </div>
-                  {/* Del (I5). Historie-kortet på Hjem har haft en Del-knap
-                      siden v1.1, men kortet forsvinder efter en uge — og det er
-                      typisk EFTER en uge, man har lyst til at vise en milepæl
-                      frem. Arkivet var dermed det ene sted, hvor et højdepunkt
-                      kunne ses og ikke deles. Samme tekst og samme
-                      `story_shared`-hændelse som kortet, så tallet i Analytics
-                      fortsat måler "et højdepunkt blev delt" og ikke to ting. */}
-                  <button type="button" onClick={() => shareMilestone(m)}
-                    aria-label={`Del milepælen: ${m.headline}`}
-                    style={{ ...iconBtn, flexShrink: 0, color: C.gold }}>
-                    <Share2 size={15} />
-                  </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {visibleMilestones.map((g) => (
+              <div key={g.key}>
+                <div style={{ color: C.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>
+                  {g.label}
                 </div>
-              </Card>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {g.items.map((m) => (
+                    <Card key={m.id} style={{ padding: 12 }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                        <div style={{ fontSize: 18, lineHeight: 1.2, flexShrink: 0 }} aria-hidden="true">{m.icon}</div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{m.headline}</div>
+                          {m.body && <div style={{ color: C.muted, fontSize: 13, marginTop: 3, lineHeight: 1.45 }}>{m.body}</div>}
+                        </div>
+                        {/* Del (I5). Kortet på Hjem forsvinder, når runden er
+                            forbi — og det er typisk EFTER en uge, man har lyst
+                            til at vise en bedrift frem. Samme tekst og samme
+                            `story_shared`-hændelse som kortet, så tallet i
+                            Analytics fortsat måler "et højdepunkt blev delt". */}
+                        <button type="button" onClick={() => shareMilestone(m)}
+                          aria-label={`Del milepælen: ${m.headline}`}
+                          style={{ ...iconBtn, flexShrink: 0, color: C.gold }}>
+                          <Share2 size={15} />
+                        </button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
-          {!milestoneExpanded && milestones.length > MILESTONE_PAGE && (
+          {!milestoneExpanded && hiddenCount > 0 && (
             <p style={{ color: C.muted, fontSize: 13, marginTop: 8, marginBottom: 0, cursor: "pointer", textDecoration: "underline" }}
                onClick={() => setMilestoneExpanded(true)}>
               Vis alle {milestones.length} milepæle

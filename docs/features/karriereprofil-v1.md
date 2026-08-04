@@ -4,6 +4,8 @@
 >
 > ⚠️ **Rettelse (K4, 30. juli 2026):** karriereprofilen er udvidet med ét narrativt cross-profile H2H-punkt, "bedste nogensinde"-rekorder og et liga/konkurrence-fodaftryk — se afsnit 2 og 8 (K4). Testcase 4/5 nedenfor gælder fortsat uændret for milepæle og rivaler, som forbliver private.
 >
+> ⚠️ **Rettelse (milepæle, august 2026):** milepæls-sektionen var et filtreret udsnit af `stories` (`priority < 90`). Fordi Story Engine gemmer **alle** udløste kandidater hver runde, blev arkivet en rundelog: en bruger i tre konkurrencer samlede "Kun 3 point op til føringen" og "Din bedste runde hidtil" op hver uge. Milepæle er nu **engangs-bedrifter** i tabellen `milestones` med et katalog på ~30 nøgler i fire familier, som sektionen grupperer efter — se [`milepaele-v1.md`](milepaele-v1.md). Privathed, Del-knap og RLS-modellen er uændrede; kun kilden og grupperingen er nye. Testcase 20 ("kun de nyeste 20 vises") gælder nu **pr. familie**.
+
 > ⚠️ **Rettelse (omfang, 30. juli 2026 — anden runde):** skærmen sagde ikke, hvilke konkurrencer dens tal gælder. Rekorder, Titler og basistal er **globale** (Championship + global rating), Milepæle er **konkurrence-nære**. Se afsnit 10.
 >
 > ⚠️ **Rettelse (30. juli 2026 — tredje runde, delvis tilbagerulning af afsnit 10):** de **synlige** scope-linjer er fjernet igen efter brugerfeedback ("det skal ikke stå på forsiden"). Omfanget forklares nu i en `InfoDot` pr. sektion — og hver sektion med tal har fået sin egen. Se afsnit 13. Testcase 23 er erstattet af 45–48.
@@ -34,7 +36,7 @@ Oppefra og ned på profilsiden:
 |---|---|---|
 | **Hoved** | Navn, "medlem siden", aktuel rating + ▲/▼ og "NY"-badge (samme visning som Rating-fanen) | `profiles`, `ratings`, `rating_history` |
 | **Titler** | Sæsontitler ("Sæsonens Champion — Superligaen 2026/27", *tilføjet 30. juli 2026*), månedstitler ("Månedens Champion, marts 2027") og rundetitler (antal rundesejre). Vises som badges/trofæer, nyeste først | `season_standings`, `monthly_standings`, `round_standings` (historik) |
-| **Milepæle** | Kronologisk minde-liste fra story-arkivet: comebacks, stimer, ratingrekorder, H2H-overhalinger — genbrug af `headline` fra gemte `stories`-rækker. *(Tilføjet efter levering, `I5`, august 2026: hvert milepælskort har en Del-knap — deler med samme tekst som historie-kortet (`storyShareText`) og logger `story_shared` med `metadata: { rule, from: "milestone" }`.)* | `stories` (alle kandidater, ikke kun viste) |
+| **Milepæle** | ⚠️ **Omskrevet august 2026 — se rettelsen øverst.** Oprindeligt: kronologisk minde-liste fra story-arkivet (genbrug af `headline` fra gemte `stories`-rækker). I dag: **engangs-bedrifter grupperet i fire familier**. Del-knappen fra `I5` er beholdt (samme `storyShareText`, samme `story_shared` med `from: "milestone"`). | `milestones` |
 | **Ratingkurve** | Rating over tid (én prik pr. runde), med provisorisk periode markeret. *(30. juli 2026:* toppunktet ringes ind (◎), og kurven har akser — y som neutralt interval, x som første/sidste runde*)* | `rating_history` |
 | **Rivaler** | De 2–3 brugere, man har de mest **jævnbyrdige** opgør med — vist som fortælling ("Din tætteste rival: Jimmy. I har mødt hinanden 7 gange — du fører 4-3"). Navnet er tryk-flade. **[Rettet 30. juli 2026, K3 lukket]:** rangeres på `abs(sejre − nederlag)` fra faktiske møder, ikke på antal historier; udkastets `rating_history.rnk` er afvist — se afsnit 12 | `competition_participants` + `predictions` + `pc_points()` (møder) · `stories` (regel 40/60, kun som farve) |
 | **Basistal (diskret)** | Samlede point, præcise hits (🎯), korrekte udfald *(tilføjet 30. juli 2026 — feltet blev hentet uden at blive vist, så halvdelen af pointene var usynlige)*, hit-rate, antal tippede kampe. Én kompakt linje/række nederst — bevidst ikke øverst | samme kilder som stillingerne (se afsnit 4) |
@@ -49,7 +51,7 @@ Oppefra og ned på profilsiden:
 ## 3. Brugerflow
 
 - **Adgang:** **et brugernavn er altid vejen til karrieren** — alle steder, hvor et navn står i appen, åbner et tryk på det den pågældendes karriere. I dag: Hjem ("Hej *navn*" + rating-snapshot), Rating-ranglisten, konkurrence-stillingen og dens "Point pr. runde"-overskrifter, Championship-tabellerne (top 5, fuld stilling og de tre kåringer), liga-medlemslisten, "Alles gæt" på Tip-skærmen, vinderen på et afsluttet konkurrence-kort og navnet i runde-tips-overlayet. Profilen er en drill-in-skærm (som Stilling/Liga-siden) — ingen ny fane i bundnavigationen. Fælles komponent: `PlayerName` i `src/ui/components.jsx`.
-- **Andres profiler (K1, se afsnit 8):** enhver indlogget bruger kan åbne enhver karriere og se hoved, titler, kurve og basistal. Milepæle fra `stories` er personlige (RLS: kun egne) og vises **kun på ens egen profil** — det samme gælder rivaler.
+- **Andres profiler (K1, se afsnit 8):** enhver indlogget bruger kan åbne enhver karriere og se hoved, titler, kurve og basistal. Milepæle er personlige (RLS: kun egne) og vises **kun på ens egen profil** — det samme gælder rivaler.
 - **Tom tilstand:** en ny bruger uden titler/milepæle ser hoved + kurve + en venlig tekst ("Din karriere er lige begyndt — den første runde skriver det første kapitel"). Ingen tomme nul-tabeller.
 
 ---
@@ -59,7 +61,7 @@ Oppefra og ned på profilsiden:
 **Ingen nye tabeller i v1.** Alt kan afledes af eksisterende data. I tråd med beslutningen "PostgreSQL som kilde til sandhed" samles læsningen i DB frem for klient-beregning:
 
 - Ét nyt view/RPC, fx `career_profile(profile_user_id uuid)`, der returnerer jsonb med: titler (aggregeret fra `monthly_standings`/`round_standings`-historik), ratingkurve (`rating_history`), basistal og rival-aggregatet. Mønster: som `admin_user_stats()` (ét kald, `security definer` hvor RLS ellers ville blokere), men **uden** admin-gate — i stedet gated på relationen fra K1 (deler liga/konkurrence, eller egen profil). *(Rettet efter levering: K1 blev siden udvidet — adgangen er i dag blot login, og kun et ukendt id giver "not found". Se afsnit 8, K1.)*
-- Milepæle hentes separat via eksisterende RLS-læsning af `stories` (kun egne rækker) — ingen ny adgang nødvendig.
+- Milepæle hentes separat via RLS-læsning af `milestones` (kun egne rækker) — ingen ny adgang nødvendig. *(Rettet august 2026: kilden var `stories`.)*
 - **Vigtigt — samme pointkilde som stillingerne:** basistallene skal beregnes af de samme views/samme SQL som `round_standings`/`season_standings`, ikke af en ny, uafhængig pointberegning. Scoring er i dag hardkodet 3/1 i views'ene, mens frontendens `pointsFor` læser konkurrencens `rules` — den inkonsistens må ikke spredes til et tredje sted (se forudsætning F2).
 
 **Frontend:** ny skærm `src/screens/ProfileScreen.jsx` + loader `loadCareerProfile` i `src/lib/data/career.js` (samme mønster som `loadUserStats`/`loadRatingHistory`). Ratingkurven tegnes med samme letvægts-tilgang som eksisterende minikurver (ingen chart-bibliotek).
@@ -76,7 +78,7 @@ Oppefra og ned på profilsiden:
 
 - Profilen viser aldrig negativt vinklet indhold (ingen bundplaceringer, ingen "dårligste …").
 - Basistal matcher Championship-fanens tal for samme bruger (samme 3/1-udtryk, F2). **Forbehold:** profilens basistal er karriere-brede (alle tippede kampe), mens `season_standings` er scopet til én sæson og `monthly_standings` til én måned. Med kun én turnering i drift er tallene identiske; det ophører den dag turnering #2 tændes ([`turnering-2.md`](./turnering-2.md)), hvor profilen skal have samme scope-valg som Championship.
-- Milepæle fra `stories` kan kun ses af brugeren selv (RLS uændret).
+- Milepæle kan kun ses af brugeren selv (RLS på `milestones`; uændret model). *(Rettet august 2026: kilden var `stories`.)*
 - En bruger uden data ser en meningsfuld tom tilstand, ikke nuller.
 - Ratingkurven matcher Rating-fanens historik (`rating_history`), inkl. provisorisk markering.
 - Titler tildeles kun for afsluttede måneder/runder (samme "færdigspillet"-regel som kåringerne i Championship).

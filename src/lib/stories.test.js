@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isQuiet, pickStory, priorityFor, QUIET_TIER_MIN, renderStory, RULES, SOFT_PRIORITY, THRESHOLDS } from "./stories.js";
+import { CAROUSEL_LIMIT, DAILY_QUIET_MIN, DAILY_RULES, isQuiet, pickDailyStories, pickStory, priorityFor, QUIET_TIER_MIN, renderStory, RULES, SOFT_PRIORITY, sortCarousel, THRESHOLDS } from "./stories.js";
 
 // Testcases spejler docs/features/story-engine-v1.md afsnit 9 (det der kan
 // udtrykkes rent i JS; DB-idempotens og trigger-adfærd verificeres i skyggetilstand).
@@ -249,5 +249,147 @@ describe("nye regler (v1.1)", () => {
   it("prioritetsstigen er entydig — ingen to regler deler prioritet", () => {
     const values = Object.values(RULES);
     expect(new Set(values).size).toBe(values.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v2 · daglige historier
+// ---------------------------------------------------------------------------
+
+describe("pickDailyStories (dagens to kort)", () => {
+  const cand = (rule, priority, league_size = 5, competition_id = "c1") =>
+    ({ rule, priority, league_size, competition_id });
+
+  it("giver højst to kort", () => {
+    const got = pickDailyStories([
+      cand("DAY_RESULT", 110), cand("CONTRARIAN", 120),
+      cand("DAY_TOP", 130), cand("SO_CLOSE", 160),
+    ]);
+    expect(got).toHaveLength(2);
+    expect(got.map((x) => x.rule)).toEqual(["DAY_RESULT", "CONTRARIAN"]);
+  });
+
+  // Uden regel-snittet ville en bruger med tre konkurrencer få to
+  // DAY_RESULT-kort og intet andet: reglen udløses i hver konkurrence og har
+  // den laveste prioritet af alle. Karusellen ville miste sin variation.
+  it("tager højst ét kort pr. regel, så to konkurrencer ikke fylder loftet", () => {
+    const got = pickDailyStories([
+      cand("DAY_RESULT", 110, 4, "c1"),
+      cand("DAY_RESULT", 110, 9, "c2"),
+      cand("DAY_RESULT", 110, 6, "c3"),
+      cand("DAY_TOP", 130, 4, "c1"),
+    ]);
+    expect(got.map((x) => x.rule)).toEqual(["DAY_RESULT", "DAY_TOP"]);
+    expect(got[0].league_size).toBe(9);   // største liga vinder inden for reglen
+  });
+
+  it("er deterministisk ved lige store ligaer", () => {
+    const a = pickDailyStories([cand("DUEL", 150, 5, "b"), cand("DUEL", 150, 5, "a")]);
+    const b = pickDailyStories([cand("DUEL", 150, 5, "a"), cand("DUEL", 150, 5, "b")]);
+    expect(a[0].competition_id).toBe("a");
+    expect(b[0].competition_id).toBe("a");
+  });
+
+  it("giver [] uden kandidater", () => {
+    expect(pickDailyStories([])).toEqual([]);
+    expect(pickDailyStories(null)).toEqual([]);
+  });
+});
+
+describe("sortCarousel (rundens karrusel)", () => {
+  it("sætter rundens afsluttende kort øverst og dagene nyeste først", () => {
+    const rows = [
+      { id: "d1", day_key: "2026-03-03", priority: 110 },
+      { id: "r", day_key: null, priority: 70 },
+      { id: "d2", day_key: "2026-03-05", priority: 110 },
+      { id: "d2b", day_key: "2026-03-05", priority: 125 },
+    ];
+    expect(sortCarousel(rows).map((x) => x.id)).toEqual(["r", "d2", "d2b", "d1"]);
+  });
+
+  it("respekterer loftet", () => {
+    const rows = Array.from({ length: 25 }, (_, i) =>
+      ({ id: `d${i}`, day_key: `2026-03-${String(i + 1).padStart(2, "0")}`, priority: 110 }));
+    expect(sortCarousel(rows)).toHaveLength(CAROUSEL_LIMIT);
+  });
+});
+
+describe("dagens regler (tekst)", () => {
+  // Prioritetsbåndet er hele grunden til, at karriereprofilens milepæle ikke
+  // behøvede en kodeændring: dens filter er priority < QUIET_TIER_MIN.
+  it("ligger helt over det dæmpede runde-tier", () => {
+    for (const p of Object.values(DAILY_RULES)) {
+      expect(p).toBeGreaterThan(QUIET_TIER_MIN);
+      expect(p).toBeLessThan(DAILY_QUIET_MIN);
+    }
+    const values = Object.values(DAILY_RULES);
+    expect(new Set(values).size).toBe(values.length);
+  });
+
+  it("Dagens facit nævner kun placeringen i den øverste halvdel", () => {
+    const top = renderStory("DAY_RESULT",
+      { points: 9, matches: 4, exact: 3, rank: 1, total: 5, moved: 0, gap: 0, league: "Kontoret" });
+    expect(top.body).toContain("Du ligger nr. 1 af 5");
+
+    const bottom = renderStory("DAY_RESULT",
+      { points: 1, matches: 4, exact: 0, rank: 4, total: 5, moved: 0, gap: 8, league: "Kontoret" });
+    expect(bottom.body).toContain("Toppen er 8 point væk");
+    expect(bottom.body).not.toMatch(/nr\. 4/);   // driller, ydmyger aldrig
+  });
+
+  it("Dagens facit fortæller om et ryk frem, når der var et", () => {
+    const { body } = renderStory("DAY_RESULT",
+      { points: 7, matches: 3, exact: 1, rank: 2, total: 8, moved: 3, gap: 4, league: "Kontoret" });
+    expect(body).toContain("fra nr. 5 til nr. 2");
+  });
+
+  it("Kontrarian formulerer uafgjort som en kamp og ikke som et hold", () => {
+    const win = renderStory("CONTRARIAN",
+      { team: "Randers", home: "Randers", away: "Silkeborg", score: "2-1", others: 4, points: 3, draw: false, league: "Kontoret" });
+    expect(win.headline).toContain("troede på Randers");
+    expect(win.body).toContain("4 andre tippet imod");
+
+    const draw = renderStory("CONTRARIAN",
+      { team: "uafgjort", home: "OB", away: "Viborg", score: "1-1", others: 1, points: 3, draw: true, league: "Kontoret" });
+    expect(draw.headline).toContain("uafgjort i OB–Viborg");
+    expect(draw.body).toContain("1 anden tippet imod");
+  });
+
+  it("Kollektiv fiasko nævner ingen ved navn", () => {
+    const { headline, body } = renderStory("COLLECTIVE_MISS",
+      { home: "OB", away: "Viborg", score: "3-3", n: 5, league: "Kontoret" });
+    expect(headline).toBe("🙈 Ingen ramte OB–Viborg");
+    expect(body).toContain("5 tippede kampen");
+  });
+
+  it("Stimen slutter fremadrettet, når den er brudt", () => {
+    const alive = renderStory("STREAK_STATUS", { n: 7, alive: true, day: "03.03" });
+    expect(alive.headline).toContain("7 kampe i træk");
+
+    const dead = renderStory("STREAK_STATUS", { n: 7, alive: false, day: "03.03" });
+    expect(dead.body).toContain("En ny begynder i morgen");
+    expect(dead.headline).not.toMatch(/dårlig|værste|sidst/i);
+  });
+
+  it("Duellen vender teksten om, når man selv fører", () => {
+    const up = renderStory("DUEL", { rival: "Bo", gap: 2, above: true, day: "03.03", league: "Kontoret" });
+    expect(up.headline).toContain("Kun 2 point op til Bo");
+
+    const down = renderStory("DUEL", { rival: "Bo", gap: 2, above: false, day: "03.03", league: "Kontoret" });
+    expect(down.headline).toContain("Bo er 2 point efter dig");
+    expect(down.body).toContain("Du fører Kontoret");
+  });
+
+  it("Så tæt på taler om nærmisser og ikke om fejl", () => {
+    const { headline, body } = renderStory("SO_CLOSE", { n: 3, day: "03.03", league: "Kontoret" });
+    expect(headline).toBe("😤 Ét mål fra 3 eksakte");
+    expect(body).toContain("på ét mål nær");
+  });
+
+  it("alle dagens regler har en skabelon", () => {
+    for (const rule of Object.keys(DAILY_RULES)) {
+      const { headline } = renderStory(rule, { n: 1, points: 1, matches: 1, rank: 1, total: 2, gap: 0, others: 1 });
+      expect(headline, `${rule} mangler en skabelon`).not.toBe("");
+    }
   });
 });

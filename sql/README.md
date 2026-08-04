@@ -64,7 +64,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 5 | `rating_trigger_optimization.sql` | Statement-level triggere på `matches`; kalder `recompute_ratings()` + `generate_stories()` | Aktiv — forudsætter `rating_core.sql` (#0) |
 | 6 | `matches_stage.sql` | `matches.stage_name` (grundspil/slutspil) | Aktiv |
 | 7 | `push_notifications.sql` | `push_subscriptions` + `notification_log` | Aktiv |
-| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — ~~v1.1 skal gen-køres i produktion~~ **gen-kørt 31. juli 2026** (både v1.1's 14 regler og `scope = 'ALL'`-filtreringen efter #20). Kun funktionen ændres, tabel og view er uændrede. **v1.2 gen-kørt 3. august 2026** (`B10`): to nye regler (`AWARD_WEEK`, `AWARD_MONTH`) læser `competition_awards`, og regel 70 tier, hvor en kåring dækker. Forudsætter #26. Dækket af `sql/tests/story_engine_awards.sql` i CI. **v1.3 gen-kørt 4. august 2026** (navneskiftet til Leagly): regel 10's overskrift hedder nu "Månedens Champion" og er dermed byte-identisk med skabelonen i `src/lib/stories.js`. Kun funktionen ændres, som ved de to foregående gen-kørsler |
+| 8 | `story_engine.sql` | `stories`, `latest_story`, `generate_stories()` | Aktiv — ~~v1.1 skal gen-køres i produktion~~ **gen-kørt 31. juli 2026** (både v1.1's 14 regler og `scope = 'ALL'`-filtreringen efter #20). Kun funktionen ændres, tabel og view er uændrede. **v1.2 gen-kørt 3. august 2026** (`B10`): to nye regler (`AWARD_WEEK`, `AWARD_MONTH`) læser `competition_awards`, og regel 70 tier, hvor en kåring dækker. Forudsætter #26. Dækket af `sql/tests/story_engine_awards.sql` i CI. **v1.3 gen-kørt 4. august 2026** (navneskiftet til Leagly): regel 10's overskrift hedder nu "Månedens Champion" og er dermed byte-identisk med skabelonen i `src/lib/stories.js`. Kun funktionen ændres, som ved de to foregående gen-kørsler. **v2 (august 2026): SKAL gen-køres efter #37 og #38** — `delete`en er nu periode-afgrænset (`and period = 'round'`), og `_se_rp` læser viewet `competition_match_points`. Uden gen-kørslen sletter runde-motoren hele ugens dagskort ved hver resultatændring |
 | 9 | `groups.sql` | Liga-laget: `groups`, `group_members`, `is_group_member()`, `move_competition_to_group()` | ⚠️ Aktiv, men **to af dens policies er afløst** — se advarslen nedenfor |
 | 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv — ~~gen-kør efter #20~~ **gen-kørt 31. juli 2026**: rundesejre og "bedste runde" filtrerer nu `scope = 'ALL'` (ellers tælles hver sejr én gang pr. turnering), og samme kørsel gav `titles.by_tournament` (K2) |
 | 11 | `live_scores.sql` | `matches.live_*`-kolonner + live-indekser | Aktiv |
@@ -93,10 +93,14 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 34 | `anon_grants.sql` | Fjerner `anon`s tabel-privilegier i `public` og lukker kilden (Supabases default privileges) — `G50` | Aktiv — tilføjet og **kørt 3. august 2026**. Idempotent. **Ingen adfærdsændring for en indlogget bruger:** appen sender altid brugerens JWT (rollen `authenticated`), og det eneste kald før login rører en `SECURITY DEFINER`-funktion. Ændrer intet i RLS — den giver dybde, hvor policyen stod alene. Tilbagerulningen er to linjer og står i filen. Dækket af `sql/tests/anon_grants.sql` i CI |
 | 35 | `predictions_updated_at.sql` | Trigger, så `predictions.updated_at` flytter sig ved en RETTELSE (`G13`) | Aktiv — tilføjet 3. august 2026. Idempotent. **Ændrer, hvad to Analytics-tal måler:** "Aktive konkurrencer/ligaer" og retention tæller fra nu af også rettede tips, altså aktivitet frem for kun afgivne tips. Måle-ordbogen er rettet i samme ombæring. En gen-skrivning af samme score flytter intet. Dækket af `sql/tests/predictions_updated_at.sql` i CI |
 | 36 | `client_errors.sql` | Fejltelemetri for frontenden (`G42`): tabellen `client_errors`, `admin_client_errors()` og `prune_client_errors()` | Aktiv — tilføjet 3. august 2026. Idempotent. **Skal køres FØR frontend-mergen** — ellers fejler hver rapportering tavst (den er fire-and-forget, så brugeren mærker intet, men sporet er væk). Samme RLS-form som #29: kun insert, kun egne rækker, ingen select. Dækket af `sql/tests/client_errors.sql` i CI |
+| 37 | `story_engine_v2_day.sql` | Story Engine v2, trin 1: `match_day()` + den genererede kolonne `matches.match_day`, `match_day_complete()`, `round_key_of_date()` og viewet `competition_match_points` | Aktiv — tilføjet august 2026. Idempotent. **KØR MELLEM TO RUNDER:** `ADD COLUMN … GENERATED … STORED` omskriver hele `matches` under en ACCESS EXCLUSIVE-lås (tabel-omskrivninger udløser dog IKKE triggere, så rating og historier genberegnes ikke). Skal køres FØR #38. `round_key_of_date()` findes, fordi `round_key(dag::timestamptz)` ville genindføre `G11` ad bagvejen — `date → timestamptz` læser sessionens tidszone |
+| 38 | `story_engine_v2.sql` | Story Engine v2, trin 2: `stories.period` + `day_key`, to partielle unique-indexes, `latest_story` pinnet til runde-kort, `generate_daily_stories()` og `generate_stories_catchup()` | Aktiv — tilføjet august 2026. Idempotent. Forudsætter #37. **Gen-kør #8 bagefter** (dens `delete` er nu periode-afgrænset). **Kør pre-flight-forespørgslen i filens hoved først:** den gamle samlede constraint droppes, og index-oprettelsen fejler højlydt, hvis der findes dubletter. Bagudkompatibel for frontenden, så den kan køres FØR mergen. Dækket af `sql/tests/story_engine_daily.sql` i CI |
+| 39 | `milestones.sql` | Milepæle: tabellen `milestones` (engangs-bedrifter), viewet `competition_status` og `award_milestones()` | Aktiv — tilføjet august 2026. Idempotent og **sikker at gen-køre** — hver skrivning er `on conflict do nothing`. Forudsætter #37. Ingen skrive-policies: funktionen er eneste skriver (trigger + notifikations-jobbet). **Skal køres FØR frontend-mergen** — ellers viser karriereprofilen ingen milepæle. **En uddelt milepæl kan aldrig trækkes tilbage**, heller ikke hvis en resultatrettelse sænker peak under tærsklen; se filens hoved. Dækket af `sql/tests/milestones.sql` i CI |
+| 40 | `story_engine_v2_backfill.sql` | Kalder `generate_daily_stories()` for hver færdigspillet dag og `award_milestones(null)` én gang | **Engangs-/ad hoc-kørsel**, ikke en migrering. Kør efter #37–#39 og gen-kørslen af #8. Tager tid — den regner hele historikken igennem. Kør uden for en kampdag |
 
-### ⚠️ Seks filer må ikke gen-køres blindt
+### ⚠️ Syv filer må ikke gen-køres blindt
 
-Alle seks bruger `drop policy … create policy` / `drop view … create view`, så en
+Alle syv bruger `drop policy … create policy` / `drop view … create view`, så en
 gen-kørsel **erstatter tavst** en nyere definition med en ældre. Der kommer ingen
 fejl — reglen bliver bare den gamle igen.
 
@@ -132,6 +136,20 @@ fejl — reglen bliver bare den gamle igen.
 - **`predictions_write_lock.sql`** (#14) gør det samme for INSERT- og UPDATE-policyen:
   en gen-kørsel ruller per-kamp-låsen tilbage til runde-lås. "Kør aldrig igen" af samme
   grund som #4 — rettelsen er igen #25 (og #28) bagefter.
+
+- **`story_engine_v2.sql`** (#38) dropper og genskaber `latest_story`. Efter en
+  fremtidig ændring af viewet ruller en gen-kørsel den tavst tilbage — kolonne-
+  rækkefølgen er samtidig bindende (`day_key`/`period` står SIDST, så viewet kan
+  udvides med `create or replace` uden at skulle droppes igen). Den gen-skaber
+  desuden de to partielle unique-indexes; det er harmløst, men den dropper først
+  den gamle samlede constraint, og **dropper man den, uden at indexene bliver
+  oprettet, står `stories` uden sikkerhedsnet mod dubletter**. *(Tilføjet august
+  2026.)*
+
+  Bemærk til gengæld, at `generate_stories()` **bevidst ikke** har en kopi i denne
+  fil: den blev redigeret i #8 i stedet. En forældet kopi af netop den funktion
+  ville være den farligste landmine i repoet — dens `delete` er periode-afgrænset,
+  og uden afgrænsningen tørrer runde-motoren hele ugens dagskort væk.
 
 ### Tests
 
@@ -215,6 +233,26 @@ medlemmer**. En rigtig sletning ville have kaskaderet ligaen væk via
 funktionen har nul parametre (den mekaniske udgave af "kan ikke ramme en anden
 bruger"), at brugssporet er væk, at feedback-rækken overlever uden afsender, at
 en anden bruger er urørt, og at andet kald er et no-op.
+
+**`sql/tests/story_engine_daily.sql`** (samme CI-job, egen database) dækker Story
+Engine v2's dagsmotor. To af påstandene er værd at kende:
+
+Den vigtigste er ikke, at reglerne virker, men at **runde-motoren ikke sletter
+dagskort**. De to motorer deler tabel og `round_key`, og v1's uafgrænsede `delete
+… where round_key = p_round_key` ville tørre hele ugen væk ved hver
+resultatændring — og kortene genskabes aldrig, fordi dagsmotoren kun kører, når
+en dag *bliver* færdig.
+
+Den anden er, at filen påstår et **ikke-nul rækkeantal**. Det er ikke pedanteri:
+hele kæden ligger bag matches-triggerens exception-guard, og den mest sandsynlige
+fejl — en `date`/`text`-sammenligning, jf. de tre nøgletyper i `stories` — fejler
+TAVST. Uden den påstand ville en motor, der intet producerer, være grøn i CI.
+
+**`sql/tests/milestones.sql`** vogter de guards, der gør en milepæl noget værd:
+feltstørrelse på ranglisten ("top 3 af 3" må ikke uddeles), peak frem for
+nuværende rating, ≥5 kampe for en perfekt runde, og at en konkurrence, der stadig
+kan vokse, ikke meldes færdig. En uddelt milepæl kan ikke tages tilbage, så en
+fejl her er ikke til at rette bagefter.
 
 **`sql/tests/story_engine_awards.sql`** (samme CI-job, egen database) kører
 `rating_core.sql`, `competition_awards.sql` og `story_engine.sql` i én tom

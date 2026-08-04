@@ -1,7 +1,7 @@
 // Karriereprofilen: RPC'en career_profile() og milepælene ved siden af den.
 
 import { db, restFetch } from "../supabase.js";
-import { QUIET_TIER_MIN } from "../stories.js";
+import { renderMilestone } from "../milestones.js";
 
 // ---------- Karriereprofil ----------
 // Ét RPC-kald samler hele profil-læsningen (hoved, titler, ratingkurve, basistal,
@@ -15,23 +15,33 @@ async function loadCareerProfile(token, profileUserId) {
   });
 }
 
-// Milepæle hentes SEPARAT via den eksisterende RLS-læsning af stories (kun egne
-// rækker), så de forbliver private — de vises kun på ens egen profil. RLS returnerer
-// intet for andres profil, men vi springer kaldet helt over når det ikke er egen profil.
-// Genbrug af story-arkivets færdige headline/body som kronologisk minde-liste.
+// Milepæle hentes SEPARAT fra den nye milestones-tabel (RLS: kun egne rækker),
+// så de forbliver private — de vises kun på ens egen profil. RLS returnerer
+// intet for andres profil, men vi springer kaldet helt over, når det ikke er
+// egen profil.
 //
-// KUN højdepunkt-tieret (`priority < QUIET_TIER_MIN`). Story Engine v1.1 gemmer også
-// dæmpede kort for stille runder ("Din runde: 4 point"), og de er per definition ikke
-// milepæle — kom de med, ville arkivet blive en rundelog med de ægte øjeblikke gemt inde i.
+// FØR AUGUST 2026 LÆSTE DENNE FUNKTION `stories` med `priority < 90`, og det er
+// den ændring, hele leverancen handler om: Story Engine gemmer ALLE udløste
+// kandidater hver runde — ikke kun den, der vises — så en bruger i tre
+// konkurrencer samlede "Kun 3 point op til føringen", "Din bedste runde hidtil"
+// og "2 præcise resultater" op hver eneste uge. Arkivet var en rundelog.
+//
+// Milepæle er nu engangs-bedrifter med deres eget katalog (src/lib/milestones.js
+// + sql/milestones.sql). Teksten renderes af klienten, fordi tabellen kun gemmer
+// nøgle og payload — der er derfor ingen skabelon at holde i sync med SQL'en.
 async function loadCareerMilestones(token, profileUserId, isOwn) {
   if (!isOwn) return [];
   try {
-    const rows = await db.select(token, "stories",
-      `user_id=eq.${profileUserId}&priority=lt.${QUIET_TIER_MIN}&select=id,round_key,rule,headline,body,created_at&order=round_key.desc,priority.asc`);
-    return (rows || []).map((s) => ({
-      id: s.id, roundKey: s.round_key, rule: s.rule,
-      headline: s.headline, body: s.body, createdAt: s.created_at,
-    }));
+    const rows = await db.select(token, "milestones",
+      `user_id=eq.${profileUserId}&select=key,family,tier,competition_id,payload,achieved_at&order=achieved_at.desc`);
+    return (rows || []).map((m) => {
+      const r = renderMilestone(m.key, m.payload || {});
+      return {
+        id: m.key, key: m.key, family: m.family, tier: m.tier,
+        competitionId: m.competition_id, achievedAt: m.achieved_at,
+        icon: r.icon, headline: r.title, body: r.body,
+      };
+    });
   } catch { return []; }
 }
 
