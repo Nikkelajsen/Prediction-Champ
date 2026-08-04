@@ -167,6 +167,27 @@ Rækkefølgen respekterer roadmappens tommelfingerregel: Story Engine-kalibrerin
 
 ## 8. Bevidst IKKE med i v1
 
+> **Rettelse efter levering (4. august 2026, `A29`).** To af punkterne nedenfor
+> er delvist opfyldt. De står bevidst uændrede — udkastet er stadig sandt om,
+> hvad der var planlagt — men læs dem sammen med dette:
+>
+> - **Medlems-administration.** Liga-admin kan nu fjerne en deltager fra en
+>   KONKURRENCE, men kun én, der aldrig har afgivet et tip. Liga-medlemskabet
+>   røres ikke, og der er stadig ingen forfremmelse af medlemmer.
+> - **Sletning af ligaer med indhold.** Reglen er løsnet fra "ingen
+>   konkurrencer" til "ingen AKTIVE konkurrencer" — og konkurrencerne slettes
+>   ikke, de bliver liga-løse (`on delete set null`).
+>
+> Begrundelsen for udskydelsen holdt: en admin-knap, der kan slette andres
+> historik, er den dyreste slags fejlklik. Det, der ændrede sig, er, at der nu
+> findes en grænse, som kan siges højt og håndhæves af RLS — *en administrator
+> må fjerne det urørte, aldrig det brugte*. Se `sql/liga_admin.sql` og
+> `docs/DECISIONS.md`.
+>
+> Samtidig (`A31`) har liga-siden fået den arkivering, som spec'en kun gav
+> liga-løse konkurrencer, og konkurrence-kortet er blevet fælles for de to
+> skærme.
+
 - **Medlems-administration** (admin fjerner/forfremmer medlemmer) — lille brugerbase af venner; udskydes til behovet opstår.
 - **Liga-identitet** (ikon, farve, beskrivelse) — navn er nok til at bevise strukturen.
 - **Per-liga-rating og per-liga-månedschampionship** — `scope`-kolonnen er forberedt; egen feature senere (åben beslutning A2 hænger sammen).

@@ -15,6 +15,141 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## August 2026 — Hvornår er en konkurrence slut, og hvem må rydde op bagefter
+
+**Fire beslutninger, én leverance.** De hang sammen, fordi de alle fire handler om
+det samme øjeblik: konkurrencen er ovre, og nogen skal gøre noget ved det.
+
+### `A28` — "afsluttet" er databasens svar, ikke klientens
+
+**Beslutning:** `computeCompetitionState` regner ikke længere selv. Den læser
+`competition_status.concluded`, og viewet har fået en sæson-gate: nye kolonner
+`seasons.ends_at`/`seasons.is_finished`, sat af sync, med en manuel markering i
+Admin → Drift og en 30-dages ventil for sæsoner uden metadata.
+
+**Begrundelsen er, at spørgsmålet havde to svar, og det svageste sad i UI'et.**
+`competition_status` fandtes allerede — bygget til milepælene — og dens
+kommentar sagde præcis det rigtige: for en konkurrence, der kan vokse, er "alle
+mine kampe har resultat" ikke nok. Klienten kendte ikke viewet og havde sin egen
+udgave af reglen uden den betingelse. Det er nøjagtig samme fejlklasse som `A7`
+(to veje ind i en konkurrence, kun den ene huskede ligaen) og `K3` (to steder
+svarede forskelligt på hvad et "møde" er): en sandhed, der bor to steder, driver
+fra hinanden — og her var den allerede drevet, uden at nogen havde bemærket det,
+fordi de to kun er uenige i en periode på nogle uger om året.
+
+**Prisen for uenigheden var permanent.** Sportmonks modellerer Superligaen som ÉN
+sæson med flere stages, og slutspillet skemalægges først til foråret. Mellem
+sidste grundspilsrunde og udgivelsen af slutspillet var klientens regel trivielt
+sand: pokal, vinder og — værst — de fire konkurrence-milepæle, som udtrykkeligt
+*ikke kan trækkes tilbage*. Det er samme form som `COMP_COMEBACK`-fejlen dagen
+før: en betingelse, der er trivielt opfyldt i den mindst mulige verden.
+
+**Viewet havde selv resten af hullet.** `seasons_done` krævede, at alle sæsonens
+kampe var scoret — men en kamp, der ikke er offentliggjort, findes slet ikke i
+`matches`, så `bool_and` var sandt af den forkerte grund. Derfor kunne det ikke
+løses ved at pege klienten på viewet alene; sæsonen skulle kunne sige noget om
+sig selv, som ikke stod at læse i dens kampe.
+
+**30-dages ventilen er en indrømmelse, og den står som sådan i migreringen.** Den
+er den karensperiode, der blev fravalgt som primær mekanisme, netop fordi den
+altid kommer for sent. Uden den ville hver eneste eksisterende sæson — alle har
+`ends_at = null` på udrulningsdagen — aldrig blive færdig, og milepæle og
+kåringer ville stoppe i tavshed. Det ville have været den modsatte version af den
+samme fejl: en betingelse, der er trivielt **falsk**. Ventilen rammer kun det
+tilfælde, hvor vi intet ved, og 30 dage er længere end enhver pause inde i en
+sæson.
+
+**Retningen på uvisheden er valgt bevidst:** en konkurrence, der ikke bliver
+afsluttet, kan rettes. En milepæl, der er uddelt, kan ikke.
+
+### `A29` — en administrator må fjerne det urørte, aldrig det brugte
+
+**Beslutning:** liga-admin kan fjerne en deltager uden ét eneste tip, slette en
+konkurrence ingen af deltagerne har tippet i, og slette en liga uden **aktive**
+konkurrencer. Global admin kan lukke en anden konto. Alt håndhæves af RLS.
+
+**Begrundelsen er, at liga-lagets v1 havde ret i sin udskydelse.** Spec §8 skrev
+medlems-administration fra med ordene "lille brugerbase af venner" — og en
+admin-knap, der kan slette andres historik, er den dyreste slags fejlklik. Det
+argument holder stadig. Reglen ovenfor er den, der lukker behovet uden at
+genåbne risikoen: ingen tips ⇒ ingen stilling at omskrive, intet point at tage
+fra nogen, ingen kåring at omgøre. Den kan siges højt i en vennegruppe, og den
+kan håndhæves af databasen frem for at bo i en knap.
+
+**Den gamle liga-sletningsregel var i praksis "aldrig".** Den krævede nul
+konkurrencer, og en vennegruppe, der har spillet en sæson færdig, har per
+definition en konkurrence liggende — som kun dens egen opretter kunne fjerne.
+Den nye regel tør være løsere, netop fordi den ikke er destruktiv:
+`competitions.group_id` er `on delete set null`, så konkurrencerne bliver
+liga-løse med stilling, tips og kåringer i behold. Der er intet at fortryde,
+fordi der ikke forsvinder noget.
+
+**Testen fandt en fejl, policyen ikke kunne læses til.** Første udgave spurgte
+"findes der et tip på en af konkurrencens kampe". Men `predictions` er global pr.
+kamp — ét tip gælder i alle de konkurrencer, kampen indgår i — så betingelsen var
+sand for enhver konkurrence med en kamp fra en officiel turnering, og admin-vejen
+ville aldrig kunne bruges. De to formuleringer ser ens ud; forskellen viser sig
+kun, når en udenforstående tilfældigvis har tippet den samme kamp. Spørgsmålet
+stilles nu om konkurrencens egne **deltagere**.
+
+**`anonymize_my_account()` beholder sine nul parametre.** Den egenskab er
+adgangsgarantien — "der findes ikke et bruger-id at forfalske" — og den er
+uændret. Kroppen er delt ud i en ikke-grantet `_anonymize_account(uuid)`, som
+begge indgange kalder, så den dag anonymiseringen skal rydde en tabel mere, kan
+de to ikke komme til at gøre forskellige ting.
+
+### `A30` — lukkede konti skjules globalt og bliver i det private
+
+**Beslutning:** rating, måneds-, runde- og sæsonchampionship filtrerer
+`anonymized_at` fra. `computeCompetitionState` og karriereprofilen røres ikke.
+Filtreringen sker i klienten, ikke i viewene.
+
+**Begrundelsen er, at de to steder ikke beskytter det samme.** I en privat
+konkurrence er deltagelsen vennernes fælles historik: fjernede vi rækken, ville
+en afsluttet konkurrence pludselig have haft én deltager færre, og en delt sejr
+kunne blive udelt. Det er ordret den grund, `sql/account_anonymization.sql` valgte
+anonymisering frem for sletning. På en global rangliste findes den historik
+ikke — dér er pseudonymet bare en fremmed, der fylder en plads, og den, der bad
+om at forsvinde, står stadig på en offentlig liste.
+
+**Klienten og ikke viewene**, fordi `monthly_standings`, `round_standings` og
+`season_standings` deles med rating-motoren og er dækket af den frosne reference
+i `sql/tests/rating_equivalence.sql`. En lukket konto må ikke kunne flytte tal,
+der allerede er beregnet. Vi ændrer hvad der **vises**, ikke hvad der er
+**regnet** — og filtreringen sker før `assignRanks`, så placeringerne lukker sig
+om hullet i stedet for at efterlade et spring.
+
+### `A31` — arkivering gælder også konkurrencer i en liga
+
+**Beslutning:** spærren i `MainApp` (`_hidden = c.group_id ? false : …`) er
+fjernet, og liga-siden har fået Arkivér/Gendan, en Afsluttede-sektion og et
+sammenklappet arkiv. Konkurrence-kortet er udskilt og deles af begge skærme.
+
+**Spærrens begrundelse var reel, men midlertidig.** Den blev sat i juli 2026,
+fordi et forældet `hidden`-flag kunne skjule en konkurrence på Hjem/Tip, mens
+liga-siden viste den som "Med" — og brugeren havde ingen Gendan-knap at rette det
+med, *fordi liga-siden ikke havde nogen*. Knappen findes nu, og dermed findes
+tilstanden ikke. Det er værd at bemærke som mønster: begrundelsen pegede hele
+tiden på det, der manglede, frem for på at arkivering var forkert dér.
+
+**Arkivér og Frameld er bevidst begge til stede**, fordi de betyder to
+forskellige ting: arkivering rydder MIN visning og lader stillingen stå,
+framelding fjerner mig fra konkurrencen. Kun den første kan fortrydes.
+
+**Kortet blev delt, fordi det var den forkerte vej rundt.** Liga-laget ER stedet,
+konkurrencer bor, og alligevel var det kun overgangslaget ("Øvrige konkurrencer"),
+der viste pokal, vinder og status. Liga-siden viste navn, mode og deltagerantal.
+
+**Sidegevinsten var ydelse, ikke kun udseende.** Ligaer-fanen kaldte
+`computeCompetitionState` — appens tungeste loader, seks kald — én gang pr.
+konkurrence alene for at skrive "afsluttet" og "12/34 spillet" på et kort.
+Belastningen voksede lineært med antallet af konkurrencer, altså netop for de
+mest aktive brugere. Nu henter `loadCompetitionStatuses` status til alle kort med
+fire opslag i alt, og den tunge loader køres kun for de afsluttede, hvor
+vinderens navn faktisk skal bruges.
+
+---
+
 ## August 2026 — Milepæle flyttes ud af matches-triggeren (v2.1)
 
 **Beslutning:** `award_milestones()` kaldes kun af notifikations-jobbet, ikke længere fra matches-triggeren.
