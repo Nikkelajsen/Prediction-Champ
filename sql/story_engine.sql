@@ -103,14 +103,19 @@ grant select, update on public.stories to authenticated;
 -- liga (snapshottet league_size), dernæst competition_id som garanteret unik
 -- tiebreak. dismissed_at filtreres IKKE her — frontenden henter seneste runde og
 -- viser intet, hvis den er afvist (så en afvist historie ikke afslører en ældre).
-create or replace view public.latest_story with (security_invoker = on) as
-select distinct on (user_id, round_key)
-  id, round_key, user_id, competition_id, rule, priority, league_size,
-  payload, headline, body, created_at, dismissed_at
-from public.stories
-order by user_id, round_key, priority asc, league_size desc nulls last, competition_id asc nulls last;
-
-grant select on public.latest_story to authenticated;
+--
+-- VIEWET DEFINERES I sql/story_engine_v2.sql — IKKE HER.
+--
+-- Det stod her indtil v2, og det var en fælde: v2 gav viewet to kolonner mere
+-- (`day_key`, `period`) og et `where period = 'round'`, og DENNE fil gen-køres
+-- rutinemæssigt (fire gange siden juli 2026). En `create or replace view` med
+-- den gamle, kortere kolonneliste kan ikke fjerne kolonner igen — Postgres
+-- svarer `42P16: cannot drop columns from view` — så gen-kørslen fejlede midt i
+-- filen, præcis når man fulgte den dokumenterede rækkefølge (v2 før denne).
+--
+-- Derfor bor definitionen ét sted: i den fil, der indfører `period`. To
+-- definitioner af samme view i to filer ville i bedste fald skulle holdes i
+-- sync, og i værste fald tavst rulle hinanden tilbage.
 
 -- ======================= 3. generate_stories() =======================
 create or replace function public.generate_stories(p_round_key text)

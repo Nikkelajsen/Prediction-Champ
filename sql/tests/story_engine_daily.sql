@@ -113,6 +113,16 @@ create table public.monthly_standings (
 \ir ../story_engine.sql
 \ir ../story_engine_v2.sql
 
+-- GEN-KØRSEL AF story_engine.sql, og den er ikke pynt. Produktionens rækkefølge
+-- er "kør v2, gen-kør så story_engine" (den sidste er ændret til en
+-- periode-afgrænset delete), mens indlæsningen ovenfor kører dem i den modsatte
+-- rækkefølge, fordi story_engine.sql opretter selve tabellen. Uden denne linje
+-- afprøver testen kun den ene retning — og det var netop den anden, der fejlede
+-- i produktion: filen havde sin egen `create or replace view latest_story` med
+-- den korte kolonneliste, som ikke kan erstatte v2's længere
+-- (`42P16: cannot drop columns from view`).
+\ir ../story_engine.sql
+
 -- ---------- fixture ----------
 -- 2026-03-03 er en tirsdag, altså rundens første dag; 03-04 er onsdag.
 -- Dag 1: fire kampe, fem brugere, én konkurrence — komponeret så hver tærskel
