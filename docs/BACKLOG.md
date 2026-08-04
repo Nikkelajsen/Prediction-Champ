@@ -41,7 +41,6 @@ eller en linje i "Forkastede ideer".
 Kontakt-mail til hjemmesiden skal afklares før publicering — `site/om.html` bruger en pladsholder-adresse (hænger sammen med `I10`).
 
 GitHub-repoet og Vercel-projektet hedder stadig det gamle navn; hjemmesidens 25 links peger derfor på `prediction-champ.vercel.app` og skal rettes, når domænet skifter (hænger sammen med `I10`).
-`sql/story_engine.sql` skal gen-køres i Supabase efter navneskiftet — indtil da skriver databasen den gamle titel i nye stories, mens appen viser den nye.
 `public/leagly-wordmark-navy.png` bruges ikke i kode; oplagt som `og:image`/socialt delebillede på hjemmesiden, når domænet er afklaret.
 `manifest.json`s `short_name` er identisk med `name` ("Leagly") — kunne få en rigtig kort form, hvis navnet nogensinde bliver for langt til et ikon.
 
