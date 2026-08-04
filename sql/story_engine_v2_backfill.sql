@@ -17,7 +17,11 @@
 -- Idempotent: begge motorer er delete-then-insert pr. periode, og
 -- award_milestones() er `on conflict do nothing`. Den kan afbrydes og køres igen.
 
-\timing on
+-- INGEN psql-kommandoer i denne fil (`\timing`, `\ir`, `\set`). Migreringerne
+-- køres i Supabases SQL-editor, som sender ren SQL til serveren og ikke kender
+-- psql's backslash-syntaks — en `\timing on` fejler med
+-- `42601: syntax error at or near "\"`. Kun filerne i sql/tests/ må bruge dem;
+-- de køres udelukkende gennem psql i CI.
 
 -- ---------- 1. Daglige historier for hver færdigspillet dag ----------
 do $$
