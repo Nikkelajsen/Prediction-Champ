@@ -151,6 +151,23 @@ export function matchUpsertRow(fx, { seasonId, homeTeamId, awayTeamId }) {
   };
 }
 
+// Sæsonens slutning fra datakilden — best effort.
+//
+// Metoden er VALGFRI i provider-kontrakten (api/_providers/index.js), og et
+// opslag, der fejler, må ikke gøre en ellers vellykket kørsel til en fejl:
+// uden svar falder `competition_status` blot tilbage på sin 30-dages ventil.
+// Fejlen logges, så en leverandør, der holder op med at svare, kan ses i
+// Vercels logs frem for kun i en gate, der pludselig aldrig åbner.
+export async function readSeasonMeta(provider, { apiLeagueId, apiSeasonId, token, meta }) {
+  if (typeof provider.fetchSeasonMeta !== "function") return null;
+  try {
+    return await provider.fetchSeasonMeta({ apiLeagueId, apiSeasonId, token, meta });
+  } catch (e) {
+    console.warn(`[sæson-meta] ${provider.key}: ${e.message}`);
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   // Sættes så snart autorisationen er i hus. Ligger uden for try'et, fordi
   // catch'en skal kunne bruge den — en kørsel, der vælter, er netop den, der
@@ -410,6 +427,33 @@ export default async function handler(req, res) {
       });
     }
 
+    // Sæsonens slutning, som datakilden ser den (`seasons.ends_at`/`is_finished`).
+    //
+    // Det er dét, der holder `competition_status` fra at erklære en konkurrence
+    // slut midt i sin egen sæson: "alle kendte kampe er spillet" er sandt hver
+    // gang et grundspil slutter, og næste stage endnu ikke er udgivet. Reglen og
+    // dens tre veje står i sql/season_end.sql.
+    //
+    // Kaster ALDRIG videre — samme regel som efterfyldningen nedenfor. En sync,
+    // der har hentet kampene rigtigt, må ikke fejle på et metadata-opslag; uden
+    // det falder viewet blot tilbage på sin 30-dages ventil.
+    //
+    // `is_finished` sættes kun TIL true. At åbne en lukket sæson igen er en
+    // beslutning, ikke en bivirkning af en kørsel — den tages i Admin → Drift.
+    const seasonMeta = dryRun ? null : await readSeasonMeta(provider, { apiLeagueId, apiSeasonId, token, meta: providerMeta });
+    if (seasonMeta && (seasonMeta.endsAt || seasonMeta.finished)) {
+      const patch = {};
+      if (seasonMeta.endsAt) patch.ends_at = seasonMeta.endsAt;
+      if (seasonMeta.finished) patch.is_finished = true;
+      try {
+        await sb(`/rest/v1/seasons?id=eq.${seasonId}`, {
+          method: "PATCH", prefer: "return=minimal", body: JSON.stringify(patch),
+        });
+      } catch (e) {
+        console.warn("[sæson-meta] kunne ikke gemmes:", e.message);
+      }
+    }
+
     // Efterfyld eksisterende konkurrencer med de kampe, der er kommet til siden
     // de blev oprettet (A20). Skal ligge EFTER upserten — det er først dér, de
     // nye kampe har fået et id. Reglerne og hvorfor de er, som de er, står i
@@ -440,6 +484,11 @@ export default async function handler(req, res) {
       // Kun til stede, når sæsonen kom tom hjem — og så er det netop det felt,
       // der siger, om tomheden er ufarlig eller en fejlkonfiguration.
       ...(emptySeason ? { emptySeason } : {}),
+      // Sæsonens slutning, som den blev aflæst. Hører i detail'en, fordi den
+      // afgør, hvornår konkurrencer må meldes færdige — og fordi et felt, der
+      // pludselig står tomt, er den eneste måde at se, at leverandøren holdt op
+      // med at svare på spørgsmålet.
+      ...(seasonMeta ? { season: seasonMeta } : {}),
       // A20: hvor mange kampe der blev føjet til eksisterende konkurrencer.
       // Hører i detail'en af samme grund som de øvrige tal — en efterfyldning,
       // der tavst holder op med at virke, ville ellers først vise sig som en

@@ -43,14 +43,67 @@ async function loadGroupDetail(token, userId, groupId) {
 
   const comps = await db.select(token, "competitions", `group_id=eq.${groupId}&select=*&order=created_at.desc`);
   const compIds = comps.map((c) => c.id);
-  const myParts = compIds.length ? await db.select(token, "competition_participants", `user_id=eq.${userId}&competition_id=in.(${compIds.join(",")})&select=competition_id`) : [];
+  // `hidden` følger med: arkivering er personlig og bor på deltager-rækken, så
+  // liga-siden kan først sortere arkiverede fra, når den kender flaget.
+  const myParts = compIds.length ? await db.select(token, "competition_participants", `user_id=eq.${userId}&competition_id=in.(${compIds.join(",")})&select=competition_id,hidden`) : [];
   const joinedSet = new Set(myParts.map((p) => p.competition_id));
+  const hiddenSet = new Set(myParts.filter((p) => p.hidden).map((p) => p.competition_id));
   const allParts = compIds.length ? await db.select(token, "competition_participants", `competition_id=in.(${compIds.join(",")})&select=competition_id`) : [];
   const partCount = {};
   allParts.forEach((p) => { partCount[p.competition_id] = (partCount[p.competition_id] || 0) + 1; });
-  const competitions = comps.map((c) => ({ ...c, joined: joinedSet.has(c.id), participantCount: partCount[c.id] || 0 }));
+  const competitions = comps.map((c) => ({
+    ...c, joined: joinedSet.has(c.id), hidden: hiddenSet.has(c.id), participantCount: partCount[c.id] || 0,
+  }));
 
   return { group, members: memberList, isMember: myRole !== null, myRole, competitions };
+}
+
+// Arkivér/gendan for MIG. Flaget bor på min egen deltager-række, så det aldrig
+// kan komme til at gælde for andre — arkivering er en oprydning i eget billede,
+// ikke en handling mod fællesskabet.
+async function setCompetitionHidden(token, userId, compId, hidden) {
+  await db.update(token, "competition_participants", `competition_id=eq.${compId}&user_id=eq.${userId}`, { hidden });
+}
+
+// Ligaens konkurrence-deltagere med ét felt mere, end listen af navne: har
+// vedkommende overhovedet tippet i konkurrencen?
+//
+// Det felt er hele grunden til, at loaderen findes. Liga-admin må kun fjerne den
+// URØRTE deltager (sql/liga_admin.sql), og uden `tipped` ville UI'et enten
+// tilbyde en handling, RLS afviser, eller skjule den for nogen, der godt kunne
+// fjernes. Spørgsmålet stilles pr. DELTAGER og ikke pr. kamp: tips er globale,
+// så "kampen er tippet" siger intet om, hvem der er med her.
+async function loadCompetitionParticipants(token, compId) {
+  const parts = await db.select(token, "competition_participants", `competition_id=eq.${compId}&select=user_id`);
+  if (!parts.length) return [];
+  const ids = parts.map((p) => p.user_id);
+  const [profiles, links] = await Promise.all([
+    db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`),
+    db.select(token, "competition_matches", `competition_id=eq.${compId}&select=match_id`),
+  ]);
+  const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
+  const matchIds = links.map((l) => l.match_id);
+  const preds = matchIds.length
+    ? await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&user_id=in.(${ids.join(",")})&select=user_id`)
+    : [];
+  const tippers = new Set(preds.map((p) => p.user_id));
+  return parts.map((p) => ({ userId: p.user_id, name: nameById.get(p.user_id) || "—", tipped: tippers.has(p.user_id) }));
+}
+
+// Liga-admin fjerner en deltager. RLS afgør, om det er tilladt (kun en deltager
+// uden ét eneste tip), så et afvist forsøg kommer tilbage som nul rækker og ikke
+// som en fejl — samme mønster som `leaveCompetition` og `leaveGroup`.
+async function removeParticipant(token, compId, userId) {
+  const res = await db.del(token, "competition_participants", `competition_id=eq.${compId}&user_id=eq.${userId}`);
+  return Array.isArray(res) ? res.length > 0 : true;
+}
+
+// Slet en konkurrence. To policies kan give lov: opretteren altid, liga-admin
+// kun hvis ingen af deltagerne har tippet. Klienten kender ikke forskellen og
+// skal ikke gøre det — den spørger, og RLS svarer.
+async function deleteCompetition(token, compId) {
+  const res = await db.del(token, "competitions", `id=eq.${compId}`);
+  return Array.isArray(res) ? res.length > 0 : true;
 }
 
 // Slå en liga op på invite-koden (uden at melde ind) — til bekræftelses-modalen.
@@ -87,7 +140,10 @@ async function leaveGroup(token, userId, groupId) {
   return Array.isArray(res) ? res.length > 0 : true;
 }
 
-// Slet en tom liga (RLS: kun admin + ingen konkurrencer). Returnerer true hvis slettet.
+// Slet en liga (RLS: kun admin, og kun hvis ingen af ligaens konkurrencer er
+// AKTIVE — sql/liga_admin.sql). Konkurrencerne følger ikke med: `group_id` er
+// `on delete set null`, så de bliver liga-løse med stilling og tips i behold.
+// Returnerer true hvis slettet.
 async function deleteGroup(token, groupId) {
   const res = await db.del(token, "groups", `id=eq.${groupId}`);
   return Array.isArray(res) ? res.length > 0 : true;
@@ -116,4 +172,8 @@ async function leaveCompetition(token, userId, compId) {
   return Array.isArray(res) ? res.length > 0 : true;
 }
 
-export { loadMyGroups, loadGroupDetail, loadGroupByCode, createGroup, joinGroup, leaveGroup, deleteGroup, joinCompetition, leaveCompetition };
+export {
+  loadMyGroups, loadGroupDetail, loadGroupByCode, createGroup, joinGroup, leaveGroup, deleteGroup,
+  joinCompetition, leaveCompetition, setCompetitionHidden, loadCompetitionParticipants,
+  removeParticipant, deleteCompetition,
+};

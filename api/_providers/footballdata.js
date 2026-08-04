@@ -164,6 +164,30 @@ export const footballdata = {
     return (data.matches || []).map(normalize);
   },
 
+  // Sæsonens SLUTNING, som datakilden ser den. Se begrundelsen i sportmonks.js
+  // og reglen i sql/season_end.sql.
+  //
+  // Samme endpoint som `describeEmptySeason` — `/competitions/<kode>` bærer både
+  // `currentSeason` og listen `seasons` med hver sin `endDate`.
+  //
+  // Der findes ikke et `finished`-flag hos denne leverandør, og vi opfinder ikke
+  // et: at sæsonen ikke længere er `currentSeason` betyder, at leverandøren er
+  // gået videre til den næste, og DET er en erklæring. Er sæsonen stadig den
+  // aktuelle, siger vi udtrykkeligt nej frem for at gætte ud fra datoen —
+  // `endsAt` er allerede med, og viewet kan selv se, om den er passeret.
+  async fetchSeasonMeta({ apiLeagueId, apiSeasonId, token, fetchImpl = fetchWithTimeout }) {
+    const data = await fdFetch(`/competitions/${apiLeagueId}`, token, fetchImpl);
+    const requested = String(apiSeasonId);
+    const current = startYear(data.currentSeason);
+    const season = (data.seasons || []).find((s) => startYear(s) === requested)
+      || (current === requested ? data.currentSeason : null);
+    if (!season) return null;
+    return {
+      endsAt: season.endDate ? String(season.endDate).slice(0, 10) : null,
+      finished: !!current && current !== requested,
+    };
+  },
+
   // Hvorfor der findes et ekstra kald netop til den tomme sæson:
   //
   // `/competitions/<kode>/matches?season=<år>` svarer **200 med en tom liste** i

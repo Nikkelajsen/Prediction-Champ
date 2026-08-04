@@ -9,6 +9,12 @@
     },
     "api/sync-live.js": {
       "maxDuration": 60
+    },
+    "api/delete-account.js": {
+      "maxDuration": 30
+    },
+    "api/admin-close-account.js": {
+      "maxDuration": 30
     }
   },
   "regions": ["dub1"],

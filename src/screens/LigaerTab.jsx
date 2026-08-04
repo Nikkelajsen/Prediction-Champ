@@ -1,16 +1,15 @@
 // Ligaer-fanen (liga-laget). Øverst: brugerens ligaer (fællesskaber). Nedenunder:
 // "Øvrige konkurrencer" — liga-løse konkurrencer, der virker som før (overgangslag).
 // Spec: docs/features/liga-laget-v1.md.
-import { useState, useEffect } from "react";
-import { Trophy, ChevronRight, Plus, Archive, Trash2, Users, Info } from "lucide-react";
-import { db } from "../lib/supabase.js";
-import { computeCompetitionState, loadMyGroups, createGroup, joinByInviteCode } from "../lib/data.js";
+import { useState, useEffect, useCallback } from "react";
+import { ChevronRight, Plus, Archive, Trash2, Users, Info } from "lucide-react";
+import { computeCompetitionState, loadCompetitionStatuses, loadMyGroups, createGroup, joinByInviteCode, setCompetitionHidden, deleteCompetition } from "../lib/data.js";
 import { leaders } from "../lib/standings.js";
-import { modeLabel } from "../lib/scoring.js";
 import { C, btnGhost, btnGold, btnGreen, font } from "../ui/theme.js";
-import { Card, Collapsible, Eyebrow, H, InfoDot, Modal, PlayerName } from "../ui/components.jsx";
-import { readUserFlag, writeUserFlag, NUDGE_KEY } from "../lib/localFlags.js";
+import { Card, Collapsible, Eyebrow, H, InfoDot, Modal } from "../ui/components.jsx";
+import { readUserFlag, writeUserFlag, readSeenCompletions, markCompletionSeen, NUDGE_KEY } from "../lib/localFlags.js";
 import { validateGroupName } from "../lib/onboarding.js";
+import CompetitionCard, { cardAction } from "./liga/CompetitionCard.jsx";
 
 function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGroup, reload, openProfile }) {
   const [groups, setGroups] = useState(null);
@@ -28,6 +27,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState(""); // fejl fra arkivér/gendan/slet
   const [nudgeGone, setNudgeGone] = useState(() => !!readUserFlag(NUDGE_KEY, userId));
+  const [seenDone, setSeenDone] = useState(() => readSeenCompletions(userId));
 
   async function reloadGroups() {
     try { setGroups(await loadMyGroups(token, userId)); } catch { setGroups([]); }
@@ -37,25 +37,52 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
   // liga-løse konkurrencer (dem med gruppetilhør vises på liga-siden i stedet)
   const loose = competitions.filter((c) => !c.group_id);
 
+  // To trin, og delingen er hele pointen.
+  //
+  // FØR: `computeCompetitionState` — appens tungeste loader, seks kald — blev
+  // kørt én gang PR. KONKURRENCE, alene for at kunne skrive "afsluttet" og
+  // "12/34 spillet" på et kort. Belastningen voksede lineært med antallet af
+  // konkurrencer, altså netop for de mest aktive brugere.
+  //
+  // NU: status til alle kortene på én gang (fire opslag i alt), og den tunge
+  // loader kun for de AFSLUTTEDE — der, hvor vinderens navn faktisk skal bruges.
   useEffect(() => {
     let cancelled = false;
+    const ids = loose.map((c) => c.id);
     (async () => {
-      const entries = await Promise.all(loose.map(async (c) => {
+      let statuses = {};
+      try { statuses = await loadCompetitionStatuses(token, userId, ids); } catch { /* tomt kort frem for intet kort */ }
+      if (cancelled) return;
+      setStatusMap(statuses);
+
+      const doneIds = ids.filter((id) => statuses[id]?.concluded);
+      if (!doneIds.length) return;
+      const details = await Promise.all(doneIds.map(async (id) => {
         try {
-          const state = await computeCompetitionState(token, c.id);
+          const state = await computeCompetitionState(token, id);
           // Placeringen er rækkens ÆGTE rang (sat af assignRanks i computeCompetitionState),
           // ikke listeindekset: to spillere, der står ægte lige, er begge nr. 2 — ikke 2 og 3.
           const me = state.rows.find((r) => r.userId === userId);
           // Vinderen kan være delt. `leaders` giver alle på 1. pladsen, som Championship-
           // fanens kåring allerede gør — en skjult nøgle må ikke udpege én af to lige.
-          const winners = state.isComplete ? leaders(state.rows) : [];
-          return [c.id, { isComplete: state.isComplete, playedMatches: state.playedMatches, totalMatches: state.totalMatches, participants: state.rows.length, myPos: me ? me.rank : null, myShared: !!me?.shared, winners }];
-        } catch { return [c.id, null]; }
+          return [id, { winners: leaders(state.rows), participants: state.rows.length, myPos: me ? me.rank : null, myShared: !!me?.shared }];
+        } catch { return [id, null]; }
       }));
-      if (!cancelled) setStatusMap(Object.fromEntries(entries));
+      if (cancelled) return;
+      setStatusMap((prev) => {
+        const next = { ...prev };
+        for (const [id, extra] of details) if (extra) next[id] = { ...next[id], ...extra };
+        return next;
+      });
     })();
     return () => { cancelled = true; };
   }, [competitions]); // eslint-disable-line
+
+  // Fejringen er set. Skrives til enheden, så den ikke kører igen ved næste
+  // åbning — og kun første gang, jf. `markCompletionSeen`.
+  const markSeen = useCallback((compId) => {
+    setSeenDone(markCompletionSeen(userId, compId));
+  }, [userId]);
 
   // Arkivering og sletning meldte ikke fejl (G31, august 2026): fejlede kaldet,
   // blev rækken bare stående, som om intet var sket — og brugeren havde ingen
@@ -65,7 +92,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
   async function setArchived(compId, hidden) {
     setActionError("");
     try {
-      await db.update(token, "competition_participants", `competition_id=eq.${compId}&user_id=eq.${userId}`, { hidden });
+      await setCompetitionHidden(token, userId, compId, hidden);
       await reload();
     } catch {
       setActionError(hidden ? "Kunne ikke arkivere konkurrencen lige nu." : "Kunne ikke gendanne konkurrencen lige nu.");
@@ -84,7 +111,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
     setDeleting(true);
     setActionError("");
     try {
-      await db.del(token, "competitions", `id=eq.${comp.id}`);
+      await deleteCompetition(token, comp.id);
       setPendingDelete(null);
       await reload();
     } catch {
@@ -131,63 +158,39 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
 
   const visible = loose.filter((c) => !c._hidden);
   const archived = loose.filter((c) => c._hidden);
-  const active = visible.filter((c) => !statusMap[c.id]?.isComplete);
-  const completed = visible.filter((c) => statusMap[c.id]?.isComplete);
+  const active = visible.filter((c) => !statusMap[c.id]?.concluded);
+  const completed = visible.filter((c) => statusMap[c.id]?.concluded);
   const canNudge = !nudgeGone && groups && groups.length === 0 && loose.some((c) => c.created_by === userId);
   function dismissNudge() { writeUserFlag(NUDGE_KEY, userId, "1"); setNudgeGone(true); }
 
   const LeagueCard = ({ c, isArchived }) => {
     const s = statusMap[c.id];
+    const canArchive = s?.concluded || isArchived;
     return (
-      <Card onClick={() => openBoard(c.id)}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: 15, display: "flex", alignItems: "center", gap: 6 }}>
-              {s?.isComplete && <Trophy size={13} color={C.gold} />}
-              <span>{c.name}</span>
-            </div>
-            <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
-              {modeLabel(c.mode, c.mode_params)}{s?.participants != null ? ` · ${s.participants} deltager${s.participants === 1 ? "" : "e"}` : ""}
-              {s && !s.isComplete && s.totalMatches > 0 ? ` · ${s.playedMatches}/${s.totalMatches} spillet` : ""}
-            </div>
-            {s?.isComplete && s.winners?.length > 0 && (
-              <div style={{ color: C.gold, fontSize: 12, fontWeight: 700, marginTop: 3 }}>
-                🏆 {s.winners.map((w, i) => (
-                  <span key={w.userId}>
-                    {i > 0 && (i === s.winners.length - 1 ? " og " : ", ")}
-                    <PlayerName userId={w.userId} name={w.player} onOpenProfile={openProfile} />
-                  </span>
-                ))} ({s.winners[0].total} point{s.winners.length > 1 ? " — delt" : ""})
-              </div>
-            )}
-          </div>
-          <div style={{ textAlign: "right", display: "flex", alignItems: "center", gap: 8 }}>
-            {s?.myPos != null && (
-              <div>
-                <div style={{ fontFamily: font.display, fontSize: 24, fontWeight: 700, color: s.myPos === 1 ? C.gold : C.text }}>{s.myPos}.</div>
-                <div style={{ color: C.muted, fontSize: 11 }}>{s.myShared ? "delt plads" : "din plads"}</div>
-              </div>
-            )}
-            <ChevronRight size={18} color={C.muted} />
-          </div>
-        </div>
-        {(s?.isComplete || isArchived || c.created_by === userId) && (
-          <div style={{ marginTop: 8, display: "flex", gap: 14, alignItems: "center" }}>
-            {(s?.isComplete || isArchived) && (
-              <button type="button" onClick={(e) => { e.stopPropagation(); setArchived(c.id, !isArchived); }}
-                style={{ background: "none", border: "none", padding: 0, color: C.muted, fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>
-                {isArchived ? "Gendan" : "Arkivér"}
-              </button>
-            )}
-            {c.created_by === userId && (
-              <button type="button" onClick={(e) => { e.stopPropagation(); setPendingDelete(c); }}
-                style={{ background: "none", border: "none", padding: 0, color: C.red, fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                <Trash2 size={12} /> Slet
-              </button>
-            )}
-          </div>
+      <CompetitionCard
+        c={c} status={s} winners={s?.winners || []}
+        myPos={s?.myPos ?? null} myShared={!!s?.myShared}
+        meta={s?.participants != null ? `${s.participants} deltager${s.participants === 1 ? "" : "e"}` : null}
+        // Arkiverede kort fejrer ikke: man har set afslutningen, hvis man selv
+        // har lagt den væk.
+        celebrate={!!s?.concluded && !isArchived && !seenDone.has(c.id)}
+        onCelebrated={markSeen}
+        onOpen={() => openBoard(c.id)}
+        onOpenProfile={openProfile}
+      >
+        {canArchive && (
+          <button type="button" style={cardAction()}
+            onClick={(e) => { e.stopPropagation(); setArchived(c.id, !isArchived); }}>
+            {isArchived ? "Gendan" : "Arkivér"}
+          </button>
         )}
-      </Card>
+        {c.created_by === userId && (
+          <button type="button" style={cardAction("danger")}
+            onClick={(e) => { e.stopPropagation(); setPendingDelete(c); }}>
+            <Trash2 size={12} /> Slet
+          </button>
+        )}
+      </CompetitionCard>
     );
   };
 

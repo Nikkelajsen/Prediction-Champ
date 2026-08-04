@@ -239,6 +239,35 @@ export const sportmonks = {
     return String(match.id);
   },
 
+  // Sæsonens SLUTNING, som datakilden ser den.
+  //
+  // Findes for at kunne svare på "kan denne sæson stadig få flere kampe?" —
+  // spørgsmålet, sql/season_end.sql stiller for ikke at erklære en konkurrence
+  // slut midt i sin egen sæson. Sportmonks modellerer Superligaen som ÉN sæson
+  // med flere stages, så "alle kendte kampe er spillet" er sandt hver gang et
+  // grundspil slutter, og slutspillet endnu ikke er udgivet.
+  //
+  // Samme endpoint som `resolveSeasonId` — sæsonobjektet bærer både `finished`
+  // og `ending_at`, så der er intet at hente et andet sted.
+  async fetchSeasonMeta({ apiLeagueId, apiSeasonId, token, fetchImpl = fetchWithTimeout, sleep, meta }) {
+    const res = await smFetch(
+      `${BASE}/leagues/${apiLeagueId}?include=seasons&api_token=${token}`, fetchImpl, sleep
+    );
+    if (!res.ok) throw new Error(`Sportmonks (sæson-meta): ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    readRateLimit(data, meta);
+    const s = (data.data?.seasons || []).find((x) => String(x.id) === String(apiSeasonId));
+    if (!s) return null;
+    return {
+      // `ending_at` er en ren dato ("2027-05-24") — skæres alligevel, hvis
+      // leverandøren en dag sender et tidsstempel.
+      endsAt: s.ending_at ? String(s.ending_at).slice(0, 10) : null,
+      // Kun et EGENTLIGT true tæller. Mangler feltet, ved vi det ikke — og
+      // "ved ikke" må aldrig blive til "slut".
+      finished: s.finished === true,
+    };
+  },
+
   // Hele sæsonens kampprogram. Pagineret — ~4 kald for en typisk turnering.
   async fetchSeasonFixtures({ apiSeasonId, token, fetchImpl = fetchWithTimeout, sleep, meta }) {
     const byId = new Map();

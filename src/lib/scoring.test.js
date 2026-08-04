@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { currentRoundKey, roundKeyOfDate, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { currentRoundKey, roundKeyOfDate, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 describe("outcome", () => {
   it("giver 1 ved hjemmesejr, X ved uafgjort, 2 ved udesejr", () => {
@@ -450,5 +450,55 @@ describe("roundKeyOfDate / currentRoundKey", () => {
     expect(currentRoundKey(new Date("2026-03-09T22:30:00Z"))).toBe("2026-03-03");
     // 2026-03-09 23.30 UTC = 00.30 dansk tirsdag → NY runde.
     expect(currentRoundKey(new Date("2026-03-09T23:30:00Z"))).toBe("2026-03-10");
+  });
+});
+
+describe("nextRoundTips", () => {
+  // Langt ude i fremtiden, så ingen kamp er låst, uanset hvornår testen køres.
+  const iso = (days) => new Date(Date.now() + days * 86400000).toISOString();
+  const m = (id, roundKey, days, extra = {}) =>
+    ({ id, round_key: roundKey, kickoff_at: iso(days), home_score: null, away_score: null, ...extra });
+  const tip = (...ids) => new Map(ids.map((id) => [id, { match_id: id, pred_home: 1, pred_away: 0 }]));
+
+  it("vælger den TIDLIGSTE runde med tipbare kampe", () => {
+    const next = nextRoundTips([m("a", "2099-01-12", 37), m("b", "2099-01-05", 30)], new Map());
+    expect(next.roundKey).toBe("2099-01-05");
+    expect(next.matches.map((x) => x.id)).toEqual(["b"]);
+  });
+
+  it("melder først 'alt tippet', når HELE runden er tippet", () => {
+    const ms = [m("a", "2099-01-05", 30), m("b", "2099-01-05", 31), m("c", "2099-01-12", 37)];
+    expect(nextRoundTips(ms, tip("a")).allTipped).toBe(false);
+    // En senere runde må ikke trække den ned — den bliver "næste runde" i tur.
+    expect(nextRoundTips(ms, tip("a", "b")).allTipped).toBe(true);
+  });
+
+  it("regner et halvt tip som intet tip", () => {
+    const ms = [m("a", "2099-01-05", 30)];
+    const halvt = new Map([["a", { match_id: "a", pred_home: 1, pred_away: null }]]);
+    expect(nextRoundTips(ms, halvt).allTipped).toBe(false);
+  });
+
+  it("ser bort fra spillede og låste kampe", () => {
+    // Spillet: har resultat. Låst: kickoff er passeret.
+    const ms = [
+      m("spillet", "2099-01-05", 30, { home_score: 1, away_score: 1 }),
+      m("laast", "2099-01-05", -1),
+      m("aaben", "2099-01-12", 37),
+    ];
+    const next = nextRoundTips(ms, new Map());
+    expect(next.roundKey).toBe("2099-01-12");
+    expect(next.matches.map((x) => x.id)).toEqual(["aaben"]);
+  });
+
+  it("svarer null, når der intet er at tippe", () => {
+    // Skal kunne skelnes fra 'alt tippet' — ellers får en bruger med nul tips
+    // at vide, at alting er inde.
+    expect(nextRoundTips([m("a", "2099-01-05", 30, { home_score: 0, away_score: 0 })], new Map())).toBeNull();
+    expect(nextRoundTips([], new Map())).toBeNull();
+  });
+
+  it("springer en kamp uden kendt kickoff over", () => {
+    expect(nextRoundTips([m("a", "2099-01-05", 30, { kickoff_at: null })], new Map())).toBeNull();
   });
 });

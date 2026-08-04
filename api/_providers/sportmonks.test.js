@@ -199,6 +199,36 @@ describe("resolveSeasonId", () => {
   });
 });
 
+describe("fetchSeasonMeta", () => {
+  const liga = (seasons) => jsonResponse({ data: { seasons } });
+
+  it("læser ending_at og finished af sæsonobjektet", async () => {
+    const fetchImpl = vi.fn(async () => liga([
+      { id: 28275, name: "2026/2027", ending_at: "2027-05-24", finished: false },
+      { id: 1, name: "2025/2026", ending_at: "2026-05-25", finished: true },
+    ]));
+    await expect(sportmonks.fetchSeasonMeta({ apiLeagueId: "271", apiSeasonId: "28275", token: "t", fetchImpl }))
+      .resolves.toEqual({ endsAt: "2027-05-24", finished: false });
+    await expect(sportmonks.fetchSeasonMeta({ apiLeagueId: "271", apiSeasonId: "1", token: "t", fetchImpl }))
+      .resolves.toEqual({ endsAt: "2026-05-25", finished: true });
+  });
+
+  // "Ved ikke" må aldrig blive til "slut": et manglende felt betyder ikke, at
+  // sæsonen er færdig — og en sæson, der fejlagtigt meldes færdig, uddeler
+  // milepæle, der ikke kan tages tilbage.
+  it("melder ikke færdig, når feltet mangler", async () => {
+    const fetchImpl = vi.fn(async () => liga([{ id: 5, name: "2026/2027" }]));
+    await expect(sportmonks.fetchSeasonMeta({ apiLeagueId: "271", apiSeasonId: "5", token: "t", fetchImpl }))
+      .resolves.toEqual({ endsAt: null, finished: false });
+  });
+
+  it("svarer null for en sæson, der ikke er i svaret", async () => {
+    const fetchImpl = vi.fn(async () => liga([{ id: 5, name: "2026/2027" }]));
+    await expect(sportmonks.fetchSeasonMeta({ apiLeagueId: "271", apiSeasonId: "999", token: "t", fetchImpl }))
+      .resolves.toBeNull();
+  });
+});
+
 // G48: 429 skal give ét gen-forsøg efter en pause — ikke et ekstra kald med det
 // samme.
 //

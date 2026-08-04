@@ -64,6 +64,21 @@ const loadJobHealth = (token) =>
 const loadClientErrors = (token, maxRows = 50) =>
   restFetch(`/rest/v1/rpc/admin_client_errors`, { method: "POST", token, body: { max_rows: maxRows } });
 
+// Sæsonerne og deres slutning (sql/season_end.sql). Samme admin-gatede form.
+//
+// Aflæsningen hører til i Drift og ikke i Statistik, fordi den svarer på et
+// DRIFTS-spørgsmål: hænger en sæson, fordi datakilden ikke fortæller, at den er
+// slut? En sæson, hvor alt er spillet, men `is_finished` er falsk og `ends_at`
+// tom, er præcis den, der venter på 30-dages ventilen — og den eneste, nogen
+// skal røre i hånden.
+const loadSeasons = (token) =>
+  restFetch(`/rest/v1/rpc/admin_seasons`, { method: "POST", token, body: {} });
+
+const setSeasonFinished = (token, seasonId, finished) =>
+  restFetch(`/rest/v1/rpc/admin_set_season_finished`, {
+    method: "POST", token, body: { p_season_id: seasonId, p_finished: finished },
+  });
+
 // Forhåndsvisning af, hvad notifikations-jobbet ville sende lige nu.
 //
 // Adgangen er admin-brugerens eget token — `isAuthorized()` i api/_shared.js
@@ -201,4 +216,4 @@ function fmtSince(ms) {
   return `${Math.floor(t / 24)} d siden`;
 }
 
-export { BASE_JOBS, expectedJobs, loadJobHealth, loadClientErrors, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince };
+export { BASE_JOBS, expectedJobs, loadJobHealth, loadClientErrors, loadSeasons, setSeasonFinished, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince };

@@ -101,13 +101,21 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
       const hiddenMap = Object.fromEntries(myComps.map((c) => [c.competition_id, !!c.hidden]));
       const ids = myComps.map((c) => c.competition_id).join(",");
       const comps = await db.select(token, "competitions", `id=in.(${ids})&select=*`);
-      // Arkivering (`hidden`) er en affordance for LIGA-LØSE konkurrencer (kun der vises
-      // Arkivér/Gendan). En konkurrence, der ligger i en liga, styres via Deltag/Framelding
-      // — ikke arkivering. Uden dette kunne et forældet hidden-flag (fx sat mens konkurrencen
-      // var liga-løs og siden flyttet ind i en liga via move_competition_to_group) skjule den
-      // på Hjem/Tip, selvom liga-siden stadig viser den som "Med" — og brugeren kunne ikke
-      // gendanne den, da Gendan-knappen ikke findes for liga-konkurrencer.
-      const merged = comps.map((c) => ({ ...c, _hidden: c.group_id ? false : (hiddenMap[c.id] || false) }));
+      // Arkivering (`hidden`) gælder ALLE konkurrencer, man deltager i — også dem
+      // i en liga (august 2026).
+      //
+      // Her stod `c.group_id ? false : …`, som tvang flaget til falsk for enhver
+      // liga-konkurrence. Begrundelsen var reel, men midlertidig: et forældet
+      // flag (sat mens konkurrencen var liga-løs og siden flyttet ind i en liga)
+      // kunne skjule den på Hjem/Tip, mens liga-siden stadig viste den som "Med"
+      // — og brugeren havde ingen Gendan-knap at rette det med, fordi liga-siden
+      // ikke havde nogen. Nu har den det, og dermed er der ikke længere en
+      // tilstand, man ikke kan komme ud af.
+      //
+      // Arkivér og Frameld er to forskellige ting, og det er derfor begge findes:
+      // arkivering rydder MIN visning og lader stillingen stå, framelding fjerner
+      // mig fra konkurrencen. Kun den første kan fortrydes.
+      const merged = comps.map((c) => ({ ...c, _hidden: hiddenMap[c.id] || false }));
       setCompetitions(merged);
       return merged;
     }

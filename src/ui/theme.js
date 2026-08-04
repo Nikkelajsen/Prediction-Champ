@@ -195,12 +195,38 @@ const globalCss = `
   .tiprow:hover, .tiprow:active { background: ${C.surface2}; }
   .livedot { animation: livepulse 1.4s ease-in-out infinite; }
   @keyframes livepulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+  /* En konkurrence er slut. Fejringen kører ÉN gang — første gang brugeren ser
+     afslutningen — og aldrig igen; bagefter står kortet stille med sin guldkant.
+     Det er med vilje ikke en løbende animation som live-prikken: dér betyder
+     bevægelsen "det sker nu", og her ville den betyde "det skete engang". */
+  .compdone { position: relative; overflow: hidden; animation: compglow 900ms ease-out 1; }
+  .compdone::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(100deg, transparent 30%, rgba(242,193,78,0.26) 50%, transparent 70%);
+    transform: translateX(-100%);
+    animation: compsweep 900ms ease-out 1;
+  }
+  @keyframes compsweep { to { transform: translateX(100%); } }
+  @keyframes compglow {
+    from { box-shadow: 0 0 22px 0 rgba(242,193,78,0.45); }
+    to   { box-shadow: 0 0 0 0 rgba(242,193,78,0); }
+  }
+  .comptrophy { display: inline-flex; }
+  .compdone .comptrophy { animation: comppop 620ms cubic-bezier(0.2, 1.4, 0.4, 1) 1; }
+  @keyframes comppop {
+    0%   { transform: scale(0.2); opacity: 0; }
+    60%  { transform: scale(1.25); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
   /* Reduceret bevægelse gælder ALLE animationer, ikke kun live-prikken (G22).
      Spinderen er den hyppigste af dem — den kører på hver eneste indlæsning —
      og en bruger, der har bedt om ro, har bedt om ro fra den også. Den skjules
      ikke, kun stilles: ikonet er stadig signalet om, at noget er i gang. */
   @media (prefers-reduced-motion: reduce) {
-    .livedot, .spin { animation: none; }
+    .livedot, .spin, .compdone, .compdone::after, .compdone .comptrophy { animation: none; }
+    /* Stryge-laget skal også VÆK og ikke bare stå stille: uden animationen
+       bliver det hængende midt over kortet som en permanent gul stribe. */
+    .compdone::after { display: none; }
   }
   /* Fokusringen skal findes på ALT, der kan tabbes til — ikke kun knapper.
      Et felt, man kan nå med tastaturet, men ikke kan se, man står i, er

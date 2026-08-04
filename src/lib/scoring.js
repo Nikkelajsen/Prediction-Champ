@@ -333,6 +333,36 @@ function lockedRoundsOf(rounds) {
     .filter((r) => r.matches.length > 0);
 }
 
+// ---------- næste runde: hvad mangler jeg at tippe? ----------
+//
+// "Næste runde" er den TIDLIGSTE runde, der stadig har kampe, man kan tippe —
+// og status vises KUN for den. Er den fuldt tippet, er alt ok, også selvom
+// senere runder mangler tips: de bliver "næste runde" i tur, efterhånden som
+// runderne spilles.
+//
+// Reglen bor her og ikke i sin kalder, fordi den nu har to (Hjem-fanens
+// deadline-kort og det grønne flueben på konkurrence-kortene). Det er samme
+// spørgsmål stillet to steder, og to kopier ville kunne blive uenige om, hvad
+// "alle tips er inde" betyder — præcis den slags skævhed, `modeLabel` og
+// `validateGroupName` også blev samlet for at fjerne.
+//
+// `predByMatch` er en Map fra match_id til brugerens tip (eller mangel på
+// samme). Returnerer null, når der intet er at tippe: ingen runde er "næste",
+// og en kalder må ikke kunne forveksle det med "alt er tippet".
+function nextRoundTips(matches, predByMatch) {
+  // Tipbar = ikke spillet, ikke låst, og med et kendt kickoff. Det rullende
+  // gætte-vindue er væk (B1), så en kamp kan tippes fra den findes til den låser.
+  const tippable = matches.filter((m) => !isPlayed(m) && !isLocked(m) && m.kickoff_at);
+  if (!tippable.length) return null;
+  const roundKey = tippable.reduce((min, m) => (m.round_key < min ? m.round_key : min), tippable[0].round_key);
+  const inRound = tippable.filter((m) => m.round_key === roundKey);
+  const untipped = inRound.filter((m) => {
+    const p = predByMatch.get(m.id);
+    return !(p && p.pred_home != null && p.pred_away != null);
+  });
+  return { roundKey, matches: inRound, untipped, allTipped: untipped.length === 0 };
+}
+
 // ---------- live-resultater ----------
 // Live-stillingen bor i SEPARATE kolonner (live_*) og tæller ALDRIG point: en kamp
 // er først "spillet", når home_score er sat. Derfor kan stillinger, rating og point
@@ -361,4 +391,4 @@ function liveInfo(m) {
   };
 }
 
-export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, currentRoundKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };
+export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, currentRoundKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };

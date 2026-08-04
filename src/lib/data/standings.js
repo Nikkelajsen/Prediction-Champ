@@ -6,6 +6,34 @@ import { db } from "../supabase.js";
 import { assignRanks } from "../standings.js";
 import { TIEBREAK_ORDER, TIEBREAK_ORDER_ROUND } from "./_shared.js";
 
+// ---------- lukkede konti på de GLOBALE lister ----------
+//
+// En lukket konto står tilbage som "Slettet a1b2c3d4" (sql/account_anonymization.sql).
+// Det er det ærlige billede i en PRIVAT konkurrence, hvor deltagelsen er en del
+// af vennernes fælles historik: fjernede vi rækken, ville en afsluttet
+// konkurrence pludselig have haft én deltager færre, og en delt sejr kunne blive
+// udelt. Derfor rører vi ikke `computeCompetitionState`.
+//
+// På de GLOBALE lister — rating, måneds-, runde- og sæsonchampionship — er der
+// ingen sådan historik at beskytte. Dér er pseudonymet bare en fremmed, der
+// fylder en plads, og den, der bad om at forsvinde, står stadig på en offentlig
+// rangliste. De filtreres derfor væk her.
+//
+// Filtreringen sker i KLIENTEN og ikke i viewene. `monthly_standings`,
+// `round_standings` og `season_standings` deles med rating-motoren og er dækket
+// af den frosne reference i sql/tests/rating_equivalence.sql — en lukket konto
+// må ikke kunne flytte tal, der allerede er beregnet. Vi ændrer, hvad der VISES,
+// ikke hvad der er REGNET.
+const PROFILE_SELECT = "id,display_name,anonymized_at";
+
+// Navne-opslag + mængden af lukkede konti, der skal ud af listen.
+function profileIndex(profiles) {
+  return {
+    nameById: new Map(profiles.map((p) => [p.id, p.display_name])),
+    closed: new Set(profiles.filter((p) => p.anonymized_at).map((p) => p.id)),
+  };
+}
+
 // ---------- global rating + monthly league (scope 'ALL') ----------
 async function loadRatingBoard(token) {
   // user_id.asc er den stabile sidste nøgle — ratings er numeric, så to ens tal er
@@ -13,9 +41,10 @@ async function loadRatingBoard(token) {
   const ratings = await db.select(token, "ratings", `scope=eq.ALL&select=user_id,rating,rounds_played,provisional&order=rating.desc,user_id.asc`);
   if (!ratings.length) return [];
   const ids = ratings.map((r) => r.user_id);
-  const profiles = await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`);
-  const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
-  const rows = ratings.map((r) => ({
+  const profiles = await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=${PROFILE_SELECT}`);
+  const { nameById, closed } = profileIndex(profiles);
+  // Filtreres FØR assignRanks, så placeringerne nummereres uden huller.
+  const rows = ratings.filter((r) => !closed.has(r.user_id)).map((r) => ({
     userId: r.user_id,
     player: nameById.get(r.user_id) || "—",
     rating: Math.round(Number(r.rating)),
@@ -90,9 +119,9 @@ async function loadMonthlyBoard(token, month, scope = ALL) {
     `month=eq.${month}&scope=eq.${scope}&select=user_id,total_points,matches,exact_count,outcome_count,round_wins,avg_goal_error&order=${TIEBREAK_ORDER}`);
   if (!rows.length) return [];
   const ids = rows.map((r) => r.user_id);
-  const profiles = await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`);
-  const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
-  return assignRanks(rows.map((r) => standingsRow(r, nameById)));
+  const profiles = await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=${PROFILE_SELECT}`);
+  const { nameById, closed } = profileIndex(profiles);
+  return assignRanks(rows.filter((r) => !closed.has(r.user_id)).map((r) => standingsRow(r, nameById)));
 }
 
 async function loadMonthsAvailable(token, scope = ALL) {
@@ -134,9 +163,9 @@ async function loadRoundBoard(token, roundKey, scope = ALL) {
   const board = await db.select(token, "round_standings",
     `round_key=eq.${roundKey}&scope=eq.${scope}&select=user_id,total_points,matches,exact_count,outcome_count,avg_goal_error&order=${TIEBREAK_ORDER_ROUND}`);
   const ids = board.map((r) => r.user_id);
-  const profiles = ids.length ? await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`) : [];
-  const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
-  const rows = assignRanks(board.map((r) => standingsRow(r, nameById)));
+  const profiles = ids.length ? await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=${PROFILE_SELECT}`) : [];
+  const { nameById, closed } = profileIndex(profiles);
+  const rows = assignRanks(board.filter((r) => !closed.has(r.user_id)).map((r) => standingsRow(r, nameById)));
   const playedMatches = ms.filter((m) => m.home_score != null && m.away_score != null).length;
   return { rows, totalMatches: ms.length, playedMatches, isComplete: ms.length > 0 && playedMatches === ms.length };
 }
@@ -155,9 +184,9 @@ async function loadSeasonBoard(token, leagueId) {
   const board = await db.select(token, "season_standings",
     `season_id=eq.${season.id}&select=user_id,total_points,matches,exact_count,outcome_count,round_wins,avg_goal_error&order=${TIEBREAK_ORDER}`);
   const ids = board.map((r) => r.user_id);
-  const profiles = ids.length ? await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=id,display_name`) : [];
-  const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
-  const rows = assignRanks(board.map((r) => standingsRow(r, nameById)));
+  const profiles = ids.length ? await db.select(token, "profiles", `id=in.(${ids.join(",")})&select=${PROFILE_SELECT}`) : [];
+  const { nameById, closed } = profileIndex(profiles);
+  const rows = assignRanks(board.filter((r) => !closed.has(r.user_id)).map((r) => standingsRow(r, nameById)));
   const playedMatches = ms.filter((m) => m.home_score != null && m.away_score != null).length;
   const totalMatches = ms.length;
   return { season, rows, totalMatches, playedMatches, isComplete: totalMatches > 0 && playedMatches === totalMatches };

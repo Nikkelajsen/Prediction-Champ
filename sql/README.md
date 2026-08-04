@@ -99,8 +99,10 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | — | `milestones_cleanup_v1_1.sql` | Sletter `COMP_COMEBACK` og `SEASONS_2/3` og uddeler dem forfra | **Engangskørsel** efter en gen-kørsel af #39. To regler uddelte milepæle for noget, der ikke kunne være sket: comeback i en konkurrence med én runde, og "to sæsoner" for to TURNERINGER i samme sæson. At slette her modsiger ikke tabellens frosne semantik — den beskytter mod datakorrektioner, ikke mod en regel, der aldrig var sand |
 | — | `story_engine_v2_measure.sql` | Måler `generate_daily_stories()` mod referencen `recompute_ratings()`, plus regel 140 isoleret | **Ad hoc-værktøj**, ikke en migrering og ikke en engangskørsel — kør den igen, hver gang en turnering kommer til. Dagsmotoren kører SYNKRONT inde i den sætning, `api/sync-live.js` bruger til at afslutte en kamp, så spørgsmålet er ikke "hvor mange ms", men "koster den mere end det, triggeren allerede betaler". Regenererer kun dage UDEN FOR den aktuelle runde, så ingen brugers karrusel ændrer sig. Handlingsgrænserne står i filens hoved, og filen regner selv dommen ud i sidste række. **Svaret kommer som en TABEL og ikke som `raise notice`** — Supabases editor viser resultatrækker, ikke serverens NOTICE-beskeder, så en notice-baseret måling svarer "Success. No rows returned" og fortæller intet |
 | 40 | `story_engine_v2_backfill.sql` | Kalder `generate_daily_stories()` for hver færdigspillet dag og `award_milestones(null)` én gang | **Engangs-/ad hoc-kørsel**, ikke en migrering. Kør efter #37–#39 og gen-kørslen af #8. Tager tid — den regner hele historikken igennem. Kør uden for en kampdag. Fremdriften meldes med `raise notice` frem for `\timing`: **ingen fil i `sql/` må indeholde psql-kommandoer**, da Supabases editor ikke kender dem — bevogtet af `sql/migration_syntax.test.js` |
+| 41 | `season_end.sql` | Sæsonen får en slutning: `seasons.ends_at` + `seasons.is_finished`, og **`competition_status` v2**, hvor en sæson først er færdig, når den selv siger det | Aktiv — tilføjet august 2026. Idempotent. **Redefinerer `competition_status` fra #39** — kør denne fil igen, hvis #39 nogensinde køres på ny. **Kan køres FØR frontend-mergen:** kolonnerne er additive, og viewets kolonner er uændrede. **Har én synlig følge på kørselsdagen:** alle eksisterende sæsoner har `ends_at = null` og `is_finished = false`, så en netop afsluttet konkurrence først melder sig færdig, når sidste kickoff er 30 dage gammel — eller straks, når sync/Drift har sat flaget. Det er den rigtige retning: for tidligt er uopretteligt, for sent er ikke. Dækket af `sql/tests/competition_status.sql` i CI |
+| 42 | `liga_admin.sql` | Hvad en administrator må: tre RLS-policies (liga-admin fjerner en deltager **uden tips**, sletter en konkurrence **uden tips**, sletter en liga uden **aktive** konkurrencer) + `_anonymize_account()`/`admin_anonymize_account()` | Aktiv — tilføjet august 2026. Idempotent. Forudsætter #41 (liga-sletningen læser `competition_status.concluded`). **AFLØSER `groups_delete_admin_empty` fra `groups.sql`.** `anonymize_my_account()` beholder sin nul-parameter-signatur; kun kroppen er flyttet til den ikke-grantede `_anonymize_account(uuid)`, som begge indgange kalder. **Skal køres FØR frontend-mergen** — ellers fejler Admin → Brugere og liga-siden bliver ved at melde "kunne ikke". Dækket af `sql/tests/liga_admin.sql` i CI |
 
-### ⚠️ Syv filer må ikke gen-køres blindt
+### ⚠️ Ni filer må ikke gen-køres blindt
 
 Alle syv bruger `drop policy … create policy` / `drop view … create view`, så en
 gen-kørsel **erstatter tavst** en nyere definition med en ældre. Der kommer ingen
@@ -126,7 +128,26 @@ fejl — reglen bliver bare den gamle igen.
   dermed A8-invarianten tilbage: man kan igen forlade en liga, mens man deltager i
   dens konkurrencer (forældreløse deltagere), og framelding bliver igen permanent
   spærret efter første spillede runde. Skal `groups.sql` køres, så kør
-  **`group_membership_invariant.sql` umiddelbart efter**.
+  **`group_membership_invariant.sql` umiddelbart efter**. *(August 2026: der er nu
+  en tredje ting at miste — filens `groups_delete_admin_empty` kræver NUL
+  konkurrencer og afløser dermed `liga_admin.sql`s regel om nul **aktive**. Kør
+  `liga_admin.sql` bagefter i samme ombæring.)*
+
+- **`milestones.sql`** (#39) genskaber `competition_status` i sin **v1**-form, hvor
+  en sæson er "færdigspillet", så snart dens kendte kampe har resultat. En
+  gen-kørsel efter `season_end.sql` (#41) fjerner altså tavst sæson-gaten — og
+  symptomet er præcis det, gaten findes for: en "hel sæson"-konkurrence bliver
+  afsluttet med pokal, vinder og **permanente milepæle**, mens slutspillet endnu
+  ikke er skemalagt. Milepælen kan ikke trækkes tilbage bagefter. **Kør altid
+  `season_end.sql` umiddelbart efter.** *(Tilføjet august 2026.)*
+
+- **`account_anonymization.sql`** (#31) genskaber `anonymize_my_account()` med
+  kroppen skrevet ind i funktionen igen og ruller dermed opdelingen i
+  `liga_admin.sql` (#42) tilbage. Det er den mildeste af de ni: begge udgaver gør
+  det samme i dag, og `admin_anonymize_account()` bliver ved med at virke, fordi
+  `_anonymize_account()` står urørt. Men så findes anonymiseringen igen **to**
+  steder, og den næste tabel, der skal ryddes, bliver kun tilføjet det ene af dem.
+  **Kør `liga_admin.sql` bagefter.** *(Tilføjet august 2026.)*
 - **`standings_views.superseded.sql`** genskaber `round_standings`/`season_standings` **uden**
   tiebreaker-kolonnerne. Kør `standings_tiebreakers.sql` efter — eller lad være med
   at røre filen; den er kun bevaret for historikken.

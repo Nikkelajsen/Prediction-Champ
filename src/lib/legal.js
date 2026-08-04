@@ -84,6 +84,7 @@ const PRIVATLIV = {
             "Hvornår appen sidst registrerede dig som aktiv, så den ikke gør det oftere end en gang i timen.",
             "Om du er færdig med introduktionen, om du har lukket kortet om notifikationer, og om du har lukket forslaget om at oprette en liga.",
             "Hvilken turnering du sidst kiggede på i Championship.",
+            "Hvilke af dine konkurrencer du allerede har set slutte, så fejringen af en afsluttet konkurrence kun vises én gang.",
           ],
         },
         "Alt på nær sessionen er mærket med din konto. Deler du enhed med andre, ser de derfor deres egen introduktion og deres egne valg — ikke dine.",

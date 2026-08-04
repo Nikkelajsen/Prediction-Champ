@@ -6,9 +6,10 @@ import { ChevronRight, ChevronLeft, ChevronDown, ArrowUp, ArrowDown, Minus, Info
 import { POINTS, pointsFor } from "../lib/scoring.js";
 import { C, btnGhost, btnGreen, font, iconBtn, muted, pagerBtn } from "./theme.js";
 
-const Card = ({ children, style, onClick }) => (
+const Card = ({ children, style, onClick, className }) => (
   <div
     onClick={onClick}
+    className={className}
     style={{
       background: C.surface,
       border: `1px solid ${C.line}`,

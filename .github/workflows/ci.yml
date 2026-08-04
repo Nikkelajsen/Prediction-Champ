@@ -248,3 +248,30 @@ jobs:
           set -euo pipefail
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database anontest;'
           psql -h localhost -U postgres -d anontest -v ON_ERROR_STOP=1 -b -f account_anonymization.sql
+
+      # Sæson-gaten (season_end.sql): en konkurrence, der KAN vokse, må ikke
+      # meldes færdig, blot fordi dens kendte kampe har resultat — en sæson med
+      # flere stages får først slutspillet skemalagt undervejs. Fejlen er
+      # usynlig i data (viewet svarer bare "afsluttet"), og prisen betales et
+      # helt andet sted: som en permanent milepæl, der ikke kan trækkes tilbage.
+      - name: Test af sæson-gaten på competition_status
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database cstest;'
+          psql -h localhost -U postgres -d cstest -v ON_ERROR_STOP=1 -b -f competition_status.sql
+
+      # Administratorens grænser (liga_admin.sql). Begge retninger måles: en for
+      # STRAM policy viser sig som en knap, der ikke virker, og bliver opdaget —
+      # en for LØS viser sig som en andens historik, der forsvandt, og der er
+      # ikke noget tilbage at opdage det på.
+      - name: Test af administratorens grænser
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database admintest;'
+          psql -h localhost -U postgres -d admintest -v ON_ERROR_STOP=1 -b -f liga_admin.sql

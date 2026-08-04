@@ -11,7 +11,7 @@
 // eneste kamp), og en for smal gør Champions League rød i seks uger for noget
 // forventeligt. Begge fejl ender samme sted — at ingen kigger på driftsloggen.
 import { describe, it, expect } from "vitest";
-import { seasonFetchVerdict, ambiguousTeamNames, normalizeTeamName, matchUpsertRow } from "./sync-matches.js";
+import { seasonFetchVerdict, ambiguousTeamNames, normalizeTeamName, matchUpsertRow, readSeasonMeta } from "./sync-matches.js";
 
 const fejl = new Error("football-data.org: 404 {\"message\":\"The resource you are looking for does not exist.\"}");
 
@@ -183,5 +183,24 @@ describe("matchUpsertRow", () => {
       home_score: null, away_score: null, status: "scheduled",
       stage_name: "REGULAR_SEASON", api_fixture_id: "fd:1",
     });
+  });
+});
+
+// Sæson-metadataene må ALDRIG kunne vælte en kørsel, der hentede kampene
+// rigtigt: uden svar falder competition_status blot tilbage på sin 30-dages
+// ventil, og det er en dårligere status — ikke en fejlet sync.
+describe("readSeasonMeta", () => {
+  it("giver leverandørens svar videre", async () => {
+    const provider = { key: "x", fetchSeasonMeta: async () => ({ endsAt: "2027-05-24", finished: false }) };
+    await expect(readSeasonMeta(provider, {})).resolves.toEqual({ endsAt: "2027-05-24", finished: false });
+  });
+
+  it("svarer null, når leverandøren ikke har metoden", async () => {
+    await expect(readSeasonMeta({ key: "x" }, {})).resolves.toBeNull();
+  });
+
+  it("svarer null i stedet for at kaste, når opslaget fejler", async () => {
+    const provider = { key: "x", fetchSeasonMeta: async () => { throw new Error("429"); } };
+    await expect(readSeasonMeta(provider, {})).resolves.toBeNull();
   });
 });
