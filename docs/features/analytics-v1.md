@@ -349,8 +349,40 @@ tre forbehold, som skal med, hvis tallet skal bære en beslutning:
   spørgsmålet skal bruges til (*virkede indgrebet?*), men ikke for et forsøg på
   at kalibrere de to hver for sig.
 
-Samme opslag svarer på `I15`s åbne spørgsmål: bruges "Ugens kupon"-kortet
-overhovedet? Kig efter `random` i `mode`-kolonnen.
+> ⚠️ **`I15`-påstanden var forkert og er fjernet (5. august 2026).** Her stod:
+> *"Samme opslag svarer på `I15`s åbne spørgsmål: bruges Ugens kupon-kortet
+> overhovedet? Kig efter `random` i `mode`-kolonnen."* Det gør det ikke.
+> `mode = 'random'` dækker **både** galleriets Ugens kupon-kort og en håndlavet
+> Quick Pick eller Quick League, og `mode_params` skiller dem ikke ad:
+> `rounds` skrives kun når den er > 1, hvilket en manuel enkeltrunde også
+> undlader. Skal kortets brug måles, kræver det en ny hændelse eller et felt —
+> altså instrumentering, ikke et opslag. To rækker for ét opslag var en
+> regnefejl.
+
+## 5G. Hvad opslaget svarede første gang (5. august 2026)
+
+Noteret her, fordi et opslag uden sit svar inviterer til at blive kørt igen med
+den samme forventning.
+
+| periode | mode | antal | pct |
+|---|---|---|---|
+| før | `time_range` | 2 | 33,3 |
+| før | `random` | 2 | 33,3 |
+| før | `full_season` | 2 | 33,3 |
+| efter | `random` | 1 | 100,0 |
+
+**Svaret er "ikke endnu", og det er ikke det samme som "mærkatet virker ikke".**
+Hele appens historik rummer syv konkurrencer, og kun én er oprettet efter
+mærkatet kom på. En fordelingssammenligning med n=1 i den ene periode kan ikke
+måle noget — præcis det første forbehold ovenfor, nu med et tal på.
+
+**Det, tallet derimod siger noget om, er metoden.** Et før/efter-design kræver
+tocifrede tal i begge perioder, og produktet skaber en konkurrence nogle få
+gange pr. sæson pr. liga — ikke pr. dag. Spørgsmålet "virkede indgrebet?" bliver
+altså først besvarligt, når brugerbasen er vokset, og det er dét, `B12`s udløser
+i backloggen nu siger: **tosifret `antal` i `efter`-perioden.** Indtil da hviler
+mærkatet på produktjudgement, hvilket er et legitimt grundlag — bare ikke et
+målt et.
 
 ## 6. Liga-diagnose (afløser Health Score, 30. juli 2026)
 
