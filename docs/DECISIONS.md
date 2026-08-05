@@ -15,6 +15,47 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 5. august 2026 — `A11`: `?secret=`-fallbacken er fjernet
+
+**Beslutning:** `isAuthorized()` i `api/_shared.js` accepterer kun `SYNC_SECRET`
+i headeren `x-sync-secret`. Query-parameteren `?secret=` er slettet, og med den
+`[A11]`-advarslen, der var dens kvittering. Et cron-job, der sender
+hemmeligheden på nogen anden måde, får 401.
+
+**Begrundelse:** fallbacken lagde hemmeligheden i request-logs, og alle var
+enige om, at den skulle væk. Det, der manglede, var ikke en afvejning, men et
+tal: rammer man forkert, svarer jobbene 401, og syncen står stille. Beslutningen
+blev derfor gjort aflæselig i august 2026 ved at gemme `authVia` i
+`job_runs.detail`, og opslaget er kørt 5. august 2026 over fjorten dage:
+
+* `header` for **alle ni jobs** — `sync-live`, `send-notifications` og syv
+  `sync-matches:<leagueId>`, altså præcis de syv turneringer i registret. Ingen
+  manglede, hvilket var den eneste måde at læse tabellen forkert på.
+* **Nul rækker med `query`.**
+* `admin-token` tre gange: mennesker, der trykkede "Hent nu".
+* `(ukendt)` kun med sidste kørsel 1. august kl. 20:23–21:17 — altså i selve
+  udrulningsminuttet for feltet, og ikke én efter. Rækkerne kunne i princippet
+  have skjult en `query`-kørsel, men de er alle fra før feltet fandtes.
+
+**Vinduet er 14 dage og ikke `CRON.md`s oprindelige 7**, fordi det langsomste
+skema er hver 12. time, og et job, der mangler i svaret, ikke må kunne forveksles
+med et job, der kalder rigtigt.
+
+**Det, beslutningen efterlader, er større end fallbacken.** Kolonnen
+"Hemmelighed sendes som" i `CRON.md` havde stået med `?` i en måned med
+begrundelsen, at svaret lå i cron-job.orgs brugerflade og ikke kunne nås fra
+repoet. Det passede ikke: svaret lå i jobbenes egne kørsler, de gemte det bare
+ikke. Mønstret — gem den værdi, koden allerede har i hånden, og et
+hukommelsesspørgsmål bliver til et opslag — er dét, der er værd at genbruge.
+`authVia` skrives fortsat, fordi det nu skiller en planlagt kørsel fra et
+manuelt "Hent nu".
+
+**Pris:** et cron-job, der aldrig blev flyttet, ville nu stå stille frem for at
+køre med en advarsel. Accepteret, fordi opslaget viser, at der ikke findes et
+sådant job — og fordi en tavs, usikker sti er dyrere end en højlydt afvist.
+
+---
+
 ## August 2026 — Hvornår er en konkurrence slut, og hvem må rydde op bagefter
 
 **Fire beslutninger, én leverance.** De hang sammen, fordi de alle fire handler om

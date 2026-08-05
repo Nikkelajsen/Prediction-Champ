@@ -1,9 +1,10 @@
 // Tests for api/_shared.js.
 //
-// api/ havde indtil nu ingen testdækning overhovedet. Autorisationen er
-// samtidig det sted, hvor BACKLOG A11 skal skære (`?secret=`-fallbacken
-// fjernes), så det er præcis den kode, der har brug for et net under sig
-// FØR den ændres — ikke efter.
+// api/ havde indtil nu ingen testdækning overhovedet. Autorisationen var
+// samtidig det sted, hvor A11 skulle skære (`?secret=`-fallbacken), så det var
+// præcis den kode, der havde brug for et net under sig FØR den blev ændret —
+// ikke efter. Snittet er lagt 5. august 2026, og nettet holdt: de to tests, der
+// beskrev fallbacken, er vendt om til at bevise, at den er væk.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   createSb,
@@ -208,17 +209,25 @@ describe("isAuthorized", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("godkender ?secret=-fallbacken, men råber op om den (A11)", async () => {
+  // A11 er lukket 5. august 2026: `?secret=` er ikke længere en vej ind.
+  //
+  // Testen står med den RIGTIGE hemmelighed i query-strengen, fordi det er den
+  // eneste formulering, der kan fange en genindførsel. En test med en forkert
+  // hemmelighed ville være grøn både før og efter fjernelsen og dermed intet
+  // bevise. Grunden til, at fallbacken kunne fjernes, var et opslag i
+  // `job_runs.detail` med nul `query`-rækker over 14 dage — se docs/CRON.md.
+  it("afviser hemmeligheden i ?secret=, også når den er rigtig (A11)", async () => {
     const r = await isAuthorized(reqWith({ query: { secret: SECRET } }), deps());
-    expect(r).toEqual({ ok: true, via: "query" });
-    expect(warn).toHaveBeenCalledOnce();
-    expect(warn.mock.calls[0][0]).toContain("[A11]");
+    expect(r).toEqual({ ok: false, via: null });
+    // Advarslen fulgte fallbacken ud: der er ikke længere noget forældet at
+    // melde, kun en afvisning.
+    expect(warn).not.toHaveBeenCalled();
   });
 
-  // Bevaret adfærd fra før udtrækningen: `header || query` betyder, at en
-  // TILSTEDE men forkert header blokerer fallbacken. Dokumenteret her, så
-  // ingen "retter" den ved et uheld.
-  it("lader en forkert header blokere query-fallbacken", async () => {
+  // En forkert header blokerede før query-fallbacken; nu findes fallbacken
+  // ikke, så begge dele afvises af samme grund. Rækken bliver stående, fordi
+  // den er den kombination, et gammelt cron-job ville ramme.
+  it("afviser en forkert header, uanset hvad der står i query-strengen", async () => {
     const req = reqWith({ headers: { "x-sync-secret": "forkert" }, query: { secret: SECRET } });
     expect(await isAuthorized(req, deps())).toEqual({ ok: false, via: null });
   });

@@ -42,6 +42,7 @@ eller en linje i "Forkastede ideer".
 - `DOCUMENTATION.md` §20 siger "appens fem øvrige bruger-flag" og §13 "alle otte bruger-flag" — der er ni bruger-bundne nøgler i dag
 - ingen test binder `LOKALE_NØGLER` til privatlivspolitikkens afsnit om lokale data, og det var præcis dér `G69` slap igennem
 - Tier 1 er nu sprunget over tre gange i træk, fordi de fire opslag kræver en adgang, arbejdsmaskinen ikke har — skal der være en vej til at køre read-only opslag uden ejeren, eller er "to betjeninger i køen" bare vilkåret?
+- `A11`-opslagets kørselstal siger, at job 6–10 kører hver ~1,8 time og ikke hver 12. time som registret lover — seks gange kaldbudgettet, og det skal bekræftes på cron-job.org, før CRON.md's skema-kolonne rettes
 - `I16`s nul betyder også, at `anonymize_my_account()` aldrig har kørt i produktion — en uigenkaldelig funktion, der blev skrevet forfra 4. august, og hvis første rigtige kørsel er en bruger, der ikke kan fortryde; samme form som `G8`, men med en dyrere fejl
 
 *Ryddet 4. august 2026: de seks linjer blev til `G69`, `B20`, `B21` og `I17` —
@@ -107,7 +108,7 @@ versionsstempel → `G42`).*
 
 ## Prioriteret rækkefølge
 
-Alle 25 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 24 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -179,17 +180,25 @@ Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
 ### Tier 1 — Produktionsadgang: svaret (eller kørslen) ligger i Supabase
 
-Ingen af de tre kræver, at der bygges noget. De kræver, at nogen logger ind og
-kigger. Alle tre har ventet i flere uger, mens spørgsmålet stod som åbent.
+Ingen af de to kræver, at der bygges noget. De kræver, at nogen logger ind og
+kigger. Begge har ventet i flere uger, mens spørgsmålet stod som åbent.
 
-*To af de oprindelige fem er aflæst 5. august 2026 (femte runde), og de svarede
-begge "ingenting" — men hver sin slags. `I16` er **slettet**: nul lukkede konti
-ud af 24 profiler, tællingen var hele opgaven, og den er lavet. `G8` er
-**flyttet til Tier 6**, fordi rækkens egen præmis faldt: nul rækker med
-`mode_params.tournaments` betyder, at `B2`s testcase 3 blev klikket igennem og
-ikke gemt. **Det er forskellen på de to udfald, der er værd at tage med:** et
-tomt svar lukker en række, når rækken bad om et tal, og åbner den, når rækken
-gættede på et.*
+*Tre af de oprindelige fem er aflæst 5. august 2026 (femte runde). **`I16` er
+slettet:** nul lukkede konti ud af 24 profiler, tællingen var hele opgaven, og
+den er lavet. **`G8` er flyttet til Tier 6**, fordi rækkens egen præmis faldt:
+nul rækker med `mode_params.tournaments` betyder, at `B2`s testcase 3 blev
+klikket igennem og ikke gemt. **Det er forskellen på de to tomme svar, der er
+værd at tage med:** et tomt svar lukker en række, når rækken bad om et tal, og
+åbner den, når rækken gættede på et.*
+
+*`A11` er den eneste af de fem, der udløste kode, og den er **slettet sammen med
+sin fallback**: opslaget viste `header` for alle ni jobs og nul `query` over
+fjorten dage, så `?secret=` er væk af `api/_shared.js`. Kolonnen i
+[`CRON.md`](./CRON.md), der havde stået med `?` i en måned, er udfyldt — og
+kan nu ikke længere have en anden værdi, fordi alt andet end headeren giver
+401. **Samme opslag bar et svar, ingen havde spurgt om:** kørselstallene siger,
+at fem af jobbene kører seks gange hyppigere end registret lover. Det ligger i
+indbakken, ikke her, fordi det skal bekræftes på cron-job.org først.*
 
 *`B19` og `B22` er begge slettet 5. august 2026, og de to hører sammen: `B19`s
 fem filer blev kørt, hvorefter skema-eksporten viste, at `rating_core.sql` (#0)
@@ -201,7 +210,6 @@ nej to gange på én dag, begge gange til os.*
 
 | # | Hvad | Hvorfor her |
 |---|---|---|
-| `A11` | Kør `job_runs.authVia`-opslaget (står i [`CRON.md`](./CRON.md)) | Ét SQL-opslag afgør, om `?secret=`-fallbacken kan fjernes. Er svaret `header` hele vejen, er næste skridt en sletning i `api/_shared.js`. |
 | `B12` | Kør §5F-forespørgslen i [`features/analytics-v1.md`](./features/analytics-v1.md) | Forespørgslen er skrevet, forbeholdene er skrevet. Svarer samtidig på `I15`s åbne spørgsmål, om Ugens kupon-kortet overhovedet bruges — to rækker for ét opslag. |
 | `A5` | Læs Story Engine-regelstatistikken | Uret har kørt siden 31. juli. Kræver kun, at Analytics-fanen åbnes med spørgsmålet "beholder højdepunkterne deres emoji?" i hånden. **Udvidet af v2 (august 2026):** der er nu syv dagsregler mere at aflæse, og spørgsmålet er blevet skarpere — dagskortene har emoji, så tallene kan vise, om signalet stadig virker, når der kommer flere kort. |
 
@@ -341,7 +349,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | # | Spørgsmål | Kontekst | Afgøres |
 |---|---|---|---|
 | A5 | **Emojis i historie-kort: til eller fra?** | Gør kortet skimbart på mobil, men mindre klassisk. **v1-default: emojis til.** **Delvist besvaret (v1.1, juli 2026):** emoji er nu et *signal* — den findes kun i højdepunkt-tieret, mens dæmpede kort er uden. Spørgsmålet er dermed reduceret til, om højdepunkterne skal beholde deres. **Datamanglen er lukket (30. juli 2026):** Analytics-fanens sektion "Story Engine-regler" viser genereret/vist/delt/afvist pr. regel, så spørgsmålet kan afgøres på tal frem for fornemmelse. **Sidste forudsætning er væk (31. juli 2026):** `story_engine.sql` er gen-kørt i produktion (den tidligere `B3`), så v1.1's 14 regler genererer nu rigtige kort. Uret på "et par runder" starter her. | Når et par runder er kørt med den nye regelstatistik i hånden. |
-| A11 | **`?secret=`-fallbacken fjernes helt** (hænger sammen med teknisk gæld) | Kan først lukkes, når alle cron-jobs (ét sync-job pr. turnering + notifikations-jobbet) er bekræftet flyttet til `x-sync-secret`-headeren — ellers fejler de med 401. **Aflæsningen er nu ét SQL-opslag (august 2026):** hver kørsel skriver `authVia` (`header`/`query`/`admin-token`) i `job_runs.detail`, så spørgsmålet besvares med 30 dages historik i appens egne data. `isAuthorized()` har altid vidst det — værdien blev bare kasseret, så det eneste spor var en advarsel i Vercels logs, hvor **fravær af advarsler ikke kunne skelnes fra fravær af kørsler**. Opslaget og aflæsningstabellen står i [`CRON.md`](./CRON.md). | Når opslaget viser `header` for alle jobs i en periode, der dækker alle skemaer (det langsomste er `sync-matches` hver 12. time). Derefter fjernes fallbacken fra `api/_shared.js`. |
 | A14 | **Skal hele kodebasen gennemformateres med Prettier?** | `npm run format` findes, men `format:check` er bevidst ikke et CI-trin. En fuld gennemformatering ville omskrive ~6.700 linjer ved `printWidth: 140` (~14.000 ved standard 80) på tværs af ~126 filer (86 uden testfiler; genmålt august 2026). Prisen er hele repoets `git blame`; gevinsten er konsistens i en kodebase med én forfatter og en i forvejen ensartet håndstil. Beslutningen er **udskudt, ikke truffet** — se [`DECISIONS.md`](./DECISIONS.md), 30. juli 2026. | Næste gang der alligevel røres bredt i frontenden — ellers aldrig. |
 | A23 | **Skal appen have en router?** | Navigation er i dag to `useState` i `MainApp.jsx` (`tab` + `screen`), og deep links læses ved boot og strippes straks via `history.replaceState` (`App.jsx:104`, `MainApp.jsx:215,239`). Følgen er ingen tilbage-knap, ingen browser-historik og ingen delbare URL'er til interne skærme — mærkbart for en PWA, hvor telefonens tilbage-gestus forventes at virke. Men det er et arkitekturvalg, ikke en fejl: afhængighedsfattigheden er bevidst (fire runtime-deps, ingen router, `docs/reviews/2026-08-app-review.md` §7), og en router omskriver hele navigations-tilstandsmaskinen inkl. begge deep-link-join-flows, som ingen test dækker. | Når tilbage-knappen enten koster brugere (kan aflæses i analytics) eller en feature kræver ægte delbare interne URL'er — `I12`s offentlige ligaside er den første, der ville. |
 | A25 | **Skal en lukket konto meldes af konkurrencer, der endnu ikke er begyndt?** | `B4` valgte den simple regel: alt bevares, fordi tips, rating og kåringer er *vennernes* stillinger og ikke kun den lukkedes egne. Den begrundelse holder for alt, der er spillet — men ikke for en konkurrence, hvor ingen kamp er låst endnu: dér findes der ingen historik at beskytte, og en framelding ville hverken omskrive noget eller bryde `group_membership_invariant`, som netop tillader framelding, når man ingen tips har på låste kampe. Prisen ved status quo er et pseudonym på deltagerlisten i en konkurrence, personen aldrig kommer til at spille — synligt for alle de andre deltagere hele sæsonen. | Når den første konto faktisk lukkes. **Antallet er talt 5. august 2026 (den tidligere `I16`): 0 lukkede konti ud af 24 profiler.** Udløseren er dermed et tal og ikke længere en henvendelse, man skal håbe på — den er bare ikke sprunget endnu, og spørgsmålet er derfor stadig hypotetisk. Tælles der igen, er det samme opslag: `select count(*) filter (where anonymized_at is not null) from profiles`. |
