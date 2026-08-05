@@ -41,6 +41,7 @@ eller en linje i "Forkastede ideer".
 - `DECISIONS.md` mangler omkring tredive rækker mere fra ROADMAP'ens beslutningslog — udvælgelsen er spørgsmålet, ikke kopieringen
 - `DOCUMENTATION.md` §20 siger "appens fem øvrige bruger-flag" og §13 "alle otte bruger-flag" — der er ni bruger-bundne nøgler i dag
 - ingen test binder `LOKALE_NØGLER` til privatlivspolitikkens afsnit om lokale data, og det var præcis dér `G69` slap igennem
+- Tier 1 er nu sprunget over tre gange i træk, fordi de fire opslag kræver en adgang, arbejdsmaskinen ikke har — skal der være en vej til at køre read-only opslag uden ejeren, eller er "to betjeninger i køen" bare vilkåret?
 
 *Ryddet 4. august 2026: de seks linjer blev til `G69`, `B20`, `B21` og `I17` —
 og for de sidste to gjaldt, at rækken ikke var svaret. **Én blev foldet ind:**
