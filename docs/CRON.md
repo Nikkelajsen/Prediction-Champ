@@ -154,37 +154,42 @@ allerede havde i hånden.
 Vejen står også i **Admin → Drift** under "Seneste resumé" på hvert jobkort, hvis
 man kun vil have et hurtigt kig.
 
-### Kørselstallene afslørede noget andet: skemaet passer ikke for fem jobs
+### Kørselstallene pegede på et skema, der allerede var rettet
 
 Samme opslag bærer et `count(*)`, og det kan omregnes til en faktisk frekvens.
 **Metoden validerer sig selv på de to jobs, hvis skema ikke er i tvivl:**
 `sync-live` giver 1,0 minut (dokumenteret "hvert minut") og `send-notifications`
-15,0 minutter (dokumenteret "hver 15.–30. minut"). Så holder regnestykket også
-for de øvrige — og der siger det:
+15,0 minutter (dokumenteret "hver 15.–30. minut"). For job 6–10 gav den derimod
+**~1,8 time**, altså seks gange hyppigere end registrets "hver 12. time".
 
-| Job | Registret siger | Kørselstallene siger |
-|---|---|---|
-| 1 Superliga, 5 Scotland | hver 12. time | ~10,6 timer ✓ |
-| **6 Premier League, 7 Champions League, 8 Bundesliga, 9 Serie A, 10 Primera División** | hver 12. time | **~1,8 time — omkring seks gange hyppigere** |
+**Aflæst på cron-job.org 5. august 2026: skemaet ER hver 12. time.** De fem jobs
+blev oprettet forkert 31. juli og er siden rettet — så udregningen beskrev
+korrekt et vindue, der indeholdt den forkerte opsætning, og forkert den
+tilstand, der gælder i dag. Registret havde ret; det var kun bagudskuende data,
+der sagde noget andet.
 
-De fem afvigende er præcis dem, der blev oprettet samme dag (31. juli), så det
-ligner én forkert indstilling gentaget fem gange og ikke fem uheld. **Det er
-ikke gratis:** hver `sync-matches` bruger af kaldbudgettet mod Sportmonks og
-football-data.org (§8), så fem jobs à ~13 kørsler i døgnet er ~65 i stedet for
-de ~10, registret lover.
+**Læren er ikke at lade være med at regne, men hvad et gennemsnit kan sige.**
+`count(*)` over fjorten dage er ét tal for hele perioden og kan ikke skelne "har
+altid kørt for hyppigt" fra "kørte for hyppigt og blev rettet". Skal spørgsmålet
+stilles igen, er `max(started_at)` og `min(started_at)` pr. job ikke nok — det
+kræver afstanden mellem *nabokørsler* (`lag(started_at) over (partition by job
+order by started_at)`), som viser hvornår ændringen skete i stedet for at midle
+hen over den.
 
-**Rate limiten på 10 kald/minut er derimod uberørt**, og det er værd at sige
-eksplicit, så ingen læser dette som en akut fejl: minutspredningen ovenfor
-(05, 11, 17, 23, 29) gælder uanset hvor ofte jobbene fyrer, så to af de fem
-lander stadig aldrig på samme minut. Det, der er seks gange større, er det
-samlede forbrug over et døgn — ikke belastningen i det enkelte minut.
+**Samme aflæsning bekræftede alle syv minuttal**, inklusive Scotlands 15, som
+indtil da kun var udledt af `A11`-opslagets `max(started_at)`:
 
-> ⚠️ **Dette er en udregning, ikke en aflæsning.** Tallene kommer fra
-> `job_runs`, ikke fra cron-job.org, og skemaet skal bekræftes dér, før
-> tabellen ovenfor rettes. Det er tredje gang, registret afviger fra
-> virkeligheden — de to første var minuttallene for job 8 og 9 (3. august
-> 2026) — og det er selve vilkåret ved et register over noget, der bor
-> et andet sted.
+| Job | Minut |
+|---|---|
+| 1 Superliga | 00 |
+| 6 Premier League | 05 |
+| 9 Serie A | 11 |
+| 5 Scotland | 15 |
+| 7 Champions League | 17 |
+| 8 Bundesliga | 23 |
+| 10 Primera División | 29 |
+
+Alle syv kørte planmæssigt samme dag (2,56–4,2 s, ingen fejl).
 
 ## Overvågning
 
