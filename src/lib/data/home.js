@@ -1,9 +1,11 @@
-// Hjem-fanens to sammensatte opslag — næste deadline med manglende tips, og
-// live-oversigten over den igangværende runde — plus den dato/tid-formattering,
-// kun de to bruger.
+// Hjem-fanens tre sammensatte opslag — næste deadline med manglende tips,
+// live-oversigten over den igangværende runde og "Dine placeringer" — plus den
+// dato/tid-formattering, kun de bruger.
 
 import { db } from "../supabase.js";
 import { APP_TZ, byKickoffThenTeams, currentRoundIndex, groupIntoRounds, lockAtOf, liveInfo, nextRoundTips, pointsFor, roundLabel } from "../scoring.js";
+import { computeCompetitionState } from "./competitionState.js";
+import { loadMonthlyBoard } from "./standings.js";
 
 // ---------- Hjem: næste deadline + manglende tips på tværs af brugerens konkurrencer ----------
 async function computeHomeTips(token, userId, competitions) {
@@ -124,6 +126,66 @@ async function computeCurrentRound(token, userId, competitions) {
   };
 }
 
+// ---------- Hjem: "Dine placeringer" ----------
+// Månedschampionshippet øverst, dernæst én række pr. konkurrence, brugeren
+// står i. Rækkefølgen på listen bevares (månedschampionship først, dernæst
+// konkurrencer i input-orden), fordi den ER visningens rækkefølge.
+//
+// Udskilt fra `HjemTab.jsx` (G1, august 2026). Snittet er det samme som i
+// `invites.js`: funktionen svarer med RÆKKER — etiket, placering, hvor man
+// lander ved tryk — og skærmen tegner dem. Gevinsten er ikke linjetallet, men
+// at reglerne kan efterprøves: placeringen er rækkens ægte `rank` (delt ved
+// lighed) og ikke dens plads i listen, en konkurrence, hvis stilling fejler,
+// SPRINGES OVER frem for at vælte hele listen, og et skjult (`_hidden`)
+// konkurrence-kort må aldrig give en række.
+//
+// Private konkurrencers stilling findes ikke i standings-views'ene (de er
+// globale pr. runde/sæson), så `computeCompetitionState` er stadig nødvendig —
+// derfor ét kald pr. konkurrence, alle parallelt.
+async function loadHomePlacements(token, userId, competitions, monthKey) {
+  const comps = competitions.filter((x) => !x._hidden);
+  // liga-navne til gruppering af konkurrence-placeringer (liga-laget)
+  const groupIds = [...new Set(comps.map((c) => c.group_id).filter(Boolean))];
+
+  const [monthly, compStates, groupRows] = await Promise.all([
+    loadMonthlyBoard(token, monthKey),
+    Promise.all(comps.map((c) => computeCompetitionState(token, c.id).catch(() => null))),
+    groupIds.length
+      ? db.select(token, "groups", `id=in.(${groupIds.join(",")})&select=id,name`).catch(() => [])
+      : Promise.resolve([]),
+  ]);
+
+  const groupNameById = new Map(groupRows.map((g) => [g.id, g.name]));
+  const list = [];
+  const mine = monthly.find((r) => r.userId === userId);
+  if (mine) list.push({ label: "Månedschampionship · " + monthName(monthKey), pos: `${mine.rank}.`, shared: mine.shared, tab: "championship" });
+  comps.forEach((c, i) => {
+    const state = compStates[i];
+    if (!state) return; // fejlede — spring over
+    const row = state.rows.find((r) => r.userId === userId);
+    if (row) list.push({
+      label: c.name, pos: `${row.rank}.`, shared: row.shared, compId: c.id,
+      groupId: c.group_id || null,
+      groupName: c.group_id ? (groupNameById.get(c.group_id) || "Liga") : null,
+    });
+  });
+  return list;
+}
+
+// ---------- Hjem: rating-snapshot ----------
+// Ét objekt til kortet øverst. `rank` er ranglistens ÆGTE placering (delt ved
+// samme rating) og ikke listeindekset. Står brugeren ikke på ranglisten,
+// svares `{ none: true }` — det er en gyldig tilstand og ikke en fejl.
+function ratingSnapshot(board, hist, userId) {
+  const me = board.find((r) => r.userId === userId);
+  if (!me) return { none: true };
+  const h = hist.get(userId) || {};
+  return {
+    rating: me.rating, move: h.move || 0, form: h.form || [],
+    rank: me.rank, total: board.length, provisional: me.provisional,
+  };
+}
+
 // ---------- dato/tid-formattering til Hjem ----------
 // Dagens dato i Hjems hoved — i DANSK tid (G32). En bruger, der åbner appen
 // klokken 23 lokalt et andet sted i verden, skal se den dag, rundens deadlines
@@ -152,4 +214,4 @@ function monthName(monthKey) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export { computeHomeTips, computeCurrentRound, daFullDate, fmtCountdown, monthName };
+export { computeHomeTips, computeCurrentRound, loadHomePlacements, ratingSnapshot, daFullDate, fmtCountdown, monthName };

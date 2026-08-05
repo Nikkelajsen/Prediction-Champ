@@ -1087,6 +1087,26 @@ grant execute on function public.admin_analytics_funnel(int) to authenticated;
 --
 -- `dismissed_at` er den mest interessante kolonne: den er brugerens eneste
 -- aktive afvisning af en historie, og den findes pr. række, ikke som event.
+--
+-- NÆVNEREN ER `viewable` OG IKKE `generated` (G73, 5. august 2026). Karusellen
+-- på Hjem henter `round_key = <nuværende runde>` (`loadRoundCarousel`,
+-- src/lib/data/activity.js), så et kort, der først blev SKREVET efter dets egen
+-- runde var forbi, kan aldrig nå en skærm. Sådanne kort findes i mængder: v2's
+-- efterfyldning (sql/story_engine_v2_backfill.sql) skrev dagskort for hele
+-- historikken, og 197 af 280 historier var i august 2026 dagskort med nul
+-- visninger. Med `generated` som nævner målte visningsraten derfor
+-- efterfyldningen og ikke brugerne — for syv af treogtyve regler var tallet
+-- reelt en påstand om noget andet, end tabellen sagde.
+--
+-- Vis-bar = skrevet FØR rundens slutning, altså midnat dansk tid på tirsdagen
+-- efter rundenøglen (`round_key` er rundens tirsdag; se public.round_key()).
+-- Definitionen fanger to ting med samme udtryk: efterfyldte kort, og et
+-- runde-kort, hvis runde først blev spillet færdig efter den var forbi (en
+-- udsat kamp). Begge er kort, ingen har kunnet se.
+--
+-- `generated` beholdes uændret ved siden af — den er sand og skal blive ved med
+-- at være det: kortet BLEV genereret. Det er kun raterne, der har skiftet
+-- nævner, og forskellen mellem de to tal er selv oplysningen.
 create or replace function public.admin_analytics_stories(p_days int default 30)
 returns jsonb
 language plpgsql
@@ -1107,6 +1127,12 @@ begin
   gen as (
     select s.rule,
       count(*)                                              as generated,
+      -- Kunne kortet OVERHOVEDET nå en skærm? Se hovedkommentaren ovenfor.
+      -- `round_key` er tekst ('YYYY-MM-DD', rundens tirsdag), så +7 giver
+      -- tirsdagen efter, og zonen er dansk ligesom i public.round_key().
+      count(*) filter (where s.created_at
+        < ((s.round_key::date + 7)::timestamp at time zone 'Europe/Copenhagen'))
+                                                            as viewable,
       count(distinct s.user_id)                             as users,
       count(*) filter (where s.dismissed_at is not null)    as dismissed,
       round(avg(s.priority), 1)                             as avg_priority,
@@ -1128,16 +1154,22 @@ begin
   joined as (
     select r.rule,
       coalesce(g.generated, 0) as generated,
+      coalesce(g.viewable, 0)  as viewable,
       coalesce(g.users, 0)     as users,
       coalesce(g.dismissed, 0) as dismissed,
       g.avg_priority,
       g.last_generated_at,
       coalesce(e.viewed, 0)    as viewed,
       coalesce(e.shared, 0)    as shared,
-      case when coalesce(g.generated, 0) = 0 then null
-        else round(100.0 * coalesce(e.viewed, 0) / g.generated, 1) end as view_rate,
-      case when coalesce(g.generated, 0) = 0 then null
-        else round(100.0 * g.dismissed / g.generated, 1) end as dismiss_rate,
+      -- BEGGE rater deler nævner, og det er med vilje: en afvisning kræver et
+      -- kort på skærmen lige så meget som en visning gør (dismissed_at sættes
+      -- kun fra karusellen, `dismissStory`), så et efterfyldt kort kan hverken
+      -- ses eller afvises. Havde de to hver sin nævner, ville summen af rater
+      -- kunne overstige det mulige.
+      case when coalesce(g.viewable, 0) = 0 then null
+        else round(100.0 * coalesce(e.viewed, 0) / g.viewable, 1) end as view_rate,
+      case when coalesce(g.viewable, 0) = 0 then null
+        else round(100.0 * g.dismissed / g.viewable, 1) end as dismiss_rate,
       case when coalesce(e.viewed, 0) = 0 then null
         else round(100.0 * coalesce(e.shared, 0) / e.viewed, 1) end as share_rate
     from rules r
@@ -1148,6 +1180,9 @@ begin
     'window_days', p_days,
     'quiet_tier_min', 90,  -- skal matche QUIET_TIER_MIN i src/lib/stories.js
     'generated_total', (select coalesce(sum(generated), 0) from joined),
+    -- Forskellen på de to totaler er selve G73-oplysningen: hvor stor en del af
+    -- motorens produktion der aldrig kunne nå en skærm.
+    'viewable_total', (select coalesce(sum(viewable), 0) from joined),
     'users_reached', (
       select count(distinct s.user_id) from public.stories s cross join win w where s.created_at >= w.t0
     ),
@@ -1240,12 +1275,24 @@ grant execute on function public.admin_analytics_stories(int) to authenticated;
 --   from r group by 1
 -- ) t where tot <> parts;
 
--- 6e) Story Engine: en visning kan aldrig overstige det genererede (loggen er
---     et gulv, aldrig et loft). Skal give 0:
+-- 6e) Story Engine: en visning kan aldrig overstige det VIS-BARE (loggen er
+--     et gulv, aldrig et loft — og efter G73 er nævneren `viewable`, som er
+--     den strammere af de to). Skal give 0:
 -- select count(*) from jsonb_array_elements(
 --   (select public.admin_analytics_stories(30) -> 'rules')) e
--- where (e->>'viewed')::int > (e->>'generated')::int
---    or (e->>'dismissed')::int > (e->>'generated')::int;
+-- where (e->>'viewed')::int > (e->>'viewable')::int
+--    or (e->>'dismissed')::int > (e->>'viewable')::int
+--    or (e->>'viewable')::int > (e->>'generated')::int;
+
+-- 6g) G73: hvor stor en del af produktionen kunne aldrig nå en skærm? Ikke en
+--     invariant, men det tal, rækken blev skrevet for — var svaret i august
+--     2026 nul, ville hele rettelsen have været unødvendig. Læses pr. periode,
+--     fordi det er dagskortene, efterfyldningen ramte:
+-- select s.period,
+--        count(*) as genereret,
+--        count(*) filter (where s.created_at
+--          < ((s.round_key::date + 7)::timestamp at time zone 'Europe/Copenhagen')) as vis_bare
+--   from public.stories s group by 1 order by 1;
 
 -- 6f) Push-effekt: åbnede + ikke-åbnede skal summe til antal modtagere.
 --     Skal give 0:

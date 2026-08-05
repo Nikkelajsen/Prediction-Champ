@@ -14,6 +14,11 @@
 // localStorage-nøgle skal have en linje her i SAMME ombæring.** En politik,
 // der er forældet, er værre end ingen — den er en påstand, der ikke passer.
 // Reglen står også i DOCUMENTATION.md §24.
+//
+// For localStorage-nøglerne er reglen siden `G71` (august 2026) maskinel:
+// `NØGLENS_LØFTE` i legal.test.js oversætter hvert navn i `LOKALE_NØGLER` til
+// den sætning, der beskriver det — og fejler i begge retninger. De to andre
+// dele af reglen (en ny tabel, en ny tredjepart) står stadig kun her.
 
 // Pladsholdere. Må KUN stå i kontakt-afsnittet, og en test håndhæver det.
 // Teksten må ikke offentliggøres, før de er udfyldt.
@@ -89,7 +94,7 @@ const PRIVATLIV = {
           punkter: [
             "Din session: en fornyelses-nøgle og din e-mail, så du forbliver logget ind. Den fjernes, når du logger ud.",
             "Hvornår appen sidst registrerede dig som aktiv, så den ikke gør det oftere end en gang i timen.",
-            "Om du er færdig med introduktionen, om du har lukket kortet om notifikationer, og om du har lukket forslaget om at oprette en liga.",
+            "Om du er færdig med introduktionen, om du har skjult checklisten Kom godt i gang, om du har lukket kortet om notifikationer, og om du har lukket forslaget om at oprette en liga.",
             "Om du har set vejledningen til at lægge appen på din hjemmeskærm, så den kun vises én gang.",
             "Hvilken turnering du sidst kiggede på i Championship.",
             "Hvilke af dine konkurrencer du allerede har set slutte, så fejringen af en afsluttet konkurrence kun vises én gang.",

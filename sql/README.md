@@ -325,10 +325,30 @@ tabel-adgangen i `public`, og at kilden (Supabases default privileges) er
 lukket, så en tabel oprettet bagefter heller ikke får den. Den anden halvdel er
 den, der betyder noget på sigt — bredden var en regel og ikke en liste.
 
+**`sql/tests/docs_sql.mjs`** (samme CI-job, egen database) er jobbets eneste
+trin, der ikke tester en migrering, men **dokumentationen** (`G74`). Hver
+` ```sql `-blok i `docs/` bygges om til et `prepare` mod hele `schema.sql`, så
+PostgreSQL selv siger, om forespørgslen kunne køre — `prepare` uden `execute`
+rører ingen rækker, så også et `update` i et dokument er ufarligt at tjekke.
+
+Baggrunden er `B12`, hvis forespørgsel stod to døgn som "klar til at køre" og
+blev afvist med `42803`, første gang nogen prøvede. **Et rent syntakstjek ville
+ikke have fanget den:** fejlen opstår i parse-analysen og kræver, at serveren
+kender tabellerne — derfor `schema.sql` og ikke et tomt skema. Prisen er, at
+tjekket arver denne fils advarsel om, at `schema.sql` kun er sand efter en
+eksport; en blok mod en ueksporteret kolonne fejler, og fejlen ser ud som
+blokkens, selv om den er eksportens.
+
+En blok, der ikke er en hel sætning (et skema-udkast, en `join`-linje), markeres
+` ```sql uddrag ` og springes over — **opt-out og ikke opt-in**, så en ny
+forespørgsel er dækket, fordi nogen skrev den, og ikke fordi nogen huskede en
+markør. De sprungne tælles op med navn i CI-loggen. Udtrækkerens egne
+afvisninger er dækket af `sql/tests/docs_sql.test.mjs` i `npm test`.
+
 Testene kan køres lokalt mod enhver tom database:
 
 ```bash
-createdb ratingtest && createdb awardstest && createdb cetest && createdb putest && createdb anongrants && createdb storytest && createdb sectest && createdb fbtest && createdb idtest && createdb anontest
+createdb ratingtest && createdb awardstest && createdb cetest && createdb putest && createdb anongrants && createdb storytest && createdb sectest && createdb fbtest && createdb idtest && createdb anontest && createdb docssql
 cd sql/tests && psql -d ratingtest -v ON_ERROR_STOP=1 -b -f rating_equivalence.sql
 psql -d awardstest -v ON_ERROR_STOP=1 -b -f competition_awards.sql
 psql -d cetest -v ON_ERROR_STOP=1 -b -f client_errors.sql
@@ -339,6 +359,8 @@ psql -d sectest -v ON_ERROR_STOP=1 -b -f security_hardening.sql
 psql -d fbtest -v ON_ERROR_STOP=1 -b -f feedback.sql
 psql -d idtest -v ON_ERROR_STOP=1 -b -f api_id_uniqueness.sql
 psql -d anontest -v ON_ERROR_STOP=1 -b -f account_anonymization.sql
+# docs/-blokkene: udtrækkeren skriver hele kørslen, psql udfører den
+node docs_sql.mjs > /tmp/docs_sql.gen.sql && psql -d docssql -v ON_ERROR_STOP=1 -f /tmp/docs_sql.gen.sql
 ```
 
 `predictions_round_lock_policies.sql` er IKKE en mild undtagelse, selv om den kun

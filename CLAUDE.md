@@ -41,7 +41,7 @@ Ved produktbeslutninger og nye features læses desuden:
 ## Når noget leveres
 
 Når en feature leveres eller en beslutning træffes, opdatér **alle tre**:
-- `docs/ROADMAP.md` (status + beslutningslog),
+- `docs/ROADMAP.md` (status og prioritering) — og skriv **beslutningen** i `docs/DECISIONS.md`, **leverancen** i `docs/CHANGELOG.md`. Hver af de to hører præcis ét sted; ROADMAP'en bar indtil `G70` (5. august 2026) en kopi af beslutningsloggen og gør det ikke længere,
 - `docs/BACKLOG.md` — **slet** de rækker, leverancen lukker, og ryd indbakken, og
 - den relevante spec i `docs/features/`, hvis den leverede adfærd afviger fra det, spec'en beskriver.
 
@@ -55,7 +55,7 @@ Støder du undervejs på noget, der burde bygges, ryddes op eller besluttes, men
 
 - `npm run dev` — udviklingsserver · `npm run build` — produktions-build
 - `npm test` — Vitest · `npm run lint` — ESLint · `npm run format` — Prettier
-- CI (`.github/workflows/ci.yml`) kører lint + test + build ved hver pull request og ved push til `main`, plus et `sql`-job med ti SQL-tests (bl.a. rating-ækvivalensen) mod en rigtig PostgreSQL. **"Tjekliste før merge" i `DOCUMENTATION.md` §11 gælder stadig** — den dækker det, en maskine ikke kan se (rigtig browser, push på iOS, RLS mod produktionsdata).
+- CI (`.github/workflows/ci.yml`) kører lint + test + build ved hver pull request og ved push til `main`, plus et `sql`-job med sytten SQL-tests (bl.a. rating-ækvivalensen og et tjek af `docs/`' SQL-blokke) mod en rigtig PostgreSQL. **"Tjekliste før merge" i `DOCUMENTATION.md` §11 gælder stadig** — den dækker det, en maskine ikke kan se (rigtig browser, push på iOS, RLS mod produktionsdata).
 - `npm run lint` har et loft på antal advarsler, så tallet kan falde, men aldrig vokse ubemærket. Falder det, sænkes loftet i `package.json` tilsvarende.
 - **Venter du på CI, så spørg jobbet, ikke kørslen.** GitHubs check-runs-svar kan stå `in_progress` et kvarter efter et job er færdigt — brug `actions_get`/`get_workflow_job` med job-id'et, som er ajour med det samme. Hele fælden står i `DOCUMENTATION.md` §13. `verify` tager typisk under et minut, `sql` halvandet; er du ude over det, er det næsten altid svaret der er gammelt.
 

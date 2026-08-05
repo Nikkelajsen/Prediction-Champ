@@ -1,255 +1,25 @@
 // Hjem-fanen: dagens overblik. Deadline-kort, rating-snapshot, rundens
 // live-oversigt, dine placeringer, rundens historie og opt-in til notifikationer.
-import { useState, useEffect, useRef } from "react";
-import { Bell, ChevronRight, Clock, Check, X, Share2, RefreshCw } from "lucide-react";
-import { APP_TZ, currentRoundKey, formatKickoff } from "../lib/scoring.js";
-import { db } from "../lib/supabase.js";
-import { computeCompetitionState, computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadRecentMilestones, loadRoundCarousel, loadMonthlyBoard, loadRatingBoard, loadRatingHistory, monthName } from "../lib/data.js";
-import { logEvent, logEventOnce } from "../lib/analytics.js";
+//
+// De tre kort-komponenter, fanen tegner med, bor i `./hjem/` siden `G1`
+// (august 2026): opt-in-kortet, karusellen og placeringslisten. Ren flytning —
+// de delte hverken state eller hjælpere med fanen, kun fil. Det, der er tilbage
+// her, ER fanen: hvad hentes, i hvilken rækkefølge, og hvad tegnes hvornår.
+import { useState, useEffect } from "react";
+import { ChevronRight, Clock, Check, RefreshCw } from "lucide-react";
+import { currentRoundKey, formatKickoff } from "../lib/scoring.js";
+import { computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadHomePlacements, loadRecentMilestones, loadRoundCarousel, loadRatingBoard, loadRatingHistory, ratingSnapshot } from "../lib/data.js";
 import { CAROUSEL_LIMIT, isQuiet } from "../lib/stories.js";
 import { renderMilestone } from "../lib/milestones.js";
-import { shareText, storyShareText } from "../lib/share.js";
 import { readUserFlag, writeUserFlag, CARD_KEY } from "../lib/localFlags.js";
 import { C, btnGhost, btnGreen, font, iconBtn } from "../ui/theme.js";
 import { usePushOptIn } from "../ui/usePushOptIn.js";
 import { Card, Collapsible, Eyebrow, FoldChevron, H, InfoDot, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
 import GetStartedCard from "./GetStartedCard.jsx";
-
-// Kompakt kort: mindre luft, ikke mindre indhold.
-//
-// Hjem er en oversigt, og de øverste kort skubbede alt det, oversigten handler
-// om ("Indeværende runde", "Dine placeringer"), under skærmkanten på en telefon.
-// Prisen blev betalt af CHROME og ikke af budskabet: den vandrette streg er
-// polstring (16 → 12/14), og hvert kort havde en handlingsknap på sin EGEN
-// linje, selvom rækken over den havde plads til overs.
-//
-// Reglen, der afgør hvilke kort der bliver kompakte: et kort, der BEKRÆFTER
-// noget ("alt ok", "intet at tippe"), er en kvittering og skal fylde derefter —
-// mens deadline-kortet, det ene med en frist og en konsekvens, beholder sin
-// fulde højde og sin egen knap. Karusellen bliver kompakt af den anden grund:
-// den er indhold, ingen har bedt om, og skal kunne ses uden at eje skærmen.
-const cardTight = { padding: "12px 14px" };
-
-// Opt-in-kort til push-notifikationer. Vises kun hvor det giver mening:
-// browseren understøtter push, brugeren har ikke sagt nej, og er ikke tilmeldt
-// endnu. Tilgængeligheden afgøres af `usePushOptIn`, som "Kom godt i gang"-
-// checklisten bruger det samme — så de to aldrig kan spørge om det samme
-// samtidig eller være uenige om, hvornår spørgsmålet giver mening.
-function PushOptInCard({ push }) {
-  if (!push.available) return null;
-
-  return (
-    <Card>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Bell size={15} color={C.gold} />
-          <div style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, textTransform: "uppercase" }}>Få besked før deadline</div>
-        </div>
-        <button style={iconBtn} aria-label="Skjul" onClick={push.dismiss}><X size={16} /></button>
-      </div>
-      <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
-        Vi minder dig om at tippe, inden kampene låser — og fortæller, hvordan runden gik.
-      </div>
-      {push.error && <div style={{ color: C.red, fontSize: 13, marginTop: 8 }}>{push.error}</div>}
-      <button style={{ ...btnGreen, marginTop: 12, opacity: push.busy ? 0.6 : 1 }} disabled={push.busy} onClick={push.enable}>
-        {push.busy ? "Slår til …" : "Slå notifikationer til"}
-      </button>
-    </Card>
-  );
-}
-
-// Historie-kort (Story Engine v1.1). Vises direkte under tips-status, live for alle.
-// Afvis sætter dismissed_at og skjuler kortet.
-//
-// TO UDGAVER, styret af prioriteten (`isQuiet`, jf. src/lib/stories.js):
-//  · Højdepunkt (prioritet < 90): guld-kant, ravgul gradient, emoji i headline og
-//    en Del-knap — ugens højdepunkt, noget man sender i gruppens beskedtråd.
-//  · Dæmpet (prioritet ≥ 90): almindeligt kort, mindre headline, ingen emoji og
-//    INGEN Del-knap. Det er den stille runde, produktbogens kapitel 6 beder om
-//    ("status quo") — den skal kunne ses uden at ligne en sejr, og der er intet
-//    at prale af. Genereres kun, når brugeren ellers ville stå helt uden kort.
-// Ét kort i karusellen. `kind` afgør udseendet, og der er nu FIRE:
-//   milestone  · guld + ikon. En bedrift, man har opnået én gang og altid har
-//                opnået — den vigtigste ting, der kan stå på forsiden.
-//   highlight  · guld. Rundens historie (prioritet < 90), som før.
-//   day        · almindeligt kort med kampdagens dato i eyebrow'en. Rigtigt
-//                indhold, men ikke ugens konklusion — derfor ikke guld.
-//   quiet      · dæmpet, ingen emoji, ingen Del (prioritet ≥ 90). Produktbogens
-//                "status quo": det skal kunne ses uden at ligne en sejr.
-function CarouselCard({ item, onDismiss, token, groupId }) {
-  const gold = item.kind === "milestone" || item.kind === "highlight";
-  const quiet = item.kind === "quiet";
-  async function share() {
-    try {
-      await shareText(storyShareText(item));
-      // Samme hændelse som før — også for milepæle, så tallet i Analytics
-      // fortsat måler "et højdepunkt blev delt" og ikke to forskellige ting.
-      logEvent(token, "story_shared", {
-        competitionId: item.competition_id || null, groupId,
-        metadata: item.kind === "milestone"
-          ? { rule: item.rule, from: "milestone" }
-          : { rule: item.rule },
-      });
-    } catch { /* bruger annullerede — ignorér */ }
-  }
-  return (
-    <Card style={{
-      ...cardTight, minWidth: "100%", scrollSnapAlign: "start", margin: 0,
-      ...(gold ? { borderColor: C.gold, background: "linear-gradient(135deg, #14212F 0%, #221E14 100%)" } : null),
-    }}>
-      {/* Del bor i eyebrow-linjen og ikke på sin egen række under teksten.
-          Rækken var der allerede — den bar kun en etiket og et kryds — og en
-          knap på egen linje kostede kortet knap en tredjedel af sin højde i en
-          karrusel, hvor der kan ligge ti kort. Rækkefølgen er bevidst: Del til
-          venstre for Afvis, med luft imellem, så den positive handling ikke
-          sidder klods op ad den, der får kortet til at forsvinde. */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-        <Eyebrow>{item.eyebrow}</Eyebrow>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-          {!quiet && (
-            <button style={{ ...btnGhost, padding: "5px 10px", borderColor: gold ? C.gold : C.line, color: gold ? C.gold : C.text }}
-              onClick={share}><Share2 size={14} /> Del</button>
-          )}
-          {onDismiss && (
-            <button style={iconBtn} aria-label="Afvis" onClick={onDismiss}><X size={16} /></button>
-          )}
-        </div>
-      </div>
-      <div style={{ fontFamily: font.display, fontSize: quiet ? 17 : 20, fontWeight: 700, lineHeight: 1.15 }}>
-        {item.headline}
-      </div>
-      <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.45, marginTop: 6 }}>{item.body}</div>
-    </Card>
-  );
-}
-
-// Rundens karrusel (Story Engine v2). Kortene akkumulerer gennem runden — 0–2
-// pr. kampdag — og vises nyeste først, med rundens afsluttende kort og
-// nyopnåede milepæle øverst. Ny runde ⇒ tom karrusel, fordi round_key skifter.
-//
-// VANDRET SWIPE og ikke en lodret stak: produktbogens kapitel 6 beder forsiden
-// om "næsten altid at fortælle én ting". Karusellen holder det løfte — man ser
-// ét kort ad gangen, og det vigtigste ligger først — men giver plads til, at
-// ugen kan rumme mere end ét øjeblik.
-function StoryCarousel({ items, onDismiss, token, competitions }) {
-  const ref = useRef(null);
-  const [idx, setIdx] = useState(0);
-
-  // Aktivt kort udledes af scroll-positionen frem for af en klik-handler, så
-  // tallet også er rigtigt, når brugeren swiper med fingeren.
-  function onScroll() {
-    const el = ref.current;
-    if (!el || !el.clientWidth) return;
-    const next = Math.round(el.scrollLeft / el.clientWidth);
-    if (next !== idx) setIdx(next);
-  }
-
-  const active = items[Math.min(idx, items.length - 1)];
-  const groupIdOf = (it) => competitions.find((c) => c.id === it?.competition_id)?.group_id || null;
-
-  // story_viewed logges, når kortet BLIVER synligt — ikke for hele listen ved
-  // indlæsning. Ellers ville et kort, ingen swipede hen til, tælle som vist, og
-  // regelstatistikken i Analytics (A5) ville måle noget andet end den påstår.
-  useEffect(() => {
-    if (!active || active.kind === "milestone") return;
-    logEventOnce(token, "story_viewed", active.id, {
-      competitionId: active.competition_id || null, groupId: groupIdOf(active),
-      metadata: { rule: active.rule, priority: active.priority, quiet: active.kind === "quiet" },
-    });
-  }, [active, token]);   // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (!items.length) return null;
-
-  return (
-    <div>
-      <div ref={ref} onScroll={onScroll} style={{
-        display: "flex", gap: 12, overflowX: "auto", scrollSnapType: "x mandatory",
-        scrollbarWidth: "none", msOverflowStyle: "none",
-      }}>
-        {items.map((it) => (
-          <CarouselCard key={it.id} item={it} token={token} groupId={groupIdOf(it)}
-            onDismiss={it.kind === "milestone" ? null : () => onDismiss(it)} />
-        ))}
-      </div>
-      {items.length > 1 && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 8 }}
-             aria-label={`Kort ${idx + 1} af ${items.length}`}>
-          {items.map((it, i) => (
-            <span key={it.id} style={{
-              width: 6, height: 6, borderRadius: 3,
-              background: i === idx ? C.gold : C.line,
-            }} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// kompakt kickoff til runde-oversigten (fx "man. 12.05. 14.00")
-function shortKick(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const day = d.toLocaleDateString("da-DK", { timeZone: APP_TZ, weekday: "short", day: "2-digit", month: "2-digit" });
-  const t = d.toLocaleTimeString("da-DK", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit" });
-  return `${day} ${t}`;
-}
-
-// "Dine placeringer": månedschampionship (global) øverst, dernæst konkurrencer grupperet
-// pr. liga (liga-laget). Har brugeren ingen ligaer, vises konkurrencerne fladt som før.
-function Placements({ placements, goTab, openBoard }) {
-  const monthlyRows = placements.filter((r) => r.tab);
-  const compRows = placements.filter((r) => r.compId);
-  const hasGroups = compRows.some((r) => r.groupId);
-
-  // Rigtige knapper og ikke klikbare `<div>`s (G22): rækkerne er appens
-  // primære vej videre fra Hjem, og de var tastatur-uopnåelige og uden rolle
-  // for en skærmlæser. `width: 100%` + `textAlign: left` beholder udseendet.
-  const Row = ({ r, top }) => (
-    <button type="button" onClick={() => (r.tab ? goTab(r.tab) : openBoard(r.compId))} style={{
-      display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%",
-      background: "none", border: "none", textAlign: "left", font: "inherit", color: "inherit",
-      padding: "10px 0", borderTop: top ? `1px solid ${C.line}` : "none", cursor: "pointer",
-    }}>
-      <span style={{ fontSize: 14 }}>{r.label}</span>
-      <span style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-        {/* "delt" siges kun her, hvor der er plads til ord — tabellerne nøjes med tallet */}
-        {r.shared && <span style={{ fontSize: 11, color: C.muted }}>delt</span>}
-        <span style={{ fontFamily: font.display, fontSize: 18, fontWeight: 700, color: r.pos === "1." ? C.gold : C.text }}>{r.pos}</span>
-        <ChevronRight size={15} color={C.muted} />
-      </span>
-    </button>
-  );
-  const SubHead = ({ children }) => (
-    <div style={{ fontFamily: font.display, textTransform: "uppercase", letterSpacing: "0.1em", fontSize: 11, color: C.muted, margin: "12px 0 2px" }}>{children}</div>
-  );
-
-  if (!hasGroups) {
-    return <>{[...monthlyRows, ...compRows].map((r, i) => <Row key={r.compId || r.tab} r={r} top={i > 0} />)}</>;
-  }
-
-  // grupper konkurrence-rækker pr. liga (første-optrædende rækkefølge); liga-løse sidst
-  const order = [];
-  const byKey = new Map();
-  for (const r of compRows) {
-    const key = r.groupId || "__loose__";
-    if (!byKey.has(key)) { byKey.set(key, { key, name: r.groupId ? r.groupName : "Øvrige", rows: [] }); order.push(key); }
-    byKey.get(key).rows.push(r);
-  }
-  const groups = order.map((k) => byKey.get(k)).sort((a, b) => (a.key === "__loose__" ? 1 : 0) - (b.key === "__loose__" ? 1 : 0));
-
-  return (
-    <>
-      {monthlyRows.map((r, i) => <Row key={r.tab} r={r} top={i > 0} />)}
-      {groups.map((g) => (
-        <div key={g.key}>
-          <SubHead>{g.name}</SubHead>
-          {g.rows.map((r, i) => <Row key={r.compId} r={r} top={i > 0} />)}
-        </div>
-      ))}
-    </>
-  );
-}
+import PushOptInCard from "./hjem/PushOptInCard.jsx";
+import StoryCarousel from "./hjem/StoryCarousel.jsx";
+import Placements from "./hjem/Placements.jsx";
+import { cardTight, shortKick } from "./hjem/shared.js";
 
 function HjemTab({ token, userId, profile, competitions, goTab, openPredictions, openBoard, openGroup, openProfile, onboarding }) {
   const [tips, setTips] = useState(null);
@@ -347,45 +117,14 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       // rating-snapshot
       try {
         const [board, hist] = await Promise.all([loadRatingBoard(token), loadRatingHistory(token)]);
-        const me = board.find((r) => r.userId === userId);
-        if (!cancelled) {
-          if (me) {
-            const h = hist.get(userId) || {};
-            // rank er ranglistens ægte placering (delt ved samme rating), ikke listeindekset
-            setSnapshot({ rating: me.rating, move: h.move || 0, form: h.form || [], rank: me.rank, total: board.length, provisional: me.provisional });
-          } else {
-            setSnapshot({ none: true });
-          }
-        }
+        if (!cancelled) setSnapshot(ratingSnapshot(board, hist, userId));
       } catch { if (!cancelled) setSnapshot({ none: true }); }
 
-      // placeringer: månedschampionship + hver privat konkurrence.
-      // Hentes parallelt (månedschampionship + alle konkurrencer på én gang); rækkefølgen
-      // på listen bevares (månedschampionship først, dernæst konkurrencer i input-orden).
-      // Bemærk: private konkurrencers stilling findes ikke i standings-views'ene
-      // (de er globale pr. runde/sæson), så computeCompetitionState er stadig nødvendig.
+      // placeringer: månedschampionship + hver privat konkurrence. Reglerne —
+      // ægte rank, spring en fejlende konkurrence over, skjulte kort tæller
+      // ikke — bor i lib/data/home.js, hvor de kan efterprøves.
       try {
-        const comps = competitions.filter((x) => !x._hidden);
-        // liga-navne til gruppering af konkurrence-placeringer (liga-laget)
-        const groupIds = [...new Set(comps.map((c) => c.group_id).filter(Boolean))];
-        const [monthly, compStates, groupRows] = await Promise.all([
-          loadMonthlyBoard(token, currentMonthKey()),
-          Promise.all(comps.map((c) =>
-            computeCompetitionState(token, c.id).catch(() => null)
-          )),
-          groupIds.length ? db.select(token, "groups", `id=in.(${groupIds.join(",")})&select=id,name`).catch(() => []) : Promise.resolve([]),
-        ]);
-        const groupNameById = new Map(groupRows.map((g) => [g.id, g.name]));
-        const list = [];
-        // Placeringen er rækkens ægte rank (delt ved lighed) — ikke dens plads i listen.
-        const mine = monthly.find((r) => r.userId === userId);
-        if (mine) list.push({ label: "Månedschampionship · " + monthName(currentMonthKey()), pos: `${mine.rank}.`, shared: mine.shared, tab: "championship" });
-        comps.forEach((c, i) => {
-          const state = compStates[i];
-          if (!state) return; // fejlede — spring over
-          const row = state.rows.find((r) => r.userId === userId);
-          if (row) list.push({ label: c.name, pos: `${row.rank}.`, shared: row.shared, compId: c.id, groupId: c.group_id || null, groupName: c.group_id ? (groupNameById.get(c.group_id) || "Liga") : null });
-        });
+        const list = await loadHomePlacements(token, userId, competitions, currentMonthKey());
         if (!cancelled) setPlacements(list);
       } catch { if (!cancelled) setPlacements([]); }
     })();
