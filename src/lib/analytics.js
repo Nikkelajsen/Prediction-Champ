@@ -160,12 +160,17 @@ function fmtMinutes(min) {
 }
 
 // ---------- Story Engine-regler ----------
-// Katalogen SKAL matche reglerne i sql/story_engine.sql. Den findes her, fordi
-// RPC'en kun kan se regler, der HAR udløst — og det interessante spørgsmål er
-// netop, hvilke der ALDRIG har. Drift fanges af en test, der læser SQL-filen
-// og sammenligner (src/lib/analytics.test.js), så listen ikke stille kan blive
-// forældet, næste gang motoren udvides.
+// Katalogen SKAL matche reglerne i BEGGE motorer — sql/story_engine.sql
+// (runde) og sql/story_engine_v2.sql (dag). Den findes her, fordi RPC'en kun
+// kan se regler, der HAR udløst — og det interessante spørgsmål er netop,
+// hvilke der ALDRIG har. Drift fanges af en test, der læser SQL-filerne og
+// sammenligner (src/lib/analytics.test.js), så listen ikke stille kan blive
+// forældet, næste gang motoren udvides. Den test læste indtil august 2026 kun
+// runde-motorens fil, og derfor stod v2's syv dagsregler som UKENDT uden navn
+// i tabellen — drift-testen fangede ikke den udvidelse, den var sat til at
+// fange.
 const STORY_RULES = {
+  // --- Runde-motoren (v1) · prioritet 10–100 · sql/story_engine.sql
   RATING_HIGH: "Højeste rating nogensinde",
   LEAD_TAKEN: "Overtog føringen",
   ROUND_WON: "Vandt runden",
@@ -182,6 +187,17 @@ const STORY_RULES = {
   AWARD_MONTH: "Månedens bedste (lokal kåring)",
   SEASON_OPENER: "Premiereugen",
   QUIET_ROUND: "Stille runde",
+  // --- Dags-motoren (v2) · prioritet 110–189 · sql/story_engine_v2.sql.
+  // Navnene siger, hvad kortet handler om, ikke hvad tærsklen er — og de er
+  // valgt så de ikke kan forveksles med runde-reglernes: STREAK er rundens
+  // stime, STREAK_STATUS er dagens, og DUEL er dagens udgave af CLOSING_IN.
+  DAY_RESULT: "Dagens facit",
+  CONTRARIAN: "Alene om at ramme",
+  COLLECTIVE_MISS: "Ingen ramte kampen",
+  DAY_TOP: "Dagens højeste",
+  STREAK_STATUS: "Stimen lever eller brød",
+  DUEL: "Duel med nærmeste rival",
+  SO_CLOSE: "Ét mål fra eksakt",
 };
 
 // Flet RPC'ens tal med katalogen, så regler der ALDRIG har udløst kommer med
