@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict gsmh9NgdsmNdl6AUrpTmlMQKjKrOuXHNgkGAYNwaWqhVv0PyA1mba2MgVbTnXfn
+\restrict RkXM7EqtIcfb1iM16zb90lL7jb9Nt8TfgP5DDApolBrj2zaGBlrlBIctwcVIbMo
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
@@ -31,6 +31,69 @@ CREATE SCHEMA public;
 --
 
 COMMENT ON SCHEMA public IS 'standard public schema';
+
+
+--
+-- Name: _anonymize_account(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._anonymize_account(p_user_id uuid) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_navn text;
+  v_hex  int := 8;
+begin
+  if p_user_id is null then
+    raise exception 'forbidden';
+  end if;
+
+  -- Allerede lukket: gør ingenting, men svar det samme, så kalderen kan gentage
+  -- kaldet uden at skulle skelne.
+  select display_name into v_navn from public.profiles
+   where id = p_user_id and anonymized_at is not null;
+  if found then
+    return v_navn;
+  end if;
+
+  -- Navnet er unikt på lower(display_name) (profiles_display_name_lower_idx) og
+  -- skal være 2–20 tegn (profiles_display_name_len). "Slettet bruger" kan
+  -- derfor kun bruges ÉN gang. Otte hex-tegn af brugerens eget id giver 16 tegn
+  -- og er unikt — men "unikt nok" er ikke godt nok, når fejlen ville ramme
+  -- netop den, der har bedt om at forsvinde, så der forlænges ved kollision.
+  loop
+    v_navn := 'Slettet ' || left(replace(p_user_id::text, '-', ''), v_hex);
+    exit when not exists (
+      select 1 from public.profiles
+      where lower(display_name) = lower(v_navn) and id <> p_user_id
+    );
+    v_hex := v_hex + 2;
+    if v_hex > 12 then
+      raise exception 'kunne ikke danne et ledigt pseudonym';
+    end if;
+  end loop;
+
+  delete from public.push_subscriptions where user_id = p_user_id;
+  delete from public.notification_log   where user_id = p_user_id;
+  delete from public.stories            where user_id = p_user_id;
+  delete from public.analytics_events   where user_id = p_user_id;
+  delete from public.user_activity_days where user_id = p_user_id;
+
+  update public.feedback set user_id = null where user_id = p_user_id;
+  -- Kontoen soft-lukkes (auth.users-rækken består), så client_errors' egen
+  -- `on delete set null` udløses aldrig — koblingen skal fjernes her.
+  update public.client_errors set user_id = null where user_id = p_user_id;
+
+  update public.profiles
+     set display_name  = v_navn,
+         anonymized_at = now(),
+         is_admin      = false,
+         last_seen_at  = null
+   where id = p_user_id;
+
+  return v_navn;
+end $$;
 
 
 --
@@ -932,6 +995,28 @@ $$;
 
 
 --
+-- Name: admin_anonymize_account(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admin_anonymize_account(p_user_id uuid) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if not exists (select 1 from public.profiles where id = auth.uid() and is_admin) then
+    raise exception 'forbidden';
+  end if;
+  if p_user_id is null or p_user_id = auth.uid() then
+    raise exception 'Din egen konto lukkes fra Profil, ikke herfra';
+  end if;
+  if exists (select 1 from public.profiles where id = p_user_id and is_admin) then
+    raise exception 'En administrator kan ikke lukkes herfra';
+  end if;
+  return public._anonymize_account(p_user_id);
+end $$;
+
+
+--
 -- Name: admin_client_errors(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1075,6 +1160,46 @@ $$;
 
 
 --
+-- Name: admin_seasons(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admin_seasons() RETURNS TABLE(season_id uuid, league_name text, season_name text, ends_at date, is_finished boolean, last_kickoff timestamp with time zone, matches integer, unplayed integer)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select s.id, l.name, s.name, s.ends_at, s.is_finished,
+         max(m.kickoff_at),
+         count(m.id)::int,
+         count(*) filter (where m.id is not null and m.home_score is null)::int
+  from public.seasons s
+  join public.leagues l on l.id = s.league_id
+  left join public.matches m on m.season_id = s.id
+  where exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin)
+  group by s.id, l.name, s.name, s.ends_at, s.is_finished
+  order by l.name, s.name desc;
+$$;
+
+
+--
+-- Name: admin_set_season_finished(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admin_set_season_finished(p_season_id uuid, p_finished boolean) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if not exists (select 1 from public.profiles where id = auth.uid() and is_admin) then
+    raise exception 'forbidden';
+  end if;
+  update public.seasons set is_finished = coalesce(p_finished, false) where id = p_season_id;
+  if not found then
+    raise exception 'Sæsonen findes ikke';
+  end if;
+end $$;
+
+
+--
 -- Name: admin_user_stats(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1174,54 +1299,12 @@ CREATE FUNCTION public.anonymize_my_account() RETURNS text
     SET search_path TO 'public'
     AS $$
 declare
-  v_uid   uuid := auth.uid();
-  v_navn  text;
-  v_hex   int := 8;
+  v_uid uuid := auth.uid();
 begin
   if v_uid is null then
     raise exception 'forbidden';
   end if;
-
-  -- Allerede lukket: gør ingenting, men svar det samme, så klienten kan
-  -- gentage kaldet uden at skulle skelne.
-  select display_name into v_navn from public.profiles where id = v_uid and anonymized_at is not null;
-  if found then
-    return v_navn;
-  end if;
-
-  -- Navnet er unikt på lower(display_name) (profiles_display_name_lower_idx) og
-  -- skal være 2–20 tegn (profiles_display_name_len). "Slettet bruger" kan
-  -- derfor kun bruges ÉN gang. Otte hex-tegn af brugerens eget id giver 16 tegn
-  -- og er unikt — men "unikt nok" er ikke godt nok, når fejlen ville ramme
-  -- netop den, der har bedt om at forsvinde, så der forlænges ved kollision.
-  loop
-    v_navn := 'Slettet ' || left(replace(v_uid::text, '-', ''), v_hex);
-    exit when not exists (
-      select 1 from public.profiles
-      where lower(display_name) = lower(v_navn) and id <> v_uid
-    );
-    v_hex := v_hex + 2;
-    if v_hex > 12 then
-      raise exception 'kunne ikke danne et ledigt pseudonym';
-    end if;
-  end loop;
-
-  delete from public.push_subscriptions where user_id = v_uid;
-  delete from public.notification_log   where user_id = v_uid;
-  delete from public.stories            where user_id = v_uid;
-  delete from public.analytics_events   where user_id = v_uid;
-  delete from public.user_activity_days where user_id = v_uid;
-
-  update public.feedback set user_id = null where user_id = v_uid;
-
-  update public.profiles
-     set display_name  = v_navn,
-         anonymized_at = now(),
-         is_admin      = false,
-         last_seen_at  = null
-   where id = v_uid;
-
-  return v_navn;
+  return public._anonymize_account(v_uid);
 end $$;
 
 
@@ -1378,6 +1461,452 @@ $$;
 
 
 --
+-- Name: award_milestones(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.award_milestones(p_user_id uuid DEFAULT NULL::uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_n int := 0;
+begin
+  drop table if exists _ms_new;
+  create temporary table _ms_new (
+    user_id uuid, key text, family text, tier int,
+    competition_id uuid, round_key text, payload jsonb
+  );
+
+  -- ================= FAMILIE: rating =================
+  -- Tærskler måles mod PEAK og ikke mod nuværende rating, så en senere nedtur
+  -- ikke gør en allerede opnået milepæl usand i det øjeblik, den vises.
+  insert into _ms_new
+  select rh.user_id, 'RATING_' || t.tier, 'rating', t.tier, null, null,
+         jsonb_build_object('peak', round(rh.peak)::int)
+  from (
+    select user_id, max(rating_after) as peak
+    from public.rating_history
+    where scope = 'ALL' and (p_user_id is null or user_id = p_user_id)
+    group by user_id
+  ) rh
+  cross join (values (1100), (1200), (1300), (1400)) t(tier)
+  where rh.peak >= t.tier;
+
+  -- Etableret: de fem provisoriske runder er gennemført.
+  insert into _ms_new
+  select r.user_id, 'RATING_ESTABLISHED', 'rating', 5, null, null,
+         jsonb_build_object('rounds', r.rounds_played)
+  from public.ratings r
+  where r.scope = 'ALL' and r.rounds_played >= 5
+    and (p_user_id is null or r.user_id = p_user_id);
+
+  -- Rangliste. FELTSTØRRELSE-GUARDEN ER IKKE VALGFRI: uden den uddeles
+  -- "top 3 af 3" på dag ét, og så betyder milepælen ingenting.
+  insert into _ms_new
+  select r.user_id, x.key, 'rating', x.tier, null, null,
+         jsonb_build_object('rank', r.rnk, 'total', r.total)
+  from (
+    select user_id,
+           rank() over (order by rating desc)::int as rnk,
+           (count(*) over ())::int as total
+    from public.ratings
+    where scope = 'ALL' and coalesce(provisional, false) = false
+  ) r
+  cross join (values
+    ('LEADERBOARD_NO1',   1,  1,  5),
+    ('LEADERBOARD_TOP3',  3,  3,  8),
+    ('LEADERBOARD_TOP10', 10, 10, 10)
+  ) x(key, tier, max_rnk, min_field)
+  where r.rnk <= x.max_rnk and r.total >= x.min_field
+    and (p_user_id is null or r.user_id = p_user_id);
+
+  -- ================= FAMILIE: precision =================
+  insert into _ms_new
+  select c.user_id, 'TIPS_' || t.tier, 'precision', t.tier, null, null,
+         jsonb_build_object('tips', c.n)
+  from (
+    select user_id, count(*)::int as n from public.predictions
+    where pred_home is not null and pred_away is not null
+      and (p_user_id is null or user_id = p_user_id)
+    group by user_id
+  ) c
+  cross join (values (100), (500), (1000)) t(tier)
+  where c.n >= t.tier;
+
+  insert into _ms_new
+  select c.user_id, 'EXACT_' || t.tier, 'precision', t.tier, null, null,
+         jsonb_build_object('exact', c.n)
+  from (
+    select pr.user_id, count(*)::int as n
+    from public.predictions pr
+    join public.matches m on m.id = pr.match_id
+    where m.home_score is not null and m.away_score is not null
+      and pr.pred_home is not null and pr.pred_away is not null
+      and public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) = 3
+      and (p_user_id is null or pr.user_id = p_user_id)
+    group by pr.user_id
+  ) c
+  cross join (values (50), (250)) t(tier)
+  where c.n >= t.tier;
+
+  -- Perfekt runde. Guard `n >= 5`: en runde med én kamp er ikke en perfekt
+  -- runde. Kan ikke komme fra round_standings — den kender ikke pr.-kamp-minimum.
+  insert into _ms_new
+  select r.user_id, x.key, 'precision', x.tier, null, r.round_key::text,
+         jsonb_build_object('matches', r.n, 'points', r.pts)
+  from (
+    select pr.user_id, m.round_key, count(*)::int as n,
+           sum(public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score))::int as pts,
+           min(public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score))::int as worst
+    from public.predictions pr
+    join public.matches m on m.id = pr.match_id
+    join public.seasons s on s.id = m.season_id
+    join public.leagues l on l.id = s.league_id and l.is_official
+    where m.home_score is not null and m.away_score is not null
+      and pr.pred_home is not null and pr.pred_away is not null
+      and (p_user_id is null or pr.user_id = p_user_id)
+    group by pr.user_id, m.round_key
+    having count(*) >= 5
+  ) r
+  cross join (values
+    ('PERFECT_ROUND', 1, 1), ('PERFECT_ROUND_EXACT', 2, 3)
+  ) x(key, tier, min_pts)
+  where r.worst >= x.min_pts;
+
+  -- Kampe i træk med point.
+  --
+  -- LÆSNING AF SPEC-LINJEN: den lød "5/10/20 eksakte resultater i træk hvor du
+  -- fik point". En stime på 20 EKSAKTE er statistisk uopnåelig (eksakt-raten er
+  -- ~15 %, så 0,15^20), mens 5/10/20 kampe i træk MED POINT er en rigtig
+  -- bedrift, man kan jagte. Derfor tælles point-stimen. Samme vindue som
+  -- STREAK_STATUS-dagsreglen (sql/story_engine_v2.sql), så de to aldrig kan
+  -- modsige hinanden.
+  insert into _ms_new
+  select b.user_id, 'POINTS_STREAK_' || t.tier, 'precision', t.tier, null, null,
+         jsonb_build_object('streak', b.len)
+  from (
+    with hist as (
+      select pr.user_id, m.kickoff_at, m.id as match_id,
+             (public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) >= 1) as hit
+      from public.predictions pr
+      join public.matches m on m.id = pr.match_id
+      join public.seasons s on s.id = m.season_id
+      join public.leagues l on l.id = s.league_id and l.is_official
+      where m.home_score is not null and m.away_score is not null
+        and pr.pred_home is not null and pr.pred_away is not null
+        and (p_user_id is null or pr.user_id = p_user_id)
+    ),
+    grp as (
+      select *,
+        row_number() over (partition by user_id order by kickoff_at, match_id)
+        - row_number() over (partition by user_id, hit order by kickoff_at, match_id) as g
+      from hist
+    ),
+    runs as (select user_id, hit, count(*)::int as len from grp group by user_id, hit, g)
+    select user_id, max(len) as len from runs where hit group by user_id
+  ) b
+  cross join (values (5), (10), (20)) t(tier)
+  where b.len >= t.tier;
+
+  -- Runder i træk med ALLE tips afgivet ("aldrig glemt").
+  -- analytics_completion_facts definerer allerede præcist, hvilke kampe en
+  -- bruger var SAT til at tippe: låsen skal være passeret, og kampen skal ligge
+  -- efter brugerens joined_at. Den definition genbruges frem for at udlede en ny.
+  insert into _ms_new
+  select b.user_id, 'ROUNDS_COMPLETE_' || t.tier, 'precision', t.tier, null, null,
+         jsonb_build_object('rounds', b.len)
+  from (
+    with slots as (
+      -- distinct: den samme kamp kan ligge i flere konkurrencer
+      select distinct user_id, round_key, match_id, predicted
+      from public.analytics_completion_facts
+      where (p_user_id is null or user_id = p_user_id)
+    ),
+    per_round as (
+      select user_id, round_key, bool_and(predicted) as full_round
+      from slots group by user_id, round_key
+    ),
+    grp as (
+      select *,
+        row_number() over (partition by user_id order by round_key)
+        - row_number() over (partition by user_id, full_round order by round_key) as g
+      from per_round
+    ),
+    runs as (select user_id, full_round, count(*)::int as len from grp group by user_id, full_round, g)
+    select user_id, max(len) as len from runs where full_round group by user_id
+  ) b
+  cross join (values (10), (30), (100)) t(tier)
+  where b.len >= t.tier;
+
+  -- ================= FAMILIE: competition =================
+  -- Månedens Champion (global). Kriteriet er byte-identisk med
+  -- career_profile.titles.monthly og med story-regel 10 — samme spørgsmål må
+  -- ikke få to svar (K3). `month` udregnes præcis som i monthly_standings
+  -- (date_trunc uden zone), fordi det er DEN tabel, vi rangerer i.
+  insert into _ms_new
+  select w.user_id, 'MONTH_CHAMP', 'competition', 1, null, null,
+         jsonb_build_object('month', w.month, 'points', w.total_points, 'shared', w.n_top > 1)
+  from (
+    select ms.month, ms.user_id, ms.total_points, count(*) over (partition by ms.month) as n_top
+    from (
+      select month, user_id, total_points,
+             rank() over (partition by month
+                          order by total_points desc, exact_count desc, outcome_count desc,
+                                   round_wins desc, avg_goal_error asc) as rnk
+      from public.monthly_standings where scope = 'ALL'
+    ) ms
+    join (
+      -- måneden skal være færdigspillet, ellers kan kåringen nå at skifte
+      select to_char(date_trunc('month', m.kickoff_at), 'YYYY-MM') as month
+      from public.matches m
+      join public.seasons s on s.id = m.season_id
+      join public.leagues l on l.id = s.league_id and l.is_official
+      group by 1
+      having count(*) filter (where m.home_score is null or m.away_score is null) = 0
+    ) md on md.month = ms.month
+    where ms.rnk = 1
+  ) w
+  where (p_user_id is null or w.user_id = p_user_id);
+
+  -- Sæsonens Champion (global), samme mønster.
+  insert into _ms_new
+  select w.user_id, 'SEASON_CHAMP', 'competition', 2, null, null,
+         jsonb_build_object('points', w.total_points, 'shared', w.n_top > 1)
+  from (
+    select ss.user_id, ss.total_points, count(*) over (partition by ss.season_id) as n_top
+    from (
+      select season_id, user_id, total_points,
+             rank() over (partition by season_id
+                          order by total_points desc, exact_count desc, outcome_count desc,
+                                   round_wins desc, avg_goal_error asc) as rnk
+      from public.season_standings
+    ) ss
+    join (
+      select s.id as season_id
+      from public.seasons s
+      join public.leagues l on l.id = s.league_id and l.is_official
+      join public.matches m on m.season_id = s.id
+      group by s.id
+      having count(*) filter (where m.home_score is null or m.away_score is null) = 0
+    ) sd on sd.season_id = ss.season_id
+    where ss.rnk = 1
+  ) w
+  where (p_user_id is null or w.user_id = p_user_id);
+
+  -- Sejr, podie og storsejr i en AFSLUTTET konkurrence.
+  drop table if exists _ms_final;
+  create temporary table _ms_final as
+  select p.competition_id, p.user_id, sum(p.pts)::int as pts,
+    rank() over (partition by p.competition_id
+                 order by sum(p.pts) desc,
+                          (count(*) filter (where p.pts = 3)) desc,
+                          (count(*) filter (where p.pts = 1)) desc,
+                          round(sum(p.goal_err)::numeric / count(*), 4) asc)::int as rnk
+  from public.competition_match_points p
+  join public.competition_status cs
+    on cs.competition_id = p.competition_id and cs.concluded
+  group by p.competition_id, p.user_id;
+
+  insert into _ms_new
+  select f.user_id, x.key, 'competition', x.tier, f.competition_id, null,
+         jsonb_build_object('league', c.name, 'points', f.pts, 'rank', f.rnk, 'total', sz.n)
+  from _ms_final f
+  join public.competitions c on c.id = f.competition_id
+  join (select competition_id, count(*)::int as n
+        from public.competition_participants group by competition_id) sz
+    on sz.competition_id = f.competition_id
+  cross join (values
+    ('COMP_FIRST_WIN',  1, 1, 2),   -- sejr i en konkurrence med mindst 2 deltagere
+    ('COMP_WIN_BIG_8',  3, 1, 8),   -- sejr i en konkurrence med mindst 8
+    ('COMP_PODIUM',     2, 3, 5)    -- podie kræver mindst 5, ellers er alle på podiet
+  ) x(key, tier, max_rnk, min_players)
+  where f.rnk <= x.max_rnk and sz.n >= x.min_players
+    and (p_user_id is null or f.user_id = p_user_id);
+
+  -- Comeback: vandt konkurrencen uden at have ligget nr. 1 i nogen runde før
+  -- den sidste. Katalogets dyreste regel — den kræver, at hele konkurrencens
+  -- rundevise stilling genopbygges, fordi rang pr. runde ikke gemmes noget sted.
+  --
+  -- BEMÆRK en kendt upræcished: en bruger uden tips i en given runde har ingen
+  -- række dér, og indgår derfor ikke i den rundes rangering. Det kan gøre en
+  -- mellemliggende førsteplads usynlig. Konsekvensen er konservativ i den
+  -- forkerte retning (milepælen kan uddeles lidt for let), men aldrig at en
+  -- ægte comeback-sejr overses.
+  --
+  -- YDELSE: rangene bygges ÉN GANG for alle afsluttede konkurrencer og lægges i
+  -- en temp-tabel. Første udgave havde genopbygningen som en korreleret
+  -- `not exists` pr. vinder-række, altså én fuld gennemregning af konkurrencens
+  -- historik pr. kandidat. Et skaleringsforsøg på en syntetisk fuld sæson
+  -- (sql/tests/story_engine_scale.sql) målte den til **726 ms af funktionens
+  -- 1087** — to tredjedele af hele milepæls-beregningen lå i denne ene regel.
+  drop table if exists _ms_lead;
+  create temporary table _ms_lead as
+  with per_round as (
+    select p.competition_id, p.user_id, p.round_key,
+           sum(p.pts) as rpts,
+           count(*) filter (where p.pts = 3) as rex,
+           count(*) filter (where p.pts = 1) as rout,
+           sum(p.goal_err) as rerr, count(*) as rm
+    from public.competition_match_points p
+    join public.competition_status cs
+      on cs.competition_id = p.competition_id and cs.concluded
+    group by p.competition_id, p.user_id, p.round_key
+  ),
+  cum as (
+    select competition_id, user_id, round_key,
+           sum(rpts) over w as pts, sum(rex) over w as ex,
+           sum(rout) over w as outc, sum(rerr) over w as err, sum(rm) over w as m
+    from per_round
+    window w as (partition by competition_id, user_id order by round_key
+                 rows between unbounded preceding and current row)
+  ),
+  ranked as (
+    select competition_id, user_id, round_key,
+           rank() over (partition by competition_id, round_key
+                        order by pts desc, ex desc, outc desc,
+                                 round(err::numeric / m, 4) asc) as rnk,
+           max(round_key) over (partition by competition_id) as last_round
+    from cum
+  )
+  -- Alle, der har ligget nr. 1 i en runde FØR den sidste. Er man ikke i denne
+  -- liste og vandt alligevel, er det per definition et comeback.
+  select distinct competition_id, user_id from ranked
+  where rnk = 1 and round_key < last_round;
+
+  -- GRÆNSERNE ER IKKE VALGFRIE. Uden dem uddeles milepælen for noget, der ikke
+  -- kan være sket: en konkurrence med ÉN runde har ingen "før sidste runde", så
+  -- `_ms_lead` er tom, `not exists` er sandt, og alle vindere fik et comeback.
+  -- Og man kan ikke komme bagfra mod ingen — reglen manglede helt den
+  -- deltagergrænse, alle de øvrige konkurrence-milepæle har.
+  --   ≥ 3 runder     : der skal være en historie at vende
+  --   ≥ 3 deltagere  : en føring skal betyde noget
+  insert into _ms_new
+  select f.user_id, 'COMP_COMEBACK', 'competition', 4, f.competition_id, null,
+         jsonb_build_object('league', c.name, 'points', f.pts, 'rounds', rc.n_rounds)
+  from _ms_final f
+  join public.competitions c on c.id = f.competition_id
+  join (select competition_id, count(*)::int as n
+        from public.competition_participants group by competition_id) sz
+    on sz.competition_id = f.competition_id and sz.n >= 3
+  join (select competition_id, count(distinct round_key)::int as n_rounds
+        from public.competition_match_points group by competition_id) rc
+    on rc.competition_id = f.competition_id and rc.n_rounds >= 3
+  where f.rnk = 1
+    and (p_user_id is null or f.user_id = p_user_id)
+    and not exists (
+      select 1 from _ms_lead ml
+      where ml.competition_id = f.competition_id and ml.user_id = f.user_id
+    );
+
+  -- ================= FAMILIE: community =================
+  insert into _ms_new
+  select g.created_by, 'FIRST_LEAGUE_CREATED', 'community', 1, null, null,
+         jsonb_build_object('league', g.name)
+  from public.groups g
+  where (p_user_id is null or g.created_by = p_user_id);
+
+  insert into _ms_new
+  select c.created_by, 'FIRST_COMPETITION_CREATED', 'community', 1, c.id, null,
+         jsonb_build_object('competition', c.name)
+  from public.competitions c
+  where (p_user_id is null or c.created_by = p_user_id);
+
+  -- Liga-vækst.
+  --
+  -- HVORFOR IKKE "5/10 venner tilmeldt via DIT link": den attribution findes
+  -- ikke i skemaet. groups.invite_code er ÉN kode pr. liga og ikke pr. bruger,
+  -- så koden kan ikke identificere afsenderen; hverken group_members eller
+  -- competition_participants har en invited_by-kolonne; og analytics_events er
+  -- erklæret lossy by design (sql/analytics_events.sql) og må aldrig bære noget,
+  -- en bruger kan bestride — hvilket en permanent bedrift per definition er.
+  -- Personlige invite-links er en selvstændig feature (se backloggens indbakke);
+  -- indtil da tæller vi det, der ER sandt: hvor mange der kom med i en liga, du
+  -- har oprettet. Det er en anden bedrift, og den hedder noget andet.
+  insert into _ms_new
+  select b.created_by, 'LEAGUE_GREW_' || t.tier, 'community', t.tier, null, null,
+         jsonb_build_object('members', b.n)
+  from (
+    select g.created_by, max(x.n)::int as n
+    from public.groups g
+    join lateral (
+      select count(*)::int as n from public.group_members gm
+      where gm.group_id = g.id and gm.user_id <> g.created_by
+    ) x on true
+    where (p_user_id is null or g.created_by = p_user_id)
+    group by g.created_by
+  ) b
+  cross join (values (5), (10)) t(tier)
+  where b.n >= t.tier;
+
+  -- Sæsoner deltaget i. Guard `>= 5` tips pr. sæson, så et strøtip ikke tæller.
+  --
+  -- TÆLLER FODBOLDSÆSONER, IKKE RÆKKER I `seasons`. Den fejl var live i to
+  -- dage: `seasons` har én række pr. TURNERING pr. år, så en bruger, der
+  -- tippede Superliga og Premier League i den samme sæson, fik "To sæsoner med"
+  -- efter en uge. Tabellens navn beskriver dens korn, ikke begrebet.
+  --
+  -- Sæsonåret udledes af kampens danske kickoff frem for af `seasons.name`:
+  -- navnet er leverandørens tekst ("2026/27" hos den ene, "2026/2027" hos den
+  -- anden), og to leverandører er allerede i drift. Måneden er skillelinjen —
+  -- en sæson løber juli→juni, så alt før juli hører til året før.
+  insert into _ms_new
+  select b.user_id, 'SEASONS_' || t.tier, 'community', t.tier, null, null,
+         jsonb_build_object('seasons', b.n)
+  from (
+    select user_id, count(*)::int as n
+    from (
+      select pr.user_id,
+             (case
+                when extract(month from m.kickoff_at at time zone 'Europe/Copenhagen') >= 7
+                then extract(year from m.kickoff_at at time zone 'Europe/Copenhagen')
+                else extract(year from m.kickoff_at at time zone 'Europe/Copenhagen') - 1
+              end)::int as season_year
+      from public.predictions pr
+      join public.matches m on m.id = pr.match_id
+      where pr.pred_home is not null and pr.pred_away is not null
+        and (p_user_id is null or pr.user_id = p_user_id)
+      group by 1, 2
+      having count(*) >= 5
+    ) s
+    group by user_id
+  ) b
+  cross join (values (2), (3)) t(tier)
+  where b.n >= t.tier;
+
+  -- ================= Skriv =================
+  -- `distinct on (user_id, key)` fordi flere blokke kan producere samme nøgle i
+  -- samme kørsel (fx to afsluttede konkurrencer, der begge giver COMP_PODIUM).
+  -- Den ÆLDSTE begivenhed vinder ikke her — vi har ingen tidsstempel pr.
+  -- kandidat — men rækken skrives kun én gang, og det er hele pointen.
+  with ins as (
+    insert into public.milestones
+      (user_id, key, family, tier, competition_id, round_key, payload)
+    select distinct on (user_id, key)
+           user_id, key, family, tier, competition_id, round_key, payload
+    from _ms_new
+    -- `user_id is not null` er et sikkerhedsnet, ikke en forventning: både
+    -- groups.created_by og competitions.created_by er NOT NULL med fremmednøgle,
+    -- så en null kan ikke opstå i dag. Filteret står her, fordi konsekvensen er
+    -- uforholdsmæssig — funktionen skriver ALLE brugeres milepæle i ét insert,
+    -- så én dårlig række afbryder hele batchen for alle, og den afbrydelse sker
+    -- TAVST bag matches-triggerens exception-guard. Ét filter på den fælles vej
+    -- ud dækker enhver kilde-blok, også dem der tilføjes senere.
+    where user_id is not null
+    order by user_id, key, tier desc
+    on conflict (user_id, key) do nothing
+    returning 1
+  )
+  select count(*)::int into v_n from ins;
+
+  drop table if exists _ms_new;
+  drop table if exists _ms_final;
+  drop table if exists _ms_lead;
+  return v_n;
+end;
+$$;
+
+
+--
 -- Name: career_profile(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1415,7 +1944,7 @@ begin
   --
   -- Før: ren stories-optælling af regel 40 (H2H_PASS) / 60 (STREAK). K3 valgte
   -- den som det billigste udgangspunkt og forudsagde selv problemet: "udvid hvis
-  -- den giver for få rivaler i små ligaer". Tragten var for smal — kun 2 af 14
+  -- den giver for få rivaler i små ligaer". Tragten var for smal — kun 2 af 16
   -- regler skriver et rival-navn, regel 40 kræver en overhaling i netop den
   -- runde og regel 60 en AKTUEL stime på ≥2 sejre, og begge har
   -- `distinct on (competition_id, user_id)`, så der gemmes ÉN rival pr.
@@ -1620,11 +2149,23 @@ begin
                          order by ms.total_points desc, ms.exact_count desc, ms.outcome_count desc,
                                   ms.round_wins desc, ms.avg_goal_error asc) as rnk
           from public.monthly_standings ms
+          -- Komplethedsjoinet er afgrænset til de OFFICIELLE turneringer (G62,
+          -- august 2026). Uden joinet grupperede den `public.matches` frit, mens
+          -- pointene ved siden af kommer fra `scope = 'ALL'`, som kun tæller
+          -- officielle — altså havde udløseren og indholdet forskellig
+          -- afgrænsning. Følgen var, at én uspillet skotsk kamp kunne
+          -- tilbageholde en global månedstitel, brugeren havde vundet på kampe,
+          -- der intet havde med Scotland at gøre. Titlen forsvandt ikke, den
+          -- blev bare aldrig vist, og der var intet sted at aflæse symptomet.
+          -- Samme fejlklasse som G9/G10; by_tournament nedenfor gjorde det
+          -- rigtigt fra dag ét, de tre samlede grene blev bare ikke rettet med.
           join (
-            select to_char(date_trunc('month', kickoff_at), 'YYYY-MM') as month
-            from public.matches
+            select to_char(date_trunc('month', m.kickoff_at), 'YYYY-MM') as month
+            from public.matches m
+            join public.seasons s on s.id = m.season_id
+            join public.leagues l on l.id = s.league_id and l.is_official
             group by 1
-            having bool_and(home_score is not null and away_score is not null)
+            having bool_and(m.home_score is not null and m.away_score is not null)
           ) mc on mc.month = ms.month
           where ms.scope = 'ALL'
         ) mw
@@ -1672,13 +2213,18 @@ begin
                          order by rs.total_points desc, rs.exact_count desc, rs.outcome_count desc,
                                   rs.avg_goal_error asc) as rnk
           from public.round_standings rs
+          -- Kun officielle turneringer afgør, om runden er færdig (G62) — samme
+          -- begrundelse som ved månedstitlen ovenfor: udløseren skal have samme
+          -- afgrænsning som det, den udløser, og pointene kommer fra scope 'ALL'.
           join (
-            select round_key
-            from public.matches
-            group by round_key
-            having bool_and(home_score is not null and away_score is not null)
+            select m.round_key
+            from public.matches m
+            join public.seasons s on s.id = m.season_id
+            join public.leagues l on l.id = s.league_id and l.is_official
+            group by m.round_key
+            having bool_and(m.home_score is not null and m.away_score is not null)
           ) rc on rc.round_key = rs.round_key
-          -- Kun den SAMLEDE rundeliga. round_standings har siden
+          -- Kun den SAMLEDE rundechampionship. round_standings har siden
           -- sql/tournament_scope.sql også en række pr. turnering, og uden dette
           -- filter ville én rundesejr tælle to gange (samlet + i sin turnering).
           -- Per-turnering-titler hører til i titles.by_tournament, ikke her.
@@ -1689,7 +2235,7 @@ begin
 
       -- ---------- Per-turnering-titler (K2, 31. juli 2026) ----------
       -- Championship kårer på to niveauer (sql/tournament_scope.sql). Grenene
-      -- ovenfor er og forbliver KUN de samlede, så "Månedens Prediction Champ ×5"
+      -- ovenfor er og forbliver KUN de samlede, så "Månedens Champion ×5"
       -- betyder det samme før og efter turnering #3 — et karrieretal, hvis
       -- betydning skifter, når produktet vokser, kan ikke sammenlignes med sig
       -- selv. Per-turnering-sejre tælles derfor med, men i deres egen gren, som
@@ -1814,18 +2360,24 @@ begin
           -- Feltstørrelsen for runden: hvor mange spillere placeringen blev sat imod.
           -- "8. plads" alene siger intet om, hvor stærk præstationen var — og var
           -- netop den linje, en bruger læste som en placering i én af sine EGNE
-          -- konkurrencer (30. juli 2026). Rundeligaen er global, så feltet er
+          -- konkurrencer (30. juli 2026). Rundechampionshippet er global, så feltet er
           -- alle brugere med mindst ét scoret tip i runden — samme kreds som
-          -- Championship-fanens rundeliga viser.
+          -- Championship-fanens rundechampionship viser.
           count(*) over (partition by rs.round_key) as field
         from public.round_standings rs
+        -- Kun officielle turneringer afgør, om runden er færdig (G62) — samme
+        -- begrundelse som ved titlerne ovenfor. Her koster skævheden en
+        -- REKORD: "din bedste runde nogensinde" ville springe en runde over,
+        -- hvor en uofficiel turnering havde en uspillet kamp.
         join (
-          select round_key
-          from public.matches
-          group by round_key
-          having bool_and(home_score is not null and away_score is not null)
+          select m.round_key
+          from public.matches m
+          join public.seasons s on s.id = m.season_id
+          join public.leagues l on l.id = s.league_id and l.is_official
+          group by m.round_key
+          having bool_and(m.home_score is not null and m.away_score is not null)
         ) rc on rc.round_key = rs.round_key
-        -- Kun den samlede rundeliga (sql/tournament_scope.sql). Uden filteret
+        -- Kun den samlede rundechampionship (sql/tournament_scope.sql). Uden filteret
         -- ville feltstørrelsen tælle hver spiller én gang pr. turnering, og
         -- "4. plads af 31" blive til "af 62".
         where rs.scope = 'ALL'
@@ -1933,6 +2485,367 @@ $$;
 
 
 --
+-- Name: generate_daily_stories(date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.generate_daily_stories(p_day date) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  -- TYPER: p_day, match_day, round_key, stories.day_key = date.
+  --        stories.round_key = TEXT. v_round_text findes udelukkende for at
+  --        gøre den ene nødvendige konvertering synlig ét sted.
+  v_round      date := public.round_key_of_date(p_day);
+  v_round_text text := v_round::text;
+  v_daylabel   text := to_char(p_day, 'DD.MM');
+  v_max_cards  int  := 2;   -- spec'ens loft
+begin
+  -- Idempotens: KUN dagens dag-kort. `period = 'day'` er ikke pynt — uden det
+  -- ville en gen-kørsel slette rundens afsluttende kort. Symmetrisk sletter
+  -- generate_stories() kun `period = 'round'`.
+  delete from public.stories where period = 'day' and day_key = p_day;
+
+  -- ---------- fakta ----------
+  drop table if exists _sd_pts;
+  create temporary table _sd_pts as
+  select * from public.competition_match_points where match_day <= p_day;
+  create index on _sd_pts (competition_id, user_id);
+  create index on _sd_pts (competition_id, match_id);
+
+  drop table if exists _sd_size;
+  create temporary table _sd_size as
+  select competition_id, count(*)::int as n
+  from public.competition_participants group by competition_id;
+
+  drop table if exists _sd_today;
+  create temporary table _sd_today as
+  select competition_id, user_id,
+         sum(pts)::int                               as pts,
+         count(*)::int                               as matches,
+         (count(*) filter (where pts = 3))::int      as exact_count,
+         (count(*) filter (where pts = 1))::int      as outcome_count,
+         (count(*) filter (where goal_err = 1))::int as near_misses
+  from _sd_pts where match_day = p_day
+  group by competition_id, user_id;
+
+  -- Kumulativ stilling EFTER og FØR dagen, med HELE tiebreaker-stigen (point →
+  -- præcise → udfald → målafvigelse) — identisk med sql/tournament_scope.sql,
+  -- src/lib/standings.js og generate_stories. Ingen parallel stige: to steder i
+  -- produktet må ikke svare forskelligt på samme spørgsmål (K3).
+  drop table if exists _sd_after;
+  create temporary table _sd_after as
+  select competition_id, user_id, sum(pts)::int as pts,
+    rank() over (partition by competition_id
+                 order by sum(pts) desc,
+                          (count(*) filter (where pts = 3)) desc,
+                          (count(*) filter (where pts = 1)) desc,
+                          round(sum(goal_err)::numeric / count(*), 4) asc)::int as rnk
+  from _sd_pts group by competition_id, user_id;
+
+  drop table if exists _sd_before;
+  create temporary table _sd_before as
+  select competition_id, user_id, sum(pts)::int as pts,
+    rank() over (partition by competition_id
+                 order by sum(pts) desc,
+                          (count(*) filter (where pts = 3)) desc,
+                          (count(*) filter (where pts = 1)) desc,
+                          round(sum(goal_err)::numeric / count(*), 4) asc)::int as rnk
+  from _sd_pts where match_day < p_day group by competition_id, user_id;
+
+  drop table if exists _sd_cand;
+  create temporary table _sd_cand (
+    user_id uuid, competition_id uuid, rule text, priority int,
+    league_size int, payload jsonb, headline text, body text
+  );
+
+  -- ======== 110 · Dagens facit ========
+  -- Ankeret. Udløses, når du har haft mindst ét scoret tip i dag, og optager
+  -- derfor reelt altid plads 1 — "max 2" læses i praksis som *facit + dagens
+  -- højdepunkt*, hvilket er hensigten.
+  --
+  -- TONEREGLEN ("driller, ydmyger aldrig"): placeringen nævnes KUN i den
+  -- øverste halvdel af tabellen. Nederst står afstanden op til toppen og en
+  -- fremadrettet slutning — aldrig "du er nr. 9 af 10".
+  insert into _sd_cand
+  select t.user_id, t.competition_id, 'DAY_RESULT', 110, sz.n,
+    jsonb_build_object('points', t.pts, 'matches', t.matches, 'exact', t.exact_count,
+                       'rank', a.rnk, 'total', sz.n, 'moved', coalesce(b.rnk - a.rnk, 0),
+                       'gap', top.pts - a.pts, 'league', c.name),
+    '📋 Dagens facit: ' || t.pts || ' point',
+    t.matches || case when t.matches = 1 then ' kamp' else ' kampe' end ||
+      ' i ' || c.name ||
+      case when t.exact_count > 0
+           then ' — ' || t.exact_count || case when t.exact_count = 1 then ' præcis.' else ' præcise.' end
+           else '.' end ||
+      case
+        when b.rnk is not null and b.rnk > a.rnk
+          then ' Du rykkede fra nr. ' || b.rnk || ' til nr. ' || a.rnk || '.'
+        when a.rnk * 2 <= sz.n
+          then ' Du ligger nr. ' || a.rnk || ' af ' || sz.n || '.'
+        when (top.pts - a.pts) > 0
+          then ' Toppen er ' || (top.pts - a.pts) || ' point væk.'
+        else ''
+      end
+  from _sd_today t
+  join _sd_size sz on sz.competition_id = t.competition_id
+  join public.competitions c on c.id = t.competition_id
+  join _sd_after a on a.competition_id = t.competition_id and a.user_id = t.user_id
+  left join _sd_before b on b.competition_id = t.competition_id and b.user_id = t.user_id
+  join lateral (select pts from _sd_after a2
+                where a2.competition_id = t.competition_id and a2.rnk = 1
+                order by a2.user_id limit 1) top on true
+  where t.matches >= 1;
+
+  -- ======== 120 · Kontrarian ========
+  -- Præcis ÉN deltager ramte udfaldet — blandt mindst fire, der tippede kampen.
+  -- Tærsklen er hele reglen: i en 3-mands konkurrence er "den eneste" støj.
+  insert into _sd_cand
+  select w.user_id, w.competition_id, 'CONTRARIAN', 120, sz.n,
+    jsonb_build_object('team', w.pick, 'home', w.home, 'away', w.away,
+                       'score', w.hs || '-' || w.away_s, 'others', w.n_pred - 1,
+                       'points', w.pts, 'draw', w.is_draw, 'league', c.name),
+    case when w.is_draw
+         then '🧠 Du var den eneste, der troede på uafgjort i ' || w.home || '–' || w.away
+         else '🧠 Du var den eneste, der troede på ' || w.pick end,
+    'I ' || c.name || ' havde ' || (w.n_pred - 1) ||
+      case when w.n_pred - 1 = 1 then ' anden' else ' andre' end ||
+      ' tippet imod. Det endte ' || w.home || ' ' || w.hs || '-' || w.away_s || ' ' || w.away ||
+      ' — ' || w.pts || ' point til dig.'
+  from (
+    select p.competition_id, p.match_id, p.user_id, p.pts,
+           m.home_score as hs, m.away_score as away_s,
+           th.name as home, ta.name as away,
+           (m.home_score = m.away_score) as is_draw,
+           case when m.home_score > m.away_score then th.name
+                when m.home_score < m.away_score then ta.name
+                else 'uafgjort' end as pick,
+           -- SKALAR SUBQUERY, ikke `count(*) over (partition by ...)`:
+           -- vinduesfunktioner beregnes EFTER where-klausulen, og da den
+           -- filtrerer til `pts >= 1`, ville vinduet tælle netop de træffere,
+           -- vi allerede ved der kun er én af — n_pred blev 1 og tærsklen
+           -- `>= 4` kunne aldrig opfyldes. Reglen udløste dermed aldrig.
+           (select count(*) from _sd_pts q2
+            where q2.competition_id = p.competition_id and q2.match_id = p.match_id) as n_pred
+    from _sd_pts p
+    join public.matches m on m.id = p.match_id
+    join public.teams th on th.id = m.home_team_id
+    join public.teams ta on ta.id = m.away_team_id
+    where p.match_day = p_day and p.pts >= 1
+      and 1 = (select count(*) from _sd_pts q
+               where q.competition_id = p.competition_id
+                 and q.match_id = p.match_id and q.pts >= 1)
+  ) w
+  join _sd_size sz on sz.competition_id = w.competition_id
+  join public.competitions c on c.id = w.competition_id
+  where w.n_pred >= 4;
+
+  -- ======== 125 · Kollektiv fiasko ========
+  -- `distinct on` er bærende: uden det giver en dårlig dag fire ens kort pr.
+  -- bruger, som fylder hele max-2-loftet med dubletter.
+  insert into _sd_cand
+  select distinct on (p.competition_id, p.user_id)
+    p.user_id, p.competition_id, 'COLLECTIVE_MISS', 125, sz.n,
+    jsonb_build_object('home', th.name, 'away', ta.name,
+                       'score', m.home_score || '-' || m.away_score,
+                       'n', (select count(*) from _sd_pts q
+                             where q.competition_id = p.competition_id and q.match_id = p.match_id),
+                       'league', c.name),
+    '🙈 Ingen ramte ' || th.name || '–' || ta.name,
+    (select count(*) from _sd_pts q
+     where q.competition_id = p.competition_id and q.match_id = p.match_id) ||
+      ' tippede kampen i ' || c.name || '. Den endte ' ||
+      m.home_score || '-' || m.away_score || ' — og ingen havde den.'
+  from _sd_pts p
+  join public.matches m on m.id = p.match_id
+  join public.teams th on th.id = m.home_team_id
+  join public.teams ta on ta.id = m.away_team_id
+  join _sd_size sz on sz.competition_id = p.competition_id
+  join public.competitions c on c.id = p.competition_id
+  where p.match_day = p_day
+    and 4 <= (select count(*) from _sd_pts q
+              where q.competition_id = p.competition_id and q.match_id = p.match_id)
+    and 0 = (select count(*) from _sd_pts q
+             where q.competition_id = p.competition_id and q.match_id = p.match_id and q.pts >= 1)
+  order by p.competition_id, p.user_id, p.match_id;
+
+  -- ======== 130 · Dagens højeste ========
+  -- Vinder-sættet skal være MINDRE end feltet — ellers kåres alle på en dag,
+  -- hvor samtlige deltagere fik det samme.
+  insert into _sd_cand
+  select w.user_id, w.competition_id, 'DAY_TOP', 130, sz.n,
+    jsonb_build_object('points', w.pts, 'exact', w.exact_count,
+                       'shared', w.n_top > 1, 'others', w.n_top - 1, 'league', c.name),
+    '🔝 Du fik dagens højeste i ' || c.name,
+    w.pts || ' point — flest af alle i ' || c.name || ' den ' || v_daylabel ||
+      case when w.n_top > 2 then ' (delt med ' || (w.n_top - 1) || ' andre).'
+           when w.n_top = 2 then ' (delt med 1 anden).'
+           else '.' end
+  from (
+    select competition_id, user_id, pts, exact_count,
+           count(*) over (partition by competition_id) as n_top,
+           n_played
+    from (
+      select competition_id, user_id, pts, exact_count,
+             rank() over (partition by competition_id
+                          order by pts desc, exact_count desc, outcome_count desc) as rnk,
+             count(*) over (partition by competition_id) as n_played
+      from _sd_today where matches >= 2
+    ) r where r.rnk = 1
+  ) w
+  join _sd_size sz on sz.competition_id = w.competition_id and sz.n >= 3
+  join public.competitions c on c.id = w.competition_id
+  where w.pts > 0 and w.n_top < w.n_played;
+
+  -- ======== 140 · Stime-status (global) ========
+  -- Katalogets DYRE regel: fuld historik-scanning med to vinduesfunktioner.
+  -- Beregnes derfor ÉN gang globalt (competition_id null) og ikke pr.
+  -- konkurrence. Er generate_daily_stories nogensinde for langsom, er det den
+  -- her, der ryger først.
+  --
+  -- Den fyrer KUN, når stimen blev forlænget i dag eller brudt i dag. Uden den
+  -- betingelse ville den udløses hver eneste dag, stimen lever.
+  insert into _sd_cand
+  select s.user_id, null, 'STREAK_STATUS', 140, null,
+    jsonb_build_object('n', s.len, 'alive', s.alive),
+    case when s.alive then '🔥 ' || s.len || ' kampe i træk med point'
+         else '💤 Din stime stoppede ved ' || s.len end,
+    case when s.alive
+         then 'Du har fået point i ' || s.len || ' kampe i træk. Stimen lever efter den ' || v_daylabel || '.'
+         else 'Efter ' || s.len || ' kampe i træk med point brød stimen den ' || v_daylabel || '. En ny begynder i morgen.'
+    end
+  from (
+    with hist as (
+      select pr.user_id, m.kickoff_at, m.match_day, m.id as match_id,
+             (public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) >= 1) as hit
+      from public.predictions pr
+      join public.matches m on m.id = pr.match_id
+      join public.seasons s on s.id = m.season_id
+      join public.leagues l on l.id = s.league_id and l.is_official
+      where m.home_score is not null and m.away_score is not null
+        and pr.pred_home is not null and pr.pred_away is not null
+        and m.match_day <= p_day
+    ),
+    grp as (
+      select *,
+        row_number() over (partition by user_id order by kickoff_at, match_id)
+        - row_number() over (partition by user_id, hit order by kickoff_at, match_id) as g
+      from hist
+    ),
+    runs as (
+      select user_id, hit, g, count(*)::int as len,
+             max(match_day) as ended_day,
+             max(kickoff_at) as run_last,
+             max(max(kickoff_at)) over (partition by user_id) as last_kick
+      from grp group by user_id, hit, g
+    )
+    select user_id, len, (run_last = last_kick) as alive
+    from runs
+    where hit and len >= 5 and ended_day = p_day
+  ) s;
+
+  -- ======== 150 · Duel ========
+  -- `is distinct from` på afstanden er HELE reglen. Uden den fyrer duellen hver
+  -- eneste dag med identisk tekst for alle i den øverste halvdel.
+  -- Nærmeste rival OVER dig; fører du, er det den nærmeste under.
+  insert into _sd_cand
+  with lad as (
+    select a.competition_id, a.user_id, a.pts,
+           lag(a.user_id)  over w as above_id, lag(a.pts)  over w as above_pts,
+           lead(a.user_id) over w as below_id, lead(a.pts) over w as below_pts
+    from _sd_after a
+    window w as (partition by a.competition_id order by a.rnk, a.user_id)
+  ),
+  pick as (
+    select competition_id, user_id, pts,
+           coalesce(above_id, below_id) as rival_id,
+           (above_id is not null)       as is_above,
+           case when above_id is not null then above_pts - pts
+                else pts - below_pts end as gap
+    from lad
+    where coalesce(above_id, below_id) is not null
+  ),
+  duel as (
+    -- Afstanden FØR dagen mellem de samme to personer. Er den uændret, er der
+    -- ikke sket noget i dag, og så er der ingen historie.
+    -- prev_gap = null (en af de to havde ingen point før i dag) tæller som
+    -- "ændret" — det er netop dagen, duellen opstod.
+    select p.*,
+           case when p.is_above then br.pts - bu.pts else bu.pts - br.pts end as prev_gap
+    from pick p
+    left join _sd_before bu on bu.competition_id = p.competition_id and bu.user_id = p.user_id
+    left join _sd_before br on br.competition_id = p.competition_id and br.user_id = p.rival_id
+  )
+  select d.user_id, d.competition_id, 'DUEL', 150, sz.n,
+    jsonb_build_object('rival', pr.display_name, 'gap', d.gap,
+                       'above', d.is_above, 'league', c.name),
+    case when d.is_above
+         then '⚔️ Kun ' || d.gap || ' point op til ' || pr.display_name
+         else '⚔️ ' || pr.display_name || ' er ' || d.gap || ' point efter dig' end,
+    case when d.is_above
+         then 'Efter den ' || v_daylabel || ' er der ' || d.gap || ' point op til ' ||
+              pr.display_name || ' i ' || c.name || '.'
+         else 'Du fører ' || c.name || ' med ' || d.gap || ' point ned til ' ||
+              pr.display_name || ' efter den ' || v_daylabel || '.' end
+  from duel d
+  join _sd_size sz on sz.competition_id = d.competition_id and sz.n >= 3
+  join public.competitions c on c.id = d.competition_id
+  join public.profiles pr on pr.id = d.rival_id
+  where d.gap between 1 and 3
+    and d.gap is distinct from d.prev_gap;
+
+  -- ======== 160 · Så tæt på ========
+  -- goal_err = 1 er ~⅓ af alle tips, så ét nærmiss er ikke en historie. To er.
+  insert into _sd_cand
+  select t.user_id, t.competition_id, 'SO_CLOSE', 160, sz.n,
+    jsonb_build_object('n', t.near_misses, 'league', c.name),
+    '😤 Ét mål fra ' || t.near_misses || ' eksakte',
+    t.near_misses || ' af dine tips i ' || c.name || ' den ' || v_daylabel ||
+      ' ramte målscoren på ét mål nær.'
+  from _sd_today t
+  join _sd_size sz on sz.competition_id = t.competition_id
+  join public.competitions c on c.id = t.competition_id
+  where t.near_misses >= 2;
+
+  -- ---------- loftet ----------
+  -- TO snit, og rækkefølgen betyder noget:
+  --   1) højst ÉT kort pr. regel pr. bruger — ellers ville en bruger med tre
+  --      konkurrencer få to DAY_RESULT-kort og intet andet, og karusellen
+  --      mistede sin variation. Vinderen er den største liga.
+  --   2) derefter højst v_max_cards kort i alt.
+  -- Tiebreaket er det samme som latest_story-viewets, så to kandidater fra samme
+  -- regel i to ligaer altid vælges deterministisk.
+  insert into public.stories
+    (round_key, day_key, period, user_id, competition_id, rule, priority,
+     league_size, payload, headline, body)
+  select v_round_text, p_day, 'day', c.user_id, c.competition_id, c.rule,
+         c.priority, c.league_size,
+         c.payload || jsonb_build_object('day', v_daylabel, 'day_key', p_day),
+         c.headline, c.body
+  from (
+    select *, row_number() over (
+      partition by user_id
+      order by priority asc, league_size desc nulls last, competition_id asc nulls last
+    ) as rn
+    from (
+      select distinct on (user_id, rule) *
+      from _sd_cand
+      order by user_id, rule, league_size desc nulls last, competition_id asc nulls last
+    ) one_per_rule
+  ) c
+  where c.rn <= v_max_cards;
+
+  drop table if exists _sd_pts;
+  drop table if exists _sd_size;
+  drop table if exists _sd_today;
+  drop table if exists _sd_after;
+  drop table if exists _sd_before;
+  drop table if exists _sd_cand;
+end;
+$$;
+
+
+--
 -- Name: generate_stories(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1959,8 +2872,11 @@ declare
   v_round date := p_round_key::date;
   months text[] := array['januar','februar','marts','april','maj','juni','juli','august','september','oktober','november','december'];
 begin
-  -- idempotent: fjern rundens historier og genberegn (stories.round_key er text)
-  delete from public.stories where round_key = p_round_key;
+  -- Idempotent: fjern rundens historier og genberegn (stories.round_key er text).
+  -- `period = 'round'` ER IKKE VALGFRI (v2). Dagskortene bærer samme round_key,
+  -- fordi karusellen grupperer på runden — uden filteret ville hver
+  -- resultatændring i en færdig runde tørre ugens dagskort væk.
+  delete from public.stories where round_key = p_round_key and period = 'round';
 
   v_label := to_char(v_round, 'DD.MM') || ' – ' || to_char(v_round + 6, 'DD.MM');
 
@@ -1972,30 +2888,20 @@ begin
   -- `round_won` = nr. 1 i runden efter stigen uden rundesejr-trinnet; delt sejr
   -- tæller for alle, hvilket regel 70 nedenfor bruger direkte.
   --
-  -- DELTAGER-AFGRÆNSNINGEN ER IKKE VALGFRI. `predictions` er global pr. (bruger,
-  -- kamp) — den ved intet om konkurrencer. Uden joinet til competition_participants
-  -- tælles ENHVER, der har tippet den samme kamp i en anden konkurrence, med i
-  -- denne konkurrences stilling. To konkurrencer på samme turnering deler alle
-  -- deres kampe, så det er reglen, ikke undtagelsen. Konsekvenserne var alvorlige:
-  -- en fremmed kunne stå som rundens vinder i en konkurrence, vedkommende ikke
-  -- deltager i, rangnumre kunne overstige league_size ("nr. 9 af 8"), og en
-  -- historie kunne nævne en person ved navn, som brugeren aldrig har mødt.
-  -- Appens egen stilling (computeCompetitionState i src/lib/data.js) har altid
-  -- bygget på deltagerlisten — denne join er det, der gør de to enige.
+  -- Grundlaget er viewet competition_match_points (sql/story_engine_v2_day.sql),
+  -- som dagsmotoren læser fra det samme sted. Viewet BÆRER deltager-
+  -- afgrænsningen, og den er ikke valgfri: `predictions` er global pr. (bruger,
+  -- kamp) og ved intet om konkurrencer, så uden joinet til
+  -- competition_participants tælles enhver, der har tippet samme kamp i en anden
+  -- konkurrence, med her (§11 — "nr. 9 af 8" og historier om fremmede).
+  -- Udtrykket stod tidligere inline netop her; det bor nu ét sted, så de to
+  -- motorer ikke kan drive fra hinanden.
   drop table if exists _se_rp;
   create temporary table _se_rp as
   with scored as (
-    select cm.competition_id, pr.user_id, m.round_key,
-      public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) as pts,
-      abs(pr.pred_home - m.home_score) + abs(pr.pred_away - m.away_score) as goal_err
-    from public.competition_matches cm
-    join public.matches m on m.id = cm.match_id
-    join public.predictions pr on pr.match_id = m.id
-    join public.competition_participants cp
-      on cp.competition_id = cm.competition_id and cp.user_id = pr.user_id
-    where m.home_score is not null and m.away_score is not null
-      and pr.pred_home is not null and pr.pred_away is not null
-      and m.round_key <= v_round
+    select competition_id, user_id, round_key, pts, goal_err
+    from public.competition_match_points
+    where round_key <= v_round
   ),
   agg as (
     select competition_id, user_id, round_key,
@@ -2312,7 +3218,7 @@ begin
   where rh.scope = 'ALL' and rh.round_key = p_round_key
     and prev.old is not null and rh.rating_after > prev.old;
 
-  -- ======== Regel 10 · Månedens Champ (global, når runden lukker måneden) ========
+  -- ======== Regel 10 · Månedens Champion (global, når runden lukker måneden) ========
   v_month := to_char(v_round, 'YYYY-MM');
   v_month_name := months[cast(to_char(v_round, 'MM') as int)];
   select not exists (
@@ -2331,7 +3237,7 @@ begin
                          'gap', w.total_points - coalesce(sec.total_points, w.total_points),
                          'shared', w.n_top > 1),
       '👑 Du er ' || case when w.n_top > 1 then 'delt ' else '' end
-        || 'Månedens Prediction Champ — ' || v_month_name,
+        || 'Månedens Champion — ' || v_month_name,
       w.total_points || ' point — flest af alle i ' || v_month_name ||
         case when w.n_top > 1 then ' (delt).' else '.' end ||
         case when sec.total_points is not null and sec.total_points < w.total_points
@@ -2365,7 +3271,7 @@ begin
   --
   -- Prioritet 15 ligger mellem den globale månedstitel (10) og en overtaget
   -- førsteplads (20): en lokal månedstitel er større end alt, hvad en enkelt
-  -- runde kan producere, men mindre end at være Månedens Prediction Champ.
+  -- runde kan producere, men mindre end at være Månedens Champion.
   v_prev_month := to_char(v_round - 7, 'YYYY-MM');
   if v_prev_month <> to_char(v_round, 'YYYY-MM') then
     v_prev_month_name := months[cast(substring(v_prev_month from 6 for 2) as int)];
@@ -2399,7 +3305,7 @@ begin
     'Du ramte ' || rs.exact_count || ' kampe præcist i runden ' || v_label ||
       ' — ' || rs.total_points || ' point i alt.'
   from public.round_standings rs
-  -- Kun den samlede rundeliga (sql/tournament_scope.sql). Uden scope-filteret
+  -- Kun den samlede rundechampionship (sql/tournament_scope.sql). Uden scope-filteret
   -- ville hver bruger få ét SHARP-kort pr. turnering med hver sit tal.
   where rs.round_key = v_round and rs.scope = 'ALL' and rs.exact_count >= 2;
 
@@ -2430,8 +3336,11 @@ begin
   join lateral (select pts from _se_after a2 where a2.competition_id = t.competition_id and a2.rnk = 1
                 order by a2.user_id limit 1) top on true
   where not exists (
+    -- Kun RUNDE-kort tæller (v2). Et dagskort er ikke rundens historie, så det
+    -- må ikke gøre en ellers stille runde tavs — det ville tage det dæmpede
+    -- kort fra netop de brugere, v1.1 indførte tieret for.
     select 1 from public.stories s
-    where s.round_key = p_round_key and s.user_id = t.user_id
+    where s.round_key = p_round_key and s.user_id = t.user_id and s.period = 'round'
   )
   order by t.user_id, sz.n desc, t.competition_id asc;
 
@@ -2476,6 +3385,54 @@ $$;
 
 
 --
+-- Name: generate_stories_catchup(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.generate_stories_catchup(p_grace integer DEFAULT 2) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_today date := public.match_day(now());
+  v_n int := 0;
+  d date;
+  r date;
+begin
+  -- Dage med spillede kampe, uden ét eneste dag-kort, ældre end grace-vinduet.
+  for d in
+    select distinct m.match_day
+    from public.matches m
+    where m.match_day < v_today - p_grace
+      and m.home_score is not null and m.away_score is not null
+      and not exists (select 1 from public.stories s
+                      where s.period = 'day' and s.day_key = m.match_day)
+    order by 1
+  loop
+    perform public.generate_daily_stories(d);
+    v_n := v_n + 1;
+  end loop;
+
+  -- Runder, hvis vindue er lukket (tirsdag + 7 dage) og som mangler
+  -- afslutningskortet. round_key er date her og text i stories — derfor ::text.
+  for r in
+    select distinct m.round_key
+    from public.matches m
+    where m.round_key < v_today - 7 - p_grace
+      and m.home_score is not null and m.away_score is not null
+      and not exists (select 1 from public.stories s
+                      where s.period = 'round' and s.round_key = m.round_key::text)
+    order by 1
+  loop
+    perform public.generate_stories(r::text);
+    v_n := v_n + 1;
+  end loop;
+
+  return v_n;
+end;
+$$;
+
+
+--
 -- Name: is_group_admin(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2502,6 +3459,34 @@ CREATE FUNCTION public.is_group_member(gid uuid) RETURNS boolean
     select 1 from public.group_members
     where group_id = gid and user_id = auth.uid()
   );
+$$;
+
+
+--
+-- Name: match_day(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.match_day(ts timestamp with time zone) RETURNS date
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  -- G11-reglen: `timezone(text, timestamptz)` er IMMUTABLE; det er casten
+  -- timestamptz::date, der er STABLE. Derfor `at time zone` FØR castet.
+  select (ts at time zone 'Europe/Copenhagen')::date;
+$$;
+
+
+--
+-- Name: match_day_complete(date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.match_day_complete(p_day date) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  select exists (select 1 from public.matches where match_day = p_day)
+     and not exists (
+       select 1 from public.matches
+       where match_day = p_day and (home_score is null or away_score is null)
+     );
 $$;
 
 
@@ -2729,14 +3714,16 @@ CREATE FUNCTION public.recompute_ratings_if_scores_changed() RETURNS trigger
     SET search_path TO 'public'
     AS $$
 declare
-  -- date, ikke text: matches.round_key er en genereret date-kolonne, og Postgres
-  -- har ingen `date = text`-operator. Med text her fejlede opslaget nedenfor
-  -- (m.round_key = v_round) inde i exception-guarden — altså tavst, hvorved
-  -- generate_stories aldrig blev kaldt. generate_stories tager text og får
-  -- derfor et eksplicit ::text.
+  -- date, ikke text: matches.round_key og matches.match_day er genererede
+  -- date-kolonner, og Postgres har ingen `date = text`-operator. Med text her
+  -- fejlede opslaget nedenfor (m.round_key = v_round) inde i exception-guarden
+  -- — altså tavst, hvorved generate_stories aldrig blev kaldt.
+  -- generate_stories tager text og får derfor et eksplicit ::text;
+  -- generate_daily_stories tager date og får ingen cast.
   v_round date;
+  v_day   date;
 begin
-  -- saml berørte round_keys, afhængigt af operationen (kun når et resultat reelt ændres)
+  -- ============ 1. Rating-porten: KUN ægte resultatændringer ============
   drop table if exists _se_changed_rounds;
   create temporary table _se_changed_rounds (round_key date);
 
@@ -2756,13 +3743,70 @@ begin
       where (home_score is not null or away_score is not null) and round_key is not null;
   end if;
 
+  -- ============ 2. Historie-porten: resultater ELLER flytninger ============
+  -- Bredere end rating-porten, og det er med vilje. En udsat kamp, der flytter
+  -- UD af en dag eller en runde, kan GØRE den dag/runde færdig, uden at ét
+  -- eneste resultat er ændret — v1 så aldrig det øjeblik. Rating er derimod
+  -- uberørt af flytningen (kampen havde ingen score), så den må ikke trække en
+  -- fuld Elo-genberegning med sig. Derfor to porte.
+  drop table if exists _se_story_days;
+  drop table if exists _se_story_rounds;
+  create temporary table _se_story_days (day_key date);
+  create temporary table _se_story_rounds (round_key date);
+
+  if tg_op = 'INSERT' then
+    insert into _se_story_days   select distinct match_day from new_rows where match_day is not null;
+    insert into _se_story_rounds select distinct round_key from new_rows where round_key is not null;
+  elsif tg_op = 'UPDATE' then
+    -- Både den NYE og den GAMLE dag/runde skal med ved en flytning: den gamle
+    -- kan nu være komplet, fordi kampen forlod den.
+    insert into _se_story_days
+      select distinct d from (
+        select n.match_day as d from new_rows n join old_rows o on o.id = n.id
+         where n.home_score is distinct from o.home_score
+            or n.away_score is distinct from o.away_score
+            or n.match_day  is distinct from o.match_day
+        union all
+        select o.match_day from new_rows n join old_rows o on o.id = n.id
+         where n.match_day is distinct from o.match_day
+      ) x where d is not null;
+    insert into _se_story_rounds
+      select distinct r from (
+        select n.round_key as r from new_rows n join old_rows o on o.id = n.id
+         where n.home_score is distinct from o.home_score
+            or n.away_score is distinct from o.away_score
+            or n.round_key  is distinct from o.round_key
+        union all
+        select o.round_key from new_rows n join old_rows o on o.id = n.id
+         where n.round_key is distinct from o.round_key
+      ) x where r is not null;
+  elsif tg_op = 'DELETE' then
+    insert into _se_story_days   select distinct match_day from old_rows where match_day is not null;
+    insert into _se_story_rounds select distinct round_key from old_rows where round_key is not null;
+  end if;
+
+  -- ============ 3. Rating ============
   if exists (select 1 from _se_changed_rounds) then
     perform public.recompute_ratings();
+  end if;
 
-    -- historier for berørte, nu fuldt afsluttede runder — best-effort, må aldrig
-    -- kunne blokere resultat-lagring/rating (derfor exception-guarden).
+  -- ============ 4. Historier og milepæle — best-effort ============
+  -- Må ALDRIG kunne blokere resultat-lagring eller rating (derfor guarden).
+  if exists (select 1 from _se_story_days) or exists (select 1 from _se_story_rounds) then
     begin
-      for v_round in (select distinct round_key from _se_changed_rounds) loop
+      -- DAGE FØRST og i kronologisk orden: en dags kort må ikke lande efter
+      -- rundens afsluttende kort, og karusellen læses i samme retning.
+      for v_day in (select distinct day_key from _se_story_days order by 1) loop
+        if public.match_day_complete(v_day) then
+          perform public.generate_daily_stories(v_day);
+        end if;
+      end loop;
+
+      -- DEREFTER rundens afsluttende kort. Betingelsen er uændret fra v1 og ER
+      -- allerede "rundens sidste dag": en runde kan først stå uden manglende
+      -- resultater på den sidste dag, der havde kampe. Spilles alt søndag,
+      -- lander konklusionen søndag, selvom runden formelt løber til mandag.
+      for v_round in (select distinct round_key from _se_story_rounds order by 1) loop
         if exists (select 1 from public.matches m where m.round_key = v_round)
            and not exists (
              select 1 from public.matches m
@@ -2770,17 +3814,38 @@ begin
            )
         then
           perform public.generate_stories(v_round::text);
+          -- MILEPÆLE KALDES IKKE HERFRA (v2.1, august 2026).
+          --
+          -- De gjorde det i første udgave, med den begrundelse at alt kampdrevet
+          -- bliver sandt netop her, hvor ratings lige er genberegnet — og at
+          -- brugeren kigger på sit kort i samme øjeblik. Et skaleringsforsøg på
+          -- en syntetisk fuld sæson (sql/tests/story_engine_scale.sql) målte
+          -- prisen: `award_milestones()` kostede ~505 ms og bragte hele
+          -- trigger-sætningen op på ~1,07 s — inde i den sætning,
+          -- api/sync-live.js bruger til at afslutte en kamp. Uden den er
+          -- sætningen ~565 ms.
+          --
+          -- Prisen for at flytte den er, at en milepæl vises op til én
+          -- cron-kørsel senere (15–30 min) i stedet for med det samme. Den pris
+          -- er lille: kortet ligger i karusellen resten af runden. Prisen for at
+          -- blive var et halvt sekund oven på hver eneste rundeafslutning, for
+          -- et kald der næsten altid ikke uddeler noget.
+          --
+          -- api/send-notifications.js er nu ENESTE kalder — den var i forvejen
+          -- den pålidelige skriver for de tre ikke-kampdrevne familier.
         end if;
       end loop;
     exception when others then
       -- warning, ikke notice: guarden skal blive ved med at beskytte resultat-
       -- lagringen, men en fejl må ikke være usynlig igen (jf. A9, juli 2026).
       -- warning når Postgres-loggen som standard; notice gjorde ikke.
-      raise warning 'generate_stories fejlede (ignoreret, resultater/rating er uberørte): %', sqlerrm;
+      raise warning 'story-generering fejlede (ignoreret, resultater/rating er uberørte): %', sqlerrm;
     end;
   end if;
 
   drop table if exists _se_changed_rounds;
+  drop table if exists _se_story_days;
+  drop table if exists _se_story_rounds;
   return null;
 end;
 $$;
@@ -2801,6 +3866,17 @@ declare
 begin
   return d - diff;
 end;
+$$;
+
+
+--
+-- Name: round_key_of_date(date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.round_key_of_date(d date) RETURNS date
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select d - ((extract(dow from d)::int - 2 + 7) % 7);
 $$;
 
 
@@ -2889,7 +3965,8 @@ CREATE TABLE public.matches (
     live_state text,
     live_minute integer,
     live_updated_at timestamp with time zone,
-    kickoff_tbd boolean DEFAULT false NOT NULL
+    kickoff_tbd boolean DEFAULT false NOT NULL,
+    match_day date GENERATED ALWAYS AS (public.match_day(kickoff_at)) STORED
 );
 
 
@@ -3104,6 +4181,101 @@ CREATE TABLE public.competition_awards (
 
 
 --
+-- Name: competition_match_points; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.competition_match_points WITH (security_invoker='on') AS
+ SELECT cm.competition_id,
+    pr.user_id,
+    m.id AS match_id,
+    m.round_key,
+    m.match_day,
+    public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) AS pts,
+    (abs((pr.pred_home - m.home_score)) + abs((pr.pred_away - m.away_score))) AS goal_err
+   FROM (((public.competition_matches cm
+     JOIN public.matches m ON ((m.id = cm.match_id)))
+     JOIN public.predictions pr ON ((pr.match_id = m.id)))
+     JOIN public.competition_participants cp ON (((cp.competition_id = cm.competition_id) AND (cp.user_id = pr.user_id))))
+  WHERE ((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL) AND (pr.pred_home IS NOT NULL) AND (pr.pred_away IS NOT NULL));
+
+
+--
+-- Name: seasons; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.seasons (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    league_id uuid NOT NULL,
+    name text NOT NULL,
+    api_season_id text,
+    start_date date,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    ends_at date,
+    is_finished boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: COLUMN seasons.ends_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.seasons.ends_at IS 'Sæsonens sidste spilledag ifølge datakilden. Sat af api/sync-matches.js. Null = ukendt.';
+
+
+--
+-- Name: COLUMN seasons.is_finished; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.seasons.is_finished IS 'Sæsonen er slut og kan ikke få flere kampe. Sættes kun TIL true af sync; at rulle den tilbage er en bevidst handling i Admin → Drift.';
+
+
+--
+-- Name: competition_status; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.competition_status WITH (security_invoker='on') AS
+ WITH cm AS (
+         SELECT cm.competition_id,
+            m.id AS match_id,
+            m.season_id,
+            ((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL)) AS scored
+           FROM (public.competition_matches cm
+             JOIN public.matches m ON ((m.id = cm.match_id)))
+        ), agg AS (
+         SELECT cm.competition_id,
+            (count(*))::integer AS matches,
+            (count(*) FILTER (WHERE cm.scored))::integer AS scored_matches
+           FROM cm
+          GROUP BY cm.competition_id
+        ), growable AS (
+         SELECT c.id AS competition_id,
+            ((c.mode = ANY (ARRAY['full_season'::text, 'team'::text, 'time_range'::text])) AND (NOT (c.mode_params ? 'stages'::text))) AS can_grow
+           FROM public.competitions c
+        ), seasons_done AS (
+         SELECT x.competition_id,
+            bool_and(COALESCE(sd_1.done, false)) AS seasons_complete
+           FROM (( SELECT DISTINCT cm.competition_id,
+                    cm.season_id
+                   FROM cm) x
+             JOIN LATERAL ( SELECT (bool_and(((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL))) AND COALESCE((s.is_finished OR ((s.ends_at IS NOT NULL) AND (s.ends_at < CURRENT_DATE)) OR ((s.ends_at IS NULL) AND (max(m.kickoff_at) < (now() - '30 days'::interval)))), false)) AS done
+                   FROM (public.matches m
+                     JOIN public.seasons s ON ((s.id = x.season_id)))
+                  WHERE (m.season_id = x.season_id)
+                  GROUP BY s.is_finished, s.ends_at) sd_1 ON (true))
+          GROUP BY x.competition_id
+        )
+ SELECT a.competition_id,
+    a.matches,
+    a.scored_matches,
+    g.can_grow,
+    COALESCE(sd.seasons_complete, true) AS seasons_complete,
+    ((a.matches > 0) AND (a.scored_matches = a.matches) AND ((NOT g.can_grow) OR COALESCE(sd.seasons_complete, true))) AS concluded
+   FROM ((agg a
+     JOIN growable g ON ((g.competition_id = a.competition_id)))
+     LEFT JOIN seasons_done sd ON ((sd.competition_id = a.competition_id)));
+
+
+--
 -- Name: feedback; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3193,7 +4365,11 @@ CREATE TABLE public.stories (
     headline text NOT NULL,
     body text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    dismissed_at timestamp with time zone
+    dismissed_at timestamp with time zone,
+    period text DEFAULT 'round'::text NOT NULL,
+    day_key date,
+    CONSTRAINT stories_day_key_shape CHECK (((period = 'day'::text) = (day_key IS NOT NULL))),
+    CONSTRAINT stories_period_check CHECK ((period = ANY (ARRAY['round'::text, 'day'::text])))
 );
 
 
@@ -3213,8 +4389,11 @@ CREATE VIEW public.latest_story WITH (security_invoker='on') AS
     headline,
     body,
     created_at,
-    dismissed_at
+    dismissed_at,
+    day_key,
+    period
    FROM public.stories
+  WHERE (period = 'round'::text)
   ORDER BY user_id, round_key, priority, league_size DESC NULLS LAST, competition_id;
 
 
@@ -3237,16 +4416,18 @@ CREATE TABLE public.leagues (
 
 
 --
--- Name: seasons; Type: TABLE; Schema: public; Owner: -
+-- Name: milestones; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.seasons (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    league_id uuid NOT NULL,
-    name text NOT NULL,
-    api_season_id text,
-    start_date date,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+CREATE TABLE public.milestones (
+    user_id uuid NOT NULL,
+    key text NOT NULL,
+    family text NOT NULL,
+    tier integer DEFAULT 0 NOT NULL,
+    competition_id uuid,
+    round_key text,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    achieved_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -3613,6 +4794,14 @@ ALTER TABLE ONLY public.matches
 
 
 --
+-- Name: milestones milestones_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.milestones
+    ADD CONSTRAINT milestones_pkey PRIMARY KEY (user_id, key);
+
+
+--
 -- Name: notification_log notification_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3706,14 +4895,6 @@ ALTER TABLE ONLY public.seasons
 
 ALTER TABLE ONLY public.stories
     ADD CONSTRAINT stories_pkey PRIMARY KEY (id);
-
-
---
--- Name: stories stories_round_key_user_id_rule_competition_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.stories
-    ADD CONSTRAINT stories_round_key_user_id_rule_competition_id_key UNIQUE (round_key, user_id, rule, competition_id);
 
 
 --
@@ -3847,10 +5028,31 @@ CREATE INDEX matches_live_window_idx ON public.matches USING btree (kickoff_at) 
 
 
 --
+-- Name: matches_match_day_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX matches_match_day_idx ON public.matches USING btree (match_day);
+
+
+--
+-- Name: matches_match_day_open_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX matches_match_day_open_idx ON public.matches USING btree (match_day) WHERE ((home_score IS NULL) OR (away_score IS NULL));
+
+
+--
 -- Name: matches_season_id_round_key_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX matches_season_id_round_key_idx ON public.matches USING btree (season_id, round_key);
+
+
+--
+-- Name: milestones_user_time_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX milestones_user_time_idx ON public.milestones USING btree (user_id, achieved_at DESC);
 
 
 --
@@ -3865,6 +5067,27 @@ CREATE UNIQUE INDEX profiles_display_name_lower_idx ON public.profiles USING btr
 --
 
 CREATE INDEX push_subscriptions_user_idx ON public.push_subscriptions USING btree (user_id);
+
+
+--
+-- Name: stories_day_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX stories_day_uniq ON public.stories USING btree (day_key, user_id, rule, competition_id) NULLS NOT DISTINCT WHERE (period = 'day'::text);
+
+
+--
+-- Name: stories_round_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX stories_round_uniq ON public.stories USING btree (round_key, user_id, rule, competition_id) NULLS NOT DISTINCT WHERE (period = 'round'::text);
+
+
+--
+-- Name: stories_user_round_day_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX stories_user_round_day_idx ON public.stories USING btree (user_id, round_key, day_key DESC, priority);
 
 
 --
@@ -4086,6 +5309,22 @@ ALTER TABLE ONLY public.matches
 
 
 --
+-- Name: milestones milestones_competition_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.milestones
+    ADD CONSTRAINT milestones_competition_id_fkey FOREIGN KEY (competition_id) REFERENCES public.competitions(id) ON DELETE SET NULL;
+
+
+--
+-- Name: milestones milestones_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.milestones
+    ADD CONSTRAINT milestones_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
 -- Name: notification_log notification_log_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4217,6 +5456,29 @@ CREATE POLICY client_errors_insert_own ON public.client_errors FOR INSERT TO aut
 
 
 --
+-- Name: competitions comp_delete_group_admin_untipped; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY comp_delete_group_admin_untipped ON public.competitions FOR DELETE TO authenticated USING (((group_id IS NOT NULL) AND public.is_group_admin(group_id) AND (NOT (EXISTS ( SELECT 1
+   FROM ((public.competition_participants cp
+     JOIN public.competition_matches cm ON ((cm.competition_id = competitions.id)))
+     JOIN public.predictions p ON (((p.match_id = cm.match_id) AND (p.user_id = cp.user_id))))
+  WHERE (cp.competition_id = competitions.id))))));
+
+
+--
+-- Name: competition_participants comp_participants_delete_admin_untipped; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY comp_participants_delete_admin_untipped ON public.competition_participants FOR DELETE TO authenticated USING (((user_id <> auth.uid()) AND (EXISTS ( SELECT 1
+   FROM public.competitions c
+  WHERE ((c.id = competition_participants.competition_id) AND (c.group_id IS NOT NULL) AND public.is_group_admin(c.group_id)))) AND (NOT (EXISTS ( SELECT 1
+   FROM (public.competition_matches cm
+     JOIN public.predictions p ON (((p.match_id = cm.match_id) AND (p.user_id = competition_participants.user_id))))
+  WHERE (cm.competition_id = competition_participants.competition_id))))));
+
+
+--
 -- Name: competition_participants comp_participants_delete_own_unlocked; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4329,12 +5591,13 @@ CREATE POLICY group_members_select ON public.group_members FOR SELECT TO authent
 ALTER TABLE public.groups ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: groups groups_delete_admin_empty; Type: POLICY; Schema: public; Owner: -
+-- Name: groups groups_delete_admin_inactive; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY groups_delete_admin_empty ON public.groups FOR DELETE TO authenticated USING ((public.is_group_admin(id) AND (NOT (EXISTS ( SELECT 1
-   FROM public.competitions c
-  WHERE (c.group_id = groups.id))))));
+CREATE POLICY groups_delete_admin_inactive ON public.groups FOR DELETE TO authenticated USING ((public.is_group_admin(id) AND (NOT (EXISTS ( SELECT 1
+   FROM (public.competitions c
+     LEFT JOIN public.competition_status cs ON ((cs.competition_id = c.id)))
+  WHERE ((c.group_id = groups.id) AND (COALESCE(cs.concluded, false) = false)))))));
 
 
 --
@@ -4417,6 +5680,19 @@ CREATE POLICY matches_update_admin ON public.matches FOR UPDATE TO authenticated
   WHERE ((p.id = auth.uid()) AND p.is_admin)))) WITH CHECK ((EXISTS ( SELECT 1
    FROM public.profiles p
   WHERE ((p.id = auth.uid()) AND p.is_admin))));
+
+
+--
+-- Name: milestones; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.milestones ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: milestones milestones_select_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY milestones_select_own ON public.milestones FOR SELECT TO authenticated USING ((user_id = auth.uid()));
 
 
 --
@@ -4635,6 +5911,14 @@ GRANT USAGE ON SCHEMA public TO service_role;
 
 
 --
+-- Name: FUNCTION _anonymize_account(p_user_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._anonymize_account(p_user_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._anonymize_account(p_user_id uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION admin_analytics_engagement(p_days integer); Type: ACL; Schema: public; Owner: -
 --
 
@@ -4689,6 +5973,15 @@ GRANT ALL ON FUNCTION public.admin_analytics_stories(p_days integer) TO service_
 
 
 --
+-- Name: FUNCTION admin_anonymize_account(p_user_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.admin_anonymize_account(p_user_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.admin_anonymize_account(p_user_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.admin_anonymize_account(p_user_id uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION admin_client_errors(max_rows integer); Type: ACL; Schema: public; Owner: -
 --
 
@@ -4734,6 +6027,24 @@ GRANT ALL ON FUNCTION public.admin_recompute_ratings() TO service_role;
 
 
 --
+-- Name: FUNCTION admin_seasons(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.admin_seasons() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.admin_seasons() TO authenticated;
+GRANT ALL ON FUNCTION public.admin_seasons() TO service_role;
+
+
+--
+-- Name: FUNCTION admin_set_season_finished(p_season_id uuid, p_finished boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.admin_set_season_finished(p_season_id uuid, p_finished boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.admin_set_season_finished(p_season_id uuid, p_finished boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.admin_set_season_finished(p_season_id uuid, p_finished boolean) TO service_role;
+
+
+--
 -- Name: FUNCTION admin_user_stats(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -4770,6 +6081,14 @@ GRANT ALL ON FUNCTION public.award_competition_periods(p_comp_id uuid) TO servic
 
 
 --
+-- Name: FUNCTION award_milestones(p_user_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.award_milestones(p_user_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.award_milestones(p_user_id uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION career_profile(profile_user_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -4788,12 +6107,28 @@ GRANT ALL ON FUNCTION public.ensure_group_membership_for_participant() TO servic
 
 
 --
+-- Name: FUNCTION generate_daily_stories(p_day date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.generate_daily_stories(p_day date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.generate_daily_stories(p_day date) TO service_role;
+
+
+--
 -- Name: FUNCTION generate_stories(p_round_key text); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.generate_stories(p_round_key text) TO anon;
 GRANT ALL ON FUNCTION public.generate_stories(p_round_key text) TO authenticated;
 GRANT ALL ON FUNCTION public.generate_stories(p_round_key text) TO service_role;
+
+
+--
+-- Name: FUNCTION generate_stories_catchup(p_grace integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.generate_stories_catchup(p_grace integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.generate_stories_catchup(p_grace integer) TO service_role;
 
 
 --
@@ -4812,6 +6147,24 @@ GRANT ALL ON FUNCTION public.is_group_admin(gid uuid) TO service_role;
 GRANT ALL ON FUNCTION public.is_group_member(gid uuid) TO anon;
 GRANT ALL ON FUNCTION public.is_group_member(gid uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.is_group_member(gid uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION match_day(ts timestamp with time zone); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.match_day(ts timestamp with time zone) TO anon;
+GRANT ALL ON FUNCTION public.match_day(ts timestamp with time zone) TO authenticated;
+GRANT ALL ON FUNCTION public.match_day(ts timestamp with time zone) TO service_role;
+
+
+--
+-- Name: FUNCTION match_day_complete(p_day date); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.match_day_complete(p_day date) TO anon;
+GRANT ALL ON FUNCTION public.match_day_complete(p_day date) TO authenticated;
+GRANT ALL ON FUNCTION public.match_day_complete(p_day date) TO service_role;
 
 
 --
@@ -4891,6 +6244,15 @@ GRANT ALL ON FUNCTION public.recompute_ratings_if_scores_changed() TO service_ro
 GRANT ALL ON FUNCTION public.round_key(ts timestamp with time zone) TO anon;
 GRANT ALL ON FUNCTION public.round_key(ts timestamp with time zone) TO authenticated;
 GRANT ALL ON FUNCTION public.round_key(ts timestamp with time zone) TO service_role;
+
+
+--
+-- Name: FUNCTION round_key_of_date(d date); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.round_key_of_date(d date) TO anon;
+GRANT ALL ON FUNCTION public.round_key_of_date(d date) TO authenticated;
+GRANT ALL ON FUNCTION public.round_key_of_date(d date) TO service_role;
 
 
 --
@@ -5006,6 +6368,30 @@ GRANT ALL ON TABLE public.competition_awards TO service_role;
 
 
 --
+-- Name: TABLE competition_match_points; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.competition_match_points TO authenticated;
+GRANT ALL ON TABLE public.competition_match_points TO service_role;
+
+
+--
+-- Name: TABLE seasons; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.seasons TO authenticated;
+GRANT ALL ON TABLE public.seasons TO service_role;
+
+
+--
+-- Name: TABLE competition_status; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.competition_status TO authenticated;
+GRANT ALL ON TABLE public.competition_status TO service_role;
+
+
+--
 -- Name: TABLE feedback; Type: ACL; Schema: public; Owner: -
 --
 
@@ -5041,7 +6427,6 @@ GRANT ALL ON TABLE public.job_runs TO service_role;
 -- Name: SEQUENCE job_runs_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON SEQUENCE public.job_runs_id_seq TO anon;
 GRANT ALL ON SEQUENCE public.job_runs_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.job_runs_id_seq TO service_role;
 
@@ -5071,11 +6456,11 @@ GRANT ALL ON TABLE public.leagues TO service_role;
 
 
 --
--- Name: TABLE seasons; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE milestones; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.seasons TO authenticated;
-GRANT ALL ON TABLE public.seasons TO service_role;
+GRANT ALL ON TABLE public.milestones TO authenticated;
+GRANT ALL ON TABLE public.milestones TO service_role;
 
 
 --
@@ -5163,7 +6548,6 @@ GRANT ALL ON TABLE public.user_activity_days TO service_role;
 --
 
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO anon;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;
 
@@ -5221,5 +6605,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict gsmh9NgdsmNdl6AUrpTmlMQKjKrOuXHNgkGAYNwaWqhVv0PyA1mba2MgVbTnXfn
+\unrestrict RkXM7EqtIcfb1iM16zb90lL7jb9Nt8TfgP5DDApolBrj2zaGBlrlBIctwcVIbMo
 
