@@ -7,8 +7,8 @@
 // Indtil nu var `sb()` og `isAuthorized()` kopieret ORDRET i sync-matches.js,
 // sync-live.js og send-notifications.js. Den vigtigste konsekvens var ikke
 // linjetallet, men at enhver ændring i autorisationen skulle laves tre steder
-// og være ens alle tre — fx den forestående fjernelse af `?secret=`-fallbacken
-// (BACKLOG A11).
+// og være ens alle tre — fx fjernelsen af `?secret=`-fallbacken (A11), som
+// derfor kunne laves ét sted 5. august 2026.
 //
 // api/ importerer bevidst ikke fra src/: funktionerne kører i Node på Vercel,
 // mens src/ bygges til browseren. Denne fil er delingspunktet for api/ alene.
@@ -204,10 +204,14 @@ export function createRunLogger(sb, job, { skip = false } = {}) {
     // nogen huskede at kigge et sted uden for appen, inden for logopbevaringens
     // vindue, og kunne skelne "ingen advarsler" fra "ingen kørsler".
     //
-    // Med værdien i `job_runs.detail` bliver spørgsmålet et ALMINDELIGT OPSLAG
+    // Med værdien i `job_runs.detail` blev spørgsmålet et ALMINDELIGT OPSLAG
     // med 30 dages historik (`prune_job_runs`), og — vigtigst — et opslag, der
     // kan skelne de to: et job, der ikke har kørt, har ingen række, mens et job,
-    // der kalder rigtigt, har rækker med `authVia: "header"`. Fremgangsmåden
+    // der kalder rigtigt, har rækker med `authVia: "header"`. **Opslaget er kørt
+    // 5. august 2026, og fallbacken er fjernet.** Feltet skrives fortsat: det
+    // skiller nu en planlagt kørsel fra et manuelt "Hent nu", hvilket er den
+    // skelnen, `CRON.md`s verifikationskolonne hviler på. Fremgangsmåden — nu
+    // som eksempel på, hvordan et hukommelsesspørgsmål gøres til et opslag —
     // står i docs/CRON.md.
     setAuth(via) {
       authVia = via || null;
@@ -293,32 +297,30 @@ export function secretsMatch(provided, expected) {
 
 // Autorisation for de tre job-endpoints. To veje ind:
 //
-//   1. Den delte hemmelighed (ekstern cron) — helst i headeren `x-sync-secret`,
-//      så den ikke havner i request-logs. `?secret=` bevares som fallback for
-//      cron-jobs, der endnu ikke er flyttet (BACKLOG A11).
+//   1. Den delte hemmelighed (ekstern cron) i headeren `x-sync-secret`, så den
+//      ikke havner i request-logs.
 //   2. En admin-brugers eget login (`Authorization: Bearer <supabase-JWT>`) —
 //      det er kun Admin-skærmens knapper, der bruger den vej.
 //
-// Returnerer `{ ok, via }` frem for en ren boolean. `via` fortæller HVILKEN vej
-// der blev brugt, og det er det, der gør A11 til et datasspørgsmål frem for et
-// hukommelsesspørgsmål: så længe noget kalder ind med `via: "query"`, ville en
-// fjernelse af fallbacken give 401.
+// `?secret=`-FALLBACKEN ER FJERNET (A11, 5. august 2026). Den fandtes, fordi
+// hemmeligheden i en query-streng havner i request-logs, mens ingen turde
+// fjerne den på et gæt: rammer man forkert, svarer jobbene 401, og syncen står
+// stille. Beslutningen blev derfor til et opslag i `job_runs.detail`, og det
+// svarede entydigt over 14 dage: `header` for alle ni jobs (sync-live,
+// send-notifications og syv sync-matches), nul rækker med `query`. De eneste
+// andre værdier var `admin-token` (tre manuelle "Hent nu") og `(ukendt)` fra
+// før feltet fandtes — sidstnævnte alle med sidste kørsel 1. august 21:17,
+// altså selve udrulningsminuttet, og ingen efter den.
+//
+// Returnerer stadig `{ ok, via }` frem for en ren boolean, og `via` skrives
+// stadig i `job_runs.detail`. Feltet overlever altså det spørgsmål, det blev
+// bygget til: det er nu dét, der skiller en planlagt kørsel fra et menneske,
+// der har trykket "Hent nu" — den skelnen, `CRON.md`s verifikationskolonne
+// hviler på.
 export async function isAuthorized(req, { sb, supabaseUrl, serviceKey, syncSecret }) {
-  // `header || query` — præcis som før udtrækningen. Bemærk at en TILSTEDE men
-  // forkert header dermed blokerer query-fallbacken; det er ikke en elegant
-  // regel, men at gøre den mere eftergivende her ville være en adfærdsændring
-  // smuglet ind i en oprydning.
-  const headerSecret = req.headers["x-sync-secret"];
-  const providedSecret = headerSecret || req.query?.secret;
-  if (secretsMatch(providedSecret, syncSecret)) {
-    if (headerSecret) return { ok: true, via: "header" };
-    // Bevidst støj i Vercels logs: den er kvitteringen for, at fallbacken
-    // stadig er i brug, og dermed at A11 endnu ikke kan lukkes.
-    console.warn(
-      "[A11] Forældet autorisation: hemmeligheden kom som ?secret=. Flyt jobbet til headeren x-sync-secret."
-    );
-    return { ok: true, via: "query" };
-  }
+  // Kun headeren. `secretsMatch()` afviser selv en manglende eller ikke-streng
+  // værdi, så der er ingen grund til at tjekke for tilstedeværelse først.
+  if (secretsMatch(req.headers["x-sync-secret"], syncSecret)) return { ok: true, via: "header" };
 
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith("Bearer ")) {

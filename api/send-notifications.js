@@ -19,8 +19,8 @@
 // notification_log sikrer, at samme besked aldrig sendes to gange.
 //
 // Kald med: /api/send-notifications  med headeren  x-sync-secret: <SYNC_SECRET>  (ekstern cron)
-//   (?secret=<SYNC_SECRET> virker stadig som fallback, men er på vej ud — BACKLOG A11.
-//    Brug ikke den form til nye jobs: hemmeligheden havner i request-logs.)
+//   (?secret=<SYNC_SECRET> er FJERNET 5. august 2026 — A11. Headeren er den
+//    eneste vej ind for et cron-job; hemmeligheden må ikke i request-logs.)
 //   valgfrit: &hours=3      hvor tæt på en kamps lås deadline-påmindelsen sendes
 //   valgfrit: &dryRun=true  vis hvad der VILLE blive sendt, uden at sende
 //   valgfrit: &force=true   send uden for sendevinduet (kun til fejlfinding)

@@ -107,7 +107,7 @@ Forventet svar uden kampe i gang:
 
 Det er det **rigtige** svar uden for kamptid — det betyder, at funktionen slog op i din egen database, ikke fandt noget, og sprang Sportmonks-kaldet helt over. Gentag testen under en kamp for at se `live`-tallet stige.
 
-> Har du ikke `curl`, virker `https://<app>/api/sync-live?dryRun=true&secret=DIN_SYNC_SECRET` i en browser. Brug kun den form til en enkelt test — hemmeligheden havner i request-logs. Cron-jobbet skal bruge headeren.
+> *(Rettet efter levering, 5. august 2026 — `A11`.)* Browser-formen `?secret=DIN_SYNC_SECRET` stod her som en nødløsning uden `curl`. **Den er fjernet**: hemmeligheden havnede i request-logs, og et opslag i `job_runs.detail` viste, at intet job brugte den. Uden `curl` er vejen "Hent nu" i Admin, som sender admin-brugerens eget token.
 
 ### Trin 2 — opret cron-jobbet på cron-job.org
 

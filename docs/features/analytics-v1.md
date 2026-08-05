@@ -199,7 +199,23 @@ A5 ("emojis i historie-kort: til eller fra?") og hele tone-spørgsmålet har hid
 | genereret, afvist | `public.stories` | rigtige rækker, **præcise** |
 | vist, delt | `analytics_events` (`metadata->>'rule'`) | fire-and-forget, et **gulv** |
 
-En visningsrate over 100 % er derfor umulig, men en lav rate kan lige så godt betyde tabt logning som manglende visning. Sammenlign regler med hinanden, ikke med et ideal.
+En lav rate kan lige så godt betyde tabt logning som manglende visning. Sammenlign regler med hinanden, ikke med et ideal.
+
+> ⚠️ **Rettet efter levering (5. august 2026).** Her stod: *"En visningsrate over
+> 100 % er derfor umulig."* **Det passer ikke**, og aflæsningen viste det: tabellen
+> havde 200 % (`Vandt runden`), 400 % (`Månedens Champion`) og 133 % (`Premiereugen`).
+> To grunde, og begge er ved design:
+> 1. **Tælleren og nævneren tæller ikke det samme.** `generated` er historier
+>    *oprettet* i vinduet; `viewed` er hændelser *logget* i vinduet. En historie
+>    fra før vinduet, der ses inde i det, giver en visning uden en generering.
+> 2. **`logEventOnce` afgrænser kun pr. sidens levetid** (`src/lib/analytics.js`),
+>    ikke pr. historie for evigt. En bruger, der åbner Hjem igen i morgen, logger
+>    samme kort igen — hvilket er det rigtige for en impression, men gør raten til
+>    visninger pr. historie og ikke andelen af historier, der blev set.
+>
+> Raten er altså **visninger pr. genereret historie** og ikke en dækningsgrad.
+> Over 100 % betyder "set flere gange", ikke "målefejl". Ordet *gulv* gælder
+> stadig nedadtil.
 
 **`dismissed_at` er den mest interessante kolonne:** den er brugerens eneste *aktive* afvisning af en historie, og den findes pr. række — ikke som event, og derfor uden gulv-forbeholdet.
 
@@ -240,22 +256,93 @@ netop for at flytte, hvilken mode nye brugere vælger. Effekten er aldrig aflæs
 og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger
 den plads, der skulle guide.
 
-**Der skal ikke instrumenteres noget.** `competition_created` bærer allerede
-`metadata.mode`, så før/efter kan opgøres på eksisterende data:
+**Der skal ikke instrumenteres noget** — men der skal vælges kilde, og det viste
+sig at være hele forskellen (5. august 2026). Der er to, og de svarer på det
+samme:
+
+| Kilde | Vindue | Pålidelighed |
+|---|---|---|
+| **`competitions.mode` + `created_at`** | **hele appens historik** | rigtige rækker, **præcise** |
+| `analytics_events` (`competition_created` → `metadata.mode`) | fra 30. juli 2026, da Analytics v1 blev udrullet | fire-and-forget, et **gulv** |
+
+**Brug `competitions`.** Hændelsesloggen var det oprindelige valg her, fordi
+`competition_created` allerede bar `metadata.mode` — men en oprettelse er ikke
+kun en hændelse, den er også en **række**, og rækken har både den præcise mode
+og et `created_at`, der går hele vejen tilbage. Med en lille brugerbase er
+vinduets længde vigtigere end alt andet: hver oprettelse tæller, og
+hændelsesloggen kasserer per konstruktion alt fra før 30. juli.
 
 ```sql
 -- Fordelingen af konkurrence-typer før og efter, at "Anbefalet" kom på.
 -- Sæt datoen til den dag, A22 blev udrullet.
-with maerket as (select timestamptz '2026-08-01 00:00+02' as fra)
-select case when e.created_at < m.fra then 'før' else 'efter' end as periode,
-       e.metadata->>'mode'                                        as mode,
-       count(*)                                                   as antal,
-       round(100.0 * count(*) / sum(count(*)) over (partition by (e.created_at < m.fra)), 1) as pct
-  from analytics_events e cross join maerket m
- where e.event_name = 'competition_created'
+with maerket as (select timestamptz '2026-08-01 00:00+02' as fra),
+     raekker as (
+       select case when c.created_at < m.fra then 'før' else 'efter' end as periode,
+              c.mode
+         from competitions c cross join maerket m
+     )
+select periode,
+       mode,
+       count(*)                                                     as antal,
+       round(100.0 * count(*) / sum(count(*)) over (partition by periode), 1) as pct
+  from raekker
  group by 1, 2
  order by 1 desc, 4 desc;
 ```
+
+Hændelses-varianten står stadig her, fordi den er den eneste, der kan skelne en
+oprettelse, som senere blev slettet, fra en, der aldrig fandtes — og fordi
+`metadata` kan bære felter, tabellen ikke har:
+
+```sql
+-- Fordelingen af konkurrence-typer før og efter, at "Anbefalet" kom på.
+-- Sæt datoen til den dag, A22 blev udrullet.
+with maerket as (select timestamptz '2026-08-01 00:00+02' as fra),
+     haendelser as (
+       select case when e.created_at < m.fra then 'før' else 'efter' end as periode,
+              e.metadata->>'mode'                                        as mode
+         from analytics_events e cross join maerket m
+        where e.event_name = 'competition_created'
+     )
+select periode,
+       mode,
+       count(*)                                                     as antal,
+       round(100.0 * count(*) / sum(count(*)) over (partition by periode), 1) as pct
+  from haendelser
+ group by 1, 2
+ order by 1 desc, 4 desc;
+```
+
+> ⚠️ **Rettet efter levering (5. august 2026), og to gange samme dag.**
+>
+> **1) Forespørgslen kunne ikke køre.** Den beregnede perioden i `select`-listen
+> og partitionerede så vinduet på `(e.created_at < m.fra)` — et udtryk, der
+> hverken står i `group by` eller er pakket i en aggregering. PostgreSQL afviser
+> den med `42803: column "e.created_at" must appear in the GROUP BY clause`.
+> Perioden udledes nu ét sted, i en CTE, så vinduet kan partitionere på selve
+> grupperingsnøglen. Begge forespørgsler ovenfor er **efterprøvet mod PostgreSQL
+> 16.13** (samme version som CI) med plantede data, hvor svaret var kendt på
+> forhånd, og med en negativ kontrol (en `login`-række, der skal holdes ude).
+>
+> **2) Kilden var forkert valgt.** Da forespørgslen endelig kørte, svarede den
+> med tre hændelser i alt, alle `random` — hvilket ikke er mistænkeligt ved en
+> testbase på ~20 brugere, men gør spørgsmålet ubesvarligt. Det afgørende er, at
+> **`analytics_events` først findes fra 30. juli 2026**, så "før mærkatet" var i
+> praksis to døgn og ikke appens historik. `competitions` bærer den samme mode
+> som en rigtig række med et `created_at`, der går hele vejen tilbage. Kilden er
+> derfor byttet om: tabellen er den primære, hændelsen er kontrollen.
+>
+> **Læren er ikke "loggen er dårlig"** — den er lossy by design, og det står i
+> §2. Læren er, at et gulv kun duer, når man har rigeligt af det man tæller.
+> Ved lille datamængde skal man tælle **rækker**, ikke hændelser, hvis rækken
+> findes.
+>
+> **Det, fejlen siger om spec'en, er vigtigere end fejlen.** §5F blev skrevet
+> netop for, at et spørgsmål uden en formuleret forespørgsel aldrig bliver
+> stillet — og backloggens `B12` stod i to døgn med teksten *"forespørgslen er
+> skrevet, tilbage står at køre den"*. Den var skrevet, ikke kørt. En SQL-blok i
+> et dokument har ingen CI bag sig, så den er en **påstand** om, hvad der ville
+> virke, indtil nogen kører den.
 
 **Sådan læses svaret.** Sammenlign `pct` for `full_season` før og efter. Bemærk
 tre forbehold, som skal med, hvis tallet skal bære en beslutning:
@@ -265,15 +352,53 @@ tre forbehold, som skal med, hvis tallet skal bære en beslutning:
   ved det ikke endnu" — ikke "det virkede ikke".
 * **Hændelsesloggen er fire-and-forget og lossy by design** (§2). Den er et
   GULV, ikke et facit. Til gengæld rammer tabet begge perioder lige, så
-  *fordelingen* er mere troværdig end de absolutte tal.
+  *fordelingen* er mere troværdig end de absolutte tal. **Gælder kun
+  kontrol-forespørgslen** — `competitions` er rigtige rækker.
+* **Perioderne er ikke lige lange, og "før" er den korte.** Mærkatet kom på
+  1. august 2026, mens appen har kørt siden juli — så "før" dækker uger og
+  "efter" dage. Med `competitions` som kilde er det en styrke (der ER noget at
+  sammenligne med); det er samtidig grunden til, at `pct` og ikke `antal` er
+  tallet, man læser.
 * **Rækkefølgen af kortene blev vendt samme dag** som mærkatet kom på (langt →
   kort med Sæson øverst). De to kan ikke skilles ad i data — flytter fordelingen
   sig, ved vi ikke hvilken af dem, der gjorde det. Det er acceptabelt for det,
   spørgsmålet skal bruges til (*virkede indgrebet?*), men ikke for et forsøg på
   at kalibrere de to hver for sig.
 
-Samme opslag svarer på `I15`s åbne spørgsmål: bruges "Ugens kupon"-kortet
-overhovedet? Kig efter `random` i `mode`-kolonnen.
+> ⚠️ **`I15`-påstanden var forkert og er fjernet (5. august 2026).** Her stod:
+> *"Samme opslag svarer på `I15`s åbne spørgsmål: bruges Ugens kupon-kortet
+> overhovedet? Kig efter `random` i `mode`-kolonnen."* Det gør det ikke.
+> `mode = 'random'` dækker **både** galleriets Ugens kupon-kort og en håndlavet
+> Quick Pick eller Quick League, og `mode_params` skiller dem ikke ad:
+> `rounds` skrives kun når den er > 1, hvilket en manuel enkeltrunde også
+> undlader. Skal kortets brug måles, kræver det en ny hændelse eller et felt —
+> altså instrumentering, ikke et opslag. To rækker for ét opslag var en
+> regnefejl.
+
+## 5G. Hvad opslaget svarede første gang (5. august 2026)
+
+Noteret her, fordi et opslag uden sit svar inviterer til at blive kørt igen med
+den samme forventning.
+
+| periode | mode | antal | pct |
+|---|---|---|---|
+| før | `time_range` | 2 | 33,3 |
+| før | `random` | 2 | 33,3 |
+| før | `full_season` | 2 | 33,3 |
+| efter | `random` | 1 | 100,0 |
+
+**Svaret er "ikke endnu", og det er ikke det samme som "mærkatet virker ikke".**
+Hele appens historik rummer syv konkurrencer, og kun én er oprettet efter
+mærkatet kom på. En fordelingssammenligning med n=1 i den ene periode kan ikke
+måle noget — præcis det første forbehold ovenfor, nu med et tal på.
+
+**Det, tallet derimod siger noget om, er metoden.** Et før/efter-design kræver
+tocifrede tal i begge perioder, og produktet skaber en konkurrence nogle få
+gange pr. sæson pr. liga — ikke pr. dag. Spørgsmålet "virkede indgrebet?" bliver
+altså først besvarligt, når brugerbasen er vokset, og det er dét, `B12`s udløser
+i backloggen nu siger: **tosifret `antal` i `efter`-perioden.** Indtil da hviler
+mærkatet på produktjudgement, hvilket er et legitimt grundlag — bare ikke et
+målt et.
 
 ## 6. Liga-diagnose (afløser Health Score, 30. juli 2026)
 
