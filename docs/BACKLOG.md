@@ -119,7 +119,7 @@ versionsstempel → `G42`).*
 
 ## Prioriteret rækkefølge
 
-Alle 28 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 27 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -187,10 +187,12 @@ var hele arbejdet. For det andet er `G74` bygget på det modsatte svar af det,
 rækken lagde op til: den spurgte, om blokkene kunne tjekkes **uden**
 produktionsskemaet, og svaret er nej, fordi `B12`s `42803` opstår i
 parse-analysen og kræver, at serveren kender tabellerne. Det behøver den heller
-ikke — `sql/schema.sql` ER skemaet, og det ligger i repoet. **Tier 1 er fyldt
-igen af leverancen selv** (`B23`: `analytics_dashboard.sql` skal gen-køres),
-præcis som `B19` blev det 5. august: en SQL-tung leverance uden
-produktionsadgang lægger sin sidste halvdel i ejerens kø.*
+ikke — `sql/schema.sql` ER skemaet, og det ligger i repoet. **Tier 1 blev fyldt
+igen af leverancen selv** (`B23`: `analytics_dashboard.sql`), præcis som `B19`
+blev det tidligere samme dag — en SQL-tung leverance uden produktionsadgang
+lægger sin sidste halvdel i ejerens kø. **Men denne gang blev den kørt samme
+dag, og `B23` er slettet igen**; køen med to betjeninger holdt trit for første
+gang. Listen er dermed 31 → 27.*
 
 Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
@@ -203,15 +205,18 @@ Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 4. **Det, der venter på en udløser, prioriteres ikke** — det står nederst, ikke
    fordi det er uvigtigt, men fordi rækkefølgen ikke er vores at vælge.
 
-### Tier 1 — Produktionsadgang: svaret ligger uden for repoet
+### Tier 1 — Produktionsadgang: svaret ligger uden for repoet ✅ tomt
 
-| # | Hvad | Hvorfor her |
-|---|---|---|
-| `B23` | Gen-kør `sql/analytics_dashboard.sql` i produktion | `G73`s rettelse er merget som kode og **inert** i databasen, indtil RPC'en er gen-kørt: `viewable`-kolonnen findes ikke, og klienten falder derfor tilbage til den gamle nævner. Filen er idempotent og rører kun funktioner og views — ingen data. Kør bagefter verifikation **6e** og **6g** i filens fod: den ene er en invariant, den anden er selve `G73`-tallet. |
+**Kørt tom tredje gang 5. august 2026.** `B23` (gen-kør
+`sql/analytics_dashboard.sql`) blev oprettet og lukket samme dag: `G73` var
+merget og **inert** i databasen, indtil RPC'en var gen-kørt, og ejeren kørte
+den. Det er første gang, tieret ikke har været en flaskehals — `B19` voksede fra
+to SQL-filer til fem, mens den ventede, og `A32` (en vej til read-only opslag
+uden ejeren) er skrevet på præcis den erfaring. **Én kørsel samme dag er ikke et
+svar på `A32`**, men den er datapunktet, spørgsmålet mangler: bliver det
+mønstret, er rækken mindre værd, end den ser ud.
 
-*Fyldt igen 5. august 2026 af Tier 2/5-kørslen selv — samme mønster som `B19`:
-en SQL-tung leverance uden produktionsadgang lægger sin sidste halvdel i ejerens
-kø. Nedenfor står de to tidligere kørsler.*
+*Nedenfor står de to tidligere kørsler.*
 
 **Kørt tom to gange 5. august 2026: fem oprindelige aflæsninger, plus de to,
 kørslen selv efterlod.** Tieret dækker nu også svar, der ligger i cron-job.org og
@@ -257,8 +262,9 @@ tal er selv oplysningen; derfor er "Vis-bar" også en synlig kolonne og ikke kun
 nævner. **Rækken pegede på dagsreglerne, men fejlen var bredere:** definitionen
 (skrevet før rundens slutning) fanger også et runde-kort, hvis runde først blev
 spillet færdig efter den var forbi — en udsat kamp — og dét kan ske igen, mens
-efterfyldningen var en engangsudgift. ⚠️ **Gen-kør `analytics_dashboard.sql`**
-(`B23` i Tier 1); indtil da falder klienten tilbage til den gamle nævner.
+efterfyldningen var en engangsudgift. **`analytics_dashboard.sql` er gen-kørt af
+ejeren samme dag** (den tidligere `B23`), så rettelsen er levende i databasen og
+ikke kun i koden.
 
 *Fyldt igen 5. august 2026 af `A5`-aflæsningen — og tømt samme dag. Nedenfor står
 de to tidligere kørsler.*
@@ -431,7 +437,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Hvad | Hvorfor / hvad den venter på | Omfang |
 |---|---|---|---|
-| B23 | **Gen-kør `sql/analytics_dashboard.sql` i produktion.** | `G73`s rettelse er merget som kode og **inert** i databasen, indtil RPC'en er gen-kørt: `admin_analytics_stories` svarer uden `viewable`/`viewable_total`, og klienten falder derfor tilbage til den gamle nævner (`viewable ?? generated`) — altså præcis den måling, `G73` blev kørt for at fjerne. Fallbacken er med vilje: en manglende kolonne må ikke lade hele tabellens procenter forsvinde, men den skjuler også, at kørslen mangler. **Filen er idempotent og rører kun funktioner og views — ingen data**, og den kan køres når som helst. Kør bagefter verifikation **6e** (invariant: vist og afvist kan aldrig overstige vis-bar, og vis-bar aldrig genereret) og **6g** (selve `G73`-tallet, opgjort pr. periode) fra filens fod. **Samme form som `B19`:** en SQL-tung leverance uden produktionsadgang lægger sin sidste halvdel i ejerens kø. | Lille (én kørsel) |
 | B21 | **Omdøb GitHub-repoet og Vercel-projektet, og ret hjemmesidens links** | Navneskiftet 4. august 2026 gik gennem app, manifest, ikoner, tekster og dokumentation, men stoppede ved projektnavnene — **med vilje**, fordi et skifte af Vercel-projektet ændrer `.vercel.app`-adressen og dermed knækker hvert link, der peger på den. Prisen ved status quo er, at produktet hedder Leagly overalt undtagen i den adresse, en ny bruger faktisk taster ind: 23 CTA'er i `site/` (4+5+6+4+4) plus README'ens live-link peger på `prediction-champ.vercel.app`. **Rækkefølgen er bindende og er hele grunden til, at rækken står lige efter `I10`:** vælges et rigtigt domæne, skal linkene alligevel skiftes, og gøres omdøbningen først, skiftes de to gange. Vercels gamle URL redirigerer ikke af sig selv, så et delt link fra før skiftet dør — det er kun ufarligt, så længe hjemmesiden ikke er publiceret. `docs/RESTORE.md`s omtale skal IKKE rettes: den navngiver backup-filer, der faktisk hedder det gamle. | Lille (men mange steder) |
 | B20 | **Personlige invite-links** (`invite_links` + `invited_by` på `group_members`/`competition_participants`) | Attributionen "hvem inviterede hvem" findes ikke i skemaet: `groups.invite_code` er én kode pr. liga og ikke pr. bruger, og ingen af medlemstabellerne gemmer afsenderen. Det er derfor, milepælen **"5/10 venner tilmeldt via dit link" ikke kunne bygges** — `milestones` tæller i stedet `LEAGUE_GREW_5/10`, altså hvor mange der kom med i en liga, man har oprettet, hvilket er en anden bedrift. Begrundelsen står ved koden begge steder (`sql/milestones.sql`, `src/lib/milestones.js`) og peger på denne række. **Ventetid er ikke gratis her, og det er rækkens vigtigste egenskab:** attribution kan kun registreres fremad, så en bedrift bygget på den kan først tælle fra udrulningsdagen — de brugere, der allerede er inviteret, tælles aldrig. Gater desuden `I6` (ambassadørprogram), som ikke kan måle noget uden. | Mellem |
 | B18 | **Staging-projektet i Supabase** | Preview og produktion deler database, medmindre staging-variablerne peger et andet sted (`DOCUMENTATION.md` §9). Selve projektet skal oprettes manuelt, og `sql/schema.sql` genskaber hele `public` på én gang, så opsætningen er kort. **Rækken findes, fordi opgaven mistede sin tracker:** den blev fulgt som `G4`, men `G4` blev leveret som noget andet — dev-serverens hårde krav om `.env.local` — og forsvandt derfor fra listen, mens selve staging-projektet aldrig blev oprettet. Prisen ved status quo er, at en preview-test skriver i brugernes rigtige data; det er dét, `DOCUMENTATION.md` §11's advarsel om ikke at taste resultater ind på en preview holder i skak i hånden. | Lille (opsætning) |
