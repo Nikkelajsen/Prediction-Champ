@@ -72,7 +72,8 @@ psql "postgresql://postgres.<staging-ref>:<password>@aws-0-eu-west-1.pooler.supa
 
 ```sql
 select
-  (select count(*) from information_schema.tables where table_schema = 'public') as tabeller,
+  (select count(*) from information_schema.tables
+    where table_schema = 'public' and table_type = 'BASE TABLE')                 as tabeller,
   (select count(*) from information_schema.views  where table_schema = 'public') as views,
   (select count(*) from pg_policies               where schemaname   = 'public') as policies,
   (select count(*) from pg_proc p
@@ -80,8 +81,10 @@ select
     where n.nspname = 'public')                                                  as funktioner;
 ```
 
-Sammenlign tallene med produktionen. **Nul policies er den fejl, der gør mest
-skade og larmer mindst** — skemaet ser rigtigt ud, og RLS er væk.
+`schema.sql` gav **23 tabeller, 9 views, 42 policies** (målt 5. august 2026 mod
+PostgreSQL 16 — tallene vokser med hver migrering, så de er et pejlemærke og
+ikke et krav). Sammenlign med produktionen. **Nul policies er den fejl, der gør
+mest skade og larmer mindst** — skemaet ser rigtigt ud, og RLS er væk.
 
 ---
 
@@ -90,16 +93,17 @@ skade og larmer mindst** — skemaet ser rigtigt ud, og RLS er væk.
 `schema.sql` er skema uden rækker, så staging har ingen turneringer at tippe på.
 Kør datafilerne i denne rækkefølge:
 
-1. `sql/tournament_footballdata.sql` — de fem football-data.org-turneringer
-2. `sql/tournament_footballdata_promote.sql` — gør dem synlige og officielle
-3. `sql/tournament_scotland_premiership.sql` — Scotland Premiership
+1. `sql/tournament_superliga.sql` — Superligaen (turnering #1, den officielle)
+2. `sql/tournament_footballdata.sql` — de fem football-data.org-turneringer
+3. `sql/tournament_footballdata_promote.sql` — gør dem synlige og officielle
+4. `sql/tournament_scotland_premiership.sql` — Scotland Premiership
 
-**Superligaen har ingen fil.** Dens `leagues`- og `seasons`-rækker blev
-oprettet i hånden, før skabelonerne fandtes, og de indgår ikke i `schema.sql`
-(data, ikke skema). Skal staging have den, hentes rækken fra produktionen og
-indsættes med nyt id — eller den udelades, hvis det, du skal prøve af, ikke
-handler om den. *(Noteret i backloggens indbakke: filen mangler, og det rammer
-også gendannelsesvejen i [`RESTORE.md`](./RESTORE.md).)*
+**Superliga-filen har to tomme parametre**, du skal udfylde først: sæsonens navn
+og dens Sportmonks-id. De skifter hvert år, så de er ikke skrevet ind — filens
+hoved har begge opslag (ét mod produktionen, ét mod Sportmonks), og blokken
+stopper med en læsbar fejl, hvis de mangler. Ligaen selv er skrevet ned.
+*(Filen kom til 5. august 2026. Indtil da var Superligaen den eneste af de syv
+turneringer, et miljø bygget af repoet alene ikke kunne få.)*
 
 Hold, kampe og resultater kommer af en sync (trin 6).
 
