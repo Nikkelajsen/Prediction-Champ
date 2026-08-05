@@ -21,6 +21,13 @@ const DATAANSVARLIG = "[NAVN]";
 const KONTAKT_EMAIL = "[KONTAKT-E-MAIL]";
 
 // Én dato for begge dokumenter. To ville uvægerligt komme ud af trit.
+//
+// Datoen flytter sig ved en ÆNDRING af behandlingen, ikke ved en rettelse af
+// teksten: dokumentet lover selv kun at opdatere den, når "vi ændrer noget
+// væsentligt". Da `pc_pwa_onboarded` fik sin manglende linje (`G69`, august
+// 2026), stod den derfor stille — flaget har ligget på enheden hele tiden, og
+// en dato, der rykker ved hver tekstrettelse, holder op med at kunne bruges til
+// at se, hvornår behandlingen sidst blev en anden.
 const LEGAL_OPDATERET = "2026-08-03";
 
 const MINDSTEALDER = 13;
@@ -83,6 +90,7 @@ const PRIVATLIV = {
             "Din session: en fornyelses-nøgle og din e-mail, så du forbliver logget ind. Den fjernes, når du logger ud.",
             "Hvornår appen sidst registrerede dig som aktiv, så den ikke gør det oftere end en gang i timen.",
             "Om du er færdig med introduktionen, om du har lukket kortet om notifikationer, og om du har lukket forslaget om at oprette en liga.",
+            "Om du har set vejledningen til at lægge appen på din hjemmeskærm, så den kun vises én gang.",
             "Hvilken turnering du sidst kiggede på i Championship.",
             "Hvilke af dine konkurrencer du allerede har set slutte, så fejringen af en afsluttet konkurrence kun vises én gang.",
           ],
