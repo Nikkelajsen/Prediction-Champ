@@ -120,7 +120,7 @@ versionsstempel → `G42`).*
 
 ## Prioriteret rækkefølge
 
-Alle 27 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 26 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -206,17 +206,16 @@ Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 4. **Det, der venter på en udløser, prioriteres ikke** — det står nederst, ikke
    fordi det er uvigtigt, men fordi rækkefølgen ikke er vores at vælge.
 
-### Tier 1 — Produktionsadgang: svaret ligger uden for repoet
+### Tier 1 — Produktionsadgang: svaret ligger uden for repoet ✅ tomt
 
-| # | Hvad | Hvorfor den er øverst |
-|---|---|---|
-| `B24` | **Gen-kør `sql/liga_admin.sql` i produktion** | `A25` er merget som kode og **inert** i databasen, indtil `_anonymize_account()` er gen-kørt — præcis `B23`s form fra samme dag, og `B22`s før den. Kørslen er ufarlig og rører ingen rækker: den erstatter tre policies og fire funktioner med deres egne, uændrede definitioner plus den ene nye `delete`. **Prisen ved at vente er ikke tid, men rækkefølge:** sker den første kontolukning inden kørslen, er den lukkede allerede blevet stående i en konkurrence, der ikke er begyndt, og det kan ikke gøres om. |
+**Kørt tom FJERDE gang 5. august 2026.** `B24` (gen-kør `sql/liga_admin.sql`)
+blev oprettet og lukket samme dag, præcis som `B23` få timer før: `A25` var
+merget og **inert** i databasen, indtil `_anonymize_account()` var gen-kørt, og
+ejeren kørte filen. **To kørsler samme dag er heller ikke et svar på `A32`** —
+men det er anden gang i træk, at køen holdt trit, og rækken er skrevet på det
+modsatte mønster.
 
-**Fyldt igen 5. august 2026 af `A25`s egen leverance.** Tieret var kørt tomt
-tredje gang samme dag, og rækken herover er den fjerde SQL-fil på to dage, der
-venter på ejeren — mønstret, `A32` er skrevet på.
-
-*Nedenfor står de tre kørsler.*
+*Nedenfor står de tre tidligere kørsler.*
 
 **Kørt tom tredje gang 5. august 2026.** `B23` (gen-kør
 `sql/analytics_dashboard.sql`) blev oprettet og lukket samme dag: `G73` var
@@ -446,7 +445,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Hvad | Hvorfor / hvad den venter på | Omfang |
 |---|---|---|---|
-| B24 | **Gen-kør `sql/liga_admin.sql` i produktion** | `A25` (5. august 2026) lagde en `delete` ind i `_anonymize_account()`: den lukkede konto meldes af de konkurrencer, hvor ingen kamp er låst eller spillet, og kun når mindst én anden deltager bliver tilbage. Migreringerne køres i hånden, så koden er merget og **inert**, indtil filen er kørt — samme tilstand som `B22` (`rating_core.sql`) og `B23` (`analytics_dashboard.sql`) begge var i samme uge. Kørslen er idempotent, rører ingen rækker og ændrer kun funktioner og policies. **Forudsætter #28** (`match_locked()`), som står i produktion. Efter kørslen kan reglen efterprøves med `select proname from pg_proc where prosrc like '%competition_participants cp%'` — men den rigtige verifikation er `sql/tests/liga_admin.sql` afsnit 12, som allerede kører i CI. | Lille (én kørsel) |
 | B21 | **Omdøb GitHub-repoet og Vercel-projektet, og ret hjemmesidens links** | Navneskiftet 4. august 2026 gik gennem app, manifest, ikoner, tekster og dokumentation, men stoppede ved projektnavnene — **med vilje**, fordi et skifte af Vercel-projektet ændrer `.vercel.app`-adressen og dermed knækker hvert link, der peger på den. Prisen ved status quo er, at produktet hedder Leagly overalt undtagen i den adresse, en ny bruger faktisk taster ind: 23 CTA'er i `site/` (4+5+6+4+4) plus README'ens live-link peger på `prediction-champ.vercel.app`. **Rækkefølgen er bindende og er hele grunden til, at rækken står lige efter `I10`:** vælges et rigtigt domæne, skal linkene alligevel skiftes, og gøres omdøbningen først, skiftes de to gange. Vercels gamle URL redirigerer ikke af sig selv, så et delt link fra før skiftet dør — det er kun ufarligt, så længe hjemmesiden ikke er publiceret. `docs/RESTORE.md`s omtale skal IKKE rettes: den navngiver backup-filer, der faktisk hedder det gamle. | Lille (men mange steder) |
 | B20 | **Personlige invite-links** (`invite_links` + `invited_by` på `group_members`/`competition_participants`) | Attributionen "hvem inviterede hvem" findes ikke i skemaet: `groups.invite_code` er én kode pr. liga og ikke pr. bruger, og ingen af medlemstabellerne gemmer afsenderen. Det er derfor, milepælen **"5/10 venner tilmeldt via dit link" ikke kunne bygges** — `milestones` tæller i stedet `LEAGUE_GREW_5/10`, altså hvor mange der kom med i en liga, man har oprettet, hvilket er en anden bedrift. Begrundelsen står ved koden begge steder (`sql/milestones.sql`, `src/lib/milestones.js`) og peger på denne række. **Ventetid er ikke gratis her, og det er rækkens vigtigste egenskab:** attribution kan kun registreres fremad, så en bedrift bygget på den kan først tælle fra udrulningsdagen — de brugere, der allerede er inviteret, tælles aldrig. Gater desuden `I6` (ambassadørprogram), som ikke kan måle noget uden. | Mellem |
 | B18 | **Staging-projektet i Supabase** | Preview og produktion deler database, medmindre staging-variablerne peger et andet sted (`DOCUMENTATION.md` §9). Selve projektet skal oprettes manuelt, og `sql/schema.sql` genskaber hele `public` på én gang, så opsætningen er kort. **Rækken findes, fordi opgaven mistede sin tracker:** den blev fulgt som `G4`, men `G4` blev leveret som noget andet — dev-serverens hårde krav om `.env.local` — og forsvandt derfor fra listen, mens selve staging-projektet aldrig blev oprettet. Prisen ved status quo er, at en preview-test skriver i brugernes rigtige data; det er dét, `DOCUMENTATION.md` §11's advarsel om ikke at taste resultater ind på en preview holder i skak i hånden. | Lille (opsætning) |
