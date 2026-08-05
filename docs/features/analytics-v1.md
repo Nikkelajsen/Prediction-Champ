@@ -240,8 +240,43 @@ netop for at flytte, hvilken mode nye brugere vælger. Effekten er aldrig aflæs
 og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger
 den plads, der skulle guide.
 
-**Der skal ikke instrumenteres noget.** `competition_created` bærer allerede
-`metadata.mode`, så før/efter kan opgøres på eksisterende data:
+**Der skal ikke instrumenteres noget** — men der skal vælges kilde, og det viste
+sig at være hele forskellen (5. august 2026). Der er to, og de svarer på det
+samme:
+
+| Kilde | Vindue | Pålidelighed |
+|---|---|---|
+| **`competitions.mode` + `created_at`** | **hele appens historik** | rigtige rækker, **præcise** |
+| `analytics_events` (`competition_created` → `metadata.mode`) | fra 30. juli 2026, da Analytics v1 blev udrullet | fire-and-forget, et **gulv** |
+
+**Brug `competitions`.** Hændelsesloggen var det oprindelige valg her, fordi
+`competition_created` allerede bar `metadata.mode` — men en oprettelse er ikke
+kun en hændelse, den er også en **række**, og rækken har både den præcise mode
+og et `created_at`, der går hele vejen tilbage. Med en lille brugerbase er
+vinduets længde vigtigere end alt andet: hver oprettelse tæller, og
+hændelsesloggen kasserer per konstruktion alt fra før 30. juli.
+
+```sql
+-- Fordelingen af konkurrence-typer før og efter, at "Anbefalet" kom på.
+-- Sæt datoen til den dag, A22 blev udrullet.
+with maerket as (select timestamptz '2026-08-01 00:00+02' as fra),
+     raekker as (
+       select case when c.created_at < m.fra then 'før' else 'efter' end as periode,
+              c.mode
+         from competitions c cross join maerket m
+     )
+select periode,
+       mode,
+       count(*)                                                     as antal,
+       round(100.0 * count(*) / sum(count(*)) over (partition by periode), 1) as pct
+  from raekker
+ group by 1, 2
+ order by 1 desc, 4 desc;
+```
+
+Hændelses-varianten står stadig her, fordi den er den eneste, der kan skelne en
+oprettelse, som senere blev slettet, fra en, der aldrig fandtes — og fordi
+`metadata` kan bære felter, tabellen ikke har:
 
 ```sql
 -- Fordelingen af konkurrence-typer før og efter, at "Anbefalet" kom på.
@@ -262,18 +297,29 @@ select periode,
  order by 1 desc, 4 desc;
 ```
 
-> ⚠️ **Rettet efter levering (5. august 2026).** Forespørgslen ovenfor er
-> omskrevet, fordi **den oprindelige ikke kunne køre.** Den beregnede perioden i
-> `select`-listen og partitionerede så vinduet på `(e.created_at < m.fra)` —
-> altså på et udtryk, der hverken står i `group by` eller er pakket i en
-> aggregering. PostgreSQL afviser den med `42803: column "e.created_at" must
-> appear in the GROUP BY clause`. Perioden udledes nu ét sted, i CTE'en
-> `haendelser`, så vinduet kan partitionere på selve grupperingsnøglen.
+> ⚠️ **Rettet efter levering (5. august 2026), og to gange samme dag.**
 >
-> **Rettelsen er efterprøvet mod PostgreSQL 16.13** (samme version som CI) med
-> plantede data, hvor svaret var kendt på forhånd: 2 af 10 `full_season` før og
-> 6 af 10 efter gav 20,0 % og 60,0 %, procenterne summede til 100 inden for hver
-> periode, og en `login`-række blev holdt ude af `event_name`-filteret.
+> **1) Forespørgslen kunne ikke køre.** Den beregnede perioden i `select`-listen
+> og partitionerede så vinduet på `(e.created_at < m.fra)` — et udtryk, der
+> hverken står i `group by` eller er pakket i en aggregering. PostgreSQL afviser
+> den med `42803: column "e.created_at" must appear in the GROUP BY clause`.
+> Perioden udledes nu ét sted, i en CTE, så vinduet kan partitionere på selve
+> grupperingsnøglen. Begge forespørgsler ovenfor er **efterprøvet mod PostgreSQL
+> 16.13** (samme version som CI) med plantede data, hvor svaret var kendt på
+> forhånd, og med en negativ kontrol (en `login`-række, der skal holdes ude).
+>
+> **2) Kilden var forkert valgt.** Da forespørgslen endelig kørte, svarede den
+> med tre hændelser i alt, alle `random` — hvilket ikke er mistænkeligt ved en
+> testbase på ~20 brugere, men gør spørgsmålet ubesvarligt. Det afgørende er, at
+> **`analytics_events` først findes fra 30. juli 2026**, så "før mærkatet" var i
+> praksis to døgn og ikke appens historik. `competitions` bærer den samme mode
+> som en rigtig række med et `created_at`, der går hele vejen tilbage. Kilden er
+> derfor byttet om: tabellen er den primære, hændelsen er kontrollen.
+>
+> **Læren er ikke "loggen er dårlig"** — den er lossy by design, og det står i
+> §2. Læren er, at et gulv kun duer, når man har rigeligt af det man tæller.
+> Ved lille datamængde skal man tælle **rækker**, ikke hændelser, hvis rækken
+> findes.
 >
 > **Det, fejlen siger om spec'en, er vigtigere end fejlen.** §5F blev skrevet
 > netop for, at et spørgsmål uden en formuleret forespørgsel aldrig bliver
@@ -290,7 +336,13 @@ tre forbehold, som skal med, hvis tallet skal bære en beslutning:
   ved det ikke endnu" — ikke "det virkede ikke".
 * **Hændelsesloggen er fire-and-forget og lossy by design** (§2). Den er et
   GULV, ikke et facit. Til gengæld rammer tabet begge perioder lige, så
-  *fordelingen* er mere troværdig end de absolutte tal.
+  *fordelingen* er mere troværdig end de absolutte tal. **Gælder kun
+  kontrol-forespørgslen** — `competitions` er rigtige rækker.
+* **Perioderne er ikke lige lange, og "før" er den korte.** Mærkatet kom på
+  1. august 2026, mens appen har kørt siden juli — så "før" dækker uger og
+  "efter" dage. Med `competitions` som kilde er det en styrke (der ER noget at
+  sammenligne med); det er samtidig grunden til, at `pct` og ikke `antal` er
+  tallet, man læser.
 * **Rækkefølgen af kortene blev vendt samme dag** som mærkatet kom på (langt →
   kort med Sæson øverst). De to kan ikke skilles ad i data — flytter fordelingen
   sig, ved vi ikke hvilken af dem, der gjorde det. Det er acceptabelt for det,
