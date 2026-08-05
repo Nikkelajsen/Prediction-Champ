@@ -24,6 +24,8 @@
 --  10. `_anonymize_account()` kan ikke kaldes af en bruger.
 --  11. `admin_anonymize_account()` afviser en ikke-admin, sig selv og en anden
 --      administrator — og virker på en almindelig bruger.
+--  12. En lukket konto meldes af de konkurrencer, der IKKE er begyndt (A25) —
+--      og bliver i dem, der er, også når den lukkede aldrig har tippet i dem.
 
 \set ON_ERROR_STOP on
 \timing off
@@ -95,6 +97,7 @@ create table public.matches (
   id uuid primary key default gen_random_uuid(),
   season_id uuid not null references public.seasons(id) on delete cascade,
   kickoff_at timestamptz not null,
+  kickoff_tbd boolean not null default false,
   home_score int, away_score int
 );
 create table public.competition_matches (
@@ -108,6 +111,26 @@ create table public.predictions (
   pred_home int, pred_away int,
   primary key (user_id, match_id)
 );
+
+-- Låsen fra sql/matches_kickoff_tbd.sql (#28), som A25-frameldingen i afsnit 4
+-- kalder. Hele migreringen kan ikke køres her: den genskaber også de fem
+-- predictions-policies og viewet `analytics_match_locks`, og de kræver et skema,
+-- denne test bevidst ikke har. De to funktioner er kopieret ORDRET — ændres
+-- låsen, ændres den i #28, og denne kopi skal følge med.
+create or replace function public.match_lock_at(kickoff_at timestamptz, kickoff_tbd boolean)
+  returns timestamptz language sql stable as $q$
+  select case
+    when kickoff_at is null then null
+    when kickoff_tbd then
+      date_trunc('day', kickoff_at at time zone 'Europe/Copenhagen')
+        at time zone 'Europe/Copenhagen'
+    else kickoff_at - interval '1 hour'
+  end;
+$q$;
+create or replace function public.match_locked(kickoff_at timestamptz, kickoff_tbd boolean)
+  returns boolean language sql stable as $q$
+  select coalesce(public.match_lock_at(kickoff_at, kickoff_tbd) <= now(), false);
+$q$;
 
 -- Security definer-hjælperen fra sql/groups.sql — den, policyerne kalder.
 create or replace function public.is_group_admin(gid uuid)
@@ -363,6 +386,110 @@ begin
   end if;
   if not exists (select 1 from public.predictions where user_id = tipper) then
     raise exception '11d) tippet forsvandt — anonymisering må aldrig røre andres stillinger';
+  end if;
+end $$;
+
+-- ---------- 12: framelding fra det, der ikke er begyndt (A25) ----------
+--
+-- Egne data, fordi de foregående afsnit har slettet både ligaen og en
+-- konkurrence undervejs. Fire konkurrencer, fordi reglen har fire udfald, og de
+-- tre af dem er "lad være":
+--
+--   IGANG      spillet kamp, LUKKES har ALDRIG tippet   → beholdes
+--   KOMMENDE   kun en fremtidig kamp, VEN er også med   → frameldes
+--   ALENE      kun en fremtidig kamp, LUKKES er ene     → beholdes
+--   TOM        ingen kampe overhovedet, VEN er også med → frameldes
+--
+-- IGANG er den vigtigste: en deltager uden tips i en igangværende konkurrence
+-- står stadig i en stilling, de andre har set. Reglen måler konkurrencen og
+-- ikke brugerens tips — havde den målt tips, ville netop den forsvinde.
+insert into auth.users (id) values
+  ('b0000000-0000-0000-0000-000000000001'),  -- LUKKES
+  ('b0000000-0000-0000-0000-000000000002');  -- VEN
+
+insert into public.profiles (id, display_name, is_admin) values
+  ('b0000000-0000-0000-0000-000000000001', 'Lukkes', false),
+  ('b0000000-0000-0000-0000-000000000002', 'Ven',    false);
+
+insert into public.groups (id, name, created_by) values
+  ('91000000-0000-0000-0000-000000000001', 'Naboerne', 'b0000000-0000-0000-0000-000000000002');
+insert into public.group_members (group_id, user_id, role) values
+  ('91000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'member'),
+  ('91000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002', 'admin');
+
+insert into public.matches (id, season_id, kickoff_at, home_score, away_score) values
+  ('11000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001', now() - interval '3 days', 2, 1),
+  ('11000000-0000-0000-0000-000000000002', '50000000-0000-0000-0000-000000000001', now() + interval '10 days', null, null);
+
+insert into public.competitions (id, name, group_id, created_by) values
+  ('c1000000-0000-0000-0000-000000000001', 'Igang',    '91000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002'),
+  ('c1000000-0000-0000-0000-000000000002', 'Kommende', '91000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002'),
+  ('c1000000-0000-0000-0000-000000000003', 'Alene',    '91000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001'),
+  ('c1000000-0000-0000-0000-000000000004', 'Tom',      '91000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002');
+
+insert into public.competition_matches (competition_id, match_id) values
+  ('c1000000-0000-0000-0000-000000000001', '11000000-0000-0000-0000-000000000001'),
+  ('c1000000-0000-0000-0000-000000000002', '11000000-0000-0000-0000-000000000002'),
+  ('c1000000-0000-0000-0000-000000000003', '11000000-0000-0000-0000-000000000002');
+  -- "Tom" får bevidst ingen kampe.
+
+insert into public.competition_participants (competition_id, user_id) values
+  ('c1000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001'),
+  ('c1000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002'),
+  ('c1000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001'),
+  ('c1000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000002'),
+  ('c1000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000001'),
+  ('c1000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000001'),
+  ('c1000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000002');
+
+do $$
+declare
+  global uuid := 'a0000000-0000-0000-0000-000000000005';
+  lukkes uuid := 'b0000000-0000-0000-0000-000000000001';
+  ven    uuid := 'b0000000-0000-0000-0000-000000000002';
+begin
+  perform set_config('test.uid', global::text, true);
+  perform public.admin_anonymize_account(lukkes);
+
+  -- 12a) De to ikke-begyndte er væk.
+  if exists (select 1 from public.competition_participants
+              where user_id = lukkes and competition_id = 'c1000000-0000-0000-0000-000000000002') then
+    raise exception '12a) pseudonymet blev stående i en konkurrence, der ikke er begyndt';
+  end if;
+  if exists (select 1 from public.competition_participants
+              where user_id = lukkes and competition_id = 'c1000000-0000-0000-0000-000000000004') then
+    raise exception '12a) pseudonymet blev stående i en konkurrence uden kampe';
+  end if;
+
+  -- 12b) Den igangværende beholdes — også uden ét eneste tip.
+  if not exists (select 1 from public.competition_participants
+                  where user_id = lukkes and competition_id = 'c1000000-0000-0000-0000-000000000001') then
+    raise exception '12b) deltagelsen forsvandt fra en konkurrence, der ER begyndt';
+  end if;
+
+  -- 12c) Den sidste deltager frameldes ikke — en tom konkurrence er ny rod.
+  if not exists (select 1 from public.competition_participants
+                  where user_id = lukkes and competition_id = 'c1000000-0000-0000-0000-000000000003') then
+    raise exception '12c) den eneste deltager blev frameldt og efterlod en tom konkurrence';
+  end if;
+
+  -- 12d) Ingen andres rækker er rørt, og ingen konkurrence står uden deltagere.
+  if (select count(*) from public.competition_participants where user_id = ven) <> 3 then
+    raise exception '12d) frameldingen ramte en anden deltager';
+  end if;
+  if exists (
+    select 1 from public.competitions c
+    where c.id::text like 'c1000000%'
+      and not exists (select 1 from public.competition_participants p where p.competition_id = c.id)
+  ) then
+    raise exception '12d) en konkurrence endte uden deltagere';
+  end if;
+
+  -- 12e) Ligamedlemskabet står. Invarianten er "deltager ⇒ medlem" og rammes
+  --      ikke af, at der fjernes i deltager-enden.
+  if not exists (select 1 from public.group_members
+                  where user_id = lukkes and group_id = '91000000-0000-0000-0000-000000000001') then
+    raise exception '12e) ligamedlemskabet forsvandt';
   end if;
 end $$;
 

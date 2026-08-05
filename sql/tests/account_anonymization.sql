@@ -12,6 +12,14 @@
 --      stadig deltager og ligamedlem. Det er hele grunden til, at anonymisering
 --      blev valgt frem for sletning — går denne påstand tabt, får vennernes
 --      stillinger huller.
+--      ⚠️ Deltagelses-påstanden gælder DENNE FILS krop og ikke produktionens.
+--      Produktionen kalder `_anonymize_account()` (sql/liga_admin.sql), som
+--      siden A25 også melder den lukkede af de konkurrencer, der IKKE er
+--      begyndt. Skellet kan ikke måles her — dette skema har hverken `matches`
+--      eller `competition_matches`, så en konkurrence kan ikke være begyndt —
+--      og hører derfor hjemme i afsnit 12 af sql/tests/liga_admin.sql, hvor
+--      begge tabeller findes. Den fulde regel er: begge kroppe bevarer
+--      deltagelsen i alt, der er spillet.
 --   5. **Ligaen, A oprettede, findes stadig med alle sine medlemmer.** En
 --      sletning ville have kaskaderet den væk via groups.created_by.
 --   6. A's feedback-række overlever uden user_id.

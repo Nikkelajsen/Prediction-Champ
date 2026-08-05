@@ -56,10 +56,12 @@ Anonymisering går uden om begge, fordi `profiles`-rækken bliver stående.
 | `push_subscriptions`, `notification_log`, `stories`, `analytics_events`, `user_activity_days` | slettes |
 | `feedback.user_id` | → `null` (samme valg som tabellens egen `on delete set null`) |
 | `client_errors.user_id` | → `null` *(tilføjet 3. august 2026 — tabellen kom til efter leveringen (#36), og kontoen soft-lukkes, så FK'ens `on delete set null` aldrig udløses; uden dette holdt politikkens løfte om fejlrapporter ikke)* |
-| `predictions`, `ratings`, `rating_history`, `competition_awards`, `competition_participants`, `group_members` | **bevares** — de er grundlaget for andres stillinger |
+| `predictions`, `ratings`, `rating_history`, `competition_awards`, `competition_participants`, `group_members` | **bevares** — de er grundlaget for andres stillinger. *(Rettet efter levering, 5. august 2026 — `A25`: `competition_participants` bevares ikke længere ubetinget. Deltagelsen i en konkurrence, hvor **ingen kamp er låst eller spillet**, slettes, når mindst én anden deltager bliver tilbage; dér findes der ingen stilling at være grundlaget for. Alt, der er begyndt, bevares uændret — også en deltagelse uden ét eneste tip.)* |
 | `groups`, `competitions` | røres ikke; overlever fordi `profiles` gør |
 
 **Medlemskaberne kan ikke behandles hver for sig.** `group_membership_invariant.sql` håndhæver, at en konkurrence-deltager altid er ligamedlem — at slette det ene og beholde det andet ville genskabe præcis den forældreløse tilstand, invarianten findes for at forhindre.
+
+*Rettet efter levering (5. august 2026, `A25`): sætningen gælder kun den ene retning, og det er dén, `A25`s framelding bruger. Invarianten er "deltager ⇒ medlem", så en sletning i **deltager**-enden bryder den ikke — det er kun den modsatte, at fjerne medlemskabet og beholde deltagelsen, der genskaber den forældreløse tilstand. Ligamedlemskabet står derfor urørt efter en framelding, og en lukket konto kan ende som ligamedlem uden en eneste deltagelse. Det er en helt almindelig tilstand i skemaet — men det er også et pseudonym på en liste, og den halvdel er noteret i backloggens indbakke frem for løst her.*
 
 `anonymize_my_account()` har **nul parametre**. Det er hele adgangsgarantien: der findes ikke et bruger-id at forfalske. `sql/tests/account_anonymization.sql` efterprøver det mekanisk med et `pg_proc`-opslag.
 
