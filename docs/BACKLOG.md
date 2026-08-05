@@ -116,7 +116,7 @@ versionsstempel → `G42`).*
 
 ## Prioriteret rækkefølge
 
-Alle 33 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -186,14 +186,14 @@ Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 4. **Det, der venter på en udløser, prioriteres ikke** — det står nederst, ikke
    fordi det er uvigtigt, men fordi rækkefølgen ikke er vores at vælge.
 
-### Tier 1 — Produktionsadgang: svaret ligger uden for repoet
+### Tier 1 — Produktionsadgang: svaret ligger uden for repoet ✅ tomt
 
-**De fem oprindelige er kørt 5. august 2026 — og kørslen efterlod to nye.**
-Tieret dækker nu også svar, der ligger i cron-job.org og ikke kun i Supabase
-(`G75`); fællesnævneren er, at adgangen ikke findes i den maskine, arbejdet
-laves i.
+**Kørt tom to gange 5. august 2026: fem oprindelige aflæsninger, plus de to,
+kørslen selv efterlod.** Tieret dækker nu også svar, der ligger i cron-job.org og
+ikke kun i Supabase; fællesnævneren er, at adgangen ikke findes i den maskine,
+arbejdet laves i.
 
-**Kørt 5. august 2026 — alle fem oprindelige aflæsninger er lavet.** Tieret har været "det
+**Alle fem oprindelige aflæsninger er lavet.** Tieret har været "det
 næste" i tre runder uden at kunne røres, fordi opslagene krævede en adgang,
 arbejdsmaskinen ikke har. De blev samlet til ét paste og kørt af ejeren.
 
@@ -209,53 +209,18 @@ ikke køre som skrevet, ét pegede på den forkerte kilde, og tre svarede med ta
 for små til at bære den beslutning, rækken var skrevet for. **En formuleret
 forespørgsel er ikke det samme som et svar, der findes.**
 
-*Fyldt igen samme dag af de fund, kørslen selv efterlod (`G72`, `G75`). Det er
-samme mønster som Tier 2 og 4 den 3. august, med én forskel, der er værd at
-holde fast i: dengang kom påfyldningen af at læse dokumentationen, her kommer
-den af at have kørt noget. **Et opslag, der svarer, stiller i snit et nyt
-spørgsmål** — og begge de nye er af den slags, kun produktionen kan besvare.*
-
-| # | Hvad | Hvorfor her |
-|---|---|---|
-| `G72` | `select count(*) from competitions where mode_params ? 'awards'` | Ét opslag afgør, om Story Engines to kåringsregler er **død kode** eller bare **uden opt-in**. Svarer den 0, er reglerne uskyldige, og rækken lukkes med en note. Svarer den > 0, er der en fejl i en leverance fra 3. august. |
-| `G75` | Aflæs skemaet for job 6–10 på cron-job.org | Kørselstallene siger hver ~1,8 time, registret siger hver 12. time. Registret er kun sandt, hvis det vedligeholdes, og det har allerede taget fejl to gange om minuttallene. |
-
-*Tre af de oprindelige fem er aflæst 5. august 2026 (femte runde). **`I16` er
-slettet:** nul lukkede konti ud af 24 profiler, tællingen var hele opgaven, og
-den er lavet. **`G8` er flyttet til Tier 6**, fordi rækkens egen præmis faldt:
-nul rækker med `mode_params.tournaments` betyder, at `B2`s testcase 3 blev
-klikket igennem og ikke gemt. **Det er forskellen på de to tomme svar, der er
-værd at tage med:** et tomt svar lukker en række, når rækken bad om et tal, og
-åbner den, når rækken gættede på et.*
-
-*`A11` er den eneste af de fem, der udløste kode, og den er **slettet sammen med
-sin fallback**: opslaget viste `header` for alle ni jobs og nul `query` over
-fjorten dage, så `?secret=` er væk af `api/_shared.js`. Kolonnen i
-[`CRON.md`](./CRON.md), der havde stået med `?` i en måned, er udfyldt — og
-kan nu ikke længere have en anden værdi, fordi alt andet end headeren giver
-401. **Samme opslag bar et svar, ingen havde spurgt om:** kørselstallene siger,
-at fem af jobbene kører seks gange hyppigere end registret lover. Det ligger i
-indbakken, ikke her, fordi det skal bekræftes på cron-job.org først.*
-
-*`B12` er kørt og **flyttet til Tier 6** — ikke fordi svaret var nej, men fordi
-det ikke findes endnu. Hele appens historik rummer **syv** konkurrencer, og kun
-**én** er oprettet efter mærkatet. En fordelingssammenligning med n=1 i den ene
-periode kan ikke måle noget, hvilket er præcis spec'ens eget første forbehold
-("står `antal` i enkeltcifre, er svaret *vi ved det ikke endnu*"). **Det, der
-gjorde rækken kørbar, står tilbage som leverance:** forespørgslen kunne ikke
-køre, og dens kilde var forkert valgt — begge dele er rettet, så opslaget kan
-gentages den dag, tallene er der.*
-
-*`B19` og `B22` er begge slettet 5. august 2026, og de to hører sammen: `B19`s
-fem filer blev kørt, hvorefter skema-eksporten viste, at `rating_core.sql` (#0)
-IKKE var — så `G68` var merget som kode og inert i databasen. Det blev `B22`,
-som er kørt og verificeret i en anden eksport samme dag. **Tieret er dermed rene
-aflæsninger igen.** Mønstret er værd at tage med: eksporten er den eneste kilde,
-der kan sige nej til en påstand om, hvad der står i produktion — og den sagde
-nej to gange på én dag, begge gange til os.*
-
-| # | Hvad | Hvorfor her |
-|---|---|---|
+*Fyldt igen samme dag af de fund, kørslen selv efterlod (`G72`, `G75`) — og
+tømt igen samme dag, fordi begge var ét opslag. **Begge svarede "ikke en fejl":**
+`G72` gav 0 konkurrencer med `mode_params.awards`, så Story Engines to
+kåringsregler er uafprøvede og ikke døde; `G75` blev aflæst på cron-job.org, hvor
+skemaet ER hver 12. time — de fem jobs blev oprettet forkert 31. juli og er siden
+rettet. **`G75` er den mest lærerige af hele dagen, fordi den var vores fejl og
+ikke registrets:** et `count(*)` over fjorten dage er ét tal for hele perioden og
+kan ikke skelne "har altid kørt forkert" fra "kørte forkert og blev rettet".
+Udregningen var rigtig om vinduet og forkert om nutiden. Skal spørgsmålet stilles
+igen, kræver det afstanden mellem nabokørsler (`lag(started_at) over …`), ikke et
+gennemsnit. Samme aflæsning bekræftede alle syv minuttal, inklusive Scotlands 15,
+som indtil da kun var udledt.*
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
@@ -435,10 +400,8 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 |---|---|---|---|
 | G70 | **`DECISIONS.md` mangler omkring tredive rækker** fra ROADMAP'ens beslutningslog. | Fundet af `G67` (5. august 2026), som lukkede de fem rækker, den selv navngav, og efterlod resten. `CLAUDE.md` sender én til `DECISIONS.md` for at vide, *hvorfor* noget blev som det blev — og en beslutning, der ikke står der, ser ud som om den aldrig blev truffet. Prisen er derfor ikke et opslag mere, men en genåbnet diskussion. **Arbejdet er udvælgelsen og ikke kopieringen:** ROADMAP'ens log blander beslutninger (som hører til) med leverancer (som hører i `CHANGELOG.md`), og den skelnen skal træffes række for række. | Mellem |
 | G71 | **Ingen test binder `LOKALE_NØGLER` til privatlivspolitikkens afsnit om lokale data.** | `G69` slap igennem præcis dér: `pc_pwa_onboarded` blev ryddet af `clearAllLocalState()` og opremset i guard-testen, men manglede sin linje i policyen — altså et løfte til brugeren, der ikke passede. `localFlags.js` siger selv, at navnene har tre aftagere, og at den tredje er `legal.js`; kun de to første har en test. **Testen er ikke et navne-match, og det er hele udfordringen:** policyen beskriver nøglerne i almindeligt sprog ("om du har lukket kortet om notifikationer"), fordi den skal kunne læses af et menneske. Koblingen kræver derfor en eksplicit oversættelsestabel i testen — ellers bygger den næste en naiv `toContain` og opgiver, når den ikke kan virke. | Lille |
-| G72 | **`AWARD_WEEK` og `AWARD_MONTH` har aldrig udløst** — de to kåringsregler, Story Engine v1.2 blev leveret for. | `B10`/`B11` (3. august 2026) gav de lokale kåringer en stemme og gjorde notifikations-jobbet til deres pålidelige skriver. Aflæsningen 5. august viser **nul** genererede kort fra begge, altså mærkatet ALDRIG — "den dyreste slags død kode: den ser ud til at virke". **Den sandsynlige forklaring er uskyldig:** kåringer er opt-in via `mode_params.awards`, og med syv konkurrencer i alt har formentlig ingen valgt dem til, så reglerne kan per konstruktion ikke fyre. Det er ét opslag at afgøre: `select count(*) from competitions where mode_params ? 'awards'`. Svarer den 0, lukkes rækken med en note om, at reglerne er uafprøvede og ikke defekte. Svarer den > 0, er der en fejl i en leverance, der har stået i produktion siden 3. august. | Lille (opslag) |
 | G73 | **Dagsreglernes `generated` måler noget andet end det, en bruger kunne se.** 197 af 280 historier er dagskort, og ingen af dem er nogensinde vist. | Karusellen henter `round_key=eq.<nuværende runde>` (`loadRoundCarousel`, `src/lib/data/activity.js`), så et dagskort, der hører til en passeret runde, kan aldrig nå skærmen — og v2's efterfyldning skrev netop sådanne kort. Det er ikke i sig selv forkert (gamle kort skal ikke dukke op), men Analytics' regeltabel stiller `viewed` op mod `generated` og læser forholdet som et adfærdssignal. For dagsreglerne er nævneren oppustet med kort, der aldrig var vis-bare, så tallet siger noget om efterfyldningen og ikke om brugerne. **Det gør netop den regelstatistik, `A5` skal afgøres på, misvisende for syv af treogtyve regler.** Enten skal nævneren afgrænses til kort, der kunne vises, eller også skal tabellen sige det højt. | Lille (analyse) / Mellem (rettelse) |
 | G74 | **SQL-blokke i `docs/` har ingen CI bag sig.** | `B12`s §5F-forespørgsel stod fra august 2026 med teksten "forespørgslen er skrevet, tilbage står at køre den" — og da den blev kørt 5. august, afviste PostgreSQL den med `42803`. En SQL-blok i et dokument er en **påstand** om, hvad der ville virke, indtil nogen kører den, og backloggen prioriterede den som "et opslag, vi allerede har svaret på". Der findes allerede et `sql`-job i CI med en rigtig PostgreSQL, så spørgsmålet er ikke om det kan lade sig gøre, men om blokkene kan udtrækkes og syntakstjekkes uden at kræve produktionsskemaet — `prepare` mod et tomt skema fejler på ukendte tabeller, ikke kun på syntaks. | Mellem |
-| G75 | **Cron-registrets skema afviger fra virkeligheden for fem jobs.** Kørselstallene siger hver ~1,8 time, `CRON.md` siger hver 12. time. | Udregnet af `A11`-opslagets `count(*)` 5. august 2026, og **metoden validerer sig selv**: `sync-live` giver 1,0 minut og `send-notifications` 15,0, begge præcis som dokumenteret. Job 1 og 5 rammer også deres 12 timer; det er job 6–10 — præcis dem, der blev oprettet samme dag — der afviger. Det koster ~65 sync-kørsler i døgnet mod de ~10, registret lover, altså seks gange kaldbudgettet mod Sportmonks og football-data.org. **Rate limiten på 10 kald/minut er uberørt**, fordi minutspredningen gælder uanset frekvens. Registret har allerede taget fejl to gange om minuttallene (3. august), og det er vilkåret ved et register over noget, der bor et andet sted. **Skal bekræftes på cron-job.org, før tabellen rettes** — tallene kommer fra `job_runs`, ikke fra kilden. | Lille (aflæsning + rettelse) |
 | G76 | **`anonymize_my_account()` har aldrig kørt i produktion.** | `I16`s tælling 5. august 2026 gav 0 lukkede konti ud af 24 profiler, og dét tal har en anden aflæsning end den, rækken blev talt for: funktionen bag kontolukning er **uafprøvet mod rigtige data**. Den blev skrevet forfra 4. august (`A28`–`A31`) og gen-kørt 5. august, den er uigenkaldelig, og dens første rigtige kørsel er en bruger, der har bedt om at forsvinde og ikke kan fortryde, hvis den fejler halvvejs. Samme form som `G8` — en kodesti, kun unit-tests har været nede ad — men med en dyrere fejl, fordi `G8`s værste udfald er en forkert stilling, og denne er en halvt slettet person. Vejen til at prøve den uden en rigtig bruger er `B18` (staging). | Lille (test) — men gated af `B18` |
 | G1 | **De resterende store skærmfiler** — `MainApp.jsx` ~582 linjer, `HjemTab.jsx` ~530, `ProfileScreen.jsx` ~460, `CreateCompetitionScreen.jsx` ~444, `AdminScreen.jsx` ~329. | Anden halvdel af fil-opdelingen fra 30. juli 2026. **Tre er delt (3. august):** `ChampionshipTab` 512 → 272 og `ProfileScreen` 614 → 460 — rene flytninger, hvor testene nu importerer fra modulerne frem for gennem skærmen. **`MainApp`s invitations-flows er udskilt 5. august 2026** til `src/lib/data/invites.js` med elleve tests. Linjetallet faldt kun 618 → 582, og dét er pointen: gevinsten var, at de to flows kunne testes overhovedet. De lå i to `useEffect`, altså uden for rækkevidde af en testopsætning uden jsdom — og `A23` står åben netop med den begrundelse, at ingen test dækker dem. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** (`A23`s emne) plus render-træet, og bør vente på den beslutning. De fire andre filer er uafhængige og kan tages hver for sig. | Mellem |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |

@@ -224,6 +224,25 @@ En lav rate kan lige så godt betyde tabt logning som manglende visning. Sammenl
 - **ALDRIG** — har ikke udløst én eneste gang, heller ikke uden for vinduet. Den dyreste slags død kode: den ser ud til at virke.
 - **STILLE** — har udløst før, men ikke i vinduet. Bare en stille periode.
 
+> **De tre ALDRIG-regler pr. 5. august 2026 er efterset, og to af dem er
+> uskyldige.** `AWARD_WEEK` og `AWARD_MONTH` læser `competition_awards`, som kun
+> skrives for konkurrencer med `mode_params.awards` — og opslaget
+> `select count(*) from competitions where mode_params ? 'awards'` svarer **0**.
+> Reglerne er altså **uafprøvede, ikke defekte**: der har aldrig været en
+> konkurrence, de kunne fyre på. De fyrer af sig selv, første gang nogen slår
+> kåringer til.
+>
+> **Det er en anden situation end `G8`s uprøvede kodesti**, og forskellen er
+> værd at kende: kæden fra kåringsrække til historie-kort er dækket af en
+> SQL-test i CI ("Test af Story Engines kåringsregler"), fordi den går gennem
+> tre filer og fejler tavst bag matches-triggerens exception-guard. Stien er
+> altså afprøvet — bare ikke af produktionsdata.
+>
+> **Den tredje, `RATING_HIGH`, står stadig åben.** Den kræver en rating, der
+> er højere end alle tidligere, altså en historik at slå — så den kan være
+> tærsklen eller reglen. Boksen bør læses med det i baghovedet: **ALDRIG er et
+> spørgsmål og ikke en dom.**
+
 Prisen for at holde katalogen i JS er drift. Den betales af en test, der **læser alle `sql/story_engine*.sql`**, trækker regelnavnene ud og fejler, hvis de to lister ikke er ens — så listen ikke stille kan blive forældet, næste gang motoren udvides.
 
 > ⚠️ **Rettet efter levering (august 2026).** Testen læste oprindeligt kun `sql/story_engine.sql` ved navn. Da Story Engine v2 lagde sin dagsmotor i en **ny fil** (`sql/story_engine_v2.sql`), var der derfor ingen drift at se: testen blev ved med at være grøn, mens de syv dagsregler stod i tabellen som rå nøgler (`DAY_RESULT`, `DUEL`, …) med mærkatet **UKENDT** og uden navn. En hårdkodet filliste var den samme fejl som den hårdkodede regelliste, testen skulle beskytte imod. Testen finder nu filerne ved at læse `sql/`-mappen, og katalogen har fået de syv navne: *Dagens facit · Alene om at ramme · Ingen ramte kampen · Dagens højeste · Stimen lever eller brød · Duel med nærmeste rival · Ét mål fra eksakt*.
