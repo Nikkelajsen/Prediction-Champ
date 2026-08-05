@@ -15,6 +15,61 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 5. august 2026 — `A25`: en lukket konto meldes af det, der ikke er begyndt
+
+**Beslutning:** `_anonymize_account()` (`sql/liga_admin.sql`) sletter den lukkede
+kontos `competition_participants`-rækker i de konkurrencer, hvor **ingen kamp er
+låst eller spillet** — og kun når mindst én **anden** deltager bliver tilbage.
+Alt andet er uændret: en konkurrence, der er begyndt, beholder deltageren, også
+hvis vedkommende aldrig nåede at tippe i den. Tips, rating, ratinghistorik,
+kåringer og ligamedlemskab røres ikke.
+
+**Begrundelsen er `A30`s skel, skåret på konkurrencen frem for på listen.** `B4`
+valgte at bevare alt, fordi deltagelsen er *vennernes* fælles historik: fjernede
+vi rækken, ville en afsluttet konkurrence pludselig have haft én deltager færre,
+og en delt sejr kunne blive udelt. Den begrundelse holder for alt, der er
+spillet — men i en konkurrence, hvor ingen kamp er låst endnu, findes der ingen
+historik at beskytte. Dér er pseudonymet ikke et spor af noget, der er sket, men
+en deltager, der **aldrig kommer til at spille**: deltagerantallet er forkert
+fremadrettet, og navnet står på listen hele sæsonen for alle de andre. Det er
+samme prøve, `A30` bestod for de globale lister — er der historik, bliver
+rækken; er der ikke, er pseudonymet bare en fremmed, der fylder en plads.
+
+**"Ikke begyndt" måles på konkurrencen og ikke på brugerens tips.** Den
+nærliggende genvej var at genbruge `comp_participants_delete_own_unlocked`s
+betingelse ("ingen tips på låste kampe"), men den er brugerens egen og for løs
+her: en deltager uden tips i en igangværende konkurrence står stadig i en
+stilling, de andre har set, og den må ikke kunne skrives om bagfra. Prøven er
+derfor konkurrencens egen — er én af dens kampe låst eller spillet, er den
+begyndt. En konkurrence uden kampe overhovedet er ikke begyndt.
+
+**Den anden betingelse er lige så vigtig som den første.** Er den lukkede den
+eneste deltager, frameldes de ikke: der er ingen, pseudonymet generer, og
+frameldingen ville efterlade en konkurrence uden deltagere — en ny slags rod i
+stedet for den gamle. Betingelsen falder sammen med selve motivet, som er, at
+*de andre* ser et navn, der aldrig kommer til at spille.
+
+**Tippene røres ikke, og det er ikke en udeladelse.** `predictions` er global pr.
+kamp — ét tip gælder i alle de konkurrencer, kampen indgår i — så en sletning
+kunne flytte tal i en konkurrence, personen stadig ER med i. Samme skelnen som
+`liga_admin.sql`s to første policies er skåret efter.
+
+**Beslutningen er truffet FØR sin egen udløser, og det er selve pointen.**
+Rækken ventede på "den første rigtige kontolukning" (talt 5. august 2026: 0 af
+24). Den udløser kan ikke bruges: lukningen er uigenkaldelig og sker én gang pr.
+person, så i det øjeblik udløseren springer, ER prisen betalt — pseudonymet står
+i konkurrencen, og det eneste, der kan rette det bagefter, er håndarbejde i
+produktionsdatabasen på en brugers rækker. En udløser, der først kan aflæses,
+når skaden er sket, er ikke en udløser, men en udskydelse. Prisen ved at afgøre
+den nu er, at spørgsmålet er besvaret hypotetisk; prisen ved at vente var, at
+den første bruger, der bad om at forsvinde, fik det forkerte svar.
+
+**Den kendte følgevirkning er, at anonymiseringen bliver en tand dyrere at køre
+første gang** — `G76` (funktionen har aldrig kørt i produktion) er dermed lidt
+vigtigere end i går, ikke mindre. Reglen er til gengæld den eneste af
+anonymiseringens handlinger, der har en *negativ* kontrol i test: `sql/tests/liga_admin.sql`
+afsnit 12 har fire konkurrencer, hvoraf de tre skal blive stående.
+
 ## 5. august 2026 — `A11`: `?secret=`-fallbacken er fjernet
 
 **Beslutning:** `isAuthorized()` i `api/_shared.js` accepterer kun `SYNC_SECRET`

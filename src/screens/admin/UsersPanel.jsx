@@ -86,6 +86,9 @@ function UsersPanel({ token }) {
           <p style={{ color: C.muted, fontSize: 13, margin: "8px 0 0" }}>
             Navn, brugslog, historie-kort og push-abonnementer fjernes. Tips, point, rating og kåringer <b>bliver</b> — de er andres stillinger regnet ud fra dem, og en sletning ville give vennernes historik huller.
           </p>
+          <p style={{ color: C.muted, fontSize: 13, margin: "8px 0 0" }}>
+            Deltagelsen bliver med — undtagen i konkurrencer, der <b>ikke er begyndt</b>: dér er der ingen stilling at efterlade et hul i, og pseudonymet ville stå på deltagerlisten hele sæsonen.
+          </p>
           <p style={{ color: C.muted, fontSize: 13, margin: "8px 0 0" }}>Det kan ikke fortrydes.</p>
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
             <button style={btnGhost} onClick={() => setPending(null)} disabled={busy}>Fortryd</button>

@@ -1,8 +1,10 @@
 -- Leagly — hvad en administrator må: liga-admin rydder op, global admin lukker konti
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
 --
--- Forudsætter sql/season_end.sql (afsnit 3 læser `competition_status.concluded`)
--- og sql/account_anonymization.sql (afsnit 4 bygger videre på `anonymized_at`).
+-- Forudsætter sql/season_end.sql (afsnit 3 læser `competition_status.concluded`),
+-- sql/account_anonymization.sql (afsnit 4 bygger videre på `anonymized_at`) og
+-- sql/matches_kickoff_tbd.sql (afsnit 4's framelding kalder `match_locked()` —
+-- låsen bor ét sted, og dette er det femte kaldested).
 --
 -- ---------------------------------------------------------------------------
 -- Den regel, der binder de tre liga-handlinger sammen
@@ -195,6 +197,59 @@ begin
   -- Kontoen soft-lukkes (auth.users-rækken består), så client_errors' egen
   -- `on delete set null` udløses aldrig — koblingen skal fjernes her.
   update public.client_errors set user_id = null where user_id = p_user_id;
+
+  -- ---------------------------------------------------------------------
+  -- Framelding fra det, der ikke er BEGYNDT (A25, 5. august 2026)
+  -- ---------------------------------------------------------------------
+  -- Alt andet her bevarer deltagelsen, og begrundelsen er vennernes historik:
+  -- en fjernet række ville give en afsluttet konkurrence én deltager færre og
+  -- kunne gøre en delt sejr udelt. Den begrundelse har en grænse. I en
+  -- konkurrence, hvor ingen kamp er låst endnu, findes der ingen historik at
+  -- beskytte — dér er pseudonymet ikke et spor af noget, der er sket, men en
+  -- deltager, der aldrig kommer til at spille: deltagerantallet er forkert
+  -- FREMADRETTET, og navnet står på listen hele sæsonen. Det er samme skel, som
+  -- A30 traf for de globale lister; her er det bare skåret på konkurrencen frem
+  -- for på listen.
+  --
+  -- TO BETINGELSER, og den anden vejer lige så meget som den første:
+  --   (a) ingen af konkurrencens kampe er låst eller spillet. "Ikke begyndt"
+  --       måles på KONKURRENCEN og ikke på brugerens egne tips: en deltager
+  --       uden tips i en igangværende konkurrence står stadig i en stilling,
+  --       de andre har set, og den må ikke kunne skrives om.
+  --   (b) der er mindst én anden deltager tilbage. Er der ingen, er der heller
+  --       ingen, pseudonymet generer — og frameldingen ville efterlade en
+  --       konkurrence uden deltagere, altså en ny slags rod i stedet for den
+  --       gamle.
+  --
+  -- Invarianten er urørt: `group_membership_invariant.sql` kræver deltager ⇒
+  -- medlem, og der fjernes kun i deltager-enden. Ligamedlemskabet bliver
+  -- stående; det er hverken en stilling eller en plads i en konkurrence.
+  --
+  -- TIPPENE RØRES IKKE. Ét tip gælder i ALLE de konkurrencer, kampen indgår i,
+  -- så en sletning her kunne flytte tal i en konkurrence, brugeren stadig ER
+  -- med i. Tippene bliver stående og tæller uændret alle de andre steder,
+  -- kampen indgår — de tæller bare ikke i den konkurrence, rækken lige er
+  -- meldt af.
+  delete from public.competition_participants cp
+   where cp.user_id = p_user_id
+     and not exists (
+       select 1
+       from public.competition_matches cm
+       join public.matches m on m.id = cm.match_id
+       where cm.competition_id = cp.competition_id
+         and (
+           public.match_locked(m.kickoff_at, m.kickoff_tbd)
+           -- Bæltet til selen: et resultat uden en overskredet lås burde ikke
+           -- kunne findes, men hvis det gør, ER konkurrencen begyndt.
+           or m.home_score is not null
+         )
+     )
+     and exists (
+       select 1
+       from public.competition_participants o
+       where o.competition_id = cp.competition_id
+         and o.user_id <> p_user_id
+     );
 
   update public.profiles
      set display_name  = v_navn,

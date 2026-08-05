@@ -69,6 +69,7 @@ function SletKontoKort({ token, onLogout }) {
             <li>dit brugernavn erstattes af et pseudonym</li>
             <li>din brugslog, dine notifikationer og dine historie-kort slettes</li>
             <li>dine tips, point, rating og kåringer bliver stående under pseudonymet</li>
+            <li>er du med i en konkurrence, der ikke er begyndt, meldes du af den</li>
             <li>ligaer og konkurrencer, du har oprettet, bliver stående for de andre</li>
           </ul>
           <label className="srOnly" htmlFor={feltId}>Skriv {BEKRÆFT_ORD} for at bekræfte</label>

@@ -43,8 +43,8 @@
 --   predictions, ratings,         BEVARES      andres stillinger, ratinghistorik
 --   rating_history,                            og kåringer er REGNET ud fra dem
 --   competition_awards
---   competition_participants,     BEVARES      se nedenfor
---   group_members
+--   competition_participants,     BEVARES      se nedenfor (én undtagelse siden
+--   group_members                              A25 — se allersidste afsnit)
 --   groups, competitions          røres ikke   overlever, fordi profiles gør
 --
 -- MEDLEMSKABERNE KAN IKKE BEHANDLES HVER FOR SIG. `group_membership_invariant.sql`
@@ -56,6 +56,15 @@
 -- sejr kunne blive udelt. Prisen er, at pseudonymet står tilbage i gamle
 -- stillinger. Det er det ærlige billede, og politikken siger det med netop de
 -- ord.
+--
+-- ÉN UNDTAGELSE, TILFØJET SENERE (A25, 5. august 2026). Begrundelsen ovenfor
+-- gælder alt, der er SPILLET. En konkurrence, hvor ingen kamp er låst endnu,
+-- har ingen historik at beskytte — dér er pseudonymet en deltager, der aldrig
+-- kommer til at spille, og frameldingen skriver derfor ikke noget om. Den sker
+-- i `_anonymize_account()` (sql/liga_admin.sql), som er kroppen, produktionen
+-- faktisk kalder, og kun når der er mindst én anden deltager tilbage. **Denne
+-- fils egen, ældre kopi af kroppen gør det ikke** — se advarslen i sql/README.md
+-- om at gen-køre liga_admin.sql bagefter.
 --
 -- ---------------------------------------------------------------------------
 -- Hvad funktionen IKKE gør

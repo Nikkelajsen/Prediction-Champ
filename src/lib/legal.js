@@ -33,7 +33,10 @@ const KONTAKT_EMAIL = "[KONTAKT-E-MAIL]";
 // 2026), stod den derfor stille — flaget har ligget på enheden hele tiden, og
 // en dato, der rykker ved hver tekstrettelse, holder op med at kunne bruges til
 // at se, hvornår behandlingen sidst blev en anden.
-const LEGAL_OPDATERET = "2026-08-03";
+// Flyttet 5. august 2026 (`A25`): en lukket konto meldes nu af de konkurrencer,
+// der ikke er begyndt. Det er en ændring af, hvad der SKER med data ved en
+// lukning, og altså præcis det, datoen findes for at markere.
+const LEGAL_OPDATERET = "2026-08-05";
 
 const MINDSTEALDER = 13;
 
@@ -130,9 +133,10 @@ const PRIVATLIV = {
             "Dit brugernavn erstattes af et pseudonym som “Slettet 3f8a1c2d”.",
             "Din brugslog, dine aktive dage, dine push-abonnementer, din notifikationslog og dine historie-kort slettes.",
             "Dine feedback-meldinger og eventuelle fejlrapporter bliver stående, men uden forbindelse til dig.",
+            "Er du med i en konkurrence, hvor ingen kamp er begyndt, bliver du meldt af den. Der er ingen stilling at efterlade et hul i, og du ville ellers stå på deltagerlisten hele sæsonen uden at kunne spille med.",
           ],
         },
-        "Dine tips, point, rating og kåringer bliver stående under pseudonymet. Det er ikke en udeladelse: de er grundlaget for dine venners stillinger og historik, og en slettet spiller ville give huller i konkurrencer, andre har spillet færdig. Din plads i en gammel stilling står altså tilbage — bare uden dit navn.",
+        "Dine tips, point, rating og kåringer bliver stående under pseudonymet. Det er ikke en udeladelse: de er grundlaget for dine venners stillinger og historik, og en slettet spiller ville give huller i konkurrencer, andre har spillet færdig. Din plads i en gammel stilling står altså tilbage — bare uden dit navn. Det samme gælder en konkurrence, der er i gang: dér bliver du stående, også hvis du ikke nåede at tippe.",
         "Nogle spor kan vi ikke nå med det samme, og det skal du kende:",
         {
           punkter: [
