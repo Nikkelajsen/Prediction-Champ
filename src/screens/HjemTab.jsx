@@ -15,6 +15,21 @@ import { usePushOptIn } from "../ui/usePushOptIn.js";
 import { Card, Collapsible, Eyebrow, FoldChevron, H, InfoDot, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
 import GetStartedCard from "./GetStartedCard.jsx";
 
+// Kompakt kort: mindre luft, ikke mindre indhold.
+//
+// Hjem er en oversigt, og de øverste kort skubbede alt det, oversigten handler
+// om ("Indeværende runde", "Dine placeringer"), under skærmkanten på en telefon.
+// Prisen blev betalt af CHROME og ikke af budskabet: den vandrette streg er
+// polstring (16 → 12/14), og hvert kort havde en handlingsknap på sin EGEN
+// linje, selvom rækken over den havde plads til overs.
+//
+// Reglen, der afgør hvilke kort der bliver kompakte: et kort, der BEKRÆFTER
+// noget ("alt ok", "intet at tippe"), er en kvittering og skal fylde derefter —
+// mens deadline-kortet, det ene med en frist og en konsekvens, beholder sin
+// fulde højde og sin egen knap. Karusellen bliver kompakt af den anden grund:
+// den er indhold, ingen har bedt om, og skal kunne ses uden at eje skærmen.
+const cardTight = { padding: "12px 14px" };
+
 // Opt-in-kort til push-notifikationer. Vises kun hvor det giver mening:
 // browseren understøtter push, brugeren har ikke sagt nej, og er ikke tilmeldt
 // endnu. Tilgængeligheden afgøres af `usePushOptIn`, som "Kom godt i gang"-
@@ -79,23 +94,31 @@ function CarouselCard({ item, onDismiss, token, groupId }) {
   }
   return (
     <Card style={{
-      minWidth: "100%", scrollSnapAlign: "start", margin: 0,
+      ...cardTight, minWidth: "100%", scrollSnapAlign: "start", margin: 0,
       ...(gold ? { borderColor: C.gold, background: "linear-gradient(135deg, #14212F 0%, #221E14 100%)" } : null),
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      {/* Del bor i eyebrow-linjen og ikke på sin egen række under teksten.
+          Rækken var der allerede — den bar kun en etiket og et kryds — og en
+          knap på egen linje kostede kortet knap en tredjedel af sin højde i en
+          karrusel, hvor der kan ligge ti kort. Rækkefølgen er bevidst: Del til
+          venstre for Afvis, med luft imellem, så den positive handling ikke
+          sidder klods op ad den, der får kortet til at forsvinde. */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <Eyebrow>{item.eyebrow}</Eyebrow>
-        {onDismiss && (
-          <button style={iconBtn} aria-label="Afvis" onClick={onDismiss}><X size={16} /></button>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+          {!quiet && (
+            <button style={{ ...btnGhost, padding: "5px 10px", borderColor: gold ? C.gold : C.line, color: gold ? C.gold : C.text }}
+              onClick={share}><Share2 size={14} /> Del</button>
+          )}
+          {onDismiss && (
+            <button style={iconBtn} aria-label="Afvis" onClick={onDismiss}><X size={16} /></button>
+          )}
+        </div>
       </div>
       <div style={{ fontFamily: font.display, fontSize: quiet ? 17 : 20, fontWeight: 700, lineHeight: 1.15 }}>
         {item.headline}
       </div>
-      <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.5, marginTop: 6 }}>{item.body}</div>
-      {!quiet && (
-        <button style={{ ...btnGhost, marginTop: 12, borderColor: gold ? C.gold : C.line, color: gold ? C.gold : C.text }}
-          onClick={share}><Share2 size={14} /> Del</button>
-      )}
+      <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.45, marginTop: 6 }}>{item.body}</div>
     </Card>
   );
 }
@@ -488,14 +511,19 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       {/* Intet at tippe lige nu — IKKE det samme som "alle tips er inde".
           Alle kampe i brugerens konkurrencer er låst eller spillet. */}
       {tips && tips.hasComps && tips.nothingToTip && (
-        <Card>
-          <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Intet at tippe lige nu</div>
-          <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
-            {tips.nextOpen ? `Næste kamp: ${formatKickoff(tips.nextOpen, tips.nextOpenTbd)}` : "Der er ingen kommende kampe i dine konkurrencer."}
+        <Card style={cardTight}>
+          <div style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700, textTransform: "uppercase" }}>Intet at tippe lige nu</div>
+          {/* Samme form som det grønne kort ovenfor — de to er gensidigt
+              udelukkende tilstande af samme kvittering og skal ikke have hver
+              sin højde. */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+            <span style={{ color: C.muted, fontSize: 13, minWidth: 0 }}>
+              {tips.nextOpen ? `Næste kamp: ${formatKickoff(tips.nextOpen, tips.nextOpenTbd)}` : "Der er ingen kommende kampe i dine konkurrencer."}
+            </span>
+            {tips.roundKey && (
+              <button style={{ ...btnGhost, padding: "5px 10px", flexShrink: 0 }} onClick={() => openPredictions("all", tips.roundKey)}>Se runden</button>
+            )}
           </div>
-          {tips.roundKey && (
-            <button style={{ ...btnGhost, marginTop: 12 }} onClick={() => openPredictions("all", tips.roundKey)}>Se runden</button>
-          )}
         </Card>
       )}
       {/* Konkurrencer uden kampe endnu (fx en stage-konkurrence før kampene er udgivet). */}
@@ -514,17 +542,24 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
         </Card>
       )}
       {tips && tips.hasComps && tips.allTipped && (
-        <Card style={{ borderColor: C.green, background: "linear-gradient(135deg, #14212F 0%, #14302A 100%)" }}>
+        <Card style={{ ...cardTight, borderColor: C.green, background: "linear-gradient(135deg, #14212F 0%, #14302A 100%)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Check size={16} color={C.green} />
-            <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase", color: C.green }}>Alt ok — alle tips er inde</div>
+            <Check size={15} color={C.green} />
+            <div style={{ fontFamily: font.display, fontSize: 17, fontWeight: 700, textTransform: "uppercase", color: C.green }}>Alt ok — alle tips er inde</div>
           </div>
-          <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>
-            {tips.nextOpen ? `Næste kamp: ${formatKickoff(tips.nextOpen, tips.nextOpenTbd)}` : "Vi giver besked, når næste runde åbner."}
+          {/* "Se tips" ved siden af næste kamp og ikke under den: kvitteringens
+              to oplysninger — hvornår og hvor — hører til på samme linje, og
+              linjen havde plads. `flexWrap` er værnet mod en lang dato på en
+              smal skærm; så bryder knappen ned, og kortet er stadig lavere end
+              det var med knappen på egen række. */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+            <span style={{ color: C.muted, fontSize: 13, minWidth: 0 }}>
+              {tips.nextOpen ? `Næste kamp: ${formatKickoff(tips.nextOpen, tips.nextOpenTbd)}` : "Vi giver besked, når næste runde åbner."}
+            </span>
+            {tips.roundKey && (
+              <button style={{ ...btnGhost, padding: "5px 10px", borderColor: C.green, color: C.green, flexShrink: 0 }} onClick={() => openPredictions("all", tips.roundKey)}>Se tips</button>
+            )}
           </div>
-          {tips.roundKey && (
-            <button style={{ ...btnGhost, marginTop: 12, borderColor: C.green, color: C.green }} onClick={() => openPredictions("all", tips.roundKey)}>Se tips</button>
-          )}
         </Card>
       )}
       {/* Manglende tips: kun når vi HAR set en tipbar runde med utippede kampe

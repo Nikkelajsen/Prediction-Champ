@@ -100,6 +100,8 @@ Vandret swipe-karrusel og ikke en lodret stak, fordi produktbogens kapitel 6 bed
 
 Fire kort-udgaver: **milepæl** (guld + ikon, kan ikke afvises, ligger forrest) · **højdepunkt** (guld) · **dag** (almindeligt kort, kampdagens dato i eyebrow'en) · **dæmpet** (mindre overskrift, uden emoji, uden Del).
 
+**Rettet efter levering (5. august 2026):** kortet var 154 px højt på en 375 px-skærm og skubbede sammen med tips-status-kortet resten af Hjem under skærmkanten. Del-knappen er flyttet op i eyebrow-linjen (til venstre for Afvis), og polstringen er 12/14 px frem for 16 — **103 px**, målt i Chromium. Udkastet beskrev kortet med Del under teksten; det er den ene detalje, der ikke længere passer. Indholdet er uændret: overskrift, brødtekst og de fire udgaver er de samme.
+
 Karusellen filtrerer på den **klient-beregnede** rundenøgle (`currentRoundKey`) og aldrig på `max(round_key)`: i en ny rundes første dage findes der endnu ingen rækker, og et max ville vise den forrige uges kort i stedet for den tomme karrusel, en ny runde skal have.
 
 `story_viewed` logges, når et kort **bliver synligt** — ikke for hele listen ved indlæsning. Ellers ville regelstatistikken i Analytics (A5) måle noget andet, end den påstår.

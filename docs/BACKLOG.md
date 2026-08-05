@@ -38,15 +38,22 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-`pc_pwa_onboarded` står i `LOKALE_NØGLER` og i guard-testen, men er aldrig blevet nævnt i privatlivspolitikkens liste over lokale data (`src/lib/legal.js`) — politikken lover netop, at hver nøgle får en linje.
+*(tom)*
 
-Personlige invite-links (`invite_links` + `invited_by` på `group_members`/`competition_participants`) — forudsætningen for milepælen "5/10 venner tilmeldt via dit link", som ikke kunne bygges: `groups.invite_code` er én kode pr. liga, ikke pr. bruger. Kan først tælle fra udrulningsdagen.
-
-Kontakt-mail til hjemmesiden skal afklares før publicering — `site/om.html` bruger en pladsholder-adresse (hænger sammen med `I10`).
-
-GitHub-repoet og Vercel-projektet hedder stadig det gamle navn; hjemmesidens 25 links peger derfor på `prediction-champ.vercel.app` og skal rettes, når domænet skifter (hænger sammen med `I10`).
-`public/leagly-wordmark-navy.png` bruges ikke i kode; oplagt som `og:image`/socialt delebillede på hjemmesiden, når domænet er afklaret.
-`manifest.json`s `short_name` er identisk med `name` ("Leagly") — kunne få en rigtig kort form, hvis navnet nogensinde bliver for langt til et ikon.
+*Ryddet 4. august 2026: de seks linjer blev til `G69`, `B20`, `B21` og `I17` —
+og for de sidste to gjaldt, at rækken ikke var svaret. **Én blev foldet ind:**
+kontakt-mailen til hjemmesiden er ikke en opgave ved siden af `I10`, den ER
+`I10` — spørgsmålet er hvilken adresse, og svaret skal samme dag ind tre steder
+(`site/om.html`s `kontakt@leagly.example` og `legal.js`' `[NAVN]` og
+`[KONTAKT-E-MAIL]`, som allerede står på tjeklisten i `DOCUMENTATION.md` §11).
+**Én blev forkastet:** `manifest.json`s `short_name`. **Runden har samme kilde som
+3. august, men den modsatte retning:** de fjorten fra dokumentations-gennemgangen
+kom af at læse dokumentationen op mod koden; disse seks kom af at læse
+**navneskiftet** op mod alt det, det rørte — og fire af de seks handler om det, der
+ligger uden for appen (hjemmesiden, repoet, delebilledet). Det er der, et navneskifte
+efterlader sine rester, netop fordi intet build fejler af dem. **`B20` er den ene, der
+ikke kan vente uden at koste noget:** den kan først tælle fra udrulningsdagen, så hver
+uge, den ligger stille, er en uge uden data — alle de andre koster det samme om et år.*
 
 *Ryddet 3. august 2026 (anden runde): de femten linjer fra dokumentations-gennemgangen
 blev til `A27`, `B17`–`B18` og `G58`–`G68`. **To linjer blev til én række:** `#34`s
@@ -96,7 +103,7 @@ versionsstempel → `G42`).*
 
 ## Prioriteret rækkefølge
 
-Alle 36 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 39 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -113,6 +120,13 @@ skriver `anonymize_my_account()` forfra i `sql/liga_admin.sql` med den
 ikke længere en selvstændig opgave, men en delmængde af en kørsel, der skal ske
 alligevel. `G64` er slettet: `vercel.json` fik `maxDuration` på begge
 konto-endpoints i samme ombæring, fordi det nye ikke måtte fødes med samme hul.*
+
+*4. august 2026 (indbakken): fire nye rækker — `G69` øverst i Tier 2, og `B21`,
+`I17` og `B20` i Tier 7. **Tier 1 er urørt**, og det er pointen: ingen af de fire
+kan lukke en aflæsning, og `B19` er stadig det, hele leverancen fra samme dag
+hænger på. Tier 7 voksede fra otte til elleve rækker og er nu tieret med flest —
+en direkte følge af, at navneskiftet ramte alt det udadvendte, mens appen selv
+var færdig samme dag.*
 
 Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
@@ -147,11 +161,14 @@ spørgsmålet stod som åbent.
 er selve pointen med at lade tieret stå: kategorien fandtes, den var bare tom i
 et par timer.*
 
-De fire nye deler form med de otte, der blev kørt: hver af dem får en læser til
-at tro noget, der ikke passer, og ingen af dem koster mere end en times arbejde.
+De fire deler form med de otte, der blev kørt: hver af dem får en læser til at
+tro noget, der ikke passer, og ingen af dem koster mere end en times arbejde.
+`G69` står øverst af samme grund, som gjorde `B17` til Tier 1's øverste række —
+den er tierets eneste, hvor den, der tror noget forkert, er **brugeren**.
 
 | # | Hvad | Hvorfor her |
 |---|---|---|
+| `G69` | Privatlivspolitikken nævner ikke `pc_pwa_onboarded` | Løftet er ikke "de fleste nøgler står her", men at hver nøgle får en linje — og en politik, der ikke passer, er værre end ingen. Rettelsen er ét punkt i en liste, der allerede findes. |
 | `G65` | Scotland-skabelonen mangler `provider`, `live_enabled` og `is_official` | En skabelon, der er forkert, er dyrere end ingen skabelon — den ligner det svar, man ledte efter, og `DOCUMENTATION.md` §10 peger direkte på den. |
 | `G67` | Tier 2–5-beslutningerne nåede aldrig `DECISIONS.md` | To filer udråber sig som arkivet, og den, `CLAUDE.md` sender én til, mangler svarene. Prisen er ikke et opslag mere, men at en afgjort beslutning bliver genåbnet. |
 | `G61` | `KIND_LABEL` kender ikke `award:`/`newleague:` | Fallbacken virker efter hensigten, men to ud af fem rækker på maskinsprog er blevet tilstanden frem for overgangen. |
@@ -234,15 +251,20 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 ### Tier 7 — Udadvendt og ubesluttet
 
 Vækst, ikke fastholdelse. Produktbogens kapitel 3 sætter dem bevidst efter alt
-ovenstående, og ingen af dem er besluttet — de står i rækkefølge efter, hvad der
-gater hvad, ikke efter værdi.
+ovenstående, og de står i rækkefølge efter, hvad der gater hvad, ikke efter
+værdi. **Én undtagelse fra "ingen af dem er besluttet":** `B21` er besluttet i
+princippet — produktet hedder Leagly, og repoet gør ikke — og venter kun på
+`I10`, fordi det er den samme flytning.
 
 | # | Hvad | Bemærkning |
 |---|---|---|
 | `I8` | Professionel hjemmeside | **Første udkast leveret i `site/` (3. august 2026, [`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md)) — ikke publiceret.** Tilbage står ejer-godkendelse af copy, kontakt-mail, domæne og publicering. Gater fortsat `I9` og `I10`, men de har nu noget konkret at hænge på. |
-| `I10` | Domæne og professionel e-mail | Forudsætning for troværdighed i invitationer og kontakt. |
+| `I10` | Domæne og professionel e-mail | Forudsætning for troværdighed i invitationer og kontakt. Bærer nu også hjemmesidens kontakt-adresse, som ellers havde fået sin egen række — det er samme spørgsmål, stillet ét sted mere. |
+| `B21` | Omdøb repo og Vercel-projekt, ret hjemmesidens 23 links | Direkte efter `I10`, fordi det er **samme** flytning: vælges et domæne, skal linkene alligevel skiftes, og gøres de to ting hver for sig, skiftes de tyve links to gange. |
 | `I9` | SEO | Der er ingen side at optimere, før `I8` findes. |
+| `I17` | Socialt delebillede (`og:image`) til hjemmesiden | Hører til `I9`s runde og ikke før: begge er metadata på en side, der ikke er publiceret, og begge skal alligevel have den endelige adresse i hånden. |
 | `I7` | Finpuds invitationsflowet | Det eneste punkt i tieret, der virker på **eksisterende** brugere — kunne argumenteres op i Tier 3, hvis vækst bliver målet. |
+| `B20` | Personlige invite-links (attribution) | Under `I7`, fordi det er den mekanik, en gennemgang af invitationsflowet ville blotlægge — og over `I6`, som ikke kan måle en ambassadør uden den. **Tieret ét sted, hvor ventetid koster:** attributionen kan først tælle fra udrulningsdagen. |
 | `I12` | Offentlig side pr. liga | Kræver stillingtagen til, hvad der må vises uden login — og ville som den første gøre `A23` (router) nødvendig. |
 | `I6` | Ambassadørprogram | Ingen mekanik designet endnu. |
 | `I11` | LinkedIn-side | Betinget af en B2B-retning, der ikke er valgt. |
@@ -270,6 +292,8 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Hvad | Hvorfor / hvad den venter på | Omfang |
 |---|---|---|---|
+| B21 | **Omdøb GitHub-repoet og Vercel-projektet, og ret hjemmesidens links** | Navneskiftet 4. august 2026 gik gennem app, manifest, ikoner, tekster og dokumentation, men stoppede ved projektnavnene — **med vilje**, fordi et skifte af Vercel-projektet ændrer `.vercel.app`-adressen og dermed knækker hvert link, der peger på den. Prisen ved status quo er, at produktet hedder Leagly overalt undtagen i den adresse, en ny bruger faktisk taster ind: 23 CTA'er i `site/` (4+5+6+4+4) plus README'ens live-link peger på `prediction-champ.vercel.app`. **Rækkefølgen er bindende og er hele grunden til, at rækken står lige efter `I10`:** vælges et rigtigt domæne, skal linkene alligevel skiftes, og gøres omdøbningen først, skiftes de to gange. Vercels gamle URL redirigerer ikke af sig selv, så et delt link fra før skiftet dør — det er kun ufarligt, så længe hjemmesiden ikke er publiceret. `docs/RESTORE.md`s omtale skal IKKE rettes: den navngiver backup-filer, der faktisk hedder det gamle. | Lille (men mange steder) |
+| B20 | **Personlige invite-links** (`invite_links` + `invited_by` på `group_members`/`competition_participants`) | Attributionen "hvem inviterede hvem" findes ikke i skemaet: `groups.invite_code` er én kode pr. liga og ikke pr. bruger, og ingen af medlemstabellerne gemmer afsenderen. Det er derfor, milepælen **"5/10 venner tilmeldt via dit link" ikke kunne bygges** — `milestones` tæller i stedet `LEAGUE_GREW_5/10`, altså hvor mange der kom med i en liga, man har oprettet, hvilket er en anden bedrift. Begrundelsen står ved koden begge steder (`sql/milestones.sql`, `src/lib/milestones.js`) og peger på denne række. **Ventetid er ikke gratis her, og det er rækkens vigtigste egenskab:** attribution kan kun registreres fremad, så en bedrift bygget på den kan først tælle fra udrulningsdagen — de brugere, der allerede er inviteret, tælles aldrig. Gater desuden `I6` (ambassadørprogram), som ikke kan måle noget uden. | Mellem |
 | B19 | **Kør `sql/season_end.sql` (#41) og `sql/liga_admin.sql` (#42) i Supabase** | Leverancen fra 4. august 2026 (`A28`–`A31`) er merget, men migreringerne køres i hånden. #41 lægger `seasons.ends_at`/`is_finished` og sæson-gaten på `competition_status`; #42 lægger de tre administrator-policies og delingen af anonymiseringen. Rækkefølgen er bindende: #42s liga-sletning læser `competition_status.concluded`. **Den afløser `B17`:** #42 indeholder `client_errors`-nulstillingen, som gen-kørslen af #31 skulle levere. **Aflæsningen efter kørslen** er Admin → Drift → Sæsonernes slutning: en sæson med "Venter" er en, datakilden ikke fortæller om, og den lever på 30-dages ventilen, indtil nogen markerer den. | Blokerer leverancen |
 | B18 | **Staging-projektet i Supabase** | Preview og produktion deler database, medmindre staging-variablerne peger et andet sted (`DOCUMENTATION.md` §9). Selve projektet skal oprettes manuelt, og `sql/schema.sql` genskaber hele `public` på én gang, så opsætningen er kort. **Rækken findes, fordi opgaven mistede sin tracker:** den blev fulgt som `G4`, men `G4` blev leveret som noget andet — dev-serverens hårde krav om `.env.local` — og forsvandt derfor fra listen, mens selve staging-projektet aldrig blev oprettet. Prisen ved status quo er, at en preview-test skriver i brugernes rigtige data; det er dét, `DOCUMENTATION.md` §11's advarsel om ikke at taste resultater ind på en preview holder i skak i hånden. | Lille (opsætning) |
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. **Forespørgslen er skrevet (august 2026)** — den står klar til at køre i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). Tilbage står at køre den. | Lille (opslag) |
@@ -288,6 +312,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | G66 | **Auth-opslaget i `isAuthorized()` er det sidste udgående kald uden tidsgrænse** — `api/_shared.js:327` kalder Supabases `/auth/v1/user` med bart `fetch`, mens alt andet går gennem `fetchWithTimeout()`. | Det er `G19`s hul, og det sidder værst tænkeligt: **før** `run` findes, altså før der er noget at skrive i `job_runs`. Hænger opslaget, bliver funktionen klippet over af Vercel uden at efterlade en række — og symptomet er dermed nøjagtig det, `G19` blev bygget for at afskaffe: tavshed frem for en fejl. Stien rammes kun af admin-token-kald ("Hent nu", Drift-forhåndsvisningen), ikke af cron-jobbene, hvilket er grunden til, at den blev overset, og grunden til at den er billig at lukke. | Lille |
 | G67 | **Tier 2–5-beslutningerne står kun i ROADMAP'ens beslutningslog — `DECISIONS.md` fik dem aldrig.** Blandt dem `G50` (anon-grants) og `B4`, som begge er begrundelser, man vil lede efter igen. | Begge filer udråber sig som arkivet: ROADMAP siger "det afgjorte i `DECISIONS.md`", og `CLAUDE.md` sender én derhen for at vide, *hvorfor* noget blev, som det blev. Når arkivet så ikke har svaret, er prisen ikke bare et opslag mere — det er, at man tror, beslutningen aldrig blev truffet, og genåbner den. Det er samme fejlklasse som backloggens egen grund til at findes: en sandhed, der bor to steder, driver fra hinanden. | Lille |
 | G68 | **`rnk` i `rating_history` rangerer kun på score.** `rank() over (order by score desc)` (`sql/rating_core.sql:264`) uden exacts-tiebreaket, som det parvise Elo-opgør ellers bruger. | To spillere med samme rundescore, men forskelligt antal præcise resultater, deler den **gemte** runde-placering, selvom Elo-duellen skilte dem — og de to tal står ved siden af hinanden i karriereprofilen og Story Engine, som begge læser `rnk`. Uenigheden er lille og usynlig i de fleste runder, men den er en uenighed mellem to tal, der kommer fra samme beregning. **Rettelsen er ikke gratis:** `rnk` er en gemt værdi, så en ændring flytter historiske tal, og `sql/tests/rating_equivalence.sql`s frosne reference skal opdateres bevidst — hvilket pr. `CLAUDE.md` er selve beslutningen. | Lille |
+| G69 | **Privatlivspolitikken nævner ni af ti localStorage-nøgler.** `pc_pwa_onboarded` står i `LOKALE_NØGLER` (`src/lib/localFlags.js:40`) og i guard-testen (`localFlags.test.js`, `account.test.js`), men afsnittet "Hvad der ligger på din egen enhed" i `src/lib/legal.js` har ingen linje om den. | Vedligeholdelsesreglen står øverst i filen selv og i `DOCUMENTATION.md` §24: **en ny localStorage-nøgle skal have en linje i SAMME ombæring**, fordi "en politik, der er forældet, er værre end ingen — den er en påstand, der ikke passer". Nøglens tre andre aftagere fangede den (den ryddes ved kontolukning, og to tests opremser den ved navn); det fjerde, som er det eneste, brugeren kan se, gjorde ikke. Det, den skjuler, er harmløst — om man har set vejledningen til at lægge appen på hjemmeskærmen — og det er netop derfor, den skal rettes billigt nu: løftet er ikke "de vigtigste nøgler står her". **Ét punkt i en liste, der allerede findes**; overvej samtidig, om `LEGAL_OPDATERET` skal flytte sig, eller om en manglende oplysning om et eksisterende flag er en rettelse frem for en ændring. | Lille |
 | G1 | **De resterende store skærmfiler** — `MainApp.jsx` ~606 linjer, `HjemTab.jsx` ~530, `ProfileScreen.jsx` ~460, `CreateCompetitionScreen.jsx` ~444, `AdminScreen.jsx` ~329. | Anden halvdel af fil-opdelingen fra 30. juli 2026. **To af dem er delt 3. august 2026 (Tier 5):** `ChampionshipTab` gik fra 512 til 272 linjer (`championship/StandingsTable.jsx`, `scope.js`, `CardHead.jsx`) og `ProfileScreen` fra 614 til 460 (`profile/facts.js`, `Sparkline.jsx`) — rene flytninger, hvor testene nu importerer fra modulerne frem for gennem skærmen. Mønstret er dermed bevist tre gange. Gevinsten er testbarhed og læsbarhed, ikke linjetal: `MainApp` er den næste, og den er også den sværeste, fordi navigations-tilstandsmaskinen bor der (`A23`). | Mellem |
 | G2 | **7 ESLint-advarsler fra React Compiler** — alle af typen `set-state-in-effect`, i indlæsningsstier (`ChampionshipTab`, `CreateCompetitionScreen`, `GroupScreen`, `MainApp`, `PredictionsScreen` ×3). | Står som advarsel frem for fejl, fordi hvert fund kræver en gennemtænkt omskrivning, ikke en rettelse. Loftet i `package.json` (`--max-warnings 7`) gør, at tallet kan falde, men aldrig vokse ubemærket. **Faldt fra 23 til 14 (3. august, `B4`) og fra 14 til 7 samme dag (`G2`, Tier 5):** de billige mønstre er brugt op — en komponent defineret inde i en anden (fire advarsler på én rettelse), en akkumulator, der lagde sammen under render, og to effekter i `App.jsx`, som satte tilstand, der lige så godt kunne være initial. **Det, der er tilbage, er ét mønster:** "hent data i en effekt og sæt state", som resten af skærmene bruger, og som ikke kan undgås uden et data-bibliotek, projektet bevidst ikke har. Næste skridt er derfor ikke en oprydning, men en beslutning om det mønster. | Mellem |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen er formentlig allerede faldet (3. august 2026):** `B2`s testcase 3 er *præcis* denne kodesti — "`full_season`-konkurrence med begge turneringer (multivalg) → kampe fra begge materialiseres, stilling korrekt" — og ejeren har kørt og godkendt den mod produktionsdata 2. august ([`features/turnering-2.md`](./features/turnering-2.md) §6). Blev konkurrencen oprettet frem for kun gennemklikket, er "nul rækker i `mode_params.tournaments`" ikke længere sandt, og rækken skal slettes. **Rækken er derfor skrumpet til ét opslag:** `select id, name, mode_params from competitions where mode_params ? 'tournaments'` — svarer den med rækker, er stien kørt mod rigtige data, og det eneste tilbage er at se stillingen efter. | Lille (opslag) |
@@ -306,10 +331,11 @@ idé bliver til en `B`- eller `A`-række, når den er værd at tage stilling til
 | I7 | **Finpuds invitationsflowet** | Invitationer er nøglen til nye brugere (delt konkurrence-/liga-link, §7), men er ikke selv blevet gennemgået som en samlet oplevelse. | Ny |
 | I8 | **Professionel hjemmeside** (4–6 sider: forside, hvordan virker det, features, om os, kontakt, download app) | Giver troværdighed, kan deles og vises til virksomheder/brugere, og gør produktet indekserbart for Google. | Første udkast i `site/` (3. august 2026, [`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md)) — mangler ejer-godkendelse, kontakt-mail, domæne og publicering |
 | I9 | **SEO for hjemmesiden** | Afhænger af `I8` — der er ingen side at optimere, før den findes. | Afhænger af I8 |
-| I10 | **Domæne og professionel e-mail** | Forudsætning for troværdighed udadtil (hjemmeside, invitationer, kontakt) — hænger sammen med `I8`. | Afhænger af I8 |
+| I10 | **Domæne og professionel e-mail** | Forudsætning for troværdighed udadtil (hjemmeside, invitationer, kontakt) — hænger sammen med `I8`. **Kontakt-adressen er den halvdel, der allerede har tre aftagere (august 2026):** `site/om.html` viser pladsholderen `kontakt@leagly.example`, og privatlivspolitikken lover en adresse, der "virker også, hvis du ikke kan logge ind", mens `src/lib/legal.js` stadig står med `[KONTAKT-E-MAIL]` og `[NAVN]` (tjeklisten i `DOCUMENTATION.md` §11). Det er ét valg, der lukker alle tre — og indtil det er truffet, kan hverken hjemmesiden eller teksten regnes som offentliggjort. | Afhænger af I8 |
 | I11 | **LinkedIn-side**, hvis der satses på indtægt via virksomheder | Betinget af en B2B-retning, der ikke er besluttet endnu. | Betinget af B2B-retning |
 | I12 | **Offentlig side pr. liga** (fx `predictionhub.app/league/padel-legends`: antal sæsoner, medlemmer, mestre, statistik — ikke tips, kun historik) | Bygger videre på liga-laget (§18) som en delbar, offentlig facade for hver liga. Kræver stillingtagen til, hvad der må vises uden login. | Ny |
 | I15 | **Weekly Mix** — automatikken: et job, der opretter ugens kupon af sig selv | **Indholdet er leveret 1. august 2026 (A22):** opret-galleriet har et "Ugens kupon"-kort — `random`, én runde frem, alle turneringer, navnet genereret — så en bruger leverer kuponen manuelt med to tryk. **Tilbage står KUN gentagelsen**, og dens to ubesluttede punkter: (1) **hvem skriver?** — enhver konkurrence skrives i dag af sin egen opretter, og RLS kræver `created_by = auth.uid()`, så et ugentligt job skal køre som `service_role` (mønsteret findes nu: `award_competition_periods()` tillader allerede `service_role`); (2) **"mest interessante kampe"** — der findes hverken odds eller tabelstilling i basen, så et automatisk udvalg bliver heuristik, hvilket støder på kap. 1's *"odds og avanceret analyse må aldrig overskygge det sociale formål"* — den leverede kupon undgår spørgsmålet ved at trække tilfældigt. Weekly Mix ville desuden være et **andet** ugentligt begreb ved siden af den globale spillerunde (som **er** produktets ugentlige tvær-turneringsbegreb) — det er dét, der skal begrundes. | Afventer efterspørgsel — mål først om Ugens kupon-kortet bruges (`competition_created` bærer `metadata.mode`) |
+| I17 | **Socialt delebillede til hjemmesiden** (`og:image` + `og:title`/`og:description`) | Hjemmesiden har **ingen** `og:`- eller `twitter:`-tags overhovedet, så et link delt i en besked, en gruppechat eller på LinkedIn vises som en nøgen URL — netop dér, hvor `I8`s formål (opret eller join en liga) skulle bære. Billedet, der mangler, findes allerede: `public/leagly-wordmark-navy.png` (34 kB) er uden en eneste aftager i koden, altså en fil, der kun overlevede navneskiftet. Koster ingen ny afhængighed og intet build-trin — fem `<meta>`-linjer og en kopi af filen — men kræver den endelige adresse, fordi `og:image` skal være absolut. | Ny — hører til `I9`s runde |
 | I16 | **Tælling af lukkede konti** | `B4` gav kontolukning, men ingen måde at se, om nogen bruger den. Tallet findes allerede som data — `profiles.anonymized_at is not null` — så det er et opslag, ikke en instrumentering, og det er den billige halvdel. Den dyre halvdel er, hvad man gør med det: en analytics-hændelse ville kræve at udvide kataloget i `sql/analytics_events.sql` OG **logge om en person, der netop har bedt om at forsvinde** — og selv en aggregeret optælling er en måling af en handling, hvis hele pointe er at efterlade færrest mulige spor. En ren tælling på et felt, der i forvejen står i basen, tilføjer intet nyt spor; en hændelse gør. Gater desuden `A25`, som mangler en udløser. | Ny — afgrænses til tællingen, ikke en hændelse |
 
 ## Forkastede ideer
@@ -319,6 +345,7 @@ steder — og fordi en forkastet idé ellers bliver foreslået igen.
 
 | Dato | Idé | Hvorfor ikke |
 |---|---|---|
+| 4. august 2026 | **Give `manifest.json` et `short_name`, der er kortere end `name`** — i dag er begge "Leagly". | `short_name` findes for at have et alternativ, når `name` er for langt til pladsen under et ikon. "Leagly" er seks tegn og bliver ikke afkortet nogen steder, så et kortere alternativ ville ikke være en forbedring, men et **andet navn** for det samme produkt — og navneskiftet 4. august 2026 blev netop kørt i ét hug for at sikre, at kun ét navn figurerer. To identiske værdier er det rigtige svar her og skal ikke læses som et udfyldningsfelt, nogen glemte. Bliver navnet nogensinde længere, opstår spørgsmålet af sig selv. |
 
 ---
 
