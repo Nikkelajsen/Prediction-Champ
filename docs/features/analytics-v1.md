@@ -196,10 +196,31 @@ A5 ("emojis i historie-kort: til eller fra?") og hele tone-spørgsmålet har hid
 
 | Tal | Kilde | Pålidelighed |
 |---|---|---|
-| genereret, afvist | `public.stories` | rigtige rækker, **præcise** |
+| genereret, vis-bar, afvist | `public.stories` | rigtige rækker, **præcise** |
 | vist, delt | `analytics_events` (`metadata->>'rule'`) | fire-and-forget, et **gulv** |
 
 En lav rate kan lige så godt betyde tabt logning som manglende visning. Sammenlign regler med hinanden, ikke med et ideal.
+
+> ➕ **Tilføjet efter levering (5. august 2026, `G73`): kolonnen "Vis-bar", og
+> den er nu NÆVNEREN under alle procenter i tabellen.** Karusellen på Hjem
+> henter kun den nuværende rundes kort (`round_key=eq.<nuværende>`,
+> `loadRoundCarousel`), så et kort skrevet efter dets egen runde var forbi kan
+> aldrig nå en skærm. Sådanne kort fandtes i mængder: v2's efterfyldning skrev
+> dagskort for hele historikken, og **197 af 280 historier var dagskort med nul
+> visninger**. Med `genereret` som nævner målte visningsraten dermed
+> efterfyldningen og ikke brugerne — for syv af treogtyve regler var tallet en
+> påstand om noget helt andet, end tabellen sagde.
+>
+> Vis-bar = skrevet **før rundens slutning** (midnat dansk tid på tirsdagen efter
+> rundenøglen). Definitionen fanger to ting med samme udtryk, og kun den ene er
+> en engangsudgift: efterfyldte kort, og et runde-kort hvis runde først blev
+> spillet færdig efter den var forbi (en udsat kamp). **Både visnings- og
+> afvisningsraten deler nævner** — `dismissed_at` sættes kun fra karusellen, så
+> et kort, ingen kunne se, kan heller ikke afvises.
+>
+> `genereret` står uændret ved siden af og skal blive ved med at være sandt:
+> kortet BLEV genereret. Forskellen mellem de to tal er selv oplysningen, og
+> derfor står vis-bar som en synlig kolonne frem for kun som en nævner.
 
 > ⚠️ **Rettet efter levering (5. august 2026).** Her stod: *"En visningsrate over
 > 100 % er derfor umulig."* **Det passer ikke**, og aflæsningen viste det: tabellen
