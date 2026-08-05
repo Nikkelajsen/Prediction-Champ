@@ -13,6 +13,7 @@
 | kampsynkronisering, live-resultater | §8 · `api/sync-matches.js`, `api/sync-live.js` · `docs/features/live-resultater-v1.md` |
 | datakilder (Sportmonks / football-data.org), API-nøgler, kaldbudget | §8 · `api/_providers/` · `docs/features/flere-datakilder-v1.md` |
 | miljøvariabler, deploy, tjekliste før merge | §9, §11 |
+| staging-database (opret, peg preview på den, vedligehold) | `docs/STAGING.md` · §9 |
 | ny turnering | §10 · `docs/features/turnering-2.md` |
 | kendte begrænsninger (vilkår, der ikke laves om) | §12 |
 | noget der ikke er bygget, ryddet op eller besluttet endnu | `docs/BACKLOG.md` |
