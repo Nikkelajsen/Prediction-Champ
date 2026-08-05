@@ -41,7 +41,7 @@ Ved produktbeslutninger og nye features læses desuden:
 ## Når noget leveres
 
 Når en feature leveres eller en beslutning træffes, opdatér **alle tre**:
-- `docs/ROADMAP.md` (status + beslutningslog),
+- `docs/ROADMAP.md` (status og prioritering) — og skriv **beslutningen** i `docs/DECISIONS.md`, **leverancen** i `docs/CHANGELOG.md`. Hver af de to hører præcis ét sted; ROADMAP'en bar indtil `G70` (5. august 2026) en kopi af beslutningsloggen og gør det ikke længere,
 - `docs/BACKLOG.md` — **slet** de rækker, leverancen lukker, og ryd indbakken, og
 - den relevante spec i `docs/features/`, hvis den leverede adfærd afviger fra det, spec'en beskriver.
 
