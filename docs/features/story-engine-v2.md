@@ -84,7 +84,7 @@ Rating-porten reagerer kun på ægte resultatændringer (uændret fra v1). Histo
 
 `generate_stories`' delete er nu periode-afgrænset:
 
-```sql
+```sql uddrag
 delete from public.stories where round_key = p_round_key and period = 'round';
 ```
 

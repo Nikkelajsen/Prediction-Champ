@@ -245,9 +245,16 @@ const METRICS = {
   story_rules: {
     title: "Story Engine pr. regel",
     what: "Hvilke af motorens regler der faktisk udløser, og hvordan folk reagerer på dem.",
-    how: "Genererede historier og afvisninger tælles pr. regel i stories-tabellen. Visninger og delinger kommer fra hændelsesloggen, hvor regelnavnet følger med i metadata.",
-    source: "public.stories (genereret, afvist) + analytics_events (vist, delt).",
+    how: "Genererede historier og afvisninger tælles pr. regel i stories-tabellen. Visninger og delinger kommer fra hændelsesloggen, hvor regelnavnet følger med i metadata. Procenterne regner på VIS-BAR og ikke på genereret — se den måling.",
+    source: "public.stories (genereret, vis-bar, afvist) + analytics_events (vist, delt).",
     caveat: "De to kilder har forskellig pålidelighed: genereret og afvist er RIGTIGE rækker og præcise, mens vist og delt er fire-and-forget og derfor et GULV. En lav visningsrate kan lige så godt være tabt logning som en historie, ingen så. Sammenlign regler med hinanden, ikke med et ideal.",
+  },
+  story_viewable: {
+    title: "Kunne vises",
+    what: "De genererede historier, der overhovedet kunne nå en skærm — og dermed nævneren under alle procenterne i tabellen.",
+    how: "Karusellen på Hjem henter kun kort fra den NUVÆRENDE runde (`round_key = <nuværende>`). Et kort tæller derfor som vis-bart, hvis det blev skrevet, før dets egen runde var forbi — altså før midnat dansk tid på tirsdagen efter rundenøglen.",
+    source: "public.stories: created_at sammenholdt med round_key + 7 dage.",
+    caveat: "Målingen kom af `G73` (august 2026), hvor 197 af 280 historier var efterfyldte dagskort med nul visninger: med `genereret` som nævner målte visningsraten efterfyldningen og ikke brugerne. To ting gør et kort ikke-vis-bart, og kun den ene er en engangsudgift — v2's efterfyldning af historikken, og et runde-kort hvis runde først blev spillet færdig efter den var forbi (en udsat kamp). Den anden kan ske igen.",
   },
   story_never: {
     title: "Regler der aldrig udløser",

@@ -203,6 +203,12 @@ const STORY_RULES = {
 // Flet RPC'ens tal med katalogen, så regler der ALDRIG har udløst kommer med
 // som `never: true` i stedet for slet ikke at være der. En regel, der aldrig
 // udløser, er den dyreste slags død kode: den ser ud til at virke.
+//
+// `viewable` (G73) er de kort, der overhovedet kunne nå en skærm — se RPC'ens
+// kommentar i sql/analytics_dashboard.sql. Feltet er `?? generated` og ikke
+// `?? 0`: kører klienten mod en database, hvor RPC'en endnu ikke er gen-kørt,
+// findes kolonnen ikke, og en nul-nævner ville lade hele tabellens rater
+// forsvinde. Faldet tilbage til `generated` er præcis den gamle opførsel.
 function storyRuleRows(data) {
   const measured = new Map((data?.rules || []).map((r) => [r.rule, r]));
   const rows = [];
@@ -210,7 +216,7 @@ function storyRuleRows(data) {
     const m = measured.get(rule);
     rows.push({
       rule, label,
-      generated: m?.generated ?? 0, users: m?.users ?? 0,
+      generated: m?.generated ?? 0, viewable: m?.viewable ?? m?.generated ?? 0, users: m?.users ?? 0,
       viewed: m?.viewed ?? 0, shared: m?.shared ?? 0, dismissed: m?.dismissed ?? 0,
       view_rate: m?.view_rate ?? null, share_rate: m?.share_rate ?? null,
       dismiss_rate: m?.dismiss_rate ?? null, avg_priority: m?.avg_priority ?? null,
@@ -225,7 +231,8 @@ function storyRuleRows(data) {
   // Regler i databasen, som katalogen ikke kender — sker kun, hvis motoren er
   // udvidet uden at listen ovenfor er fulgt med. Vises frem for at skjules.
   for (const [rule, m] of measured) {
-    rows.push({ ...m, rule, label: rule, never: false, silent: (m.generated ?? 0) === 0, unknown: true });
+    rows.push({ ...m, rule, label: rule, viewable: m.viewable ?? m.generated ?? 0,
+      never: false, silent: (m.generated ?? 0) === 0, unknown: true });
   }
   return rows.sort((a, b) => (b.generated - a.generated) || a.rule.localeCompare(b.rule));
 }

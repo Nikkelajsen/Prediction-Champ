@@ -304,3 +304,25 @@ jobs:
           set -euo pipefail
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database admintest;'
           psql -h localhost -U postgres -d admintest -v ON_ERROR_STOP=1 -b -f liga_admin.sql
+
+      # SQL-blokkene i docs/ (G74). Det eneste trin i jobbet, der ikke tester en
+      # migrering, men DOKUMENTATIONEN: hver ```sql-blok bygges om til et
+      # `prepare` mod hele sql/schema.sql, så PostgreSQL selv siger, om
+      # forespørgslen kunne køre. `prepare` uden `execute` rører ingen rækker —
+      # også et `update` i et dokument er derfor ufarligt at tjekke.
+      #
+      # Trinnet kræver Node, som kun `verify`-jobbet ellers har. Det er billigt
+      # nok: udtrækkeren bruger ingen afhængigheder, så der er intet `npm ci`.
+      #
+      # Baggrunden er `B12`, hvis forespørgsel stod to døgn som "klar til at
+      # køre" og blev afvist med `42803`, første gang nogen prøvede. Et rent
+      # syntakstjek ville ikke have fanget den — fejlen opstår i parse-analysen
+      # og kræver, at serveren kender tabellerne.
+      - name: Test af SQL-blokkene i docs/
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          node sql/tests/docs_sql.mjs > "$RUNNER_TEMP/docs_sql.gen.sql"
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database docssql;'
+          psql -h localhost -U postgres -d docssql -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/docs_sql.gen.sql"

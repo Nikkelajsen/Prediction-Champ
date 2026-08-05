@@ -473,6 +473,27 @@ describe("storyRuleRows — katalogen fletter med det målte", () => {
     expect(out.every((r) => r.never)).toBe(true);
   });
 
+  // G73: `viewable` er nævneren under alle procenter i tabellen. Falder den
+  // til 0, forsvinder raterne — så en database, hvor RPC'en endnu ikke er
+  // gen-kørt, må ikke give 0, men det gamle tal.
+  describe("viewable — nævneren, når kortet overhovedet kunne nå en skærm", () => {
+    it("bæres igennem, når RPC'en leverer den", () => {
+      const out = storyRuleRows({ rules: [{ rule: "DAY_RESULT", generated: 123, viewable: 4 }] });
+      expect(out.find((r) => r.rule === "DAY_RESULT").viewable).toBe(4);
+    });
+
+    it("falder tilbage til generated på en RPC uden kolonnen — ikke til nul", () => {
+      expect(byRule.ROUND_WON.viewable).toBe(12);
+      const ukendt = storyRuleRows({ rules: [{ rule: "NY_REGEL", generated: 3 }] })
+        .find((r) => r.rule === "NY_REGEL");
+      expect(ukendt.viewable).toBe(3);
+    });
+
+    it("er 0 for en regel, der slet ikke blev målt", () => {
+      expect(byRule.COMEBACK.viewable).toBe(0);
+    });
+  });
+
   // Katalogen findes kun i JS, fordi RPC'en per definition ikke kan se regler,
   // der aldrig har udløst. Denne test er prisen for det: den fejler, hvis
   // motoren udvides uden at listen følger med.

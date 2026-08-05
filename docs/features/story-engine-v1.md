@@ -132,7 +132,7 @@ Samme mønster som ratings: beregnes i databasen, én gang pr. runde, idempotent
 
 **Ny tabel `stories`:**
 
-```sql
+```sql uddrag
 create table stories (
   id uuid primary key default gen_random_uuid(),
   round_key text not null,
@@ -157,7 +157,7 @@ create table stories (
 **Deterministisk udvælgelse (`latest_story`-view):**
 Præcis én historie pr. `(user_id, round_key)`. Tre sorteringsnøgler, hvor den sidste er garanteret unik, så viewet aldrig kan returnere to rækker eller skifte vilkårligt:
 
-```sql
+```sql uddrag
 -- pr. (user_id, round_key): vælg rækken med
 order by priority asc, league_size desc nulls last, competition_id asc
 limit 1   -- fx via distinct on (user_id, round_key) med denne order
@@ -327,7 +327,7 @@ Bemærk, at en genberegning nulstiller `dismissed_at` for de berørte runder —
 
 `generate_stories` byggede konkurrencens stilling (`_se_rp`) sådan:
 
-```sql
+```sql uddrag
 from competition_matches cm
 join matches m on m.id = cm.match_id
 join predictions pr on pr.match_id = m.id   -- ← ingen afgrænsning til deltagere
@@ -347,7 +347,7 @@ Appens egen konkurrence-stilling (`computeCompetitionState` i `src/lib/data.js`)
 
 Ét join i `_se_rp`:
 
-```sql
+```sql uddrag
 join competition_participants cp
   on cp.competition_id = cm.competition_id and cp.user_id = pr.user_id
 ```

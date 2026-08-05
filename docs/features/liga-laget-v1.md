@@ -77,7 +77,7 @@ Det eksisterende flow får ét nyt felt øverst: **"Liga"** (dropdown over ligae
 
 Nyt idempotent script `sql/groups.sql` (køres i Supabase-editoren med "Run without RLS", jf. dokumentationens afsnit 13).
 
-```sql
+```sql uddrag
 create table groups (
   id uuid primary key default gen_random_uuid(),
   name text not null check (char_length(name) between 2 and 40),

@@ -78,9 +78,10 @@ export default [
     },
   },
 
-  // Konfigurationsfiler i roden køres af Node.
+  // Konfigurationsfiler i roden — og udtrækkeren bag SQL-tjekket på docs/
+  // (G74), som CI kører med `node` uden om både Vite og npm — køres af Node.
   {
-    files: ["*.config.js"],
+    files: ["*.config.js", "sql/tests/*.mjs"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",

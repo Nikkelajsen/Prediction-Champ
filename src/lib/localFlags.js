@@ -22,8 +22,14 @@
 //
 // Id'et lægges i værdien og ikke i nøglenavnet, fordi navnene har tre andre
 // aftagere: LOKALE_NØGLER rydder på eksakte navne, guard-testen opremser dem,
-// og privatlivspolitikken (src/lib/legal.js) nævner dem ved navn. Et suffiks på
+// og privatlivspolitikken (src/lib/legal.js) beskriver dem. Et suffiks på
 // nøglen ville bryde alle tre; et suffiks på værdien rører ingen af dem.
+//
+// Alle tre aftagere har nu en test. Den tredje kom sidst (`G71`, august 2026)
+// og er den eneste, der ikke kunne bygges som et navne-match: politikken siger
+// "om du har lukket kortet om notifikationer" og ikke `pc_push_dismissed`, så
+// koblingen bor i en oversættelsestabel i src/lib/legal.test.js. Tilføjes en
+// nøgle her, kræver den derfor to linjer dér — en i tabellen og en i teksten.
 
 // ---------- nøglerne ----------
 
@@ -43,7 +49,7 @@ const PWA_ONBOARDED_KEY = "pc_pwa_onboarded";
 //
 // Formen er ikke tilfældig: navnene har tre andre aftagere (LOKALE_NØGLER
 // rydder på eksakte navne, guard-testen opremser dem, og privatlivspolitikken
-// nævner dem), så et suffiks på NØGLEN ville bryde alle tre — mens et suffiks
+// beskriver dem), så et suffiks på NØGLEN ville bryde alle tre — mens et suffiks
 // på værdien ikke rører nogen af dem. Samme argument som bruger-id'et nedenfor.
 const COMP_DONE_KEY = "pc_comp_done_seen";
 
@@ -57,6 +63,8 @@ const COMP_DONE_KEY = "pc_comp_done_seen";
 //
 // Listen skal holdes i trit med privatlivspolitikkens afsnit om lokale data
 // (src/lib/legal.js): står en nøgle ikke her, bliver den heller ikke ryddet.
+// Siden `G71` håndhæves den anden halvdel af kravet af en test —
+// src/lib/legal.test.js fejler, hvis en nøgle her mangler sin sætning dér.
 const LOKALE_NØGLER = [
   SESSION_KEY,
   PING_KEY,
