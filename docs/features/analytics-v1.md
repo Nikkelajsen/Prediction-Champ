@@ -203,12 +203,14 @@ En visningsrate over 100 % er derfor umulig, men en lav rate kan lige så godt b
 
 **`dismissed_at` er den mest interessante kolonne:** den er brugerens eneste *aktive* afvisning af en historie, og den findes pr. række — ikke som event, og derfor uden gulv-forbeholdet.
 
-**Regler, der aldrig udløser.** RPC'en kan per definition kun se regler, der *har* udløst. Katalogen med de 16 regler holdes derfor i klienten (`STORY_RULES` i `src/lib/analytics.js`) — 14 indtil Story Engine v1.2 (august 2026) lagde de to lokale kåringer til — og de to tilstande skelnes:
+**Regler, der aldrig udløser.** RPC'en kan per definition kun se regler, der *har* udløst. Katalogen med de 23 regler holdes derfor i klienten (`STORY_RULES` i `src/lib/analytics.js`) — 14 indtil Story Engine v1.2 (august 2026) lagde de to lokale kåringer til, og 16 indtil v2's syv dagsregler kom med *(rettet efter levering, august 2026 — se nedenfor)* — og de to tilstande skelnes:
 
 - **ALDRIG** — har ikke udløst én eneste gang, heller ikke uden for vinduet. Den dyreste slags død kode: den ser ud til at virke.
 - **STILLE** — har udløst før, men ikke i vinduet. Bare en stille periode.
 
-Prisen for at holde katalogen i JS er drift. Den betales af en test, der **læser `sql/story_engine.sql`**, trækker regelnavnene ud og fejler, hvis de to lister ikke er ens — så listen ikke stille kan blive forældet, næste gang motoren udvides.
+Prisen for at holde katalogen i JS er drift. Den betales af en test, der **læser alle `sql/story_engine*.sql`**, trækker regelnavnene ud og fejler, hvis de to lister ikke er ens — så listen ikke stille kan blive forældet, næste gang motoren udvides.
+
+> ⚠️ **Rettet efter levering (august 2026).** Testen læste oprindeligt kun `sql/story_engine.sql` ved navn. Da Story Engine v2 lagde sin dagsmotor i en **ny fil** (`sql/story_engine_v2.sql`), var der derfor ingen drift at se: testen blev ved med at være grøn, mens de syv dagsregler stod i tabellen som rå nøgler (`DAY_RESULT`, `DUEL`, …) med mærkatet **UKENDT** og uden navn. En hårdkodet filliste var den samme fejl som den hårdkodede regelliste, testen skulle beskytte imod. Testen finder nu filerne ved at læse `sql/`-mappen, og katalogen har fået de syv navne: *Dagens facit · Alene om at ramme · Ingen ramte kampen · Dagens højeste · Stimen lever eller brød · Duel med nærmeste rival · Ét mål fra eksakt*.
 
 **Dækning** = brugere med mindst én historie ÷ brugere med mindst ét muligt tip i en låst runde. Det er dét tal, v1.1-leverancen blev målt på ("1 af 8 → 8 af 8 brugere i premiereugen") — nu permanent i stedet for en engangsmåling.
 
@@ -424,7 +426,7 @@ Ingen af de to lock-policy-filer eller `sql/story_engine.sql`/`sql/groups.sql`/`
 15. `biggestDrop` ignorerer trin, der VOKSER (en liga-løs konkurrence kan nås uden liga), og giver `null` for en tragt uden frafald.
 16. `fmtMinutes` dækker sekunder → dage i samme felt; `null` bliver til en tankestreg, aldrig til 0.
 17. `storyRuleRows` returnerer hele katalogen (ikke kun det målte), skelner ALDRIG fra STILLE, og markerer en ukendt regel fra databasen frem for at skjule den.
-18. Drift-test: regelnavnene i `sql/story_engine.sql` er præcis dem i `STORY_RULES`.
+18. Drift-test: regelnavnene i **alle** `sql/story_engine*.sql` (fundet ved at læse mappen, ikke ved navn) er præcis dem i `STORY_RULES` — og der findes mindst to sådanne filer, så en flyttet eller omdøbt motor ikke kan gøre testen tom.
 
 ---
 

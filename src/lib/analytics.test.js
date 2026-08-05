@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("./supabase.js", () => ({ restFetch: vi.fn() }));
 import { restFetch } from "./supabase.js";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import {
   logEvent, logEventOnce, diagnoseLeague, diagnoseLeagues, summarizeDiagnoses, LEAGUE_THRESHOLDS,
   funnelRow, funnelSteps, biggestDrop, fmtMinutes, storyRuleRows, STORY_RULES,
@@ -476,11 +476,24 @@ describe("storyRuleRows — katalogen fletter med det målte", () => {
   // Katalogen findes kun i JS, fordi RPC'en per definition ikke kan se regler,
   // der aldrig har udløst. Denne test er prisen for det: den fejler, hvis
   // motoren udvides uden at listen følger med.
-  it("katalogen driver ikke fra sql/story_engine.sql", () => {
-    const sql = readFileSync(new URL("../../sql/story_engine.sql", import.meta.url), "utf8");
-    const NOT_RULES = new Set(["ALL"]);
+  //
+  // Filerne findes ved at LÆSE mappen, ikke ved en håndholdt liste. Testen
+  // pegede indtil august 2026 kun på `story_engine.sql`, og da v2 lagde sin
+  // dagsmotor i en ny fil, var der ingen drift at se: de syv dagsregler stod
+  // som UKENDT uden navn i analytics, mens testen var grøn. En hårdkodet
+  // filliste er den samme fejl som en hårdkodet regelliste.
+  it("katalogen driver ikke fra sql/story_engine*.sql — hverken runde- eller dagsmotoren", () => {
+    const dir = new URL("../../sql/", import.meta.url);
+    const files = readdirSync(dir).filter((f) => /^story_engine.*\.sql$/.test(f));
+    expect(files.length).toBeGreaterThanOrEqual(2); // v1 + v2; fanger en flyttet/omdøbt fil
+    // Store bogstaver i apostroffer, som IKKE er regelnavne: 'ALL' er
+    // generate_stories' scope-argument, 'UTC' en tidszone i dagsmotoren.
+    const NOT_RULES = new Set(["ALL", "UTC"]);
     const inSql = new Set(
-      [...sql.matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)].map((m) => m[1]).filter((r) => !NOT_RULES.has(r))
+      files
+        .flatMap((f) => [...readFileSync(new URL(f, dir), "utf8").matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)])
+        .map((m) => m[1])
+        .filter((r) => !NOT_RULES.has(r))
     );
     expect([...inSql].sort()).toEqual(Object.keys(STORY_RULES).sort());
   });
