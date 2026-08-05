@@ -105,7 +105,7 @@ versionsstempel → `G42`).*
 
 ## Prioriteret rækkefølge
 
-Alle 27 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 26 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -156,6 +156,14 @@ som et NEJ** (`G2` og — 3. august — `G7`), og begge gange fordi rækkens pr�
 ikke holdt ved eftersyn. Det er den billigste slags leverance og den, der er
 lettest at springe over.*
 
+*5. august 2026 (fjerde runde): `B22` er kørt og slettet — `rating_core.sql` er
+gen-kørt, ratingene er regnet om, og en anden skema-eksport bekræfter, at
+`recompute_ratings()` i produktion nu bærer `order by score desc, exacts desc`.
+Listen er 27 → 26. **Dagens mest brugbare lære er ikke en af de tolv rækker, men
+mekanikken, der fandt den trettende:** en frisk skema-eksport er den eneste
+kilde, der kan modsige en påstand om, hvad der står i produktion, og den gjorde
+det to gange på én dag. Begge gange var påstanden vores egen.*
+
 Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
 1. **Et svar, vi allerede har, er gratis** — et opslag, der lukker eller
@@ -169,19 +177,19 @@ Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
 ### Tier 1 — Produktionsadgang: svaret (eller kørslen) ligger i Supabase
 
-Fem aflæsninger og én kørsel. Tre af aflæsningerne har ventet i flere uger, mens
-spørgsmålet stod som åbent.
+Ingen af de fem kræver, at der bygges noget. De kræver, at nogen logger ind og
+kigger. Tre af dem har ventet i flere uger, mens spørgsmålet stod som åbent.
 
-*`B19` er slettet 5. august 2026: dens fem SQL-filer (#41, #42, #43, #10, #3) er
-kørt i produktion og verificeret i skema-eksporten. **`B22` kom til samme dag og
-af samme eksport** — den viste, at `rating_core.sql` (#0) ikke er gen-kørt, så
-`G68`s tiebreak er merget som kode og inert i databasen. Det er præcis dét, en
-frisk eksport er til for: den er den eneste kilde, der kan sige nej til en
-påstand om, hvad der står i produktion.*
+*`B19` og `B22` er begge slettet 5. august 2026, og de to hører sammen: `B19`s
+fem filer blev kørt, hvorefter skema-eksporten viste, at `rating_core.sql` (#0)
+IKKE var — så `G68` var merget som kode og inert i databasen. Det blev `B22`,
+som er kørt og verificeret i en anden eksport samme dag. **Tieret er dermed rene
+aflæsninger igen.** Mønstret er værd at tage med: eksporten er den eneste kilde,
+der kan sige nej til en påstand om, hvad der står i produktion — og den sagde
+nej to gange på én dag, begge gange til os.*
 
 | # | Hvad | Hvorfor her |
 |---|---|---|
-| `B22` | **Gen-kør `sql/rating_core.sql` (#0)**, og tryk derefter "Opdater ratings" i Admin | Øverst, fordi den er tierets eneste kørsel, og fordi `G68` ellers er en rettelse, der findes i repoet og ikke i databasen. Gen-kørslen ændrer kun funktionen; de gemte `rnk`-værdier flytter sig først, når `recompute_ratings()` faktisk kører. ⚠️ **Kopiér filen ORDRET** — den har CRLF i funktionskroppene med vilje (`G5`), og et værktøj, der normaliserer linjeskift, ville give næste skema-eksport ~2.400 linjers falsk diff. **Aflæsningen efter kørslen:** to spillere med lige rundescore og forskelligt antal præcise resultater skal have hver sin placering i karriereprofilen. |
 | `A11` | Kør `job_runs.authVia`-opslaget (står i [`CRON.md`](./CRON.md)) | Ét SQL-opslag afgør, om `?secret=`-fallbacken kan fjernes. Er svaret `header` hele vejen, er næste skridt en sletning i `api/_shared.js`. |
 | `B12` | Kør §5F-forespørgslen i [`features/analytics-v1.md`](./features/analytics-v1.md) | Forespørgslen er skrevet, forbeholdene er skrevet. Svarer samtidig på `I15`s åbne spørgsmål, om Ugens kupon-kortet overhovedet bruges — to rækker for ét opslag. |
 | `G8` | `select ... from competitions where mode_params ? 'tournaments'` | `B2`s testcase 3 er godkendt 2. august, og den ER denne kodesti. Svarer opslaget med rækker, slettes rækken helt. |
@@ -334,7 +342,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Hvad | Hvorfor / hvad den venter på | Omfang |
 |---|---|---|---|
-| B22 | **Gen-kør `sql/rating_core.sql` (#0) i Supabase** | `G68` (5. august 2026) gav `rnk` i `rating_history` opgørets eget tiebreak (`score desc, exacts desc`), men filen er en migrering, der køres i hånden — og skema-eksporten samme dag viste, at produktionens `recompute_ratings()` stadig rangerer på score alene. Rettelsen er dermed merget og **inert**. Gen-kørslen ændrer kun funktionen; de gemte værdier flytter sig først ved næste kald (en resultatændring eller "Opdater ratings" i Admin), og dét er samme forbehold som ved `A17`s gen-kørsel. ⚠️ Filen har CRLF i kroppene med vilje (`G5`) — kopiér den ordret. | Lille (kørsel) |
 | B21 | **Omdøb GitHub-repoet og Vercel-projektet, og ret hjemmesidens links** | Navneskiftet 4. august 2026 gik gennem app, manifest, ikoner, tekster og dokumentation, men stoppede ved projektnavnene — **med vilje**, fordi et skifte af Vercel-projektet ændrer `.vercel.app`-adressen og dermed knækker hvert link, der peger på den. Prisen ved status quo er, at produktet hedder Leagly overalt undtagen i den adresse, en ny bruger faktisk taster ind: 23 CTA'er i `site/` (4+5+6+4+4) plus README'ens live-link peger på `prediction-champ.vercel.app`. **Rækkefølgen er bindende og er hele grunden til, at rækken står lige efter `I10`:** vælges et rigtigt domæne, skal linkene alligevel skiftes, og gøres omdøbningen først, skiftes de to gange. Vercels gamle URL redirigerer ikke af sig selv, så et delt link fra før skiftet dør — det er kun ufarligt, så længe hjemmesiden ikke er publiceret. `docs/RESTORE.md`s omtale skal IKKE rettes: den navngiver backup-filer, der faktisk hedder det gamle. | Lille (men mange steder) |
 | B20 | **Personlige invite-links** (`invite_links` + `invited_by` på `group_members`/`competition_participants`) | Attributionen "hvem inviterede hvem" findes ikke i skemaet: `groups.invite_code` er én kode pr. liga og ikke pr. bruger, og ingen af medlemstabellerne gemmer afsenderen. Det er derfor, milepælen **"5/10 venner tilmeldt via dit link" ikke kunne bygges** — `milestones` tæller i stedet `LEAGUE_GREW_5/10`, altså hvor mange der kom med i en liga, man har oprettet, hvilket er en anden bedrift. Begrundelsen står ved koden begge steder (`sql/milestones.sql`, `src/lib/milestones.js`) og peger på denne række. **Ventetid er ikke gratis her, og det er rækkens vigtigste egenskab:** attribution kan kun registreres fremad, så en bedrift bygget på den kan først tælle fra udrulningsdagen — de brugere, der allerede er inviteret, tælles aldrig. Gater desuden `I6` (ambassadørprogram), som ikke kan måle noget uden. | Mellem |
 | B18 | **Staging-projektet i Supabase** | Preview og produktion deler database, medmindre staging-variablerne peger et andet sted (`DOCUMENTATION.md` §9). Selve projektet skal oprettes manuelt, og `sql/schema.sql` genskaber hele `public` på én gang, så opsætningen er kort. **Rækken findes, fordi opgaven mistede sin tracker:** den blev fulgt som `G4`, men `G4` blev leveret som noget andet — dev-serverens hårde krav om `.env.local` — og forsvandt derfor fra listen, mens selve staging-projektet aldrig blev oprettet. Prisen ved status quo er, at en preview-test skriver i brugernes rigtige data; det er dét, `DOCUMENTATION.md` §11's advarsel om ikke at taste resultater ind på en preview holder i skak i hånden. | Lille (opsætning) |

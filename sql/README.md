@@ -10,8 +10,8 @@ og kan køres igen.
 `public`-skemaet, som det så ud ved seneste eksport. Den redigeres aldrig i hånden;
 den regenereres med guiden nedenfor.
 
-> ✅ **Øjebliksbilledet er FRISKT (5. august 2026, efter #43).** Eksporten er
-> kørt manuelt efter dagens fem migreringer og viser dem alle: `seasons.ends_at`
+> ✅ **Øjebliksbilledet er FRISKT (5. august 2026, efter #0's gen-kørsel).**
+> Eksporten er kørt manuelt to gange samme dag og viser alle dagens migreringer: `seasons.ends_at`
 > og `competition_status` v2 (#41), `_anonymize_account()`/`admin_anonymize_account()`
 > og de tre administrator-policies (#42), `anon`s tomme sekvens-grants (#43),
 > `career_profile()`s officielle komplethedsjoin (#10) og brugernavne-objekterne
@@ -33,11 +33,17 @@ den regenereres med guiden nedenfor.
 > kontroller i [`job-heartbeat.yml`](../.github/workflows/job-heartbeat.yml) hver
 > halve time — tabeller, sekvenser og selve kilden.
 >
-> ⚠️ **Eksporten afslørede samtidig, at #0 IKKE er gen-kørt:** `recompute_ratings()`
-> i produktion rangerer stadig `rnk` på score alene, altså uden `G68`s tiebreak.
-> Rettelsen er merget som kode og er inert, indtil `rating_core.sql` køres. Det
-> er netop dét, en frisk eksport er til for — se `B22` i
-> [`BACKLOG.md`](../docs/BACKLOG.md).
+> **#0 er gen-kørt, og eksporten er beviset.** Den første eksport samme dag
+> afslørede, at `recompute_ratings()` i produktion stadig rangerede `rnk` på
+> score alene — `G68` var merget som kode og inert i databasen, fordi
+> `rating_core.sql` er en migrering, der køres i hånden, og aldrig blev flaget
+> som en kørsel. Det blev `B22`, som nu er lukket: funktionen bærer
+> `order by score desc, exacts desc`, og ratingene er regnet om.
+>
+> **Diff'en er samtidig `G5`s bevis:** gen-kørslen gav 19 linjers ændring og
+> ikke ~2.400. Var filen blevet normaliseret til LF undervejs, ville hver eneste
+> linje i hver eneste funktionskrop stå som ændret — og en rigtig ændring kunne
+> gemme sig i støjen.
 >
 > **Det, en tidligere eksport afgjorde (`G5`):** funktionskroppene i produktion
 > indeholder CRLF — alle funktionskroppe med `$$`-body. Advarslen i `rating_core.sql`s
@@ -63,7 +69,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | # | Fil | Formål | Status |
 |---|---|---|---|
 | — | `schema.sql` | **Genereret** øjebliksbillede af hele `public`. Kør den i et nyt/staging-projekt i stedet for hele listen | Redigér aldrig i hånden |
-| 0 | `rating_core.sql` | `pc_points()`, `round_key()`, `recompute_ratings()` + tabellerne `ratings`/`rating_history` | Aktiv — **skal køres før #5**. Tilføjet 30. juli 2026 med optimeringen fra samme dag (logistikken i `double precision`, ~175× hurtigere). **Skal gen-køres efter #20** (31. juli 2026, A17): `_rs` joiner nu `seasons`/`leagues` og tæller kun **officielle** turneringer. ⚠️ **Gen-kørslen ændrer kun funktionen, ikke tallene** — `ratings` står uændret, til noget kalder `recompute_ratings()`. Tryk "Opdater ratings" i Admin bagefter, ellers ligger de gamle tal og venter på næste kampresultat. **SKAL gen-køres igen efter `G68` (5. august 2026):** `rnk` rangerer nu på `score desc, exacts desc` og ikke på score alene. Samme forbehold som ovenfor — gen-kørslen ændrer kun funktionen, og de gemte `rnk`-værdier i `rating_history` flytter sig først, når `recompute_ratings()` faktisk kører (næste resultatændring eller "Opdater ratings"). ⚠️ **Filen har CRLF i funktionskroppene med vilje** (`G5`, `.gitattributes`) — kopiér den ordret ind i SQL-editoren, og lad være med at køre den gennem et værktøj, der normaliserer linjeskift |
+| 0 | `rating_core.sql` | `pc_points()`, `round_key()`, `recompute_ratings()` + tabellerne `ratings`/`rating_history` | Aktiv — **skal køres før #5**. Tilføjet 30. juli 2026 med optimeringen fra samme dag (logistikken i `double precision`, ~175× hurtigere). **Skal gen-køres efter #20** (31. juli 2026, A17): `_rs` joiner nu `seasons`/`leagues` og tæller kun **officielle** turneringer. ⚠️ **Gen-kørslen ændrer kun funktionen, ikke tallene** — `ratings` står uændret, til noget kalder `recompute_ratings()`. Tryk "Opdater ratings" i Admin bagefter, ellers ligger de gamle tal og venter på næste kampresultat. ~~**SKAL gen-køres igen efter `G68`**~~ **gen-kørt 5. august 2026** (`G68`): `rnk` rangerer nu på `score desc, exacts desc` og ikke på score alene, og ejeren har trykket "Opdater ratings" bagefter, så de gemte værdier faktisk er regnet om. Samme forbehold som ovenfor — gen-kørslen ændrer kun funktionen, og de gemte `rnk`-værdier i `rating_history` flytter sig først, når `recompute_ratings()` faktisk kører (næste resultatændring eller "Opdater ratings"). ⚠️ **Filen har CRLF i funktionskroppene med vilje** (`G5`, `.gitattributes`) — kopiér den ordret ind i SQL-editoren, og lad være med at køre den gennem et værktøj, der normaliserer linjeskift |
 | 1 | `standings_views.superseded.sql` | Første udgave af `round_standings` + `season_standings` | ⚠️ **Afløst af `standings_tiebreakers.sql`** — kør den aldrig. Omdøbt 30. juli 2026, så filnavnet selv advarer; kun bevaret for historikken |
 | 2 | `user_stats.sql` | `user_activity_days`, `touch_activity()`, `admin_user_stats()` | Aktiv |
 | 3 | `username_constraints.sql` | Hele §6-løftet om et brugernavn: længde-constraint (2–20), det unikke indeks `profiles_display_name_lower_idx` og `username_available()` | Aktiv — **kørt 5. august 2026** (no-op: objekterne stod der i forvejen). Idempotent. **De to sidste kom til august 2026 (`G63`)**: de fandtes indtil da kun i den genererede `schema.sql`, så et skema bygget fra `sql/`-scripterne lod to brugere hedde det samme og manglede signup-tjekket. Hullet var i **gendannelsesvejen**, ikke i produktion, hvor objekterne står. Dækket af `sql/tests/username_constraints.sql` i CI |
