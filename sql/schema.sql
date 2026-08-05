@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict jMjvAHF0PxgDLyhimo2xwUY8aBDIZgodk2n2BP5ejBNZxaInwICyizQzzleKvsL
+\restrict PMVn2CoGJgArlUvTYSGfjy86nbRkp7eXpCzcMTyVvjFwiP4P5stpDri53RYSkia
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
@@ -84,6 +84,59 @@ begin
   -- Kontoen soft-lukkes (auth.users-rækken består), så client_errors' egen
   -- `on delete set null` udløses aldrig — koblingen skal fjernes her.
   update public.client_errors set user_id = null where user_id = p_user_id;
+
+  -- ---------------------------------------------------------------------
+  -- Framelding fra det, der ikke er BEGYNDT (A25, 5. august 2026)
+  -- ---------------------------------------------------------------------
+  -- Alt andet her bevarer deltagelsen, og begrundelsen er vennernes historik:
+  -- en fjernet række ville give en afsluttet konkurrence én deltager færre og
+  -- kunne gøre en delt sejr udelt. Den begrundelse har en grænse. I en
+  -- konkurrence, hvor ingen kamp er låst endnu, findes der ingen historik at
+  -- beskytte — dér er pseudonymet ikke et spor af noget, der er sket, men en
+  -- deltager, der aldrig kommer til at spille: deltagerantallet er forkert
+  -- FREMADRETTET, og navnet står på listen hele sæsonen. Det er samme skel, som
+  -- A30 traf for de globale lister; her er det bare skåret på konkurrencen frem
+  -- for på listen.
+  --
+  -- TO BETINGELSER, og den anden vejer lige så meget som den første:
+  --   (a) ingen af konkurrencens kampe er låst eller spillet. "Ikke begyndt"
+  --       måles på KONKURRENCEN og ikke på brugerens egne tips: en deltager
+  --       uden tips i en igangværende konkurrence står stadig i en stilling,
+  --       de andre har set, og den må ikke kunne skrives om.
+  --   (b) der er mindst én anden deltager tilbage. Er der ingen, er der heller
+  --       ingen, pseudonymet generer — og frameldingen ville efterlade en
+  --       konkurrence uden deltagere, altså en ny slags rod i stedet for den
+  --       gamle.
+  --
+  -- Invarianten er urørt: `group_membership_invariant.sql` kræver deltager ⇒
+  -- medlem, og der fjernes kun i deltager-enden. Ligamedlemskabet bliver
+  -- stående; det er hverken en stilling eller en plads i en konkurrence.
+  --
+  -- TIPPENE RØRES IKKE. Ét tip gælder i ALLE de konkurrencer, kampen indgår i,
+  -- så en sletning her kunne flytte tal i en konkurrence, brugeren stadig ER
+  -- med i. Tippene bliver stående og tæller uændret alle de andre steder,
+  -- kampen indgår — de tæller bare ikke i den konkurrence, rækken lige er
+  -- meldt af.
+  delete from public.competition_participants cp
+   where cp.user_id = p_user_id
+     and not exists (
+       select 1
+       from public.competition_matches cm
+       join public.matches m on m.id = cm.match_id
+       where cm.competition_id = cp.competition_id
+         and (
+           public.match_locked(m.kickoff_at, m.kickoff_tbd)
+           -- Bæltet til selen: et resultat uden en overskredet lås burde ikke
+           -- kunne findes, men hvis det gør, ER konkurrencen begyndt.
+           or m.home_score is not null
+         )
+     )
+     and exists (
+       select 1
+       from public.competition_participants o
+       where o.competition_id = cp.competition_id
+         and o.user_id <> p_user_id
+     );
 
   update public.profiles
      set display_name  = v_navn,
@@ -933,6 +986,12 @@ begin
   gen as (
     select s.rule,
       count(*)                                              as generated,
+      -- Kunne kortet OVERHOVEDET nå en skærm? Se hovedkommentaren ovenfor.
+      -- `round_key` er tekst ('YYYY-MM-DD', rundens tirsdag), så +7 giver
+      -- tirsdagen efter, og zonen er dansk ligesom i public.round_key().
+      count(*) filter (where s.created_at
+        < ((s.round_key::date + 7)::timestamp at time zone 'Europe/Copenhagen'))
+                                                            as viewable,
       count(distinct s.user_id)                             as users,
       count(*) filter (where s.dismissed_at is not null)    as dismissed,
       round(avg(s.priority), 1)                             as avg_priority,
@@ -954,16 +1013,22 @@ begin
   joined as (
     select r.rule,
       coalesce(g.generated, 0) as generated,
+      coalesce(g.viewable, 0)  as viewable,
       coalesce(g.users, 0)     as users,
       coalesce(g.dismissed, 0) as dismissed,
       g.avg_priority,
       g.last_generated_at,
       coalesce(e.viewed, 0)    as viewed,
       coalesce(e.shared, 0)    as shared,
-      case when coalesce(g.generated, 0) = 0 then null
-        else round(100.0 * coalesce(e.viewed, 0) / g.generated, 1) end as view_rate,
-      case when coalesce(g.generated, 0) = 0 then null
-        else round(100.0 * g.dismissed / g.generated, 1) end as dismiss_rate,
+      -- BEGGE rater deler nævner, og det er med vilje: en afvisning kræver et
+      -- kort på skærmen lige så meget som en visning gør (dismissed_at sættes
+      -- kun fra karusellen, `dismissStory`), så et efterfyldt kort kan hverken
+      -- ses eller afvises. Havde de to hver sin nævner, ville summen af rater
+      -- kunne overstige det mulige.
+      case when coalesce(g.viewable, 0) = 0 then null
+        else round(100.0 * coalesce(e.viewed, 0) / g.viewable, 1) end as view_rate,
+      case when coalesce(g.viewable, 0) = 0 then null
+        else round(100.0 * g.dismissed / g.viewable, 1) end as dismiss_rate,
       case when coalesce(e.viewed, 0) = 0 then null
         else round(100.0 * coalesce(e.shared, 0) / e.viewed, 1) end as share_rate
     from rules r
@@ -974,6 +1039,9 @@ begin
     'window_days', p_days,
     'quiet_tier_min', 90,  -- skal matche QUIET_TIER_MIN i src/lib/stories.js
     'generated_total', (select coalesce(sum(generated), 0) from joined),
+    -- Forskellen på de to totaler er selve G73-oplysningen: hvor stor en del af
+    -- motorens produktion der aldrig kunne nå en skærm.
+    'viewable_total', (select coalesce(sum(viewable), 0) from joined),
     'users_reached', (
       select count(distinct s.user_id) from public.stories s cross join win w where s.created_at >= w.t0
     ),
@@ -6616,5 +6684,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict jMjvAHF0PxgDLyhimo2xwUY8aBDIZgodk2n2BP5ejBNZxaInwICyizQzzleKvsL
+\unrestrict PMVn2CoGJgArlUvTYSGfjy86nbRkp7eXpCzcMTyVvjFwiP4P5stpDri53RYSkia
 
