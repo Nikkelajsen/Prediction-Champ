@@ -10,41 +10,39 @@ og kan køres igen.
 `public`-skemaet, som det så ud ved seneste eksport. Den redigeres aldrig i hånden;
 den regenereres med guiden nedenfor.
 
-> ✅ **Øjebliksbilledet er FRISKT (3. august 2026, efter #36).** Eksporten er
-> kørt efter alle migreringer til og med `client_errors.sql` (#36) og viser dem
-> alle: `round_key()`s danske krop (#33), `anon`s tomme tabel-grants (#34),
-> `predictions_touch_updated_at` (#35), tabellen `client_errors` (#36) og Story
-> Engine v1.2's `generate_stories()`. #32 rører ikke skemaet. Filens eget
-> datostempel i git er svaret på "hvor gammel er den?" — ikke en dato skrevet i
-> hånden her, som var dét, der drev tre steder fra hinanden indtil `G21`.
+> ✅ **Øjebliksbilledet er FRISKT (5. august 2026, efter #43).** Eksporten er
+> kørt manuelt efter dagens fem migreringer og viser dem alle: `seasons.ends_at`
+> og `competition_status` v2 (#41), `_anonymize_account()`/`admin_anonymize_account()`
+> og de tre administrator-policies (#42), `anon`s tomme sekvens-grants (#43),
+> `career_profile()`s officielle komplethedsjoin (#10) og brugernavne-objekterne
+> (#3). Filens eget datostempel i git er svaret på "hvor gammel er den?" — ikke
+> en dato skrevet i hånden her, som var dét, der drev tre steder fra hinanden
+> indtil `G21`.
 >
-> **Adgangskontrakten kan læses af filen:** de gamle, åbne `matches`-policies og
-> `grant … to anon` på `recompute_ratings()` er væk, som #27 gjorde dem, og
-> `anon` har nul tabel-privilegier efter #34.
+> **Adgangskontrakten kan læses af filen:** `anon` har hverken tabel- eller
+> sekvens-privilegier, og `postgres`' default privileges giver dem ikke tilbage.
+> Kun `on functions` står tilbage — med vilje, for `username_available()` kaldes
+> før login.
 >
-> ⚠️ **Med én undtagelse, som eksporten selv afslørede:** #34 lukkede kilden for
-> grantor-rollen `postgres`, men **ikke** for `supabase_admin` — dens
-> `ALTER DEFAULT PRIVILEGES … GRANT ALL ON TABLES TO anon` står der stadig.
-> Migreringens `do`-blok forudså det og swallowede fejlen med en `notice`, så
-> kørslen ikke væltede; eksporten er beviset på, at netop dén gren fyrede.
-> Sekvenserne var af samme grund heller ikke lukket (`job_runs_id_seq` + begge
-> `ON SEQUENCES`-defaults) — dét var en ren dækningsfejl: ordet "tables" stod
-> tre steder i #34s formulering.
+> ⚠️ **Én ting står stadig, og den kan ikke lukkes herfra:** `supabase_admin`s
+> `ALTER DEFAULT PRIVILEGES … TO anon` (både `TABLES` og `SEQUENCES`). Sætningen
+> kræver medlemskab af rollen, som SQL-editorens session ikke har, og #43
+> melder det som en `warning` frem for at vælte. **Følgen er snævrere, end den
+> lyder:** reglen gælder kun objekter, der oprettes **af** `supabase_admin`, og
+> alt, vi selv opretter, ejes af `postgres`. Tilstanden aflæses af tre
+> kontroller i [`job-heartbeat.yml`](../.github/workflows/job-heartbeat.yml) hver
+> halve time — tabeller, sekvenser og selve kilden.
 >
-> **Sekvenserne er lukket af #43** (`anon_grants_finish.sql`, `G58`), **kørt
-> 5. august 2026** — øjebliksbilledet ovenfor er dermed forældet på netop dét
-> punkt, indtil næste eksport. `supabase_admin`-delen kan formentlig ikke køres fra SQL-editoren, og
-> **følgen er snævrere, end den lyder:** `ALTER DEFAULT PRIVILEGES FOR ROLE x`
-> gælder kun objekter, der oprettes **af** rolle x, og alt, vi selv opretter,
-> ejes af `postgres`. Tilstanden aflæses nu af tre kontroller i
-> [`job-heartbeat.yml`](../.github/workflows/job-heartbeat.yml) hver halve time
-> — tabeller, sekvenser og selve kilden — frem for af en skema-eksport og et
-> menneske.
+> ⚠️ **Eksporten afslørede samtidig, at #0 IKKE er gen-kørt:** `recompute_ratings()`
+> i produktion rangerer stadig `rnk` på score alene, altså uden `G68`s tiebreak.
+> Rettelsen er merget som kode og er inert, indtil `rating_core.sql` køres. Det
+> er netop dét, en frisk eksport er til for — se `B22` i
+> [`BACKLOG.md`](../docs/BACKLOG.md).
 >
-> **Det, eksporten samtidig afgjorde (`G5`):** funktionskroppene i produktion
-> indeholder CRLF — alle funktionskroppe med `$$`-body. Advarslen i `rating_core.sql`s hoved var
-> altså sand om databasen, mens selve filen var blevet normaliseret til LF.
-> Kroppene er hentet ordret tilbage, og `.gitattributes` (`*.sql -text`) holder
+> **Det, en tidligere eksport afgjorde (`G5`):** funktionskroppene i produktion
+> indeholder CRLF — alle funktionskroppe med `$$`-body. Advarslen i `rating_core.sql`s
+> hoved var altså sand om databasen, mens selve filen var blevet normaliseret til
+> LF. Kroppene er hentet ordret tilbage, og `.gitattributes` (`*.sql -text`) holder
 > dem der.
 >
 > Reglen er uændret: **eksport efter hver migrering** — kør
@@ -65,7 +63,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | # | Fil | Formål | Status |
 |---|---|---|---|
 | — | `schema.sql` | **Genereret** øjebliksbillede af hele `public`. Kør den i et nyt/staging-projekt i stedet for hele listen | Redigér aldrig i hånden |
-| 0 | `rating_core.sql` | `pc_points()`, `round_key()`, `recompute_ratings()` + tabellerne `ratings`/`rating_history` | Aktiv — **skal køres før #5**. Tilføjet 30. juli 2026 med optimeringen fra samme dag (logistikken i `double precision`, ~175× hurtigere). **Skal gen-køres efter #20** (31. juli 2026, A17): `_rs` joiner nu `seasons`/`leagues` og tæller kun **officielle** turneringer. ⚠️ **Gen-kørslen ændrer kun funktionen, ikke tallene** — `ratings` står uændret, til noget kalder `recompute_ratings()`. Tryk "Opdater ratings" i Admin bagefter, ellers ligger de gamle tal og venter på næste kampresultat |
+| 0 | `rating_core.sql` | `pc_points()`, `round_key()`, `recompute_ratings()` + tabellerne `ratings`/`rating_history` | Aktiv — **skal køres før #5**. Tilføjet 30. juli 2026 med optimeringen fra samme dag (logistikken i `double precision`, ~175× hurtigere). **Skal gen-køres efter #20** (31. juli 2026, A17): `_rs` joiner nu `seasons`/`leagues` og tæller kun **officielle** turneringer. ⚠️ **Gen-kørslen ændrer kun funktionen, ikke tallene** — `ratings` står uændret, til noget kalder `recompute_ratings()`. Tryk "Opdater ratings" i Admin bagefter, ellers ligger de gamle tal og venter på næste kampresultat. **SKAL gen-køres igen efter `G68` (5. august 2026):** `rnk` rangerer nu på `score desc, exacts desc` og ikke på score alene. Samme forbehold som ovenfor — gen-kørslen ændrer kun funktionen, og de gemte `rnk`-værdier i `rating_history` flytter sig først, når `recompute_ratings()` faktisk kører (næste resultatændring eller "Opdater ratings"). ⚠️ **Filen har CRLF i funktionskroppene med vilje** (`G5`, `.gitattributes`) — kopiér den ordret ind i SQL-editoren, og lad være med at køre den gennem et værktøj, der normaliserer linjeskift |
 | 1 | `standings_views.superseded.sql` | Første udgave af `round_standings` + `season_standings` | ⚠️ **Afløst af `standings_tiebreakers.sql`** — kør den aldrig. Omdøbt 30. juli 2026, så filnavnet selv advarer; kun bevaret for historikken |
 | 2 | `user_stats.sql` | `user_activity_days`, `touch_activity()`, `admin_user_stats()` | Aktiv |
 | 3 | `username_constraints.sql` | Hele §6-løftet om et brugernavn: længde-constraint (2–20), det unikke indeks `profiles_display_name_lower_idx` og `username_available()` | Aktiv — **kørt 5. august 2026** (no-op: objekterne stod der i forvejen). Idempotent. **De to sidste kom til august 2026 (`G63`)**: de fandtes indtil da kun i den genererede `schema.sql`, så et skema bygget fra `sql/`-scripterne lod to brugere hedde det samme og manglede signup-tjekket. Hullet var i **gendannelsesvejen**, ikke i produktion, hvor objekterne står. Dækket af `sql/tests/username_constraints.sql` i CI |
