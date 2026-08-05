@@ -42,6 +42,9 @@ eller en linje i "Forkastede ideer".
 - `DOCUMENTATION.md` §20 siger "appens fem øvrige bruger-flag" og §13 "alle otte bruger-flag" — der er ni bruger-bundne nøgler i dag
 - ingen test binder `LOKALE_NØGLER` til privatlivspolitikkens afsnit om lokale data, og det var præcis dér `G69` slap igennem
 - Tier 1 er nu sprunget over tre gange i træk, fordi de fire opslag kræver en adgang, arbejdsmaskinen ikke har — skal der være en vej til at køre read-only opslag uden ejeren, eller er "to betjeninger i køen" bare vilkåret?
+- Story Engines tre døde regler: `AWARD_WEEK` og `AWARD_MONTH` har aldrig udløst, selvom v1.2 (`B10`/`B11`) blev leveret for at give kåringerne en stemme — tjek `select count(*) from competitions where mode_params ? 'awards'`, for uden opt-in kan de per konstruktion ikke fyre
+- 197 af 280 historier er dagskort, og ingen af dem er nogensinde vist — karusellen henter kun `round_key=eq.<nuværende>`, så v2-efterfyldningens kort til passerede runder kan aldrig ses; `generated` for dagsregler måler dermed noget andet end det viste
+- `DAY_RESULT` alene er 123 af 280 historier (44 %) — er dagsmotorens variation tyndere end regelantallet lover?
 - SQL-blokke i `docs/` har ingen CI bag sig og er derfor påstande, ikke forespørgsler — `B12`s stod to døgn som "klar til at køre" og kunne ikke køre; er der en billig måde at syntakstjekke dem, eller er det vilkåret?
 - `A11`-opslagets kørselstal siger, at job 6–10 kører hver ~1,8 time og ikke hver 12. time som registret lover — seks gange kaldbudgettet, og det skal bekræftes på cron-job.org, før CRON.md's skema-kolonne rettes
 - `I16`s nul betyder også, at `anonymize_my_account()` aldrig har kørt i produktion — en uigenkaldelig funktion, der blev skrevet forfra 4. august, og hvis første rigtige kørsel er en bruger, der ikke kan fortryde; samme form som `G8`, men med en dyrere fejl
@@ -179,10 +182,23 @@ Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 4. **Det, der venter på en udløser, prioriteres ikke** — det står nederst, ikke
    fordi det er uvigtigt, men fordi rækkefølgen ikke er vores at vælge.
 
-### Tier 1 — Produktionsadgang: svaret (eller kørslen) ligger i Supabase
+### Tier 1 — Produktionsadgang: svaret ligger i Supabase ✅ tomt
 
-Punktet kræver ikke, at der bygges noget. Det kræver, at nogen logger ind og
-kigger. Det har ventet siden 31. juli, mens spørgsmålet stod som åbent.
+**Kørt 5. august 2026 — alle fem aflæsninger er lavet.** Tieret har været "det
+næste" i tre runder uden at kunne røres, fordi opslagene krævede en adgang,
+arbejdsmaskinen ikke har. De blev samlet til ét paste og kørt af ejeren.
+
+**To rækker er slettet:** `I16` (0 lukkede konti af 24) og `A11` (`header` for
+alle ni jobs, nul `query` — fallbacken er fjernet af koden). **Tre er flyttet
+til Tier 6**, fordi svaret viste, at spørgsmålet endnu ikke kan besvares: `G8`
+(nul multi-turneringskonkurrencer), `B12` (1 oprettelse efter mærkatet) og `A5`
+(nul delinger af 280 historier).
+
+**Det er tieret selv, resultatet siger mest om.** Tre af de fem punkter blev
+kaldt "aflæsninger", som om svaret lå og ventede — men to af opslagene kunne
+ikke køre som skrevet, ét pegede på den forkerte kilde, og tre svarede med tal
+for små til at bære den beslutning, rækken var skrevet for. **En formuleret
+forespørgsel er ikke det samme som et svar, der findes.**
 
 *Tre af de oprindelige fem er aflæst 5. august 2026 (femte runde). **`I16` er
 slettet:** nul lukkede konti ud af 24 profiler, tællingen var hele opgaven, og
@@ -220,7 +236,6 @@ nej to gange på én dag, begge gange til os.*
 
 | # | Hvad | Hvorfor her |
 |---|---|---|
-| `A5` | Læs Story Engine-regelstatistikken | Uret har kørt siden 31. juli. Kræver kun, at Analytics-fanen åbnes med spørgsmålet "beholder højdepunkterne deres emoji?" i hånden. **Udvidet af v2 (august 2026):** der er nu syv dagsregler mere at aflæse, og spørgsmålet er blevet skarpere — dagskortene har emoji, så tallene kan vise, om signalet stadig virker, når der kommer flere kort. |
 
 ### Tier 2 — Billige rettelser, hvor koden lyver ✅ tomt
 
@@ -316,6 +331,7 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 |---|---|---|
 | `A25` | Lukket konto som deltager i ikke-startede konkurrencer | Første rigtige kontolukning. **Talt 5. august 2026: 0 af 24.** Udløseren er dermed et tal, ikke en henvendelse — den er bare ikke sprunget endnu. |
 | `A26` | `ambiguousTeams`: godkendte par eller accepteret støj | Turnering #3. |
+| `A5` | Emojis i historie-kort: til eller fra? | **Når der findes en deling overhovedet.** Aflæst 5. august 2026: 280 historier, 21 af 21 brugere dækket — og **0 delinger**. Del-knappen er selve det, højdepunkt-tieret har og det dæmpede ikke, så uden en eneste deling kan signalet ikke måles. |
 | `G8` | Multi-turnerings-`full_season` er stadig uafprøvet mod rigtige data | Den første konkurrence med `mode_params.tournaments` — aflæst tom igen 5. august 2026. |
 | `A27` | Skal `competitions.rules` droppes? | Når produktet svarer på, om point skal kunne variere pr. konkurrence. Et `drop column` er uigenkaldeligt, og kolonnen koster kun plads, mens spørgsmålet står åbent. |
 | `B18` | Staging-projektet i Supabase | Første gang en ændring skal prøves af mod data, der ikke er brugernes — eller første gang nogen taster et forkert resultat ind på en preview. Indtil da holder §11's advarsel det i skak i hånden. |
@@ -358,7 +374,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Spørgsmål | Kontekst | Afgøres |
 |---|---|---|---|
-| A5 | **Emojis i historie-kort: til eller fra?** | Gør kortet skimbart på mobil, men mindre klassisk. **v1-default: emojis til.** **Delvist besvaret (v1.1, juli 2026):** emoji er nu et *signal* — den findes kun i højdepunkt-tieret, mens dæmpede kort er uden. Spørgsmålet er dermed reduceret til, om højdepunkterne skal beholde deres. **Datamanglen er lukket (30. juli 2026):** Analytics-fanens sektion "Story Engine-regler" viser genereret/vist/delt/afvist pr. regel, så spørgsmålet kan afgøres på tal frem for fornemmelse. **Sidste forudsætning er væk (31. juli 2026):** `story_engine.sql` er gen-kørt i produktion (den tidligere `B3`), så v1.1's 14 regler genererer nu rigtige kort. Uret på "et par runder" starter her. | Når et par runder er kørt med den nye regelstatistik i hånden. |
+| A5 | **Emojis i historie-kort: til eller fra?** | Gør kortet skimbart på mobil, men mindre klassisk. **v1-default: emojis til.** **Delvist besvaret (v1.1, juli 2026):** emoji er nu et *signal* — den findes kun i højdepunkt-tieret, mens dæmpede kort er uden. Spørgsmålet er dermed reduceret til, om højdepunkterne skal beholde deres. **Datamanglen er lukket (30. juli 2026):** Analytics-fanens sektion "Story Engine-regler" viser genereret/vist/delt/afvist pr. regel, så spørgsmålet kan afgøres på tal frem for fornemmelse. **Sidste forudsætning er væk (31. juli 2026):** `story_engine.sql` er gen-kørt i produktion (den tidligere `B3`), så v1.1's 14 regler genererer nu rigtige kort. Uret på "et par runder" starter her. | **Regelstatistikken er aflæst 5. august 2026, og den kan ikke afgøre spørgsmålet.** 280 historier, 21 af 21 brugere dækket — men **0 delinger** og kun 2 afvisninger i alt. Del-knappen er præcis det, højdepunkt-tieret har og det dæmpede ikke, så uden en eneste deling findes signalet ikke. Sammenligningen mangler desuden en nævner: det dæmpede tier har kun **6** historier (`Premiereugen` 3, `Stille runde` 3), fordi det per design kun genereres til brugere, der ellers ville stå uden kort. **Uret starter forfra ved den første deling** — ikke ved den næste runde. |
 | A14 | **Skal hele kodebasen gennemformateres med Prettier?** | `npm run format` findes, men `format:check` er bevidst ikke et CI-trin. En fuld gennemformatering ville omskrive ~6.700 linjer ved `printWidth: 140` (~14.000 ved standard 80) på tværs af ~126 filer (86 uden testfiler; genmålt august 2026). Prisen er hele repoets `git blame`; gevinsten er konsistens i en kodebase med én forfatter og en i forvejen ensartet håndstil. Beslutningen er **udskudt, ikke truffet** — se [`DECISIONS.md`](./DECISIONS.md), 30. juli 2026. | Næste gang der alligevel røres bredt i frontenden — ellers aldrig. |
 | A23 | **Skal appen have en router?** | Navigation er i dag to `useState` i `MainApp.jsx` (`tab` + `screen`), og deep links læses ved boot og strippes straks via `history.replaceState` (`App.jsx:104`, `MainApp.jsx:215,239`). Følgen er ingen tilbage-knap, ingen browser-historik og ingen delbare URL'er til interne skærme — mærkbart for en PWA, hvor telefonens tilbage-gestus forventes at virke. Men det er et arkitekturvalg, ikke en fejl: afhængighedsfattigheden er bevidst (fire runtime-deps, ingen router, `docs/reviews/2026-08-app-review.md` §7), og en router omskriver hele navigations-tilstandsmaskinen inkl. begge deep-link-join-flows, som ingen test dækker. | Når tilbage-knappen enten koster brugere (kan aflæses i analytics) eller en feature kræver ægte delbare interne URL'er — `I12`s offentlige ligaside er den første, der ville. |
 | A25 | **Skal en lukket konto meldes af konkurrencer, der endnu ikke er begyndt?** | `B4` valgte den simple regel: alt bevares, fordi tips, rating og kåringer er *vennernes* stillinger og ikke kun den lukkedes egne. Den begrundelse holder for alt, der er spillet — men ikke for en konkurrence, hvor ingen kamp er låst endnu: dér findes der ingen historik at beskytte, og en framelding ville hverken omskrive noget eller bryde `group_membership_invariant`, som netop tillader framelding, når man ingen tips har på låste kampe. Prisen ved status quo er et pseudonym på deltagerlisten i en konkurrence, personen aldrig kommer til at spille — synligt for alle de andre deltagere hele sæsonen. | Når den første konto faktisk lukkes. **Antallet er talt 5. august 2026 (den tidligere `I16`): 0 lukkede konti ud af 24 profiler.** Udløseren er dermed et tal og ikke længere en henvendelse, man skal håbe på — den er bare ikke sprunget endnu, og spørgsmålet er derfor stadig hypotetisk. Tælles der igen, er det samme opslag: `select count(*) filter (where anonymized_at is not null) from profiles`. |

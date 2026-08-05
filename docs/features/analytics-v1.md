@@ -199,7 +199,23 @@ A5 ("emojis i historie-kort: til eller fra?") og hele tone-spørgsmålet har hid
 | genereret, afvist | `public.stories` | rigtige rækker, **præcise** |
 | vist, delt | `analytics_events` (`metadata->>'rule'`) | fire-and-forget, et **gulv** |
 
-En visningsrate over 100 % er derfor umulig, men en lav rate kan lige så godt betyde tabt logning som manglende visning. Sammenlign regler med hinanden, ikke med et ideal.
+En lav rate kan lige så godt betyde tabt logning som manglende visning. Sammenlign regler med hinanden, ikke med et ideal.
+
+> ⚠️ **Rettet efter levering (5. august 2026).** Her stod: *"En visningsrate over
+> 100 % er derfor umulig."* **Det passer ikke**, og aflæsningen viste det: tabellen
+> havde 200 % (`Vandt runden`), 400 % (`Månedens Champion`) og 133 % (`Premiereugen`).
+> To grunde, og begge er ved design:
+> 1. **Tælleren og nævneren tæller ikke det samme.** `generated` er historier
+>    *oprettet* i vinduet; `viewed` er hændelser *logget* i vinduet. En historie
+>    fra før vinduet, der ses inde i det, giver en visning uden en generering.
+> 2. **`logEventOnce` afgrænser kun pr. sidens levetid** (`src/lib/analytics.js`),
+>    ikke pr. historie for evigt. En bruger, der åbner Hjem igen i morgen, logger
+>    samme kort igen — hvilket er det rigtige for en impression, men gør raten til
+>    visninger pr. historie og ikke andelen af historier, der blev set.
+>
+> Raten er altså **visninger pr. genereret historie** og ikke en dækningsgrad.
+> Over 100 % betyder "set flere gange", ikke "målefejl". Ordet *gulv* gælder
+> stadig nedadtil.
 
 **`dismissed_at` er den mest interessante kolonne:** den er brugerens eneste *aktive* afvisning af en historie, og den findes pr. række — ikke som event, og derfor uden gulv-forbeholdet.
 
