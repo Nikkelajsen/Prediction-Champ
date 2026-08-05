@@ -8,8 +8,8 @@
 // og selve skrivningen i data.js — så onboarding-guiden og denne skærm ikke
 // kan divergere.
 import { useState, useEffect, useMemo, useRef } from "react";
-import { db } from "../lib/supabase.js";
 import { loadMyGroups, createCompetition, createGroup } from "../lib/data.js";
+import { loadNewestSeasons, countMatchesPerLeague, loadTeamsByLeague, loadUpcomingMatches } from "../lib/data/createSources.js";
 import { validateGroupName } from "../lib/onboarding.js";
 import { ChevronLeft } from "lucide-react";
 import { groupIntoRounds } from "../lib/scoring.js";
@@ -109,43 +109,16 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   // Nyeste sæson pr. turnering hentes ÉN gang — Sæson-chippene, holdvalget,
   // perioden og kamp-puljen bruger alle det samme opslag.
   useEffect(() => {
-    (async () => {
-      const leagueIds = leagues.map((l) => l.id);
-      if (!leagueIds.length) return;
-      const seasons = await db.select(token, "seasons", `league_id=in.(${leagueIds.join(",")})&select=id,league_id&order=start_date.desc`);
-      const newest = {};
-      for (const s of seasons) if (!newest[s.league_id]) newest[s.league_id] = s;
-      setSeasonByLeague(newest);
-    })();
+    (async () => { setSeasonByLeague(await loadNewestSeasons(token, leagues)); })();
   }, [token, leagues]);
 
-  // Sæson: KAMPANTAL for alle turneringer.
-  //
-  // Antallet er ikke pynt. En konkurrence materialiserer sine kampe én gang ved
-  // oprettelsen, så en turnering uden kampe giver en konkurrence, der er tom for
-  // altid. Champions League har netop nu en sæsonrække og nul kampe, og indtil
-  // dette tal blev vist, var det eneste tegn på det en konkurrence, der aldrig
-  // fik noget at tippe på. Tallet gør den frosne liste synlig præcis dér, hvor
-  // nogen kan nå at reagere på den.
-  //
-  // Tælles med ét opslag PR. TURNERING, ikke ved at hente alle turneringers
-  // kampe i én omgang og tælle dem i browseren. Det sidste var fejlen bag
-  // "Premier League · 0 kampe": PostgREST leverer højst 1000 rækker pr. svar og
-  // siger ikke, at det klipper, så de fire første turneringer fyldte loftet
-  // (306+380+182+132 = præcis 1000), og Premier League og Serie A — hentet og
-  // fuldt indlæste i databasen — faldt uden for svaret og blev talt som nul.
-  // Chippen var derfor slukket for turneringer, der intet fejlede.
+  // Sæson: KAMPANTAL for alle turneringer. Opslaget — og hvorfor det tælles
+  // pr. turnering frem for i browseren — bor i lib/data/createSources.js.
   useEffect(() => {
     if (typeId !== "season") return;
     if (!Object.keys(seasonByLeague).length) return;
     (async () => {
-      const entries = await Promise.all(leagues.map(async (l) => {
-        const s = seasonByLeague[l.id];
-        // Ingen sæsonrække = ingen kampe at tippe på — samme spærring som nul kampe.
-        if (!s) return [l.id, 0];
-        return [l.id, await db.count(token, "matches", `season_id=eq.${s.id}`)];
-      }));
-      const counts = Object.fromEntries(entries);
+      const counts = await countMatchesPerLeague(token, leagues, seasonByLeague);
       setCountByLeague(counts);
       // Forvalget må ikke lande på en tom turnering: den ville se valgt ud og
       // samtidig være det ene valg, der ikke kan bruges.
@@ -168,14 +141,7 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   // Favorithold: alle synlige turneringers hold i ét opslag (~20 pr. turnering).
   useEffect(() => {
     if (typeId !== "team" || teamsByLeague !== null) return;
-    (async () => {
-      const leagueIds = leagues.map((l) => l.id);
-      if (!leagueIds.length) return;
-      const tms = await db.select(token, "teams", `league_id=in.(${leagueIds.join(",")})&select=id,league_id,name&order=name`);
-      const byLeague = {};
-      for (const t of tms) (byLeague[t.league_id] ||= []).push(t);
-      setTeamsByLeague(byLeague);
-    })();
+    (async () => { setTeamsByLeague(await loadTeamsByLeague(token, leagues)); })();
   }, [typeId, leagues]); // eslint-disable-line
 
   function addTeam(teamId) {
@@ -190,36 +156,20 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   // Puljen af kommende kampe. Quick League skal kunne se flere runder frem, så
   // dens opslag går 11 uger ud (maks. 10 runder + margen) med et højere loft —
   // det gamle `limit=300` fra nærmeste runde og frem rakte kun til én runde
-  // ad gangen med 7+ turneringer.
+  // ad gangen med 7+ turneringer. Selve opslaget, og hvordan afkortning gøres
+  // MÆRKBAR, bor i lib/data/createSources.js.
   useEffect(() => {
     if (!type || (type.mode !== "random" && typeId !== "custom")) return;
-    const seasonIds = Object.values(seasonByLeague).map((s) => s.id);
-    if (!seasonIds.length) return;
+    if (!Object.keys(seasonByLeague).length) return;
     (async () => {
-      const seasonToLeague = Object.fromEntries(Object.values(seasonByLeague).map((s) => [s.id, s.league_id]));
-      const leagueNames = Object.fromEntries(leagues.map((l) => [l.id, l.name]));
-      const nowIso = new Date().toISOString();
-      // `limit=1000` var PRÆCIS PostgRESTs loft (G35, august 2026). Rammes det,
-      // forsvinder den 1001. kamp uden fejl, brugeren kan ikke vælge den, og
-      // ingen kode kan se forskel på "1000 kampe" og "for mange kampe" — samme
-      // tavse afkortning, som kostede "Premier League · 0 kampe" og en falsk
-      // runde-notifikation (`G51`).
-      //
-      // Rettelsen er ikke et højere loft, men at loftet kan MÆRKES: vi beder om
-      // én række mere, end vi vil vise. Kommer den, ved vi, at der er flere —
-      // og så siges det højt frem for at lade listen se komplet ud.
-      const visLoft = typeId === "quick_league" ? UPCOMING_LIMIT_QUICK : UPCOMING_LIMIT_PICK;
-      const horizon = typeId === "quick_league"
-        ? `&kickoff_at=lte.${new Date(Date.now() + 11 * 7 * 24 * 3600 * 1000).toISOString()}`
-        : "";
-      const raw = await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&kickoff_at=gte.${nowIso}&select=*&order=kickoff_at${horizon}&limit=${visLoft + 1}`);
-      const afkortet = raw.length > visLoft;
-      const ms = afkortet ? raw.slice(0, visLoft) : raw;
-      setUpcomingTruncated(afkortet);
-      const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]))];
-      const tms = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
-      setUpcomingTeams(Object.fromEntries(tms.map((t) => [t.id, t.name])));
-      setUpcoming(ms.map((m) => ({ ...m, _leagueId: seasonToLeague[m.season_id], _leagueName: leagueNames[seasonToLeague[m.season_id]] })));
+      const quick = typeId === "quick_league";
+      const { matches, teams, truncated } = await loadUpcomingMatches(token, seasonByLeague, leagues, {
+        limit: quick ? UPCOMING_LIMIT_QUICK : UPCOMING_LIMIT_PICK,
+        horizonMs: quick ? 11 * 7 * 24 * 3600 * 1000 : null,
+      });
+      setUpcomingTruncated(truncated);
+      setUpcomingTeams(teams);
+      setUpcoming(matches);
       setPickedIds([]);
     })();
   }, [typeId, seasonByLeague, leagues]); // eslint-disable-line
