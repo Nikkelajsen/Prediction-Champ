@@ -246,16 +246,41 @@ den plads, der skulle guide.
 ```sql
 -- Fordelingen af konkurrence-typer før og efter, at "Anbefalet" kom på.
 -- Sæt datoen til den dag, A22 blev udrullet.
-with maerket as (select timestamptz '2026-08-01 00:00+02' as fra)
-select case when e.created_at < m.fra then 'før' else 'efter' end as periode,
-       e.metadata->>'mode'                                        as mode,
-       count(*)                                                   as antal,
-       round(100.0 * count(*) / sum(count(*)) over (partition by (e.created_at < m.fra)), 1) as pct
-  from analytics_events e cross join maerket m
- where e.event_name = 'competition_created'
+with maerket as (select timestamptz '2026-08-01 00:00+02' as fra),
+     haendelser as (
+       select case when e.created_at < m.fra then 'før' else 'efter' end as periode,
+              e.metadata->>'mode'                                        as mode
+         from analytics_events e cross join maerket m
+        where e.event_name = 'competition_created'
+     )
+select periode,
+       mode,
+       count(*)                                                     as antal,
+       round(100.0 * count(*) / sum(count(*)) over (partition by periode), 1) as pct
+  from haendelser
  group by 1, 2
  order by 1 desc, 4 desc;
 ```
+
+> ⚠️ **Rettet efter levering (5. august 2026).** Forespørgslen ovenfor er
+> omskrevet, fordi **den oprindelige ikke kunne køre.** Den beregnede perioden i
+> `select`-listen og partitionerede så vinduet på `(e.created_at < m.fra)` —
+> altså på et udtryk, der hverken står i `group by` eller er pakket i en
+> aggregering. PostgreSQL afviser den med `42803: column "e.created_at" must
+> appear in the GROUP BY clause`. Perioden udledes nu ét sted, i CTE'en
+> `haendelser`, så vinduet kan partitionere på selve grupperingsnøglen.
+>
+> **Rettelsen er efterprøvet mod PostgreSQL 16.13** (samme version som CI) med
+> plantede data, hvor svaret var kendt på forhånd: 2 af 10 `full_season` før og
+> 6 af 10 efter gav 20,0 % og 60,0 %, procenterne summede til 100 inden for hver
+> periode, og en `login`-række blev holdt ude af `event_name`-filteret.
+>
+> **Det, fejlen siger om spec'en, er vigtigere end fejlen.** §5F blev skrevet
+> netop for, at et spørgsmål uden en formuleret forespørgsel aldrig bliver
+> stillet — og backloggens `B12` stod i to døgn med teksten *"forespørgslen er
+> skrevet, tilbage står at køre den"*. Den var skrevet, ikke kørt. En SQL-blok i
+> et dokument har ingen CI bag sig, så den er en **påstand** om, hvad der ville
+> virke, indtil nogen kører den.
 
 **Sådan læses svaret.** Sammenlign `pct` for `full_season` før og efter. Bemærk
 tre forbehold, som skal med, hvis tallet skal bære en beslutning:
