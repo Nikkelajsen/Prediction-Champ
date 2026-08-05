@@ -236,16 +236,24 @@ describe("summarizeOutbox", () => {
     expect(ud[0].key).toBe("result:2026-07-28");
   });
 
-  it("holder forskellige nøgler adskilt og oversætter typen", () => {
+  // Alle FEM beskedtyper er med med vilje: `award:` og `newleague:` blev
+  // leveret i Tier 3 uden en etiket og stod på maskinsprog, indtil G61 (august
+  // 2026). Testen er det, der gør, at den næste type ikke kan gøre det samme
+  // uendeligt — den skal listes her for at blive nævnt.
+  it("holder forskellige nøgler adskilt og oversætter alle fem typer", () => {
     const ud = summarizeOutbox([
       besked("result:2026-07-28", "u1"),
       besked("deadline:2026-08-01", "u1", { title: "Kampe låser snart ⏰" }),
       besked("newcomp:abc", "u2", { title: "Ny konkurrence i Test 🎯" }),
+      besked("award:abc:round:2026-07-28", "u2", { title: "Du er Ugens bedste 🏅" }),
+      besked("newleague:def", "u3", { title: "Ny turnering i Leagly ⚽" }),
     ]);
     expect(ud.map((r) => r.kindLabel)).toEqual([
       "Runde-resultat",
       "Deadline-påmindelse",
       "Ny konkurrence",
+      "Lokal kåring",
+      "Ny turnering",
     ]);
     expect(ud.every((r) => r.recipients === 1)).toBe(true);
   });

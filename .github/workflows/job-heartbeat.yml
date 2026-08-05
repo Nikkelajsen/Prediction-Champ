@@ -161,6 +161,46 @@ jobs:
                      where grantee = 'anon' and table_schema = 'public') = 0,
                    'Kør sql/anon_grants.sql igen (#34) — en ny tabel kan have arvet grants'
             union all
+            -- #43: samme for sekvenserne, som #34s formulering aldrig dækkede.
+            -- ACL'en læses fra pg_class og ikke fra information_schema, som pr.
+            -- standarden kun rapporterer USAGE på en sekvens — `grant all` giver
+            -- også SELECT og UPDATE, og en kontrol, der kun ser den ene, ville
+            -- melde ok for to tredjedele af det, den skal fange.
+            select 'anon uden sekvens-grants',
+                   not exists (
+                     select 1 from pg_class c
+                       join pg_namespace n on n.oid = c.relnamespace
+                      where n.nspname = 'public' and c.relkind = 'S'
+                        and coalesce(c.relacl::text, '') like '%anon=%'),
+                   'Kør sql/anon_grants_finish.sql igen (#43)'
+            union all
+            -- #34 + #43: KILDEN og ikke kun tilstanden. De to kontroller ovenfor
+            -- ser først en fejl, EFTER nogen har oprettet en tabel eller en
+            -- sekvens; denne ser reglen, der ville give den grants, og fanger
+            -- dermed en gen-indført default privilege samme dag.
+            --
+            -- Kun objekttype 'r' (tabeller og views) og 'S' (sekvenser).
+            -- **'f' er bevidst udeladt:** `anon` SKAL kunne køre
+            -- `username_available()` før login, og `anon_grants.sql` siger
+            -- eksplicit, at den hverken rører funktions-grants eller `usage` på
+            -- skemaet. En kontrol uden det filter ville være rød hver eneste
+            -- gang for noget, der er rigtigt.
+            --
+            -- Kun grantor `postgres`: det er den rolle, vores egne migreringer
+            -- opretter som. `supabase_admin` er udeladt, fordi den normalt ikke
+            -- kan ændres fra SQL-editoren — og en kontrol, der altid er rød,
+            -- lærer man at ignorere. Forbeholdet står i #43s hoved.
+            select 'anon uden default privileges (postgres)',
+                   not exists (
+                     select 1
+                       from pg_default_acl d
+                       join pg_roles r on r.oid = d.defaclrole
+                       join pg_namespace n on n.oid = d.defaclnamespace
+                      where n.nspname = 'public' and r.rolname = 'postgres'
+                        and d.defaclobjtype in ('r', 'S')
+                        and coalesce(d.defaclacl::text, '') like '%anon=%'),
+                   'Kør sql/anon_grants.sql (#34) og sql/anon_grants_finish.sql (#43) igen'
+            union all
             -- #33: round_key() aflæser dansk tid og ikke sessionens
             select 'round_key() i dansk tid',
                    (select prosrc like '%Europe/Copenhagen%' from pg_proc

@@ -613,7 +613,17 @@ export default async function handler(req, res) {
         );
         const tipped = new Set(preds.filter((p) => p.pred_home != null && p.pred_away != null).map((p) => `${p.match_id}:${p.user_id}`));
 
-        const today = new Date().toISOString().slice(0, 10);
+        // Dansk dato, ikke serverens UTC-dato (G60, august 2026). Nøglen bærer
+        // løftet "maks. én påmindelse pr. bruger pr. DAG", og en dag er dansk
+        // overalt ellers i filen — det er husreglen fra DOCUMENTATION.md §16.
+        //
+        // Fejlen kunne ikke udløses af den nuværende konfiguration: sendevinduet
+        // er 08–22 dansk og krydser aldrig en UTC-datogrænse. Den er rettet
+        // netop MENS den er harmløs, fordi den var filens eneste dato, der ikke
+        // fulgte reglen — og `G11`/`G32` viste, hvad det koster, når to sider
+        // regner den samme dato hver for sig. Ændres vinduet, eller får en
+        // beskedtype sit eget, bliver løftet tavst til "pr. UTC-døgn".
+        const today = dateInZone(new Date(now));
         for (const uid of subscribedUsers) {
           const missing = lockingMatches
             .filter((m) => usersByMatch[m.id]?.has(uid) && !tipped.has(`${m.id}:${uid}`))
@@ -688,7 +698,21 @@ export default async function handler(req, res) {
         // samme kilde og samme tiebreaker-stige som Championship-fanens rundechampionship
         // (sql/standings_tiebreakers.sql). En runde har ingen rundesejre at bryde
         // lighed med, så stigen er point → præcise → udfald → målafvigelse.
-        const board = await sb(`/rest/v1/round_standings?round_key=eq.${roundKey}&scope=eq.ALL&select=user_id,total_points,exact_count,outcome_count,avg_goal_error&order=total_points.desc,exact_count.desc,outcome_count.desc,avg_goal_error.asc,user_id.asc`);
+        // `sbAll` og ikke `sb` (G59, august 2026): boardet er et BREDT opslag,
+        // og `board.length` er det N, beskeden gør en pointe ud af ("du blev
+        // nr. X af N"). Supabase klipper ved projektets `db-max-rows` og svarer
+        // 200, så et afkortet svar er ikke en fejl, men et forkert facit — og
+        // `sb()` kan ikke skelne. Det er præcis `G51`s fejl, og den kostede en
+        // falsk runde-notifikation i produktion: grænsen nås af DATAMÆNGDE og
+        // ikke af en kodeændring, så der er ingen dag, hvor den begynder at
+        // være forkert. Sorteringen er allerede entydig (`user_id.asc` til
+        // sidst), hvilket er dét, paginering kræver for ikke at tabe eller
+        // gentage en række mellem to sider.
+        const board = await sbAll(
+          sb,
+          `/rest/v1/round_standings?round_key=eq.${roundKey}&scope=eq.ALL&select=user_id,total_points,exact_count,outcome_count,avg_goal_error`,
+          { order: "total_points.desc,exact_count.desc,outcome_count.desc,avg_goal_error.asc,user_id.asc" }
+        );
         assignRanks(board);
 
         for (const r of board) {

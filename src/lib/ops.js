@@ -102,10 +102,15 @@ async function previewNotifications(token) {
   return data;
 }
 
+// Alle fem beskedtyper i api/send-notifications.js. Listen skal holdes i trit
+// med `kind`-feltet dér — en type, der mangler her, vises med sit rå
+// nøgle-præfiks (se summarizeOutbox nedenfor).
 const KIND_LABEL = {
   deadline: "Deadline-påmindelse",
   result: "Runde-resultat",
   newcomp: "Ny konkurrence",
+  award: "Lokal kåring",
+  newleague: "Ny turnering",
 };
 
 // Outboxen er (besked × bruger), så en runde med 18 tippere er 18 næsten ens
@@ -113,12 +118,16 @@ const KIND_LABEL = {
 // og antallet af modtagere er selv det interessante tal — det var præcis dét,
 // der var forkert, da G51 meldte en igangværende runde færdig ("nr. 2 af 18").
 //
-// Beskedtypen udledes af nøglens præfiks (`result:`, `deadline:`, `newcomp:`),
-// fordi wouldSend ikke bærer `kind` med — endpointet returnerer bevidst kun de
-// fire felter, et menneske skal læse. En ukendt type vises med sit præfiks
-// frem for at blive skjult: en ny beskedtype skal kunne ses her, før nogen
-// husker at opdatere denne fil. Det er præcis dét, der sker for de nyere typer
-// (`award:`, `newleague:`), indtil KIND_LABEL udvides.
+// Beskedtypen udledes af nøglens præfiks (`result:`, `deadline:`, `newcomp:`,
+// `award:`, `newleague:`), fordi wouldSend ikke bærer `kind` med — endpointet
+// returnerer bevidst kun de fire felter, et menneske skal læse. En ukendt type
+// vises med sit præfiks frem for at blive skjult: en ny beskedtype skal kunne
+// ses her, før nogen husker at opdatere KIND_LABEL.
+//
+// Fallbacken er altså en OVERGANG og ikke en tilstand (G61, august 2026):
+// `award:` og `newleague:` stod på maskinsprog fra Tier 3 til nu, og en
+// forhåndsvisning, hvor to ud af fem rækker er rå nøgler, er sværere at læse
+// for den, der skal afgøre, om en besked skal sendes.
 function summarizeOutbox(wouldSend) {
   const byKey = new Map();
   for (const m of wouldSend || []) {

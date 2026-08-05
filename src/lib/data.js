@@ -16,4 +16,5 @@ export { loadCompetitionStatuses, EMPTY_STATUS } from "./data/competitionStatus.
 export { moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data/competitions.js";
 export { loadMyGroups, loadGroupDetail, loadGroupByCode, createGroup, joinGroup, leaveGroup, deleteGroup, joinCompetition, leaveCompetition, setCompetitionHidden, loadCompetitionParticipants, removeParticipant, deleteCompetition } from "./data/groups.js";
 export { computeHomeTips, computeCurrentRound, daFullDate, fmtCountdown, monthName } from "./data/home.js";
+export { resolveCompetitionInvite, resolveLeagueInvite, stripInviteParam } from "./data/invites.js";
 export { loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard } from "./data/standings.js";

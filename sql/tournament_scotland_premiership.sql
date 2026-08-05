@@ -1,5 +1,7 @@
 -- Turnering #2: Scotland Premiership (B2, drejebogen docs/features/turnering-2.md §3.1).
 -- Idempotent — kan køres igen når som helst (kør med "Run without RLS").
+-- FORUDSÆTTER at sql/multi_provider.sql (provider, live_enabled) og
+-- sql/tournament_scope.sql (is_official) er kørt først.
 --
 -- Scriptet opretter KUN de to rækker, en ny turnering skal have: ligaen og dens
 -- sæson. Hold oprettes automatisk af api/sync-matches.js ud fra kampenes
@@ -35,6 +37,29 @@
 -- så en skjult turnering holder ikke runderne kunstigt åbne.
 --
 -- ---------------------------------------------------------------------------
+-- provider, live_enabled og is_official (G65, august 2026)
+--
+-- Filen er ældre end multi_provider.sql og tournament_scope.sql og satte
+-- oprindeligt ingen af de tre kolonner. Den virkede alligevel — men ved et
+-- tilfælde: `provider` defaulter til 'sportmonks', og `live_enabled` til true,
+-- hvilket tilfældigvis ER det rigtige for netop denne leverandør. `is_official`
+-- defaulter derimod til **true**, så en turnering oprettet efter denne skabelon
+-- ville begynde som officiel og dermed ændre, hvad en Championship-titel
+-- betyder, i samme sekund den blev indsat — stik imod DOCUMENTATION.md §10, som
+-- peger på filen som Sportmonks-skabelonen. En skabelon, der er forkert, er
+-- dyrere end ingen skabelon: den ligner det svar, man ledte efter.
+--
+-- Alle tre sættes derfor eksplicit ved INSERT. Scotland selv blev sat
+-- uofficiel af tournament_scope.sql (A2/A17), så værdien her er den samme, som
+-- rækken allerede har.
+--
+-- Gen-kørsel sætter kun `provider`, præcis som tournament_footballdata.sql:
+-- `is_visible` og `is_official` er manuelle valg (A19's forfremmelse er én
+-- update), og de må ikke rulles tilbage af en uskyldig gen-kørsel af denne fil.
+-- `live_enabled` hører til samme kategori — den følger abonnementet, ikke
+-- leverandøren (§10).
+--
+-- ---------------------------------------------------------------------------
 -- Sæsonen: 2026/2027, Sportmonks-id 28275 — verificeret 31. juli 2026
 --
 -- Begge værdier er slået op på Sportmonks (liga 501 → "Current Season ID"), så
@@ -58,9 +83,13 @@ begin
   select id into v_league_id from leagues where api_league_id = '501';
 
   if v_league_id is null then
-    insert into leagues (name, api_league_id, is_visible)
-    values ('Scotland Premiership', '501', true)
+    insert into leagues (name, api_league_id, provider, live_enabled, is_visible, is_official)
+    values ('Scotland Premiership', '501', 'sportmonks', true, true, false)
     returning id into v_league_id;
+  else
+    -- Gen-kørsel: sæt kun det, migreringen ejer. is_visible, is_official og
+    -- live_enabled røres IKKE — se blokken om de tre kolonner ovenfor.
+    update leagues set provider = 'sportmonks' where id = v_league_id;
   end if;
 
   if not exists (select 1 from seasons where league_id = v_league_id and name = v_season_name) then
@@ -72,7 +101,8 @@ end $$;
 -- ---------------------------------------------------------------------------
 -- Verifikation: én liga, én sæson med api_season_id = 28275, og endnu ingen hold
 -- eller kampe — de kommer med syncen.
-select l.id as league_id, l.name, l.api_league_id, l.is_visible,
+select l.id as league_id, l.name, l.api_league_id, l.provider, l.live_enabled,
+       l.is_visible, l.is_official,
        s.id as season_id, s.name as season_name, s.api_season_id,
        (select count(*) from teams t where t.league_id = l.id) as teams,
        (select count(*) from matches m where m.season_id = s.id) as matches

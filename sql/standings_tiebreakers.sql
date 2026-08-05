@@ -188,6 +188,9 @@ left join wins w
 group by s.month, s.user_id, w.round_wins;
 
 -- ============================================================================
-grant select on public.round_standings   to anon, authenticated, service_role;
-grant select on public.season_standings  to anon, authenticated, service_role;
-grant select on public.monthly_standings to anon, authenticated, service_role;
+-- `anon` er BEVIDST ikke med (G58, august 2026) — se den samme note i
+-- tournament_scope.sql. En gen-kørsel af denne fil må ikke give rollen adgang
+-- tilbage, som `anon_grants.sql` (#34) netop tog fra den.
+grant select on public.round_standings   to authenticated, service_role;
+grant select on public.season_standings  to authenticated, service_role;
+grant select on public.monthly_standings to authenticated, service_role;
