@@ -105,7 +105,7 @@ versionsstempel → `G42`).*
 
 ## Prioriteret rækkefølge
 
-Alle 30 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 26 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -145,6 +145,17 @@ den er værd at se i øjnene: hver leverance, der ikke kan køres samme dag, gø
 den ene opgave, der venter på ejeren, større. Tre af de fem er billige (#3 er et
 no-op, #43 lukker intet kendt hul), men #10 er den, en bruger kan mærke.*
 
+*5. august 2026 (tredje runde): **alle fem SQL-filer er kørt af ejeren, `B19` er
+slettet, og Tier 5 er kørt** (`G60`, `G68`, `G2`; `G1` skrumpede). Listen er
+30 → 26, og **Tier 1 er endelig rene aflæsninger igen** — der er ikke længere en
+Run-knap på den. Fire tiers på én dag lyder som meget, men det er værd at bemærke
+hvorfor det kunne lade sig gøre: tre af de fire var fyldt af
+dokumentations-gennemgangen 3. august, altså af punkter, der aldrig havde ventet
+på en beslutning, kun på at nogen læste efter. **To af dagens rækker blev lukket
+som et NEJ** (`G2` og — 3. august — `G7`), og begge gange fordi rækkens præmis
+ikke holdt ved eftersyn. Det er den billigste slags leverance og den, der er
+lettest at springe over.*
+
 Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
 1. **Et svar, vi allerede har, er gratis** — et opslag, der lukker eller
@@ -158,13 +169,17 @@ Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
 ### Tier 1 — Produktionsadgang: svaret (eller kørslen) ligger i Supabase
 
-Ingen af de seks kræver, at der bygges noget. De kræver, at nogen logger ind og
-kigger — eller trykker Run. Tre af aflæsningerne har ventet i flere uger, mens
-spørgsmålet stod som åbent.
+Ingen af de fem kræver, at der bygges noget. De kræver, at nogen logger ind og
+kigger. Tre af dem har ventet i flere uger, mens spørgsmålet stod som åbent.
+
+*`B19` er slettet 5. august 2026: alle fem SQL-filer (#41, #42, #43, #10, #3) er
+kørt i produktion, verificeret med en tilstands-forespørgsel frem for en
+huskeliste. **Tieret er dermed rene aflæsninger igen** — der er ikke længere en
+Run-knap på listen, og det er værd at bemærke, at den række, hele to leverancer
+hang på, var den eneste, der ikke krævede et menneske til at *vurdere* noget.*
 
 | # | Hvad | Hvorfor her |
 |---|---|---|
-| `B19` | **Kør fem SQL-filer** ("Run without RLS"): `season_end.sql` (#41), `liga_admin.sql` (#42), `anon_grants_finish.sql` (#43), `career_profile.sql` (#10) og `username_constraints.sql` (#3) | Øverst, fordi to leverancer hænger på dem. **De to første er bindende i rækkefølge og haster mest:** uden #41 regner klienten stadig med det svage "afsluttet" og får en 404 på `competition_status`; uden #42 fejler Admin → Brugere og liga-siden ved hver administrator-handling. **#42 lukker samtidig `B17`.** De tre sidste kom til med Tier 4 (5. august) og kan køres i vilkårlig rækkefølge: #43 og #3 er begge gratis at køre (#3 er et rent no-op i produktion, hvor objekterne står — den findes for gendannelsesvejen), mens **gen-kørslen af #10 er den, en bruger kan mærke**: titler og rekorder, en uofficiel turnering hidtil har tilbageholdt, dukker op ved næste indlæsning. **Efter kørslen:** åbn Admin → Drift → Sæsonernes slutning og se, om nogen sæson står "Venter" — og hold øje med, at job-heartbeat'en bliver grøn: dens tre `anon`-kontroller er **røde, indtil #43 er kørt**, hvilket er meningen og ikke en fejl.
 | `A11` | Kør `job_runs.authVia`-opslaget (står i [`CRON.md`](./CRON.md)) | Ét SQL-opslag afgør, om `?secret=`-fallbacken kan fjernes. Er svaret `header` hele vejen, er næste skridt en sletning i `api/_shared.js`. |
 | `B12` | Kør §5F-forespørgslen i [`features/analytics-v1.md`](./features/analytics-v1.md) | Forespørgslen er skrevet, forbeholdene er skrevet. Svarer samtidig på `I15`s åbne spørgsmål, om Ugens kupon-kortet overhovedet bruges — to rækker for ét opslag. |
 | `G8` | `select ... from competitions where mode_params ? 'tournaments'` | `B2`s testcase 3 er godkendt 2. august, og den ER denne kodesti. Svarer opslaget med rækker, slettes rækken helt. |
@@ -234,21 +249,27 @@ lunte, der er slukket, kan tændes igen, mens en test bliver ved med at spørge.
 
 ### Tier 5 — Robusthed og vedligehold
 
-**Kørt 3. august 2026.** Fire af de seks er leveret og slettet: `G42`
-(fejltelemetri + source maps), `B16` (heartbeat'en tjekker migreringernes
-virkning), `G13` (rettede tips flytter `updated_at`) og `G7`, som blev lukket
-som et **nej** — en permanent trigger er ikke prisen værd for en fejl, der
-retter sig selv, og begrundelsen står i `DECISIONS.md`.
+**Kørt anden gang 5. august 2026.** `G60` (deadline-nøglen regner i dansk tid),
+`G68` (`rnk` bruger opgørets tiebreak) og `G2` (lukket som et **nej**) er
+leveret og slettet. `G1` skrumpede.
 
-To rækker skrumpede i stedet for at forsvinde, og to er kommet til. Alle fire
-har det til fælles, at de ikke haster og ikke bliver værre af at vente:
+*Første kørsel var 3. august 2026: `G42`, `B16`, `G13` og `G7`, hvor `G7` også
+blev lukket som et nej.*
+
+**`G2`s præmis holdt ikke, og dét afgjorde sagen.** Rækken sagde, at de syv
+advarsler var ÉT mønster — "hent data i en effekt og sæt state" — som kun kunne
+fjernes med et data-bibliotek, projektet bevidst har fravalgt. Gennemgangen
+viste tre af den slags. De fire andre er en afledt default, en engangs-gate på
+indlæst tilstand og to synkroniseringer af et rundeindeks. **Et data-bibliotek
+ville altså kun have fjernet tre af syv** — så den store beslutning, rækken
+ventede på, kunne ikke have løst problemet. De fire kan skrives om enkeltvis,
+men ingen af dem er en fejl, og skærmene har ingen interaktionstests. Loftet
+bliver stående på 7, og vilkåret står i `DOCUMENTATION.md` §12 sammen med den
+fælde, den næste ville falde i.
 
 | # | Hvad står tilbage | Hvorfor det ikke bare er mere af det samme |
 |---|---|---|
-| `G2` | 7 advarsler, alle `set-state-in-effect` | De billige mønstre er brugt op. Det, der er tilbage, er ÉT mønster — "hent data i en effekt og sæt state" — som resten af skærmene bruger, og som ikke kan undgås uden et data-bibliotek, projektet bevidst ikke har. Næste skridt er en beslutning om det mønster, ikke en oprydning. |
-| `G1` | `MainApp` (~606) og fire mindre | `ChampionshipTab` og `ProfileScreen` er delt. `MainApp` er den næste og den sværeste: navigations-tilstandsmaskinen bor der, og den er også `A23`s emne — de to bør formentlig ses sammen. |
-| `G60` | Deadline-nøglens UTC-dato | Kan ikke udløses af den nuværende konfiguration — sendevinduet 08–22 dansk krydser aldrig en UTC-datogrænse. Den skal rettes, netop mens den er harmløs: den er filens eneste dato, der ikke følger husreglen, og `G11`/`G32` viste, hvad det koster, når to sider regner samme dato hver for sig. |
-| `G68` | `rnk` uden exacts-tiebreak | Lille, usynlig uenighed mellem to tal fra samme beregning. Rettelsen flytter historiske værdier og kræver, at `rating_equivalence`s frosne reference opdateres bevidst — hvilket pr. `CLAUDE.md` **er** beslutningen. Derfor ikke en oprydning, man laver i forbifarten. |
+| `G1` | `MainApp` (~582), `HjemTab` (~530), `ProfileScreen` (~460), `CreateCompetitionScreen` (~444), `AdminScreen` (~329) | **`MainApp`s invitations-flows er ude** (5. august 2026): de lå som ~100 linjer i to `useEffect` og har nu elleve tests i `src/lib/data/invites.js`. Gevinsten var ikke linjetallet (618 → 582), men at flowene kunne testes overhovedet — og det var netop den omkostning, `A23` stod og bar. Resten af `MainApp` **er** navigations-tilstandsmaskinen, altså `A23`s emne, og bør ikke røres før den beslutning. De fire andre filer er uafhængige af `A23` og kan tages hver for sig. |
 
 ### Tier 6 — Venter på en udløser
 
@@ -313,7 +334,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 |---|---|---|---|
 | B21 | **Omdøb GitHub-repoet og Vercel-projektet, og ret hjemmesidens links** | Navneskiftet 4. august 2026 gik gennem app, manifest, ikoner, tekster og dokumentation, men stoppede ved projektnavnene — **med vilje**, fordi et skifte af Vercel-projektet ændrer `.vercel.app`-adressen og dermed knækker hvert link, der peger på den. Prisen ved status quo er, at produktet hedder Leagly overalt undtagen i den adresse, en ny bruger faktisk taster ind: 23 CTA'er i `site/` (4+5+6+4+4) plus README'ens live-link peger på `prediction-champ.vercel.app`. **Rækkefølgen er bindende og er hele grunden til, at rækken står lige efter `I10`:** vælges et rigtigt domæne, skal linkene alligevel skiftes, og gøres omdøbningen først, skiftes de to gange. Vercels gamle URL redirigerer ikke af sig selv, så et delt link fra før skiftet dør — det er kun ufarligt, så længe hjemmesiden ikke er publiceret. `docs/RESTORE.md`s omtale skal IKKE rettes: den navngiver backup-filer, der faktisk hedder det gamle. | Lille (men mange steder) |
 | B20 | **Personlige invite-links** (`invite_links` + `invited_by` på `group_members`/`competition_participants`) | Attributionen "hvem inviterede hvem" findes ikke i skemaet: `groups.invite_code` er én kode pr. liga og ikke pr. bruger, og ingen af medlemstabellerne gemmer afsenderen. Det er derfor, milepælen **"5/10 venner tilmeldt via dit link" ikke kunne bygges** — `milestones` tæller i stedet `LEAGUE_GREW_5/10`, altså hvor mange der kom med i en liga, man har oprettet, hvilket er en anden bedrift. Begrundelsen står ved koden begge steder (`sql/milestones.sql`, `src/lib/milestones.js`) og peger på denne række. **Ventetid er ikke gratis her, og det er rækkens vigtigste egenskab:** attribution kan kun registreres fremad, så en bedrift bygget på den kan først tælle fra udrulningsdagen — de brugere, der allerede er inviteret, tælles aldrig. Gater desuden `I6` (ambassadørprogram), som ikke kan måle noget uden. | Mellem |
-| B19 | **Kør fem SQL-filer i Supabase** — #41 `season_end.sql`, #42 `liga_admin.sql`, #43 `anon_grants_finish.sql`, #10 `career_profile.sql` (gen-kørsel) og #3 `username_constraints.sql` | To leverancer er merget, mens migreringerne køres i hånden. **Fra 4. august (`A28`–`A31`):** #41 lægger `seasons.ends_at`/`is_finished` og sæson-gaten på `competition_status`; #42 lægger de tre administrator-policies og delingen af anonymiseringen. Rækkefølgen mellem de to er bindende — #42s liga-sletning læser `competition_status.concluded` — og #42 **afløser `B17`**, fordi den indeholder `client_errors`-nulstillingen, som gen-kørslen af #31 skulle levere. **Fra 5. august (Tier 4):** #43 lukker `anon`s sekvens-grants (`G58`), #10 afgrænser karriereprofilens tre globale komplethedsjoin til officielle turneringer (`G62`), og #3 er versioneringen af brugernavnets unikhed (`G63`) — den sidste er et **no-op i produktion**, hvor objekterne står, og findes for gendannelsesvejen. De tre kan køres i vilkårlig rækkefølge. **To aflæsninger efter kørslen:** Admin → Drift → Sæsonernes slutning (en sæson med "Venter" lever på 30-dages ventilen, indtil nogen markerer den), og job-heartbeat'en, hvis tre `anon`-kontroller er **røde indtil #43 er kørt** — det er meningen, ikke en fejl. | Blokerer to leverancer |
 | B18 | **Staging-projektet i Supabase** | Preview og produktion deler database, medmindre staging-variablerne peger et andet sted (`DOCUMENTATION.md` §9). Selve projektet skal oprettes manuelt, og `sql/schema.sql` genskaber hele `public` på én gang, så opsætningen er kort. **Rækken findes, fordi opgaven mistede sin tracker:** den blev fulgt som `G4`, men `G4` blev leveret som noget andet — dev-serverens hårde krav om `.env.local` — og forsvandt derfor fra listen, mens selve staging-projektet aldrig blev oprettet. Prisen ved status quo er, at en preview-test skriver i brugernes rigtige data; det er dét, `DOCUMENTATION.md` §11's advarsel om ikke at taste resultater ind på en preview holder i skak i hånden. | Lille (opsætning) |
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. **Forespørgslen er skrevet (august 2026)** — den står klar til at køre i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). Tilbage står at køre den. | Lille (opslag) |
 
@@ -321,10 +341,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
-| G60 | **Deadline-dedup-nøglen bruger serverens UTC-dato.** `new Date().toISOString().slice(0, 10)` (`api/send-notifications.js:611`) frem for `dateInZone()`, som filen selv bruger til rundegrænserne. | Harmløst i dag, og det er hele grunden til, at den skal rettes nu frem for efter et uheld: sendevinduet er 08–22 dansk tid, som aldrig krydser en UTC-datogrænse, så fejlen kan ikke udløses af den nuværende konfiguration. Men det er filens **eneste** dato, der ikke følger husreglen om fast dansk tidszone (`DOCUMENTATION.md` §16), og reglen findes, fordi `G11`/`G32` viste, hvad der sker, når to sider regner den samme dato hver for sig. Ændres sendevinduet — eller får en beskedtype et andet vindue — bliver "maks. én påmindelse pr. bruger pr. dag" tavst til "pr. UTC-døgn". | Lille |
-| G68 | **`rnk` i `rating_history` rangerer kun på score.** `rank() over (order by score desc)` (`sql/rating_core.sql:264`) uden exacts-tiebreaket, som det parvise Elo-opgør ellers bruger. | To spillere med samme rundescore, men forskelligt antal præcise resultater, deler den **gemte** runde-placering, selvom Elo-duellen skilte dem — og de to tal står ved siden af hinanden i karriereprofilen og Story Engine, som begge læser `rnk`. Uenigheden er lille og usynlig i de fleste runder, men den er en uenighed mellem to tal, der kommer fra samme beregning. **Rettelsen er ikke gratis:** `rnk` er en gemt værdi, så en ændring flytter historiske tal, og `sql/tests/rating_equivalence.sql`s frosne reference skal opdateres bevidst — hvilket pr. `CLAUDE.md` er selve beslutningen. | Lille |
-| G1 | **De resterende store skærmfiler** — `MainApp.jsx` ~606 linjer, `HjemTab.jsx` ~530, `ProfileScreen.jsx` ~460, `CreateCompetitionScreen.jsx` ~444, `AdminScreen.jsx` ~329. | Anden halvdel af fil-opdelingen fra 30. juli 2026. **To af dem er delt 3. august 2026 (Tier 5):** `ChampionshipTab` gik fra 512 til 272 linjer (`championship/StandingsTable.jsx`, `scope.js`, `CardHead.jsx`) og `ProfileScreen` fra 614 til 460 (`profile/facts.js`, `Sparkline.jsx`) — rene flytninger, hvor testene nu importerer fra modulerne frem for gennem skærmen. Mønstret er dermed bevist tre gange. Gevinsten er testbarhed og læsbarhed, ikke linjetal: `MainApp` er den næste, og den er også den sværeste, fordi navigations-tilstandsmaskinen bor der (`A23`). | Mellem |
-| G2 | **7 ESLint-advarsler fra React Compiler** — alle af typen `set-state-in-effect`, i indlæsningsstier (`ChampionshipTab`, `CreateCompetitionScreen`, `GroupScreen`, `MainApp`, `PredictionsScreen` ×3). | Står som advarsel frem for fejl, fordi hvert fund kræver en gennemtænkt omskrivning, ikke en rettelse. Loftet i `package.json` (`--max-warnings 7`) gør, at tallet kan falde, men aldrig vokse ubemærket. **Faldt fra 23 til 14 (3. august, `B4`) og fra 14 til 7 samme dag (`G2`, Tier 5):** de billige mønstre er brugt op — en komponent defineret inde i en anden (fire advarsler på én rettelse), en akkumulator, der lagde sammen under render, og to effekter i `App.jsx`, som satte tilstand, der lige så godt kunne være initial. **Det, der er tilbage, er ét mønster:** "hent data i en effekt og sæt state", som resten af skærmene bruger, og som ikke kan undgås uden et data-bibliotek, projektet bevidst ikke har. Næste skridt er derfor ikke en oprydning, men en beslutning om det mønster. | Mellem |
+| G1 | **De resterende store skærmfiler** — `MainApp.jsx` ~582 linjer, `HjemTab.jsx` ~530, `ProfileScreen.jsx` ~460, `CreateCompetitionScreen.jsx` ~444, `AdminScreen.jsx` ~329. | Anden halvdel af fil-opdelingen fra 30. juli 2026. **Tre er delt (3. august):** `ChampionshipTab` 512 → 272 og `ProfileScreen` 614 → 460 — rene flytninger, hvor testene nu importerer fra modulerne frem for gennem skærmen. **`MainApp`s invitations-flows er udskilt 5. august 2026** til `src/lib/data/invites.js` med elleve tests. Linjetallet faldt kun 618 → 582, og dét er pointen: gevinsten var, at de to flows kunne testes overhovedet. De lå i to `useEffect`, altså uden for rækkevidde af en testopsætning uden jsdom — og `A23` står åben netop med den begrundelse, at ingen test dækker dem. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** (`A23`s emne) plus render-træet, og bør vente på den beslutning. De fire andre filer er uafhængige og kan tages hver for sig. | Mellem |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen er formentlig allerede faldet (3. august 2026):** `B2`s testcase 3 er *præcis* denne kodesti — "`full_season`-konkurrence med begge turneringer (multivalg) → kampe fra begge materialiseres, stilling korrekt" — og ejeren har kørt og godkendt den mod produktionsdata 2. august ([`features/turnering-2.md`](./features/turnering-2.md) §6). Blev konkurrencen oprettet frem for kun gennemklikket, er "nul rækker i `mode_params.tournaments`" ikke længere sandt, og rækken skal slettes. **Rækken er derfor skrumpet til ét opslag:** `select id, name, mode_params from competitions where mode_params ? 'tournaments'` — svarer den med rækker, er stien kørt mod rigtige data, og det eneste tilbage er at se stillingen efter. | Lille (opslag) |
 
 ## Ideer

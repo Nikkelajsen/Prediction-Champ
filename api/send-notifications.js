@@ -613,7 +613,17 @@ export default async function handler(req, res) {
         );
         const tipped = new Set(preds.filter((p) => p.pred_home != null && p.pred_away != null).map((p) => `${p.match_id}:${p.user_id}`));
 
-        const today = new Date().toISOString().slice(0, 10);
+        // Dansk dato, ikke serverens UTC-dato (G60, august 2026). Nøglen bærer
+        // løftet "maks. én påmindelse pr. bruger pr. DAG", og en dag er dansk
+        // overalt ellers i filen — det er husreglen fra DOCUMENTATION.md §16.
+        //
+        // Fejlen kunne ikke udløses af den nuværende konfiguration: sendevinduet
+        // er 08–22 dansk og krydser aldrig en UTC-datogrænse. Den er rettet
+        // netop MENS den er harmløs, fordi den var filens eneste dato, der ikke
+        // fulgte reglen — og `G11`/`G32` viste, hvad det koster, når to sider
+        // regner den samme dato hver for sig. Ændres vinduet, eller får en
+        // beskedtype sit eget, bliver løftet tavst til "pr. UTC-døgn".
+        const today = dateInZone(new Date(now));
         for (const uid of subscribedUsers) {
           const missing = lockingMatches
             .filter((m) => usersByMatch[m.id]?.has(uid) && !tipped.has(`${m.id}:${uid}`))

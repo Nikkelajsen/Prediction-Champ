@@ -277,6 +277,89 @@ begin
   raise notice 'OK: % præcise tips i en uofficiel turnering flyttede hverken rating eller historik, og spilleren, der kun tipper den, har ingen rating (A17).', n_uoff;
 end $$;
 
+-- ---------- G68: rnk skiller på exacts, ikke kun på score ----------
+-- Samme dobbelthed som A17 ovenfor: referencen fik tiebreaket den 5. august
+-- 2026, så de to sider ville være enige om `rnk`, uanset om det virkede.
+-- Beviset skal derfor konstruere det tilfælde, uenigheden bestod i.
+--
+-- FIDUSEN i tallene: score er point PR. KAMP, så to spillere kan have samme
+-- score og forskelligt antal præcise resultater, hvis de tipper lige mange
+-- kampe. Med fire kampe hver giver 2 eksakte (3+3) og 2 forkerte det samme som
+-- 1 eksakt (3) og 3 rigtige udfald (1+1+1): seks point, score 1,5 — men to
+-- exacts mod én. Det parvise Elo-opgør skiller dem allerede (`u.exacts >
+-- v.exacts` giver 1 og ikke 0,5), så FØR rettelsen var de to tal fra samme
+-- beregning uenige: forskelligt ratingskridt, delt `rnk`.
+--
+-- Runden ligger i 2027, altså efter al anden testdata, så den ikke kan forstyrre
+-- et eksisterende ratingskridt. Turneringen er OFFICIEL — ellers ville A17's
+-- filter fjerne den, før tiebreaket kom i spil.
+insert into leagues(id, name, is_official)
+values ('33333333-3333-3333-3333-333333333331', 'Tiebreak-turnering (test)', true);
+insert into seasons(id, league_id, name)
+values ('33333333-3333-3333-3333-333333333332', '33333333-3333-3333-3333-333333333331', '2026/2027');
+
+insert into matches(id, season_id, kickoff_at, home_score, away_score) values
+  ('33333333-0000-0000-0000-000000000001', '33333333-3333-3333-3333-333333333332', '2027-03-03 18:00+00', 2, 1),
+  ('33333333-0000-0000-0000-000000000002', '33333333-3333-3333-3333-333333333332', '2027-03-03 20:00+00', 2, 1),
+  ('33333333-0000-0000-0000-000000000003', '33333333-3333-3333-3333-333333333332', '2027-03-04 18:00+00', 2, 1),
+  ('33333333-0000-0000-0000-000000000004', '33333333-3333-3333-3333-333333333332', '2027-03-04 20:00+00', 0, 0);
+
+-- Spiller 1: 2 eksakte + 2 helt forkerte  = 3+3+0+0 = 6 point, 2 exacts
+insert into predictions(user_id, match_id, pred_home, pred_away) values
+  ('00000000-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000001', 2, 1),
+  ('00000000-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000002', 2, 1),
+  ('00000000-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000003', 0, 3),
+  ('00000000-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000004', 1, 0);
+
+-- Spiller 2: 1 eksakt + 3 rigtige udfald = 3+1+1+1 = 6 point, 1 exact
+insert into predictions(user_id, match_id, pred_home, pred_away) values
+  ('00000000-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000001', 2, 1),
+  ('00000000-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000002', 3, 1),
+  ('00000000-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000003', 1, 0),
+  ('00000000-0000-0000-0000-000000000002', '33333333-0000-0000-0000-000000000004', 2, 2);
+
+analyze;
+select public.recompute_ratings();
+
+do $$
+declare
+  -- `rating_history.round_key` er TEXT (rating_core.sql), mens round_key()
+  -- giver en date. Casten hører til her og ikke i et implicit sammenligning.
+  nøgle text := public.round_key(timestamptz '2027-03-03 18:00+00')::text;
+  s1 record; s2 record;
+begin
+  select * into s1 from rating_history
+   where user_id = '00000000-0000-0000-0000-000000000001' and round_key = nøgle and scope = 'ALL';
+  select * into s2 from rating_history
+   where user_id = '00000000-0000-0000-0000-000000000002' and round_key = nøgle and scope = 'ALL';
+
+  if s1 is null or s2 is null then
+    raise exception 'FEJL: testrunden % gav ingen historik-rækker — fixturen ramte ved siden af', nøgle;
+  end if;
+
+  -- Forudsætningen skal holde, ellers beviser resten ingenting.
+  if s1.round_score is distinct from s2.round_score then
+    raise exception 'FEJL: fixturen giver ikke lige score (% mod %) — så testes tiebreaket ikke', s1.round_score, s2.round_score;
+  end if;
+
+  -- Selve rettelsen: forskellige exacts ⇒ forskellig rnk.
+  if s1.rnk = s2.rnk then
+    raise exception 'FEJL: lige score og forskellige exacts gav samme rnk (%) — tiebreaket mangler', s1.rnk;
+  end if;
+  if s1.rnk <> 1 then
+    raise exception 'FEJL: spilleren med FLEST exacts fik rnk % og ikke 1 — tiebreaket vender forkert', s1.rnk;
+  end if;
+
+  -- Og de to tal skal være enige: den, der vandt tiebreaket, fik også det
+  -- største ratingskridt. Det var netop dét, uenigheden bestod i.
+  if not (s1.delta > s2.delta) then
+    raise exception 'FEJL: rnk og delta er uenige — rnk % mod %, delta % mod %', s1.rnk, s2.rnk, s1.delta, s2.delta;
+  end if;
+
+  raise notice 'OK: lige score (%), forskellige exacts ⇒ rnk % mod % og delta % mod % (G68).',
+    s1.round_score, s1.rnk, s2.rnk, round(s1.delta, 3), round(s2.delta, 3);
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- G11: round_key() er markeret IMMUTABLE og skal FAKTISK være det
 -- ---------------------------------------------------------------------------

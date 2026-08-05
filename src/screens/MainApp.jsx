@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";
-import { loadGroupByCode, joinGroup, joinCompetition } from "../lib/data.js";
+import { joinGroup, joinCompetition, resolveCompetitionInvite, resolveLeagueInvite, stripInviteParam } from "../lib/data.js";
 import { logEvent } from "../lib/analytics.js";
 import { deriveOnboarding, loadOnboardingSignals } from "../lib/onboarding.js";
 import { readUserFlag, writeUserFlag, COMPLETE_KEY, FLOW_KEY, PWA_ONBOARDED_KEY } from "../lib/localFlags.js";
@@ -210,50 +210,22 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     setShowInstall(false);
   }
 
+  // Selve opslaget bor i src/lib/data/invites.js (G1) og svarer HVAD koden peger
+  // på; her oversættes svaret til navigation. Snittet er valgt, så `A23` (router)
+  // kun skal røre denne halvdel — og så flowene kan unit-testes, hvilket var
+  // netop den omkostning, `A23` stod og bar.
   useEffect(() => {
     if (!pendingJoinCode) return;
     (async () => {
       setJoinError("");
       try {
-        const found = await db.select(token, "competitions", `invite_code=eq.${pendingJoinCode}&select=*`);
-        if (found.length) {
-          const comp = found[0];
-          const already = await db.select(token, "competition_participants", `competition_id=eq.${comp.id}&user_id=eq.${userId}&select=competition_id`);
-          if (already.length) {
-            // Allerede deltager — ingen bekræftelse nødvendig, gå direkte til stillingen.
-            // Men sikr liga-medlemskabet først: en deltager UDEN liga-medlemskab er
-            // netop den halve tilstand, A8-hullet efterlod (deltager i stillingen,
-            // men usynlig på medlemslisten og uden adgang til ligaens side). At
-            // trykke på invitationslinket igen er den naturlige måde at forsøge at
-            // rette det på, så det skal faktisk rette det. joinGroup er idempotent.
-            if (comp.group_id) {
-              try { await joinGroup(token, userId, comp.group_id); }
-              catch { /* deltagelsen er intakt — bloker ikke navigationen */ }
-            }
-            await loadCompetitions();
-            setTab("ligaer");
-            setScreen({ type: "board", compId: comp.id });
-          } else {
-            // vis bekræftelse i stedet for at joine direkte
-            let inviterName = "";
-            if (comp.created_by) {
-              try {
-                const prof = await db.select(token, "profiles", `id=eq.${comp.created_by}&select=display_name`);
-                inviterName = prof[0]?.display_name || "";
-              } catch { /* inviter-navn er valgfrit */ }
-            }
-            // Ligger konkurrencen i en liga, melder join én ind i BEGGE (A8) —
-            // ligaens navn hentes, så bekræftelsen kan sige det højt i stedet
-            // for at gøre det bag om ryggen på brugeren.
-            let groupName = "";
-            if (comp.group_id) {
-              try {
-                const g = await db.select(token, "groups", `id=eq.${comp.group_id}&select=name`);
-                groupName = g[0]?.name || "";
-              } catch { /* liga-navn er valgfrit */ }
-            }
-            setPendingJoin({ competition: comp, inviterName, groupName });
-          }
+        const res = await resolveCompetitionInvite(token, userId, pendingJoinCode);
+        if (res.kind === "already") {
+          await loadCompetitions();
+          setTab("ligaer");
+          setScreen({ type: "board", compId: res.competition.id });
+        } else if (res.kind === "confirm") {
+          setPendingJoin(res);
         } else {
           setJoinError("Ingen konkurrence fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
         }
@@ -261,9 +233,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
         setJoinError("Kunne ikke tilmelde dig konkurrencen lige nu. Prøv igen om lidt.");
       }
       clearPendingJoinCode();
-      const url = new URL(window.location.href);
-      url.searchParams.delete("join");
-      window.history.replaceState({}, "", url.toString());
+      stripInviteParam("join");
     })();
   }, [pendingJoinCode]); // eslint-disable-line
 
@@ -273,21 +243,15 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     (async () => {
       setJoinError("");
       try {
-        const g = await loadGroupByCode(token, pendingLigaCode);
-        if (g) {
-          const already = await db.select(token, "group_members", `group_id=eq.${g.id}&user_id=eq.${userId}&select=user_id`);
-          if (already.length) { setTab("ligaer"); setScreen({ type: "group", groupId: g.id }); }
-          else setPendingGroupJoin({ group: g });
-        } else {
-          setJoinError("Ingen liga fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
-        }
+        const res = await resolveLeagueInvite(token, userId, pendingLigaCode);
+        if (res.kind === "already") { setTab("ligaer"); setScreen({ type: "group", groupId: res.group.id }); }
+        else if (res.kind === "confirm") setPendingGroupJoin(res);
+        else setJoinError("Ingen liga fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
       } catch {
         setJoinError("Kunne ikke tilmelde dig ligaen lige nu. Prøv igen om lidt.");
       }
       clearPendingLigaCode();
-      const url = new URL(window.location.href);
-      url.searchParams.delete("liga");
-      window.history.replaceState({}, "", url.toString());
+      stripInviteParam("liga");
     })();
   }, [pendingLigaCode]); // eslint-disable-line
 

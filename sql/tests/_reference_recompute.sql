@@ -21,6 +21,24 @@
 -- selvstændig sektion i rating_equivalence.sql, som tilføjer en uofficiel
 -- turnering EFTER sammenligningen og kræver, at intet rykker sig. Rører du
 -- referencen igen, så husk den samme dobbelthed.
+--
+-- OPDATERET ANDEN GANG — 5. august 2026 (G68). `rnk` rangerer nu på
+-- `score desc, exacts desc` og ikke på score alene. Det er igen en "meningsfuld
+-- ændring": `rnk` er en GEMT værdi, så rettelsen flytter historiske tal i
+-- `rating_history`, og dét er præcis, hvad denne fil skal tvinge nogen til at
+-- beslutte frem for at opdage.
+--
+-- Begrundelsen er, at de to tal kom fra SAMME beregning og var uenige. Det
+-- parvise Elo-opgør fem linjer længere nede skiller allerede to spillere med
+-- samme rundescore på antallet af præcise resultater (`u.exacts > v.exacts`
+-- giver 1 og ikke 0.5) — så den ene fik et større ratingskridt end den anden,
+-- mens `rnk` gemte dem som delte. Karriereprofilen og Story Engine læser `rnk`
+-- og viser det ved siden af ratingen.
+--
+-- Samme dobbelthed som ved A17: begge sider har nu tiebreaket, så testen kan
+-- ikke selv bevise, at det virker. Beviset står i en egen sektion i
+-- rating_equivalence.sql, som konstruerer to spillere med lige score og
+-- forskellige exacts og kræver, at de får forskellig `rnk`.
 
 CREATE OR REPLACE FUNCTION public.recompute_ratings_reference() RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
@@ -66,7 +84,7 @@ begin
       where rs.round_key = r.round_key
     ),
     agg as (
-      select u.user_id, u.rating, u.rounds_played, u.score, u.n,
+      select u.user_id, u.rating, u.rounds_played, u.score, u.n, u.exacts,
              count(*) as others,
              sum(case when u.score > v.score
                         or (u.score = v.score and u.exacts > v.exacts) then 1
@@ -74,23 +92,23 @@ begin
                       else 0 end) as s_sum,
              sum(1.0 / (1 + power(10, (v.rating - u.rating) / 400.0))) as e_sum
       from pt u join pt v on v.user_id <> u.user_id
-      group by u.user_id, u.rating, u.rounds_played, u.score, u.n
+      group by u.user_id, u.rating, u.rounds_played, u.score, u.n, u.exacts
     ),
     solo as (
-      select user_id, rating, rounds_played, score, n,
+      select user_id, rating, rounds_played, score, n, exacts,
              0::numeric as others, 0::numeric as s_sum, 0::numeric as e_sum
       from pt where (select count(*) from pt) = 1
     ),
     allrows as (select * from agg union all select * from solo),
     d as (
-      select user_id, rating, score, n,
+      select user_id, rating, score, n, exacts,
              case when others = 0 then 0
                   else (case when rounds_played < 5 then 32 else 24 end)::numeric
                        / others * (s_sum - e_sum) end as d
       from allrows
     )
     select user_id, d, rating + d as rating_after, score, n,
-           rank() over (order by score desc) as rnk
+           rank() over (order by score desc, exacts desc) as rnk
     from d;
 
     update _cur c

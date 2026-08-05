@@ -229,7 +229,7 @@ begin
       where rs.round_key = r.round_key
     ),
     agg as (
-      select u.user_id, u.rating, u.rounds_played, u.score, u.n,
+      select u.user_id, u.rating, u.rounds_played, u.score, u.n, u.exacts,
              count(*) as others,
              sum(case when u.score > v.score
                         or (u.score = v.score and u.exacts > v.exacts) then 1
@@ -245,23 +245,29 @@ begin
              -- afsnit 12.
              sum(1.0 / (1 + power(10::float8, ((v.rating - u.rating) / 400.0)::float8)))::numeric as e_sum
       from pt u join pt v on v.user_id <> u.user_id
-      group by u.user_id, u.rating, u.rounds_played, u.score, u.n
+      group by u.user_id, u.rating, u.rounds_played, u.score, u.n, u.exacts
     ),
     solo as (
-      select user_id, rating, rounds_played, score, n,
+      select user_id, rating, rounds_played, score, n, exacts,
              0::numeric as others, 0::numeric as s_sum, 0::numeric as e_sum
       from pt where (select count(*) from pt) = 1
     ),
     allrows as (select * from agg union all select * from solo),
     d as (
-      select user_id, rating, score, n,
+      select user_id, rating, score, n, exacts,
              case when others = 0 then 0
                   else (case when rounds_played < 5 then 32 else 24 end)::numeric
                        / others * (s_sum - e_sum) end as d
       from allrows
     )
     select user_id, d, rating + d as rating_after, score, n,
-           rank() over (order by score desc) as rnk
+           -- Samme tiebreak som Elo-opgøret ovenfor: score, så exacts (G68).
+           -- Uden `exacts desc` delte to spillere med samme rundescore, men
+           -- forskelligt antal præcise resultater, den GEMTE placering —
+           -- selvom duellen skilte dem (`u.exacts > v.exacts` giver 1 og ikke
+           -- 0.5). De to tal kommer fra samme beregning og står ved siden af
+           -- hinanden i karriereprofilen og Story Engine, som begge læser rnk.
+           rank() over (order by score desc, exacts desc) as rnk
     from d;
 
     update _cur c
