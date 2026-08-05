@@ -324,7 +324,17 @@ export async function isAuthorized(req, { sb, supabaseUrl, serviceKey, syncSecre
   if (authHeader?.startsWith("Bearer ")) {
     const userToken = authHeader.slice(7);
     try {
-      const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      // `fetchWithTimeout` og ikke bart `fetch` (G66, august 2026). Det var
+      // filens sidste udgående kald uden tidsgrænse, og det sad værst tænkeligt:
+      // FØR `run` findes, altså før der er noget at skrive i `job_runs`. Hang
+      // opslaget, blev funktionen klippet over af Vercel uden at efterlade en
+      // række — nøjagtig den tavshed, `G19` blev bygget for at afskaffe.
+      //
+      // Stien rammes kun af admin-token-kald ("Hent nu", Drift-forhåndsvisningen)
+      // og ikke af cron-jobbene, hvilket både er grunden til, at den blev
+      // overset, og til at den er billig at lukke: en tidsgrænse her kan ikke
+      // koste en planlagt kørsel noget.
+      const userRes = await fetchWithTimeout(`${supabaseUrl}/auth/v1/user`, {
         headers: { apikey: serviceKey, Authorization: `Bearer ${userToken}` },
       });
       if (!userRes.ok) return { ok: false, via: null };

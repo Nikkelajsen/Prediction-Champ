@@ -177,8 +177,15 @@ left join wins w
 group by s.month, s.scope, s.user_id, w.round_wins;
 
 -- ============================================================================
-grant select on public.round_standings   to anon, authenticated, service_role;
-grant select on public.monthly_standings to anon, authenticated, service_role;
+-- `anon` er BEVIDST ikke med (G58, august 2026). Stillingerne kræver login, og
+-- `anon_grants.sql` (#34) fjernede rollens tabel-privilegier med den begrundelse,
+-- at bredden var en REGEL og ikke en liste. En `grant … to anon` her ville
+-- omgøre det ved en helt almindelig gen-kørsel af denne fil — som er dokumenteret
+-- som idempotent og forventet gen-kørt — uden at nogen havde besluttet noget.
+-- Heartbeat'en ville opdage det inden for en halv time, men en fil, der lægger
+-- en fejl, en kontrol så fanger, er stadig en fil, der lægger en fejl.
+grant select on public.round_standings   to authenticated, service_role;
+grant select on public.monthly_standings to authenticated, service_role;
 
 -- ============================================================================
 -- Verifikation — kør efter migreringen

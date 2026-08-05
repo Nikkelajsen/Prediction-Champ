@@ -144,6 +144,35 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database anongrants;'
           psql -h localhost -U postgres -d anongrants -v ON_ERROR_STOP=1 -b -f anon_grants.sql
 
+      # anon-grants, anden halvdel (G58): SEKVENSERNE, som #34s formulering
+      # aldrig dækkede — ordet "tables" stod tre steder. Testen bevæger sig
+      # bevidst også i den anden retning og kræver, at funktions-adgangen
+      # OVERLEVER: `anon` skal kunne kalde `username_available()` før login, og
+      # en oprydning, der tog den med, ville lukke nye brugere ude uden at vise
+      # sig andre steder.
+      - name: Test af anon-grants (sekvenser)
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database anongrantsfinish;'
+          psql -h localhost -U postgres -d anongrantsfinish -v ON_ERROR_STOP=1 -b -f anon_grants_finish.sql
+
+      # Brugernavne (G63): hele §6-løftet bygget op fra scriptet ALENE — længde,
+      # case-insensitiv unikhed og opslaget. Testen ER gendannelsesvejen: indtil
+      # august 2026 fandtes indekset og funktionen kun i den genererede
+      # schema.sql, så et skema bygget fra sql/-scripterne lod to brugere hedde
+      # det samme, og det ville først vise sig, når det skete.
+      - name: Test af brugernavne-garantierne
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database usernametest;'
+          psql -h localhost -U postgres -d usernametest -v ON_ERROR_STOP=1 -b -f username_constraints.sql
+
       # Story Engine v1.2's kåringsregler (B10): kører rating_core +
       # competition_awards + story_engine i én tom database og efterprøver
       # kæden fra kåringsrække til historie-kort. Egen database, som de andre.

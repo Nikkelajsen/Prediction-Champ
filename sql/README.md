@@ -26,11 +26,19 @@ den regenereres med guiden nedenfor.
 > grantor-rollen `postgres`, men **ikke** for `supabase_admin` — dens
 > `ALTER DEFAULT PRIVILEGES … GRANT ALL ON TABLES TO anon` står der stadig.
 > Migreringens `do`-blok forudså det og swallowede fejlen med en `notice`, så
-> kørslen ikke væltede; eksporten er beviset på, at netop dén gren fyrede. Følgen
-> er snæver — en tabel oprettet **af** `supabase_admin` ville få grants til
-> `anon` igen, mens alt, vi selv opretter i SQL-editoren, ejes af `postgres` —
-> men den står i backloggens indbakke frem for kun her. Sekvenserne er af samme
-> grund heller ikke lukket (`job_runs_id_seq` + begge `ON SEQUENCES`-defaults).
+> kørslen ikke væltede; eksporten er beviset på, at netop dén gren fyrede.
+> Sekvenserne var af samme grund heller ikke lukket (`job_runs_id_seq` + begge
+> `ON SEQUENCES`-defaults) — dét var en ren dækningsfejl: ordet "tables" stod
+> tre steder i #34s formulering.
+>
+> **Sekvenserne lukkes af #43** (`anon_grants_finish.sql`, `G58`), som skal
+> køres. `supabase_admin`-delen kan formentlig ikke køres fra SQL-editoren, og
+> **følgen er snævrere, end den lyder:** `ALTER DEFAULT PRIVILEGES FOR ROLE x`
+> gælder kun objekter, der oprettes **af** rolle x, og alt, vi selv opretter,
+> ejes af `postgres`. Tilstanden aflæses nu af tre kontroller i
+> [`job-heartbeat.yml`](../.github/workflows/job-heartbeat.yml) hver halve time
+> — tabeller, sekvenser og selve kilden — frem for af en skema-eksport og et
+> menneske.
 >
 > **Det, eksporten samtidig afgjorde (`G5`):** funktionskroppene i produktion
 > indeholder CRLF — alle funktionskroppe med `$$`-body. Advarslen i `rating_core.sql`s hoved var
@@ -59,14 +67,14 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 0 | `rating_core.sql` | `pc_points()`, `round_key()`, `recompute_ratings()` + tabellerne `ratings`/`rating_history` | Aktiv — **skal køres før #5**. Tilføjet 30. juli 2026 med optimeringen fra samme dag (logistikken i `double precision`, ~175× hurtigere). **Skal gen-køres efter #20** (31. juli 2026, A17): `_rs` joiner nu `seasons`/`leagues` og tæller kun **officielle** turneringer. ⚠️ **Gen-kørslen ændrer kun funktionen, ikke tallene** — `ratings` står uændret, til noget kalder `recompute_ratings()`. Tryk "Opdater ratings" i Admin bagefter, ellers ligger de gamle tal og venter på næste kampresultat |
 | 1 | `standings_views.superseded.sql` | Første udgave af `round_standings` + `season_standings` | ⚠️ **Afløst af `standings_tiebreakers.sql`** — kør den aldrig. Omdøbt 30. juli 2026, så filnavnet selv advarer; kun bevaret for historikken |
 | 2 | `user_stats.sql` | `user_activity_days`, `touch_activity()`, `admin_user_stats()` | Aktiv |
-| 3 | `username_constraints.sql` | Længde-constraint på `profiles.display_name` (2–20) | Aktiv — filen rummer KUN længde-constrainten. `username_available()` og `profiles_display_name_lower_idx` findes kun i skema-eksporten; der er ingen versioneret migrering for dem (noteret i backloggen) |
+| 3 | `username_constraints.sql` | Hele §6-løftet om et brugernavn: længde-constraint (2–20), det unikke indeks `profiles_display_name_lower_idx` og `username_available()` | Aktiv — idempotent. **De to sidste kom til august 2026 (`G63`)**: de fandtes indtil da kun i den genererede `schema.sql`, så et skema bygget fra `sql/`-scripterne lod to brugere hedde det samme og manglede signup-tjekket. Hullet var i **gendannelsesvejen**, ikke i produktion, hvor objekterne står. Dækket af `sql/tests/username_constraints.sql` i CI |
 | 4 | `predictions_round_lock_policies.sql` | Runde-baseret lås på `predictions` for **SELECT + DELETE** | ⚠️ **Afløst af #25** — kør den aldrig igen. En gen-kørsel ruller tavst låsen tilbage fra kamp til runde |
 | 5 | `rating_trigger_optimization.sql` | Statement-level triggere på `matches`; kalder `recompute_ratings()` + `generate_stories()` | Aktiv — forudsætter `rating_core.sql` (#0) |
 | 6 | `matches_stage.sql` | `matches.stage_name` (grundspil/slutspil) | Aktiv |
 | 7 | `push_notifications.sql` | `push_subscriptions` + `notification_log` | Aktiv |
 | 8 | `story_engine.sql` | `stories` + `generate_stories()` (viewet `latest_story` flyttede til #38 med v2) | Aktiv — ~~v1.1 skal gen-køres i produktion~~ **gen-kørt 31. juli 2026** (både v1.1's 14 regler og `scope = 'ALL'`-filtreringen efter #20). Kun funktionen ændres, tabel og view er uændrede. **v1.2 gen-kørt 3. august 2026** (`B10`): to nye regler (`AWARD_WEEK`, `AWARD_MONTH`) læser `competition_awards`, og regel 70 tier, hvor en kåring dækker. Forudsætter #26. Dækket af `sql/tests/story_engine_awards.sql` i CI. **v1.3 gen-kørt 4. august 2026** (navneskiftet til Leagly): regel 10's overskrift hedder nu "Månedens Champion" og er dermed byte-identisk med skabelonen i `src/lib/stories.js`. Kun funktionen ændres, som ved de to foregående gen-kørsler. **v2 (august 2026): SKAL gen-køres efter #37 og #38** — `delete`en er nu periode-afgrænset (`and period = 'round'`), og `_se_rp` læser viewet `competition_match_points`. Uden gen-kørslen sletter runde-motoren hele ugens dagskort ved hver resultatændring. **`latest_story` er samtidig fjernet fra filen** og bor nu kun i #38: filen gen-køres rutinemæssigt, og en `create or replace view` med den korte kolonneliste kan ikke erstatte v2's længere — gen-kørslen fejlede med `42P16: cannot drop columns from view`, netop når man fulgte den dokumenterede rækkefølge |
 | 9 | `groups.sql` | Liga-laget: `groups`, `group_members`, `is_group_member()`, `move_competition_to_group()` | ⚠️ Aktiv, men **to af dens policies er afløst** — se advarslen nedenfor |
-| 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv — ~~gen-kør efter #20~~ **gen-kørt 31. juli 2026**: rundesejre og "bedste runde" filtrerer nu `scope = 'ALL'` (ellers tælles hver sejr én gang pr. turnering), og samme kørsel gav `titles.by_tournament` (K2) |
+| 10 | `career_profile.sql` | `career_profile(profile_user_id)` | Aktiv — ~~gen-kør efter #20~~ **gen-kørt 31. juli 2026**: rundesejre og "bedste runde" filtrerer nu `scope = 'ALL'` (ellers tælles hver sejr én gang pr. turnering), og samme kørsel gav `titles.by_tournament` (K2). **SKAL gen-køres igen efter `G62` (august 2026):** de tre GLOBALE komplethedsjoin (månedstitel, rundesejre, "bedste runde") grupperede `matches` uden join til `seasons`/`leagues`, mens pointene ved siden af kom fra `scope = 'ALL'`, som kun tæller officielle — så én uspillet **uofficiel** kamp kunne tilbageholde en global titel, brugeren havde vundet. Kun funktionen ændres. Verificeret mod PostgreSQL 16.13 med negativ kontrol: samme data gav 0 rundesejre/0 månedstitler før og 1/1 efter |
 | 11 | `live_scores.sql` | `matches.live_*`-kolonner + live-indekser | Aktiv |
 | 12 | `standings_tiebreakers.sql` | Genskaber alle tre stillings-views med `outcome_count`, `round_wins`, `avg_goal_error` | Aktiv — **afløser #1** |
 | 13 | `group_membership_invariant.sql` | A8 i databasen: backfill, auto-indmeldende trigger, strammet liga-exit + framelding | Aktiv — **afløser to policies fra #9** |
@@ -101,6 +109,7 @@ som det gør, og til at undgå at køre en gammel fil oven i en nyere.
 | 40 | `story_engine_v2_backfill.sql` | Kalder `generate_daily_stories()` for hver færdigspillet dag og `award_milestones(null)` én gang | **Engangs-/ad hoc-kørsel**, ikke en migrering. Kør efter #37–#39 og gen-kørslen af #8. Tager tid — den regner hele historikken igennem. Kør uden for en kampdag. Fremdriften meldes med `raise notice` frem for `\timing`: **ingen fil i `sql/` må indeholde psql-kommandoer**, da Supabases editor ikke kender dem — bevogtet af `sql/migration_syntax.test.js` |
 | 41 | `season_end.sql` | Sæsonen får en slutning: `seasons.ends_at` + `seasons.is_finished`, og **`competition_status` v2**, hvor en sæson først er færdig, når den selv siger det | Aktiv — tilføjet august 2026. Idempotent. **Redefinerer `competition_status` fra #39** — kør denne fil igen, hvis #39 nogensinde køres på ny. **Kan køres FØR frontend-mergen:** kolonnerne er additive, og viewets kolonner er uændrede. **Har én synlig følge på kørselsdagen:** alle eksisterende sæsoner har `ends_at = null` og `is_finished = false`, så en netop afsluttet konkurrence først melder sig færdig, når sidste kickoff er 30 dage gammel — eller straks, når sync/Drift har sat flaget. Det er den rigtige retning: for tidligt er uopretteligt, for sent er ikke. Dækket af `sql/tests/competition_status.sql` i CI |
 | 42 | `liga_admin.sql` | Hvad en administrator må: tre RLS-policies (liga-admin fjerner en deltager **uden tips**, sletter en konkurrence **uden tips**, sletter en liga uden **aktive** konkurrencer) + `_anonymize_account()`/`admin_anonymize_account()` | Aktiv — tilføjet august 2026. Idempotent. Forudsætter #41 (liga-sletningen læser `competition_status.concluded`). **AFLØSER `groups_delete_admin_empty` fra `groups.sql`.** `anonymize_my_account()` beholder sin nul-parameter-signatur; kun kroppen er flyttet til den ikke-grantede `_anonymize_account(uuid)`, som begge indgange kalder. **Skal køres FØR frontend-mergen** — ellers fejler Admin → Brugere og liga-siden bliver ved at melde "kunne ikke". Dækket af `sql/tests/liga_admin.sql` i CI |
+| 43 | `anon_grants_finish.sql` | `anon` mister også **sekvenserne**, og kilden til dem lukkes (`G58`) | Aktiv — tilføjet august 2026. Idempotent. Anden halvdel af #34, som kun dækkede tabellerne: ordet "tables" stod tre steder i formuleringen, så `job_runs_id_seq` og begge `on sequences`-defaults blev aldrig rørt. **Lukker intet kendt hul** — `anon` har ingen INSERT på `job_runs` — men fjerner en uenighed mellem #34s påstand og skema-eksporten. ⚠️ `supabase_admin`-delen kan formentlig ikke køres fra SQL-editoren; se filens hoved for, hvad der så gælder. Dækket af `sql/tests/anon_grants_finish.sql` i CI |
 
 ### ⚠️ Ni filer må ikke gen-køres blindt
 

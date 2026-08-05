@@ -164,6 +164,15 @@ Alarmen ligger med vilje **uden for appen**: kører Supabase eller Vercel ikke,
 ville en alarm inde i appen dø af præcis samme årsag som jobbet. Kanalen er
 GitHubs egen notifikation, når workflowen fejler.
 
+Samme workflow efterprøver **migreringernes virkning i databasen** før
+helbredstjekket (`B16`). Den spørger ikke, om filerne er kørt — det ville kræve
+et register, ingen vedligeholder — men om deres virkning står der: har
+`monthly_standings` `security_invoker`, nævner `round_key()` `Europe/Copenhagen`,
+har `anon` tabel- eller sekvens-grants, og står der en default privilege, der
+ville give dem tilbage. De tre `anon`-kontroller kom til med `G58` (august 2026)
+og er grunden til, at den klasse ikke længere kræver en skema-eksport og et
+menneske for at blive opdaget.
+
 **Job 4 og 11 overvåges af ingen af de to lag** — de skriver ikke i `job_runs`
 og optræder derfor ikke i Admin → Drift. De er selv GitHub Actions, så en fejlet
 kørsel er allerede en rød workflow med en notifikation til ejeren; et ekstra lag

@@ -300,11 +300,23 @@ begin
                          order by ms.total_points desc, ms.exact_count desc, ms.outcome_count desc,
                                   ms.round_wins desc, ms.avg_goal_error asc) as rnk
           from public.monthly_standings ms
+          -- Komplethedsjoinet er afgrænset til de OFFICIELLE turneringer (G62,
+          -- august 2026). Uden joinet grupperede den `public.matches` frit, mens
+          -- pointene ved siden af kommer fra `scope = 'ALL'`, som kun tæller
+          -- officielle — altså havde udløseren og indholdet forskellig
+          -- afgrænsning. Følgen var, at én uspillet skotsk kamp kunne
+          -- tilbageholde en global månedstitel, brugeren havde vundet på kampe,
+          -- der intet havde med Scotland at gøre. Titlen forsvandt ikke, den
+          -- blev bare aldrig vist, og der var intet sted at aflæse symptomet.
+          -- Samme fejlklasse som G9/G10; by_tournament nedenfor gjorde det
+          -- rigtigt fra dag ét, de tre samlede grene blev bare ikke rettet med.
           join (
-            select to_char(date_trunc('month', kickoff_at), 'YYYY-MM') as month
-            from public.matches
+            select to_char(date_trunc('month', m.kickoff_at), 'YYYY-MM') as month
+            from public.matches m
+            join public.seasons s on s.id = m.season_id
+            join public.leagues l on l.id = s.league_id and l.is_official
             group by 1
-            having bool_and(home_score is not null and away_score is not null)
+            having bool_and(m.home_score is not null and m.away_score is not null)
           ) mc on mc.month = ms.month
           where ms.scope = 'ALL'
         ) mw
@@ -352,11 +364,16 @@ begin
                          order by rs.total_points desc, rs.exact_count desc, rs.outcome_count desc,
                                   rs.avg_goal_error asc) as rnk
           from public.round_standings rs
+          -- Kun officielle turneringer afgør, om runden er færdig (G62) — samme
+          -- begrundelse som ved månedstitlen ovenfor: udløseren skal have samme
+          -- afgrænsning som det, den udløser, og pointene kommer fra scope 'ALL'.
           join (
-            select round_key
-            from public.matches
-            group by round_key
-            having bool_and(home_score is not null and away_score is not null)
+            select m.round_key
+            from public.matches m
+            join public.seasons s on s.id = m.season_id
+            join public.leagues l on l.id = s.league_id and l.is_official
+            group by m.round_key
+            having bool_and(m.home_score is not null and m.away_score is not null)
           ) rc on rc.round_key = rs.round_key
           -- Kun den SAMLEDE rundechampionship. round_standings har siden
           -- sql/tournament_scope.sql også en række pr. turnering, og uden dette
@@ -499,11 +516,17 @@ begin
           -- Championship-fanens rundechampionship viser.
           count(*) over (partition by rs.round_key) as field
         from public.round_standings rs
+        -- Kun officielle turneringer afgør, om runden er færdig (G62) — samme
+        -- begrundelse som ved titlerne ovenfor. Her koster skævheden en
+        -- REKORD: "din bedste runde nogensinde" ville springe en runde over,
+        -- hvor en uofficiel turnering havde en uspillet kamp.
         join (
-          select round_key
-          from public.matches
-          group by round_key
-          having bool_and(home_score is not null and away_score is not null)
+          select m.round_key
+          from public.matches m
+          join public.seasons s on s.id = m.season_id
+          join public.leagues l on l.id = s.league_id and l.is_official
+          group by m.round_key
+          having bool_and(m.home_score is not null and m.away_score is not null)
         ) rc on rc.round_key = rs.round_key
         -- Kun den samlede rundechampionship (sql/tournament_scope.sql). Uden filteret
         -- ville feltstørrelsen tælle hver spiller én gang pr. turnering, og

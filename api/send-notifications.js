@@ -688,7 +688,21 @@ export default async function handler(req, res) {
         // samme kilde og samme tiebreaker-stige som Championship-fanens rundechampionship
         // (sql/standings_tiebreakers.sql). En runde har ingen rundesejre at bryde
         // lighed med, så stigen er point → præcise → udfald → målafvigelse.
-        const board = await sb(`/rest/v1/round_standings?round_key=eq.${roundKey}&scope=eq.ALL&select=user_id,total_points,exact_count,outcome_count,avg_goal_error&order=total_points.desc,exact_count.desc,outcome_count.desc,avg_goal_error.asc,user_id.asc`);
+        // `sbAll` og ikke `sb` (G59, august 2026): boardet er et BREDT opslag,
+        // og `board.length` er det N, beskeden gør en pointe ud af ("du blev
+        // nr. X af N"). Supabase klipper ved projektets `db-max-rows` og svarer
+        // 200, så et afkortet svar er ikke en fejl, men et forkert facit — og
+        // `sb()` kan ikke skelne. Det er præcis `G51`s fejl, og den kostede en
+        // falsk runde-notifikation i produktion: grænsen nås af DATAMÆNGDE og
+        // ikke af en kodeændring, så der er ingen dag, hvor den begynder at
+        // være forkert. Sorteringen er allerede entydig (`user_id.asc` til
+        // sidst), hvilket er dét, paginering kræver for ikke at tabe eller
+        // gentage en række mellem to sider.
+        const board = await sbAll(
+          sb,
+          `/rest/v1/round_standings?round_key=eq.${roundKey}&scope=eq.ALL&select=user_id,total_points,exact_count,outcome_count,avg_goal_error`,
+          { order: "total_points.desc,exact_count.desc,outcome_count.desc,avg_goal_error.asc,user_id.asc" }
+        );
         assignRanks(board);
 
         for (const r of board) {
