@@ -57,11 +57,13 @@ værd at gentage, hvis krypteringstrinnet nogensinde ændres.
   | `FOOTBALLDATA_TOKEN` | football-data.org-kontoen | ✅ |
   | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API | ✅ |
   | `SYNC_SECRET` | Ingen — den er selvvalgt. Kan skiftes, men så skal **alle** cron-jobs i [`CRON.md`](./CRON.md) opdateres samme dag | ⚠️ |
-  | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | **Ingen.** Findes ingen kopi uden for Vercel, er de uigenkaldeligt væk — og med dem hvert eneste push-abonnement | 🛑 |
+  | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Ingen leverandør — men **ejeren har parret liggende uden for Vercel** (bekræftet 6. august 2026) | ✅ |
 
   **Handlingen er den samme som for `BACKUP_PASSPHRASE`:** værdierne hører til i
-  en passwordmanager, ikke kun i Vercel. Det gælder især VAPID-parret, som er
-  det eneste, der hverken kan læses igen eller hentes hos en leverandør.
+  en passwordmanager, ikke kun i Vercel. VAPID-parret er det eneste, der hverken
+  kan læses igen eller hentes hos en leverandør, og derfor det eneste, hvor
+  kopien ER gendannelsesplanen. Den findes — **og skal gen-bekræftes, hver gang
+  nøglerne skiftes**, for et nyt par uden kopi er samme hul igen.
 - **cron-job.org-kontoen.** Jobbene står i [`CRON.md`](./CRON.md), men skal
   oprettes på ny i hånden.
 - **Supabase Storage.** Appen bruger ikke buckets i dag. Gør den det en dag, er
