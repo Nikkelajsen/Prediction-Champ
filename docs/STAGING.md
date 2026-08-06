@@ -301,13 +301,22 @@ deler kaldebudget med produktionens cron-jobs** — football-data.org har 10
 kald/minut, og minut-spredningen i [`CRON.md`](./CRON.md) regner ikke med en
 ekstra kalder. Synkronisér i staging i ryk, ikke på et skema.
 
+**Leverandør-tokens er de eneste, der må DELES mellem de to miljøer** — og bør
+det. Isolationen, staging findes for, ligger i databasen, ikke i tokenet: det er
+en læseadgang til en tredjeparts kampprogram og kan ikke skrive noget nogen
+steder. `FOOTBALLDATA_TOKEN` står allerede på *Production and Preview*, og
+`SPORTMONKS_TOKEN` kan sættes til det samme frem for at få sin egen
+Preview-værdi. De fire andre er det modsatte: dér ER forskellen hele pointen.
+
 > **Kender du ikke `SPORTMONKS_TOKEN`s værdi, kan den ikke hentes ud af
-> Vercel.** Variablen er `Sensitive`, altså skrive-kun. Den kan hentes hos
-> Sportmonks (kontoens API-tokens), men **du behøver den ikke for at komme
-> videre**: `FOOTBALLDATA_TOKEN` står allerede på *Production and Preview*, så
-> preview kan synkronisere de fem football-data-turneringer med det samme.
-> Superligaen kan hentes bagefter. Hvilke variabler der kan genskabes hvorfra —
-> og hvilken der ikke kan — står i [`RESTORE.md`](./RESTORE.md).
+> Vercel.** Variablen er `Sensitive`, altså skrive-kun. To veje: udvid den
+> eksisterende variabels miljøer til også at dække Preview (virker uden at
+> kende værdien, hvis Vercel tillader en scope-ændring uden genindtastning),
+> eller hent tokenet hos Sportmonks igen. **Ingen af delene blokerer trin 6:**
+> `FOOTBALLDATA_TOKEN` dækker allerede Preview, så de fem
+> football-data-turneringer kan synkroniseres med det samme, og Superligaen kan
+> komme bagefter. Hvilke variabler der kan genskabes hvorfra — og hvilken der
+> ikke kan — står i [`RESTORE.md`](./RESTORE.md).
 
 **Variabler slår først igennem ved et NYT deploy.** `VITE_*` bages ind i
 buildet, så en preview-URL, der allerede er bygget, peger stadig på det, den
