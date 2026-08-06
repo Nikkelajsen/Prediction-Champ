@@ -41,6 +41,7 @@ eller en linje i "Forkastede ideer".
 - `loadLatestStory` og viewet `latest_story` har ingen aftagere i appen længere — karusellen afløste dem, men begge vedligeholdes stadig
 - SQL-tjekket på `docs/` er kun så sandt som `sql/schema.sql`, og en manglende eksport ligner en fejl i blokken
 - efter `A25` kan en lukket konto stå som ligamedlem uden en eneste deltagelse i ligaens konkurrencer — samme pseudonym på en liste, ét lag højere oppe
+- klikker man "Hent nu" på `npm run dev`, svarer `/api/*` med HTML, og fejlen bliver `Unexpected token '/', "// Server-"... is not valid JSON` — den kunne sige "endpointet findes ikke lokalt, brug et deploy", og det samme gælder de tre andre `/api`-kaldere
 *Ryddet 5. august 2026: de ti linjer blev til `A32`–`A33` og `G70`–`G76`.
 **Én blev rettet med det samme frem for at få et ID:** bruger-flag-tællingen i
 `DOCUMENTATION.md` §13 og §20. Selve arbejdet var at tælle efter — der er ti
