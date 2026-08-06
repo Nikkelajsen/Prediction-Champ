@@ -158,6 +158,38 @@ export function familyOf(key) {
   return MILESTONES[key]?.family || "other";
 }
 
+// Rækkefølgen på milepælene i karusellen på Hjem — nyeste DAG først, og inden
+// for dagen den mest interessante.
+//
+// Hvorfor dagen og ikke tidsstemplet: `achieved_at` er `now()` i det øjeblik,
+// `award_milestones()` kører, og den funktion er en BATCH-genberegning, der
+// kaldes lazy fra klienten. Flere milepæle får derfor rutinemæssigt det samme
+// tidsstempel — ned til mikrosekundet ved den første kørsel for en bruger, som
+// uddeler hele historikken på én gang. Da havde `order by achieved_at desc`
+// intet at sortere på, og databasen valgte frit hvilke tre der kom med. Målt i
+// et gennemspillet testmiljø: 15 milepæle, ÉT distinkt tidsstempel — og de tre,
+// der blev vist, var "Du oprettede din første liga", "… første konkurrence" og
+// en sæsonstatistik, mens en sæsontitel lå længere nede i den samme bunke.
+//
+// Rangordenen er `MILESTONE_FAMILIES`' egen og ikke en ny opfindelse:
+// konkurrence → rating → præcision → fællesskab. Karriereprofilen grupperer
+// allerede efter den, så de to flader er enige om, hvad der vejer tungest —
+// hvad man har PRÆSTERET slår, hvad man har sat op. `tier` bruges kun INDEN FOR
+// en familie: skalaen er familie-relativ (`TIPS_100` har tier 100, mens
+// `COMP_FIRST_WIN` har 1), så den kan ikke sammenlignes på tværs.
+const FAMILY_RANK = new Map(MILESTONE_FAMILIES.map((f, i) => [f.key, i]));
+
+export function compareMilestones(a, b) {
+  const day = (m) => String(m.achieved_at || m.achievedAt || "").slice(0, 10);
+  const rank = (m) => FAMILY_RANK.get(m.family || familyOf(m.key)) ?? FAMILY_RANK.size;
+  return (
+    day(b).localeCompare(day(a)) ||
+    rank(a) - rank(b) ||
+    (b.tier ?? 0) - (a.tier ?? 0) ||
+    String(a.key || "").localeCompare(String(b.key || ""))
+  );
+}
+
 // Grupperet til karriereprofilen: familierne i fast rækkefølge, og inden for
 // hver familie nyeste først. Familier uden rækker udelades helt.
 export function groupMilestones(rows) {

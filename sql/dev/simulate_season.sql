@@ -655,6 +655,10 @@ begin
     -- ville løkken vælge den samme runde igen og køre for evigt.
     exit when v_rows = 0;
     v_total := v_total + v_rows;
+
+    -- Rundens milepæle, dateret til rundens sidste dag kl. 22 dansk tid — altså
+    -- kort efter at søndagens sidste kamp er fløjtet af. Se sim.award_milestones_at().
+    perform sim.award_milestones_at(((v_round + 6)::timestamp + time '22:00') at time zone 'Europe/Copenhagen');
   end loop;
 
   -- Kåringerne skrives normalt lazy, når nogen åbner konkurrencens board
@@ -701,17 +705,65 @@ begin
     perform sim.finish_season(true);
   end if;
 
-  -- Mærkerne (milestones) skrives også lazy fra klienten. Samme argument som
-  -- kåringerne: en simuleret sæson uden mærker er en halv sæson. Kaldes EFTER
-  -- sæson-flaget: milepælene for en afsluttet konkurrence (pokal, podie)
-  -- læser `competition_status`, som netop først nu er sand.
+  -- Sidste kald, og det er ikke overflødigt: milepælene for en AFSLUTTET
+  -- konkurrence (pokal, podie) læser `competition_status`, som først blev sand
+  -- lige ovenfor. Dateres til den sidste kamp, der er spillet — ikke til nu,
+  -- for i simulationens tidsregning er det dér, sæsonen sluttede.
+  perform sim.award_milestones_at(coalesce(
+    (select max(kickoff_at) + interval '105 minutes'
+     from public.matches where season_id = v_season and home_score is not null),
+    now()
+  ));
+
+  return v_total;
+end;
+$fn$;
+
+
+-- Milepæle, dateret til det øjeblik, de blev opnået.
+--
+-- `award_milestones()` er en BATCH-genberegning: den ser på alt, brugeren har
+-- gjort, og indsætter det, der mangler — med `achieved_at` = `now()`. Kaldes den
+-- én gang til sidst, får en hel sæsons bedrifter derfor ét og samme tidsstempel,
+-- og alt, der sorterer på det, får ingenting at sortere efter. Målt: 15
+-- milepæle, ét distinkt tidsstempel — og karusellen på Hjem viste da tre
+-- vilkårlige af dem, hvoraf de to var "Du oprettede din første liga/konkurrence".
+--
+-- Derfor kaldes den ÉN GANG PR. RUNDE, og de rækker, kaldet lige har lagt ind,
+-- dateres til rundens sidste søndag aften. Så ligner testdataene en sæson, der
+-- er levet igennem, frem for en, der blev regnet ud på ét sekund.
+create or replace function sim.award_milestones_at(p_when timestamptz)
+returns int
+language plpgsql
+as $fn$
+declare
+  -- `now()` og IKKE `clock_timestamp()`, og det er hele finten.
+  --
+  -- `milestones.achieved_at` har `default now()`, og `now()` er TRANSAKTIONENS
+  -- starttidspunkt — ikke urets. Hele `select sim.play(...)` er én transaktion,
+  -- så hver eneste række, `award_milestones()` indsætter undervejs, får samme
+  -- værdi: transaktionens start. Et mærke sat med `clock_timestamp()` ligger
+  -- DERFOR EFTER de rækker, det skulle fange, og `where achieved_at >= v_mark`
+  -- rammer nul rækker — tavst. (Ramt her, og symptomet var, at alle 15
+  -- milepæle stadig delte én dato efter en runde-for-runde-kørsel.)
+  v_mark timestamptz := now();
+  v_rows int := 0;
+begin
   begin
     perform public.award_milestones();
+    -- Lighed og ikke `>=`: en tidligere rundes rækker er allerede dateret VÆK
+    -- fra `now()`, så de går fri — og en runde, der ligger i FREMTIDEN (spiller
+    -- man hele sæsonen med `sim.play('2030-01-01')`, slutter de sidste runder
+    -- efter i dag), ville med `>=` blive fanget igen og omdateret ved næste
+    -- gennemløb.
+    update public.milestones
+       set achieved_at = p_when
+     where achieved_at = v_mark;
+    get diagnostics v_rows = row_count;
   exception when others then
     raise notice 'Mærkerne kunne ikke skrives (%).', sqlerrm;
   end;
-
-  return v_total;
+  return v_rows;
 end;
 $fn$;
 

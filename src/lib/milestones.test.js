@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { familyOf, groupMilestones, MILESTONE_FAMILIES, MILESTONES, renderMilestone } from "./milestones.js";
+import { compareMilestones, familyOf, groupMilestones, MILESTONE_FAMILIES, MILESTONES, renderMilestone } from "./milestones.js";
 
 describe("milepæls-kataloget", () => {
   it("dækker alle fire familier, og hver nøgle hører til en af dem", () => {
@@ -92,5 +92,60 @@ describe("groupMilestones", () => {
   it("giver [] for ingen milepæle", () => {
     expect(groupMilestones([])).toEqual([]);
     expect(groupMilestones(null)).toEqual([]);
+  });
+});
+
+describe("compareMilestones (rækkefølgen i karusellen på Hjem)", () => {
+  const m = (key, family, tier, achieved_at) => ({ key, family, tier, achieved_at });
+
+  it("sætter nyeste DAG først", () => {
+    const rows = [
+      m("A", "community", 1, "2026-08-01T10:00:00Z"),
+      m("B", "community", 1, "2026-08-05T09:00:00Z"),
+    ];
+    expect(rows.slice().sort(compareMilestones).map((r) => r.key)).toEqual(["B", "A"]);
+  });
+
+  // Den fejl, rettelsen findes for: `award_milestones()` er en batch, så flere
+  // milepæle får samme tidsstempel — og så valgte databasen frit.
+  it("lader præstationen slå opsætningen, når dagen er den samme", () => {
+    const same = "2026-08-06T19:26:41.877946Z";
+    const rows = [
+      m("FIRST_LEAGUE_CREATED", "community", 1, same),
+      m("FIRST_COMPETITION_CREATED", "community", 1, same),
+      m("SEASON_CHAMP", "competition", 2, same),
+      m("RATING_ESTABLISHED", "rating", 5, same),
+      m("TIPS_100", "precision", 100, same),
+    ];
+    expect(rows.slice().sort(compareMilestones).map((r) => r.key)).toEqual([
+      "SEASON_CHAMP", "RATING_ESTABLISHED", "TIPS_100",
+      "FIRST_COMPETITION_CREATED", "FIRST_LEAGUE_CREATED",
+    ]);
+  });
+
+  it("bruger tier INDEN FOR en familie, aldrig på tværs", () => {
+    const same = "2026-08-06T12:00:00Z";
+    const rows = [
+      m("COMP_FIRST_WIN", "competition", 1, same),
+      m("SEASON_CHAMP", "competition", 2, same),
+    ];
+    expect(rows.slice().sort(compareMilestones).map((r) => r.key)).toEqual(["SEASON_CHAMP", "COMP_FIRST_WIN"]);
+    // …og en tier på 100 i en lavere rangeret familie overhaler ikke.
+    const across = [m("TIPS_100", "precision", 100, same), m("COMP_FIRST_WIN", "competition", 1, same)];
+    expect(across.slice().sort(compareMilestones).map((r) => r.key)).toEqual(["COMP_FIRST_WIN", "TIPS_100"]);
+  });
+
+  it("er stabil, når alt andet er lige (samme liste to gange = samme rækkefølge)", () => {
+    const same = "2026-08-06T12:00:00Z";
+    const rows = [m("B_KEY", "community", 1, same), m("A_KEY", "community", 1, same)];
+    expect(rows.slice().sort(compareMilestones).map((r) => r.key)).toEqual(["A_KEY", "B_KEY"]);
+  });
+
+  it("dagen slår rangordenen — en gammel titel fortrænger ikke en ny milepæl", () => {
+    const rows = [
+      m("SEASON_CHAMP", "competition", 2, "2026-08-01T12:00:00Z"),
+      m("FIRST_LEAGUE_CREATED", "community", 1, "2026-08-06T12:00:00Z"),
+    ];
+    expect(rows.slice().sort(compareMilestones).map((r) => r.key)).toEqual(["FIRST_LEAGUE_CREATED", "SEASON_CHAMP"]);
   });
 });
