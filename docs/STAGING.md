@@ -58,26 +58,49 @@ psql "postgresql://postgres.<staging-ref>:<password>@aws-0-eu-west-1.pooler.supa
   -v ON_ERROR_STOP=1 -f sql/schema.sql
 ```
 
-> 🛑 **To linjer skal ud FØRST, ellers stopper kørslen på linje 5.** `pg_dump`
-> 17.5+ omkranser sit eget dump med `\restrict` / `\unrestrict` — psql-**meta**-
-> kommandoer, som SQL-editoren ikke kender (den sender ren SQL til serveren).
-> Fejlen er `42601: syntax error at or near "\"`, og den kommer, før noget som
-> helst er kørt. Linjerne er ren emballage og ændrer intet i skemaet:
+> 🛑 **Tre linjer skal ud FØRST — to slags fejl, begge før noget som helst er
+> kørt.** Den ene stopper på linje 5, den anden få linjer efter:
+>
+> | Linje | Fejl | Hvorfor |
+> |---|---|---|
+> | `\restrict` / `\unrestrict` (linje 5 og sidst) | `42601: syntax error at or near "\"` | psql-**meta**-kommandoer, som `pg_dump` 17.5+ selv lægger ind. SQL-editoren sender ren SQL til serveren og kender dem ikke. Ren emballage |
+> | `CREATE SCHEMA public;` | `42P06: schema "public" already exists` | Et friskt Supabase-projekt har allerede `public`. Dumpet vil oprette sit eget |
 >
 > ```bash
-> sed -E '/^\\(un)?restrict\b/d' sql/schema.sql > schema_til_editoren.sql
+> sed -E '/^\\(un)?restrict\b/d; /^CREATE SCHEMA public;$/d' \
+>   sql/schema.sql > schema_til_editoren.sql
 > ```
+>
+> Skemaets **grants følger med længere nede i filen** (`GRANT USAGE ON SCHEMA
+> public TO anon/authenticated/service_role`), så det eksisterende `public` får
+> den rigtige adgangskontrakt uden at blive oprettet forfra. Klager editoren
+> derefter over `COMMENT ON SCHEMA public` (ejerskab — Supabase lader
+> `pg_database_owner` eje skemaet), så fjern også den linje; den er kosmetisk.
+>
+> **[`RESTORE.md`](./RESTORE.md) scenarie 2 dropper i stedet `public` først, og
+> begge veje er rigtige** — hver i sin sammenhæng. Ved en gendannelse er et
+> `drop schema public cascade` rigtigt, fordi hele projektet skal genskabes. Her
+> er det ikke: du sidder med to Supabase-faner åbne, og den kommando i den
+> forkerte fane er uigenkaldelig. Derfor `sed` frem for `drop`.
+>
+> Verificeret 6. august 2026 mod PostgreSQL 16 med et `public`, der fandtes i
+> forvejen: 23 tabeller, 42 policies, ingen fejl.
 >
 > **Kører du vej B med en psql ÆLDRE end 17.5, skal to ting mere ud** —
 > `SET transaction_timeout` (GUC fra PG17) og `MAINTAIN` i ét grant på
-> `public.matches`. En psql 17.5+ klarer alle tre selv. Præcis samme tre
-> undtagelser laver CI i [`sql/tests/docs_sql.mjs`](../sql/tests/docs_sql.mjs)
-> (`tilPG16`), og begrundelsen for hver af dem står dér:
+> `public.matches`. En psql 17.5+ mod en PG17-server klarer dem selv, og
+> `\restrict` er da også lovlig. Præcis de tre undtagelser laver CI i
+> [`sql/tests/docs_sql.mjs`](../sql/tests/docs_sql.mjs) (`tilPG16`), og
+> begrundelsen for hver af dem står dér:
 >
 > ```bash
-> sed -E '/^\\(un)?restrict\b/d; /^SET transaction_timeout\b/d; s/\bMAINTAIN,//; s/,MAINTAIN\b//' \
+> sed -E '/^\\(un)?restrict\b/d; /^CREATE SCHEMA public;$/d; /^SET transaction_timeout\b/d; s/\bMAINTAIN,//; s/,MAINTAIN\b//' \
 >   sql/schema.sql > schema_pg16.sql
 > ```
+>
+> *(`CREATE SCHEMA public` er ikke en PG-version-ting og står derfor i begge
+> kommandoer — den afhænger af, om måldatabasen har skemaet i forvejen. Et
+> friskt Supabase-projekt har.)*
 
 > ⚠️ **Ud over de linjer: kopiér filen ordret.** Funktionskroppene indeholder
 > CRLF med vilje (`G5`, `.gitattributes`) — kør den ikke gennem et værktøj, der
