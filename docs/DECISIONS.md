@@ -15,6 +15,48 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 6. august 2026 — Sæson-simulationen i staging får sin EGEN turnering
+
+**Beslutning:** Testdata til staging fremstilles af
+[`sql/dev/simulate_season.sql`](../sql/dev/simulate_season.sql), som opretter en
+syntetisk turnering ("SIM-ligaen") med egne hold og et fuldt
+dobbeltturneringsprogram — frem for at skrive tips og resultater på de rigtige
+turneringers kampe. Simulationens kampe bærer `api_fixture_id`-præfikset `sim:`,
+ligaen har intet `api_league_id`, og `live_enabled` er slået fra.
+
+**Begrundelse:** Den nærliggende vej — taste resultater på Superligaens kampe i
+staging — er ikke bare besværlig, den er **ustabil**. `toRow()` i
+`api/sync-matches.js` skriver `home_score: null`, når leverandøren ikke melder
+kampen færdig, og upserten kører på `api_fixture_id`. Ét tryk på "Hent nu"
+sletter dermed hver eneste håndtastede score i sæsonen, og det sker tavst — man
+opdager det, næste gang en stilling er tom. Det er præcis den risiko, der
+udløste opgaven.
+
+Med en turnering, ingen leverandør kender, findes fælden ikke: der er intet
+`api_fixture_id`, en upsert kan ramme, og intet liga-id at hente fra. De
+rigtige turneringer kan synkroniseres frit ved siden af.
+
+**Prisen er, at simulationen ikke tester leverandør-stien** — hverken
+holdmatchning, paginering eller `kickoff_tbd`. Det er accepteret, fordi den sti
+allerede har tests og et dry-run, mens dét, den ikke kan levere, er en sæsons
+historik.
+
+**Den anden beslutning i samme fil: tips trækkes fra samme model som
+resultaterne, ikke fra resultatet.** Et hold har en styrke, styrkerne giver et
+forventet antal mål, resultatet er en Poisson-trækning derfra, og tippet er den
+samme beregning set gennem brugerens `noise`. Alternativet — "lad tippet ramme
+i X % af tilfældene" — kræver, at resultatet findes, **før** tippet kan skrives,
+og så kan en runde ikke tippes, før den er spillet. Med to trækninger fra samme
+model er rækkefølgen ligegyldig, og forskellen mellem brugerne opstår af sig
+selv.
+
+**Det kostede en måling at få rigtigt.** Første udgave trak også tippet fra
+Poisson-fordelingen, og så forsvandt forskellen mellem personaerne: 43 % mod
+35 % rigtige udfald, altså trækningens støj og ikke brugerens dygtighed. Et
+menneske tipper det, det **forventer** (2-1), mens en kamp er tilfældig — den
+asymmetri er hele grunden til, at ingen rammer eksakt særlig ofte. Målt på
+20.000 kampe giver de tre personaer nu 0,62 / 0,54 / 0,47 point pr. kamp.
+
 ## 6. august 2026 — "Tid ikke fastlagt" aflæses af tidsfeltet, ikke af leverandørens status
 
 **Beslutning:** `kickoffTbd` udledes hos **begge** leverandører af den samme

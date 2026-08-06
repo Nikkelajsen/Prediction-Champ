@@ -59,6 +59,18 @@ den regenereres med guiden nedenfor.
 
 ---
 
+## Undermapper
+
+| Mappe | Hvad | Køres |
+|---|---|---|
+| `sql/tests/` | SQL-testene, som CI's `sql`-job kører mod en rigtig PostgreSQL | Af CI. Bruger `\ir`/`\set` med vilje og kan derfor **ikke** pastes i SQL-editoren |
+| `sql/dev/` | Værktøjer til **staging**, ikke migreringer. I dag én fil: [`simulate_season.sql`](./dev/simulate_season.sql), som spiller en hel sæson igennem for testbrugerne — tips, resultater, stillinger, rating, historier og kåringer — i sin EGEN turnering, som ingen synkronisering kan røre | I hånden i staging-projektets SQL-editor. 🛑 **Aldrig i produktion.** Filen er selv låst: den kræver `sim.arm('JA - DETTE ER STAGING')` og et loft over antallet af brugere |
+
+Filerne i `sql/dev/` pastes i editoren ligesom migreringerne og er derfor
+dækket af den samme vagt mod psql-kommandoer (`migration_syntax.test.js`).
+
+---
+
 ## Filoversigt og kørerækkefølge
 
 Rækkefølgen er den, filerne blev kørt i, og den, en frisk database skal bruge.

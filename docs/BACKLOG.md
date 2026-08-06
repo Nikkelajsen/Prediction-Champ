@@ -44,6 +44,8 @@ eller en linje i "Forkastede ideer".
 - `G76` står i Tier 6, men dens udløser er sprunget (staging findes) — den hører i Tier 1 ved næste tier-sortering
 - klikker man "Hent nu" på `npm run dev`, svarer `/api/*` med HTML, og fejlen bliver `Unexpected token '/', "// Server-"... is not valid JSON` — den kunne sige "endpointet findes ikke lokalt, brug et deploy", og det samme gælder de tre andre `/api`-kaldere
 - vi ved stadig ikke, hvordan football-data.org markerer en kamp UDEN fastsat tid — at det er midnat UTC, er en antagelse af samme slags som den, der lige blev afkræftet; aflæs `&dryRun=true` næste gang en runde derfra ser forkert ud
+- sæson-simulatoren (`sql/dev/simulate_season.sql`) har ingen CI-dækning — kampprogrammet, personaernes rangorden og oprydningen er efterprøvet i hånden mod en lokal PG16 med `schema.sql` kørt ind, og den vej skal gås igen for hver ændring
+- `award_competition_periods()` og `award_milestones()` skrives KUN lazy fra klienten, så enhver anden skrivevej (simulation, gendannelse, backfill) skal huske at kalde dem — det opdages først, når kåringerne mangler
 - ingen test og ingen kontrol kunne have fanget, at ALLE kampe fra én leverandør stod uden klokkeslæt — en aflæsning af `kickoff_tbd` pr. liga (fx i job-heartbeat'en eller Admin → Drift) ville have vist 100 % mod Superligaens få
 *Ryddet 5. august 2026: de ti linjer blev til `A32`–`A33` og `G70`–`G76`.
 **Én blev rettet med det samme frem for at få et ID:** bruger-flag-tællingen i
