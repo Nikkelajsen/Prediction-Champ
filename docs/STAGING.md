@@ -301,6 +301,14 @@ deler kaldebudget med produktionens cron-jobs** — football-data.org har 10
 kald/minut, og minut-spredningen i [`CRON.md`](./CRON.md) regner ikke med en
 ekstra kalder. Synkronisér i staging i ryk, ikke på et skema.
 
+> **Kender du ikke `SPORTMONKS_TOKEN`s værdi, kan den ikke hentes ud af
+> Vercel.** Variablen er `Sensitive`, altså skrive-kun. Den kan hentes hos
+> Sportmonks (kontoens API-tokens), men **du behøver den ikke for at komme
+> videre**: `FOOTBALLDATA_TOKEN` står allerede på *Production and Preview*, så
+> preview kan synkronisere de fem football-data-turneringer med det samme.
+> Superligaen kan hentes bagefter. Hvilke variabler der kan genskabes hvorfra —
+> og hvilken der ikke kan — står i [`RESTORE.md`](./RESTORE.md).
+
 **Variabler slår først igennem ved et NYT deploy.** `VITE_*` bages ind i
 buildet, så en preview-URL, der allerede er bygget, peger stadig på det, den
 blev bygget med. Redeploy branchen (eller push en commit) efter at have sat

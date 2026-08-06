@@ -45,6 +45,23 @@ værd at gentage, hvis krypteringstrinnet nogensinde ændres.
   VAPID-nøglerne, API-nøglerne). De står i `DOCUMENTATION.md` §9 som *liste*, men
   værdierne findes kun i Vercel. Mistes projektet, skal VAPID-nøglerne genskabes —
   og **alle push-abonnementer dør med dem**.
+
+  ⚠️ **Skærpet 6. august 2026: "findes kun i Vercel" er for optimistisk.** Alle
+  otte står som `Sensitive`, og en Sensitive-variabel er **skrive-kun** — den
+  kan ikke læses igen, heller ikke af ejeren. Værdien findes altså kun dér, hvor
+  den kom fra:
+
+  | Variabel | Kan hentes igen hos | |
+  |---|---|---|
+  | `SPORTMONKS_TOKEN` | Sportmonks-kontoen | ✅ |
+  | `FOOTBALLDATA_TOKEN` | football-data.org-kontoen | ✅ |
+  | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API | ✅ |
+  | `SYNC_SECRET` | Ingen — den er selvvalgt. Kan skiftes, men så skal **alle** cron-jobs i [`CRON.md`](./CRON.md) opdateres samme dag | ⚠️ |
+  | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | **Ingen.** Findes ingen kopi uden for Vercel, er de uigenkaldeligt væk — og med dem hvert eneste push-abonnement | 🛑 |
+
+  **Handlingen er den samme som for `BACKUP_PASSPHRASE`:** værdierne hører til i
+  en passwordmanager, ikke kun i Vercel. Det gælder især VAPID-parret, som er
+  det eneste, der hverken kan læses igen eller hentes hos en leverandør.
 - **cron-job.org-kontoen.** Jobbene står i [`CRON.md`](./CRON.md), men skal
   oprettes på ny i hånden.
 - **Supabase Storage.** Appen bruger ikke buckets i dag. Gør den det en dag, er
