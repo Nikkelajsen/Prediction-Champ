@@ -253,9 +253,10 @@ tilstrækkelige, de er svaret.
 
 ## 5. Peg miljøerne på staging
 
-Nøglerne står i Supabase → Project Settings → API: **Project URL**, den
-offentlige **publishable**-nøgle (`sb_publishable_…`) og den hemmelige
-**service_role**-nøgle.
+Nøglerne står i Supabase → Project Settings → API: **Project URL**
+(`https://<ref>.supabase.co` — *ikke* feltet "RESTful endpoint" lige ved siden
+af, se advarslen nedenfor), den offentlige **publishable**-nøgle
+(`sb_publishable_…`) og den hemmelige **service_role**-nøgle.
 
 ### Vercel — kun Preview
 
@@ -326,14 +327,21 @@ buildet, så en preview-URL, der allerede er bygget, peger stadig på det, den
 blev bygget med. Redeploy branchen (eller push en commit) efter at have sat
 dem — ellers ser opsætningen rigtig ud i Vercels UI og forkert i browseren.
 
-> ⚠️ **URL'en skrives UDEN afsluttende skråstreg** — `https://<ref>.supabase.co`
-> og ikke `…supabase.co/`. Appen sætter selv stien på (`${SUPABASE_URL}${path}`
-> i `src/lib/supabase.js`), så en skråstreg for meget giver `//auth/v1/token`,
-> og Supabases gateway svarer **404 "Invalid path specified in request URL"**.
-> Symptomet ligner en forkert adgangskode: login fejler, og fejlteksten nævner
-> ikke adressen. Samme gælder et mellemrum eller linjeskift, der følger med en
-> indsætning — de dukker op som `%20`/`%0A` i Request URL'en i netværksfanen.
-> **Facit er den linje, der virker i `.env.local`.**
+> 🛑 **Tag `Project URL` — IKKE `RESTful endpoint`.** Supabases API-side viser
+> begge, og REST-adressen (`https://<ref>.supabase.co/rest/v1`) står mest
+> iøjnefaldende. Men appen sætter selv stien på (`${SUPABASE_URL}${path}` i
+> `src/lib/supabase.js`), så den giver
+> `…/rest/v1//auth/v1/token` og et **404 "Invalid path specified in request
+> URL"**. Værdien skal være `https://<ref>.supabase.co` og intet efter `.co` —
+> heller ikke en afsluttende skråstreg, et mellemrum eller et linjeskift (de to
+> sidste dukker op som `%20`/`%0A` i Request URL'en).
+>
+> **Symptomet er det, der gør fejlen dyr:** login fejler med "Invalid path
+> specified in request URL", hvilket ligner en forkert adgangskode. Kig altid på
+> **Request URL** i netværksfanen frem for på fejlteksten. Gælder begge — både
+> `VITE_SUPABASE_URL` og funktionernes `SUPABASE_URL`, som typisk får samme
+> forkerte værdi og først fejler et trin senere, når "Hent nu" trykkes.
+> *(Ramt 6. august 2026, første gang preview blev åbnet.)*
 
 ### Lokalt
 
