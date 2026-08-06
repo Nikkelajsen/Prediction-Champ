@@ -309,10 +309,13 @@ steder. `FOOTBALLDATA_TOKEN` står allerede på *Production and Preview*, og
 Preview-værdi. De fire andre er det modsatte: dér ER forskellen hele pointen.
 
 > **Kender du ikke `SPORTMONKS_TOKEN`s værdi, kan den ikke hentes ud af
-> Vercel.** Variablen er `Sensitive`, altså skrive-kun. To veje: udvid den
-> eksisterende variabels miljøer til også at dække Preview (virker uden at
-> kende værdien, hvis Vercel tillader en scope-ændring uden genindtastning),
-> eller hent tokenet hos Sportmonks igen. **Ingen af delene blokerer trin 6:**
+> Vercel** — variablen er `Sensitive`, altså skrive-kun. Det behøver du heller
+> ikke: ✅ **en Sensitive-variabels MILJØER kan ændres, uden at værdien
+> genindtastes** (bekræftet 6. august 2026 — `SPORTMONKS_TOKEN` udvidet fra
+> *Production* til *Production and Preview* på ét klik). Værdien kan altså ikke
+> læses, men den kan flyttes. Alternativet — at hente tokenet hos Sportmonks
+> igen — er kun nødvendigt, hvis værdien skal *ændres*. **Ingen af delene
+> blokerer trin 6:**
 > `FOOTBALLDATA_TOKEN` dækker allerede Preview, så de fem
 > football-data-turneringer kan synkroniseres med det samme, og Superligaen kan
 > komme bagefter. Hvilke variabler der kan genskabes hvorfra — og hvilken der

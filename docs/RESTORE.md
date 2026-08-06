@@ -48,8 +48,10 @@ værd at gentage, hvis krypteringstrinnet nogensinde ændres.
 
   ⚠️ **Skærpet 6. august 2026: "findes kun i Vercel" er for optimistisk.** Alle
   otte står som `Sensitive`, og en Sensitive-variabel er **skrive-kun** — den
-  kan ikke læses igen, heller ikke af ejeren. Værdien findes altså kun dér, hvor
-  den kom fra:
+  kan ikke læses igen, heller ikke af ejeren. *(Den kan derimod godt **flyttes**:
+  miljøerne på en Sensitive-variabel kan ændres uden at genindtaste værdien.
+  Efterprøvet samme dag med `SPORTMONKS_TOKEN`.)* Værdien findes altså kun dér,
+  hvor den kom fra:
 
   | Variabel | Kan hentes igen hos | |
   |---|---|---|
