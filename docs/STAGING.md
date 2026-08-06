@@ -322,6 +322,15 @@ Preview-værdi. De fire andre er det modsatte: dér ER forskellen hele pointen.
 > komme bagefter. Hvilke variabler der kan genskabes hvorfra — og hvilken der
 > ikke kan — står i [`RESTORE.md`](./RESTORE.md).
 
+> **Sådan laver du et nyt Preview-deploy — de to knapper, der ligner hinanden.**
+> I **Deployments** har hver række sin egen `⋯`-menu yderst til højre. Det er
+> **Preview-rækkens** menu → *Redeploy*, der skal bruges. Knappen på
+> Production-rækken og "Redeploy" fra projektets forside rammer begge
+> produktionen og ændrer intet for staging — de laver blot en ny
+> Production-række øverst, hvilket ligner et resultat. Alternativet, der ikke
+> kan rammes ved siden af: **push en commit til branchen**, så bygger Vercel et
+> Preview af sig selv. *(Ramt to gange 6. august 2026.)*
+
 **Variabler slår først igennem ved et NYT deploy — og det skal være et
 PREVIEW-deploy.** Vercel fryser miljøet ind i det enkelte deploy, og det gælder
 **også de variabler, funktionerne læser ved kørsel** (`SUPABASE_URL`,
