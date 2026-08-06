@@ -322,10 +322,16 @@ Preview-værdi. De fire andre er det modsatte: dér ER forskellen hele pointen.
 > komme bagefter. Hvilke variabler der kan genskabes hvorfra — og hvilken der
 > ikke kan — står i [`RESTORE.md`](./RESTORE.md).
 
-**Variabler slår først igennem ved et NYT deploy.** `VITE_*` bages ind i
-buildet, så en preview-URL, der allerede er bygget, peger stadig på det, den
-blev bygget med. Redeploy branchen (eller push en commit) efter at have sat
-dem — ellers ser opsætningen rigtig ud i Vercels UI og forkert i browseren.
+**Variabler slår først igennem ved et NYT deploy — og det skal være et
+PREVIEW-deploy.** Vercel fryser miljøet ind i det enkelte deploy, og det gælder
+**også de variabler, funktionerne læser ved kørsel** (`SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`): en ændret værdi rammer først næste deploy, ikke
+det, der allerede kører. Redeploy derfor **branchens Preview-række** i
+Deployments — eller push en commit til branchen. *(Et Production-redeploy laver
+ikke et nyt Preview og ændrer intet for staging. Ramt 6. august 2026: to
+Production-redeploys, mens preview'et blev ved at køre på den gamle URL, og
+"Hent nu" svarede 401 "Ikke autoriseret" i stedet for 404, fordi funktionen
+sagtens kunne starte — den kunne bare ikke slå kalderen op.)*
 
 > 🛑 **Tag `Project URL` — IKKE `RESTful endpoint`.** Supabases API-side viser
 > begge, og REST-adressen (`https://<ref>.supabase.co/rest/v1`) står mest
