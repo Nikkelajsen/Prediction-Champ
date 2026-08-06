@@ -286,6 +286,11 @@ produktionens cron-jobs** — football-data.org har 10 kald/minut, og
 minut-spredningen i [`CRON.md`](./CRON.md) regner ikke med en ekstra kalder.
 Synkronisér i staging i ryk, ikke på et skema.
 
+**Variabler slår først igennem ved et NYT deploy.** `VITE_*` bages ind i
+buildet, så en preview-URL, der allerede er bygget, peger stadig på det, den
+blev bygget med. Redeploy branchen (eller push en commit) efter at have sat
+dem — ellers ser opsætningen rigtig ud i Vercels UI og forkert i browseren.
+
 ### Lokalt
 
 ```bash
@@ -294,6 +299,25 @@ cp .env.example .env.local   # og udfyld med staging-værdierne
 
 `npm run dev` kræver de to `VITE_`-variabler (`G4`) — det er præcis dette valg,
 kravet findes for.
+
+> ⚠️ **`/api/*` findes ikke i `npm run dev`, og det rammer trin 6.** Admin →
+> Drift → "Hent nu" kalder `/api/sync-matches`, som er en Vercel-funktion.
+> Lokalt får du 404, og **staging får aldrig kampe** — resten af appen virker,
+> men der er intet at tippe på. Tre veje, i den rækkefølge de er værd at prøve:
+>
+> 1. **Preview-deployet** (anbefalet): funktionerne er der allerede, og de peger
+>    på staging, så snart variablerne ovenfor er sat. Ingen lokal opsætning.
+> 2. **`npm run dev:api`** (`vercel dev`) kører funktionerne lokalt. Kræver, at
+>    `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SYNC_SECRET` og
+>    leverandørens token også står i `.env.local` — og at det linkede
+>    Vercel-projekts *Development*-variabler ikke overskriver dem med
+>    produktionens.
+> 3. **`VITE_API_PROXY`** — 🛑 **ikke til dette formål.** Den videresender
+>    `/api/*` til en kørende deploy, og den deploys funktioner skriver i
+>    **deres egen** database. Peger du den på produktions-deployet, mens
+>    frontenden kører mod staging, henter og skriver du kampe i PRODUKTIONEN
+>    fra en app, der ser ud til at være staging. Proxyen er lavet til at
+>    afprøve push-flowet, ikke til at synkronisere.
 
 ### Det, der IKKE må pege på staging
 
@@ -307,11 +331,17 @@ kravet findes for.
 
 ## 6. Første kørsel
 
-1. Åbn preview-URL'en for en branch, opret en bruger, og gør den til admin
-   (trin 4).
-2. Admin → Drift → **"Hent nu"** for en liga. Kampene kommer ind; `job_runs`
-   får en række med `authVia: admin-token`.
+1. Åbn **preview-URL'en** for en branch (ikke `localhost` — se advarslen i trin
+   5), log ind med den bruger, du oprettede i trin 4. Er brugeren lavet lokalt,
+   findes den allerede: begge instanser taler med samme staging-database.
+2. Admin → Drift → **"Hent nu"** for en liga ad gangen. Kampene kommer ind, og
+   `job_runs` får en række med `authVia: admin-token`. Får du i stedet en fejl
+   om en manglende nøgle, mangler leverandørens token for Preview (trin 5).
 3. Opret en liga og en konkurrence, afgiv et tip.
+
+**Sync'en er den eneste vej til kampe.** Appen kan rette et resultat, men ikke
+oprette kampen — så uden et gennemført "Hent nu" har staging turneringer uden
+noget at tippe på.
 
 ---
 
