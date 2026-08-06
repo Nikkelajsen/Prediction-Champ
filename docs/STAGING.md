@@ -179,14 +179,15 @@ Kør datafilerne i denne rækkefølge:
 3. `sql/tournament_footballdata_promote.sql` — gør dem synlige og officielle
 4. `sql/tournament_scotland_premiership.sql` — Scotland Premiership
 
-**Superliga-filen har to tomme parametre**, du skal udfylde først: sæsonens navn
-og dens Sportmonks-id. De skifter hvert år, så de er ikke skrevet ind — filens
-hoved har begge opslag (ét mod produktionen, ét mod Sportmonks), og blokken
-stopper med en læsbar fejl, hvis de mangler. Ligaen selv er skrevet ned.
-*(Filen kom til 5. august 2026. Indtil da var Superligaen den eneste af de syv
-turneringer, et miljø bygget af repoet alene ikke kunne få.)*
+**Superliga-filen bærer sine værdier** (sæson `2026/27`, `api_season_id` 27897 —
+aflæst i produktionen 6. august 2026). Skifter sæsonen, står begge opslag i
+filens hoved, og guarden stopper læsbart, hvis nogen tømmer parametrene uden at
+udfylde dem. *(Filen kom til 5. august 2026. Indtil da var Superligaen den
+eneste af de syv turneringer, et miljø bygget af repoet alene ikke kunne få.)*
 
-Hold, kampe og resultater kommer af en sync (trin 6).
+Efter alle fire: **7 ligaer, 7 sæsoner** — Superligaen officiel, de fem
+football-data officielle, Scotland uofficiel. Hold, kampe og resultater kommer
+af en sync (trin 6).
 
 ---
 
@@ -196,14 +197,51 @@ Appen skriver selv `profiles`-rækken ved oprettelse (`App.jsx` upserter den
 efter signup), så **opret testbrugerne gennem appen** frem for i Supabase —
 ellers står de i `auth.users` uden profil, og halvdelen af skærmene er tomme.
 
+**Men hvilken app?** Den, der peger på staging — og det afgøres af `VITE_*`,
+som bages ind ved build-tid. Produktions-appen skriver ALTID i produktionen,
+uanset hvilken fane du har åben ved siden af. Der er to instanser at vælge
+imellem, og den første kan bruges med det samme:
+
+| Vej | Sådan | Hvornår |
+|---|---|---|
+| **Lokalt** (hurtigst) | `cp .env.example .env.local`, udfyld med staging-URL og publishable-nøgle, `npm run dev` → `localhost:5173` | Nu. Kræver ikke trin 5. `/api/*` findes ikke i dev, men oprettelse bruger det ikke — signup går direkte til Supabases auth-endpoint |
+| **Preview-deployet** | Trin 5's fire variabler, derefter branchens preview-URL | Når trin 5 alligevel er lavet |
+
+**`npm run dev` kan ikke ramme produktionen ved et uheld** (`G4`): mangler de to
+variabler, kaster `src/lib/supabase.js` med det samme frem for at falde tilbage.
+Fallbacken gælder kun produktions-buildet.
+
+Før den første bruger:
+
 - Authentication → Sign In / Providers: slå **"Confirm email" fra** i staging.
-  Det sparer et mailflow pr. testbruger. Produktionens indstilling er en anden
-  sag og røres ikke.
+  **Det er ikke bekvemmelighed, det er nødvendigt:** med bekræftelse slået til
+  returnerer signup ingen session, og uden token kan appen ikke skrive
+  `profiles`-rækken (`Auth.jsx` kræver `access_token` for at gå videre). Det
+  brugernavn, du lige valgte, går tabt, og kontoen ender uden profil. Ved næste
+  login slås profilen kun OP — den oprettes ikke. Produktionens indstilling er
+  en anden sag og røres ikke.
 - Gør dig selv til administrator bagefter:
 
   ```sql
   update public.profiles set is_admin = true where display_name = '<dit testnavn>';
   ```
+
+- **Bekræft, at brugeren landede det rigtige sted**, før du opretter nummer to:
+  netværksfanen skal vise kaldet til `/auth/v1/signup` mod **staging-ref'en**, og
+
+  ```sql
+  select count(*) from auth.users;
+  ```
+
+  skal stige i staging, mens produktionens står stille.
+
+**Bruger du alligevel Dashboard → Add user**, opretter det kun `auth.users`-
+rækken. Så skal profilen sættes i hånden, ellers har brugeren intet navn:
+
+```sql uddrag
+insert into public.profiles (id, display_name)
+select id, 'Testbruger' from auth.users where email = '<mail>';
+```
 
 **Kopiér ikke produktionens brugere ind.** Det er teknisk muligt —
 `data-backup.yml` dumper også `auth.users` — men det flytter rigtige personers
