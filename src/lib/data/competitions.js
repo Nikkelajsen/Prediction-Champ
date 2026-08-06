@@ -166,6 +166,47 @@ async function createCompetition(token, userId, spec) {
     return { competition, matchCount: ids.length };
   }
 
+  // Periode over FLERE turneringer (august 2026). Samme form som full_season-
+  // multi: liga-løs række med turneringerne i `mode_params.tournaments`, og
+  // kampene materialiseret pr. turnering, så læse-stierne er uændrede.
+  //
+  // Efterfyldningen kan i forvejen finde den: `coversSeason()` i
+  // api/_backfill.js kigger på `tournaments`, og `matchesRule()` for
+  // `time_range` afgør kun på datoerne — den kalder ikke ligaen ind, fordi
+  // efterfyldningen allerede er afgrænset til sæsonen. Der er derfor ingen
+  // ændring på serversiden.
+  //
+  // ÉN turnering går bevidst IKKE denne vej: den beholder den bundne form
+  // (`league_id`/`season_id` sat, ingen `tournaments`-nøgle), så rækkerne ser
+  // ud som hidtil, og ingen eksisterende konkurrence skifter form.
+  if (mode === "time_range" && Array.isArray(tournaments) && tournaments.length > 1) {
+    const sel = tournaments.filter((t) => t && t.leagueId && t.seasonId);
+    if (!sel.length) throw new Error("Vælg mindst én turnering");
+    if (!startDate || !endDate) throw new Error("Vælg en start- og slutdato");
+    const ids = [];
+    const picked = [];
+    for (const t of sel) {
+      let ms = await db.select(token, "matches",
+        `season_id=eq.${t.seasonId}&select=id,round_key,home_score` +
+        `&kickoff_at=gte.${startDate}&kickoff_at=lte.${endDate}T23:59:59`);
+      ms = filterFromNextUnfinishedRound(ms);
+      for (const m of ms) ids.push(m.id);
+      picked.push({ league_id: t.leagueId, season_id: t.seasonId });
+    }
+    const [competition] = await db.insert(token, "competitions", [{
+      ...base,
+      league_id: null, season_id: null,
+      mode: "time_range",
+      mode_params: { start_date: startDate, end_date: endDate, tournaments: picked, ...awardsParams },
+    }]);
+    await db.insert(token, "competition_participants", [{ competition_id: competition.id, user_id: userId }]);
+    if (ids.length) {
+      await db.insert(token, "competition_matches", ids.map((id) => ({ competition_id: competition.id, match_id: id })));
+    }
+    logEvent(token, "competition_created", { competitionId: competition.id, groupId, metadata: { mode: "time_range", match_count: ids.length, tournaments: picked.length } });
+    return { competition, matchCount: ids.length };
+  }
+
   const crossLeague = mode === "custom" || mode === "random";
   // Sæson-baserede modes kan ikke oprettes uden en sæson. Før returnerede
   // skærmen tavst her, så knappen bare holdt op med at virke; nu siges det højt.

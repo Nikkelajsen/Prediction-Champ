@@ -13,7 +13,7 @@ import { loadNewestSeasons, countMatchesPerLeague, loadTeamsByLeague, loadUpcomi
 import { validateGroupName } from "../lib/onboarding.js";
 import { ChevronLeft } from "lucide-react";
 import { groupIntoRounds } from "../lib/scoring.js";
-import { createTypeById, pickRandomFromRounds, weeklyCouponName, buildSpec } from "../lib/createTypes.js";
+import { createTypeById, pickRandomFromRounds, pickPerRound, weeklyCouponName, buildSpec } from "../lib/createTypes.js";
 import { C, btnGhost, btnGreen, font } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
 import TypeGallery, { ICONS } from "./create/TypeGallery.jsx";
@@ -59,7 +59,9 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   const [method, setMethod] = useState("pick");
   const [pickLeagueIds, setPickLeagueIds] = useState(null);
   const [pickedIds, setPickedIds] = useState([]);
-  const [periodLeagueId, setPeriodLeagueId] = useState(leagues[0]?.id || "");
+  // null = alle turneringer, samme konvention som LeagueChips bruger overalt.
+  const [periodLeagueIds, setPeriodLeagueIds] = useState(null);
+  const [perRound, setPerRound] = useState(0); // 0 = alle kampe i runden
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   // kommende kampe (puljen for random-typerne og håndplukket)
@@ -178,6 +180,33 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     const allowed = pickLeagueIds || leagues.map((l) => l.id);
     return groupIntoRounds(upcoming.filter((m) => allowed.includes(m._leagueId)));
   }, [upcoming, pickLeagueIds, leagues]);
+  // Periodens valgte turneringer — kun dem, der HAR en sæson med kampprogram.
+  const periodTournaments = useMemo(() => {
+    const allowed = periodLeagueIds || leagues.map((l) => l.id);
+    return allowed
+      .filter((id) => seasonByLeague[id])
+      .map((id) => ({ leagueId: id, seasonId: seasonByLeague[id].id }));
+  }, [periodLeagueIds, leagues, seasonByLeague]);
+
+  // Kampene bag et LOFT udpeges i klienten, fordi loftet gør konkurrencen
+  // håndplukket (se buildSpec). Uden loft er listen tom og ubrugt: da er det
+  // datoerne, der er reglen, og serveren finder selv kampene — også dem, der
+  // først skemalægges senere.
+  //
+  // Puljen er den samme `upcoming`, håndpluk bruger, og den er skåret ved et
+  // loft fra nærmeste runde og frem. Advarslen om afkortning står allerede over
+  // felterne (`upcomingTruncated`) og gælder derfor også her.
+  const periodMatchIds = useMemo(() => {
+    if (!perRound || !startDate || !endDate) return [];
+    const allowed = periodTournaments.map((t) => t.leagueId);
+    const pool = upcoming.filter((m) => {
+      if (!allowed.includes(m._leagueId) || !m.kickoff_at) return false;
+      const day = m.kickoff_at.slice(0, 10);
+      return day >= startDate && day <= endDate;
+    });
+    return pickPerRound(pool, { perRound });
+  }, [perRound, startDate, endDate, periodTournaments, upcoming]);
+
   const randomPool = useMemo(() => {
     const allowed = randomLeagueIds || leagues.map((l) => l.id);
     return upcoming.filter((m) => allowed.includes(m._leagueId));
@@ -220,10 +249,15 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     if (typeId === "team") return buildSpec({ ...shared, teams: teamSel });
     if (typeId === "custom") {
       if (method === "period") {
+        const only = periodTournaments.length === 1 ? periodTournaments[0] : null;
         return buildSpec({
-          ...shared, method,
-          leagueId: periodLeagueId, seasonId: seasonByLeague[periodLeagueId]?.id || null,
+          ...shared, method, perRound,
+          tournaments: periodTournaments,
+          // Én turnering beholder den bundne form; flere gør konkurrencen
+          // turneringsløs. Er der et loft, er `matchIds` det, der tæller.
+          leagueId: only?.leagueId || null, seasonId: only?.seasonId || null,
           startDate, endDate,
+          matchIds: periodMatchIds,
         });
       }
       return buildSpec({ ...shared, method, matchIds: pickedIds });
@@ -241,7 +275,9 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   const canSubmit = !!name && !!groupId && (
     typeId === "season" ? fsLeagueIds.some((id) => countByLeague[id] !== 0)
     : typeId === "team" ? teamSel.length > 0
-    : typeId === "custom" ? (method === "period" ? !!(periodLeagueId && startDate && endDate) : pickedIds.length > 0)
+    : typeId === "custom" ? (method === "period"
+        ? !!(periodTournaments.length && startDate && endDate && (!perRound || periodMatchIds.length))
+        : pickedIds.length > 0)
     : randomPool.length > 0
   );
 
@@ -315,9 +351,10 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
             )}
             {typeId === "custom" && (
               <CustomFields method={method} onMethod={setMethod}
+                perRound={perRound} onPerRound={setPerRound} periodCount={periodMatchIds.length}
                 leagues={leagues} pickLeagueIds={pickLeagueIds} onPickLeagueIds={setPickLeagueIds}
                 upcomingRounds={upcomingRounds} upcomingTeams={upcomingTeams} pickedIds={pickedIds} onPickedIds={setPickedIds}
-                periodLeagueId={periodLeagueId} onPeriodLeagueId={setPeriodLeagueId}
+                periodLeagueIds={periodLeagueIds} onPeriodLeagueIds={setPeriodLeagueIds}
                 startDate={startDate} endDate={endDate} onStartDate={setStartDate} onEndDate={setEndDate} />
             )}
 

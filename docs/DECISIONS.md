@@ -15,6 +15,41 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 6. august 2026 — Et loft pr. runde gør perioden til et frosset udvalg
+
+**Beslutning:** Custom-perioden kan vælge flere turneringer og få et loft på
+antal kampe pr. runde. Sættes et loft, skrives konkurrencen som `custom` med
+udpegede kampe i stedet for `time_range` — altså **frossen ved oprettelsen**.
+Uden loft er formen uændret, og perioden vokser som hidtil. Loftet fordeles
+jævnt på de valgte turneringer ved en round robin, hvor den ekstra plads ved
+ulige deling går til den turnering, der spiller først i runden.
+
+**Begrundelse:** `time_range` er en voksende regel — `api/_backfill.js` føjer
+kampe til, efterhånden som de skemalægges, og det er hele periodens løfte over
+for en sæson, hvis slutspil først offentliggøres senere. Et loft sat ved
+oprettelsen ville blive brudt **tavst** ved næste efterfyldning: brugeren beder
+om ti kampe pr. runde og ender med fjorten uden at få det at vide. Et tal, som
+brugeren har valgt, må ikke stille og roligt holde op med at passe.
+
+Efterfyldningen kan ikke selv håndhæve loftet. Den kører **pr. sæson** — den
+kaldes fra syncen med én sæsons kampe — og kan derfor ikke se, hvor mange kampe
+konkurrencen allerede har fra de ØVRIGE valgte turneringer i samme runde. Et
+loft på tværs af turneringer ville kræve, at efterfyldningen så hele runden på
+én gang, altså en ombygning af den sti, der holder rigtige konkurrencer ajour.
+Prisen for det står ikke mål med gevinsten ved en valgfri kupon-afgrænsning.
+
+**Prisen er sagt højt i brugerfladen** frem for at ligge i en note: teksten
+under felterne skifter mellem "også dem, der skemalægges senere" og "kampene
+vælges nu". De to løfter udelukker hinanden, og begge er sande — hver for sin
+indstilling.
+
+**Hvorfor round robin og ikke kvoter:** en kvoteudregning skal have en regel for,
+hvad der sker, når en turnering har færre kampe end sin andel, og enhver sådan
+regel er et nyt hjørne at teste. Round robin har svaret indbygget — en tom kø
+springes over — og giver 4/3/3 ved ti kampe på tre turneringer, men 1/5/4 når
+den ene kun har én kamp. Det var også præcis den betingelse, ønsket blev stillet
+med: er der færre end ti i runden, er det bare dem, der er.
+
 ## 6. august 2026 — Man kan ikke vinde uden at have tippet
 
 **Beslutning:** En spiller uden ét eneste tip kan hverken kåres som vinder eller
