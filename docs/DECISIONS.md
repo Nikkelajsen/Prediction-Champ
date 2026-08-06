@@ -15,6 +15,43 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 6. august 2026 — "Tid ikke fastlagt" aflæses af tidsfeltet, ikke af leverandørens status
+
+**Beslutning:** `kickoffTbd` udledes hos **begge** leverandører af den samme
+markør — midnat-pladsholderen i tidsfeltet (`isMidnightPlaceholder()` i
+`api/_providers/kickoff.js`). football-data.orgs `SCHEDULED` vs `TIMED` bruges
+**ikke længere** til noget; den rå status bæres fortsat med i `liveState` og er
+dermed en diagnose i forhåndsvisningen (`&dryRun=true`), ikke en regel.
+Sportmonks beholder sin egen state `TBA` oveni, fordi den betyder noget, den
+anden markør ikke dækker: hverken dato eller tid er bekræftet.
+
+**Begrundelse:** Beslutningen fra 2. august gav hver leverandør sin egen markør
+med den rigtige begrundelse — *formen er fælles, kilden er det ikke* — men den
+ene af de to markører var **uprøvet**, og det stod skrevet i beslutningen selv:
+egress-politikken blokerer begge leverandørers API og docs fra
+udviklingsmiljøet, så Sportmonks-markøren blev sluttet af de **gemte data**,
+mens football-data.orgs blev sluttet af **dokumentationen**. Den, der kunne
+efterprøves, holdt. Den anden gjorde ikke: alle fem football-data-turneringer
+mistede deres klokkeslæt i appen, fordi en turnering kan blive stående i
+`SCHEDULED` længe efter, at tiderne er sendt.
+
+**Beviset kom fra rækkefølgen, ikke fra tiderne.** Kampene uden klokkeslæt
+sorterede ind **mellem** Superligaens 16.00 og 18.00 samme dag — og sorteringen
+er `byKickoffThenTeams`, altså på `kickoff_at` selv. En midnats-pladsholder
+ville have ligget først på dagen. Værdien var der hele tiden; det var kun
+visningen, der skjulte den. Det er den generelle vej ud af et symptom som dette:
+en visning, der udelader et felt, kan stadig **sortere** på det.
+
+**Prisen er kendt og den samme som Sportmonks' i forvejen:** en falsk positiv
+for en kamp, der faktisk starter 00:00 UTC (02.00 dansk sommertid). Ingen af de
+dækkede turneringer spiller på det tidspunkt. Til gengæld er der nu ét sted at
+tage højde for den, i stedet for to. **Hvad der stadig ikke vides:** hvordan
+football-data.org faktisk markerer en kamp, hvis tid ikke er fastsat — at det er
+midnat UTC, er en antagelse på linje med den, der lige blev afkræftet, og den er
+noteret som sådan i backloggens indbakke. Forskellen er, at den nu fejler i den
+**ufarlige** retning: en tid, der ikke findes, vises som en tid, mod tidligere en
+tid, der findes, der ikke blev vist.
+
 ## 5. august 2026 — `A25`: en lukket konto meldes af det, der ikke er begyndt
 
 **Beslutning:** `_anonymize_account()` (`sql/liga_admin.sql`) sletter den lukkede

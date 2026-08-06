@@ -20,6 +20,7 @@
 // Miljøvariabel: FOOTBALLDATA_TOKEN
 
 import { fetchWithTimeout } from "../_shared.js";
+import { isMidnightPlaceholder } from "./kickoff.js";
 
 const BASE = "https://api.football-data.org/v4";
 
@@ -45,18 +46,32 @@ function statusOf(m) {
   if (FINISHED_STATES.has(m.status)) return "finished";
   if (LIVE_STATES.has(m.status)) return "live";
   // SCHEDULED, TIMED, POSTPONED, SUSPENDED, CANCELLED — samme behandling.
-  // Forskellen på SCHEDULED og TIMED er ikke uden konsekvens, men den hører
-  // ikke til her: den bæres videre i kickoffTbd (se kickoffTbdOf).
+  // Den rå status bæres videre i `liveState` og kan dermed aflæses i
+  // forhåndsvisningen (`?dryRun=true`); det var dét, der afgjorde sagen nedenfor.
   return "scheduled";
 }
 
-// "Tid ikke fastlagt". Hos football-data.org er skelnen eksplicit: en kamp
-// SCHEDULES med en grov dato, når terminslisten lægges, og TIMES først, når det
-// eksakte klokkeslæt er fastsat — typisk nogle uger før kampen. `utcDate` bærer
-// en pladsholder-tid indtil da, og den er ikke til at kende fra en ægte
-// kampstart. Derfor er status det eneste sted, informationen findes.
+// "Tid ikke fastlagt" — samme markør som hos Sportmonks: midnat-pladsholderen i
+// tidsfeltet (`isMidnightPlaceholder`).
+//
+// **Rettet 6. august 2026.** Her stod `m.status === "SCHEDULED"`, læst af
+// leverandørens dokumentation: en kamp SCHEDULES med en grov dato, når
+// terminslisten lægges, og TIMES først, når klokkeslættet er fastsat. Den
+// læsning holder ikke mod data. La Liga-kampene i runden 11.08–17.08 stod ALLE
+// uden klokkeslæt i appen, samtidig med at deres `utcDate` bar rigtige,
+// indbyrdes forskellige tider: kampene sorterede ind mellem Superligaens 16.00
+// og 18.00 på samme dag — hvilket en midnats-pladsholder aldrig kunne have gjort.
+// `SCHEDULED` betyder altså ikke "tiden mangler"; turneringer kan blive stående
+// i den status længe efter, at tidspunkterne er kendte, og statussen kastede
+// derfor en tid væk, leverandøren faktisk havde sendt.
+//
+// Fejlen i den oprindelige udgave var ikke selve læsningen, men at markøren var
+// UPRØVET: egress-politikken blokerer leverandørens API og docs fra
+// udviklingsmiljøet, så begge markører blev sluttet af de gemte data hos
+// Sportmonks og af dokumentationen hos football-data.org. Det, der kunne
+// efterprøves, holdt; det, der ikke kunne, gjorde ikke.
 function kickoffTbdOf(m) {
-  return m.status === "SCHEDULED";
+  return isMidnightPlaceholder(m.utcDate);
 }
 
 function team(t) {

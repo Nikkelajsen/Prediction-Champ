@@ -76,6 +76,17 @@ Alt, hvad et providermodul returnerer:
 > `SCHEDULED` fra `TIMED`; Sportmonks har state `TBA` plus selve
 > midnat-pladsholderen. Havde kalderen skullet kende den forskel, ville hele
 > pointen med laget være væk.
+>
+> **Rettet 6. august 2026:** den ene af de to markører var forkert.
+> football-data.orgs `SCHEDULED` betyder ikke "tiden mangler" — turneringer kan
+> stå i den status længe efter, at tidspunkterne er sendt, og reglen skjulte
+> derfor klokkeslæt, leverandøren havde leveret. **Begge** bruger nu
+> midnat-pladsholderen i tidsfeltet (`isMidnightPlaceholder()` i
+> `api/_providers/kickoff.js`); Sportmonks har fortsat `TBA` oveni. Pointen
+> ovenfor står ved magt — den blev bare demonstreret den anden vej: markøren var
+> leverandørspecifik i teorien og uprøvet i praksis, fordi API'et ikke kan nås
+> fra udviklingsmiljøet. Begrundelsen: [`DECISIONS.md`](../DECISIONS.md),
+> 6. august 2026.
 
 `score` er den aktuelle stilling. Kalderen må kun skrive den i
 `home_score`/`away_score`, når `status === "finished"` — hele appen bruger
