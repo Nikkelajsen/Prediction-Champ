@@ -15,6 +15,45 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 6. august 2026 — Man kan ikke vinde uden at have tippet
+
+**Beslutning:** En spiller uden ét eneste tip kan hverken kåres som vinder eller
+vinde en tiebreak. To ændringer i `src/lib/standings.js`, som begge følger af
+samme sætning: `goalErrorOf()` giver en række med `matches === 0` den værst
+mulige målafvigelse i stedet for den bedste, og `leaders()` svarer tomt, når
+førstepladsen står på nul tippede kampe.
+
+**Begrundelse:** Stillingen har én række pr. **deltager** og ikke pr. tipper —
+og det skal den blive ved med, for man skal kunne se, hvem der er med. Men
+dermed er "0 point" tvetydigt: det betyder både "tippede og ramte forbi" og
+"deltog aldrig". Hele fejlen ligger i, at stigen behandlede de to ens.
+
+Det synlige udslag var en afsluttet konkurrence, hvor ingen havde tippet, og
+hvor alle tre deltagere fik en pokal. Det usynlige var værre: målafvigelsen er
+stigens sidste trin, hvor mindst vinder, og `avgGoalError(0, 0) = 0` er den
+bedst mulige værdi. Den, der ikke havde tippet, slog altså den, der havde
+tippet tyve kampe og ramt skævt. **Man vandt tiebreakeren ved at lade være med
+at deltage** — det modsatte af `A2` ("Månedschampionshippet må gerne belønne
+deltagelse"), som er hele grunden til, at trinnet er et gennemsnit og ikke en
+sum.
+
+**Hvorfor `Number.MAX_VALUE` og ikke `Infinity`:** to spillere uden tips skal
+være **ægte lige** og dele placering. `Infinity - Infinity` er `NaN`, og en
+`NaN` i en komparator gør sorteringen udefineret frem for delt.
+
+**Hvorfor det er nok at se på førstepladsen i `leaders()`:** efter den første
+ændring kan en spiller uden tips aldrig komme foran en, der har tippet. Er nr. 1
+på nul kampe, har ingen tippet.
+
+**Databasen var aldrig ramt, og det afgrænser beslutningen.** Kåringerne
+(`award_competition_periods()`) og milepælene (`_ms_final`) bygger deres vindere
+på `predictions join matches` og `competition_match_points`, hvor en spiller
+uden tips slet ikke findes. Der er ikke uddelt en eneste kåring eller permanent
+milepæl på det forkerte grundlag. Rettelsen hører derfor i klienten alene — og
+stigen i SQL (`sql/standings_tiebreakers.sql`) skal **ikke** følge med, fordi
+dens views ikke indeholder rækker med nul kampe. Det er den ene gang, hvor JS og
+SQL med vilje ikke er ens, og grunden er, at de ikke får de samme rækker ind.
+
 ## 6. august 2026 — Sæson-simulationen i staging får sin EGEN turnering
 
 **Beslutning:** Testdata til staging fremstilles af
