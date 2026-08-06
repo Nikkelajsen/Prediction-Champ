@@ -9,6 +9,12 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+6. august 2026 — Runbogens trin 2 fandt sin første fejl ved første kørsel: `\restrict`
+**`schema.sql` kan ikke pastes i SQL-editoren, og runbogen sagde det modsatte** — "kopiér filen ordret". Første rigtige kørsel svarede `42601: syntax error at or near "\"` på **linje 5**, altså før noget som helst var kørt. `pg_dump` 17.5+ omkranser sit dump med `\restrict`/`\unrestrict`, som er psql-**meta**-kommandoer; editoren sender ren SQL til serveren og kender dem ikke. Linjerne er ren emballage og ændrer intet i skemaet.
+**Vi vidste det allerede, ét sted, og det hjalp ingen.** `sql/tests/docs_sql.mjs` har siden `G74` en `tilPG16()`, der fjerner præcis de linjer med begrundelsen skrevet ud — men den viden lå i en CI-hjælper og ikke der, hvor nogen skulle bruge den. Trin 2 har nu opskriften (en `sed`, efterprøvet: to linjer væk, og de 3.573 CRLF-kroppe urørt), plus den strengere variant til en psql ældre end 17.5, hvor også `SET transaction_timeout` og ét `MAINTAIN`-grant skal ud. Samme tre undtagelser, samme rækkefølge — filen henviser til hjælperen, så de ikke kan drive fra hinanden.
+**Vagten i `sql/migration_syntax.test.js` undtager `schema.sql` med en begrundelse, der var forkert:** "aldrig en fil man kører i hånden". Den køres netop i hånden — det er hele runbogens trin 2 og gendannelsens vej. Den rigtige begrundelse er, at den ikke kan RETTES: den er et dump, og næste eksport ville skrive linjerne tilbage. Undtagelsen står, teksten er rettet.
+**`sql/README.md`s `schema.sql`-række siger det nu også**, fordi det er den række, man læser, når man skal bygge et miljø op fra bunden.
+
 5. august 2026 — Turnering nr. 1 har fået sin fil, seks uger efter de seks andre
 **`sql/tournament_superliga.sql` lukker indbakke-linjen fra runbogen samme dag.** Superligaen blev oprettet i hånden i juli 2026, før der fandtes skabeloner, og `schema.sql` er skema uden rækker — så en database bygget af repoet alene havde alt undtagen den turnering, der bruges mest. Det ramte to veje: staging (`STAGING.md` trin 3) og gendannelse fra repoet, når dumpet ikke kan læses (`RESTORE.md`).
 **I produktion er filen et no-op**, og det er hele dens form: den spørger på ligaen, ikke på sæsonnavnet, som #21 gør. Havde den spurgt på navnet, ville en kørsel i produktionen med tomme parametre vælte på en række, der står. Gen-kørsel sætter kun `provider` — `is_visible`, `is_official` og `live_enabled` er manuelle valg, præcis som i #21 og #23.

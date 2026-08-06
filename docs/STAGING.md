@@ -58,9 +58,30 @@ psql "postgresql://postgres.<staging-ref>:<password>@aws-0-eu-west-1.pooler.supa
   -v ON_ERROR_STOP=1 -f sql/schema.sql
 ```
 
-> ⚠️ **Kopiér filen ordret.** Funktionskroppene indeholder CRLF med vilje
-> (`G5`, `.gitattributes`) — kør den ikke gennem et værktøj, der normaliserer
-> linjeskift.
+> 🛑 **To linjer skal ud FØRST, ellers stopper kørslen på linje 5.** `pg_dump`
+> 17.5+ omkranser sit eget dump med `\restrict` / `\unrestrict` — psql-**meta**-
+> kommandoer, som SQL-editoren ikke kender (den sender ren SQL til serveren).
+> Fejlen er `42601: syntax error at or near "\"`, og den kommer, før noget som
+> helst er kørt. Linjerne er ren emballage og ændrer intet i skemaet:
+>
+> ```bash
+> sed -E '/^\\(un)?restrict\b/d' sql/schema.sql > schema_til_editoren.sql
+> ```
+>
+> **Kører du vej B med en psql ÆLDRE end 17.5, skal to ting mere ud** —
+> `SET transaction_timeout` (GUC fra PG17) og `MAINTAIN` i ét grant på
+> `public.matches`. En psql 17.5+ klarer alle tre selv. Præcis samme tre
+> undtagelser laver CI i [`sql/tests/docs_sql.mjs`](../sql/tests/docs_sql.mjs)
+> (`tilPG16`), og begrundelsen for hver af dem står dér:
+>
+> ```bash
+> sed -E '/^\\(un)?restrict\b/d; /^SET transaction_timeout\b/d; s/\bMAINTAIN,//; s/,MAINTAIN\b//' \
+>   sql/schema.sql > schema_pg16.sql
+> ```
+
+> ⚠️ **Ud over de linjer: kopiér filen ordret.** Funktionskroppene indeholder
+> CRLF med vilje (`G5`, `.gitattributes`) — kør den ikke gennem et værktøj, der
+> normaliserer linjeskift. `sed` ovenfor rører dem ikke.
 
 > ⚠️ **`schema.sql` er kun sand efter en eksport.** Den er et genereret
 > øjebliksbillede, ikke en kilde. Er der kørt en migrering i produktionen efter

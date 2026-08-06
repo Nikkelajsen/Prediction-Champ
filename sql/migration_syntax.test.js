@@ -16,8 +16,13 @@ import { fileURLToPath } from "node:url";
 //
 // Undtagelserne er præcis to slags filer:
 //   · sql/tests/**  — køres KUN gennem psql og BRUGER `\ir`/`\set` bevidst.
-//   · sql/schema.sql — genereret pg_dump-øjebliksbillede (`\restrict`), aldrig
-//     en fil man kører i hånden.
+//   · sql/schema.sql — genereret pg_dump-øjebliksbillede (`\restrict`). Den
+//     KØRES i hånden, når et miljø bygges op fra bunden (staging, gendannelse)
+//     — men den kan ikke rettes, for den er et dump. Prisen betales i stedet
+//     ved kørslen: de to `\restrict`-linjer skal fjernes, før den kan pastes i
+//     SQL-editoren, og opskriften står i docs/STAGING.md trin 2. Undtagelsen
+//     her er altså "kan ikke rettes", ikke "køres aldrig i hånden" — sidstnævnte
+//     stod her indtil august 2026 og var forkert.
 const SQL_DIR = join(dirname(fileURLToPath(import.meta.url)));
 const EXEMPT = new Set(["schema.sql"]);
 
