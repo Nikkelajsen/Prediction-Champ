@@ -392,6 +392,13 @@ kravet findes for.
 1. Åbn **preview-URL'en** for en branch (ikke `localhost` — se advarslen i trin
    5), log ind med den bruger, du oprettede i trin 4. Er brugeren lavet lokalt,
    findes den allerede: begge instanser taler med samme staging-database.
+
+   **Brug branchens alias, ikke den enkelte deploys adresse.** Hvert deploy får
+   sin egen URL (`…-8q3hs2f48-…`), og den bliver ved at køre med det miljø, den
+   blev bygget med — også efter en rettelse. Aliasset
+   (`…-git-<branch>-<team>.vercel.app`, står under **Domains** på deployet)
+   peger altid på det nyeste. En fejlsøgning mod en gammel deploy-URL ser ud
+   som en fejl, der ikke vil gå væk.
 2. Admin → Drift → **"Hent nu"** for en liga ad gangen. Kampene kommer ind, og
    `job_runs` får en række med `authVia: admin-token`. Får du i stedet en fejl
    om en manglende nøgle, mangler leverandørens token for Preview (trin 5).
