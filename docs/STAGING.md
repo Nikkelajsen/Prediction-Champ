@@ -269,22 +269,37 @@ miljø:
 | `SUPABASE_URL` | samme URL (serverfunktionerne) |
 | `SUPABASE_SERVICE_ROLE_KEY` | staging-service_role-nøglen |
 
-> ⚠️ **Fælden er de variabler, der allerede findes.** Produktionens
-> `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` er formentlig sat til *alle*
-> miljøer. Vercel tillader ikke to værdier for samme navn i overlappende
-> miljøer, så den eksisterende skal først **begrænses til Production**, og
-> derefter oprettes staging-værdien for Preview. Gør man kun det sidste, ser
-> det ud som om det virkede — og preview kalder videre til produktionen.
+> ⚠️ **Tjek scope på de variabler, der allerede findes, FØR du opretter noget.**
+> Vercel tillader ikke to værdier for samme navn i overlappende miljøer. Står en
+> eksisterende på *Production and Preview*, skal den først **begrænses til
+> Production**, og derefter oprettes staging-værdien for Preview. Gør man kun
+> det sidste, ser det ud som om det virkede — og preview kalder videre til
+> produktionen.
+>
+> **Aflæst 6. august 2026 var det ikke nødvendigt for nogen af de fire:**
+> `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SYNC_SECRET` og
+> `SPORTMONKS_TOKEN` stod allerede som **Production** alene, så Preview-værdien
+> kan oprettes ved siden af. `FOOTBALLDATA_TOKEN` og de tre `VAPID_*` står på
+> *Production and Preview* og skal blive der — de er de samme værdier i begge
+> miljøer, og en preview mod staging vil gerne have dem.
 
-Sæt også en **anden** `SYNC_SECRET` for Preview. To miljøer med samme
-hemmelighed betyder, at et kald, der ved en fejl rammer produktionen, bliver
-autoriseret.
+**Det, aflæsningen samtidig afslørede:** preview har aldrig haft en
+`SUPABASE_URL`, så `/api/*` på en preview-URL har aldrig kunnet svare. Det
+forklarer, hvorfor `DOCUMENTATION.md` §9's "alle miljøer peger på samme
+Supabase-projekt" kun har været sandt for **frontenden** (som har produktionens
+værdier hårdkodet som fallback) — serverfunktionerne på preview fejlede i
+stedet på en manglende variabel. Trin 5 retter begge dele på én gang.
 
-Skal preview kunne synkronisere kampe, skal `SPORTMONKS_TOKEN` /
-`FOOTBALLDATA_TOKEN` også være sat for Preview. **De deler kaldebudget med
-produktionens cron-jobs** — football-data.org har 10 kald/minut, og
-minut-spredningen i [`CRON.md`](./CRON.md) regner ikke med en ekstra kalder.
-Synkronisér i staging i ryk, ikke på et skema.
+Sæt en **anden** `SYNC_SECRET` for Preview. To miljøer med samme hemmelighed
+betyder, at et kald, der ved en fejl rammer produktionen, bliver autoriseret.
+Den bruges ikke af "Hent nu" (den autoriserer på admin-token), så den kan sættes
+bagefter — men så er den også sat, den dag et cron-lignende kald skal prøves af.
+
+Leverandør-tokens skal være sat for Preview, hvis kampene skal hentes:
+`SPORTMONKS_TOKEN` (Superligaen) og `FOOTBALLDATA_TOKEN` (de fem andre). **De
+deler kaldebudget med produktionens cron-jobs** — football-data.org har 10
+kald/minut, og minut-spredningen i [`CRON.md`](./CRON.md) regner ikke med en
+ekstra kalder. Synkronisér i staging i ryk, ikke på et skema.
 
 **Variabler slår først igennem ved et NYT deploy.** `VITE_*` bages ind i
 buildet, så en preview-URL, der allerede er bygget, peger stadig på det, den
