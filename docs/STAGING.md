@@ -58,17 +58,18 @@ psql "postgresql://postgres.<staging-ref>:<password>@aws-0-eu-west-1.pooler.supa
   -v ON_ERROR_STOP=1 -f sql/schema.sql
 ```
 
-> 🛑 **15 linjer skal ud FØRST.** Tre slags, og de rammer i denne rækkefølge —
-> de to første, før noget som helst er kørt, den tredje til allersidst:
+> 🛑 **16 linjer skal ud FØRST.** Fire slags, og de rammer i denne rækkefølge —
+> de tre første, før noget som helst er kørt, den sidste til allersidst:
 >
 > | Linjer | Fejl | Hvorfor |
 > |---|---|---|
 > | `\restrict` / `\unrestrict` (linje 5 og sidst) | `42601: syntax error at or near "\"` | psql-**meta**-kommandoer, som `pg_dump` 17.5+ selv lægger ind. SQL-editoren sender ren SQL til serveren og kender dem ikke. Ren emballage |
 > | `CREATE SCHEMA public;` | `42P06: schema "public" already exists` | Et friskt Supabase-projekt har allerede `public`. Dumpet vil oprette sit eget |
+> | `COMMENT ON SCHEMA public …` | `42501: must be owner of schema public` (forebyggende) | Supabase lader `pg_database_owner` eje skemaet. Ren kosmetik — et friskt projekt har i forvejen præcis den kommentar, linjen ville sætte |
 > | `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin …` (12 stk., til sidst) | `42501: permission denied to change default privileges` | Sætningen kræver **medlemskab af `supabase_admin`**, som SQL-editorens session ikke har. Kendt begrænsning — `sql/README.md` beskriver den, og `anon_grants_finish.sql` (#43) melder den som en `warning` frem for at vælte |
 >
 > ```bash
-> sed -E '/^\\(un)?restrict\b/d; /^CREATE SCHEMA public;$/d; /^ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin/d' \
+> sed -E '/^\\(un)?restrict\b/d; /^CREATE SCHEMA public;$/d; /^COMMENT ON SCHEMA public /d; /^ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin/d' \
 >   sql/schema.sql > schema_til_editoren.sql
 > ```
 >
@@ -84,9 +85,7 @@ psql "postgresql://postgres.<staging-ref>:<password>@aws-0-eu-west-1.pooler.supa
 >
 > Skemaets **grants følger med længere nede i filen** (`GRANT USAGE ON SCHEMA
 > public TO anon/authenticated/service_role`), så det eksisterende `public` får
-> den rigtige adgangskontrakt uden at blive oprettet forfra. Klager editoren
-> derefter over `COMMENT ON SCHEMA public` (ejerskab — Supabase lader
-> `pg_database_owner` eje skemaet), så fjern også den linje; den er kosmetisk.
+> den rigtige adgangskontrakt uden at blive oprettet forfra.
 >
 > **[`RESTORE.md`](./RESTORE.md) scenarie 2 dropper i stedet `public` først, og
 > begge veje er rigtige** — hver i sin sammenhæng. Ved en gendannelse er et
@@ -94,8 +93,9 @@ psql "postgresql://postgres.<staging-ref>:<password>@aws-0-eu-west-1.pooler.supa
 > er det ikke: du sidder med to Supabase-faner åbne, og den kommando i den
 > forkerte fane er uigenkaldelig. Derfor `sed` frem for `drop`.
 >
-> Verificeret 6. august 2026 mod PostgreSQL 16 med et `public`, der fandtes i
-> forvejen: 23 tabeller, 42 policies, ingen fejl.
+> Verificeret 6. august 2026: den klippede fil kørt mod PostgreSQL 16 ind i en
+> database, hvor `public` fandtes i forvejen — **23 tabeller, 9 views, 42
+> policies, 42 funktioner**, ingen fejl, og de 3.573 CRLF-linjer urørt.
 >
 > **Kører du vej B med en psql ÆLDRE end 17.5, skal to ting mere ud** —
 > `SET transaction_timeout` (GUC fra PG17) og `MAINTAIN` i ét grant på
@@ -105,7 +105,7 @@ psql "postgresql://postgres.<staging-ref>:<password>@aws-0-eu-west-1.pooler.supa
 > begrundelsen for hver af dem står dér:
 >
 > ```bash
-> sed -E '/^\\(un)?restrict\b/d; /^CREATE SCHEMA public;$/d; /^ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin/d; /^SET transaction_timeout\b/d; s/\bMAINTAIN,//; s/,MAINTAIN\b//' \
+> sed -E '/^\\(un)?restrict\b/d; /^CREATE SCHEMA public;$/d; /^COMMENT ON SCHEMA public /d; /^ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin/d; /^SET transaction_timeout\b/d; s/\bMAINTAIN,//; s/,MAINTAIN\b//' \
 >   sql/schema.sql > schema_pg16.sql
 > ```
 >
