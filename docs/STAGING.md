@@ -326,6 +326,15 @@ buildet, så en preview-URL, der allerede er bygget, peger stadig på det, den
 blev bygget med. Redeploy branchen (eller push en commit) efter at have sat
 dem — ellers ser opsætningen rigtig ud i Vercels UI og forkert i browseren.
 
+> ⚠️ **URL'en skrives UDEN afsluttende skråstreg** — `https://<ref>.supabase.co`
+> og ikke `…supabase.co/`. Appen sætter selv stien på (`${SUPABASE_URL}${path}`
+> i `src/lib/supabase.js`), så en skråstreg for meget giver `//auth/v1/token`,
+> og Supabases gateway svarer **404 "Invalid path specified in request URL"**.
+> Symptomet ligner en forkert adgangskode: login fejler, og fejlteksten nævner
+> ikke adressen. Samme gælder et mellemrum eller linjeskift, der følger med en
+> indsætning — de dukker op som `%20`/`%0A` i Request URL'en i netværksfanen.
+> **Facit er den linje, der virker i `.env.local`.**
+
 ### Lokalt
 
 ```bash
