@@ -58,18 +58,29 @@ psql "postgresql://postgres.<staging-ref>:<password>@aws-0-eu-west-1.pooler.supa
   -v ON_ERROR_STOP=1 -f sql/schema.sql
 ```
 
-> 🛑 **Tre linjer skal ud FØRST — to slags fejl, begge før noget som helst er
-> kørt.** Den ene stopper på linje 5, den anden få linjer efter:
+> 🛑 **15 linjer skal ud FØRST.** Tre slags, og de rammer i denne rækkefølge —
+> de to første, før noget som helst er kørt, den tredje til allersidst:
 >
-> | Linje | Fejl | Hvorfor |
+> | Linjer | Fejl | Hvorfor |
 > |---|---|---|
 > | `\restrict` / `\unrestrict` (linje 5 og sidst) | `42601: syntax error at or near "\"` | psql-**meta**-kommandoer, som `pg_dump` 17.5+ selv lægger ind. SQL-editoren sender ren SQL til serveren og kender dem ikke. Ren emballage |
 > | `CREATE SCHEMA public;` | `42P06: schema "public" already exists` | Et friskt Supabase-projekt har allerede `public`. Dumpet vil oprette sit eget |
+> | `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin …` (12 stk., til sidst) | `42501: permission denied to change default privileges` | Sætningen kræver **medlemskab af `supabase_admin`**, som SQL-editorens session ikke har. Kendt begrænsning — `sql/README.md` beskriver den, og `anon_grants_finish.sql` (#43) melder den som en `warning` frem for at vælte |
 >
 > ```bash
-> sed -E '/^\\(un)?restrict\b/d; /^CREATE SCHEMA public;$/d' \
+> sed -E '/^\\(un)?restrict\b/d; /^CREATE SCHEMA public;$/d; /^ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin/d' \
 >   sql/schema.sql > schema_til_editoren.sql
 > ```
+>
+> **De 12 sidste er de eneste, hvor `sed` ikke bare er en omvej uden om en
+> psql-detalje — der springes noget over.** Det er alligevel det rigtige, af tre
+> grunde. Reglerne gælder kun objekter, der oprettes **af** `supabase_admin`, og
+> alt, vi selv opretter, ejes af `postgres`. Et friskt Supabase-projekt har
+> allerede sine egne udgaver, så der fjernes intet — de bliver bare ikke sat på
+> ny. Og tre af de 12 giver `anon` adgang, hvilket er præcis det, `G50`/`G58`
+> har brugt to migreringer på at komme af med i produktionen. Efterprøvet
+> 6. august 2026: uden dem står adgangskontrakten uændret — `authenticated` kan
+> læse `matches`, `anon` kan ikke, og `anon` beholder sin `usage` på skemaet.
 >
 > Skemaets **grants følger med længere nede i filen** (`GRANT USAGE ON SCHEMA
 > public TO anon/authenticated/service_role`), så det eksisterende `public` får
@@ -94,13 +105,14 @@ psql "postgresql://postgres.<staging-ref>:<password>@aws-0-eu-west-1.pooler.supa
 > begrundelsen for hver af dem står dér:
 >
 > ```bash
-> sed -E '/^\\(un)?restrict\b/d; /^CREATE SCHEMA public;$/d; /^SET transaction_timeout\b/d; s/\bMAINTAIN,//; s/,MAINTAIN\b//' \
+> sed -E '/^\\(un)?restrict\b/d; /^CREATE SCHEMA public;$/d; /^ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin/d; /^SET transaction_timeout\b/d; s/\bMAINTAIN,//; s/,MAINTAIN\b//' \
 >   sql/schema.sql > schema_pg16.sql
 > ```
 >
-> *(`CREATE SCHEMA public` er ikke en PG-version-ting og står derfor i begge
-> kommandoer — den afhænger af, om måldatabasen har skemaet i forvejen. Et
-> friskt Supabase-projekt har.)*
+> *(De to første slags er ikke PG-version-ting og står derfor i begge
+> kommandoer: `CREATE SCHEMA public` afhænger af måldatabasen, og
+> `supabase_admin`-linjerne af hvilken rolle du kører som. Kører du som
+> superbruger i din egen PostgreSQL, kan de sidste 12 blive stående.)*
 
 > ⚠️ **Ud over de linjer: kopiér filen ordret.** Funktionskroppene indeholder
 > CRLF med vilje (`G5`, `.gitattributes`) — kør den ikke gennem et værktøj, der
@@ -129,6 +141,31 @@ select
 PostgreSQL 16 — tallene vokser med hver migrering, så de er et pejlemærke og
 ikke et krav). Sammenlign med produktionen. **Nul policies er den fejl, der gør
 mest skade og larmer mindst** — skemaet ser rigtigt ud, og RLS er væk.
+
+### Døde kørslen midtvejs?
+
+**`schema.sql` er ikke idempotent** — den er et dump, og dens `create table` har
+intet `if not exists`. Du kan altså ikke bare rette fejlen og køre igen: anden
+kørsel svarer `42P07: relation … already exists`, og så er det ikke til at se,
+hvad der nåede at komme med.
+
+Kør tællingen ovenfor. Er den **nul hele vejen**, rullede kørslen tilbage — ret
+filen og kør den igen. Står der tabeller, skal skemaet nulstilles:
+
+```sql
+select count(*) as brugere from auth.users;
+```
+
+**Det tal skal være 0.** Det er kontrollen af, at du står i staging og ikke i
+produktionen — og den skal tages hver gang, ikke kun første gang. Derefter:
+
+```sql uddrag
+drop schema public cascade;
+create schema public;
+```
+
+og kør så den rettede fil igen. Skemaets grants står i dumpet selv, så det
+nyoprettede `public` får dem med.
 
 ---
 
