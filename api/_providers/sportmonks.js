@@ -11,6 +11,7 @@
 // Miljøvariabel: SPORTMONKS_TOKEN
 
 import { fetchWithTimeout } from "../_shared.js";
+import { isMidnightPlaceholder } from "./kickoff.js";
 
 const BASE = "https://api.sportmonks.com/v3/football";
 
@@ -142,21 +143,16 @@ function liveMinute(fx) {
 // TV-tiderne er fastsat nogle uger før. To markører fanger den:
 //
 //   TBA      leverandørens egen state for en kamp uden bekræftet dato OG tid.
-//   midnat   pladsholderen i `starting_at`, når kun datoen er kendt.
+//   midnat   pladsholderen i `starting_at`, når kun datoen er kendt
+//            (`isMidnightPlaceholder` — begrundelsen står dér).
 //
-// Midnat-testen er aflæst, ikke antaget: en kamp gemt med 00:00 UTC vises som
-// 02.00 i dansk sommertid, og `starting_at` skrives ordret hele vejen til
-// matches.kickoff_at (normalize → sync-matches). Intet led tilføjer midnat, så
-// værdien kommer fra leverandøren.
-//
-// Prisen er en falsk positiv for en kamp, der FAKTISK starter 00:00 UTC (02.00
-// dansk sommertid). Ingen af de turneringer, appen dækker, spiller på det
-// tidspunkt; kommer en til, er det her, den skal tages højde for.
+// Midnat-testen er DEN FÆLLES: football-data.org bruger den nu også, efter at
+// dens egen markør (`SCHEDULED` vs `TIMED`) viste sig at skjule tider,
+// leverandøren faktisk havde sendt (6. august 2026). Reglen bor derfor i
+// kickoff.js frem for i hver sin fil.
 function kickoffTbdOf(fx) {
   if (stateNames(fx).includes("TBA")) return true;
-  const ts = fx.starting_at;
-  if (typeof ts !== "string") return false;
-  return /[ T]00:00:00/.test(ts);
+  return isMidnightPlaceholder(fx.starting_at);
 }
 
 function participant(fx, location) {

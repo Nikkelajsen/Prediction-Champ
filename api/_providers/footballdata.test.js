@@ -66,19 +66,31 @@ describe("normalize", () => {
     expect(normalize(match({ status: raw })).status).toBe(expected);
   });
 
-  // SCHEDULED vs TIMED er den ENESTE kilde til "tid ikke fastlagt" hos
-  // football-data.org: en terminsliste lægges med grove datoer og times først
-  // uger senere. `utcDate` bærer en pladsholder indtil da og kan ikke skelnes
-  // fra en ægte kampstart, så går status tabt, er informationen væk for altid.
+  // "Tid ikke fastlagt" aflæses af TIDSFELTET, ikke af statussen: er `utcDate`
+  // midnat UTC, er kun datoen kendt (samme markør som hos Sportmonks).
   it.each([
-    ["SCHEDULED", true],
-    ["TIMED", false],
-    ["IN_PLAY", false],
-    ["FINISHED", false],
-    ["POSTPONED", false],
-  ])("sætter kickoffTbd til %s → %s", (raw, expected) => {
-    expect(normalize(match({ status: raw })).kickoffTbd).toBe(expected);
+    ["2026-08-15T00:00:00Z", true],
+    ["2026-08-15T14:00:00Z", false],
+    ["2026-08-15T20:30:00Z", false],
+  ])("sætter kickoffTbd ud fra utcDate %s → %s", (utcDate, expected) => {
+    expect(normalize(match({ utcDate, status: "SCHEDULED" })).kickoffTbd).toBe(expected);
   });
+
+  it("regner ikke en manglende utcDate for en pladsholder", () => {
+    expect(normalize(match({ utcDate: null })).kickoffTbd).toBe(false);
+  });
+
+  // Regressionen fra 6. august 2026. Her stod `status === "SCHEDULED"` som den
+  // eneste markør, og resultatet var, at ALLE La Liga-kampe i runden
+  // 11.08–17.08 mistede deres klokkeslæt i appen — leverandøren havde sendt
+  // rigtige, indbyrdes forskellige tider, men blev ved med at kalde kampene
+  // SCHEDULED. Statussen må ikke kunne kaste en tid væk igen.
+  it.each(["SCHEDULED", "TIMED", "IN_PLAY", "FINISHED", "POSTPONED"])(
+    "lader status %s være uden betydning for kickoffTbd, når tiden er ægte",
+    (status) => {
+      expect(normalize(match({ status, utcDate: "2026-08-16T17:30:00Z" })).kickoffTbd).toBe(false);
+    }
+  );
 
   it("giver null-score når kampen ikke har et resultat endnu", () => {
     const n = normalize(match({ status: "TIMED", score: { fullTime: { home: null, away: null } } }));
