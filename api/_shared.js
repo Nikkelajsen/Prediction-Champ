@@ -365,7 +365,19 @@ export async function isAuthorized(req, { sb, supabaseUrl, serviceKey, syncSecre
       const user = await userRes.json();
       const profs = await sb(`/rest/v1/profiles?id=eq.${user.id}&select=is_admin`);
       if (!profs[0]?.is_admin) {
-        console.error(`[auth] Bruger ${user.id} har ikke is_admin i databasen på ${supabaseUrl} (fandt ${profs.length} profilrække(r)).`);
+        // NUL rækker og "findes, men er ikke admin" er to forskellige fejl, og
+        // den første er den lumske: `profiles` har `read profiles` med
+        // `auth.role() = 'authenticated'`, og en publishable nøgle giver rollen
+        // `anon`. Så rammer opslaget RLS og svarer TOMT — ingen 401, ingen
+        // undtagelse, bare nul rækker. En rigtig service_role-nøgle omgår RLS
+        // og finder rækken. Fælden er reel: den kostede den sidste time af
+        // staging-opsætningen, hvor profilen stod i databasen med
+        // `is_admin = true`, mens funktionen påstod, at brugeren ikke fandtes.
+        console.error(
+          profs.length === 0
+            ? `[auth] Fandt 0 profilrækker for bruger ${user.id} på ${supabaseUrl}. Findes rækken i databasen, er SUPABASE_SERVICE_ROLE_KEY næsten altid ikke service_role-nøglen — en publishable nøgle rammer RLS og får et tomt svar uden fejl.`
+            : `[auth] Bruger ${user.id} findes på ${supabaseUrl}, men har ikke is_admin.`
+        );
         return { ok: false, via: null };
       }
       return { ok: true, via: "admin-token" };

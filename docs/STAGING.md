@@ -268,7 +268,7 @@ miljø:
 | `VITE_SUPABASE_URL` | staging-projektets URL |
 | `VITE_SUPABASE_KEY` | staging-publishable-nøglen |
 | `SUPABASE_URL` | samme URL (serverfunktionerne) |
-| `SUPABASE_SERVICE_ROLE_KEY` | staging-service_role-nøglen |
+| `SUPABASE_SERVICE_ROLE_KEY` | staging-**service_role**-nøglen (den hemmelige, `sb_secret_…`) |
 
 > ⚠️ **Tjek scope på de variabler, der allerede findes, FØR du opretter noget.**
 > Vercel tillader ikke to værdier for samme navn i overlappende miljøer. Står en
@@ -290,6 +290,18 @@ forklarer, hvorfor `DOCUMENTATION.md` §9's "alle miljøer peger på samme
 Supabase-projekt" kun har været sandt for **frontenden** (som har produktionens
 værdier hårdkodet som fallback) — serverfunktionerne på preview fejlede i
 stedet på en manglende variabel. Trin 5 retter begge dele på én gang.
+
+> 🛑 **De to nøgler ligger under hinanden på samme side, og forveksles de,
+> fejler det TAVST.** `VITE_SUPABASE_KEY` skal være den **publishable**, og
+> `SUPABASE_SERVICE_ROLE_KEY` den **hemmelige**. Bytter man om:
+>
+> * publishable i `SUPABASE_SERVICE_ROLE_KEY` → funktionen får rollen `anon`,
+>   rammer `read profiles`-policyen (`auth.role() = 'authenticated'`) og får
+>   **nul rækker uden fejl**. Symptomet er "Ikke autoriseret", mens profilen
+>   står i databasen med `is_admin = true`. *(Ramt 6. august 2026 — den sidste
+>   time af opsætningen gik med den.)*
+> * service_role i `VITE_SUPABASE_KEY` → en nøgle, der omgår RLS, bygges ind i
+>   den JavaScript, enhver browser henter. Det er den alvorlige af de to.
 
 Sæt en **anden** `SYNC_SECRET` for Preview. To miljøer med samme hemmelighed
 betyder, at et kald, der ved en fejl rammer produktionen, bliver autoriseret.
