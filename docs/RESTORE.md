@@ -163,6 +163,14 @@ Derefter, i denne rækkefølge:
 6. **Admin → "Opdater ratings"**, og derefter Admin → Drift: alle jobs skal melde
    sig inden for deres tavshedsgrænse.
 
+> **Kan dumpet ikke læses**, er repoet det, der er tilbage — og siden 5. august
+> 2026 rækker det til et *tomt, men komplet* miljø: `sql/schema.sql` giver hele
+> skemaet, og de fire `sql/tournament_*.sql`-filer giver alle syv turneringer.
+> Superligaen var indtil da den eneste uden fil, fordi den blev oprettet i
+> hånden, før skabelonerne fandtes. **Brugere, tips og resultater er stadig
+> væk** — det er præcis den forskel, dumpet dækker, og derfor er dette den
+> sidste udvej og ikke en plan B.
+
 ## Scenarie 3 — en migrering rullede noget tavst tilbage
 
 **Her er dumpet sjældent svaret.** Fire filer i `sql/` bruger
