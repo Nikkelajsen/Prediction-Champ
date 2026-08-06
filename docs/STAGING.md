@@ -58,9 +58,65 @@ psql "postgresql://postgres.<staging-ref>:<password>@aws-0-eu-west-1.pooler.supa
   -v ON_ERROR_STOP=1 -f sql/schema.sql
 ```
 
-> ⚠️ **Kopiér filen ordret.** Funktionskroppene indeholder CRLF med vilje
-> (`G5`, `.gitattributes`) — kør den ikke gennem et værktøj, der normaliserer
-> linjeskift.
+> 🛑 **16 linjer skal ud FØRST.** Fire slags, og de rammer i denne rækkefølge —
+> de tre første, før noget som helst er kørt, den sidste til allersidst:
+>
+> | Linjer | Fejl | Hvorfor |
+> |---|---|---|
+> | `\restrict` / `\unrestrict` (linje 5 og sidst) | `42601: syntax error at or near "\"` | psql-**meta**-kommandoer, som `pg_dump` 17.5+ selv lægger ind. SQL-editoren sender ren SQL til serveren og kender dem ikke. Ren emballage |
+> | `CREATE SCHEMA public;` | `42P06: schema "public" already exists` | Et friskt Supabase-projekt har allerede `public`. Dumpet vil oprette sit eget |
+> | `COMMENT ON SCHEMA public …` | `42501: must be owner of schema public` (forebyggende) | Supabase lader `pg_database_owner` eje skemaet. Ren kosmetik — et friskt projekt har i forvejen præcis den kommentar, linjen ville sætte |
+> | `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin …` (12 stk., til sidst) | `42501: permission denied to change default privileges` | Sætningen kræver **medlemskab af `supabase_admin`**, som SQL-editorens session ikke har. Kendt begrænsning — `sql/README.md` beskriver den, og `anon_grants_finish.sql` (#43) melder den som en `warning` frem for at vælte |
+>
+> ```bash
+> sed -E '/^\\(un)?restrict\b/d; /^CREATE SCHEMA public;$/d; /^COMMENT ON SCHEMA public /d; /^ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin/d' \
+>   sql/schema.sql > schema_til_editoren.sql
+> ```
+>
+> **De 12 sidste er de eneste, hvor `sed` ikke bare er en omvej uden om en
+> psql-detalje — der springes noget over.** Det er alligevel det rigtige, af tre
+> grunde. Reglerne gælder kun objekter, der oprettes **af** `supabase_admin`, og
+> alt, vi selv opretter, ejes af `postgres`. Et friskt Supabase-projekt har
+> allerede sine egne udgaver, så der fjernes intet — de bliver bare ikke sat på
+> ny. Og tre af de 12 giver `anon` adgang, hvilket er præcis det, `G50`/`G58`
+> har brugt to migreringer på at komme af med i produktionen. Efterprøvet
+> 6. august 2026: uden dem står adgangskontrakten uændret — `authenticated` kan
+> læse `matches`, `anon` kan ikke, og `anon` beholder sin `usage` på skemaet.
+>
+> Skemaets **grants følger med længere nede i filen** (`GRANT USAGE ON SCHEMA
+> public TO anon/authenticated/service_role`), så det eksisterende `public` får
+> den rigtige adgangskontrakt uden at blive oprettet forfra.
+>
+> **[`RESTORE.md`](./RESTORE.md) scenarie 2 dropper i stedet `public` først, og
+> begge veje er rigtige** — hver i sin sammenhæng. Ved en gendannelse er et
+> `drop schema public cascade` rigtigt, fordi hele projektet skal genskabes. Her
+> er det ikke: du sidder med to Supabase-faner åbne, og den kommando i den
+> forkerte fane er uigenkaldelig. Derfor `sed` frem for `drop`.
+>
+> Verificeret 6. august 2026: den klippede fil kørt mod PostgreSQL 16 ind i en
+> database, hvor `public` fandtes i forvejen — **23 tabeller, 9 views, 42
+> policies, 42 funktioner**, ingen fejl, og de 3.573 CRLF-linjer urørt.
+>
+> **Kører du vej B med en psql ÆLDRE end 17.5, skal to ting mere ud** —
+> `SET transaction_timeout` (GUC fra PG17) og `MAINTAIN` i ét grant på
+> `public.matches`. En psql 17.5+ mod en PG17-server klarer dem selv, og
+> `\restrict` er da også lovlig. Præcis de tre undtagelser laver CI i
+> [`sql/tests/docs_sql.mjs`](../sql/tests/docs_sql.mjs) (`tilPG16`), og
+> begrundelsen for hver af dem står dér:
+>
+> ```bash
+> sed -E '/^\\(un)?restrict\b/d; /^CREATE SCHEMA public;$/d; /^COMMENT ON SCHEMA public /d; /^ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin/d; /^SET transaction_timeout\b/d; s/\bMAINTAIN,//; s/,MAINTAIN\b//' \
+>   sql/schema.sql > schema_pg16.sql
+> ```
+>
+> *(De to første slags er ikke PG-version-ting og står derfor i begge
+> kommandoer: `CREATE SCHEMA public` afhænger af måldatabasen, og
+> `supabase_admin`-linjerne af hvilken rolle du kører som. Kører du som
+> superbruger i din egen PostgreSQL, kan de sidste 12 blive stående.)*
+
+> ⚠️ **Ud over de linjer: kopiér filen ordret.** Funktionskroppene indeholder
+> CRLF med vilje (`G5`, `.gitattributes`) — kør den ikke gennem et værktøj, der
+> normaliserer linjeskift. `sed` ovenfor rører dem ikke.
 
 > ⚠️ **`schema.sql` er kun sand efter en eksport.** Den er et genereret
 > øjebliksbillede, ikke en kilde. Er der kørt en migrering i produktionen efter
@@ -86,6 +142,31 @@ PostgreSQL 16 — tallene vokser med hver migrering, så de er et pejlemærke og
 ikke et krav). Sammenlign med produktionen. **Nul policies er den fejl, der gør
 mest skade og larmer mindst** — skemaet ser rigtigt ud, og RLS er væk.
 
+### Døde kørslen midtvejs?
+
+**`schema.sql` er ikke idempotent** — den er et dump, og dens `create table` har
+intet `if not exists`. Du kan altså ikke bare rette fejlen og køre igen: anden
+kørsel svarer `42P07: relation … already exists`, og så er det ikke til at se,
+hvad der nåede at komme med.
+
+Kør tællingen ovenfor. Er den **nul hele vejen**, rullede kørslen tilbage — ret
+filen og kør den igen. Står der tabeller, skal skemaet nulstilles:
+
+```sql
+select count(*) as brugere from auth.users;
+```
+
+**Det tal skal være 0.** Det er kontrollen af, at du står i staging og ikke i
+produktionen — og den skal tages hver gang, ikke kun første gang. Derefter:
+
+```sql uddrag
+drop schema public cascade;
+create schema public;
+```
+
+og kør så den rettede fil igen. Skemaets grants står i dumpet selv, så det
+nyoprettede `public` får dem med.
+
 ---
 
 ## 3. Data: turneringer
@@ -98,14 +179,15 @@ Kør datafilerne i denne rækkefølge:
 3. `sql/tournament_footballdata_promote.sql` — gør dem synlige og officielle
 4. `sql/tournament_scotland_premiership.sql` — Scotland Premiership
 
-**Superliga-filen har to tomme parametre**, du skal udfylde først: sæsonens navn
-og dens Sportmonks-id. De skifter hvert år, så de er ikke skrevet ind — filens
-hoved har begge opslag (ét mod produktionen, ét mod Sportmonks), og blokken
-stopper med en læsbar fejl, hvis de mangler. Ligaen selv er skrevet ned.
-*(Filen kom til 5. august 2026. Indtil da var Superligaen den eneste af de syv
-turneringer, et miljø bygget af repoet alene ikke kunne få.)*
+**Superliga-filen bærer sine værdier** (sæson `2026/27`, `api_season_id` 27897 —
+aflæst i produktionen 6. august 2026). Skifter sæsonen, står begge opslag i
+filens hoved, og guarden stopper læsbart, hvis nogen tømmer parametrene uden at
+udfylde dem. *(Filen kom til 5. august 2026. Indtil da var Superligaen den
+eneste af de syv turneringer, et miljø bygget af repoet alene ikke kunne få.)*
 
-Hold, kampe og resultater kommer af en sync (trin 6).
+Efter alle fire: **7 ligaer, 7 sæsoner** — Superligaen officiel, de fem
+football-data officielle, Scotland uofficiel. Hold, kampe og resultater kommer
+af en sync (trin 6).
 
 ---
 
@@ -115,14 +197,51 @@ Appen skriver selv `profiles`-rækken ved oprettelse (`App.jsx` upserter den
 efter signup), så **opret testbrugerne gennem appen** frem for i Supabase —
 ellers står de i `auth.users` uden profil, og halvdelen af skærmene er tomme.
 
+**Men hvilken app?** Den, der peger på staging — og det afgøres af `VITE_*`,
+som bages ind ved build-tid. Produktions-appen skriver ALTID i produktionen,
+uanset hvilken fane du har åben ved siden af. Der er to instanser at vælge
+imellem, og den første kan bruges med det samme:
+
+| Vej | Sådan | Hvornår |
+|---|---|---|
+| **Lokalt** (hurtigst) | `cp .env.example .env.local`, udfyld med staging-URL og publishable-nøgle, `npm run dev` → `localhost:5173` | Nu. Kræver ikke trin 5. `/api/*` findes ikke i dev, men oprettelse bruger det ikke — signup går direkte til Supabases auth-endpoint |
+| **Preview-deployet** | Trin 5's fire variabler, derefter branchens preview-URL | Når trin 5 alligevel er lavet |
+
+**`npm run dev` kan ikke ramme produktionen ved et uheld** (`G4`): mangler de to
+variabler, kaster `src/lib/supabase.js` med det samme frem for at falde tilbage.
+Fallbacken gælder kun produktions-buildet.
+
+Før den første bruger:
+
 - Authentication → Sign In / Providers: slå **"Confirm email" fra** i staging.
-  Det sparer et mailflow pr. testbruger. Produktionens indstilling er en anden
-  sag og røres ikke.
+  **Det er ikke bekvemmelighed, det er nødvendigt:** med bekræftelse slået til
+  returnerer signup ingen session, og uden token kan appen ikke skrive
+  `profiles`-rækken (`Auth.jsx` kræver `access_token` for at gå videre). Det
+  brugernavn, du lige valgte, går tabt, og kontoen ender uden profil. Ved næste
+  login slås profilen kun OP — den oprettes ikke. Produktionens indstilling er
+  en anden sag og røres ikke.
 - Gør dig selv til administrator bagefter:
 
   ```sql
   update public.profiles set is_admin = true where display_name = '<dit testnavn>';
   ```
+
+- **Bekræft, at brugeren landede det rigtige sted**, før du opretter nummer to:
+  netværksfanen skal vise kaldet til `/auth/v1/signup` mod **staging-ref'en**, og
+
+  ```sql
+  select count(*) from auth.users;
+  ```
+
+  skal stige i staging, mens produktionens står stille.
+
+**Bruger du alligevel Dashboard → Add user**, opretter det kun `auth.users`-
+rækken. Så skal profilen sættes i hånden, ellers har brugeren intet navn:
+
+```sql uddrag
+insert into public.profiles (id, display_name)
+select id, 'Testbruger' from auth.users where email = '<mail>';
+```
 
 **Kopiér ikke produktionens brugere ind.** Det er teknisk muligt —
 `data-backup.yml` dumper også `auth.users` — men det flytter rigtige personers
@@ -134,9 +253,10 @@ tilstrækkelige, de er svaret.
 
 ## 5. Peg miljøerne på staging
 
-Nøglerne står i Supabase → Project Settings → API: **Project URL**, den
-offentlige **publishable**-nøgle (`sb_publishable_…`) og den hemmelige
-**service_role**-nøgle.
+Nøglerne står i Supabase → Project Settings → API: **Project URL**
+(`https://<ref>.supabase.co` — *ikke* feltet "RESTful endpoint" lige ved siden
+af, se advarslen nedenfor), den offentlige **publishable**-nøgle
+(`sb_publishable_…`) og den hemmelige **service_role**-nøgle.
 
 ### Vercel — kun Preview
 
@@ -148,24 +268,107 @@ miljø:
 | `VITE_SUPABASE_URL` | staging-projektets URL |
 | `VITE_SUPABASE_KEY` | staging-publishable-nøglen |
 | `SUPABASE_URL` | samme URL (serverfunktionerne) |
-| `SUPABASE_SERVICE_ROLE_KEY` | staging-service_role-nøglen |
+| `SUPABASE_SERVICE_ROLE_KEY` | staging-**service_role**-nøglen (den hemmelige, `sb_secret_…`) |
 
-> ⚠️ **Fælden er de variabler, der allerede findes.** Produktionens
-> `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` er formentlig sat til *alle*
-> miljøer. Vercel tillader ikke to værdier for samme navn i overlappende
-> miljøer, så den eksisterende skal først **begrænses til Production**, og
-> derefter oprettes staging-værdien for Preview. Gør man kun det sidste, ser
-> det ud som om det virkede — og preview kalder videre til produktionen.
+> ⚠️ **Tjek scope på de variabler, der allerede findes, FØR du opretter noget.**
+> Vercel tillader ikke to værdier for samme navn i overlappende miljøer. Står en
+> eksisterende på *Production and Preview*, skal den først **begrænses til
+> Production**, og derefter oprettes staging-værdien for Preview. Gør man kun
+> det sidste, ser det ud som om det virkede — og preview kalder videre til
+> produktionen.
+>
+> **Aflæst 6. august 2026 var det ikke nødvendigt for nogen af de fire:**
+> `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SYNC_SECRET` og
+> `SPORTMONKS_TOKEN` stod allerede som **Production** alene, så Preview-værdien
+> kan oprettes ved siden af. `FOOTBALLDATA_TOKEN` og de tre `VAPID_*` står på
+> *Production and Preview* og skal blive der — de er de samme værdier i begge
+> miljøer, og en preview mod staging vil gerne have dem.
 
-Sæt også en **anden** `SYNC_SECRET` for Preview. To miljøer med samme
-hemmelighed betyder, at et kald, der ved en fejl rammer produktionen, bliver
-autoriseret.
+**Det, aflæsningen samtidig afslørede:** preview har aldrig haft en
+`SUPABASE_URL`, så `/api/*` på en preview-URL har aldrig kunnet svare. Det
+forklarer, hvorfor `DOCUMENTATION.md` §9's "alle miljøer peger på samme
+Supabase-projekt" kun har været sandt for **frontenden** (som har produktionens
+værdier hårdkodet som fallback) — serverfunktionerne på preview fejlede i
+stedet på en manglende variabel. Trin 5 retter begge dele på én gang.
 
-Skal preview kunne synkronisere kampe, skal `SPORTMONKS_TOKEN` /
-`FOOTBALLDATA_TOKEN` også være sat for Preview. **De deler kaldebudget med
-produktionens cron-jobs** — football-data.org har 10 kald/minut, og
-minut-spredningen i [`CRON.md`](./CRON.md) regner ikke med en ekstra kalder.
-Synkronisér i staging i ryk, ikke på et skema.
+> 🛑 **De to nøgler ligger under hinanden på samme side, og forveksles de,
+> fejler det TAVST.** `VITE_SUPABASE_KEY` skal være den **publishable**, og
+> `SUPABASE_SERVICE_ROLE_KEY` den **hemmelige**. Bytter man om:
+>
+> * publishable i `SUPABASE_SERVICE_ROLE_KEY` → funktionen får rollen `anon`,
+>   rammer `read profiles`-policyen (`auth.role() = 'authenticated'`) og får
+>   **nul rækker uden fejl**. Symptomet er "Ikke autoriseret", mens profilen
+>   står i databasen med `is_admin = true`. *(Ramt 6. august 2026 — den sidste
+>   time af opsætningen gik med den.)*
+> * service_role i `VITE_SUPABASE_KEY` → en nøgle, der omgår RLS, bygges ind i
+>   den JavaScript, enhver browser henter. Det er den alvorlige af de to.
+
+Sæt en **anden** `SYNC_SECRET` for Preview. To miljøer med samme hemmelighed
+betyder, at et kald, der ved en fejl rammer produktionen, bliver autoriseret.
+Den bruges ikke af "Hent nu" (den autoriserer på admin-token), så den kan sættes
+bagefter — men så er den også sat, den dag et cron-lignende kald skal prøves af.
+
+Leverandør-tokens skal være sat for Preview, hvis kampene skal hentes:
+`SPORTMONKS_TOKEN` (Superligaen) og `FOOTBALLDATA_TOKEN` (de fem andre). **De
+deler kaldebudget med produktionens cron-jobs** — football-data.org har 10
+kald/minut, og minut-spredningen i [`CRON.md`](./CRON.md) regner ikke med en
+ekstra kalder. Synkronisér i staging i ryk, ikke på et skema.
+
+**Leverandør-tokens er de eneste, der må DELES mellem de to miljøer** — og bør
+det. Isolationen, staging findes for, ligger i databasen, ikke i tokenet: det er
+en læseadgang til en tredjeparts kampprogram og kan ikke skrive noget nogen
+steder. `FOOTBALLDATA_TOKEN` står allerede på *Production and Preview*, og
+`SPORTMONKS_TOKEN` kan sættes til det samme frem for at få sin egen
+Preview-værdi. De fire andre er det modsatte: dér ER forskellen hele pointen.
+
+> **Kender du ikke `SPORTMONKS_TOKEN`s værdi, kan den ikke hentes ud af
+> Vercel** — variablen er `Sensitive`, altså skrive-kun. Det behøver du heller
+> ikke: ✅ **en Sensitive-variabels MILJØER kan ændres, uden at værdien
+> genindtastes** (bekræftet 6. august 2026 — `SPORTMONKS_TOKEN` udvidet fra
+> *Production* til *Production and Preview* på ét klik). Værdien kan altså ikke
+> læses, men den kan flyttes. Alternativet — at hente tokenet hos Sportmonks
+> igen — er kun nødvendigt, hvis værdien skal *ændres*. **Ingen af delene
+> blokerer trin 6:**
+> `FOOTBALLDATA_TOKEN` dækker allerede Preview, så de fem
+> football-data-turneringer kan synkroniseres med det samme, og Superligaen kan
+> komme bagefter. Hvilke variabler der kan genskabes hvorfra — og hvilken der
+> ikke kan — står i [`RESTORE.md`](./RESTORE.md).
+
+> **Sådan laver du et nyt Preview-deploy — de to knapper, der ligner hinanden.**
+> I **Deployments** har hver række sin egen `⋯`-menu yderst til højre. Det er
+> **Preview-rækkens** menu → *Redeploy*, der skal bruges. Knappen på
+> Production-rækken og "Redeploy" fra projektets forside rammer begge
+> produktionen og ændrer intet for staging — de laver blot en ny
+> Production-række øverst, hvilket ligner et resultat. Alternativet, der ikke
+> kan rammes ved siden af: **push en commit til branchen**, så bygger Vercel et
+> Preview af sig selv. *(Ramt to gange 6. august 2026.)*
+
+**Variabler slår først igennem ved et NYT deploy — og det skal være et
+PREVIEW-deploy.** Vercel fryser miljøet ind i det enkelte deploy, og det gælder
+**også de variabler, funktionerne læser ved kørsel** (`SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`): en ændret værdi rammer først næste deploy, ikke
+det, der allerede kører. Redeploy derfor **branchens Preview-række** i
+Deployments — eller push en commit til branchen. *(Et Production-redeploy laver
+ikke et nyt Preview og ændrer intet for staging. Ramt 6. august 2026: to
+Production-redeploys, mens preview'et blev ved at køre på den gamle URL, og
+"Hent nu" svarede 401 "Ikke autoriseret" i stedet for 404, fordi funktionen
+sagtens kunne starte — den kunne bare ikke slå kalderen op.)*
+
+> 🛑 **Tag `Project URL` — IKKE `RESTful endpoint`.** Supabases API-side viser
+> begge, og REST-adressen (`https://<ref>.supabase.co/rest/v1`) står mest
+> iøjnefaldende. Men appen sætter selv stien på (`${SUPABASE_URL}${path}` i
+> `src/lib/supabase.js`), så den giver
+> `…/rest/v1//auth/v1/token` og et **404 "Invalid path specified in request
+> URL"**. Værdien skal være `https://<ref>.supabase.co` og intet efter `.co` —
+> heller ikke en afsluttende skråstreg, et mellemrum eller et linjeskift (de to
+> sidste dukker op som `%20`/`%0A` i Request URL'en).
+>
+> **Symptomet er det, der gør fejlen dyr:** login fejler med "Invalid path
+> specified in request URL", hvilket ligner en forkert adgangskode. Kig altid på
+> **Request URL** i netværksfanen frem for på fejlteksten. Gælder begge — både
+> `VITE_SUPABASE_URL` og funktionernes `SUPABASE_URL`, som typisk får samme
+> forkerte værdi og først fejler et trin senere, når "Hent nu" trykkes.
+> *(Ramt 6. august 2026, første gang preview blev åbnet.)*
 
 ### Lokalt
 
@@ -175,6 +378,25 @@ cp .env.example .env.local   # og udfyld med staging-værdierne
 
 `npm run dev` kræver de to `VITE_`-variabler (`G4`) — det er præcis dette valg,
 kravet findes for.
+
+> ⚠️ **`/api/*` findes ikke i `npm run dev`, og det rammer trin 6.** Admin →
+> Drift → "Hent nu" kalder `/api/sync-matches`, som er en Vercel-funktion.
+> Lokalt får du 404, og **staging får aldrig kampe** — resten af appen virker,
+> men der er intet at tippe på. Tre veje, i den rækkefølge de er værd at prøve:
+>
+> 1. **Preview-deployet** (anbefalet): funktionerne er der allerede, og de peger
+>    på staging, så snart variablerne ovenfor er sat. Ingen lokal opsætning.
+> 2. **`npm run dev:api`** (`vercel dev`) kører funktionerne lokalt. Kræver, at
+>    `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SYNC_SECRET` og
+>    leverandørens token også står i `.env.local` — og at det linkede
+>    Vercel-projekts *Development*-variabler ikke overskriver dem med
+>    produktionens.
+> 3. **`VITE_API_PROXY`** — 🛑 **ikke til dette formål.** Den videresender
+>    `/api/*` til en kørende deploy, og den deploys funktioner skriver i
+>    **deres egen** database. Peger du den på produktions-deployet, mens
+>    frontenden kører mod staging, henter og skriver du kampe i PRODUKTIONEN
+>    fra en app, der ser ud til at være staging. Proxyen er lavet til at
+>    afprøve push-flowet, ikke til at synkronisere.
 
 ### Det, der IKKE må pege på staging
 
@@ -188,11 +410,24 @@ kravet findes for.
 
 ## 6. Første kørsel
 
-1. Åbn preview-URL'en for en branch, opret en bruger, og gør den til admin
-   (trin 4).
-2. Admin → Drift → **"Hent nu"** for en liga. Kampene kommer ind; `job_runs`
-   får en række med `authVia: admin-token`.
+1. Åbn **preview-URL'en** for en branch (ikke `localhost` — se advarslen i trin
+   5), log ind med den bruger, du oprettede i trin 4. Er brugeren lavet lokalt,
+   findes den allerede: begge instanser taler med samme staging-database.
+
+   **Brug branchens alias, ikke den enkelte deploys adresse.** Hvert deploy får
+   sin egen URL (`…-8q3hs2f48-…`), og den bliver ved at køre med det miljø, den
+   blev bygget med — også efter en rettelse. Aliasset
+   (`…-git-<branch>-<team>.vercel.app`, står under **Domains** på deployet)
+   peger altid på det nyeste. En fejlsøgning mod en gammel deploy-URL ser ud
+   som en fejl, der ikke vil gå væk.
+2. Admin → Drift → **"Hent nu"** for en liga ad gangen. Kampene kommer ind, og
+   `job_runs` får en række med `authVia: admin-token`. Får du i stedet en fejl
+   om en manglende nøgle, mangler leverandørens token for Preview (trin 5).
 3. Opret en liga og en konkurrence, afgiv et tip.
+
+**Sync'en er den eneste vej til kampe.** Appen kan rette et resultat, men ikke
+oprette kampen — så uden et gennemført "Hent nu" har staging turneringer uden
+noget at tippe på.
 
 ---
 

@@ -20,19 +20,20 @@
 -- databaser, hvor de ikke gør.
 --
 -- ---------------------------------------------------------------------------
--- De to værdier, du selv skal udfylde — og hvorfor de ikke står her
+-- Alle værdier er AFLÆST I PRODUKTIONEN 6. august 2026
 --
--- Ligaen kan skrives ned, fordi 271 er verificeret (kontoens plan, aflæst 31.
--- juli 2026: Superliga 271, Superliga Play-offs 1659, Scotland Premiership 501,
--- Premiership Play-Offs 513). Sæsonen kan den ikke: dens navn og id skifter
--- hvert år, og ingen af delene kunne verificeres, da filen blev skrevet.
+-- Ligaen: 271, sportmonks, live_enabled, synlig, officiel.
+-- Sæsonen: '2026/27', api_season_id 27897, start 2026-07-01.
 --
--- Et gæt ville være dyrere end en tom parameter. Det er præcis G65's erfaring
--- fra tournament_scotland_premiership.sql: en skabelon, der er forkert, ligner
--- det svar, man ledte efter. Derfor står de to som `null`, og blokken nedenfor
--- STOPPER med en læsbar fejl frem for at skrive en halv sæson.
+-- **Sæsonnavnet er '2026/27' og ikke '2026/2027'** — Scotland-filen (#21)
+-- skriver det med fire cifre, og de to turneringer er altså ikke enige. Det er
+-- ikke en detalje: står api_season_id tomt, er navnet den ENESTE nøgle, syncen
+-- har (se blokken nedenfor), og et navn med et ekstra "20" fejler med "sæson
+-- ikke fundet". Filen stod netop med tomme parametre indtil aflæsningen, fordi
+-- et gæt her ville have ramt formatet forkert — G65's erfaring fra Scotland,
+-- bekræftet af sig selv.
 --
--- Hent dem ét af to steder:
+-- NÆSTE SÆSON: begge værdier skifter. Hent parret ét af to steder:
 --
 --   1. Fra produktionen (den nemmeste, og den der er sand):
 --
@@ -47,6 +48,9 @@
 --
 --      curl -s "https://api.sportmonks.com/v3/football/leagues/271?include=seasons&api_token=$T" \
 --        | jq -r '.data.seasons[] | "\(.id)\t\(.name)"'
+--
+-- Guarden nedenfor står tilbage og fyrer, hvis nogen tømmer parametrene igen
+-- uden at udfylde dem.
 --
 -- ---------------------------------------------------------------------------
 -- api_season_id må gerne være null — for netop denne turnering
@@ -89,11 +93,12 @@
 do $$
 declare
   v_league_id uuid;
-  -- ▼▼▼ UDFYLD DISSE FØR KØRSEL I EN TOM DATABASE ▼▼▼
-  -- Navnet skal være Sportmonks' eget (fx '2026/2027'), hvis api_season_id er null.
-  v_season_name text := null;
-  v_season_api_id text := null;    -- valgfri, se blokken ovenfor
-  v_season_start date := null;     -- valgfri, kun til visning
+  -- Aflæst i produktionen 6. august 2026. Ret dem SAMLET, når sæsonen skifter —
+  -- navn og id hører sammen. Navnet er Sportmonks' eget og har to cifre i
+  -- årstal nr. 2 ('2026/27'), hvilket IKKE er samme format som #21's.
+  v_season_name text := '2026/27';
+  v_season_api_id text := '27897';
+  v_season_start date := '2026-07-01';
   -- ▲▲▲
 begin
   select id into v_league_id from leagues where api_league_id = '271' and provider = 'sportmonks';

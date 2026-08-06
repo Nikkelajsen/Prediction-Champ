@@ -339,13 +339,53 @@ export async function isAuthorized(req, { sb, supabaseUrl, serviceKey, syncSecre
       const userRes = await fetchWithTimeout(`${supabaseUrl}/auth/v1/user`, {
         headers: { apikey: serviceKey, Authorization: `Bearer ${userToken}` },
       });
-      if (!userRes.ok) return { ok: false, via: null };
+      // Hvorfor en 401 opstod, kan kun læses HER (august 2026). Svaret til
+      // kalderen er og bliver et nøgent "Ikke autoriseret" — teksten må ikke
+      // kortlægge opsætningen for en uautentificeret kalder, jf. begrundelsen i
+      // sync-matches.js. Men de tre veje til den 401 kræver hver sin rettelse,
+      // og uden en linje her ser de ens ud:
+      //
+      //   · 404 fra /auth/v1/user  → SUPABASE_URL peger forkert (fx på
+      //     "RESTful endpoint" med /rest/v1 bagpå i stedet for Project URL)
+      //   · 401 fra /auth/v1/user  → service-nøglen hører til et andet projekt,
+      //     eller brugerens token er udløbet
+      //   · is_admin falsk         → funktionen kigger i en ANDEN database end
+      //     den, klienten viste Admin-fanen ud fra
+      //
+      // Fælden er ægte og ikke hypotetisk: den kostede en aften under
+      // opsætningen af staging (docs/STAGING.md trin 5-6), hvor alle tre var
+      // mistænkt på skift, fordi loggen kun sagde "401".
+      //
+      // Intet hemmeligt logges — hverken nøgle eller token — og logs kan kun
+      // læses af projektets ejer.
+      if (!userRes.ok) {
+        console.error(`[auth] ${supabaseUrl}/auth/v1/user svarede ${userRes.status}. 404 = forkert SUPABASE_URL, 401 = forkert SUPABASE_SERVICE_ROLE_KEY eller udløbet brugertoken.`);
+        return { ok: false, via: null };
+      }
       const user = await userRes.json();
       const profs = await sb(`/rest/v1/profiles?id=eq.${user.id}&select=is_admin`);
-      return profs[0]?.is_admin ? { ok: true, via: "admin-token" } : { ok: false, via: null };
-    } catch {
+      if (!profs[0]?.is_admin) {
+        // NUL rækker og "findes, men er ikke admin" er to forskellige fejl, og
+        // den første er den lumske: `profiles` har `read profiles` med
+        // `auth.role() = 'authenticated'`, og en publishable nøgle giver rollen
+        // `anon`. Så rammer opslaget RLS og svarer TOMT — ingen 401, ingen
+        // undtagelse, bare nul rækker. En rigtig service_role-nøgle omgår RLS
+        // og finder rækken. Fælden er reel: den kostede den sidste time af
+        // staging-opsætningen, hvor profilen stod i databasen med
+        // `is_admin = true`, mens funktionen påstod, at brugeren ikke fandtes.
+        console.error(
+          profs.length === 0
+            ? `[auth] Fandt 0 profilrækker for bruger ${user.id} på ${supabaseUrl}. Findes rækken i databasen, er SUPABASE_SERVICE_ROLE_KEY næsten altid ikke service_role-nøglen — en publishable nøgle rammer RLS og får et tomt svar uden fejl.`
+            : `[auth] Bruger ${user.id} findes på ${supabaseUrl}, men har ikke is_admin.`
+        );
+        return { ok: false, via: null };
+      }
+      return { ok: true, via: "admin-token" };
+    } catch (e) {
+      console.error(`[auth] Opslaget af kalderen fejlede: ${e.message}`);
       return { ok: false, via: null };
     }
   }
+  console.error("[auth] Hverken en gyldig x-sync-secret-header eller et Bearer-token fulgte med kaldet.");
   return { ok: false, via: null };
 }
