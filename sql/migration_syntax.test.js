@@ -26,13 +26,27 @@ import { fileURLToPath } from "node:url";
 const SQL_DIR = join(dirname(fileURLToPath(import.meta.url)));
 const EXEMPT = new Set(["schema.sql"]);
 
-const migrations = readdirSync(SQL_DIR)
-  .filter((f) => f.endsWith(".sql") && !EXEMPT.has(f))
-  .sort();
+// `sql/dev/` er ikke migreringer, men værktøjer, der pastes i SQL-editoren
+// præcis som en migrering — og rammer derfor præcis samme fælde. De tages med
+// i vagten af samme grund, som `sql/tests/**` holdes ude af den: det afgørende
+// er ikke, om filen er en migrering, men om den pastes i editoren.
+const migrations = [
+  ...readdirSync(SQL_DIR)
+    .filter((f) => f.endsWith(".sql") && !EXEMPT.has(f))
+    .sort(),
+  ...readdirSync(join(SQL_DIR, "dev"))
+    .filter((f) => f.endsWith(".sql"))
+    .sort()
+    .map((f) => join("dev", f)),
+];
 
 describe("migreringer i sql/ kan køres i Supabase SQL-editoren", () => {
   it("finder migreringsfilerne (vagten må ikke stå og bevogte ingenting)", () => {
     expect(migrations.length).toBeGreaterThan(20);
+  });
+
+  it("dækker også sql/dev/, som pastes i editoren på samme måde", () => {
+    expect(migrations.some((f) => f.startsWith("dev"))).toBe(true);
   });
 
   it.each(migrations)("%s indeholder ingen psql-kommandoer", (file) => {

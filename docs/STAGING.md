@@ -431,6 +431,51 @@ noget at tippe på.
 
 ---
 
+## 6b. En hel sæson med ét kald
+
+Trin 6 giver et kampprogram. Det, der stadig mangler, er en **historik**:
+stillinger med afstand mellem brugerne, en rating der har bevæget sig, runde-
+og månedsvindere, historier, mærker. Alt det kræver hundredvis af tips og
+resultater, og der er to grunde til, at det ikke skal tastes:
+
+1. **Mængden.** Tre brugere gange en sæsons kampe er over tre hundrede
+   indtastninger, og halvdelen af skærmene ser først rigtige ud, når tallene
+   er der.
+2. **Resultaterne forsvinder igen.** Taster du dem på en RIGTIG turnerings
+   kampe, skriver næste "Hent nu" `home_score = null` på hver kamp,
+   leverandøren ikke melder færdig (§8) — altså hele sæsonen tilbage til
+   udgangspunktet.
+
+[`sql/dev/simulate_season.sql`](../sql/dev/simulate_season.sql) løser begge
+dele ved at give simulationen sin **egen** turnering — "SIM-ligaen" med egne
+hold, en fuld dobbeltturnering og `api_fixture_id`-præfikset `sim:`, som ingen
+leverandør sender. Ingen sync kan ramme den, uanset hvor tit du henter de
+rigtige turneringer ved siden af.
+
+SQL-editoren, staging-projektet, "Run without RLS":
+
+```sql uddrag
+select sim.arm('JA - DETTE ER STAGING');
+select sim.setup();     -- 12 hold, 22 runder, 132 kampe, alle brugere med
+select sim.season();    -- tips + spiller alle runder frem til i dag
+select * from sim.status();
+```
+
+`select sim.advance(1)` spiller én runde mere — det er den, der viser
+*forløbet* (rating der flytter sig, en ny rundevinder, næste historie).
+`select sim.teardown()` fjerner det hele igen, inklusive de afledte rækker,
+kaskaderne ikke fanger.
+
+**Låsen er en heuristik, ikke et bevis.** `sim.arm()` kræver sætningen ordret
+og afviser en database med mere end ti brugere — men ingen SQL-værdi siger
+"dette er staging". Tag kontrollen fra trin 2 først; den tager to sekunder:
+
+```sql
+select count(*) from auth.users;
+```
+
+---
+
 ## 7. Bevis, at det er staging
 
 Tre kontroller. Den sidste er den eneste, der ikke kan snydes af en cachet
