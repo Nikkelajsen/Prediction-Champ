@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict fvv9CoRIZZGOg9ubMt1PcVcKwKQ6LjhAetCR5kXneMnbtltdvK0qFGGpN0zQIl1
+\restrict z7nquY8arZpf5bBlcDaIEjEW8ujtyWchKCK2ZhuUDojzaXDW2oPTKr2R4tXMVT3
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
@@ -109,8 +109,8 @@ begin
   --       gamle.
   --
   -- Invarianten er urørt: `group_membership_invariant.sql` kræver deltager ⇒
-  -- medlem, og der fjernes kun i deltager-enden. Ligamedlemskabet bliver
-  -- stående; det er hverken en stilling eller en plads i en konkurrence.
+  -- medlem, og der fjernes kun i deltager-enden. **Ligamedlemskabet håndteres
+  -- lige nedenfor** (`A36`/`A37`, 7. august 2026) — indtil da blev det stående.
   --
   -- TIPPENE RØRES IKKE. Ét tip gælder i ALLE de konkurrencer, kampen indgår i,
   -- så en sletning her kunne flytte tal i en konkurrence, brugeren stadig ER
@@ -137,6 +137,79 @@ begin
        where o.competition_id = cp.competition_id
          and o.user_id <> p_user_id
      );
+
+  -- ---------------------------------------------------------------------
+  -- Ligamedlemskabet: overdrag først, forlad derefter (A36 + A37)
+  -- ---------------------------------------------------------------------
+  -- To beslutninger, truffet 7. august 2026, og de hænger sammen:
+  --   `A37` — admin overdrages til det ældste levende medlem.
+  --   `A36` — den lukkede konto forlader ligaen.
+  --
+  -- **Rækkefølgen er ikke valgfri.** Overdragelsen skal ske FØR frameldingen,
+  -- fordi den bruger den lukkede kontos egen `role = 'admin'` til at finde de
+  -- ligaer, der skal have en ny administrator. Bytter man om, er oplysningen
+  -- væk, og ligaen fryser præcis som `A37` beskriver.
+  --
+  -- **Hvorfor overdragelsen overhovedet er nødvendig.** Admin-rollen kan kun
+  -- uddeles ÉN gang — af opretteren til sig selv ved oprettelsen — og der
+  -- findes ingen UPDATE-policy på `group_members`, altså ingen forfremmelse.
+  -- En lukket konto kan aldrig logge ind igen (`api/delete-account.js`
+  -- soft-sletter `auth.users`). Uden overdragelsen kan `is_group_admin()`
+  -- derfor aldrig blive sand for den liga igen: den kan hverken omdøbes,
+  -- slettes, få fjernet en deltager eller få slettet en konkurrence.
+  -- Aflæst i produktion 7. august 2026: fire rigtige ligaer, 5–9 medlemmer
+  -- hver, og præcis én levende admin i hver af dem.
+  --
+  -- **"Ældste" = længst i ligaen** (`group_members.joined_at`), ikke ældste
+  -- konto. Det er den aflæsning, der giver mening i et fællesskab: den, der
+  -- har været med længst, er den, de andre kender. `user_id` bryder
+  -- uafgjort, så to medlemmer med samme tidsstempel ikke gør resultatet
+  -- afhængigt af rækkefølgen på disken.
+  with mine as (
+    -- Ligaer, hvor den lukkede konto ER administrator.
+    select group_id
+      from public.group_members
+     where user_id = p_user_id and role = 'admin'
+  ),
+  arving as (
+    select distinct on (m.group_id) m.group_id, m.user_id
+      from public.group_members m
+      join mine           on mine.group_id = m.group_id
+      join public.profiles pr on pr.id = m.user_id
+     where m.user_id <> p_user_id
+       -- Kun en LEVENDE konto kan arve. Ellers flyttes problemet blot.
+       and pr.anonymized_at is null
+     order by m.group_id, m.joined_at, m.user_id
+  )
+  update public.group_members gm
+     set role = 'admin'
+    from arving a
+   where gm.group_id = a.group_id
+     and gm.user_id  = a.user_id;
+
+  -- Frameldingen. **Guarden er invarianten og ikke en bekvemmelighed:**
+  -- `group_membership_invariant.sql` kræver deltager ⇒ medlem, så
+  -- medlemskabet må kun fjernes i de ligaer, hvor der ikke er en deltagelse
+  -- tilbage. A25 ovenfor har netop fjernet dem, der ikke var begyndt — det,
+  -- der står tilbage, er spillet historik, og dér BLIVER pseudonymet på
+  -- listen. Det er samme skel som hele resten af funktionen: alt, der er
+  -- sket, bevares.
+  delete from public.group_members gm
+   where gm.user_id = p_user_id
+     and not exists (
+       select 1
+         from public.competition_participants cp
+         join public.competitions c on c.id = cp.competition_id
+        where cp.user_id = p_user_id
+          and c.group_id = gm.group_id
+     );
+
+  -- Blev medlemskabet stående (historik i ligaen), må rollen ikke blive ved
+  -- at være `admin`: en konto, der ikke kan logge ind, er ikke en
+  -- administrator, og `league_admin_coverage` ville tælle den som en.
+  update public.group_members
+     set role = 'member'
+   where user_id = p_user_id and role = 'admin';
 
   update public.profiles
      set display_name  = v_navn,
@@ -7277,5 +7350,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict fvv9CoRIZZGOg9ubMt1PcVcKwKQ6LjhAetCR5kXneMnbtltdvK0qFGGpN0zQIl1
+\unrestrict z7nquY8arZpf5bBlcDaIEjEW8ujtyWchKCK2ZhuUDojzaXDW2oPTKr2R4tXMVT3
 
