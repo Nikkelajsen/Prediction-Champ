@@ -615,6 +615,52 @@ describe("createCompetition", () => {
       (table === "competitions" ? [{ id: "c1", ...rows[0] }] : undefined));
   }
 
+  // Perioden kunne indtil august 2026 kun dække ÉN turnering: opret-skærmen
+  // havde en enkeltvalgs-dropdown, og skrive-stien krævede league_id + season_id.
+  it("periode over FLERE turneringer bliver turneringsløs med tournaments i mode_params", async () => {
+    setup();
+    const res = await create({
+      name: "August", mode: "time_range",
+      tournaments: [{ leagueId: "L1", seasonId: "S1" }, { leagueId: "L2", seasonId: "S2" }],
+      startDate: "2026-08-01", endDate: "2026-08-31",
+    });
+
+    expect(insertedRow("competitions")).toMatchObject({
+      mode: "time_range",
+      league_id: null,
+      season_id: null,
+      mode_params: {
+        start_date: "2026-08-01",
+        end_date: "2026-08-31",
+        tournaments: [{ league_id: "L1", season_id: "S1" }, { league_id: "L2", season_id: "S2" }],
+      },
+    });
+    // Kampene materialiseres pr. turnering — begge sæsoner slås op.
+    expect(db.select.mock.calls.filter((c) => c[1] === "matches")).toHaveLength(2);
+    expect(res.matchCount).toBe(matchRows().length);
+  });
+
+  it("periode over ÉN turnering beholder den bundne form (ingen tournaments-nøgle)", async () => {
+    setup();
+    await create({
+      name: "August", mode: "time_range",
+      tournaments: [{ leagueId: "L1", seasonId: "S1" }],
+      leagueId: "L1", seasonId: "S1", startDate: "2026-08-01", endDate: "2026-08-31",
+    });
+    const row = insertedRow("competitions");
+    expect(row.league_id).toBe("L1");
+    expect(row.season_id).toBe("S1");
+    expect(row.mode_params.tournaments).toBeUndefined();
+  });
+
+  it("periode over flere turneringer kræver datoer", async () => {
+    setup();
+    await expect(create({
+      name: "August", mode: "time_range",
+      tournaments: [{ leagueId: "L1", seasonId: "S1" }, { leagueId: "L2", seasonId: "S2" }],
+    })).rejects.toThrow(/dato/i);
+  });
+
   it("full sæson med én turnering bevarer den bundne form og tager kun ikke-spillede runder med", async () => {
     setup();
     const res = await create({

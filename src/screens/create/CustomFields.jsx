@@ -7,10 +7,15 @@ import { C, chip, muted } from "../../ui/theme.js";
 import { formatKickoff } from "../../lib/scoring.js";
 import LeagueChips from "./LeagueChips.jsx";
 
+// Loftets valgmuligheder. 0 = "Alle" og er standarden, så en periode uden
+// stillingtagen opfører sig præcis som før.
+const PER_ROUND_CHOICES = [0, 3, 5, 8, 10, 15];
+
 function CustomFields({
   method, onMethod,
   leagues, pickLeagueIds, onPickLeagueIds, upcomingRounds, upcomingTeams, pickedIds, onPickedIds,
-  periodLeagueId, onPeriodLeagueId, startDate, endDate, onStartDate, onEndDate,
+  periodLeagueIds, onPeriodLeagueIds, startDate, endDate, onStartDate, onEndDate,
+  perRound, onPerRound, periodCount,
 }) {
   return (
     <>
@@ -25,16 +30,38 @@ function CustomFields({
 
       {method === "period" && (
         <>
-          {leagues.length > 1 && (
-            <select className="field" value={periodLeagueId} onChange={(e) => onPeriodLeagueId(e.target.value)}>
-              {leagues.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-          )}
+          {/* Samme turneringsvælger som håndpluk og de tilfældige typer. Feltet
+              var en enkeltvalgs-dropdown indtil august 2026, så en periode kun
+              kunne dække ÉN turnering — mens håndpluk lige ved siden af kunne
+              vælge frit blandt dem alle. */}
+          <LeagueChips leagues={leagues} selectedIds={periodLeagueIds} onChange={onPeriodLeagueIds} />
           <div style={{ display: "flex", gap: 8 }}>
             <input className="field" type="date" value={startDate} onChange={(e) => onStartDate(e.target.value)} />
             <input className="field" type="date" value={endDate} onChange={(e) => onEndDate(e.target.value)} />
           </div>
-          <p style={{ ...muted, margin: 0 }}>Alle kampe mellem de to datoer kommer med — også dem, der skemalægges senere.</p>
+
+          <div>
+            <div style={{ ...muted, marginBottom: 6 }}>Kampe pr. runde</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {PER_ROUND_CHOICES.map((n) => (
+                <button key={n} type="button" aria-pressed={perRound === n} style={chip(perRound === n)}
+                  onClick={() => onPerRound(n)}>
+                  {perRound === n ? "\u2713 " : ""}{n === 0 ? "Alle" : n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* De to løfter udelukker hinanden, så teksten skifter med valget frem
+              for at stå med et forbehold, der kun gælder halvdelen af tiden. */}
+          <p style={{ ...muted, margin: 0 }}>
+            {perRound
+              ? `Højst ${perRound} kampe i hver runde, fordelt jævnt på de valgte turneringer — er der færre i en runde, kommer de alle med. Kampene vælges nu, så kampe, der først skemalægges senere, kommer ikke med.`
+              : "Alle kampe mellem de to datoer kommer med — også dem, der skemalægges senere."}
+          </p>
+          {perRound > 0 && periodCount > 0 && (
+            <p style={{ ...muted, margin: 0 }}>{periodCount} kampe valgt.</p>
+          )}
         </>
       )}
 

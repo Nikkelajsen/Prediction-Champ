@@ -113,6 +113,55 @@ function pickRandomFromRounds(pool, { count = 6, rounds = 1, shuffle } = {}) {
   return ids;
 }
 
+// ---------- loft pr. runde (custom/periode) ----------
+// Vælg højst `perRound` kampe i hver runde, fordelt JÆVNT på de valgte
+// turneringer. Ren funktion, så reglen kan efterprøves uden en skærm.
+//
+// Fordelingen er en round robin og ikke en kvote-udregning, og det er dét, der
+// gør reglen robust: har en turnering færre kampe end sin andel, bliver den
+// bare sprunget over i næste omgang, og de øvrige fylder pladsen. Med 10 kampe
+// og tre turneringer giver det 4/3/3; har den ene kun én kamp, giver det 1/5/4
+// frem for et hul. Brugeren bad netop om, at et loft på ti i en runde med syv
+// kampe bare betyder syv.
+//
+// Rækkefølgen er fastlagt hele vejen ned, så to kørsler giver samme kampe:
+// turneringerne tages i rækkefølge efter deres TIDLIGSTE kickoff i runden (ved
+// ulige deling går den ekstra altså til den, der spiller først), og inden for
+// en turnering tages kampene i kickoff-rækkefølge med id'et som sidste nøgle.
+function pickPerRound(pool, { perRound, leagueOf = (m) => m._leagueId } = {}) {
+  const cap = Math.max(0, Number(perRound) || 0);
+  if (!cap) return (pool || []).map((m) => m.id); // 0/null = "Alle"
+
+  const byRound = {};
+  for (const m of pool || []) (byRound[m.round_key] ||= []).push(m);
+
+  const ids = [];
+  for (const key of Object.keys(byRound).sort()) {
+    const byLeague = new Map();
+    for (const m of byRound[key]) {
+      const lid = leagueOf(m) ?? "";
+      if (!byLeague.has(lid)) byLeague.set(lid, []);
+      byLeague.get(lid).push(m);
+    }
+    const order = (a, b) =>
+      String(a.kickoff_at || "").localeCompare(String(b.kickoff_at || "")) ||
+      String(a.id || "").localeCompare(String(b.id || ""));
+    const queues = [...byLeague.values()].map((list) => list.slice().sort(order));
+    queues.sort((qa, qb) => order(qa[0], qb[0]));
+
+    let taken = 0;
+    while (taken < cap && queues.some((q) => q.length)) {
+      for (const q of queues) {
+        if (taken >= cap) break;
+        if (!q.length) continue;
+        ids.push(q.shift().id);
+        taken++;
+      }
+    }
+  }
+  return ids;
+}
+
 // Ugens kupon er det ENE kort, der forudfylder navnet — det genererede navn er
 // selve featuren ("Ugens kupon 12/08 – 18/08"), ikke en default, man glemmer at
 // ændre (B6 fjernede netop dén slags forudfyldning alle andre steder).
@@ -133,6 +182,8 @@ function weeklyCouponName(roundKey) {
 //   teams        team: [{ leagueId, seasonId, teamId }]
 //   method       custom: "pick" (håndpluk) | "period" (time_range)
 //   leagueId, seasonId, startDate, endDate   custom/period
+//   tournaments  custom/period med FLERE turneringer: [{ leagueId, seasonId }]
+//   perRound     custom/period: loft pr. runde (0/null = alle). Sat ⇒ mode `custom`
 //   matchIds     custom/pick + alle random-typer (udpeget i klienten)
 //   randomCount, rounds                      random-typerne
 function buildSpec(state) {
@@ -144,8 +195,27 @@ function buildSpec(state) {
   if (type.id === "team") return { ...shared, mode: "team", teams: state.teams || [] };
   if (type.id === "custom") {
     if (state.method === "period") {
+      // Et LOFT gør perioden til et håndplukket udvalg, og det er et bevidst
+      // skifte af mode. `time_range` er en VOKSENDE regel — api/_backfill.js
+      // føjer kampe til, efterhånden som de skemalægges, og det er hele
+      // periodens løfte. Et loft, der blev sat ved oprettelsen, ville derfor
+      // blive brudt tavst ved næste efterfyldning: brugeren bad om ti kampe
+      // pr. runde og ville ende med fjorten uden at få det at vide.
+      //
+      // Efterfyldningen kan heller ikke håndhæve loftet selv: den kører pr.
+      // sæson og ser dermed ikke de øvrige valgte turneringers kampe i samme
+      // runde. Med `custom` er kampene udpeget én gang, og `custom` står ikke i
+      // BACKFILLABLE_MODES — konkurrencen kan altså ikke vokse fra sig selv.
+      // Uden loft er formen uændret, og perioden vokser som hidtil.
+      if (state.perRound) {
+        return { ...shared, mode: "custom", matchIds: state.matchIds || [] };
+      }
       return {
         ...shared, mode: "time_range",
+        // Én turnering beholder den BUNDNE form (league_id/season_id sat), så
+        // eksisterende rækker og efterfyldningens sti er urørte; flere gør den
+        // turneringsløs med `tournaments`, præcis som full_season-multi.
+        tournaments: state.tournaments || [],
         leagueId: state.leagueId, seasonId: state.seasonId,
         startDate: state.startDate, endDate: state.endDate,
       };
@@ -161,4 +231,4 @@ function buildSpec(state) {
   };
 }
 
-export { CREATE_TYPES, createTypeById, pickRandomFromRounds, weeklyCouponName, buildSpec };
+export { CREATE_TYPES, createTypeById, pickRandomFromRounds, pickPerRound, weeklyCouponName, buildSpec };

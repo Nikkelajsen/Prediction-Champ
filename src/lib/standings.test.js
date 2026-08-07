@@ -37,6 +37,30 @@ describe("compareStandings (tiebreaker-stigen)", () => {
     const b = { userId: "b", total: 10, exactCount: 2, outcomeCount: 4, avgGoalError: 2.0 };
     expect(compareStandings(a, b)).toBeLessThan(0); // målafvigelsen afgør, ikke det manglende felt
   });
+
+  // Den, der ikke har tippet, har `avgGoalError: 0` — den bedst mulige værdi på
+  // et trin, hvor mindst vinder. Uden `goalErrorOf` vandt man altså
+  // tiebreakeren ved at lade være med at deltage.
+  it("en spiller UDEN tips taber målafvigelsen til en, der har tippet skævt", () => {
+    const tipper = { userId: "a", total: 0, exactCount: 0, outcomeCount: 0, roundWins: 0, matches: 20, avgGoalError: 3.0 };
+    const fravær = { userId: "b", total: 0, exactCount: 0, outcomeCount: 0, roundWins: 0, matches: 0, avgGoalError: 0 };
+    expect(compareStandings(tipper, fravær)).toBeLessThan(0);
+    expect(compareStandings(fravær, tipper)).toBeGreaterThan(0);
+  });
+
+  it("to spillere uden tips er ægte lige (ingen NaN i komparatoren)", () => {
+    const a = { userId: "a", total: 0, matches: 0, avgGoalError: 0 };
+    const b = { userId: "b", total: 0, matches: 0, avgGoalError: 0 };
+    expect(compareStandings(a, b)).toBe(0);
+  });
+
+  // Championship-stillingerne kommer fra SQL-views, som kun indeholder
+  // spillere, der HAR tippet — deres rækker bærer intet `matches`-felt.
+  it("rører ikke rækker uden `matches`", () => {
+    const a = { userId: "a", total: 5, avgGoalError: 1.0 };
+    const b = { userId: "b", total: 5, avgGoalError: 2.0 };
+    expect(compareStandings(a, b)).toBeLessThan(0);
+  });
 });
 
 describe("avgGoalError", () => {
@@ -116,6 +140,27 @@ describe("leaders / joinNames (delt titel)", () => {
       base({ userId: "c", total: 9 }),
     ]));
     expect(leaders(rows).map((r) => r.userId)).toEqual(["a", "b"]);
+  });
+
+  // Stillingen har én række pr. DELTAGER, ikke pr. tipper. En konkurrence, hvor
+  // ingen nåede at tippe, står derfor med alle på 0 point, alle ægte lige og
+  // alle på 1. pladsen — og kårede før alle sammen som vindere.
+  it("kårer INGEN, når ingen har tippet", () => {
+    const rows = assignRanks(sortStandings([
+      { userId: "a", total: 0, exactCount: 0, outcomeCount: 0, roundWins: 0, matches: 0, avgGoalError: 0 },
+      { userId: "b", total: 0, exactCount: 0, outcomeCount: 0, roundWins: 0, matches: 0, avgGoalError: 0 },
+      { userId: "c", total: 0, exactCount: 0, outcomeCount: 0, roundWins: 0, matches: 0, avgGoalError: 0 },
+    ]));
+    expect(rows.every((r) => r.rank === 1)).toBe(true); // de ER ægte lige
+    expect(leaders(rows)).toEqual([]);                  // men ingen har vundet
+  });
+
+  it("kårer den, der HAR tippet, selv om alle står på 0 point", () => {
+    const rows = assignRanks(sortStandings([
+      { userId: "fravær", total: 0, exactCount: 0, outcomeCount: 0, roundWins: 0, matches: 0, avgGoalError: 0 },
+      { userId: "tipper", total: 0, exactCount: 0, outcomeCount: 0, roundWins: 0, matches: 6, avgGoalError: 2.5 },
+    ]));
+    expect(leaders(rows).map((r) => r.userId)).toEqual(["tipper"]);
   });
 
   it("sætter navne sammen på dansk", () => {

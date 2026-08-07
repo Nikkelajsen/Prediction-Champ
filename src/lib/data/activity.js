@@ -3,6 +3,7 @@
 
 import { db, restFetch } from "../supabase.js";
 import { readUserFlag, writeUserFlag, PING_KEY } from "../localFlags.js";
+import { compareMilestones } from "../milestones.js";
 
 // ---------- Aktivitets-sporing + brugerstatistik ----------
 // touchActivity: letvægts-"ping" ved app-start. RPC'en registrerer, at brugeren har
@@ -71,13 +72,20 @@ async function loadRoundCarousel(token, roundKey, limit = 10) {
 // milepæl lægger sig forrest som guldkort. Uden den ville en milepæl kun kunne
 // opdages ved at åbne karriereprofilen, og så ville de fleste aldrig se, at de
 // havde opnået noget. Teksten renderes af klienten (src/lib/milestones.js).
-async function loadRecentMilestones(token, sinceDateKey) {
+// Rækkefølgen afgøres i JS og ikke af `order=` — se `compareMilestones`.
+// Databasen kan sortere på `achieved_at`, men ikke på familie-rangordenen, og
+// det er netop den, der skal afgøre, når flere milepæle deler dag (hvilket de
+// rutinemæssigt gør: `award_milestones()` er en batch-genberegning). Derfor
+// hentes der bredere end de tre, der vises, og de tre vælges her.
+const MILESTONE_FETCH = 12;
+
+async function loadRecentMilestones(token, sinceDateKey, limit = 3) {
   if (!sinceDateKey) return [];
   try {
     const rows = await db.select(token, "milestones",
       `achieved_at=gte.${sinceDateKey}&select=key,family,tier,competition_id,payload,achieved_at` +
-      `&order=achieved_at.desc&limit=3`);
-    return rows || [];
+      `&order=achieved_at.desc&limit=${MILESTONE_FETCH}`);
+    return (rows || []).slice().sort(compareMilestones).slice(0, limit);
   } catch { return []; }
 }
 

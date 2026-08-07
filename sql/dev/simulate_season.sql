@@ -53,6 +53,17 @@
 --
 --       select sim.advance(1);    -- tipper og spiller næste runde
 --
+--    Eller spil den HELT færdig, også de runder der ligger fremme, og lad
+--    konkurrencen blive afsluttet med pokal og podie:
+--
+--       select sim.tip();
+--       select sim.play('2030-01-01');
+--
+--    Sæsonen meldes færdig af sig selv, når sidste kamp er spillet. Det er ikke
+--    en detalje: `competition_status` kræver, at SÆSONEN siger, den er slut —
+--    "alle kampe har resultat" er ikke nok for en konkurrence, der kan vokse.
+--    `sim.status()`s række "Afsluttet" siger, hvad der mangler.
+--
 -- 5. Fortryd alt igen — sporløst:
 --
 --       select sim.teardown();
@@ -644,6 +655,10 @@ begin
     -- ville løkken vælge den samme runde igen og køre for evigt.
     exit when v_rows = 0;
     v_total := v_total + v_rows;
+
+    -- Rundens milepæle, dateret til rundens sidste dag kl. 22 dansk tid — altså
+    -- kort efter at søndagens sidste kamp er fløjtet af. Se sim.award_milestones_at().
+    perform sim.award_milestones_at(((v_round + 6)::timestamp + time '22:00') at time zone 'Europe/Copenhagen');
   end loop;
 
   -- Kåringerne skrives normalt lazy, når nogen åbner konkurrencens board
@@ -665,15 +680,128 @@ begin
     raise notice 'Kåringerne kunne ikke skrives (%). Åbn konkurrencen i appen — så skrives de af sig selv.', sqlerrm;
   end;
 
-  -- Mærkerne (milestones) skrives også lazy fra klienten. Samme argument som
-  -- kåringerne: en simuleret sæson uden mærker er en halv sæson.
+  -- Er der ikke flere kampe tilbage, meldes SÆSONEN færdig — og det er ikke
+  -- pyntning, det er det skridt, der afgør, om konkurrencen kan afsluttes.
+  --
+  -- `competition_status` (sql/season_end.sql) kræver mere end "alle kampe har
+  -- resultat" for en konkurrence, der kan vokse: sæsonen skal selv sige, at den
+  -- er slut — via `is_finished`, via `ends_at < current_date`, eller via
+  -- 30-dages-ventilen. Reglen findes for at lukke Superliga-hullet, hvor
+  -- slutspillet først skemalægges til foråret, så sæsonen SER færdig ud imens.
+  --
+  -- Simulationen har præcis samme hul: med standardopsætningen ligger `ends_at`
+  -- i fremtiden, så en gennemspillet sæson stod som 132/132 spillet og alligevel
+  -- ikke afsluttet — for evigt. (Fundet 6. august 2026 af den første, der spillede
+  -- en sæson færdig i staging og spurgte hvorfor pokalen udeblev.)
+  --
+  -- Her er simulationen selv datakilden, så den gør dét, `fetchSeasonMeta()` i
+  -- syncen gør: sætter flaget og trækker `ends_at` tilbage til den sidste kamp,
+  -- der faktisk blev spillet. Kun ÉN vej — at åbne en sæson igen er en bevidst
+  -- handling, jf. samme fil, og den bor i `sim.finish_season(false)`.
+  if not exists (
+    select 1 from public.matches
+    where season_id = v_season and home_score is null
+  ) then
+    perform sim.finish_season(true);
+  end if;
+
+  -- Sidste kald, og det er ikke overflødigt: milepælene for en AFSLUTTET
+  -- konkurrence (pokal, podie) læser `competition_status`, som først blev sand
+  -- lige ovenfor. Dateres til den sidste kamp, der er spillet — ikke til nu,
+  -- for i simulationens tidsregning er det dér, sæsonen sluttede.
+  perform sim.award_milestones_at(coalesce(
+    (select max(kickoff_at) + interval '105 minutes'
+     from public.matches where season_id = v_season and home_score is not null),
+    now()
+  ));
+
+  return v_total;
+end;
+$fn$;
+
+
+-- Milepæle, dateret til det øjeblik, de blev opnået.
+--
+-- `award_milestones()` er en BATCH-genberegning: den ser på alt, brugeren har
+-- gjort, og indsætter det, der mangler — med `achieved_at` = `now()`. Kaldes den
+-- én gang til sidst, får en hel sæsons bedrifter derfor ét og samme tidsstempel,
+-- og alt, der sorterer på det, får ingenting at sortere efter. Målt: 15
+-- milepæle, ét distinkt tidsstempel — og karusellen på Hjem viste da tre
+-- vilkårlige af dem, hvoraf de to var "Du oprettede din første liga/konkurrence".
+--
+-- Derfor kaldes den ÉN GANG PR. RUNDE, og de rækker, kaldet lige har lagt ind,
+-- dateres til rundens sidste søndag aften. Så ligner testdataene en sæson, der
+-- er levet igennem, frem for en, der blev regnet ud på ét sekund.
+create or replace function sim.award_milestones_at(p_when timestamptz)
+returns int
+language plpgsql
+as $fn$
+declare
+  -- `now()` og IKKE `clock_timestamp()`, og det er hele finten.
+  --
+  -- `milestones.achieved_at` har `default now()`, og `now()` er TRANSAKTIONENS
+  -- starttidspunkt — ikke urets. Hele `select sim.play(...)` er én transaktion,
+  -- så hver eneste række, `award_milestones()` indsætter undervejs, får samme
+  -- værdi: transaktionens start. Et mærke sat med `clock_timestamp()` ligger
+  -- DERFOR EFTER de rækker, det skulle fange, og `where achieved_at >= v_mark`
+  -- rammer nul rækker — tavst. (Ramt her, og symptomet var, at alle 15
+  -- milepæle stadig delte én dato efter en runde-for-runde-kørsel.)
+  v_mark timestamptz := now();
+  v_rows int := 0;
+begin
   begin
     perform public.award_milestones();
+    -- Lighed og ikke `>=`: en tidligere rundes rækker er allerede dateret VÆK
+    -- fra `now()`, så de går fri — og en runde, der ligger i FREMTIDEN (spiller
+    -- man hele sæsonen med `sim.play('2030-01-01')`, slutter de sidste runder
+    -- efter i dag), ville med `>=` blive fanget igen og omdateret ved næste
+    -- gennemløb.
+    update public.milestones
+       set achieved_at = p_when
+     where achieved_at = v_mark;
+    get diagnostics v_rows = row_count;
   exception when others then
     raise notice 'Mærkerne kunne ikke skrives (%).', sqlerrm;
   end;
+  return v_rows;
+end;
+$fn$;
 
-  return v_total;
+
+-- Sæsonens slutning. `sim.play()` sætter den selv, når sidste kamp er spillet;
+-- denne findes for den anden retning og for at kunne fremkalde tilstanden
+-- "sæsonen er slut, men kampene er ikke spillet færdige" i hånden.
+--
+-- Modsvarer `admin_set_season_finished()` i produktet (Admin → Drift), som af
+-- samme grund tillader begge veje: en sæson lukket ved en fejl skal kunne åbnes
+-- igen, og en fejl, der kun kan rettes i databasekonsollen, bliver ikke rettet.
+create or replace function sim.finish_season(p_finished boolean default true)
+returns text
+language plpgsql
+as $fn$
+declare
+  v_season uuid := sim.season_id();
+  v_last   date;
+begin
+  perform sim.require_armed();
+  if v_season is null then
+    raise exception 'Ingen SIM-sæson. Kør sim.setup() først.';
+  end if;
+
+  -- Slutdatoen sættes efter de kampe, der FINDES, og ikke efter den plan,
+  -- sæsonen blev oprettet med. De to er kun ens, når hele sæsonen er spillet.
+  select max((kickoff_at at time zone 'Europe/Copenhagen')::date) into v_last
+  from public.matches where season_id = v_season;
+
+  update public.seasons
+     set is_finished = p_finished,
+         ends_at     = case when p_finished then v_last else ends_at end
+   where id = v_season;
+
+  return case
+    when p_finished then format('SIM-sæsonen er meldt færdig (ends_at = %s). Konkurrencen kan nu afsluttes.', v_last)
+    else 'SIM-sæsonen er åbnet igen (is_finished = false).'
+  end;
 end;
 $fn$;
 
@@ -781,9 +909,25 @@ as $fn$
     union all
     select 8, 'Historier', (select count(*)::text from public.stories where competition_id = (select comp_id from s))
     union all
+    -- Den række, der besvarer "hvorfor er konkurrencen ikke færdig?". Begge
+    -- halvdele skal være sande, og det er sjældent den første, der mangler.
+    select 9, 'Afsluttet', (
+      select case
+        when cs.concluded then 'ja'
+        -- Rækkefølgen på de to råd er ikke tilfældig: mangler der kampe, er det
+        -- dem, der skal spilles, og sæson-flaget følger så af sig selv.
+        when cs.scored_matches < cs.matches then
+          format('nej — %s af %s kampe spillet. Kør sim.advance(n) eller sim.play(''2030-01-01'')',
+                 cs.scored_matches, cs.matches)
+        else
+          'nej — alle kampe er spillet, men sæsonen står som i gang. Kør sim.finish_season()'
+      end
+      from public.competition_status cs where cs.competition_id = (select comp_id from s)
+    )
+    union all
     -- Stillingen sorteret som appen sorterer den (sql/standings_tiebreakers.sql):
     -- point, så eksakte, så mållinjen.
-    select 9 + row_number() over (order by st.total_points desc, st.exact_count desc, st.avg_goal_error),
+    select 10 + row_number() over (order by st.total_points desc, st.exact_count desc, st.avg_goal_error),
            'Stilling · ' || pr.display_name,
            format('%s point på %s kampe (%s eksakte, %s rundesejre) · rating %s',
                   st.total_points, st.matches, st.exact_count, st.round_wins,

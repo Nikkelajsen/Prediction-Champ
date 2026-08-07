@@ -466,6 +466,24 @@ select * from sim.status();
 `select sim.teardown()` fjerner det hele igen, inklusive de afledte rækker,
 kaskaderne ikke fanger.
 
+**Vil du se en AFSLUTTET konkurrence** — pokal, podie, de milepæle der kun
+uddeles til sidst — så spil også de runder, der ligger fremme:
+
+```sql uddrag
+select sim.tip();
+select sim.play('2030-01-01');
+```
+
+Sæsonen meldes færdig af sig selv, når sidste kamp er spillet. Det skridt er
+ikke pynt: `competition_status` (§3, `sql/season_end.sql`) kræver, at **sæsonen
+selv** siger, den er slut — `seasons.is_finished`, `ends_at < i dag`, eller
+30-dages-ventilen. "Alle kampe har resultat" er med vilje ikke nok for en
+konkurrence, der kan vokse, fordi Superligaens slutspil først skemalægges til
+foråret og sæsonen indtil da *ser* færdig ud. Simulationen spiller her
+datakildens rolle, præcis som `fetchSeasonMeta()` gør i syncen.
+
+Rækken **"Afsluttet"** i `sim.status()` siger, hvad der eventuelt mangler.
+
 **Låsen er en heuristik, ikke et bevis.** `sim.arm()` kræver sætningen ordret
 og afviser en database med mere end ti brugere — men ingen SQL-værdi siger
 "dette er staging". Tag kontrollen fra trin 2 først; den tager to sekunder:

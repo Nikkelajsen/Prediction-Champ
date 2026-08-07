@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Trophy, Copy, Check, ClipboardList } from "lucide-react";
 import { lockedRoundsOf, roundLabel } from "../lib/scoring.js";
+import { leaders } from "../lib/standings.js";
 import { computeCompetitionState, loadRatingMap, ensureCompetitionAwards, loadCompetitionAwards, monthName } from "../lib/data.js";
 import { isAborted } from "../lib/supabase.js";
 import { logEvent } from "../lib/analytics.js";
@@ -51,6 +52,9 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
   const [awards, setAwards] = useState(null);
   const comp = competitions.find((c) => c.id === selectedCompId);
   const awardsEnabled = comp?.mode_params?.awards === true;
+  // Hvem der fører — ét opslag, så pokalen, guldfarven og liga-sidens kort
+  // svarer det samme. Tom, når ingen har tippet: se `leaders()`.
+  const winnerIds = new Set(leaders(state?.rows || []).map((r) => r.userId));
 
   // G23: computeCompetitionState lå uden for try'en (kun ratings-kaldet var
   // beskyttet), så et kast dér lod setLoading(false) uden for rækkevidde og
@@ -217,6 +221,12 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
               <th style={{ ...thStyle, textAlign: "right", padding: "8px 2px" }}>Point</th>
             </tr></thead>
             <tbody>
+              {/* Førstepladsen hentes af `leaders()` og ikke af `rank === 1`.
+                  Forskellen viser sig i præcis ét tilfælde, og det er ikke et
+                  hjørne: har INGEN tippet, er alle deltagere ægte lige på 0
+                  point og får hver sin pokal. `leaders()` svarer da med en tom
+                  liste — samme svar som kortet på liga-siden, der altid har
+                  spurgt den vej. */}
               {state.rows.map((r) => (
                 // Hele rækken er tryk-fladen til spillerens tips runde for runde.
                 // Et enkelt tal er et for lille mål på en telefon, og cursor:pointer
@@ -229,8 +239,8 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
                     background: r.userId === userId ? "rgba(34,197,94,0.06)" : "transparent",
                     cursor: hasLocked ? "pointer" : "default",
                   }}>
-                  <td style={{ color: r.rank === 1 ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display, padding: "8px 2px" }}>
-                    {r.rank === 1 && state.isComplete ? "🏆" : r.rank}
+                  <td style={{ color: winnerIds.has(r.userId) ? C.gold : C.muted, fontWeight: 700, whiteSpace: "nowrap", fontFamily: font.display, padding: "8px 2px" }}>
+                    {winnerIds.has(r.userId) && state.isComplete ? "🏆" : r.rank}
                     {r.rankDelta !== undefined && r.rankDelta !== 0 && (
                       <span style={{ fontSize: 11, marginLeft: 4, color: r.rankDelta > 0 ? C.green : C.red }}>
                         {r.rankDelta > 0 ? `▲${r.rankDelta}` : `▼${Math.abs(r.rankDelta)}`}
@@ -248,7 +258,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
                   <td style={{ textAlign: "center", color: C.text, fontSize: 13, padding: "8px 2px" }}>{r.exactCount}</td>
                   <td style={{ textAlign: "center", color: C.muted, fontSize: 13, padding: "8px 2px" }}>{r.form3}</td>
                   <td style={{ textAlign: "right", padding: "8px 2px" }}>
-                    <span style={{ background: r.rank === 1 ? "rgba(240,180,41,0.15)" : C.surface2, color: r.rank === 1 ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 8px" }}>{r.total}</span>
+                    <span style={{ background: winnerIds.has(r.userId) ? "rgba(240,180,41,0.15)" : C.surface2, color: winnerIds.has(r.userId) ? C.gold : C.text, fontSize: 15, fontWeight: 700, borderRadius: 999, padding: "3px 8px" }}>{r.total}</span>
                   </td>
                 </tr>
               ))}

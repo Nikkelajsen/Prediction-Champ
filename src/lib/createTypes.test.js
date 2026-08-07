@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CREATE_TYPES, createTypeById, pickRandomFromRounds, weeklyCouponName, buildSpec } from "./createTypes.js";
+import { CREATE_TYPES, createTypeById, pickRandomFromRounds, pickPerRound, weeklyCouponName, buildSpec } from "./createTypes.js";
 
 // Galleriet er kun en oversættelse: seks kort → de fem eksisterende modes plus
 // parametre. Testene her holder oversættelsen fast, så opret-skærmen kan være
@@ -122,5 +122,83 @@ describe("buildSpec", () => {
 
   it("en ukendt korttype er en fejl, ikke en tavs default", () => {
     expect(() => buildSpec({ typeId: "knockout", name: "K" })).toThrow("Ukendt korttype");
+  });
+});
+
+describe("pickPerRound (loft pr. runde, fordelt på turneringer)", () => {
+  // r1: liga A har 4 kampe, liga B har 3, liga C har 2 — ni i alt.
+  const m = (id, round, league, hour) =>
+    ({ id, round_key: round, _leagueId: league, kickoff_at: `2026-08-${round}T${String(hour).padStart(2, "0")}:00:00Z` });
+  const pool = [
+    m("a1", "10", "A", 18), m("a2", "10", "A", 19), m("a3", "10", "A", 20), m("a4", "10", "A", 21),
+    m("b1", "10", "B", 17), m("b2", "10", "B", 22), m("b3", "10", "B", 23),
+    m("c1", "10", "C", 16), m("c2", "10", "C", 15),
+  ];
+
+  it("uden loft kommer alt med", () => {
+    expect(pickPerRound(pool, { perRound: 0 })).toHaveLength(9);
+    expect(pickPerRound(pool, {})).toHaveLength(9);
+  });
+
+  it("fordeler loftet jævnt på turneringerne", () => {
+    const ids = pickPerRound(pool, { perRound: 6 });
+    expect(ids).toHaveLength(6);
+    const perLeague = {};
+    for (const id of ids) perLeague[id[0]] = (perLeague[id[0]] || 0) + 1;
+    expect(perLeague).toEqual({ a: 2, b: 2, c: 2 });
+  });
+
+  // Brugerens egen betingelse: er der færre kampe end loftet, er det bare dem, der er.
+  it("tager alt, når runden har færre kampe end loftet", () => {
+    expect(pickPerRound(pool, { perRound: 20 })).toHaveLength(9);
+  });
+
+  it("lader de øvrige fylde pladsen ud, når en turnering løber tør", () => {
+    // Loft 8: C har kun 2, så A og B må dele de sidste — ingen huller.
+    const ids = pickPerRound(pool, { perRound: 8 });
+    expect(ids).toHaveLength(8);
+    const perLeague = {};
+    for (const id of ids) perLeague[id[0]] = (perLeague[id[0]] || 0) + 1;
+    expect(perLeague.c).toBe(2);
+    expect(perLeague.a + perLeague.b).toBe(6);
+  });
+
+  it("er deterministisk — samme pulje giver samme kampe", () => {
+    expect(pickPerRound(pool, { perRound: 5 })).toEqual(pickPerRound(pool.slice().reverse(), { perRound: 5 }));
+  });
+
+  it("giver den ekstra plads til den turnering, der spiller først", () => {
+    // Loft 4 på tre turneringer: 2/1/1, og de to går til C, som har rundens
+    // tidligste kickoff (15:00).
+    const ids = pickPerRound(pool, { perRound: 4 });
+    expect(ids.filter((id) => id[0] === "c")).toHaveLength(2);
+  });
+
+  it("gælder PR. RUNDE og ikke for hele perioden", () => {
+    const two = [...pool, m("a9", "17", "A", 18), m("b9", "17", "B", 19), m("c9", "17", "C", 20)];
+    const ids = pickPerRound(two, { perRound: 2 });
+    expect(ids).toHaveLength(4); // 2 i runde 10 + 2 i runde 17
+  });
+});
+
+describe("buildSpec — custom/periode", () => {
+  const base = { typeId: "custom", name: "Test", groupId: "g1", method: "period", startDate: "2026-08-01", endDate: "2026-08-31" };
+
+  it("uden loft er det en VOKSENDE periode (time_range)", () => {
+    const spec = buildSpec({ ...base, tournaments: [{ leagueId: "l1", seasonId: "s1" }], leagueId: "l1", seasonId: "s1" });
+    expect(spec.mode).toBe("time_range");
+    expect(spec.startDate).toBe("2026-08-01");
+  });
+
+  it("bærer flere turneringer videre", () => {
+    const tournaments = [{ leagueId: "l1", seasonId: "s1" }, { leagueId: "l2", seasonId: "s2" }];
+    expect(buildSpec({ ...base, tournaments }).tournaments).toEqual(tournaments);
+  });
+
+  // Loftet gør konkurrencen håndplukket, ellers ville efterfyldningen bryde det.
+  it("MED loft bliver den til et frosset udvalg (custom)", () => {
+    const spec = buildSpec({ ...base, perRound: 10, matchIds: ["m1", "m2"] });
+    expect(spec.mode).toBe("custom");
+    expect(spec.matchIds).toEqual(["m1", "m2"]);
   });
 });

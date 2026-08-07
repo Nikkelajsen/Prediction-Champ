@@ -15,6 +15,80 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 6. august 2026 — Et loft pr. runde gør perioden til et frosset udvalg
+
+**Beslutning:** Custom-perioden kan vælge flere turneringer og få et loft på
+antal kampe pr. runde. Sættes et loft, skrives konkurrencen som `custom` med
+udpegede kampe i stedet for `time_range` — altså **frossen ved oprettelsen**.
+Uden loft er formen uændret, og perioden vokser som hidtil. Loftet fordeles
+jævnt på de valgte turneringer ved en round robin, hvor den ekstra plads ved
+ulige deling går til den turnering, der spiller først i runden.
+
+**Begrundelse:** `time_range` er en voksende regel — `api/_backfill.js` føjer
+kampe til, efterhånden som de skemalægges, og det er hele periodens løfte over
+for en sæson, hvis slutspil først offentliggøres senere. Et loft sat ved
+oprettelsen ville blive brudt **tavst** ved næste efterfyldning: brugeren beder
+om ti kampe pr. runde og ender med fjorten uden at få det at vide. Et tal, som
+brugeren har valgt, må ikke stille og roligt holde op med at passe.
+
+Efterfyldningen kan ikke selv håndhæve loftet. Den kører **pr. sæson** — den
+kaldes fra syncen med én sæsons kampe — og kan derfor ikke se, hvor mange kampe
+konkurrencen allerede har fra de ØVRIGE valgte turneringer i samme runde. Et
+loft på tværs af turneringer ville kræve, at efterfyldningen så hele runden på
+én gang, altså en ombygning af den sti, der holder rigtige konkurrencer ajour.
+Prisen for det står ikke mål med gevinsten ved en valgfri kupon-afgrænsning.
+
+**Prisen er sagt højt i brugerfladen** frem for at ligge i en note: teksten
+under felterne skifter mellem "også dem, der skemalægges senere" og "kampene
+vælges nu". De to løfter udelukker hinanden, og begge er sande — hver for sin
+indstilling.
+
+**Hvorfor round robin og ikke kvoter:** en kvoteudregning skal have en regel for,
+hvad der sker, når en turnering har færre kampe end sin andel, og enhver sådan
+regel er et nyt hjørne at teste. Round robin har svaret indbygget — en tom kø
+springes over — og giver 4/3/3 ved ti kampe på tre turneringer, men 1/5/4 når
+den ene kun har én kamp. Det var også præcis den betingelse, ønsket blev stillet
+med: er der færre end ti i runden, er det bare dem, der er.
+
+## 6. august 2026 — Man kan ikke vinde uden at have tippet
+
+**Beslutning:** En spiller uden ét eneste tip kan hverken kåres som vinder eller
+vinde en tiebreak. To ændringer i `src/lib/standings.js`, som begge følger af
+samme sætning: `goalErrorOf()` giver en række med `matches === 0` den værst
+mulige målafvigelse i stedet for den bedste, og `leaders()` svarer tomt, når
+førstepladsen står på nul tippede kampe.
+
+**Begrundelse:** Stillingen har én række pr. **deltager** og ikke pr. tipper —
+og det skal den blive ved med, for man skal kunne se, hvem der er med. Men
+dermed er "0 point" tvetydigt: det betyder både "tippede og ramte forbi" og
+"deltog aldrig". Hele fejlen ligger i, at stigen behandlede de to ens.
+
+Det synlige udslag var en afsluttet konkurrence, hvor ingen havde tippet, og
+hvor alle tre deltagere fik en pokal. Det usynlige var værre: målafvigelsen er
+stigens sidste trin, hvor mindst vinder, og `avgGoalError(0, 0) = 0` er den
+bedst mulige værdi. Den, der ikke havde tippet, slog altså den, der havde
+tippet tyve kampe og ramt skævt. **Man vandt tiebreakeren ved at lade være med
+at deltage** — det modsatte af `A2` ("Månedschampionshippet må gerne belønne
+deltagelse"), som er hele grunden til, at trinnet er et gennemsnit og ikke en
+sum.
+
+**Hvorfor `Number.MAX_VALUE` og ikke `Infinity`:** to spillere uden tips skal
+være **ægte lige** og dele placering. `Infinity - Infinity` er `NaN`, og en
+`NaN` i en komparator gør sorteringen udefineret frem for delt.
+
+**Hvorfor det er nok at se på førstepladsen i `leaders()`:** efter den første
+ændring kan en spiller uden tips aldrig komme foran en, der har tippet. Er nr. 1
+på nul kampe, har ingen tippet.
+
+**Databasen var aldrig ramt, og det afgrænser beslutningen.** Kåringerne
+(`award_competition_periods()`) og milepælene (`_ms_final`) bygger deres vindere
+på `predictions join matches` og `competition_match_points`, hvor en spiller
+uden tips slet ikke findes. Der er ikke uddelt en eneste kåring eller permanent
+milepæl på det forkerte grundlag. Rettelsen hører derfor i klienten alene — og
+stigen i SQL (`sql/standings_tiebreakers.sql`) skal **ikke** følge med, fordi
+dens views ikke indeholder rækker med nul kampe. Det er den ene gang, hvor JS og
+SQL med vilje ikke er ens, og grunden er, at de ikke får de samme rækker ind.
+
 ## 6. august 2026 — Sæson-simulationen i staging får sin EGEN turnering
 
 **Beslutning:** Testdata til staging fremstilles af
