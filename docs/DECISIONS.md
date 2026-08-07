@@ -15,6 +15,75 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 7. august 2026 — Ét øjeblik om dagen: motoren vælger frem for at udgive
+
+**Beslutning:** Story Engine v3 (spec:
+[`features/story-engine-v3.md`](./features/story-engine-v3.md)). Fem dele:
+
+1. **Højst ét `period = 'day'`-kort pr. bruger pr. dag**, på tværs af alle
+   ligaer og konkurrencer. `DAILY_MAX_CARDS` 2 → 1, håndhævet af et unikt indeks
+   på `(user_id, day_key)` frem for af koden.
+2. **Karrusellen udgår.** Hjem viser dagens ene kort; `CAROUSEL_LIMIT` og
+   `sortCarousel()` fjernes. Kort udløber efter 48 timer.
+3. **Valget sker på en nyhedsværdi-score**, ikke på fast prioritet:
+   grundvægt + størrelse (0–30) + nærhed til brugeren (0–20). Publiceringstærskel
+   **45**; under tærsklen udgives det dæmpede `DAY_RESULT`-kort uden
+   ulæst-markering.
+4. **Rundens sidste dag udgiver kun rundekortet**, nu som tap-through med 4
+   frames (+ en betinget frame 5). Dags-motoren springes over den dag.
+5. **Milepæle får aldrig eget kort.** De deltager i scoringen med grundvægt 100
+   og kaprer dermed dagens slot, og de får en betinget frame 5 i rundestoryen med
+   deep-link til karriereprofilen.
+
+Uændret: køretidspunktet, `match_day`/`round_key_of_date`, bagstopperen
+`generate_stories_catchup`, triggerens to porte, prioritetsbåndet 110–189, den
+periode-afgrænsede delete (v2 §8) og hele milepælskataloget med dets guards.
+
+**Begrundelse:** v2's egen måling er anklageskriftet. `A33` noterede, at
+`DAY_RESULT` alene står for 123 af 280 historier (44 %) — og det er ikke en
+skævhed i regelsættet, det følger af konstruktionen: reglen har den laveste
+prioritet, udløses næsten altid, og v2 §3 beskriver den selv som *"ankeret;
+optager reelt altid plads 1"*. Med to kort om dagen betyder det, at det første,
+brugeren møder, per design er det mest forudsigelige. Oveni giver en uge med fem
+kampdage op til ti kort plus milepæle i et felt, hvis loft (`CAROUSEL_LIMIT =
+10`) dermed var ugens normaltilstand og ikke en sjælden kant.
+
+Et øjeblik, der deles med ni andre, er ikke et øjeblik. Feature'ens målsætning
+har hele vejen været, at brugeren skal kunne genfortælle dagens historie — og ti
+kort kan ingen genfortælle. Fejlen var ikke, at der genereres for ofte (daglig
+generering fastholdes uændret), men at motoren udgav alt, den fandt, i stedet
+for at vælge.
+
+**Hvorfor scoring frem for strammere prioriteter:** en prioritetsstige rangerer
+regeltyper, ikke begivenheder. Den kan ikke skelne en overhaling på fire pladser
+fra en på én, og den kan slet ikke se, om hovedpersonen er brugerens nærmeste
+rival eller en fremmed i den mindste liga. Nærhedsleddet er hele grunden til, at
+en andens aften kan blive brugerens historie, og det kan kun beregnes pr. bruger
+— derfor er slottet `(user_id, day_key)`-unikt og ikke `(competition_id, day_key)`.
+
+**Hvorfor tærskel frem for altid at udgive en historie:** et ulæst-signal, der
+lyser hver dag, er ikke et signal, det er en baggrundsfarve. Det dæmpede kort
+findes allerede som kortudgave i v2 §9, så prisen for at holde signalet sjældent
+er nul nyt UI. **Tallet 45 er dog udledt af grundvægtene og ikke af data** — det
+er v3's svageste tal og er derfor skrevet ud som en åben beslutning (`A35`) med
+en målbar udløser frem for at blive låst her.
+
+**Hvorfor milepæle beholder en plads på Hjem:** `milepaele-v1.md` §8 sagde det
+allerede — uden den plads ville de fleste aldrig opdage, at de havde opnået
+noget, og karriereprofilen er ikke et sted, folk går hen for at tjekke, om der er
+sket noget. Det, der var galt i v2, var ikke at milepæle blev vist, men at de
+lagde sig **oven i** dagens historie. Ét slot fjerner den mulighed uden at
+fjerne visningen: uanset hvor mange milepæle der udløses samme dag, kan der kun
+vises én, og resten ligger på profilen. Kalibreringen strammes tilsvarende — en
+aktiv bruger må ramme en milepæl ca. hver anden uge, ellers konkurrerer
+milepælene med sig selv om slottet.
+
+**Prisen, der accepteres:** de historier, der taber slottet, vises aldrig. Med
+v2's karrusel kunne en bruger i tre ligaer i princippet følge alle sine
+konkurrencer dagligt; det kan de ikke længere. Det er en bevidst ombytning af
+dækning mod hukommelse, og den kan aflæses: falder `story_viewed` pr. bruger
+ikke, mens andelen af dage med ulæst-markering falder, er ombytningen lykkedes.
+
 ## 6. august 2026 — Et loft pr. runde gør perioden til et frosset udvalg
 
 **Beslutning:** Custom-perioden kan vælge flere turneringer og få et loft på

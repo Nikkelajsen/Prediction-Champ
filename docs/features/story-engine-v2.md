@@ -2,6 +2,8 @@
 
 Bygger videre på `story-engine-v1.md`, som stadig beskriver runde-motoren, tonen og de 16 runde-regler. Denne fil beskriver **kun det, v2 tilføjer**.
 
+> **Delvist omgjort af en beslutning, der endnu ikke er bygget (7. august 2026).** [`story-engine-v3.md`](./story-engine-v3.md) ændrer *udvælgelse og visning*: ét kort pr. bruger pr. dag i stedet for to, ingen karrusel, nyhedsværdi-score i stedet for fast prioritet, og kun rundekortet på rundens sidste dag. **Denne fil beskriver fortsat det, der kører i produktion** — v3 er besluttet, ikke leveret (`B27` i [`BACKLOG.md`](../BACKLOG.md)) — men §3 (dagens regler og loftet "to snit, i den rækkefølge") og §9 (karrusellen) er de steder, v3 lander, når den bygges. Prioritetsbåndet 110–189 (§4), den danske dag (§5), bagstopperen (§6), triggerens to porte (§7) og den periode-afgrænsede delete (§8) er **uændrede** af v3.
+
 ## 1. Problemet
 
 v1 talte én gang om ugen. `generate_stories(round_key)` kørte, når rundens sidste resultat var inde, og brugeren mødte ét kort. Mellem to mandag-aftener skete der intet på Hjem — også i uger med kampe fem ud af syv dage.
