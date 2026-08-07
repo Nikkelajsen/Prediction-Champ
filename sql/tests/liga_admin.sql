@@ -26,6 +26,9 @@
 --      administrator — og virker på en almindelig bruger.
 --  12. En lukket konto meldes af de konkurrencer, der IKKE er begyndt (A25) —
 --      og bliver i dem, der er, også når den lukkede aldrig har tippet i dem.
+--  13. Ved lukning overdrages administratorrollen til det ældste LEVENDE medlem,
+--      og den lukkede konto forlader ligaen (A36 + A37). Er der ingen levende
+--      at overdrage til, bliver ligaen stående — tom og uden administrator.
 
 \set ON_ERROR_STOP on
 \timing off
@@ -71,6 +74,10 @@ create table public.group_members (
   group_id uuid not null references public.groups(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
   role text not null default 'member',
+  -- Med siden A37 (7. august 2026): overdragelsen vælger det ældste LEVENDE
+  -- medlem, og "ældste" måles her. Uden kolonnen ville funktionen fejle på
+  -- første kald — produktionen har den, og testen skal ligne produktionen.
+  joined_at timestamptz not null default now(),
   primary key (group_id, user_id)
 );
 create table public.competitions (
@@ -485,15 +492,266 @@ begin
     raise exception '12d) en konkurrence endte uden deltagere';
   end if;
 
-  -- 12e) Ligamedlemskabet står. Invarianten er "deltager ⇒ medlem" og rammes
-  --      ikke af, at der fjernes i deltager-enden.
+  -- 12e) Ligamedlemskabet står — men BEGRUNDELSEN er en anden efter A36
+  --      (7. august 2026). Før stod det, fordi medlemskaber aldrig blev rørt;
+  --      nu står det, fordi der er deltagelser tilbage i ligaen ("Igang" og
+  --      "Alene"), og invarianten "deltager ⇒ medlem" derfor forbyder at
+  --      fjerne det. Påstanden er den samme, reglen bag den er ny — og
+  --      afsnit 13 måler den anden gren.
   if not exists (select 1 from public.group_members
                   where user_id = lukkes and group_id = '91000000-0000-0000-0000-000000000001') then
-    raise exception '12e) ligamedlemskabet forsvandt';
+    raise exception '12e) ligamedlemskabet forsvandt, selv om der er deltagelser tilbage i ligaen';
   end if;
 end $$;
 
--- Idempotens: anden kørsel erstatter policies og funktioner uden at fejle.
+-- ---------- 13: overdragelse af admin + framelding af ligaen (A36 + A37) ----------
+--
+-- Egne data. Fire ligaer, fordi beslutningen har fire udfald:
+--
+--   ARV       LUKKES er admin · A og B lever, C er lukket   → A arver, LUKKES ud
+--   HISTORIK  LUKKES er admin · D lever · LUKKES har en     → D arver, LUKKES
+--             deltagelse i en BEGYNDT konkurrence             bliver, men som 'member'
+--   ALENE     LUKKES er eneste medlem                       → ingen arving,
+--                                                             LUKKES ud, ligaen står
+--   GÆST      LUKKES er almindeligt medlem, E er admin      → E urørt, LUKKES ud
+--
+-- ARV er den vigtigste, og det er `C`, der gør den skarp: C meldte sig ind
+-- FØRST og ville vinde en naiv "ældste medlem"-sortering — men C er selv
+-- lukket, og en lukket konto kan ikke administrere noget. Uden C ville testen
+-- ikke kunne skelne "ældste" fra "ældste levende".
+insert into auth.users (id) values
+  ('d0000000-0000-0000-0000-000000000001'),  -- LUKKES
+  ('d0000000-0000-0000-0000-000000000002'),  -- A  (arving i ARV)
+  ('d0000000-0000-0000-0000-000000000003'),  -- B  (yngre end A)
+  ('d0000000-0000-0000-0000-000000000004'),  -- C  (ældst, men LUKKET)
+  ('d0000000-0000-0000-0000-000000000005'),  -- D  (arving i HISTORIK)
+  ('d0000000-0000-0000-0000-000000000006');  -- E  (admin i GÆST)
+
+insert into public.profiles (id, display_name, is_admin, anonymized_at) values
+  ('d0000000-0000-0000-0000-000000000001', 'Lukkes2',  false, null),
+  ('d0000000-0000-0000-0000-000000000002', 'Anja',     false, null),   -- A
+  ('d0000000-0000-0000-0000-000000000003', 'Bodil',    false, null),   -- B
+  ('d0000000-0000-0000-0000-000000000004', 'C lukket', false, now() - interval '1 day'),
+  ('d0000000-0000-0000-0000-000000000005', 'Dorte',    false, null),   -- D
+  ('d0000000-0000-0000-0000-000000000006', 'Erik',     false, null);   -- E
+
+insert into public.groups (id, name, created_by) values
+  ('92000000-0000-0000-0000-000000000001', 'Arv',      'd0000000-0000-0000-0000-000000000001'),
+  ('92000000-0000-0000-0000-000000000002', 'Historik', 'd0000000-0000-0000-0000-000000000001'),
+  ('92000000-0000-0000-0000-000000000003', 'Alene',    'd0000000-0000-0000-0000-000000000001'),
+  ('92000000-0000-0000-0000-000000000004', 'Gaest',    'd0000000-0000-0000-0000-000000000006');
+
+-- `joined_at` er hele pointen i ARV: C er ældst, A er ældste LEVENDE.
+insert into public.group_members (group_id, user_id, role, joined_at) values
+  ('92000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001', 'admin',  now() - interval '10 days'),
+  ('92000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000004', 'member', now() - interval '20 days'),
+  ('92000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000002', 'member', now() - interval '15 days'),
+  ('92000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000003', 'member', now() - interval '5 days'),
+
+  ('92000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000001', 'admin',  now() - interval '10 days'),
+  ('92000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000005', 'member', now() - interval '3 days'),
+
+  ('92000000-0000-0000-0000-000000000003', 'd0000000-0000-0000-0000-000000000001', 'admin',  now() - interval '10 days'),
+
+  ('92000000-0000-0000-0000-000000000004', 'd0000000-0000-0000-0000-000000000006', 'admin',  now() - interval '10 days'),
+  ('92000000-0000-0000-0000-000000000004', 'd0000000-0000-0000-0000-000000000001', 'member', now() - interval '2 days');
+
+-- HISTORIK får en BEGYNDT konkurrence, som LUKKES deltager i — det er den, der
+-- gør, at medlemskabet dér ikke må fjernes.
+insert into public.competitions (id, name, group_id, created_by) values
+  ('c2000000-0000-0000-0000-000000000001', 'Spillet', '92000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000005');
+insert into public.competition_matches (competition_id, match_id) values
+  ('c2000000-0000-0000-0000-000000000001', '11000000-0000-0000-0000-000000000001');
+insert into public.competition_participants (competition_id, user_id) values
+  ('c2000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001'),
+  ('c2000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000005');
+
+do $$
+declare
+  global uuid := 'a0000000-0000-0000-0000-000000000005';
+  lukkes uuid := 'd0000000-0000-0000-0000-000000000001';
+  arv      uuid := '92000000-0000-0000-0000-000000000001';
+  historik uuid := '92000000-0000-0000-0000-000000000002';
+  alene    uuid := '92000000-0000-0000-0000-000000000003';
+  gaest    uuid := '92000000-0000-0000-0000-000000000004';
+  r record;
+begin
+  perform set_config('test.uid', global::text, true);
+  perform public.admin_anonymize_account(lukkes);
+
+  -- 13a) ARV: det ældste LEVENDE medlem arvede — ikke det ældste.
+  select * into r from public.group_members
+   where group_id = arv and role = 'admin';
+  if not found then
+    raise exception '13a) ingen arvede administratorrollen i ARV';
+  end if;
+  if r.user_id <> 'd0000000-0000-0000-0000-000000000002' then
+    raise exception '13a) forkert arving i ARV: % (forventede A, ikke den ældste C, som er lukket)', r.user_id;
+  end if;
+  if (select count(*) from public.group_members where group_id = arv and role = 'admin') <> 1 then
+    raise exception '13a) ARV fik mere end én administrator';
+  end if;
+
+  -- 13b) ARV: den lukkede konto forlod ligaen (ingen deltagelser tilbage).
+  if exists (select 1 from public.group_members where group_id = arv and user_id = lukkes) then
+    raise exception '13b) den lukkede konto blev stående på ARVs medlemsliste';
+  end if;
+
+  -- 13c) HISTORIK: D arvede, OG den lukkede konto blev — men som 'member'.
+  --      Invarianten forbyder frameldingen, fordi deltagelsen i "Spillet" står.
+  if not exists (select 1 from public.group_members
+                  where group_id = historik and user_id = 'd0000000-0000-0000-0000-000000000005'
+                    and role = 'admin') then
+    raise exception '13c) D arvede ikke administratorrollen i HISTORIK';
+  end if;
+  select * into r from public.group_members where group_id = historik and user_id = lukkes;
+  if not found then
+    raise exception '13c) medlemskabet blev fjernet, selv om en deltagelse står tilbage — invarianten er brudt';
+  end if;
+  if r.role <> 'member' then
+    raise exception '13c) en lukket konto står stadig som administrator (rolle: %)', r.role;
+  end if;
+
+  -- 13d) ALENE: ingen arving. Ligaen bliver stående — tom og uden admin — og
+  --      det er beslutningen, ikke en mangel.
+  if exists (select 1 from public.group_members where group_id = alene) then
+    raise exception '13d) ALENE har stadig medlemmer';
+  end if;
+  if not exists (select 1 from public.groups where id = alene) then
+    raise exception '13d) den tomme liga blev slettet — den skal blive stående';
+  end if;
+
+  -- 13e) GÆST: en almindelig medlemskonto forlader også ligaen, og ligaens
+  --      egen administrator er urørt.
+  if exists (select 1 from public.group_members where group_id = gaest and user_id = lukkes) then
+    raise exception '13e) den lukkede konto blev stående på GÆSTs medlemsliste';
+  end if;
+  if not exists (select 1 from public.group_members
+                  where group_id = gaest and user_id = 'd0000000-0000-0000-0000-000000000006'
+                    and role = 'admin') then
+    raise exception '13e) GÆSTs egen administrator blev rørt';
+  end if;
+
+  -- 13f) Ingen lukket konto står som administrator nogen steder — hverken
+  --      den, der lige lukkede, eller C, som var lukket i forvejen.
+  if exists (
+    select 1 from public.group_members gm
+    join public.profiles p on p.id = gm.user_id
+    where gm.role = 'admin' and p.anonymized_at is not null
+  ) then
+    raise exception '13f) en lukket konto står som administrator';
+  end if;
+
+  -- 13g) Ingen andres medlemskaber forsvandt: B står stadig i ARV.
+  if not exists (select 1 from public.group_members
+                  where group_id = arv and user_id = 'd0000000-0000-0000-0000-000000000003') then
+    raise exception '13g) frameldingen ramte et andet medlem';
+  end if;
+end $$;
+
+-- ---------- den efterladte liga, som backfillen skal redde ----------
+--
+-- Bygget HER og ikke i afsnit 13, fordi den er en tilstand, funktionen ikke kan
+-- skabe: en liga, hvis administrator var lukket, FØR reglen fandtes. Det er
+-- produktionens tilstand 7. august 2026 (`Testerr`), bare med medlemmer i —
+-- altså det tilfælde, hvor der faktisk er noget at redde.
+--
+-- Uden den ville backfillens overdragelses-gren aldrig køre i testen, og en
+-- gren, der aldrig har kørt, er en formodning (`G84`).
+insert into public.groups (id, name, created_by) values
+  ('92000000-0000-0000-0000-000000000005', 'Efterladt', 'd0000000-0000-0000-0000-000000000004');
+insert into public.group_members (group_id, user_id, role, joined_at) values
+  -- C er lukket OG administrator: præcis den frosne tilstand.
+  ('92000000-0000-0000-0000-000000000005', 'd0000000-0000-0000-0000-000000000004', 'admin',  now() - interval '30 days'),
+  ('92000000-0000-0000-0000-000000000005', 'd0000000-0000-0000-0000-000000000003', 'member', now() - interval '8 days'),
+  ('92000000-0000-0000-0000-000000000005', 'd0000000-0000-0000-0000-000000000002', 'member', now() - interval '12 days');
+
+-- Idempotens: anden kørsel erstatter policies og funktioner uden at fejle —
+-- og kører backfillen, som nu har noget at lave.
+\ir ../liga_admin.sql
+
+-- ---------- 14: backfillen i liga_admin.sql (A36 + A37) ----------
+--
+-- Gen-kørslen ovenfor er samtidig den eneste måde at afprøve backfillen på, og
+-- den har et ægte emne: `C lukket` blev oprettet som ALLEREDE anonymiseret i
+-- afsnit 13 og blev derfor aldrig behandlet af funktionen — præcis den
+-- tilstand, produktionen stod i 7. august 2026, hvor én konto var lukket, før
+-- reglen fandtes.
+--
+-- Uden dette afsnit ville backfillen være kode, der aldrig er efterprøvet —
+-- `G72`s og `G76`s fejltype, og den dyreste slags her, fordi backfillen KUN
+-- kører én gang og gør det mod rigtige data.
+do $$
+begin
+  -- 14a) Den forud-lukkede konto forlod ligaen ved backfillen.
+  if exists (
+    select 1 from public.group_members
+     where group_id = '92000000-0000-0000-0000-000000000001'
+       and user_id  = 'd0000000-0000-0000-0000-000000000004'
+  ) then
+    raise exception '14a) backfillen fjernede ikke den forud-lukkede konto fra ARV';
+  end if;
+
+  -- 14b) Den rørte ikke de levende: Anja er stadig administrator, Bodil medlem.
+  if not exists (
+    select 1 from public.group_members
+     where group_id = '92000000-0000-0000-0000-000000000001'
+       and user_id  = 'd0000000-0000-0000-0000-000000000002' and role = 'admin'
+  ) then
+    raise exception '14b) backfillen fjernede eller degraderede den arvede administrator';
+  end if;
+  if not exists (
+    select 1 from public.group_members
+     where group_id = '92000000-0000-0000-0000-000000000001'
+       and user_id  = 'd0000000-0000-0000-0000-000000000003'
+  ) then
+    raise exception '14b) backfillen ramte et levende medlem';
+  end if;
+
+  -- 14c) Den respekterer invarianten: HISTORIK har stadig sin lukkede konto,
+  --      fordi deltagelsen i "Spillet" står.
+  if not exists (
+    select 1 from public.group_members
+     where group_id = '92000000-0000-0000-0000-000000000002'
+       and user_id  = 'd0000000-0000-0000-0000-000000000001'
+  ) then
+    raise exception '14c) backfillen brød invarianten deltager ⇒ medlem';
+  end if;
+
+  -- 14d) Ingen lukket konto er administrator nogen steder efter backfillen.
+  if exists (
+    select 1 from public.group_members gm
+    join public.profiles p on p.id = gm.user_id
+    where gm.role = 'admin' and p.anonymized_at is not null
+  ) then
+    raise exception '14d) en lukket konto står som administrator efter backfillen';
+  end if;
+
+  -- 14e) **Overdragelses-grenen:** den efterladte liga fik en ny, LEVENDE
+  --      administrator — og det blev Anja, som meldte sig ind før Bodil.
+  if not exists (
+    select 1 from public.group_members
+     where group_id = '92000000-0000-0000-0000-000000000005'
+       and user_id  = 'd0000000-0000-0000-0000-000000000002' and role = 'admin'
+  ) then
+    raise exception '14e) den efterladte liga fik ikke det ældste levende medlem som administrator';
+  end if;
+  if (select count(*) from public.group_members
+       where group_id = '92000000-0000-0000-0000-000000000005' and role = 'admin') <> 1 then
+    raise exception '14e) den efterladte liga fik mere end én administrator';
+  end if;
+
+  -- 14f) Og den lukkede administrator forlod listen.
+  if exists (
+    select 1 from public.group_members
+     where group_id = '92000000-0000-0000-0000-000000000005'
+       and user_id  = 'd0000000-0000-0000-0000-000000000004'
+  ) then
+    raise exception '14f) den lukkede administrator blev stående på den efterladte ligas medlemsliste';
+  end if;
+end $$;
+
+-- Og en TREDJE kørsel skal være et rent no-op — backfillen konvergerer.
 \ir ../liga_admin.sql
 
 select 'liga_admin: OK' as result;

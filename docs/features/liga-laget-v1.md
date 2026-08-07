@@ -203,10 +203,20 @@ Rækkefølgen respekterer roadmappens tommelfingerregel: Story Engine-kalibrerin
 >
 > **Det er ikke et hjørnetilfælde:** hver liga har præcis én administrator,
 > nemlig sin opretter. Efterprøvet under ægte RLS 7. august 2026 (fem forsøg fra
-> et almindeligt medlem, fem afvisninger). Eneste vej ud i dag er manuel SQL.
-> Spørgsmålet om, hvad der SKAL ske, er `A37` i `docs/BACKLOG.md`; opslaget, der
-> viser, om en liga allerede står sådan, er
-> `sql/checks/league_admin_coverage.sql` (dækket af en test i CI).
+> et almindeligt medlem, fem afvisninger), og aflæst i produktion samme dag: én
+> liga stod allerede sådan, og fire rigtige ligaer med 5–9 medlemmer havde
+> præcis én levende administrator hver.
+>
+> **LØST samme dag (`A37`).** `_anonymize_account()` overdrager nu
+> administratorrollen til det **ældste levende medlem** (`joined_at`), før den
+> lukkede konto forlader ligaen — og en backfill i `sql/liga_admin.sql` retter
+> de ligaer, der allerede stod sådan. **Forfremmelse er stadig ikke bygget som
+> UI-funktion**, og udskydelsen ovenfor står derfor ved magt; det, der er
+> lukket, er den ene sti, hvor fraværet af forfremmelse gjorde en liga
+> permanent uadministrerbar. Er der ingen levende medlemmer at overdrage til,
+> bliver ligaen stående uden administrator — det er beslutningen, ikke en
+> mangel. Kontrollen `sql/checks/league_admin_coverage.sql` (dækket af en test i
+> CI) svarer på, om nogen liga står sådan.
 
 - **Medlems-administration** (admin fjerner/forfremmer medlemmer) — lille brugerbase af venner; udskydes til behovet opstår.
 - **Liga-identitet** (ikon, farve, beskrivelse) — navn er nok til at bevise strukturen.

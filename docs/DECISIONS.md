@@ -15,6 +15,52 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 7. august 2026 — En lukket konto overdrager sin liga og forlader den (`A36` + `A37`)
+
+**Beslutning (produktejeren):** ved kontolukning **overdrages administratorrollen
+til det ældste levende medlem**, og den lukkede konto **forlader ligaen**. Er der
+ingen medlemmer tilbage at overdrage til, **bliver ligaen bare stående**.
+
+De to spørgsmål er afgjort sammen, fordi de har samme udløser og modsatrettede
+rettelser: `A36` (skal pseudonymet forlade medlemslisten?) ville alene have gjort
+`A37` sværere at opdage, fordi den fjerner det eneste synlige spor af, hvorfor en
+liga er frossen. Overdragelsen fjerner grunden til at have sporet.
+
+**Hvorfor overdragelse frem for de tre andre muligheder.** Rækken havde fire:
+overdrag, tillad forfremmelse, lad en platform-admin gribe ind, eller accepter
+vilkåret. Forfremmelse er en UI-funktion, der bevidst er udskudt fra liga-lagets
+v1 og stadig ikke er efterspurgt; en platform-admin-indgang løser det for os og
+ikke for brugerne; og at acceptere vilkåret var ikke længere gratis, da
+aflæsningen viste, at fire rigtige ligaer med 5–9 medlemmer hver har præcis én
+levende administrator. Overdragelsen er den eneste, der virker **uden at nogen
+skal opdage problemet først** — og det er hele pointen, for symptomet (en knap,
+der ikke virker) opstår måneder efter årsagen.
+
+**"Ældste" er `group_members.joined_at`, ikke `profiles.created_at`.** Det er den
+aflæsning, der giver mening i et fællesskab: den, der har været med i ligaen
+længst, er den, de andre kender — ikke den, der tilfældigvis oprettede sin konto
+først. `user_id` bryder uafgjort, så resultatet ikke afhænger af rækkefølgen på
+disken.
+
+**Frameldingen har invarianten som grænse, og det var ikke et valg.**
+`group_membership_invariant.sql` kræver deltager ⇒ medlem, så medlemskabet kan
+kun fjernes i de ligaer, hvor der ikke er en deltagelse tilbage. `A25` har lige
+fjernet dem, der ikke var begyndt; det, der står tilbage, er spillet historik, og
+dér **bliver** pseudonymet på listen. Det er samme skel som resten af funktionen:
+alt, der er sket, bevares. Bliver medlemskabet stående, degraderes rollen til
+`member` — en konto, der ikke kan logge ind, er ikke en administrator, og
+`league_admin_coverage` ville ellers tælle den som en.
+
+**Den tomme liga bliver stående, og det er en beslutning og ikke en mangel.** En
+liga uden medlemmer er usynlig — den vises kun for sine medlemmer — og koster
+ingenting. Alternativet ville være at slette den, altså at fjerne data på en
+formodning om, at ingen kommer tilbage.
+
+**Rækkefølgen i koden er selv en regel:** overdrag FØR framelding. Overdragelsen
+bruger den lukkede kontos egen `role = 'admin'` til at finde de ligaer, der skal
+have en ny administrator; bytter man om, er oplysningen væk, og ligaen fryser
+præcis som `A37` beskriver. En mutationstest låser det.
+
 ## 7. august 2026 — "Read-only" er to spørgsmål: rører den data, og efterlader den noget?
 
 **Beslutning (`A37`):** forespørgslen, der aflæser, om en liga står uden en

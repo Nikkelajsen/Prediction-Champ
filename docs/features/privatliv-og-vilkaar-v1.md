@@ -56,23 +56,25 @@ Anonymisering går uden om begge, fordi `profiles`-rækken bliver stående.
 | `push_subscriptions`, `notification_log`, `stories`, `analytics_events`, `user_activity_days` | slettes |
 | `feedback.user_id` | → `null` (samme valg som tabellens egen `on delete set null`) |
 | `client_errors.user_id` | → `null` *(tilføjet 3. august 2026 — tabellen kom til efter leveringen (#36), og kontoen soft-lukkes, så FK'ens `on delete set null` aldrig udløses; uden dette holdt politikkens løfte om fejlrapporter ikke)* |
-| `predictions`, `ratings`, `rating_history`, `competition_awards`, `competition_participants`, `group_members` | **bevares** — de er grundlaget for andres stillinger. *(Rettet efter levering, 5. august 2026 — `A25`: `competition_participants` bevares ikke længere ubetinget. Deltagelsen i en konkurrence, hvor **ingen kamp er låst eller spillet**, slettes, når mindst én anden deltager bliver tilbage; dér findes der ingen stilling at være grundlaget for. Alt, der er begyndt, bevares uændret — også en deltagelse uden ét eneste tip.)* |
+| `predictions`, `ratings`, `rating_history`, `competition_awards`, `competition_participants`, ~~`group_members`~~ | **bevares** — de er grundlaget for andres stillinger. *(Rettet efter levering, 7. august 2026 — `A36`/`A37`: **`group_members` bevares ikke længere ubetinget.** Er der ingen deltagelse tilbage i ligaen, forlader den lukkede konto medlemslisten; er der en, bliver rækken stående — men rollen degraderes til `member`. Var kontoen ligaens administrator, overdrages rollen FØRST til det ældste levende medlem (`joined_at`), fordi admin ellers aldrig kan uddeles igen og ligaen ville være permanent uadministrerbar.)* *(Rettet efter levering, 5. august 2026 — `A25`: `competition_participants` bevares ikke længere ubetinget. Deltagelsen i en konkurrence, hvor **ingen kamp er låst eller spillet**, slettes, når mindst én anden deltager bliver tilbage; dér findes der ingen stilling at være grundlaget for. Alt, der er begyndt, bevares uændret — også en deltagelse uden ét eneste tip.)* |
 | `groups`, `competitions` | røres ikke; overlever fordi `profiles` gør |
 
 **Medlemskaberne kan ikke behandles hver for sig.** `group_membership_invariant.sql` håndhæver, at en konkurrence-deltager altid er ligamedlem — at slette det ene og beholde det andet ville genskabe præcis den forældreløse tilstand, invarianten findes for at forhindre.
 
 *Rettet efter levering (5. august 2026, `A25`): sætningen gælder kun den ene retning, og det er dén, `A25`s framelding bruger. Invarianten er "deltager ⇒ medlem", så en sletning i **deltager**-enden bryder den ikke — det er kun den modsatte, at fjerne medlemskabet og beholde deltagelsen, der genskaber den forældreløse tilstand. Ligamedlemskabet står derfor urørt efter en framelding, og en lukket konto kan ende som ligamedlem uden en eneste deltagelse. Det er en helt almindelig tilstand i skemaet — men det er også et pseudonym på en liste, og den halvdel er noteret i backloggens indbakke frem for løst her.*
 
-*Rettet efter levering (7. august 2026): den halvdel hedder nu `A36` og er
-**stadig ikke afgjort** — men prøvekørslen af hele funktionen (`G76`) fandt, at
-det efterladte medlemskab er værre end kosmetisk, når den lukkede konto var
-ligaens **administrator**. Admin-rollen kan kun uddeles ved oprettelsen, der
+*Rettet efter levering (7. august 2026): den halvdel hed `A36`, og den er nu
+**afgjort og bygget**. Prøvekørslen af hele funktionen (`G76`) fandt undervejs,
+at det efterladte medlemskab er værre end kosmetisk, når den lukkede konto var
+ligaens **administrator**: admin-rollen kan kun uddeles ved oprettelsen, der
 findes ingen forfremmelse, og en lukket konto kan aldrig logge ind igen — så
-ligaen kan aldrig administreres igen. Det er `A37`, og det er grunden til, at
-`A36` ikke må afgøres først: fjernes den lukkede konto fra medlemslisten,
-forsvinder også det eneste synlige spor af, hvorfor ligaen er frossen. Selve
-tabellen ovenfor er efterprøvet mod produktionsskemaet under ægte RLS ved samme
-kørsel, og hver eneste linje holdt.*
+ligaen kunne aldrig administreres igen (`A37`). Aflæst i produktion samme dag:
+én liga stod allerede sådan, og fire rigtige ligaer med 5–9 medlemmer havde
+præcis én levende administrator hver. **Beslutningen lukkede begge på én gang:**
+overdrag admin til det ældste levende medlem, lad den lukkede konto forlade
+ligaen, og lad en liga uden medlemmer stå. Selve tabellen ovenfor er efterprøvet
+mod produktionsskemaet under ægte RLS, og hver eneste linje holdt — se
+[`../DECISIONS.md`](../DECISIONS.md).*
 
 `anonymize_my_account()` har **nul parametre**. Det er hele adgangsgarantien: der findes ikke et bruger-id at forfalske. `sql/tests/account_anonymization.sql` efterprøver det mekanisk med et `pg_proc`-opslag.
 
