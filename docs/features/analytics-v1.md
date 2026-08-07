@@ -66,7 +66,8 @@ Logges via én generisk klient-helper, `logEvent(token, name, { groupId, competi
 | Konkurrence | `competition_created`, `competition_joined`, `competition_opened` | `src/lib/data.js` (`createCompetition` — alle 3 return-veje, `joinCompetition`), `src/screens/MainApp.jsx` (`openBoard`/`openPredictions`) |
 | Tip | `prediction_started`, `prediction_saved`, `prediction_updated`, `prediction_submitted` | `src/screens/PredictionsScreen.jsx` (`save()`, efter vellykket upsert) |
 | Navigation | `opened_home`, `opened_tip`, `opened_league`, `opened_standings`, `opened_rating`, `opened_career`, `opened_story`, `opened_championship` | `src/screens/MainApp.jsx` (`goTab`/`open*`, ét sted for al navigation) |
-| Story Engine | `story_viewed`, `story_shared` | `src/screens/HjemTab.jsx` (`StoryCard` + hentnings-effekt) |
+| Story Engine | `story_viewed`, `story_shared` | `src/screens/hjem/DayCard.jsx`, `RoundStory.jsx` |
+| Story Engine v3 | `story_score_distribution`, `story_frame_viewed`, `milestone_cta_clicked` | `src/screens/hjem/DayCard.jsx` (scoren), `RoundStory.jsx` (frames + CTA) |
 | Notifikationer | `push_opened` | `src/App.jsx` (boot-effekt, læser `?pn=`/`?rk=` fra push-linket) |
 
 **Ikke logget — udledt i stedet (se afsnit 1):**
@@ -76,6 +77,8 @@ Logges via én generisk klient-helper, `logEvent(token, name, { groupId, competi
 | `prediction_locked` | `analytics_match_locks`-viewet (lås-udtrykket pr. kamp) + Deadline Miss Rate-beregningen |
 | `story_generated` | `public.stories` (én række pr. genereret historie) |
 | `push_sent` | `public.notification_log` (én række pr. sendt besked, `key`-præfiks = type) |
+
+**Tre events kom til med Story Engine v3 (7. august 2026).** `story_score_distribution` (`day_key`, `winner_rule`, `news_value`, `runner_up_value`) svarer på, om publiceringstærsklen 45 er rigtig — men **kun som ekko af det sete**, og det er en vigtig skelnen: `analytics_events` er lossy by design og skrives af klienten under RLS, så den tabsfri fordeling, `A35` skal afgøres på, bor i `stories.news_value` og aflæses i SQL. Eventet siger, hvad brugerne faktisk *mødte*; kolonnen siger, hvad motoren *valgte imellem*. `story_frame_viewed` (`story_id`, `frame`, `total_frames`) svarer på, hvor mange der når frame 4 i rundestoryen — altså om tap-through overhovedet bliver brugt. `milestone_cta_clicked` (`milestone_key`) er det, der afgør, om frame 5 løser den bekymring, der udløste den: ser vi ikke et målbart løft i besøg på karriereprofilen inden for 24 timer efter en rundestory med frame 5, virker mekanismen ikke, og så skal milepæle have en anden indgang — ikke flere kort.
 
 **`opened_story` er reserveret, men udsendes ikke i v1** — der findes endnu ingen selvstændig story-drilldown (kortet lever inline på Hjem; `story_viewed` er dens impression). Navnet står i check-constrainten, så en fremtidig detaljevisning ikke kræver en ny migrering.
 
