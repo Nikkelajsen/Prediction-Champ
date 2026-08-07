@@ -70,6 +70,27 @@ function statusOf(m) {
 // udviklingsmiljøet, så begge markører blev sluttet af de gemte data hos
 // Sportmonks og af dokumentationen hos football-data.org. Det, der kunne
 // efterprøves, holdt; det, der ikke kunne, gjorde ikke.
+//
+// **Aflæst 7. august 2026, og resultatet er værre end forventet.** Markøren er
+// prøvet mod fire af de fem turneringer, denne leverandør dækker
+// (docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md):
+//
+//   BL1  306 kampe   `TIMED` vs. `SCHEDULED` + midnat — begge markører rene
+//   PL   380 kampe   alle `SCHEDULED`, nul midnat
+//   PD   380 kampe   alle `SCHEDULED`, nul midnat
+//   SA   380 kampe   alle `SCHEDULED`, nul midnat
+//
+// For de tre sidste sender leverandøren et OPDIGTET klokkeslæt i stedet for en
+// pladsholder: turneringens typiske anspilstidspunkt (lokalt) frem til nytår,
+// derefter 12:00 UTC sæsonen ud. Værdierne er kendelige som gæt, fordi hver
+// måned kun har én af dem — men de er ikke kendelige på noget felt i svaret.
+//
+// Funktionen returnerer altså `false` for hver eneste PL-, PD- og SA-kamp fra
+// oktober og frem, og appen viser leverandørens gæt som et fastsat klokkeslæt.
+// Rettelsen er ikke besluttet endnu; de to kandidater står i `G85`.
+//
+// CL er ikke aflæst: sæsonen 2026 fandtes ikke hos leverandøren pr. 1. august
+// (`B8`). Gentag aflæsningen, når ligafasen er lodtrukket.
 function kickoffTbdOf(m) {
   return isMidnightPlaceholder(m.utcDate);
 }
