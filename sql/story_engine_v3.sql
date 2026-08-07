@@ -72,9 +72,15 @@ alter table public.stories
 -- news_value, smutter uden om nettet. Sker det, er kolonnen ikke længere
 -- æra-markør, og prædikatet skal strammes.
 --
--- PRE-FLIGHT — skal give 0 rækker, ellers fejler oprettelsen:
---   select user_id, day_key, count(*) from public.stories
---    where period = 'day' and news_value is not null group by 1,2 having count(*) > 1;
+-- INTET PRE-FLIGHT, og det er ikke en forglemmelse. v2's dagsindeks krævede et
+-- (dets prædikat dækkede eksisterende rækker, som kunne indeholde dubletter),
+-- men dette gør ikke: `add column` ovenfor giver hver eneste eksisterende række
+-- `news_value = null`, så prædikatet matcher NUL rækker i det øjeblik, indekset
+-- oprettes. Det kan pr. konstruktion ikke fejle på en v2-database.
+--
+-- En kopieret pre-flight ville desuden ikke kunne køres FØR filen — kolonnen,
+-- den spørger om, oprettes seks linjer længere oppe. Kontrollen, der faktisk
+-- betyder noget, hører til BAGEFTER og står i verifikationsblokken nederst.
 create unique index if not exists stories_day_slot_uniq
   on public.stories (user_id, day_key)
   where period = 'day' and news_value is not null;
