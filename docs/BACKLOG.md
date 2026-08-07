@@ -145,7 +145,7 @@ versionsstempel → `G42`).*
 
 ## Prioriteret rækkefølge
 
-Alle 40 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 39 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -257,6 +257,22 @@ betjeninger, og som `A32` handler om. **Tier 4 er den, der bør læses først:**
 gendannelsesvej, der efterlader ratingen forkert uden at sige det. De to er
 tilsammen svaret på "hvad opdager vi ikke?", og det spørgsmål har ikke haft en
 række på listen før i dag.*
+
+*7. august 2026 (sent): **`G84` er leveret og slettet — 40 → 39.** Rækken var
+under to timer gammel, og det er ikke en anbefaling om at haste; det er, hvad
+der sker, når en række beskriver en fejl, der ALLEREDE er sket, frem for en, der
+kunne. **Leverancen efterlod ingen ny række, men den flyttede en grænse:**
+`sql/checks/` er en ny slags fil i repoet — ikke en migrering, ikke en test, men
+en overvågnings-forespørgsel, der køres to steder og derfor kun må findes ét.
+Modellen er værd at genbruge, næste gang en kontrol skal skrives: en temporær
+view installerer intet i produktionen og kan alligevel efterprøves i CI.
+**Det mest lærerige skete i testen og ikke i kontrollen.** Otte mutationer blev
+prøvet mod den; syv blev fanget, og den ottende — "erstat 100 %-reglen med
+mindst halvdelen" — slap igennem, fordi testens blandede tilfælde var 2 af 5 og
+dermed lå under tærsklen. Testen påstod at bevise, at kontrollen ikke er en
+andel, og beviste det ikke. Den er nu 4 af 5. **En test, man ikke har set fejle,
+er en formodning** — samme lære som `G74`s blokke og `G72`s kode, der aldrig har
+kørt, bare stillet mod testen selv.*
 
 Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
@@ -409,15 +425,20 @@ kigger, når kortet er væk fra Hjem igen.
 
 ### Tier 4 — Datarisiko med en lunte
 
-**Fyldt igen 7. august 2026 med to punkter, der er tierets definition sat på
-spidsen:** begge beskriver en tilstand, hvor dataene er forkerte, og INTET siger
-det højt. `G84` er endda den eneste række på hele listen, hvis lunte allerede er
-brændt ned én gang — fire døgn med alle football-data-kampe uden klokkeslæt,
-opdaget af et menneske, der undrede sig over en sortering.
+**`G84` er leveret og slettet samme dag, den blev oprettet (7. august 2026).**
+Heartbeat'en aflæser nu `kickoff_tbd` pr. turnering og slår alarm, når **alle**
+en turnerings kampe inden for ti dage står uden klokkeslæt. **Leverancen blev
+større end rækken sagde, og på ét bestemt punkt:** rækken bad om "én forespørgsel
++ ét tjek", men en kontrol er kode, der per definition næsten aldrig udløser —
+den ville være tavs på nøjagtig samme måde, hvad enten den virkede eller ej.
+Forespørgslen bor derfor i `sql/checks/` som en **temporær** view, der læses af
+BÅDE heartbeat'en mod produktion og af en CI-test mod en tom database, og testen
+er selv efterprøvet ved at mutere kontrollen otte gange og se den fange hver
+enkelt. Den ottende mutation slap igennem første gang og afslørede en for svag
+test — det blandede tilfælde var 2 af 5 og skelnede ikke mod en 50 %-tærskel.
 
 | # | Hvad | Hvorfor her |
 |---|---|---|
-| `G84` | **Ingen kontrol aflæser `kickoff_tbd` pr. liga** | 100 % TBD i en liga er ikke en gyldig tilstand, og tallet findes allerede i databasen. Heartbeat'en har adgangen og mønstret; det, der mangler, er én forespørgsel. |
 | `G83` | **Der findes ingen samlet genberegning af afledte rækker** | `RESTORE.md`s delvise gendannelse foreskriver `--disable-triggers` og siger så ikke, hvad man gør bagefter. Ratingen har ingen bagstopper i cron — den ville stå forkert, indtil nogen tilfældigvis rettede et resultat. |
 
 *Nedenfor står de to tidligere kørsler.*
@@ -588,7 +609,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
-| G84 | **Ingen kontrol aflæser, hvor stor en andel af en ligas kampe der står uden klokkeslæt.** | 6. august 2026 stod **alle** kampe fra de fem football-data-turneringer med `kickoff_tbd = true` i fire døgn: tiderne var der hos leverandøren, og syncen kastede dem væk. Fejlen blev fundet af et menneske, der undrede sig over, at La Liga-kampe sorterede ind mellem Superligaens 16.00 og 18.00 — altså på en bivirkning, ikke på symptomet. **Der findes ingen test og ingen kørende kontrol, der ville have set det**, og det er ikke tilfældigt: unit-testene efterprøver, at flaget kommer korrekt MED i rækken (`sync-matches.test.js`), og det gjorde det jo — fejlen sad i, hvad flaget blev sat til, hvilket kun kan aflæses på fordelingen. Tallet er ét `group by` fra at kunne ses: 100 % i en liga er ikke en gyldig tilstand, mens Superligaens få er det normale. **Mekanismen findes allerede** — job-heartbeat'ens trin "Tjek migreringernes virkning i databasen" kører netop den slags påstande mod produktion hver kørsel og har `SUPABASE_DB_URL`. Alternativt (eller også) en linje i Admin → Drift, hvor ejeren i forvejen kigger. Fejltypen er den dyre slags: den rammer alle brugere i én turnering på én gang, den ser ud som en tom kolonne frem for som en fejl, og den retter sig selv ved næste sync — så et symptom, der forsvandt, er ikke et bevis på, at det ikke sker igen. | Lille (én forespørgsel + ét tjek) |
 | G83 | **Der findes ingen samlet indgang til at genberegne de afledte rækker.** | Fire tabeller er ren funktion af `matches` + `predictions`: `ratings`/`rating_history`, `stories`, `competition_awards` og `milestones`. Ingen af dem skrives af den, der skriver grunddataene — de skrives af en trigger, af klienten, eller af notifikations-jobbet. **Indbakke-linjens præmis ("skrives KUN lazy fra klienten") holder ikke:** `award_competition_periods()` og `award_milestones()` har haft en pålidelig skriver i cron siden `B11`/v2.1 (`api/send-notifications.js`), og v3 lagde `apply_milestone_stories()` til. **Det, der er tilbage bagved, er større:** `recompute_ratings()` har INGEN bagstopper — den udløses kun af triggeren på `matches` — og [`RESTORE.md`](./RESTORE.md) foreskriver `--disable-triggers` ved en delvis gendannelse **uden at sige, hvad man gør bagefter**. En gendannelse af tabte tips ville altså efterlade ratingen forkert, indtil nogen tilfældigvis rettede et resultat i den samme sæson. Simulatoren måtte af samme grund kalde tre funktioner i hånden i den rigtige rækkefølge (`sql/dev/simulate_season.sql`, opdaget ved at køre den), og en fremtidig backfill vil skulle det igen. Løsningen er ikke ny kode, men ét sted: en `recompute_all(p_season_id)` — eller, billigere og næsten lige så godt, et afsnit i `RESTORE.md` og i `sql/README.md`, der navngiver de fire kald og deres rækkefølge. **Rækkefølgen er ikke valgfri** og er allerede lært to gange: `award_milestones()` skal ligge efter sæson-flaget (6. august), og `apply_milestone_stories()` efter `award_milestones()` (7. august). | Lille (dokumentation) til mellem (én RPC) |
 | G82 | **Sæson-simulatoren (`sql/dev/simulate_season.sql`, 1.069 linjer) har ingen CI-dækning.** | Filen er testdata-fabrikken for staging og dermed det eneste sted, en hel sæson kan opstå uden 300 håndindtastninger. Den er efterprøvet i hånden mod en lokal PostgreSQL 16 med `schema.sql` kørt ind — kampprogrammet (132 kampe, 22 runder, intet hold to gange pr. runde, hvert par præcis to gange), personaernes rangorden (0,62/0,54/0,47 point pr. kamp over 20.000 kampe) og at `teardown()` efterlader nul rækker i alle otte tabeller. **Den vej skal gås igen for hver ændring**, og den er allerede gået fire gange på to dage (6.–7. august: sæsonen kunne ikke afsluttes, milepælene fik ét tidsstempel, sæsonåret krydsede 1. juli). Filen rører desuden præcis de funktioner, `G83` handler om, så den er også den billigste levende dokumentation af deres rækkefølge. `sql`-jobbet i CI har mønstret i forvejen — opret database, kør fil, påstå tal — og `schema.sql` ligger i repoet. **Forbeholdet, sagt højt:** det ville blive jobbets tungeste trin (en fuld sæson med tips og resultater), og en simulator, der er langsom i CI, bliver en simulator, nogen vil springe over. Et delvist trin (`setup` + én runde + `teardown`) fanger de fleste regressioner til en brøkdel af tiden. | Mellem (ét CI-trin) |
 | G79 | **Docs-SQL-tjekket er kun så sandt som `sql/schema.sql`, og en manglende eksport ligner en fejl i blokken.** | `G74`s tjek (`sql/tests/docs_sql.mjs`) bygger hver ` ```sql `-blok i `docs/` om til et `prepare` mod skemaet i repoet, og det er dét, der gør, at `B12`s `42803` ville være fanget. Prisen står allerede skrevet i filens eget hoved: `schema.sql` er et **genereret** øjebliksbillede, som kun er sandt, når eksport-workflowen er kørt efter seneste migrering (den kører ugentligt, mandag 06:00 UTC, plus manuelt). Skriver nogen en forespørgsel mod en kolonne fra en migrering, der ikke er eksporteret endnu, fejler tjekket — **med den rigtige fejl af den forkerte grund**: PostgreSQL siger "kolonnen findes ikke", og den næste læser retter sin blok i stedet for at køre eksporten. Vilkåret er erkendt, men kun i en kommentar; det, der mangler, er, at KØRSLEN siger det. To billige veje: CI-trinnet kan skrive `schema.sql`s commit-dato ud, før det kører (så alderen er synlig i loggen ved en rød kørsel), eller trinnet kan fejle med en linje, der navngiver eksporten som første mistænkte. Ingen af dem gør tjekket rigtigere — de gør fejlen læselig, hvilket er hele forskellen på en kontrol, folk stoler på, og en, de begynder at omgå. | Lille |

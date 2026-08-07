@@ -30,6 +30,11 @@ const EXEMPT = new Set(["schema.sql"]);
 // præcis som en migrering — og rammer derfor præcis samme fælde. De tages med
 // i vagten af samme grund, som `sql/tests/**` holdes ude af den: det afgørende
 // er ikke, om filen er en migrering, men om den pastes i editoren.
+//
+// `sql/checks/` er af samme grund IKKE med (G84, august 2026): filerne dér er
+// overvågnings-forespørgsler, som køres af `job-heartbeat.yml` og af CI gennem
+// psql, aldrig i editoren. De må gerne bruge psql-kommandoer — de gør det bare
+// ikke i dag.
 const migrations = [
   ...readdirSync(SQL_DIR)
     .filter((f) => f.endsWith(".sql") && !EXEMPT.has(f))

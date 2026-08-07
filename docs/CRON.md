@@ -230,6 +230,20 @@ ville give dem tilbage. De tre `anon`-kontroller kom til med `G58` (august 2026)
 og er grunden til, at den klasse ikke længere kræver en skema-eksport og et
 menneske for at blive opdaget.
 
+**3. `kickoff_coverage` — om det, der kørte, skrev noget troværdigt** (`G84`,
+7. august 2026). De to lag ovenfor kan begge stå grønne, mens dataene er
+forkerte: jobbet kørte, skemaet er uændret, og syncen skrev bare noget forkert i
+en kolonne. Det skete 2.–6. august 2026, hvor alle kampe fra de fem
+football-data-turneringer stod uden klokkeslæt i fire døgn og blev fundet af et
+menneske, der undrede sig over en sortering. Sidste trin i heartbeat'en aflæser
+derfor `kickoff_tbd` pr. turnering og slår alarm, når **alle** en turnerings
+kampe inden for ti dage står uden tid — ikke ved en andel, som ville kræve en
+tærskel, vi ikke har data til at kalibrere. Forespørgslen bor i
+[`sql/checks/kickoff_coverage.sql`](../sql/checks/kickoff_coverage.sql) frem for
+i workflowen, så CI kan køre præcis den samme regel mod en tom database.
+Trinnet ligger **sidst** med vilje: et fejlende trin springer resten af jobbet
+over, og et tavst job er den dyrere af de to fejl.
+
 **Job 4 og 11 overvåges af ingen af de to lag** — de skriver ikke i `job_runs`
 og optræder derfor ikke i Admin → Drift. De er selv GitHub Actions, så en fejlet
 kørsel er allerede en rød workflow med en notifikation til ejeren; et ekstra lag

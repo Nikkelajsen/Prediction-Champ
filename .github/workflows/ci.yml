@@ -305,6 +305,27 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database admintest;'
           psql -h localhost -U postgres -d admintest -v ON_ERROR_STOP=1 -b -f liga_admin.sql
 
+      # Kontrollen af klokkeslæt (G84). Det eneste trin i jobbet, der tester en
+      # OVERVÅGNING og ikke en migrering: forespørgslen i sql/checks/ læses af
+      # job-heartbeat.yml mod produktion, og af denne test mod en tom
+      # engangsdatabase — samme fil begge steder, så reglen kun findes ét sted.
+      #
+      # En kontrol er kode, der per definition næsten aldrig udløser, og det er
+      # den værste slags at lade være uafprøvet: den ser rigtig ud, den kører
+      # hver halve time, og den ville være tavs på nøjagtig samme måde, hvad
+      # enten den virkede eller ej. Testen efterprøver derfor BEGGE retninger —
+      # at augustfejlen ville have udløst alarm, og at fire normale tilstande
+      # ikke gør — og den er selv efterprøvet ved at mutere kontrollen otte
+      # gange og se testen fange hver enkelt.
+      - name: Test af kontrollen for manglende klokkeslæt
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database kickofftest;'
+          psql -h localhost -U postgres -d kickofftest -v ON_ERROR_STOP=1 -b -f kickoff_coverage.sql
+
       # SQL-blokkene i docs/ (G74). Det eneste trin i jobbet, der ikke tester en
       # migrering, men DOKUMENTATIONEN: hver ```sql-blok bygges om til et
       # `prepare` mod hele sql/schema.sql, så PostgreSQL selv siger, om

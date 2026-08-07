@@ -64,6 +64,7 @@ den regenereres med guiden nedenfor.
 | Mappe | Hvad | Køres |
 |---|---|---|
 | `sql/tests/` | SQL-testene, som CI's `sql`-job kører mod en rigtig PostgreSQL | Af CI. Bruger `\ir`/`\set` med vilje og kan derfor **ikke** pastes i SQL-editoren |
+| `sql/checks/` | **Overvågning**, ikke migreringer. I dag én fil: [`kickoff_coverage.sql`](./checks/kickoff_coverage.sql) (`G84`), som spørger, om de nært forestående kampe har et rigtigt klokkeslæt. Filen opretter en **temporær** view og installerer derfor intet — den lever kun i den psql-session, der læser den | Af `.github/workflows/job-heartbeat.yml` mod produktion hver halve time, og af `sql/tests/kickoff_coverage.sql` i CI mod en tom database. **Samme fil begge steder** — det er hele grunden til, at den er en fil og ikke en heredoc i en workflow |
 | `sql/dev/` | Værktøjer til **staging**, ikke migreringer. I dag én fil: [`simulate_season.sql`](./dev/simulate_season.sql), som spiller en hel sæson igennem for testbrugerne — tips, resultater, stillinger, rating, historier og kåringer — i sin EGEN turnering, som ingen synkronisering kan røre | I hånden i staging-projektets SQL-editor. 🛑 **Aldrig i produktion.** Filen er selv låst: den kræver `sim.arm('JA - DETTE ER STAGING')` og et loft over antallet af brugere |
 
 Filerne i `sql/dev/` pastes i editoren ligesom migreringerne og er derfor

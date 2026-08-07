@@ -15,6 +15,43 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 7. august 2026 — En overvågnings-forespørgsel bor i en fil, ikke i en workflow
+
+**Beslutning (`G84`):** kontrollen af, om kampene har klokkeslæt, skrives som en
+**temporær view** i den nye mappe `sql/checks/` — ikke som en heredoc i
+`job-heartbeat.yml`, sådan som workflowens to eksisterende kontroller er.
+
+**Begrundelsen er, at denne kontrol kan tage fejl på en måde, de to andre ikke
+kan.** "Har `monthly_standings` `security_invoker`?" er et ja/nej-opslag i
+`information_schema`; skrives det forkert, fejler det højlydt. "Er alle en
+turnerings kampe uden klokkeslæt?" er en påstand om, hvad der er et normalt
+datamønster — og skrives DEN forkert, er resultatet en kontrol, der er tavs på
+nøjagtig samme måde, hvad enten den virker eller ej. En kontrol udløser per
+definition næsten aldrig; tavshed er dens normaltilstand og kan derfor ikke
+skelnes fra, at den er død.
+
+Derfor skal den kunne testes, og derfor må reglen kun findes ét sted. En
+temporær view løser begge dele på én gang: den installerer intet i produktionen
+(ingen migrering, ingen kørsel hos ejeren, intet der kan drive fra repoet), og
+den samme fil kan læses af heartbeat'en mod produktionsdatabasen og af
+`sql/tests/kickoff_coverage.sql` mod en tom engangsdatabase. Prisen er et krav
+om en **session**-forbindelse, som `SUPABASE_DB_URL` allerede opfylder, fordi
+skema-eksporten bruger den til `pg_dump`.
+
+**Fravalgt:** en `security definer`-funktion i skemaet (kræver en migrering,
+altså en kørsel hos ejeren for hver rettelse af kontrollen — se `A32` om den kø)
+og en heredoc som de to andre (kan ikke testes uden at duplikere forespørgslen,
+hvilket er `G78`s fejltype).
+
+**Selve tærsklen er den anden halvdel af beslutningen: 100 % og ikke en andel.**
+En andel kræver et kalibreret tal, og der findes ingen data at kalibrere det på.
+100 % er udledt af fejlen selv — en forkert aflæsning af leverandørens markør
+rammer alt eller intet inden for én turnering — mens en terminsliste, hvor de
+fleste kampe endnu ikke har fået tid, er fuldstændig normal. Et gulv på tre
+kampe holder en enkelt omberammelse ude. Bliver det alligevel for følsomt en
+dag, er rettelsen én linje; men en kontrol, der ofte er rød uden grund, lærer
+man at holde op med at læse, og så er den værre end ingen.
+
 ## 7. august 2026 — Ét øjeblik om dagen: motoren vælger frem for at udgive
 
 **Beslutning:** Story Engine v3 (spec:
