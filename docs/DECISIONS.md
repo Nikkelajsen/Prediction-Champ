@@ -15,6 +15,72 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 7. august 2026 (nat) — En historie skal enten være uafhængig af nuet eller trække sig, når nuet er løbet fra den (`A38`)
+
+**Beslutning:** rundestoryen afløses ikke længere kun af et nyere dagskort. Den
+trækker sig også, så snart den runde, Hjem viser som indeværende, er **strengt
+senere** end storyens og har mindst ét resultat. Samtidig bærer kortet sin runde
+i overskriftslinjen (`Rundens historie · 28.07 – 03.08`), og de tre regler, der
+hævdede en *tilstand*, er sat i datid.
+
+**Begrundelse — to ure, ikke ét.** Rundestoryens overskrifter er udsagn om en
+**stilling**, og en stilling er live pr. kamp: `computeCompetitionState`
+medregner en runde, så snart ÉN kamp har resultat. Afløseren — dagskortet —
+skrives derimod først, når **hele kampdagen** er færdigspillet, og
+komplethedsprædikatet er globalt over alle turneringer. Mellem de to øjeblikke
+stod Hjem med et kort, STILLING-skærmen modsagde. Meldt af en bruger 7. august
+2026: kortet sagde *"Du er nu foran Lis04 i Superliga Grundspil"*, mens Lis04 lå
+over vedkommende i tabellen.
+
+**Hvorfor begge greb og ikke ét.** Datidsformuleringen alene ville gøre
+påstanden sand for evigt, men den ville stadig stå side om side med en tabel,
+der siger noget andet. Tilbagetrækningen alene ville løse det tilfælde, men lade
+kortet være usandt i de timer, hvor kampen spilles. Datelinen er det billigste af
+de tre og det eneste, der virker **bagudrettet**: den udledes af `round_key` i
+frontenden, så rækker, der allerede står i databasen, får deres dato med. Derfor
+blev der ikke kørt backfill — `story_engine_backfill.sql` nulstiller
+`dismissed_at` og ville genoplive kort, brugerne aktivt har afvist.
+
+**Den accepterede upræcished er valgt, ikke overset:** reglen ser på brugerens
+runde på tværs af alle konkurrencer, så et resultat i én turnering trækker også
+et kort om en anden. En præcis regel ville kræve et opslag pr.
+`story.competition_id` — et ekstra kald og en ny kodesti for nogle timers
+gevinst. **Prisen ved beslutningen er, at top-slottet på Hjem kan stå tomt**,
+indtil dagskortet lander. Ingen historie er bedre end en forkert.
+
+## 7. august 2026 (nat) — Guarden om story-genereringen skal efterlade et spor, ikke kun beskytte
+
+**Beslutning:** matches-triggeren skriver én `job_runs`-række (`job =
+'story-engine'`) pr. kørsel af historie-porten, med hver berørt dag og runde,
+om dagen var komplet, hvor mange kort der blev skrevet, og `sqlerrm` ved fejl.
+Skrivningen ligger **uden for** exception-guarden. Dertil kontrollen
+`sql/checks/day_card_coverage.sql`.
+
+**Begrundelse.** Undersøgelsen af rapporten ovenfor afdækkede noget større end
+selve kortet: v3's dagsmotor havde på det tidspunkt **aldrig skrevet en eneste
+række i produktion**, og det kunne ikke aflæses nogen steder. Fire hypoteser blev
+afkræftet undervejs — udrulningstidspunkt (produktionsdumpet fra 19:35 dansk
+indeholdt allerede funktionen), en fejl i motoren (håndkaldet skrev 20 rækker),
+`statement_timeout` (hele triggersætningen måler 141 ms) og kaldende rolle (hele
+kæden er `security definer` som `postgres`) — og årsagen kunne til sidst **ikke
+fastslås**, fordi beviserne ikke findes: `matches.updated_at` vedligeholdes ikke
+af syncen, og de rækker, der eventuelt blev skrevet og rullet tilbage, er væk.
+
+Det er selve konklusionen. Symptomet på en fejlet generering er **stilhed**, og
+stilhed er uskelnelig fra en rolig uge. Det er samme fejltype som `A9` (juli
+2026), hvor motoren aldrig havde genereret én eneste historie; dengang blev
+guarden skærpet fra `notice` til `warning`, men en advarsel i Postgres-loggen er
+i praksis lige så usynlig. **Derfor rettes ikke en formodet årsag, men
+observerbarheden** — og de øvrige rettelser i leverancen (bagstopperen dækker nu
+også i går og i dag; den tidlige udgang i dagsmotoren står før dens `delete`) er
+alle valgt, fordi de virker uanset årsagen.
+
+**Placeringen uden for guarden er ikke en detalje:** `begin … exception … end` er
+en subtransaktion, så en insert indenfor ville blive rullet tilbage sammen med
+alt andet, netop når der var noget at fortælle.
+
+---
+
 ## 7. august 2026 — Ratingens bagstopper er en KONTROL, ikke et job (`G83`)
 
 **Beslutning:** `recompute_derived()` sættes **ikke** på et skema. I stedet kører

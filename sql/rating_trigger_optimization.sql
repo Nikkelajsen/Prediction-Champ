@@ -51,6 +51,13 @@ declare
   -- generate_daily_stories tager date og får ingen cast.
   v_round date;
   v_day   date;
+  -- Instrumentering (august 2026). Se kommentaren ved logskrivningen nedenfor.
+  v_t0      timestamptz;
+  v_ok      boolean := true;
+  v_err     text;
+  v_n       int;
+  v_days    jsonb := '[]'::jsonb;
+  v_rounds  jsonb := '[]'::jsonb;
 begin
   -- ============ 1. Rating-porten: KUN ægte resultatændringer ============
   drop table if exists _se_changed_rounds;
@@ -122,12 +129,21 @@ begin
   -- ============ 4. Historier og milepæle — best-effort ============
   -- Må ALDRIG kunne blokere resultat-lagring eller rating (derfor guarden).
   if exists (select 1 from _se_story_days) or exists (select 1 from _se_story_rounds) then
+    v_t0 := clock_timestamp();
     begin
       -- DAGE FØRST og i kronologisk orden: en dags kort må ikke lande efter
       -- rundens afsluttende kort, og karusellen læses i samme retning.
       for v_day in (select distinct day_key from _se_story_days order by 1) loop
         if public.match_day_complete(v_day) then
           perform public.generate_daily_stories(v_day);
+          select count(*) into v_n
+            from public.stories where period = 'day' and day_key = v_day;
+          v_days := v_days || jsonb_build_object('day', v_day, 'complete', true, 'cards', v_n);
+        else
+          -- Den gren er værd at logge for sig: "dagen var ikke komplet" og
+          -- "dagen fejlede" ligner hinanden udefra (intet kort), men er to helt
+          -- forskellige problemer med hver sin rettelse.
+          v_days := v_days || jsonb_build_object('day', v_day, 'complete', false, 'cards', 0);
         end if;
       end loop;
 
@@ -143,6 +159,9 @@ begin
            )
         then
           perform public.generate_stories(v_round::text);
+          select count(*) into v_n
+            from public.stories where period = 'round' and round_key = v_round::text;
+          v_rounds := v_rounds || jsonb_build_object('round', v_round, 'complete', true, 'cards', v_n);
           -- MILEPÆLE KALDES IKKE HERFRA (v2.1, august 2026).
           --
           -- De gjorde det i første udgave, med den begrundelse at alt kampdrevet
@@ -162,13 +181,40 @@ begin
           --
           -- api/send-notifications.js er nu ENESTE kalder — den var i forvejen
           -- den pålidelige skriver for de tre ikke-kampdrevne familier.
+        else
+          v_rounds := v_rounds || jsonb_build_object('round', v_round, 'complete', false, 'cards', 0);
         end if;
       end loop;
     exception when others then
       -- warning, ikke notice: guarden skal blive ved med at beskytte resultat-
       -- lagringen, men en fejl må ikke være usynlig igen (jf. A9, juli 2026).
       -- warning når Postgres-loggen som standard; notice gjorde ikke.
+      v_ok  := false;
+      v_err := sqlerrm;
       raise warning 'story-generering fejlede (ignoreret, resultater/rating er uberørte): %', sqlerrm;
+    end;
+
+    -- ============ 5. Sporet — UDEN FOR GUARDEN ============
+    -- Guarden beskytter resultat-lagringen, men den efterlod intet spor, og en
+    -- `raise warning` i Postgres-loggen er i praksis usynlig. Følgen blev meldt
+    -- 7. august 2026: v3's dagsmotor havde aldrig skrevet en eneste række i
+    -- produktion, og det kunne ikke ses nogen steder — en STILHED kan ikke
+    -- skelnes fra en rolig uge. Det er samme fejltype som `A9` (juli 2026),
+    -- hvor motoren aldrig havde genereret noget overhovedet.
+    --
+    -- SKRIVNINGEN SKAL LIGGE HER OG IKKE INDE I BLOKKEN, og det er hele pointen:
+    -- `begin … exception … end` er en SUBTRANSAKTION. Stod insert'en indenfor,
+    -- ville den blive rullet tilbage sammen med alt andet, netop når der var
+    -- noget at fortælle. Variablerne overlever derimod rulningen — de er
+    -- hukommelse, ikke databasetilstand.
+    --
+    -- Egen guard, fordi et fejlende spor aldrig må vælte det, det sporer.
+    begin
+      insert into public.job_runs (job, started_at, finished_at, ok, detail, error)
+      values ('story-engine', v_t0, clock_timestamp(), v_ok,
+              jsonb_build_object('op', tg_op, 'days', v_days, 'rounds', v_rounds),
+              v_err);
+    exception when others then null;
     end;
   end if;
 

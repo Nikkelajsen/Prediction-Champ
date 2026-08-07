@@ -9,7 +9,7 @@ import { useState, useEffect } from "react";
 import { ChevronRight, Clock, Check, RefreshCw } from "lucide-react";
 import { formatKickoff } from "../lib/scoring.js";
 import { computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadDayCard, loadHomePlacements, loadLatestStory, loadRatingBoard, loadRatingHistory, ratingSnapshot } from "../lib/data.js";
-import { isFresh, ROUND_STORY_MAX_AGE_MS } from "../lib/stories.js";
+import { isFresh, roundStorySuperseded, ROUND_STORY_MAX_AGE_MS } from "../lib/stories.js";
 import { readUserFlag, writeUserFlag, readSeenStories, markStorySeen, CARD_KEY } from "../lib/localFlags.js";
 import { C, btnGhost, btnGreen, font, iconBtn } from "../ui/theme.js";
 import { usePushOptIn } from "../ui/usePushOptIn.js";
@@ -23,7 +23,12 @@ import { cardTight, shortKick } from "./hjem/shared.js";
 
 function HjemTab({ token, userId, profile, competitions, goTab, openPredictions, openBoard, openGroup, openProfile, onboarding }) {
   const [tips, setTips] = useState(null);
-  const [round, setRound] = useState(null); // live-oversigt over indeværende runde
+  // `undefined` = ikke hentet endnu · `null` = hentet, men der ER ingen runde
+  // (ingen konkurrencer, eller kaldet fejlede). Forskellen er ikke kosmetisk:
+  // visningsreglen for rundestoryen nedenfor skal kunne holde kortet tilbage,
+  // mens svaret er ukendt — men ikke når svaret er "ingen". Alle andre læsere
+  // skriver `round && …`, og `undefined` er falsy, så de er urørte.
+  const [round, setRound] = useState(undefined); // live-oversigt over indeværende runde
   const [roundOpen, setRoundOpen] = useState(false); // foldet som standard: viser kun X/Y + point
   const [snapshot, setSnapshot] = useState(null); // { rating, move, form, rank, total }
   const [placements, setPlacements] = useState(null); // [{ label, pos, gold, onClick }]
@@ -69,21 +74,30 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
     return () => { cancelled = true; };
   }, [token, reloadKey]);
 
-  // VISNINGSREGLEN: rundestoryen taler, indtil der findes et NYERE dagskort.
+  // VISNINGSREGLEN: rundestoryen taler, indtil noget nyere har noget at sige —
+  // og "noget nyere" er TO ting, ikke én.
   //
-  // Det er dét, der giver ugens konklusion lov til at leve hele den følgende
-  // runde, uden at der skal beregnes en rundenøgle på klienten: et nyere
-  // dagskort er per konstruktion fra den NYE runde, fordi matches-triggeren
-  // kører dagsmotoren før runde-motoren — så den gamle rundes dagskort er
-  // altid ældre end rundekortet, og først den nye rundes første kampdag kan
-  // afløse det.
+  // 1) Et NYERE dagskort. Sammenligningen er på `created_at` og ikke på
+  //    `day_key`/`round_key`, fordi det er SKRIVETIDSPUNKTET, der afgør hvad der
+  //    er nyest at fortælle: en resultatrettelse i en gammel runde regenererer
+  //    begge kort i samme triggersætning, og rundekortet skrives sidst.
   //
-  // Sammenligningen er på `created_at` og ikke på `day_key`/`round_key`, fordi
-  // det er SKRIVETIDSPUNKTET, der afgør hvad der er nyest at fortælle: en
-  // resultatrettelse i en gammel runde regenererer begge kort i samme
-  // triggersætning, og rundekortet skrives sidst.
-  const roundIsNewer = roundStory && (!dayCard ||
-    String(roundStory.created_at || "") > String(dayCard.created_at || ""));
+  // 2) VIRKELIGHEDEN ALENE — `roundStorySuperseded`. Indtil august 2026 stod der
+  //    kun punkt 1 her, med den begrundelse at et nyere dagskort per konstruktion
+  //    er fra den nye runde. Den påstand er sand, men den er for SMAL: et dagskort
+  //    kræver en færdigspillet kampdag, mens stillingen flytter sig ved hvert
+  //    enkelt slutfløjt. I hullet imellem stod rundekortet og påstod noget,
+  //    STILLING-skærmen modsagde — rapporteret 7. august 2026, hvor kortet sagde
+  //    "du er nu foran Lis04", mens Lis04 lå over brugeren i tabellen.
+  //
+  // `round !== undefined` er ikke en detalje: `computeCurrentRound` er fire
+  // sekventielle kald og lander efter historierne. Uden porten ville kortet blive
+  // vist og forsvinde igen et øjeblik senere — og `story_viewed` ville blive
+  // logget for en visning, brugeren aldrig reelt fik.
+  const roundIsNewer = roundStory
+    && round !== undefined
+    && !roundStorySuperseded(roundStory, round)
+    && (!dayCard || String(roundStory.created_at || "") > String(dayCard.created_at || ""));
 
   function onSeen(id) {
     if (!id || seenStories.has(id)) return;

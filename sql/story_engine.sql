@@ -332,7 +332,7 @@ begin
     jsonb_build_object('from', b.rnk, 'to', a.rnk, 'gap', top.pts - a.pts),
     '🚀 Fra nr. ' || b.rnk || ' til nr. ' || a.rnk || ' i ' || c.name,
     'Du rykkede ' || (b.rnk - a.rnk) || ' pladser frem i runden ' || v_label ||
-      '. Toppen er nu ' || (top.pts - a.pts) || ' point væk.'
+      '. Toppen var ' || (top.pts - a.pts) || ' point væk, da den sluttede.'
   from _se_after a
   join _se_before b on b.competition_id = a.competition_id and b.user_id = a.user_id
   join _se_size sz on sz.competition_id = a.competition_id and sz.n >= 4
@@ -348,9 +348,9 @@ begin
   insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
   select p_round_key, a.user_id, a.competition_id, 'PODIUM_ENTER', 22, sz.n,
     jsonb_build_object('rank', a.rnk, 'from', b.rnk, 'total', sz.n, 'gap', top.pts - a.pts),
-    '🏅 Du er inde i top 3 i ' || c.name,
+    '🏅 Du gik ind i top 3 i ' || c.name,
     'Efter runden ' || v_label || ' ligger du nr. ' || a.rnk || ' af ' || sz.n || ' i ' || c.name ||
-      '. Toppen er ' || (top.pts - a.pts) || ' point væk.'
+      '. Toppen var ' || (top.pts - a.pts) || ' point væk.'
   from _se_after a
   join _se_before b on b.competition_id = a.competition_id and b.user_id = a.user_id
   join _se_size sz on sz.competition_id = a.competition_id and sz.n >= 6
@@ -368,8 +368,8 @@ begin
   insert into public.stories (round_key, user_id, competition_id, rule, priority, league_size, payload, headline, body)
   select p_round_key, a.user_id, a.competition_id, 'CLOSING_IN', 45, sz.n,
     jsonb_build_object('rival', pr.display_name, 'gap', top.pts - a.pts, 'rank', a.rnk),
-    '👀 Kun ' || (top.pts - a.pts) || ' point op til føringen i ' || c.name,
-    'Efter runden ' || v_label || ' er der ' || (top.pts - a.pts) || ' point op til ' ||
+    '👀 Du sluttede runden ' || (top.pts - a.pts) || ' point fra toppen i ' || c.name,
+    'Efter runden ' || v_label || ' var der ' || (top.pts - a.pts) || ' point op til ' ||
       pr.display_name || ' i ' || c.name || '.'
   from _se_after a
   join _se_size sz on sz.competition_id = a.competition_id and sz.n >= 3
@@ -414,9 +414,13 @@ begin
   from (
     select a.competition_id, a.user_id, sz.n as league_size,
       jsonb_build_object('rival', pr.display_name, 'gap', a.pts - ao.pts) as payload,
-      '🔄 Du er nu foran ' || pr.display_name || ' i ' || c.name as headline,
-      'Efter runden ' || v_label || ' fører du jeres duel i ' || c.name ||
-        ' med ' || (a.pts - ao.pts) || ' point.' as body,
+      -- DATID, ikke nutid. "Du er nu foran X" er et udsagn om en STILLING, og
+      -- en stilling flytter sig ved næste kamp — overskriften blev meldt som
+      -- usand, mens den stod på Hjem (august 2026). "Du gik forbi X" er en
+      -- BEGIVENHED i en afsluttet runde og kan aldrig blive forkert.
+      '🔄 Du gik forbi ' || pr.display_name || ' i ' || c.name as headline,
+      'Du overhalede ' || pr.display_name || ' i runden ' || v_label ||
+        ' og sluttede ' || (a.pts - ao.pts) || ' point foran i ' || c.name || '.' as body,
       (a.pts - ao.pts) as gap
     from _se_after a
     join _se_after ao on ao.competition_id = a.competition_id and ao.user_id <> a.user_id
@@ -475,7 +479,7 @@ begin
     jsonb_build_object('rating', round(rh.rating_after)::int, 'old', round(prev.old)::int, 'rank', rk.rnk, 'total', v_rating_total),
     '📈 Ny personlig ratingrekord: ' || round(rh.rating_after)::int,
     'Din runde ' || v_label || ' sendte dig forbi din hidtidige rekord på ' || round(prev.old)::int ||
-      '. Du er nu nr. ' || rk.rnk || ' af ' || v_rating_total || ' på ranglisten.'
+      '. Efter runden var du nr. ' || rk.rnk || ' af ' || v_rating_total || ' på ranglisten.'
   from public.rating_history rh
   join public.ratings r on r.user_id = rh.user_id and r.scope = 'ALL' and coalesce(r.provisional, false) = false
   join lateral (

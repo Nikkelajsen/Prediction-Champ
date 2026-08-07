@@ -127,22 +127,29 @@ declare
   v_daylabel   text := to_char(p_day, 'DD.MM');
   v_threshold  int  := 45;   -- spec §5. Ukalibreret; se A35.
 begin
-  -- Idempotens: KUN dagens dag-kort. `period = 'day'` er ikke pynt — uden det
-  -- ville en gen-kørsel slette rundens afsluttende kort. Symmetrisk sletter
-  -- generate_stories() kun `period = 'round'`. Den farligste linje i v2 er
-  -- lige så farlig i v3.
-  delete from public.stories where period = 'day' and day_key = p_day;
-
   -- ---------- Rundens sidste dag: kun rundekortet ----------
   -- Dags-motoren springes over — ikke fordi den ville fejle, men fordi to kort
   -- samme dag er præcis det, v3 afskaffer. Bemærk `not exists ... > p_day`:
   -- afgørelsen bygger på om der er FLERE kampdage i runden, ikke på om runden
   -- er færdigspillet, så en udsat kamp senere i ugen holder dagen åben.
+  --
+  -- UDGANGEN STÅR FØR SLETNINGEN, og rækkefølgen er ikke fri (august 2026).
+  -- Stod sletningen først, ville et gen-kald for en dag, der ER BLEVET rundens
+  -- sidste kampdag — fordi en senere kamp blev flyttet eller aflyst — tømme
+  -- dagen og returnere uden at skrive noget tilbage. Dagen ville stå tom for
+  -- evigt, for dagsmotoren kører kun, når en dag BLIVER færdig. En tidlig
+  -- udgang må aldrig efterlade mindre, end den fandt.
   if exists (select 1 from public.matches where round_key = v_round and match_day = p_day)
      and not exists (select 1 from public.matches where round_key = v_round and match_day > p_day)
   then
     return;
   end if;
+
+  -- Idempotens: KUN dagens dag-kort. `period = 'day'` er ikke pynt — uden det
+  -- ville en gen-kørsel slette rundens afsluttende kort. Symmetrisk sletter
+  -- generate_stories() kun `period = 'round'`. Den farligste linje i v2 er
+  -- lige så farlig i v3.
+  delete from public.stories where period = 'day' and day_key = p_day;
 
   -- ---------- fakta (uændret fra v2) ----------
   drop table if exists _sd_pts;
