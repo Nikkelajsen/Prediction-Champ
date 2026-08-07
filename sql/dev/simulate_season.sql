@@ -313,7 +313,11 @@ $fn$;
 -- p_teams          antal hold (lige tal). 12 hold = 22 runder = 132 kampe.
 -- p_played_rounds  hvor mange runder der skal ligge BAG i dag. Resten ligger
 --                  fremme og kan tippes i appen som en almindelig sæson.
---                  Sæt den til (p_teams-1)*2 for en sæson, der er helt forbi.
+--                  ØNSKE, ikke løfte: sæsonen må ikke starte før 1. juli
+--                  (fodboldsæsonens skillelinje, se nedenfor), så køres filen
+--                  tidligt på sæsonen, bliver tallet mindre — og svaret siger
+--                  hvor meget. Vil du have en sæson, der ER spillet færdig,
+--                  så brug `sim.play('2030-01-01')` frem for et højt tal her.
 -- p_users          brugere, der skal deltage. Null = alle profiler i databasen.
 -- p_seed           trækningens frø. Samme frø + samme kald = samme sæson.
 --
@@ -353,6 +357,11 @@ declare
 
   v_rounds   int;
   v_first_tue date;
+  v_today       date;
+  v_this_tue    date;
+  v_season_start date;   -- 1. juli i indeværende fodboldsæson
+  v_earliest_tue date;
+  v_played      int;
   v_kick      timestamptz;
   v_slot      int;
   r int; i int; a int; b int; h int; aw int;
@@ -383,9 +392,39 @@ begin
   update sim.env set seed = p_seed;
 
   v_rounds := (p_teams - 1) * 2;
+  v_today  := (now() at time zone 'Europe/Copenhagen')::date;
+  v_this_tue := date_trunc('week', v_today)::date + 1;
   -- Tirsdagen i indeværende uge, minus én uge pr. runde, der skal være spillet.
-  v_first_tue := (date_trunc('week', (now() at time zone 'Europe/Copenhagen')::date)::date + 1)
-                 - (p_played_rounds * 7);
+  v_first_tue := v_this_tue - (p_played_rounds * 7);
+
+  -- SÆSONEN MÅ IKKE KRYDSE 1. JULI, og det er ikke pedanteri.
+  --
+  -- `award_milestones()` tæller FODBOLDSÆSONER og ikke rækker i `seasons`:
+  -- sæsonåret udledes af kampens danske kickoff, hvor juli er skillelinjen
+  -- (`sql/milestones.sql`). En sæson, der løber fra maj til oktober, ligger
+  -- derfor i TO sæsonår — og med fem tips i hver halvdel udløser den
+  -- "To sæsoner med", selv om der kun er spillet én.
+  --
+  -- Milepælen har ret; kalenderen havde ikke. Med standardopsætningen (10
+  -- runder bagud, kørt en dag i august) startede sæsonen i slutningen af maj,
+  -- og 30 af 132 kampe landede i det forrige sæsonår. Fundet 7. august 2026 af
+  -- en bruger, der undrede sig over et mærke, der ikke passede.
+  --
+  -- Starten klippes derfor til den første tirsdag i indeværende fodboldsæson.
+  -- Det KOSTER runder bagud, når filen køres tidligt på sæsonen — og det er
+  -- det rigtige: en rigtig sæson har heller ikke spillet ti runder i august.
+  -- Sig det højt i svaret frem for at lade tallet skride i stilhed.
+  v_season_start := make_date(
+    (case when extract(month from v_today) >= 7 then extract(year from v_today)
+          else extract(year from v_today) - 1 end)::int, 7, 1);
+  -- Første tirsdag på eller efter 1. juli (0 = søndag, 2 = tirsdag).
+  v_earliest_tue := v_season_start + ((2 - extract(dow from v_season_start)::int + 7) % 7);
+  if v_first_tue < v_earliest_tue then
+    v_first_tue := v_earliest_tue;
+  end if;
+
+  -- Hvor mange runder der FAKTISK ligger bag, efter klippet.
+  v_played := greatest(0, least(v_rounds, ((v_this_tue - v_first_tue) / 7)));
 
   -- ---------- liga ----------
   -- `is_official` er sat: kun officielle turneringer tæller i Leagly Rating og
@@ -494,9 +533,13 @@ begin
   select v_comp, m.id from public.matches m where m.season_id = v_season;
 
   return format(
-    'SIM-ligaen oprettet: %s hold, %s runder, %s kampe (%s → %s). %s deltagere. Næste skridt: select sim.season();',
+    'SIM-ligaen oprettet: %s hold, %s runder, %s kampe (%s → %s). %s deltagere. %s runder ligger bag i dag%s. Næste skridt: select sim.season();',
     p_teams, v_rounds, v_matches, v_first_tue + 3, v_first_tue + ((v_rounds - 1) * 7) + 6,
-    array_length(v_users, 1)
+    array_length(v_users, 1), v_played,
+    case when v_played < p_played_rounds
+      then format(' (du bad om %s — sæsonen er klippet til fodboldsæsonens start %s, så den ikke krydser 1. juli og tælles som to sæsoner)',
+                  p_played_rounds, v_first_tue)
+      else '' end
   );
 end;
 $fn$;
