@@ -255,10 +255,26 @@ export function isNewsworthy(story) {
 // Uden det er "dagens historie" en løgn på en tirsdag efter en stille weekend.
 export const DAY_CARD_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
-export function isFresh(story, now = Date.now()) {
+// RUNDESTORYEN HAR ET ANDET UR, og det er hele forskellen mellem de to formater.
+//
+// Dagskortet handler om ÉN aften og bliver en løgn, så snart aftenen er to døgn
+// gammel. Rundestoryen er ugens konklusion og skal leve, indtil den nye runde
+// har noget at fortælle — altså indtil dagsmotoren udgiver sit første kort i
+// den. Den afløsning sker af sig selv i visningsreglen (`roundIsNewer` i
+// HjemTab): et nyere dagskort er per konstruktion fra den NYE runde, fordi
+// triggeren kører dagene før runden, så den gamle rundes dagskort altid er
+// ældre end rundekortet.
+//
+// Loftet her er derfor ikke det, der normalt afløser rundestoryen — det er et
+// værn mod SÆSONPAUSEN. Uden det ville den sidste runde før en pause stå på
+// Hjem i månedsvis, fordi der aldrig kom et nyere dagskort at afløse den med.
+// Fjorten dage = den følgende runde plus slæk til en runde, der sluttede sent.
+export const ROUND_STORY_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+export function isFresh(story, now = Date.now(), maxAge = DAY_CARD_MAX_AGE_MS) {
   if (!story?.created_at) return false;
   const t = Date.parse(story.created_at);
-  return Number.isFinite(t) && now - t < DAY_CARD_MAX_AGE_MS;
+  return Number.isFinite(t) && now - t < maxAge;
 }
 
 // Deterministisk udvælgelse: præcis én historie pr. bruger pr. runde.

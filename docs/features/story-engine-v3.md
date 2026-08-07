@@ -313,3 +313,25 @@ trigger-sætning 229 ms mod 1 s-grænsen.
 `sql/tests/story_engine_scale.sql` måler nu en **sen, men ikke sidste** kampdag:
 efter v3 returnerer motoren straks på rundens sidste dag, så den gamle måling
 ville have vist 0,1 ms og påstået, at dagsmotoren er gratis.
+
+
+### 13.6 Rundestoryen udløber ikke efter 48 timer (rettet efter drift)
+
+§8 skriver udløbet på 48 timer i frontend-afsnittet, og den første udgave lagde
+det på **begge** formater. Det var for stramt: rundekortet forsvandt så ~2 døgn
+efter runden sluttede, hvor det i v2 levede hele runden igennem, og på en stille
+uge stod Hjem helt uden historie i flere dage. §8's egen begrundelse handler
+udtrykkeligt om dagskortet — *"uden det er 'dagens historie' en løgn på en
+tirsdag efter en stille weekend"* — og gælder ikke ugens konklusion.
+
+Bygget: **rundestoryen lever, indtil den nye runde har noget at fortælle.**
+Afløsningen kræver ingen ny mekanik, fordi visningsreglen allerede gør det —
+`roundIsNewer` viser rundekortet, medmindre der findes et nyere dagskort, og et
+nyere dagskort er per konstruktion fra den nye runde: matches-triggeren kører
+dagsmotoren før runde-motoren, så den gamle rundes dagskort er altid ældre end
+rundekortet.
+
+`ROUND_STORY_MAX_AGE_MS` (14 dage) er derfor ikke den normale afløser, men et
+værn mod **sæsonpausen**: uden det ville den sidste runde før en pause stå på
+Hjem i månedsvis, fordi der aldrig kom et nyere dagskort. Fjorten dage = den
+følgende runde plus slæk til en runde, der sluttede sent.

@@ -9,7 +9,7 @@ import { useState, useEffect } from "react";
 import { ChevronRight, Clock, Check, RefreshCw } from "lucide-react";
 import { formatKickoff } from "../lib/scoring.js";
 import { computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadDayCard, loadHomePlacements, loadLatestStory, loadRatingBoard, loadRatingHistory, ratingSnapshot } from "../lib/data.js";
-import { isFresh } from "../lib/stories.js";
+import { isFresh, ROUND_STORY_MAX_AGE_MS } from "../lib/stories.js";
 import { readUserFlag, writeUserFlag, readSeenStories, markStorySeen, CARD_KEY } from "../lib/localFlags.js";
 import { C, btnGhost, btnGreen, font, iconBtn } from "../ui/theme.js";
 import { usePushOptIn } from "../ui/usePushOptIn.js";
@@ -61,15 +61,27 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       ]);
       if (cancelled) return;
       setDayCard(day);
-      setRoundStory(round && isFresh(round) ? round : null);
+      // Rundestoryen måles mod SIT eget loft (14 dage) og ikke mod dagskortets
+      // 48 timer. Den lever, indtil den nye runde har noget at fortælle —
+      // afløsningen sker i visningsreglen nedenfor, ikke ved et udløb.
+      setRoundStory(round && isFresh(round, Date.now(), ROUND_STORY_MAX_AGE_MS) ? round : null);
     })();
     return () => { cancelled = true; };
   }, [token, reloadKey]);
 
-  // VISNINGSREGLEN: findes der en frisk, uafvist rundestory, som er NYERE end
-  // dagskortet, taler kun den. Det er hele v3's løfte om ét øjeblik ad gangen —
-  // rundens sidste dag udgiver slet ikke noget dagskort, men en resultatrettelse
-  // tidligere i ugen kan lave et, og så må de to ikke stå oven på hinanden.
+  // VISNINGSREGLEN: rundestoryen taler, indtil der findes et NYERE dagskort.
+  //
+  // Det er dét, der giver ugens konklusion lov til at leve hele den følgende
+  // runde, uden at der skal beregnes en rundenøgle på klienten: et nyere
+  // dagskort er per konstruktion fra den NYE runde, fordi matches-triggeren
+  // kører dagsmotoren før runde-motoren — så den gamle rundes dagskort er
+  // altid ældre end rundekortet, og først den nye rundes første kampdag kan
+  // afløse det.
+  //
+  // Sammenligningen er på `created_at` og ikke på `day_key`/`round_key`, fordi
+  // det er SKRIVETIDSPUNKTET, der afgør hvad der er nyest at fortælle: en
+  // resultatrettelse i en gammel runde regenererer begge kort i samme
+  // triggersætning, og rundekortet skrives sidst.
   const roundIsNewer = roundStory && (!dayCard ||
     String(roundStory.created_at || "") > String(dayCard.created_at || ""));
 
