@@ -371,9 +371,24 @@ live slået til", hvilket er præcis den verden, migreringen endnu ikke har
 
 ## 10. Aflæsning: hvad sender football-data.org, når tiden ikke er fastsat? (`G81`)
 
-**Status: ikke udført.** Rækken er `G81` i [`../BACKLOG.md`](../BACKLOG.md) og er
-det eneste punkt i Tier 1, der stadig kræver en adgang, arbejdsmaskinen ikke
-har. Guiden findes, fordi aflæsningen er billig og let at gøre forkert.
+**Status: UDFØRT 7. august 2026 — men ikke ad denne vej, og svaret var et andet
+end de tre, guiden forudså.** Resultatet står i
+[`../reviews/football-data-kickoff-aflaesning-2026-08-07.md`](../reviews/football-data-kickoff-aflaesning-2026-08-07.md),
+og den åbne rest hedder nu `G85`. Guiden bliver stående af to grunde: den skal
+gentages for Champions League, når ligafasen er lodtrukket, og trinnene er de
+samme, næste gang en leverandørs markør skal efterprøves.
+
+> **Det, aflæsningen gjorde anderledes — og bedre.** Guiden nedenfor går gennem
+> `?dryRun=true`, altså gennem VORES normalisering. Aflæsningen gik uden om
+> appen, direkte mod `api.football-data.org/v4`, og læste `utcDate` som rå
+> tekst. **Det var afgørende:** guidens trin 1 ville have valgt turneringen med
+> flest `kickoff_tbd`, og det er Bundesliga — den ene, hvor koden virker. Så
+> ville svaret have været "antagelsen holder", og de tre turneringer, hvor
+> flaget aldrig sættes, ville aldrig være blevet set. **En markør, man aflæser
+> gennem sin egen tolkning af den, kan kun bekræftes.** Skal en leverandørs felt
+> efterprøves igen, så læs det rå og læs mere end én turnering.
+
+Guiden findes, fordi aflæsningen er billig og let at gøre forkert.
 
 ### Hvorfor den skal laves
 

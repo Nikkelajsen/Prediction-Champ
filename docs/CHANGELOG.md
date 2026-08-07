@@ -9,6 +9,15 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+7. august 2026 — Football-data.orgs tidsfelt er aflæst, og `kickoff_tbd` virker kun ét sted (`G81` → `G85`)
+**Aflæsningen er selve leverancen; der er ingen kodeændring.** Fire turneringer læst direkte hos leverandøren, 1.446 kampe, uden om appen — tabellerne står i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md`.
+**Midnats-antagelsen var ufuldstændig, ikke forkert.** Bundesliga har begge markører rene (`TIMED` vs. `SCHEDULED`, 261 af 306 kampe med midnat). Premier League, Primera División og Serie A har ingen: nul midnat i 1.140 kampe, og `SCHEDULED` på hver eneste, også dem med rigtige tider.
+**De tre turneringer får et opdigtet klokkeslæt i stedet for en pladsholder** — turneringens typiske anspilstid lokalt frem til nytår, 12:00 UTC derefter. Oktober-splittet falder på sommertidsskiftet i alle tre og er samme lokale tid før og efter (17:00 Madrid, 18:30 Rom, 15:00 London), hvilket var det, der afslørede værdierne som gæt.
+**Det er værre end fejlen fra 2.–6. august.** Dengang stod kampene synligt forkert som "Tid ikke fastlagt"; nu viser appen et konkret tidspunkt, leverandøren har fundet på, og låsen sættes efter det.
+**`G84`s kontrol er blind for netop de ramte turneringer,** fordi den leder efter en turnering, hvor alle nære kampe mangler tid — og flaget kan aldrig sættes.
+**Fire formodninger blev prøvet af og forkastet undervejs** (`status`, midnat som universel regel, formen på en runde, `lastUpdated` pr. kamp), alle før der blev skrevet kode. Nummer tre døde på Bundesligas sidste spillerunde: ni kampe på samme klokkeslæt, og de er ægte.
+**Kommentarerne i `api/_providers/kickoff.js` og `footballdata.js` siger nu, hvad der blev aflæst og hvor det ikke gælder.** Rettelsen selv er ikke besluttet — de to kandidater står i `G85`.
+
 7. august 2026 — En lukket konto overdrager sin liga og forlader den (`A36` + `A37`)
 **Beslutningen er truffet, bygget og backfillet samme dag.** Ved kontolukning overdrages administratorrollen til det ældste levende medlem, den lukkede konto forlader ligaen, og er der ingen tilbage, bliver ligaen bare stående. `_anonymize_account()` i `sql/liga_admin.sql` har fået tre trin efter `A25`s framelding: overdrag, forlad, degradér.
 **Rækkefølgen er selv reglen.** Overdragelsen SKAL ske før frameldingen, fordi den bruger den lukkede kontos egen `role = 'admin'` til at finde de ligaer, der skal have en ny administrator. Bytter man om, er oplysningen væk, og ligaen fryser præcis som `A37` beskriver — en mutationstest låser det.
