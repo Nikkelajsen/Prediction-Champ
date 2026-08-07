@@ -345,6 +345,63 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database ladmintest;'
           psql -h localhost -U postgres -d ladmintest -v ON_ERROR_STOP=1 -b -f league_admin_coverage.sql
 
+      # Kontrollen af ratingens friskhed (G83). Jobbets tredje overvågning, og
+      # den første, der kører mod det RIGTIGE skema frem for et håndskrevet
+      # miniskema: kontrollen sammenligner `matches.round_key` (date, en
+      # genereret kolonne) med `rating_history.round_key` (text), og et
+      # miniskema ville have givet de to samme type og dermed bevist noget
+      # andet end det, der kører i produktion.
+      #
+      # Testen bygger gendannelsens egen tilstand — rækker indlæst med
+      # triggerne slået fra, præcis som RESTORE.md scenarie 1 foreskriver — og
+      # spørger, om kontrollen kan se den. Den er selv efterprøvet ved at mutere
+      # kontrollen ni gange og se testen fange hver enkelt; to af de ni slap
+      # igennem den første udgave af testen og gav den påstand 8 og en fixture
+      # mere.
+      - name: Test af kontrollen for ratingens friskhed
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          node sql/tests/_schema.mjs > "$RUNNER_TEMP/skema.gen.sql"
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database ratingfresh;'
+          psql -h localhost -U postgres -d ratingfresh -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d ratingfresh -v ON_ERROR_STOP=1 -b -f sql/tests/rating_freshness.sql
+
+      # Rydningen af analytics_events (G77). Et `delete` mod brugerdata, hvor
+      # hele sikkerheden ligger i én sammenligning — og en fejl i den er ikke en
+      # fejlbesked, men en tom tabel. Testen prøver begge retninger og gulvet.
+      - name: Test af rydningen i analytics_events
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database analyticsretention;'
+          psql -h localhost -U postgres -d analyticsretention -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d analyticsretention -v ON_ERROR_STOP=1 -b -f sql/tests/analytics_retention.sql
+
+      # Sæson-simulatoren (G82). Jobbets TUNGESTE trin — ~10 sekunder — og det
+      # er hele prisen ved rækken: 1.069 linjer SQL, der indtil august 2026 kun
+      # var efterprøvet i hånden mod en lokal PG16.
+      #
+      # Filen kan ikke testes mod et miniskema som de øvrige her: den rører hele
+      # kæden på én gang (ligaer, sæsoner, hold, kampe, tips, matches-triggeren,
+      # rating, historier, kåringer, milepæle, competition_status), og det er
+      # netop sammenstødet med det RIGTIGE skema, der er værd at prøve.
+      #
+      # Den mest lærerige påstand er determinismen: filens hoved lover "samme
+      # frø + samme kald = samme sæson", og den anden halvdel af det løfte er
+      # ikke pynt — tips og resultater deler `random()`-strøm, så en gentagelse,
+      # der springer et kald over, får et andet facit uden at noget er galt.
+      - name: Test af sæson-simulatoren
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database simtest;'
+          psql -h localhost -U postgres -d simtest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d simtest -v ON_ERROR_STOP=1 -b -f sql/tests/simulate_season.sql
+
       # SQL-blokkene i docs/ (G74). Det eneste trin i jobbet, der ikke tester en
       # migrering, men DOKUMENTATIONEN: hver ```sql-blok bygges om til et
       # `prepare` mod hele sql/schema.sql, så PostgreSQL selv siger, om

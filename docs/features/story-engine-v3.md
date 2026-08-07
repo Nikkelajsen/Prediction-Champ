@@ -153,6 +153,13 @@ Konkrete ændringer i koden:
 - `DAILY_MAX_CARDS` 2 → 1.
 - `CAROUSEL_LIMIT` og `sortCarousel()` udgår. `StoryCarousel.jsx` bliver til et enkelt kort (`DayCard`) plus en `RoundStory`-visning med frames. Behold `story_viewed`-logningen ved synlighed — den regel er stadig rigtig og bliver mere præcis, når der kun er ét kort.
 - `pickDailyStories()` erstattes af `scoreDailyCandidates()` + `pickDay()`. Scoringen skal ligge i `src/lib/stories.js` **og** i SQL'en, med samme talværdier — samme dobbelt-vedligehold som v1 og v2, og samme risiko (§11).
+
+  > ⚠️ **RULLET TILBAGE 7. august 2026 (`G78`).** Dobbeltheden blev bygget som beskrevet og fjernet igen tre uger senere. To ting viste sig ved eftersyn, og begge peger samme vej:
+  >
+  > 1. **JS-siden var død kode.** Hverken `scoreDailyCandidates()`, `pickDay()`, `sizeOf()` eller `proximityOf()` blev kaldt af appen — motoren kører i databasen, og frontenden læser den færdige række. Deres eneste aftagere var deres egne enhedstests, altså tal, der blev holdt i trit med SQL'en for at holde en test grøn, som beviste, at de var i trit med SQL'en.
+  > 2. **Migreringen, backloggen forudsagde, var ikke nødvendig.** `G78` stod som "kræver en migrering af eksisterende rækker", fordi frontenden skulle kunne afgøre ulæst-markeringen uden at kende tærsklen. Det kan den allerede: motoren har præcis to udgange, og `priority < 180` betyder det samme som `news_value >= 45`. `isNewsworthy()` læser derfor prioriteten, og der blev hverken tilføjet en kolonne eller rørt en eksisterende række.
+  >
+  > Tallene bor nu kun i `sql/story_engine_v3.sql`, og invarianten mellem prioritet og tærskel er låst af påstand 14 i `sql/tests/story_engine_daily.sql`.
 - **Udløb: 48 timer.** Et kort ældre end 48 timer vises ikke, selvom rækken bliver stående. Uden det er "dagens historie" en løgn på en tirsdag efter en stille weekend.
 - **Sen milepæl:** når cron uddeler en milepæl for en dag, hvis kort allerede er udgivet, **erstattes** kortet i stedet for at der lægges et til (upsert på `(user_id, day_key)`), forudsat kortet er under 48 timer gammelt. Er det ældre, ryger milepælen på karriereprofilen uden at have været på Hjem, og frame 5 i den kommende rundestory fanger den alligevel.
 

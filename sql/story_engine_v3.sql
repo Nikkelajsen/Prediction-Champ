@@ -102,6 +102,16 @@ create unique index if not exists stories_day_slot_uniq
 -- glemmer `period`-filteret, men sorterer på priority og dermed stadig får
 -- runde-kort først (sikker degradering, v2 §3).
 --
+-- SIDEN G78 (7. august 2026) BÆRER PRIORITETEN ÉN TING MERE, og den er værd at
+-- sige højt her, hvor tallene sættes: den er også ulæst-markeringens svar.
+-- Funktionen har præcis to udgange for et dagskort — vinderen over tærsklen med
+-- sin egen regels prioritet, og det dæmpede DAY_RESULT på 180 — så
+-- `priority < 180` betyder det samme som `news_value >= v_threshold`.
+-- Frontenden læser derfor prioriteten frem for at kende tærsklen, og
+-- `isNewsworthy()` i src/lib/stories.js indeholder ikke længere tallet 45.
+-- **En TREDJE udgang herfra ville bryde det.** Påstand 14 i
+-- sql/tests/story_engine_daily.sql er stedet, det ville blive opdaget.
+--
 -- DAY_RESULT er flyttet fra 110 til 180, fordi den med grundvægt 8 aldrig kan
 -- nå tærsklen ved egen kraft (8 + 12 + 20 = 40 < 45). Den udgives derfor KUN
 -- som fald-tilbage, og et fald-tilbage skal se dæmpet ud.
@@ -615,9 +625,13 @@ begin
   group by r.cid, r.user_id;
 
   -- ---------- SCORING ----------
-  -- nyhedsværdi = grundvægt + størrelse + nærhed (spec §4). Tallene står også i
-  -- src/lib/stories.js og SKAL være ens: en afvigelse giver ikke en fejl, men
-  -- et ANDET kort — tavst. Se docs/BACKLOG.md G78.
+  -- nyhedsværdi = grundvægt + størrelse + nærhed (spec §4).
+  --
+  -- TALLENE STÅR KUN HER (G78, 7. august 2026). Frem til da lå en kopi i
+  -- src/lib/stories.js, som ingen del af appen kaldte — dens eneste aftagere
+  -- var dens egne enhedstests. Kopien er slettet, og påstandene om de præcise
+  -- news_value-tal står i sql/tests/story_engine_daily.sql, altså mod en
+  -- rigtig PostgreSQL og ikke mod en genskrivning af beregningen.
   drop table if exists _sd_scored;
   create temporary table _sd_scored as
   select px.user_id, c.cid, c.subject_id, c.competition_id, c.rule, c.priority,

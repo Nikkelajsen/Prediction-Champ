@@ -13,7 +13,14 @@ function stub(res) {
   });
   return kald;
 }
-const svar = (ok, body, status = ok ? 200 : 500) => ({ ok, status, json: async () => body });
+// `headers` er ikke pynt i denne attrap. apiFetch() (G80) afgør på
+// content-type, om svaret overhovedet kom fra vores endpoint — og et svar uden
+// den header er præcis det, udviklingsserveren sender.
+const svar = (ok, body, status = ok ? 200 : 500, type = "application/json") => ({
+  ok, status,
+  headers: new Headers(type ? { "content-type": type } : {}),
+  json: async () => body,
+});
 
 afterEach(() => { globalThis.fetch = ORIGINAL; vi.restoreAllMocks(); });
 
@@ -53,6 +60,17 @@ describe("deleteMyAccount", () => {
   it("kaster også, når svaret er 200 uden ok", async () => {
     stub(svar(true, { ok: false }));
     await expect(deleteMyAccount("t")).rejects.toThrow();
+  });
+
+  // G80. Udviklingsserveren svarer index.html med status 200 på enhver ukendt
+  // sti, så `res.ok` er sand og kroppen er HTML. Indtil august 2026 endte det
+  // som "Kontoen kunne ikke lukkes" — appen meldte den mest uigenkaldelige
+  // handling afvist, uden at serveren nogensinde var blevet spurgt.
+  it("siger at endpointet ikke findes, når svaret er HTML og ikke JSON", async () => {
+    stub(svar(true, null, 200, "text/html; charset=utf-8"));
+    const fejl = await deleteMyAccount("t").catch((e) => e);
+    expect(fejl.message).toMatch(/findes ikke på udviklingsserveren/);
+    expect(fejl.message).not.toMatch(/Kontoen kunne ikke lukkes/);
   });
 });
 

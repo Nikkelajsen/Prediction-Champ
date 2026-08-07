@@ -123,10 +123,17 @@ create policy analytics_events_insert_own on public.analytics_events
 revoke all on public.analytics_events from anon;
 grant insert on public.analytics_events to authenticated;
 
--- ---------- Oprydning (manuel, INGEN cron — jf. arkitekturvalg #3) ----------
--- Kør i hånden med jævne mellemrum (fx en gang om året), hvis tabellen vokser
--- for stor til smag. Der er bevidst intet scheduled job, der gør det automatisk.
---   delete from public.analytics_events where created_at < now() - interval '18 months';
+-- ---------- Oprydning ----------
+-- **RETTET 7. august 2026 (`G77`).** Her stod, at rydningen var manuel — "kør i
+-- hånden med jævne mellemrum (fx en gang om året)" — og at der bevidst ikke
+-- fandtes noget planlagt job. Første halvdel var det samme som `docs/CRON.md`
+-- skrev om `prune_job_runs()` før `G43`: en rydning, ingen udførte.
+--
+-- Rydningen bor nu i `sql/analytics_retention.sql` som
+-- `prune_analytics_events(18)` og kaldes af `.github/workflows/job-heartbeat.yml`
+-- ved siden af `prune_job_runs(30)` og `prune_client_errors(90)`. Arkitekturvalg
+-- #3 er uændret: der er **intet nyt planlagt job** — kun ét udsagn mere i et,
+-- der kører i forvejen.
 
 -- ---------- Verifikation efter kørsel ----------
 -- 1) Tabellen findes, har præcis én policy, og en almindelig bruger kan

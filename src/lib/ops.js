@@ -7,6 +7,7 @@
 // Registeret over hvilke jobs der SKAL findes, står i docs/CRON.md. Denne fil
 // viser kun, hvad de faktisk har meldt.
 import { restFetch } from "./supabase.js";
+import { apiFetch } from "./api.js";
 
 // Forventet kadence pr. job. Skal holdes i trit med docs/CRON.md og med
 // tavshedsgrænserne i .github/workflows/job-heartbeat.yml — de tre steder
@@ -93,11 +94,13 @@ const setSeasonFinished = (token, seasonId, finished) =>
 // Plain `fetch` og ikke `restFetch`: endpointet er appens eget, ikke Supabases.
 // Kaldet sender intet, reserverer intet i notification_log og skriver ingen
 // række i job_runs — se api/send-notifications.js.
+// apiFetch() og ikke `fetch` direkte (G80): på `npm run dev` svarede stien
+// index.html med status 200, og forhåndsvisningen stod tom uden at sige hvorfor
+// — en tom udbakke og et manglende endpoint så ens ud.
 async function previewNotifications(token) {
-  const res = await fetch(`/api/send-notifications?dryRun=true`, {
+  const { res, data } = await apiFetch(`/api/send-notifications?dryRun=true`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.error || `Forhåndsvisningen fejlede (${res.status})`);
   return data;
 }

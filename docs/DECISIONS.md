@@ -15,6 +15,82 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 7. august 2026 — Ratingens bagstopper er en KONTROL, ikke et job (`G83`)
+
+**Beslutning:** `recompute_derived()` sættes **ikke** på et skema. I stedet kører
+`sql/checks/rating_freshness.sql` hver halve time i job-heartbeat'en og siger,
+når genberegningen er nødvendig.
+
+Rækken hed "ratingen har ingen bagstopper i cron", og det nærliggende var at
+lægge et femte kald ind i notifikations-jobbet ved siden af de fire, der allerede
+er der. Det er fravalgt af to grunde. **Prisen er asymmetrisk:**
+`recompute_ratings()` sletter og genopbygger hele `rating_history` fra runde nul
+— den er dyr hver gang, mens de fire andre kald koster ingenting, når der intet
+er at gøre. Og **det ville skjule spørgsmålet:** en genberegning hvert kvarter
+retter tilstanden uden nogensinde at fortælle, at den var forkert, så vejene uden
+om triggeren (gendannelsen, et sent tip, et skiftet `is_official`) ville forblive
+usynlige. En kontrol koster ét opslag og efterlader et spor.
+
+**Afvejningen er sagt højt:** en kontrol retter ikke noget af sig selv, så der går
+op til en halv time, før nogen får besked, plus den tid det tager at køre ét kald.
+Til gengæld er alarmen selv oplysningen — og fejlteksten bærer rettelsen med, så
+afstanden fra alarm til handling er ét copy-paste.
+
+**Generaliseringen er værd at holde fast i:** når en tilstand kan blive forkert
+ad veje, vi ikke kender, er en kontrol bedre end en gentagelse. Gentagelsen
+skjuler både fejlen og dens årsag; kontrollen finder dem begge.
+
+## 7. august 2026 — Friskhedsmålingen på `schema.sql` RAPPORTERER, den afviser ikke (`G79`)
+
+**Beslutning:** docs-SQL-kørslen måler, om `sql/schema.sql` dækker det,
+migreringerne i `sql/` opretter, og skriver svaret øverst — men en manglende
+eksport gør **ikke** kørslen rød af sig selv.
+
+Det oplagte var at fejle: eksporten ER bagud, og det er en fejl, nogen skal rette.
+Men eksporten kører mandage og manuelt, så enhver PR, der tilføjer en SQL-fil, er
+lovligt forud for den. En gate ville gøre hver eneste migrerings-PR rød på noget,
+der ikke er en fejl — og en farve, der altid lyser på det samme, holder folk op
+med at læse den. Nøjagtig samme argument som `G2`s: et loft, der kun kan vokse,
+er ikke et loft.
+
+**Det, rækken faktisk bad om, var ikke en gate, men en SKELNEN:** en rød blok
+skulle kunne kendes fra en manglende eksport. Det kræver, at kørslen siger, hvad
+den ved — og den grønne linje ("eksporten dækker alle N objekter") bærer lige så
+meget som den røde, fordi den fjerner dumpet som mulig forklaring.
+
+Prisen er, at en stille bagud-eksport kan ligge længe. Den er acceptabel, fordi
+den eneste skade er en fejl, der er sværere at læse — og netop dén skade er nu
+lukket.
+
+## 7. august 2026 — `G78` lukket UDEN den migrering, rækken forudsagde
+
+**Beslutning:** v3's scoringstal fjernes fra `src/lib/stories.js` uden at tilføje
+en kolonne til `stories` og uden at røre en eksisterende række.
+
+Rækken stod i Tier 6 som "kræver en migrering af eksisterende rækker", og
+forudsætningen var rigtig så langt: frontenden skal kunne afgøre
+ulæst-markeringen uden at kende publiceringstærsklen, og det oplagte svar er en
+boolean på rækken, skrevet af motoren og backfillet.
+
+**Eftersynet viste, at svaret allerede står på rækken.** `generate_daily_stories()`
+har præcis to udgange for et dagskort — vinderen over tærsklen med sin egen regels
+prioritet (110–160), og det dæmpede `DAY_RESULT` på 180 — og dagens facit kan
+aldrig nå tærsklen ved egen kraft (8 + 12 + 20 = 40 < 45, spec §5). `priority < 180`
+betyder derfor det samme som `news_value >= 45`. At læse prioriteten er ikke en
+genvej: SQL-filen udpeger selv prioriteten som frontendens grænseflade og nævner
+`isDailyQuiet()` som en af dens tre aftagere.
+
+**Valget koster en invariant, og den er gjort eksplicit** frem for underforstået:
+påstand 14 i `sql/tests/story_engine_daily.sql` kræver `priority < 180` ⟺
+`news_value >= tærsklen` for hvert v3-dagskort, og at fixturen har kort i begge
+lejre, så påstanden ikke kan blive tom. Får motoren en tredje udgang, bliver det
+opdaget dér.
+
+**Den generelle lære:** en backlog-række er en hypotese om en løsning, ikke kun om
+et problem. `G78`s problem var rigtigt beskrevet; dens foreslåede pris var
+gætværk, og gætværket blev dyrere end svaret. Samme form som `G74`, der blev
+leveret på det modsatte svar af det, rækken lagde op til.
+
 ## 7. august 2026 — En lukket konto overdrager sin liga og forlader den (`A36` + `A37`)
 
 **Beslutning (produktejeren):** ved kontolukning **overdrages administratorrollen

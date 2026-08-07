@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DAILY_QUIET_MIN, DAILY_RULES, DAY_CARD_MAX_AGE_MS, isDailyQuiet, isFresh, isNewsworthy, isQuiet, pickDay, pickStory, priorityFor, PUBLISH_THRESHOLD, QUIET_TIER_MIN, renderFrame, renderStory, ROUND_STORY_MAX_AGE_MS, RULES, scoreDailyCandidates, sizeOf, SOFT_PRIORITY, THRESHOLDS, usableFrames } from "./stories.js";
+import { DAILY_QUIET_MIN, DAILY_RULES, DAY_CARD_MAX_AGE_MS, isDailyQuiet, isFresh, isNewsworthy, isQuiet, pickStory, priorityFor, QUIET_TIER_MIN, renderFrame, renderStory, ROUND_STORY_MAX_AGE_MS, RULES, SOFT_PRIORITY, THRESHOLDS, usableFrames } from "./stories.js";
 
 // Testcases spejler docs/features/story-engine-v1.md afsnit 9 (det der kan
 // udtrykkes rent i JS; DB-idempotens og trigger-adfærd verificeres i skyggetilstand).
@@ -256,132 +256,32 @@ describe("nye regler (v1.1)", () => {
 // v2/v3 · daglige historier
 // ---------------------------------------------------------------------------
 
-describe("scoreDailyCandidates + pickDay (v3 · dagens ENE kort)", () => {
-  const cand = (rule, extra = {}) =>
-    ({ rule, league_size: 5, competition_id: "c1", rel: "self", ...extra });
-
-  // TALLENE ER LÅST MED VILJE. De står også i sql/story_engine_v3.sql, og en
-  // afvigelse mellem de to giver ikke en fejl og ikke en forkert formulering,
-  // men et ANDET kort — uden log. Derfor påstås de præcist frem for at blive
-  // sammenlignet med "større end". Samme argument som de præcise news_value-tal
-  // i sql/tests/story_engine_daily.sql.
-  it("lægger grundvægt, størrelse og nærhed sammen", () => {
-    const [got] = scoreDailyCandidates([cand("DAY_TOP", { moved: 2, overAvg: 3, rel: "biggest" })]);
-    // 34 (grundvægt) + 12 (2 pladser) + 9 (3 point over snit) + 8 (største liga)
-    expect(got.news_value).toBe(34 + 12 + 9 + 8);
-  });
-
-  it("lofter hvert størrelsesbidrag for sig og summen ved 30", () => {
-    // 6 pladser = 36 → loftes til 18; 10 point over = 30 → loftes til 12;
-    // stime 20 = 30 → loftes til 12. Sum 42 → loftes til 30.
-    expect(sizeOf({ moved: 6, overAvg: 10, streak: 20 })).toBe(30);
-    expect(sizeOf({ moved: 6 })).toBe(18);
-    expect(sizeOf({ overAvg: 10 })).toBe(12);
-    expect(sizeOf({ streak: 20 })).toBe(12);
-  });
-
-  it("tæller et FALD lige så tungt som en fremgang", () => {
-    expect(sizeOf({ moved: -2 })).toBe(sizeOf({ moved: 2 }));
-  });
-
-  it("giver stimen point først OVER 5 runder", () => {
-    expect(sizeOf({ streak: 5 })).toBe(0);
-    expect(sizeOf({ streak: 6 })).toBe(2);
-  });
-
-  // Beviset for spec §5's påstand: "DAY_RESULT kan aldrig alene nå tærsklen".
-  // Holder den ikke, er hele det dæmpede fald-tilbage meningsløst — dagens
-  // facit ville kunne udgive sig selv som dagens historie.
-  it("DAY_RESULT kan ikke nå tærsklen, uanset hvor stor dagen var", () => {
-    const [max] = scoreDailyCandidates([
-      cand("DAY_RESULT", { moved: 99, overAvg: 99, streak: 99, rel: "self" }),
-    ]);
-    // Spec §5's regnestykke ORDRET: 8 + 12 + 20 = 40. Dagens facit får kun
-    // afstanden til dagens gennemsnit, ikke placeringsændring og ikke stime —
-    // fik den hele størrelsesloftet (30), ville den nå 58 og kunne udgive sig
-    // selv som dagens historie, og så ville der aldrig findes en dag under
-    // tærsklen at falde tilbage til.
-    expect(max.news_value).toBe(8 + 12 + 20);
-    expect(max.news_value).toBeLessThan(PUBLISH_THRESHOLD);
-  });
-
-  // MILESTONE får intet størrelsesbidrag. Uden det ville motoren (som kender
-  // dagens tal) og cron-kapringen (som ikke gør) skrive forskellig news_value
-  // for det SAMME kort, og determinismen i acceptkriterie 7 ville falde.
-  it("milepælen scorer fast 120 og vinder alt", () => {
-    const [ms] = scoreDailyCandidates([cand("MILESTONE", { moved: 3, overAvg: 5, rel: "self" })]);
-    expect(ms.news_value).toBe(120);
-    const alle = scoreDailyCandidates([
-      cand("MILESTONE", { rel: "self" }),
-      cand("DAY_TOP", { moved: 6, overAvg: 10, rel: "self" }),
-    ]);
-    expect(pickDay(alle).rule).toBe("MILESTONE");
-  });
-
-  it("nærheden afgør, om en fremmeds aften bliver din historie", () => {
-    const score = (rel) => scoreDailyCandidates([cand("CONTRARIAN", { rel })])[0].news_value;
-    expect(score("self")).toBe(32 + 20);
-    expect(score("rival")).toBe(32 + 14);
-    expect(score("biggest")).toBe(32 + 8);
-    expect(score("other")).toBe(32 + 4);
-    // En ukendt relation må falde til den svageste og ikke til NaN.
-    expect(score("vrøvl")).toBe(32 + 4);
-  });
-
-  it("vælger højeste nyhedsværdi", () => {
-    const got = pickDay(scoreDailyCandidates([
-      cand("SO_CLOSE", { rel: "self" }),          // 18 + 20 = 38
-      cand("DAY_TOP", { rel: "biggest" }),        // 34 + 8  = 42
-      cand("DUEL", { rel: "self" }),              // 30 + 20 = 50
-    ]));
-    expect(got.rule).toBe("DUEL");
-  });
-
-  // Tiebreak-stigen: grundvægt → største konkurrence → rule alfabetisk. Uden
-  // det sidste led kunne to kandidater med samme score bytte plads mellem to
-  // kørsler, og gen-kørslen ville give et andet kort.
-  it("er deterministisk ved lige score", () => {
-    // COLLECTIVE_MISS 24 + 20 = 44; SO_CLOSE 18 + 20 = 38 → forskellige.
-    // To DUEL i lige store ligaer er derimod uadskillelige på alt andet end id.
-    const a = pickDay(scoreDailyCandidates([
-      cand("DUEL", { competition_id: "b" }), cand("DUEL", { competition_id: "a" }),
-    ]));
-    const b = pickDay(scoreDailyCandidates([
-      cand("DUEL", { competition_id: "a" }), cand("DUEL", { competition_id: "b" }),
-    ]));
-    expect(a.competition_id).toBe("a");
-    expect(b.competition_id).toBe("a");
-  });
-
-  it("lader grundvægten bryde uafgjort før konkurrencestørrelsen", () => {
-    // DAY_TOP 34 + 4 = 38; SO_CLOSE 18 + 20 = 38. Samme score, højeste
-    // grundvægt vinder — selv om SO_CLOSE ligger i den største liga.
-    const got = pickDay(scoreDailyCandidates([
-      cand("SO_CLOSE", { rel: "self", league_size: 20 }),
-      cand("DAY_TOP", { rel: "other", league_size: 3 }),
-    ]));
-    expect(got.rule).toBe("DAY_TOP");
-  });
-
-  it("giver null uden kandidater", () => {
-    expect(pickDay([])).toBe(null);
-    expect(pickDay(null)).toBe(null);
-    expect(scoreDailyCandidates(null)).toEqual([]);
-  });
-});
-
 describe("ulæst-markering og udløb (v3)", () => {
   // Ulæst-signalet skal være sjældent nok til at betyde noget. Et badge, der
   // lyser hver dag, er ikke et signal, det er en baggrundsfarve.
-  it("markerer kun kort over tærsklen", () => {
-    expect(isNewsworthy({ news_value: 45, priority: 130 })).toBe(true);
-    expect(isNewsworthy({ news_value: 44, priority: 130 })).toBe(false);
+  // TÆRSKLEN STÅR IKKE I JS (G78). Den er afgjort, da rækken blev skrevet:
+  // et v3-dagskort med prioritet under 180 ER et kort over tærsklen, fordi
+  // motorens eneste anden udgang er det dæmpede DAY_RESULT på 180. Invarianten
+  // selv påstås mod en rigtig PostgreSQL i sql/tests/story_engine_daily.sql —
+  // her prøves kun aflæsningen af den.
+  it("markerer kortet med en rigtig regels prioritet", () => {
+    expect(isNewsworthy({ news_value: 52, priority: 130 })).toBe(true);
+    expect(isNewsworthy({ news_value: 120, priority: 110 })).toBe(true);
     expect(isNewsworthy(null)).toBe(false);
+  });
+
+  // v2-rækkerne har ingen news_value og dermed ingen tærskel at være over.
+  // Æra-markøren er den samme, som det unikke indeks i migreringen bruger.
+  it("markerer aldrig en historisk v2-række", () => {
+    expect(isNewsworthy({ priority: 130 })).toBe(false);
+    expect(isNewsworthy({ news_value: null, priority: 110 })).toBe(false);
   });
 
   it("markerer ALDRIG det dæmpede kort, uanset news_value", () => {
     // Dagen kan have ligget ét point under tærsklen og stadig bære tallet —
-    // men kortet, der blev udgivet, er facit og skal ikke lyse.
+    // men kortet, der blev udgivet, er facit og skal ikke lyse. Tallet 90 er
+    // valgt, fordi det ligger OVER tærsklen: det er netop den kombination, en
+    // aflæsning af news_value alene ville tage fejl af.
     expect(isNewsworthy({ news_value: 90, priority: 180 })).toBe(false);
   });
 
