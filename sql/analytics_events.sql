@@ -77,6 +77,11 @@ alter table public.analytics_events add constraint analytics_events_name_check
     'opened_career', 'opened_story', 'opened_championship',
     -- Story Engine
     'story_viewed', 'story_shared',
+    -- Story Engine v3: nyhedsværdien, rundestoryens frames og milepæls-CTA'en.
+    -- `story_score_distribution` er ekkoet af det SETE og dermed lossy som alt
+    -- andet her; den tabsfri fordeling, tærsklen skal kalibreres på (A35), bor i
+    -- stories.news_value og aflæses i SQL.
+    'story_score_distribution', 'story_frame_viewed', 'milestone_cta_clicked',
     -- Notifikationer
     'push_opened'
   ));

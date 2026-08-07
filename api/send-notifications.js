@@ -849,10 +849,18 @@ export default async function handler(req, res) {
     // Begge er idempotente og koster ingenting, når der intet er at gøre.
     // dryRun springer dem over af samme grund som kåringerne: en
     // forhåndsvisning er en LÆSNING og må ikke uddele en permanent milepæl.
+    // apply_milestone_stories() SKAL stå efter award_milestones() og er ikke
+    // valgfri efter v3: milepæle får ikke længere deres eget kort, men kaprer
+    // dagens ene slot. Uddeles en milepæl EFTER at dagens kort er skrevet af
+    // matches-triggeren — og det er normaltilstanden, når skriveren er cron og
+    // kortet er triggerens — ville den ellers aldrig nå Hjem. Kaldet erstatter
+    // kortet (aldrig lægger til) og rører kun kort under 48 timer gamle;
+    // resten fanges af frame 5 i rundestoryen.
     if (!dryRun) {
       for (const [label, path, body] of [
         ["historie-bagstopper", "generate_stories_catchup", {}],
         ["milepæle", "award_milestones", { p_user_id: null }],
+        ["milepæls-kort", "apply_milestone_stories", {}],
       ]) {
         try {
           await sb(`/rest/v1/rpc/${path}`, { method: "POST", body: JSON.stringify(body) });
