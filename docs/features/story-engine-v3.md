@@ -1,5 +1,11 @@
 # Story Engine v3 — ét øjeblik om dagen (august 2026)
 
+> **LEVERET 7. august 2026.** Afsnit 1–12 nedenfor er udkastet, som det så ud
+> før implementeringen, og det er bevaret med vilje. **§13 er tilføjet efter
+> leveringen og beskriver, hvor den byggede motor afviger fra udkastet** — læs
+> den, før du bruger et tal herfra. Tre steder holdt udkastet ikke mødet med en
+> database, og ét af dem er et regnestykke i §5, som er forkert som skrevet.
+
 Bygger videre på `story-engine-v1.md` (runde-motoren, tonen, de 16 runde-regler) og `story-engine-v2.md` (dags-motoren, den danske dag, bagstopperen, prioritetsbåndet). Denne fil beskriver **kun det, v3 ændrer**, og v3 ændrer næsten udelukkende *udvælgelse og visning* — ikke hvornår motoren kører.
 
 ## 1. Problemet
@@ -202,3 +208,108 @@ Det tredje event er det, der afgør, om §6 løser den bekymring, der udløste d
 - **Nærhed pr. bruger koster en beregning mere.** Kandidatsættet er fælles, scoringen er ikke. Ved fuld sæson skal det holdes op mod de ~320 ms, v2's dagsmotor målte.
 - **Teksten står stadig to steder**, indtil anbefalingen i §9 gennemføres. v3 tilføjer scoring til den liste over ting, der skal spejles præcist mellem SQL og JS — nu også talværdier, hvor en afvigelse ikke giver en fejl, men et *andet kort*. Det er en værre fejltype end en tekstafvigelse, fordi den er tavs.
 - **Åbent:** skal de gamle dagskort være tilgængelige et sted, når karrusellen forsvinder? En "Historik"-fane på karriereprofilen er billig at bygge, men den genindfører muligvis netop den log, `milepaele-v1.md` skilte sig af med. Anbefalingen er at **vente**, til nogen spørger efter dem.
+
+
+## 13. Rettelser efter levering (7. august 2026)
+
+Udkastet ovenfor er ikke redigeret; her står, hvad der faktisk blev bygget, og
+hvorfor det afviger. Fire punkter — de tre første er afvigelser, det fjerde er
+arbejde, udkastet forudsatte uden at beskrive.
+
+### 13.1 Ét-slot-indekset måtte have et led mere (§9)
+
+Spec'en skriver `unique index on stories(user_id, day_key) where period = 'day'`.
+Det kan ikke oprettes: de historiske v2-rækker har op til **to** rækker pr.
+(bruger, dag), og §9 beder i samme åndedrag om at **beholde** dem som
+analysedata. De to krav udelukker hinanden med det snævre prædikat.
+
+Bygget som (`uddrag`, fordi `prepare`-tjekket i `sql/tests/docs_sql.mjs` kun
+accepterer DML — en `create index` kan ikke forberedes):
+
+```sql uddrag
+create unique index stories_day_slot_uniq on public.stories (user_id, day_key)
+  where period = 'day' and news_value is not null;
+```
+
+`news_value` sættes af hver eneste v3-skrivning og er dermed æra-markør:
+invarianten er DB-håndhævet for alt, v3 producerer, mens v2-rækkerne bliver
+stående urørt. Prædikatet er blivende sandt og ikke en dato-litteral — en dato
+ville gøre CI-testens fixture (marts 2026) blind for netop det indeks, den skal
+bevise. **Restrisikoen:** en fremtidig skriver, der indsætter en day-række uden
+`news_value`, smutter uden om nettet. Testen påstår begge retninger, så
+ændres prædikatet, fejler den og tvinger en beslutning.
+
+### 13.2 `DAY_RESULT` får kun ét størrelsesbidrag — ellers holder §5 ikke
+
+§5 påstår: *"`DAY_RESULT` med grundvægt 8 kan maksimalt nå 8 + 12 + 20 = 40 og
+kommer derfor aldrig over tærsklen ved egen kraft."* Regnestykket forudsætter
+tavst, at dagens facit kun kan få **afstands**-bidraget (max 12) — ikke
+placeringsændring og ikke stime. Med hele størrelsesloftet (30) når den
+8 + 30 + 20 = **58** og kan udgive sig selv som dagens historie, og så findes der
+aldrig en dag under tærsklen at falde tilbage til. Hele det dæmpede
+fald-tilbage ville være død kode.
+
+Bygget efter §5's tal og ikke efter §4's tabel: `DAY_RESULT` får kun
+afstandsleddet. **En enhedstest fandt det, ikke en gennemlæsning** — påstanden
+`news_value < 45` var skrevet direkte fra spec'en og blev rød.
+
+### 13.3 `MILESTONE` scorer fast 120
+
+Milepæle får **intet** størrelsesbidrag. Ikke af æstetiske grunde: kortet kan
+skrives to steder — af `generate_daily_stories` (som kender dagens
+placeringsændringer) og af `apply_milestone_stories` (som ikke gør) — og de to
+skal give byte-samme række, ellers falder determinismen i acceptkriterie 7.
+100 (grundvægt) + 0 + 20 (nærhed) = 120, begge steder. Det er også konceptuelt
+rigtigt: en engangsbedrifts vægt er, at den er sket, ikke hvor mange pladser man
+tilfældigvis rykkede samme dag.
+
+**Tilknytningsdagen** (hvilken dag en milepæl kaprer) er
+`max(match_day) <= match_day(achieved_at)` — milepælens egen kampdag, eller den
+seneste før. Formlen står **ordret ens** i de to funktioner, og det er dét, der
+gør, at en gen-kørsel af dagsmotoren genskaber en kapring, den lige har slettet.
+Ændres den ene uden den anden, går sene milepæle tabt ved næste
+resultatrettelse, og det sker tavst.
+
+### 13.4 Fan-out: nærheden krævede tredjepersons-tekster
+
+§4 siger, at nærhed beregnes pr. bruger, og giver 14/8/4 for kandidater, hvor
+brugeren **ikke** er hovedpersonen. Det forudsætter, at en kandidat kan nå en
+sådan modtager — men i v2 var enhver historie "dig"-centreret, så det var nyt
+arbejde. Bygget som:
+
+| Regel | Modtagere |
+|---|---|
+| `DAY_RESULT`, `SO_CLOSE`, `DUEL`, `MILESTONE`, `COLLECTIVE_MISS` | kun hovedpersonen |
+| `CONTRARIAN`, `DAY_TOP`, `STREAK_STATUS` | hovedpersonen + alle, der deler konkurrence med hen |
+
+De tre fan-out-regler har derfor hver en **tredjepersons-tekstvariant**, som
+skal spejles i `renderStory` som alt andet. Fan-out sker kun gennem
+`competition_participants`, så designreglen om, hvem en historie må nævne, er
+strukturel og ikke en betingelse, nogen kan glemme.
+
+**Hård regel, som §11's acceptkriterie 8 kræver, men §4 ikke nævner:** en bruger
+uden ét eneste scoret tip på en kampdag fjernes fra kandidatsættet helt. Uden
+den kunne et fan-out-kort (34 + 20 = 54) lande hos en, der slet ikke var med.
+
+**Observation til `A35`:** på en dag med én stor hændelse i en lille konkurrence
+får hele feltet det samme fan-out-kort, fordi hovedpersonens størrelse indgår i
+alles score. Det er spec-konformt, men det er værd at holde øje med, når
+tærsklen kalibreres — det er den ene måde, v3 kan genskabe v2's "alle ser det
+samme" i ny indpakning.
+
+### 13.5 Ydelse: to rettelser, acceptkriterie 10 opfyldt
+
+Første udgave gjorde runde-motoren **11× langsommere** (77 → 886 ms på en
+syntetisk fuld sæson), fordi frames slog bedste/værste tip og månedsstillingen
+op med laterals — Postgres sorterede hele tabellen forfra for hver bruger. Med
+`distinct on`-præaggregering: 38 ms. Dagsmotorens temp-tabeller er desuden
+indekseret, fordi v3 slår op i dem **pr. modtager**, hvor v2 kun scannede dem
+sekventielt pr. regel.
+
+Målt: dagsmotor 266 ms mod referencen `recompute_ratings()` 118 ms = **2,26**,
+mod v2's 2,28. Forholdet steg ikke, som acceptkriterie 10 kræver. Værste
+trigger-sætning 229 ms mod 1 s-grænsen.
+
+`sql/tests/story_engine_scale.sql` måler nu en **sen, men ikke sidste** kampdag:
+efter v3 returnerer motoren straks på rundens sidste dag, så den gamle måling
+ville have vist 0,1 ms og påstået, at dagsmotoren er gratis.

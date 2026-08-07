@@ -52,6 +52,18 @@ const PWA_ONBOARDED_KEY = "pc_pwa_onboarded";
 // beskriver dem), så et suffiks på NØGLEN ville bryde alle tre — mens et suffiks
 // på værdien ikke rører nogen af dem. Samme argument som bruger-id'et nedenfor.
 const COMP_DONE_KEY = "pc_comp_done_seen";
+// Hvilke historier har brugeren allerede set? Samme listeform som ovenfor.
+//
+// Story Engine v3's ulæst-prik har ingen server-side tilstand: `story_viewed`
+// logges allerede, når kortet bliver synligt, men analytics-laget dedupliker i
+// hukommelsen og glemmer alt ved en genindlæsning — så prikken ville lyse igen
+// hver gang appen blev åbnet. Flaget her er det eneste, der husker.
+//
+// At det er LOKALT og ikke en kolonne er et bevidst valg: en ulæst-markering er
+// en egenskab ved enheden, ikke ved historien. Ser man kortet på telefonen og
+// åbner appen på en anden enhed, er prikken der igen — og det er det rigtige
+// svar, for man har ikke set kortet dér.
+const STORY_SEEN_KEY = "pc_story_seen";
 
 // Alt, appen har lagt på enheden — ikke kun sessionen.
 //
@@ -76,6 +88,7 @@ const LOKALE_NØGLER = [
   SEASON_LEAGUE_KEY,
   PWA_ONBOARDED_KEY,
   COMP_DONE_KEY,
+  STORY_SEEN_KEY,
 ];
 
 // ---------- de rå, enheds-globale læse/skrive ----------
@@ -124,36 +137,52 @@ function writeUserFlag(key, userId, value = "1") {
   writeFlag(key, `${value}${OWNER_SEP}${userId}`);
 }
 
-// ---------- listeflaget: sete konkurrence-afslutninger ----------
+// ---------- listeflagene: sete konkurrence-afslutninger og sete historier ----------
 //
 // Læse/skrive-parret bor her og ikke hos kalderen, fordi FORMATET er det, der
 // skal holdes ét sted: to skærme viser fejringen (Ligaer-fanen og liga-siden),
 // og en kommasepareret liste, der parses to steder, er én kommasepareret liste
-// for meget.
+// for meget. Da Story Engine v3 fik brug for præcis samme form til ulæst-
+// prikken, blev parret generaliseret frem for kopieret — ellers ville
+// beskæringen og "1"-særtilfældet stå to steder.
 const MAX_SEEN = 50; // en liste, der kun vokser, ender som et localStorage-loft
 
-function readSeenCompletions(userId) {
-  const raw = readUserFlag(COMP_DONE_KEY, userId);
+function readSeenList(key, userId) {
+  const raw = readUserFlag(key, userId);
   if (!raw || raw === "1") return new Set(); // "1" = sat uden indhold (se readUserFlag)
   return new Set(raw.split(",").filter(Boolean));
 }
 
 // Returnerer den opdaterede mængde, så kalderen kan gentegne uden at læse igen.
-function markCompletionSeen(userId, competitionId) {
-  const seen = readSeenCompletions(userId);
-  if (seen.has(competitionId)) return seen;
-  seen.add(competitionId);
+function markSeen(key, userId, id, max = MAX_SEEN) {
+  const seen = readSeenList(key, userId);
+  if (!id || seen.has(id)) return seen;
+  seen.add(id);
   // De ÆLDSTE ryger først. At tabe en gammel post koster i værste fald én
   // gentaget fejring for en konkurrence, brugeren ikke har set i lang tid.
-  const ids = [...seen].slice(-MAX_SEEN);
-  writeUserFlag(COMP_DONE_KEY, userId, ids.join(","));
+  const ids = [...seen].slice(-max);
+  writeUserFlag(key, userId, ids.join(","));
   return new Set(ids);
 }
+
+const readSeenCompletions = (userId) => readSeenList(COMP_DONE_KEY, userId);
+const markCompletionSeen = (userId, competitionId) =>
+  markSeen(COMP_DONE_KEY, userId, competitionId);
+
+// Historier beskæres hårdere end konkurrencer: der kommer ét kort om dagen, og
+// et kort ældre end 48 timer vises alligevel ikke. Tyve er rigeligt til, at en
+// prik ikke kan lyse igen for noget, brugeren stadig kan se.
+const MAX_SEEN_STORIES = 20;
+const readSeenStories = (userId) => readSeenList(STORY_SEEN_KEY, userId);
+const markStorySeen = (userId, storyId) =>
+  markSeen(STORY_SEEN_KEY, userId, storyId, MAX_SEEN_STORIES);
 
 export {
   SESSION_KEY, PING_KEY, FLOW_KEY, CARD_KEY, COMPLETE_KEY,
   PUSH_DISMISS_KEY, NUDGE_KEY, SEASON_LEAGUE_KEY, PWA_ONBOARDED_KEY, COMP_DONE_KEY,
+  STORY_SEEN_KEY,
   LOKALE_NØGLER,
   readFlag, writeFlag, removeFlag, readUserFlag, writeUserFlag,
   readSeenCompletions, markCompletionSeen,
+  readSeenStories, markStorySeen,
 };

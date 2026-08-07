@@ -2,7 +2,7 @@
 
 Bygger videre på `story-engine-v1.md`, som stadig beskriver runde-motoren, tonen og de 16 runde-regler. Denne fil beskriver **kun det, v2 tilføjer**.
 
-> **Delvist omgjort af en beslutning, der endnu ikke er bygget (7. august 2026).** [`story-engine-v3.md`](./story-engine-v3.md) ændrer *udvælgelse og visning*: ét kort pr. bruger pr. dag i stedet for to, ingen karrusel, nyhedsværdi-score i stedet for fast prioritet, og kun rundekortet på rundens sidste dag. **Denne fil beskriver fortsat det, der kører i produktion** — v3 er besluttet, ikke leveret (`B27` i [`BACKLOG.md`](../BACKLOG.md)) — men §3 (dagens regler og loftet "to snit, i den rækkefølge") og §9 (karrusellen) er de steder, v3 lander, når den bygges. Prioritetsbåndet 110–189 (§4), den danske dag (§5), bagstopperen (§6), triggerens to porte (§7) og den periode-afgrænsede delete (§8) er **uændrede** af v3.
+> **DELVIST OMGJORT AF v3, som er leveret 7. august 2026.** [`story-engine-v3.md`](./story-engine-v3.md) ændrer *udvælgelse og visning*, og **den er nu det, der kører i produktion**. Læs denne fil som historik for de steder, v3 rører: §3's loft ("to snit, i den rækkefølge") er erstattet af ét slot valgt på nyhedsværdi, `DAY_RESULT` er flyttet 110 → 180 og er blevet dagens dæmpede fald-tilbage, og §9's karrusel er erstattet af ét kort plus en tap-through-rundestory. Prioritetsbåndet 110–189 (§4), den danske dag (§5), bagstopperen (§6), triggerens to porte (§7) og den periode-afgrænsede delete (§8) er **uændrede** af v3 og gælder fortsat ordret.
 
 ## 1. Problemet
 

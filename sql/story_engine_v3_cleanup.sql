@@ -1,0 +1,42 @@
+-- Story Engine v3, oprydning — KØRES SIDST, efter at frontenden er deployet.
+--
+-- Rækkefølge: sql/story_engine_v3.sql → gen-kør sql/story_engine.sql → gen-kør
+-- sql/analytics_events.sql → deploy frontend → DENNE FIL. Idempotent.
+--
+-- Filen sletter INGEN rækker. De historiske v2-dagskort (op til to pr. bruger
+-- pr. dag, `news_value is null`) bliver stående som analysedata — det er dem,
+-- A33's måling af dagsmotorens variation hviler på, og karriereprofilen
+-- filtrerer dem allerede fra på prioritetsbåndet.
+
+-- ======================= stories_day_uniq udgår =======================
+-- v2's dagsindeks (day_key, user_id, rule, competition_id) sikrede "højst ét
+-- kort pr. regel pr. dag" — et loft, der gav mening, da en bruger kunne få to
+-- kort. v3's stories_day_slot_uniq (user_id, day_key) er strengere: ét kort i
+-- alt. Det gamle indeks kan derfor ikke længere afvise noget, det nye ikke
+-- allerede har afvist.
+--
+-- DET GÆLDER OGSÅ DE GAMLE RÆKKER, selvom de ikke dækkes af det nye indeks:
+-- ingen skriver rører en historisk dag. Sker det alligevel — en resultatrettelse
+-- flere uger tilbage — kører generate_daily_stories() sin delete-then-insert og
+-- erstatter dagens v2-rækker med én v3-række, som det nye indeks vogter.
+--
+-- Droppes FØRST her og ikke i story_engine_v3.sql, så en tilbagerulning til v2
+-- er mulig, indtil frontenden er ude.
+drop index if exists public.stories_day_uniq;
+
+-- ============================================================================
+-- Verifikation
+-- ============================================================================
+-- 1) Indekserne står som forventet. Forvent stories_round_uniq,
+--    stories_day_slot_uniq og stories_user_round_day_idx — men ikke
+--    stories_day_uniq:
+-- select indexname from pg_indexes where tablename = 'stories' order by 1;
+--
+-- 2) De historiske rækker er der endnu:
+-- select count(*) filter (where news_value is null)     as v2_raekker,
+--        count(*) filter (where news_value is not null) as v3_raekker
+--   from public.stories where period = 'day';
+--
+-- 3) Ét-slot-invarianten holder for v3-æraen. Forvent 0 rækker:
+-- select user_id, day_key, count(*) from public.stories
+--  where period = 'day' and news_value is not null group by 1,2 having count(*) > 1;

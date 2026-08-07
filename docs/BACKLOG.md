@@ -218,6 +218,20 @@ blive til en række:** `loadLatestStory`/`latest_story` uden aftagere er ikke et
 selvstændigt spørgsmål længere, den er en delmængde af `B27`, fordi rundestoryen
 gør viewet relevant igen.*
 
+*7. august 2026 (eftermiddag): **v3 er bygget, og listen er 34 → 33.** `B27` er
+slettet, og `loadLatestStory` er genbrugt frem for slettet — rundestoryen læser
+viewet. De to andre rækker fra formiddagen har nu en opfyldt udløser: `A35` kan
+måles, fordi `news_value` gemmes på hver eneste v3-række, og `G78` er blevet
+konkret frem for hypotetisk, fordi tallene nu FAKTISK står to steder.
+**Leverancen efterlod ingen nye rækker**, og det er værd at bemærke, for tre
+ting afveg undervejs fra spec'en; alle tre blev løst inde i opgaven og noteret i
+spec'ens §13 frem for skudt til hjørne. Den mest lærerige var spec §5's eget
+regnestykke — 8 + 12 + 20 = 40 — som ikke holdt mod en implementering, der gav
+`DAY_RESULT` hele størrelsesloftet: den ville nå 58 og kunne udgive sig selv som
+dagens historie, og så ville der aldrig findes en dag under tærsklen at falde
+tilbage til. **En enhedstest fandt det, ikke en gennemlæsning** — samme form som
+`G72`s lære om kode, der aldrig har kørt.*
+
 Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
 1. **Et svar, vi allerede har, er gratis** — et opslag, der lukker eller
@@ -325,16 +339,13 @@ spørgsmål og ikke en kopiering.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
-**Fyldt igen 7. august 2026** af Story Engine v3-beslutningen. Tieret har været
-tomt siden 3. august, og `B27` er dermed den eneste række på hele listen, der
-hverken venter på en udløser eller på en produktionsadgang — den venter kun på,
-at nogen bygger den.
+**Tomt igen 7. august 2026.** Tieret blev fyldt af Story Engine v3-beslutningen
+om formiddagen og tømt af leverancen samme dag — `B27` var den eneste række på
+hele listen, der hverken ventede på en udløser eller på en produktionsadgang,
+og den er nu bygget. Leverancen efterlod ingen ny række her: de to ting, den
+udskød (`A35` og `G78`), venter begge på drift og hører til deres egne tiers.
 
-| # | Hvad | Bemærkning |
-|---|---|---|
-| `B27` | **Byg Story Engine v3** | Besluttet 7. august 2026, spec skrevet, intet bygget. Rækkefølgen inde i opgaven er bunden: SQL før frontend. |
-
-*Nedenfor står den tidligere kørsel.*
+*Nedenfor står de tidligere kørsler.*
 
 **Kørt 3. august 2026.** Alle fire punkter er leveret og slettet: `B10` og `B11`
 som én leverance (Story Engine v1.2's to kåringsregler + push, hvor
@@ -425,8 +436,8 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 | `G77` | `analytics_events` vokser uden loft | **Når `A34`s månedlige Usage-aflæsning viser tabellen som største vækstdriver** — eller sammen med `A34`, hvis Free-planen skal strækkes. |
 | `G76` | `anonymize_my_account()` har aldrig kørt i produktion | ~~`B18` (staging)~~ **udløseren er sprunget: staging findes siden 6. august 2026** ([`STAGING.md`](./STAGING.md)), så funktionen kan prøves dér på en testkonto frem for på en bruger. Ellers den første rigtige kontolukning. Funktionen er uigenkaldelig og blev skrevet forfra 4. august, så dens første kørsel må ikke være en bruger, der ikke kan fortryde. Samme form som `G8`, men med en dyrere fejl. **Vejer tungere efter `A25` (5. august 2026):** kroppen har fået en `delete` mere, og det er den slags, der ikke kan efterprøves på den bruger, den rammer. |
 | `A33` | Er dagsmotorens variation tyndere, end regelantallet lover? | **Når vis-bare dagskort har visninger.** `G73` (5. august 2026) rettede MÅLINGEN og ikke synligheden: de 197 efterfyldte dagskort kan stadig ikke vises, de tælles bare ikke længere i nævneren. Fremadrettede dagskort skrives inde i deres egen runde og ER vis-bare, så udløseren kan nu aflæses direkte — vis-bar > 0 og vist > 0 for dagsreglerne i Analytics. `DAY_RESULT` alene er 123 af 280 historier (44 %). |
-| `A35` | Er Story Engine v3's publiceringstærskel på 45 den rigtige? | **To uger med v3 i drift og mindst ti kampdage.** Gated af `B27` — tærsklen kan ikke måles, før den findes. |
-| `G78` | v3's scoringstal står i både SQL og `src/lib/stories.js` | **Når v3's udvælgelse er valideret i drift** (altså tidligst sammen med `A35`). Kræver en migrering af eksisterende rækker og må derfor ikke ligge i samme leverance som `B27`. |
+| `A35` | Er Story Engine v3's publiceringstærskel på 45 den rigtige? | **To uger med v3 i drift og mindst ti kampdage.** Bygget 7. august 2026, så uret er startet. Måles på `stories.news_value`, som gemmes på alle rækker — også de dæmpede — netop for at kunne svare bagudrettet. Mål: 40–60 % af kampdagene med ulæst-markering. |
+| `G78` | v3's scoringstal står i både SQL og `src/lib/stories.js` | **Når v3's udvælgelse er valideret i drift** (altså tidligst sammen med `A35`). Kræver en migrering af eksisterende rækker og lå derfor bevidst uden for v3-leverancen. Indtil da holdes de to sider ærlige af påstande frem for af struktur: `sql/tests/story_engine_daily.sql` låser de præcise `news_value`-tal, og `src/lib/stories.test.js` gør det samme fra JS-siden. |
 | `A32` | Skal der findes en vej til read-only opslag uden ejeren? | Næste gang et tier blokeres af manglende produktionsadgang. Tier 1 blev sprunget over tre gange, og prisen var, at `B19` voksede fra to SQL-filer til fem imens. Et svar kan koste produktionstal i Actions-logs, og dét er afvejningen. |
 | `A5` | Emojis i historie-kort: til eller fra? | **Når der findes en deling overhovedet.** Aflæst 5. august 2026: 280 historier, 21 af 21 brugere dækket — og **0 delinger**. Del-knappen er selve det, højdepunkt-tieret har og det dæmpede ikke, så uden en eneste deling kan signalet ikke måles. |
 | `G8` | Multi-turnerings-`full_season` er stadig uafprøvet mod rigtige data | Den første konkurrence med `mode_params.tournaments` — aflæst tom igen 5. august 2026. |
@@ -490,7 +501,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Hvad | Hvorfor / hvad den venter på | Omfang |
 |---|---|---|---|
-| B27 | **Byg Story Engine v3** (`sql/story_engine_v3.sql`, ét kort + rundestory i frontenden) | Beslutningen er truffet 7. august 2026 og spec'en er skrevet ([`features/story-engine-v3.md`](./features/story-engine-v3.md)), men intet er bygget. Rækkefølgen er bunden: SQL først (scoring, unikt indeks, `news_value`), derefter frontenden — omvendt ville et enkelt kort vise ét ud af to genererede uden at nogen kunne se hvilket. Rydder samtidig indbakke-linjen om `loadLatestStory`/`latest_story` uden aftagere: rundestoryen gør viewet relevant igen, og det skal enten genbruges eller slettes bevidst, ikke bare vedligeholdes videre. | SQL: dags-motoren omskrives til ét slot + scoring. Frontend: `StoryCarousel.jsx` → `DayCard` + `RoundStory` med frames. Tests: `sql/tests/story_engine_daily.sql` udvides med determinisme og ét-slot-invarianten; `sql/tests/story_engine_scale.sql` køres igen med `recompute_ratings()` som reference. |
 | B21 | **Omdøb GitHub-repoet og Vercel-projektet, og ret hjemmesidens links** | Navneskiftet 4. august 2026 gik gennem app, manifest, ikoner, tekster og dokumentation, men stoppede ved projektnavnene — **med vilje**, fordi et skifte af Vercel-projektet ændrer `.vercel.app`-adressen og dermed knækker hvert link, der peger på den. Prisen ved status quo er, at produktet hedder Leagly overalt undtagen i den adresse, en ny bruger faktisk taster ind: 23 CTA'er i `site/` (4+5+6+4+4) plus README'ens live-link peger på `prediction-champ.vercel.app`. **Rækkefølgen er bindende og er hele grunden til, at rækken står lige efter `I10`:** vælges et rigtigt domæne, skal linkene alligevel skiftes, og gøres omdøbningen først, skiftes de to gange. Vercels gamle URL redirigerer ikke af sig selv, så et delt link fra før skiftet dør — det er kun ufarligt, så længe hjemmesiden ikke er publiceret. `docs/RESTORE.md`s omtale skal IKKE rettes: den navngiver backup-filer, der faktisk hedder det gamle. | Lille (men mange steder) |
 | B25 | **Egen SMTP til auth-mails** (`noreply@leagly.app` via Resend el.lign., SPF/DKIM i DNS, indsat i Supabase → Auth → SMTP Settings) | Uden den går bekræftelses- og nulstillingsmails gennem Supabases delte, stærkt rate-begrænsede udviklings-mailservice — den første fremmede, der glemmer sin adgangskode, er låst ude, og afsenderen er ikke vores. Domænet er købt (august 2026), så rækken er ikke gated af noget. Gratis-tieret hos Resend rækker langt forbi `A34`s udløser. Gater `B26`. | Lille (opsætning + DNS) |
 | B26 | **E-mailbekræftelse + Turnstile på signup** | I det kontrollerede felt er ubekræftede konti harmløse; offentligt kan hvem som helst oprette konti med hvem som helsts e-mail — både en spam-vektor og et lille GDPR-problem (adresser opbevares, som ingen har verificeret er deres). Begge dele er Supabase-konfiguration, ikke kode: bekræftelse slås til under Auth (kræver `B25`), Turnstile under Auth → Bot Protection. Prisen er ét ekstra trin i onboardingen — derfor først ved åben deling, ikke før. | Lille (konfiguration) |

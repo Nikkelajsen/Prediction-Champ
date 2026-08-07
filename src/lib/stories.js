@@ -13,6 +13,12 @@
 // v1.2 (august 2026): to regler for de LOKALE kåringer (AWARD_WEEK,
 // AWARD_MONTH). De læser `competition_awards` i SQL'en frem for at regne noget
 // om, så et kort aldrig kan modsige den kåring, boardet viser.
+//
+// v3 (august 2026): motoren VÆLGER frem for at udgive. Ét kort pr. bruger pr.
+// dag, valgt på en nyhedsværdi-score (scoreDailyCandidates/pickDay nedenfor),
+// og rundekortet er blevet en tap-through-story med frames (renderFrame).
+
+import { renderMilestone } from "./milestones.js";
 
 // Prioritetsstige (lavere tal = vigtigere). Én kilde til sandhed for regel-metadata.
 // Værdien her er reglens STÆRKE prioritet; tre regler har også en svag variant,
@@ -59,33 +65,81 @@ export const RULES = {
 //   2) en forespørgsel, der glemmer at filtrere på periode, men sorterer på
 //      prioritet, sætter stadig runde-kort først. Sikker degradering.
 //   3) isQuiet() beholder sin betydning for latest_story, som nu er runde-only.
+// v3 (august 2026): MILESTONE er kommet til som dagbåndets top, og DAY_RESULT
+// er flyttet fra 110 til 180 — det reserverede dæmpede tier er taget i brug.
+// Med grundvægt 8 kan dagens facit aldrig nå publiceringstærsklen ved egen
+// kraft (8 + 12 + 20 = 40 < 45), så den udgives KUN som fald-tilbage, og et
+// fald-tilbage skal se dæmpet ud.
 export const DAILY_RULES = {
-  DAY_RESULT: 110,
+  MILESTONE: 110,
   CONTRARIAN: 120,
   COLLECTIVE_MISS: 125,
   DAY_TOP: 130,
   STREAK_STATUS: 140,
   DUEL: 150,
   SO_CLOSE: 160,
+  DAY_RESULT: 180,
 };
 
-// Båndets grænser. 180–189 er reserveret til et dæmpet dagstier, hvis det
-// nogensinde bliver nødvendigt; indtil da genereres intet dér.
+// Båndets grænser. 180–189 er det dæmpede dagstier.
 export const DAILY_TIER_MIN = 110;
 export const DAILY_QUIET_MIN = 180;
 export function isDaily(priority) {
   return (priority ?? 0) >= DAILY_TIER_MIN;
 }
+// Dæmpet dagskort: mindre overskrift, ingen emoji, ingen ulæst-markering.
+export function isDailyQuiet(priority) {
+  return (priority ?? 0) >= DAILY_QUIET_MIN;
+}
 
-// Højst så mange dagskort pr. bruger pr. dag. Spejler v_max_cards i
-// sql/story_engine_v2.sql. Med seks turneringer er der kampe næsten hver dag i
-// en runde, så to kort om dagen bliver til ~10–12 gennem ugen — nok til at
-// karusellen har noget at fortælle, lidt nok til at den kan swipes igennem.
-export const DAILY_MAX_CARDS = 2;
+// Højst så mange dagskort pr. bruger pr. dag. ÉT — på tværs af alle
+// konkurrencer. I v2 var tallet 2 og loftet "pr. regel, derefter i alt"; nu er
+// der kun ét slot, og det håndhæves af et unikt indeks på (user_id, day_key) i
+// databasen frem for af koden her. Konstanten står tilbage som den værdi,
+// frontenden regner med at møde.
+export const DAILY_MAX_CARDS = 1;
 
-// Karusellens loft. Rundens kort vises nyeste først; resten falder stille af,
-// så forsiden aldrig bliver en uendelig swipe.
-export const CAROUSEL_LIMIT = 10;
+// ---------------------------------------------------------------------------
+// v3 · NYHEDSVÆRDI (spec docs/features/story-engine-v3.md §4)
+//
+//   nyhedsværdi = grundvægt + størrelse + nærhed
+//
+// ALLE TAL HERUNDER STÅR OGSÅ I sql/story_engine_v3.sql OG SKAL VÆRE ENS.
+// Det er en værre fejltype end de dobbelt-vedligeholdte tekster: en afvigelse i
+// en grundvægt eller et nærhedsled giver ikke en fejl og ikke en forkert
+// formulering, men et ANDET kort — uden log, uden at nogen opdager det.
+// sql/tests/story_engine_daily.sql påstår de præcise news_value-tal netop
+// derfor. Backloggens G78 er opgaven med at fjerne dobbeltheden helt.
+export const BASE_WEIGHTS = {
+  MILESTONE: 100,       // vinder altid; kaprer dagens slot
+  DAY_TOP: 34,          // dagens højeste i konkurrencen
+  CONTRARIAN: 32,       // den eneste, der ramte
+  DUEL: 30,             // nærmeste rival flyttede sig
+  STREAK_STATUS: 28,    // stimen lever eller brød
+  COLLECTIVE_MISS: 24,  // ingen ramte
+  SO_CLOSE: 18,         // ≥2 nærmisser
+  DAY_RESULT: 8,        // ankeret — kan aldrig alene nå tærsklen
+};
+
+// Størrelse (0–30): tre bidrag med hver sit loft, summen loftet ved 30.
+// Størrelsen hører til HÆNDELSEN og dermed til hovedpersonen — ikke til
+// modtageren.
+export const SIZE_CAPS = { move: 18, over: 12, streak: 12, total: 30 };
+export const SIZE_RATES = { move: 6, over: 3, streak: 2, streakFrom: 5 };
+
+// Nærhed (0–20): det bidrag, der gør en fremmeds aften til brugerens historie.
+// Beregnes PR. MODTAGER — samme kamp giver forskellige kort til forskellige
+// brugere, og det er meningen.
+export const PROXIMITY = { self: 20, rival: 14, biggest: 8, other: 4 };
+
+// Publiceringstærsklen. Vinder ≥ 45 udgives som dagens historie med
+// ulæst-markering; herunder udgives et dæmpet DAY_RESULT uden.
+//
+// TALLET ER ET KVALIFICERET GÆT OG SKAL MÅLES, IKKE TROS (spec §5). Målet er,
+// at 40–60 % af kampdagene får ulæst-markering for en aktiv bruger. Over 70 %
+// er tærsklen for lav, og v3 har genskabt v2's problem i ny indpakning; under
+// 25 % er Hjem stille igen. Backloggens A35.
+export const PUBLISH_THRESHOLD = 45;
 
 // Svage varianter (v1.1). Tærsklen for tre regler er sænket, så de udløses oftere,
 // men den svage udgave får et højere prioritetstal og kan derfor kun vises, når der
@@ -122,42 +176,89 @@ export function priorityFor(rule, strength) {
   }
 }
 
-// Dagens kort: højst DAILY_MAX_CARDS pr. bruger, og højst ÉT pr. regel.
-// Spejler de TO snit i sql/story_engine_v2.sql, og rækkefølgen betyder noget.
+// Størrelsesbidraget for én kandidat (0–30). Spejler _sd_mag + stimeleddet i
+// sql/story_engine_v3.sql. `moved` er ABSOLUT: et fald er lige så meget drama
+// som en fremgang — tonen ligger i teksten, ikke i scoringen.
 //
-// Uden regel-snittet ville en bruger med tre konkurrencer få to DAY_RESULT-kort
-// og intet andet: reglen udløses i hver konkurrence, og den har den laveste
-// prioritet af dem alle. Karusellen ville miste netop den variation, den findes
-// for. Vinderen inden for en regel er den største liga — samme tiebreak som
-// latest_story-viewet, så valget er deterministisk.
-export function pickDailyStories(candidates, max = DAILY_MAX_CARDS) {
-  if (!candidates || !candidates.length) return [];
-  const better = (a, b) => {
-    const as = a.league_size ?? -1, bs = b.league_size ?? -1;
-    if (as !== bs) return bs - as;                        // største liga først
-    return String(a.competition_id ?? "").localeCompare(String(b.competition_id ?? ""));
-  };
-  const bestOfRule = new Map();
-  for (const c of candidates) {
-    const cur = bestOfRule.get(c.rule);
-    if (!cur || better(c, cur) < 0) bestOfRule.set(c.rule, c);
-  }
-  return [...bestOfRule.values()]
-    .sort((a, b) => (a.priority - b.priority) || better(a, b))
-    .slice(0, max);
+// MILESTONE får bevidst nul. En milepæl er en engangsbedrift; dens vægt er, at
+// den er sket, ikke hvor mange pladser man tilfældigvis rykkede samme dag.
+// Uden det ville motoren og cron-kapringen score samme kort forskelligt.
+export function sizeOf(cand = {}) {
+  if (cand.rule === "MILESTONE") return 0;
+  const over = Math.min(SIZE_CAPS.over, SIZE_RATES.over * Math.max(0, Math.floor(cand.overAvg ?? 0)));
+  // DAY_RESULT får KUN afstanden til dagens gennemsnit — ikke placeringsændring
+  // og ikke stime. Det er spec §5's regnestykke, og det er et krav, ikke en
+  // detalje: "8 + 12 + 20 = 40 ... kommer derfor aldrig over tærsklen ved egen
+  // kraft. Det er tilsigtet: dagens facit er en oplysning, ikke en historie."
+  //
+  // Fik den hele størrelsesloftet, kunne den nå 58 og udgive sig selv som
+  // dagens historie — og så ville hele det dæmpede fald-tilbage være
+  // meningsløst, for der ville aldrig være en dag under tærsklen.
+  if (cand.rule === "DAY_RESULT") return over;
+  const move = Math.min(SIZE_CAPS.move, SIZE_RATES.move * Math.abs(cand.moved ?? 0));
+  const streak = Math.min(
+    SIZE_CAPS.streak,
+    SIZE_RATES.streak * Math.max(0, (cand.streak ?? 0) - SIZE_RATES.streakFrom),
+  );
+  return Math.min(SIZE_CAPS.total, move + over + streak);
 }
 
-// Karusellens rækkefølge: rundens afsluttende kort øverst (det har ingen dag),
-// derefter dagene nyeste først, og inden for en dag den vigtigste først.
-// Spejler PostgREST-forespørgslen i loadRoundCarousel — de to må ikke være
-// uenige, for listen renderes i den rækkefølge, serveren leverer.
-export function sortCarousel(rows, limit = CAROUSEL_LIMIT) {
-  if (!rows || !rows.length) return [];
-  return rows.slice().sort((a, b) => {
-    const ad = a.day_key || "", bd = b.day_key || "";
-    if (ad !== bd) return ad === "" ? -1 : bd === "" ? 1 : bd.localeCompare(ad);
-    return (a.priority ?? 0) - (b.priority ?? 0);
-  }).slice(0, limit);
+// Nærheden mellem en kandidats hovedperson og én modtager (0–20).
+// `rel` er relationen, SQL'en allerede har afgjort: "self" | "rival" |
+// "biggest" | "other".
+export function proximityOf(rel) {
+  return PROXIMITY[rel] ?? PROXIMITY.other;
+}
+
+// Nyhedsværdien for hver kandidat. Kandidaterne bærer selv deres relation til
+// modtageren (`rel`), fordi den kun kan afgøres af stillingen, som SQL'en har.
+export function scoreDailyCandidates(candidates) {
+  return (candidates || []).map((c) => ({
+    ...c,
+    news_value: (BASE_WEIGHTS[c.rule] ?? 0) + sizeOf(c) + proximityOf(c.rel),
+  }));
+}
+
+// Dagens ENE kort. Højeste nyhedsværdi vinder.
+//
+// Afgørelse ved lige score (spec §4): højeste grundvægt → største konkurrence →
+// laveste rule alfabetisk. De sidste led er ikke i spec'en, men er nødvendige
+// for at to gen-kørsler giver SAMME kort (acceptkriterie 7) — uden dem er to
+// kandidater fra samme regel i samme konkurrence uadskillelige, og databasen
+// vælger frit. Rækkefølgen SKAL være den samme som `_sd_rank`'s ORDER BY i
+// sql/story_engine_v3.sql.
+//
+// Returnerer null ved ingen kandidater. Bemærk at der IKKE filtreres på
+// tærsklen her: den afgør, om vinderen udgives som historie eller erstattes af
+// det dæmpede fald-tilbage, og det valg træffes i SQL'en, som har DAY_RESULT-
+// kandidaten ved hånden.
+export function pickDay(scored) {
+  if (!scored || !scored.length) return null;
+  return scored.slice().sort((a, b) =>
+    (b.news_value ?? 0) - (a.news_value ?? 0) ||
+    (BASE_WEIGHTS[b.rule] ?? 0) - (BASE_WEIGHTS[a.rule] ?? 0) ||
+    (b.league_size ?? -1) - (a.league_size ?? -1) ||
+    String(a.rule).localeCompare(String(b.rule)) ||
+    String(a.competition_id ?? "").localeCompare(String(b.competition_id ?? "")) ||
+    String(a.headline ?? "").localeCompare(String(b.headline ?? "")),
+  )[0];
+}
+
+// Er kortet nået over tærsklen? Kun da fortjener det en ulæst-markering.
+// Et badge, der lyser hver dag, er ikke et signal, det er en baggrundsfarve.
+export function isNewsworthy(story) {
+  if (!story) return false;
+  return (story.news_value ?? 0) >= PUBLISH_THRESHOLD && !isDailyQuiet(story.priority);
+}
+
+// Udløb: et kort ældre end dette vises ikke, selvom rækken bliver stående.
+// Uden det er "dagens historie" en løgn på en tirsdag efter en stille weekend.
+export const DAY_CARD_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
+export function isFresh(story, now = Date.now()) {
+  if (!story?.created_at) return false;
+  const t = Date.parse(story.created_at);
+  return Number.isFinite(t) && now - t < DAY_CARD_MAX_AGE_MS;
 }
 
 // Deterministisk udvælgelse: præcis én historie pr. bruger pr. runde.
@@ -264,7 +365,19 @@ export function renderStory(rule, payload = {}) {
     // --- v2 · dagens kort (110–189). `p.day` er dagens etiket ("03.03"), lagt
     // i payload af generate_daily_stories; `p.label` er rundens interval og
     // bruges ikke her — et dagskort taler om én dag.
+    // v3: DAY_RESULT er dagens dæmpede fald-tilbage og har derfor mistet sin
+    // emoji — emoji er højdepunktets signal, og et facit er ikke et højdepunkt.
+    // `variant: "no_tips"` er kortet til den, der slet ikke havde tips med:
+    // acceptkriterie 8 forbyder udtrykkeligt at give hende et drama-kort om
+    // andre, så hun får dagens omfang og en fremadrettet slutning.
     case "DAY_RESULT": {
+      if (p.variant === "no_tips") {
+        return {
+          headline: "Ingen tips i dag",
+          body: `Der blev spillet ${p.matches}${p.matches === 1 ? " kamp" : " kampe"}` +
+            ` i ${p.league}, men du havde ingen tips med. Husk at tippe, inden næste kamp låser.`,
+        };
+      }
       // Tonereglen: placeringen nævnes KUN i den øverste halvdel af tabellen.
       // Nederst står afstanden op til toppen — aldrig "du er nr. 9 af 10".
       const moved = p.moved || 0;
@@ -274,12 +387,26 @@ export function renderStory(rule, payload = {}) {
         : p.gap > 0 ? ` Toppen er ${p.gap} point væk.`
         : "";
       return {
-        headline: `📋 Dagens facit: ${p.points} point`,
+        headline: `Dagens facit: ${p.points} point`,
         body: `${p.matches}${p.matches === 1 ? " kamp" : " kampe"} i ${p.league}` +
           (p.exact > 0 ? ` — ${p.exact}${p.exact === 1 ? " præcis." : " præcise."}` : ".") + place,
       };
     }
+    // v3 · TREDJEPERSON. Tre regler fan-outer til modtagere, der ikke er
+    // hovedpersonen (`payload.third`), fordi nærhedsleddet i scoringen kun
+    // giver mening, hvis en fremmeds aften kan blive din historie. Navnet i
+    // `p.subject` er altid en, modtageren deler konkurrence med — fan-outen
+    // sker gennem competition_participants og kan strukturelt ikke nå andre.
     case "CONTRARIAN":
+      if (p.third) {
+        return {
+          headline: p.draw
+            ? `🧠 ${p.subject} var den eneste, der troede på uafgjort i ${p.home}–${p.away}`
+            : `🧠 ${p.subject} var den eneste, der troede på ${p.team}`,
+          body: `I ${p.league} tippede ${p.others}${p.others === 1 ? " anden" : " andre"} imod.` +
+            ` Det endte ${p.home} ${p.score} ${p.away} — ${p.points} point til ${p.subject}.`,
+        };
+      }
       return {
         headline: p.draw
           ? `🧠 Du var den eneste, der troede på uafgjort i ${p.home}–${p.away}`
@@ -292,16 +419,30 @@ export function renderStory(rule, payload = {}) {
         headline: `🙈 Ingen ramte ${p.home}–${p.away}`,
         body: `${p.n} tippede kampen i ${p.league}. Den endte ${p.score} — og ingen havde den.`,
       };
-    case "DAY_TOP":
-      return {
-        headline: `🔝 Du fik dagens højeste i ${p.league}`,
-        body: `${p.points} point — flest af alle i ${p.league} den ${p.day}` +
-          (!p.shared ? "."
-            : p.others > 1 ? ` (delt med ${p.others} andre).`
-            : " (delt med 1 anden)."),
-      };
+    case "DAY_TOP": {
+      const tail = !p.shared ? "."
+        : p.others > 1 ? ` (delt med ${p.others} andre).`
+        : " (delt med 1 anden).";
+      const body = `${p.points} point — flest af alle i ${p.league} den ${p.day}${tail}`;
+      return p.third
+        ? { headline: `🔝 ${p.subject} fik dagens højeste i ${p.league}`, body }
+        : { headline: `🔝 Du fik dagens højeste i ${p.league}`, body };
+    }
     case "STREAK_STATUS":
       // Den brudte stime slutter fremadrettet — "driller, ydmyger aldrig".
+      // Tredjepersons-varianten dropper den opmuntring: "en ny begynder i
+      // morgen" er noget, man siger til sig selv, ikke om en anden.
+      if (p.third) {
+        return p.alive
+          ? {
+              headline: `🔥 ${p.subject} har ${p.n} kampe i træk med point`,
+              body: `${p.subject} har fået point i ${p.n} kampe i træk. Stimen lever efter den ${p.day}.`,
+            }
+          : {
+              headline: `💤 ${p.subject}s stime stoppede ved ${p.n}`,
+              body: `Efter ${p.n} kampe i træk med point brød ${p.subject}s stime den ${p.day}.`,
+            };
+      }
       return p.alive
         ? {
             headline: `🔥 ${p.n} kampe i træk med point`,
@@ -346,7 +487,91 @@ export function renderStory(rule, payload = {}) {
             ? `Du holder nr. ${p.rank} af ${p.total} i ${p.league} — ${p.gap} point op til toppen.`
             : `${p.gap} point op til toppen i ${p.league}. Næste runde er en ny chance.`,
       };
+    // v3 · Milepælen kaprer dagens slot og har derfor sin egen regel her — men
+    // ikke sin egen tekst. Kataloget bor i src/lib/milestones.js, og
+    // milestones-tabellen gemmer kun nøgle + payload, så en formulering kan
+    // rettes uden en migrering. SQL'ens headline/body er kun et faldback for en
+    // klient, der er ældre end nøglen.
+    case "MILESTONE": {
+      const m = renderMilestone(p.milestone_key, p.milestone_payload || {});
+      return { headline: `${m.icon} ${m.title}`, body: m.body };
+    }
     default:
       return { headline: "", body: "" };
   }
+}
+
+// ---------------------------------------------------------------------------
+// v3 · RUNDESTORYENS FRAMES
+//
+// Rundens sidste dag udgiver kun rundekortet, og det er til gengæld den ene
+// gang om ugen, tap-through er sit besvær værd. Frames bygges i SQL
+// (build_round_frames) og gemmes i payload.frames; teksten bor KUN her.
+//
+// Frame 1 og 3 skal kunne stå alene som delt billede uden kontekst — det er de
+// to, folk sender videre. Derfor er deres overskrifter hele sætninger.
+//
+// En frame, der mangler sine data (ingen ratingrække, ingen tips i runden),
+// returnerer null og springes over af visningen frem for at vise tomme felter.
+export function renderFrame(frame = {}) {
+  const f = frame;
+  switch (f.frame) {
+    case "ROUND_SUM":
+      return {
+        eyebrow: `Din runde ${f.label || ""}`.trim(),
+        headline: `${f.points ?? 0} point`,
+        body: [
+          f.exact > 0 ? `${f.exact}${f.exact === 1 ? " præcist resultat" : " præcise resultater"}` : null,
+          f.percentile != null ? `Bedre end ${f.percentile} % af feltet` : null,
+          f.rank != null && f.total != null ? `Nr. ${f.rank} af ${f.total}` : null,
+        ].filter(Boolean).join(" · "),
+      };
+    case "BEST_WORST": {
+      if (!f.best) return null;
+      const line = (t) => `${t.home}–${t.away}: du tippede ${t.guess}, det endte ${t.score}`;
+      return {
+        eyebrow: "Kampen der afgjorde det",
+        headline: `${line(f.best)} — ${f.best.points} point`,
+        // Den værste nævnes uden bebrejdelse: kampen, ikke tippet, er emnet.
+        body: f.worst ? `Den anden vej: ${line(f.worst)}.` : "",
+      };
+    }
+    case "RATING": {
+      if (f.rating == null) return null;
+      const d = Number(f.delta ?? 0);
+      const sign = d > 0 ? "+" : "";
+      return {
+        eyebrow: "Rating",
+        headline: `${Math.round(Number(f.rating))} (${sign}${Math.round(d)})`,
+        body: [
+          f.rank != null ? `Nr. ${f.rank} på ranglisten` : null,
+          f.moved ? (f.moved > 0 ? `${f.moved} pladser frem` : `${Math.abs(f.moved)} pladser tilbage`) : null,
+        ].filter(Boolean).join(" · "),
+      };
+    }
+    case "CHAMPION": {
+      if (!f.winner) return null;
+      return {
+        eyebrow: "Rundens Champion",
+        headline: `${f.shared ? "Delt: " : ""}${f.winner} — ${f.winner_points} point`,
+        body: f.month_rank != null
+          ? `I Månedsligaen ligger du nr. ${f.month_rank} af ${f.month_total} med ${f.month_points} point.`
+          : "",
+      };
+    }
+    case "MILESTONE": {
+      const m = renderMilestone(f.milestone_key, f.milestone_payload || {});
+      return { eyebrow: "Ny milepæl", headline: `${m.icon} ${m.title}`, body: m.body };
+    }
+    default:
+      return null;
+  }
+}
+
+// Frames, der faktisk kan vises. En rundestory med kun to brugbare frames er
+// stadig en story — den har bare færre sider.
+export function usableFrames(payload) {
+  return (payload?.frames || [])
+    .map((f) => ({ raw: f, view: renderFrame(f) }))
+    .filter((x) => x.view);
 }

@@ -509,7 +509,16 @@ describe("storyRuleRows — katalogen fletter med det målte", () => {
     expect(files.length).toBeGreaterThanOrEqual(2); // v1 + v2; fanger en flyttet/omdøbt fil
     // Store bogstaver i apostroffer, som IKKE er regelnavne: 'ALL' er
     // generate_stories' scope-argument, 'UTC' en tidszone i dagsmotoren.
-    const NOT_RULES = new Set(["ALL", "UTC"]);
+    //
+    // Fra v3 også RUNDESTORYENS FRAMES. De ser ud som regelnavne (samme form,
+    // samme apostroffer, samme fil), men de er sider i ét kort — ikke kort, der
+    // kan udløse. Havde de stået i STORY_RULES, ville analytics have vist fire
+    // regler, der altid har 0 udløsninger, og en regel, der aldrig udløser, er
+    // netop det, denne test findes for at fange.
+    const NOT_RULES = new Set([
+      "ALL", "UTC",
+      "ROUND_SUM", "BEST_WORST", "RATING", "CHAMPION",
+    ]);
     const inSql = new Set(
       files
         .flatMap((f) => [...readFileSync(new URL(f, dir), "utf8").matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)])

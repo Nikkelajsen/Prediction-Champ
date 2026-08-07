@@ -101,6 +101,7 @@ const PRIVATLIV = {
             "Om du har set vejledningen til at lægge appen på din hjemmeskærm, så den kun vises én gang.",
             "Hvilken turnering du sidst kiggede på i Championship.",
             "Hvilke af dine konkurrencer du allerede har set slutte, så fejringen af en afsluttet konkurrence kun vises én gang.",
+            "Hvilke af dine historier du allerede har set, så markeringen af en ulæst historie kun vises, indtil du har set den.",
           ],
         },
         "Alt på nær sessionen er mærket med din konto. Deler du enhed med andre, ser de derfor deres egen introduktion og deres egne valg — ikke dine.",

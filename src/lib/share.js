@@ -32,4 +32,38 @@ function storyShareText(story) {
   return [story.headline, story.body].filter(Boolean).join("\n");
 }
 
-export { shareText, storyShareText };
+// Deling som BILLEDE — rundestoryens frame 1 og 3 (Story Engine v3 §7).
+//
+// `draw` får et canvas og tegner rammen; helperen står for resten. To ting
+// gøres bevidst forsigtigt, fordi delefunktioner fejler forskelligt på hver
+// platform:
+//
+//   1. `canShare({files})` spørges FØR billedet tegnes. iOS Safari har
+//      navigator.share, men afviser filer i nogle sammenhænge, og et afvist
+//      share efter en tung canvas-tegning er både langsomt og synligt.
+//   2. Alt, der ikke er filedeling, falder tilbage på `shareText`. Et billede,
+//      der ikke kan sendes, må aldrig betyde, at knappen ikke gør noget.
+//
+// Kaster videre som shareText: en bruger, der annullerer arket, er ikke en fejl,
+// og det er kaldstedet, der ved, om der skal siges noget.
+async function shareImage(draw, { text = "", title = "Leagly", width = 1080, height = 1080 } = {}) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx || typeof canvas.toBlob !== "function") return shareText(text, { title });
+
+  const probe = new File([new Blob([""], { type: "image/png" })], "p.png", { type: "image/png" });
+  if (!navigator.share || !navigator.canShare?.({ files: [probe] })) {
+    return shareText(text, { title });
+  }
+
+  draw(ctx, width, height);
+  const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+  if (!blob) return shareText(text, { title });
+
+  await navigator.share({ title, text, files: [new File([blob], "leagly.png", { type: "image/png" })] });
+  return "share";
+}
+
+export { shareText, shareImage, storyShareText };

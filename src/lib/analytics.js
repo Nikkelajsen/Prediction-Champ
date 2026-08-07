@@ -187,11 +187,18 @@ const STORY_RULES = {
   AWARD_MONTH: "Månedens bedste (lokal kåring)",
   SEASON_OPENER: "Premiereugen",
   QUIET_ROUND: "Stille runde",
-  // --- Dags-motoren (v2) · prioritet 110–189 · sql/story_engine_v2.sql.
-  // Navnene siger, hvad kortet handler om, ikke hvad tærsklen er — og de er
-  // valgt så de ikke kan forveksles med runde-reglernes: STREAK er rundens
-  // stime, STREAK_STATUS er dagens, og DUEL er dagens udgave af CLOSING_IN.
-  DAY_RESULT: "Dagens facit",
+  // --- Dags-motoren (v2/v3) · prioritet 110–189 · sql/story_engine_v2.sql og
+  // sql/story_engine_v3.sql. Navnene siger, hvad kortet handler om, ikke hvad
+  // tærsklen er — og de er valgt så de ikke kan forveksles med runde-reglernes:
+  // STREAK er rundens stime, STREAK_STATUS er dagens, og DUEL er dagens udgave
+  // af CLOSING_IN.
+  //
+  // Efter v3 er reglerne KANDIDATER, ikke udgivelser: kun ét kort pr. bruger pr.
+  // dag udgives, så `generated` i tabellen tæller vindere. Andelen af dage, en
+  // regel VANDT, er dermed det tal, der siger noget — og MILESTONE vinder altid,
+  // når den er i spil.
+  MILESTONE: "Milepæl kaprede dagens kort",
+  DAY_RESULT: "Dagens facit (dæmpet fald-tilbage)",
   CONTRARIAN: "Alene om at ramme",
   COLLECTIVE_MISS: "Ingen ramte kampen",
   DAY_TOP: "Dagens højeste",

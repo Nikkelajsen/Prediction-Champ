@@ -651,6 +651,27 @@ begin
   drop table if exists _se_this;
   drop table if exists _se_pair;
   drop table if exists _se_quiet;
+
+  -- ======== v3 · frames til rundestoryen ========
+  -- Rundekortet er efter v3 en tap-through-story med 4–5 frames (point og
+  -- percentil, bedste/værste tip, rating, rundens Champion, evt. milepæl).
+  -- Frames er PER BRUGER og kan derfor ikke bygges i inserts ovenfor, som alle
+  -- er per konkurrence. Hele bygningen bor i sql/story_engine_v3.sql, fordi den
+  -- kaldes fra to steder: her, og fra apply_milestone_stories() når en milepæl
+  -- lander efter at rundekortet er skrevet.
+  --
+  -- GUARDEN ER IKKE PYNT. Denne fil gen-køres rutinemæssigt, og
+  -- migreringsrækkefølgen (v3-filen først) kan ikke håndhæves af en SQL-editor.
+  -- Uden guarden ville en gen-kørsel på en database uden v3 fejle midt i
+  -- funktionen — og bag matches-triggerens exception-guard ville det ske tavst,
+  -- så runden slet ingen historier fik. Det er præcis fejl A9's form.
+  if exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'build_round_frames'
+  ) then
+    perform public.build_round_frames(p_round_key);
+  end if;
 end;
 $fn$;
 
