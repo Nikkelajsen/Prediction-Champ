@@ -2,6 +2,7 @@
 // Abonnementet gemmes i Supabase-tabellen push_subscriptions (RLS: kun egne rækker);
 // selve udsendelsen sker server-side i api/send-notifications.js.
 import { db } from "./supabase.js";
+import { apiFetch } from "./api.js";
 
 function isPushSupported() {
   return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
@@ -45,8 +46,11 @@ async function enablePush(token, userId) {
   if (!reg) throw new Error("Kunne ikke starte notifikations-tjenesten.");
   await navigator.serviceWorker.ready;
 
-  const keyRes = await fetch("/api/send-notifications?action=vapidKey");
-  const { publicKey } = keyRes.ok ? await keyRes.json() : {};
+  // apiFetch() (G80): uden den blev et manglende endpoint til "VAPID-nøgle
+  // mangler" — altså en påstand om serverens opsætning, udledt af et svar,
+  // serveren aldrig sendte.
+  const { res: keyRes, data: keyData } = await apiFetch("/api/send-notifications?action=vapidKey");
+  const publicKey = keyRes.ok ? keyData?.publicKey : null;
   if (!publicKey) throw new Error("Notifikationer er ikke sat op på serveren endnu (VAPID-nøgle mangler).");
 
   const sub = await reg.pushManager.subscribe({

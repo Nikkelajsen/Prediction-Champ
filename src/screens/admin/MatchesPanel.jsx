@@ -4,6 +4,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { RefreshCw, Loader2 } from "lucide-react";
 import { db } from "../../lib/supabase.js";
+import { apiFetch } from "../../lib/api.js";
 import { currentRoundIndex, formatKickoff, groupIntoRounds } from "../../lib/scoring.js";
 import { C, btnGold, font, muted } from "../../ui/theme.js";
 import { Card, RoundPager } from "../../ui/components.jsx";
@@ -39,8 +40,9 @@ function MatchesPanel({ token, leagues, reloadLeagues }) {
     if (!league) return;
     setSyncing(true); setSyncResult(null);
     try {
-      const res = await fetch(`/api/sync-matches?leagueId=${league.id}`, { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
+      // apiFetch() (G80): `res.json()` på udviklingsserverens index.html gav
+      // den rå parser-fejl `Unexpected token '/'` i knappens fejlfelt.
+      const { data } = await apiFetch(`/api/sync-matches?leagueId=${league.id}`, { headers: { Authorization: `Bearer ${token}` } });
       setSyncResult(data);
       await reloadLeagues();
       await loadData();

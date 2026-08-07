@@ -85,6 +85,23 @@ jobs:
           fejl=$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -c "select public.prune_client_errors(90);")
           echo "Ryddede $fejl fejlrapporter ældre end 90 dage."
 
+          # Og hændelsesloggen (G77). Den var indtil august 2026 den ENESTE
+          # tabel, der voksede med brugen uden loft: sql/analytics_events.sql
+          # foreskrev en oprydning "i hånden med jævne mellemrum", altså præcis
+          # det, docs/CRON.md skrev om prune_job_runs() før G43 — en rydning,
+          # ingen udførte.
+          #
+          # 18 måneder og ikke 90 dage: retention-matricen i Analytics går til
+          # uge 52, så et år-mod-år-blik kræver, at året før stadig findes.
+          # Tallet står også i privatlivspolitikken (src/lib/legal.js), og
+          # ENHEDEN er måneder netop derfor — et "550" her ville være det samme
+          # løfte skrevet, så det ikke kan genkendes.
+          #
+          # Spec'ens arkitekturvalg #3 ("intet nyt cron") er uændret: der er
+          # ikke oprettet et job, kun tilføjet et udsagn til et, der findes.
+          haendelser=$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -At -c "select public.prune_analytics_events(18);")
+          echo "Ryddede $haendelser hændelser ældre end 18 måneder fra analytics_events."
+
       # ---- Migreringernes VIRKNING (B16) ----
       #
       # Fire filer i sql/README.md ruller tavst noget nyere tilbage, hvis de
@@ -392,3 +409,54 @@ jobs:
             exit 1
           fi
           echo "Klokkeslættene ser troværdige ud."
+
+      # ---- 4. Er den GEMTE rating stadig sand? (G83) ----
+      #
+      # Den fjerde og sidste kontrol, og den dækker en fejlklasse, de tre andre
+      # ikke kan se. `kickoff_coverage` spørger, om det, syncen SKREV, er
+      # troværdigt. Denne spørger, om det, ingen skrev, er blevet forkert:
+      # ratingen udledes af en trigger på `matches`, og der findes veje uden om
+      # den — en gendannelse med `--disable-triggers` (RESTORE.md scenarie 1),
+      # et tip skrevet efter kampen, en turnering, der skifter `is_official`.
+      #
+      # I alle tre tilfælde er der ingen fejlbesked, intet job der fejler og
+      # ingen tom skærm — kun et tal, der er lidt forkert, indtil nogen
+      # tilfældigvis retter et resultat. Det var den eneste store afledte
+      # størrelse i appen helt uden bagstopper.
+      #
+      # Forespørgslen bor i sql/checks/ og ikke i en heredoc, af samme grund som
+      # kickoff-kontrollen: CI kører præcis den samme regel mod en tom database
+      # (sql/tests/rating_freshness.sql), så reglen kun findes ét sted.
+      #
+      # RETTELSEN, når den er rød, er ét kald: `select * from
+      # public.recompute_derived();` (sql/recompute_derived.sql). Alarmen har
+      # med vilje en knap.
+      - name: Tjek at ratingen er regnet på de nuværende data
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::error::Secret SUPABASE_DB_URL mangler. Tilføj den under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+          # `-q`, så `CREATE VIEW` ikke havner i rapporten. `-f` og `-c` deler
+          # session, så den temporære view findes, når der læses fra den — og
+          # forsvinder, når psql lukker. Der installeres intet i produktionen.
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -q -At -F'|' \
+            -f sql/checks/rating_freshness.sql \
+            -c "select manglende, foraeldede, overfloedige, sammenlignede, tilstand
+                  from rating_freshness" > rating.txt
+
+          IFS='|' read -r manglende foraeldede overfloedige sammenlignede tilstand < rating.txt
+          echo "Sammenlignede $sammenlignede (runde, bruger)-par."
+          echo "  manglende:    $manglende"
+          echo "  forældede:    $foraeldede"
+          echo "  overflødige:  $overfloedige"
+
+          if [ "$tilstand" != "ok" ]; then
+            echo "::error::Ratingen er ikke regnet på de nuværende data ($manglende manglende, $foraeldede forældede, $overfloedige overflødige). Kør 'select * from public.recompute_derived();' i Supabase SQL-editoren."
+            exit 1
+          fi
+          echo "Ratingen passer til de data, den er udledt af."

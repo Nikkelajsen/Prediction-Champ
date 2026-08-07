@@ -242,7 +242,39 @@ tærskel, vi ikke har data til at kalibrere. Forespørgslen bor i
 [`sql/checks/kickoff_coverage.sql`](../sql/checks/kickoff_coverage.sql) frem for
 i workflowen, så CI kan køre præcis den samme regel mod en tom database.
 Trinnet ligger **sidst** med vilje: et fejlende trin springer resten af jobbet
-over, og et tavst job er den dyrere af de to fejl.
+over, og et tavst job er den dyrere af de to fejl. *(Rettet 7. august 2026: der
+er nu ét trin efter det — se punkt 4. De to deler egenskaben, at de dømmer DATA
+og ikke kørsler, og de ligger begge efter helbredstjekket af samme grund.)*
+
+**4. `rating_freshness` — om det, INGEN skrev, er blevet forkert** (`G83`,
+7. august 2026). De tre lag ovenfor kan alle stå grønne, mens ratingen er
+forkert, for ratingen skrives af en trigger på `matches` — og der findes veje
+uden om triggeren. Den vigtigste er gendannelsen: `docs/RESTORE.md` scenarie 1
+foreskriver `pg_restore --disable-triggers`, netop for at indlæsningen ikke skal
+kalde `recompute_ratings()` midt i det hele, og efterlod indtil august 2026 alt
+det udledte forkert uden at sige det. De to andre er et tip skrevet efter
+kampen, og en turnering, der skifter `is_official` (kun officielle tæller, A17).
+
+I alle tre tilfælde er der ingen fejlbesked, intet job der fejler og ingen tom
+skærm — kun et tal, der er lidt forkert, indtil nogen tilfældigvis retter et
+resultat og udløser en genberegning. Det var den eneste store afledte størrelse
+i appen helt uden bagstopper.
+
+Kontrollen sammenligner `rating_history` med det aggregat, `recompute_ratings()`
+bygger sin Elo på, og melder tre tal: `manglende`, `foraeldede` og
+`overfloedige`. Den genberegner **ikke** Elo'en — det ville være at efterprøve
+en beregning med den selv; den delen dækkes af
+`sql/tests/rating_equivalence.sql` i CI. Forespørgslen bor i
+[`sql/checks/rating_freshness.sql`](../sql/checks/rating_freshness.sql), så CI
+kan køre præcis den samme regel mod en tom database.
+
+**Alarmen har en knap:** rettelsen er ét kald,
+`select * from public.recompute_derived();`
+([`sql/recompute_derived.sql`](../sql/recompute_derived.sql)), som regner rating,
+historier, kåringer, milepæle og milepæls-kort om i den bindende rækkefølge.
+Genberegningen er bevidst **ikke** sat på et skema: den er dyr (hele
+`rating_history` bygges fra runde nul) og hører til efter en hændelse. Det er
+kontrollen, der kører hvert kvarter, ikke arbejdet.
 
 **Job 4 og 11 overvåges af ingen af de to lag** — de skriver ikke i `job_runs`
 og optræder derfor ikke i Admin → Drift. De er selv GitHub Actions, så en fejlet
@@ -274,7 +306,13 @@ op i cron-job.org. Alarmgrænsen fulgte med fra 14 til 26 timer: 14 timer mod et
 overvåge — ét sprunget interval ville have larmet.
 
 `job_runs` ryddes med `prune_job_runs(30)`, som kaldes af `job-heartbeat.yml`
-før hvert helbredstjek. **Funktionen havde ingen kaldere overhovedet indtil
+før hvert helbredstjek. Samme trin rydder `client_errors` med
+`prune_client_errors(90)` og — siden `G77` (7. august 2026) — `analytics_events`
+med `prune_analytics_events(18)`. Den sidste er den, der voksede hurtigst:
+`sql/analytics_events.sql` foreskrev en rydning "i hånden med jævne mellemrum",
+altså præcis det, dette afsnit engang skrev om `prune_job_runs()`. **Der er ikke
+oprettet et job for den** — Analytics' arkitekturvalg #3 udelukker nyt cron, og
+en rydning mere i et job, der findes, er ét udsagn. **Funktionen havde ingen kaldere overhovedet indtil
 august 2026 (`G43`)** — dette afsnit beskrev en rydning, der ikke skete, mens
 `sync-live` alene lagde 1.440 rækker i tabellen i døgnet. Heartbeat'en er
 stedet, fordi den allerede har databaseadgangen og allerede kører på et skema:

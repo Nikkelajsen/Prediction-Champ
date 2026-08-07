@@ -36,7 +36,10 @@ const KONTAKT_EMAIL = "[KONTAKT-E-MAIL]";
 // Flyttet 5. august 2026 (`A25`): en lukket konto meldes nu af de konkurrencer,
 // der ikke er begyndt. Det er en ændring af, hvad der SKER med data ved en
 // lukning, og altså præcis det, datoen findes for at markere.
-const LEGAL_OPDATERET = "2026-08-05";
+// Flyttet igen 7. august 2026 (`G77`): brugsloggen slettes nu efter 18 måneder.
+// Ændringen er til brugerens fordel, og det gør den ikke mindre væsentlig —
+// hvor længe noget gemmes, er en af de få ting, en politik faktisk lover.
+const LEGAL_OPDATERET = "2026-08-07";
 
 const MINDSTEALDER = 13;
 
@@ -127,7 +130,8 @@ const PRIVATLIV = {
     {
       titel: "Hvor længe vi gemmer",
       tekst: [
-        "Så længe du har en konto. Vælger du at lukke den, sker der følgende med det samme:",
+        "Så længe du har en konto — med én undtagelse: din brugslog (hvad du åbner og gemmer) slettes automatisk, når den er 18 måneder gammel. Det sker af sig selv, uanset om du lukker kontoen eller ej.",
+        "Vælger du at lukke kontoen, sker der følgende med det samme:",
         {
           punkter: [
             "Din e-mail fjernes, og du kan ikke længere logge ind.",

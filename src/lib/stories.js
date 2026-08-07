@@ -100,46 +100,28 @@ export function isDailyQuiet(priority) {
 export const DAILY_MAX_CARDS = 1;
 
 // ---------------------------------------------------------------------------
-// v3 · NYHEDSVÆRDI (spec docs/features/story-engine-v3.md §4)
+// v3 · NYHEDSVÆRDI — OG HVORFOR DEN IKKE STÅR HER (G78, 7. august 2026)
 //
-//   nyhedsværdi = grundvægt + størrelse + nærhed
+//   nyhedsværdi = grundvægt + størrelse + nærhed   (spec §4)
 //
-// ALLE TAL HERUNDER STÅR OGSÅ I sql/story_engine_v3.sql OG SKAL VÆRE ENS.
-// Det er en værre fejltype end de dobbelt-vedligeholdte tekster: en afvigelse i
-// en grundvægt eller et nærhedsled giver ikke en fejl og ikke en forkert
-// formulering, men et ANDET kort — uden log, uden at nogen opdager det.
-// sql/tests/story_engine_daily.sql påstår de præcise news_value-tal netop
-// derfor. Backloggens G78 er opgaven med at fjerne dobbeltheden helt.
-export const BASE_WEIGHTS = {
-  MILESTONE: 100,       // vinder altid; kaprer dagens slot
-  DAY_TOP: 34,          // dagens højeste i konkurrencen
-  CONTRARIAN: 32,       // den eneste, der ramte
-  DUEL: 30,             // nærmeste rival flyttede sig
-  STREAK_STATUS: 28,    // stimen lever eller brød
-  COLLECTIVE_MISS: 24,  // ingen ramte
-  SO_CLOSE: 18,         // ≥2 nærmisser
-  DAY_RESULT: 8,        // ankeret — kan aldrig alene nå tærsklen
-};
-
-// Størrelse (0–30): tre bidrag med hver sit loft, summen loftet ved 30.
-// Størrelsen hører til HÆNDELSEN og dermed til hovedpersonen — ikke til
-// modtageren.
-export const SIZE_CAPS = { move: 18, over: 12, streak: 12, total: 30 };
-export const SIZE_RATES = { move: 6, over: 3, streak: 2, streakFrom: 5 };
-
-// Nærhed (0–20): det bidrag, der gør en fremmeds aften til brugerens historie.
-// Beregnes PR. MODTAGER — samme kamp giver forskellige kort til forskellige
-// brugere, og det er meningen.
-export const PROXIMITY = { self: 20, rival: 14, biggest: 8, other: 4 };
-
-// Publiceringstærsklen. Vinder ≥ 45 udgives som dagens historie med
-// ulæst-markering; herunder udgives et dæmpet DAY_RESULT uden.
+// Frem til august 2026 stod hele regnestykket ogsÅ her: otte grundvægte, tre
+// størrelseslofter med hver sin sats, fire nærhedsled, publiceringstærsklen og
+// selve udvælgelsen (`sizeOf`, `proximityOf`, `scoreDailyCandidates`,
+// `pickDay`). Det var en KOPI af sql/story_engine_v3.sql, og det er den værste
+// slags dobbelthed: en afvigelse i en grundvægt giver ikke en fejl og ikke en
+// forkert formulering, men et ANDET kort — uden log, uden at nogen opdager det.
 //
-// TALLET ER ET KVALIFICERET GÆT OG SKAL MÅLES, IKKE TROS (spec §5). Målet er,
-// at 40–60 % af kampdagene får ulæst-markering for en aktiv bruger. Over 70 %
-// er tærsklen for lav, og v3 har genskabt v2's problem i ny indpakning; under
-// 25 % er Hjem stille igen. Backloggens A35.
-export const PUBLISH_THRESHOLD = 45;
+// KOPIEN VAR DESUDEN DØD. Ikke én af de fire funktioner blev kaldt af appen;
+// motoren kører i databasen, og frontenden læser den færdige række. Deres
+// eneste aftagere var deres egne enhedstests — altså tal, der blev holdt i trit
+// med SQL'en for at holde en test grøn, som beviste, at de var i trit med
+// SQL'en. Tallene bor nu ét sted: sql/story_engine_v3.sql, hvor motoren er, og
+// sql/tests/story_engine_daily.sql påstår dem mod en rigtig PostgreSQL.
+//
+// TILBAGE ER ÉT SPØRGSMÅL, frontenden faktisk skal svare på: fortjener kortet
+// en ulæst-markering? Se `isNewsworthy()` nedenfor — svaret kræver ikke
+// tærsklen, og det er hele grunden til, at rækken kunne lukkes uden en
+// migrering, sådan som backloggen ellers forudsagde.
 
 // Svage varianter (v1.1). Tærsklen for tre regler er sænket, så de udløses oftere,
 // men den svage udgave får et højere prioritetstal og kan derfor kun vises, når der
@@ -176,79 +158,33 @@ export function priorityFor(rule, strength) {
   }
 }
 
-// Størrelsesbidraget for én kandidat (0–30). Spejler _sd_mag + stimeleddet i
-// sql/story_engine_v3.sql. `moved` er ABSOLUT: et fald er lige så meget drama
-// som en fremgang — tonen ligger i teksten, ikke i scoringen.
+// Fortjener kortet en ulæst-markering? Et badge, der lyser hver dag, er ikke et
+// signal, det er en baggrundsfarve.
 //
-// MILESTONE får bevidst nul. En milepæl er en engangsbedrift; dens vægt er, at
-// den er sket, ikke hvor mange pladser man tilfældigvis rykkede samme dag.
-// Uden det ville motoren og cron-kapringen score samme kort forskelligt.
-export function sizeOf(cand = {}) {
-  if (cand.rule === "MILESTONE") return 0;
-  const over = Math.min(SIZE_CAPS.over, SIZE_RATES.over * Math.max(0, Math.floor(cand.overAvg ?? 0)));
-  // DAY_RESULT får KUN afstanden til dagens gennemsnit — ikke placeringsændring
-  // og ikke stime. Det er spec §5's regnestykke, og det er et krav, ikke en
-  // detalje: "8 + 12 + 20 = 40 ... kommer derfor aldrig over tærsklen ved egen
-  // kraft. Det er tilsigtet: dagens facit er en oplysning, ikke en historie."
-  //
-  // Fik den hele størrelsesloftet, kunne den nå 58 og udgive sig selv som
-  // dagens historie — og så ville hele det dæmpede fald-tilbage være
-  // meningsløst, for der ville aldrig være en dag under tærsklen.
-  if (cand.rule === "DAY_RESULT") return over;
-  const move = Math.min(SIZE_CAPS.move, SIZE_RATES.move * Math.abs(cand.moved ?? 0));
-  const streak = Math.min(
-    SIZE_CAPS.streak,
-    SIZE_RATES.streak * Math.max(0, (cand.streak ?? 0) - SIZE_RATES.streakFrom),
-  );
-  return Math.min(SIZE_CAPS.total, move + over + streak);
-}
-
-// Nærheden mellem en kandidats hovedperson og én modtager (0–20).
-// `rel` er relationen, SQL'en allerede har afgjort: "self" | "rival" |
-// "biggest" | "other".
-export function proximityOf(rel) {
-  return PROXIMITY[rel] ?? PROXIMITY.other;
-}
-
-// Nyhedsværdien for hver kandidat. Kandidaterne bærer selv deres relation til
-// modtageren (`rel`), fordi den kun kan afgøres af stillingen, som SQL'en har.
-export function scoreDailyCandidates(candidates) {
-  return (candidates || []).map((c) => ({
-    ...c,
-    news_value: (BASE_WEIGHTS[c.rule] ?? 0) + sizeOf(c) + proximityOf(c.rel),
-  }));
-}
-
-// Dagens ENE kort. Højeste nyhedsværdi vinder.
+// SPØRGSMÅLET ER ALLEREDE BESVARET, når rækken skrives, og derfor står tærsklen
+// ikke her (G78). `generate_daily_stories()` har to udgange, og de er
+// udtømmende for et v3-dagskort:
 //
-// Afgørelse ved lige score (spec §4): højeste grundvægt → største konkurrence →
-// laveste rule alfabetisk. De sidste led er ikke i spec'en, men er nødvendige
-// for at to gen-kørsler giver SAMME kort (acceptkriterie 7) — uden dem er to
-// kandidater fra samme regel i samme konkurrence uadskillelige, og databasen
-// vælger frit. Rækkefølgen SKAL være den samme som `_sd_rank`'s ORDER BY i
-// sql/story_engine_v3.sql.
+//   · vinderen over tærsklen udgives med sin egen regels prioritet (110–160),
+//   · alt andet udgives som dæmpet DAY_RESULT med prioritet 180.
 //
-// Returnerer null ved ingen kandidater. Bemærk at der IKKE filtreres på
-// tærsklen her: den afgør, om vinderen udgives som historie eller erstattes af
-// det dæmpede fald-tilbage, og det valg træffes i SQL'en, som har DAY_RESULT-
-// kandidaten ved hånden.
-export function pickDay(scored) {
-  if (!scored || !scored.length) return null;
-  return scored.slice().sort((a, b) =>
-    (b.news_value ?? 0) - (a.news_value ?? 0) ||
-    (BASE_WEIGHTS[b.rule] ?? 0) - (BASE_WEIGHTS[a.rule] ?? 0) ||
-    (b.league_size ?? -1) - (a.league_size ?? -1) ||
-    String(a.rule).localeCompare(String(b.rule)) ||
-    String(a.competition_id ?? "").localeCompare(String(b.competition_id ?? "")) ||
-    String(a.headline ?? "").localeCompare(String(b.headline ?? "")),
-  )[0];
-}
-
-// Er kortet nået over tærsklen? Kun da fortjener det en ulæst-markering.
-// Et badge, der lyser hver dag, er ikke et signal, det er en baggrundsfarve.
+// Prioriteten er dermed selve afgørelsen, gemt på rækken. Dagens facit kan
+// aldrig nå tærsklen ved egen kraft (8 + 12 + 20 = 40 < 45, spec §5), så et
+// kort med prioritet under 180 ER et kort over tærsklen — og omvendt. Milepæls-
+// kapringen skriver 110 og passer ind i samme regel.
+//
+// At læse prioriteten er ikke en genvej, men den GRÆNSEFLADE, motoren selv
+// udpeger: sql/story_engine_v3.sql skriver, at prioriteten er beholdt netop
+// fordi tre ting uden for filen læser den, og `isDailyQuiet()` er den ene af de
+// tre. Invarianten er låst af en påstand i sql/tests/story_engine_daily.sql, så
+// en fremtidig tredje udgang ikke kan opstå i tavshed.
+//
+// `news_value != null` skiller v3 fra de historiske v2-rækker — samme
+// æra-markør som det unikke indeks i migreringen bruger. En v2-række har ingen
+// tærskel at være over.
 export function isNewsworthy(story) {
   if (!story) return false;
-  return (story.news_value ?? 0) >= PUBLISH_THRESHOLD && !isDailyQuiet(story.priority);
+  return story.news_value != null && !isDailyQuiet(story.priority);
 }
 
 // Udløb: et kort ældre end dette vises ikke, selvom rækken bliver stående.

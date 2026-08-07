@@ -36,6 +36,13 @@
 --      dagsmotoren kører kun, når en dag BLIVER færdig.
 --  12. latest_story ser kun runde-kort, og prioritetsbåndet 110–189 holder, så
 --      karriereprofilens filter (< 90) udelukker dagskort uden kodeændring.
+--  13. Karriereprofilen er uberørt (acceptkriterie 9).
+--  14. **PRIORITETEN ER TÆRSKLEN** (`G78`, august 2026): for hvert v3-dagskort
+--      gælder `priority < 180` ⟺ `news_value >= tærsklen`. Den påstand er hele
+--      grunden til, at tærsklen kunne fjernes fra `src/lib/stories.js`, hvor den
+--      stod som en kopi af `v_threshold`. Frontendens ulæst-markering læser nu
+--      prioriteten, og hvis motoren en dag får en TREDJE udgang, skal det
+--      opdages her frem for som et badge, der lyser den forkerte dag.
 --
 -- OM TIDSVINDUER: fixturen ligger i marts 2026, mens `now()` er hvad det er.
 -- apply_milestone_stories() måler alder mod `now()`, så testen kalder den med
@@ -690,6 +697,41 @@ begin
   end if;
   if exists (select 1 from public.milestones where payload = '{}'::jsonb) then
     raise exception 'FEJL 13b: en milepæls payload blev overskrevet';
+  end if;
+end $$;
+
+-- ---------- 14. Prioriteten ER tærsklen (G78) ----------
+-- Frontendens ulæst-markering læser `priority` og ikke `news_value`, fordi
+-- tærsklen ikke længere står i src/lib/stories.js. Det hviler på ÉN invariant,
+-- som denne blok er hele beviset for: motoren har præcis to udgange for et
+-- dagskort — vinderen over tærsklen med sin egen regels prioritet (110–160),
+-- og det dæmpede DAY_RESULT på 180 — og de to falder aldrig sammen.
+--
+-- Påstanden er skrevet med `v_threshold` som TAL og ikke som symbol med vilje:
+-- A35 kan flytte tærsklen, og så skal påstanden stadig holde. Den siger derfor
+-- ikke "45", men "de to sider er enige".
+do $$
+declare v_grænse int := 45;   -- v_threshold i generate_daily_stories()
+begin
+  if exists (
+    select 1 from public.stories
+     where period = 'day' and news_value is not null
+       and (priority < 180) <> (news_value >= v_grænse)
+  ) then
+    raise exception
+      'FEJL 14a: et dagskort, hvor prioritet og tærskel er UENIGE — frontendens ulæst-markering (isNewsworthy) læser prioriteten og ville tage fejl. Fandt: %',
+      (select string_agg(format('%s/%s/%s', rule, priority, news_value), ', ')
+         from public.stories where period = 'day' and news_value is not null
+          and (priority < 180) <> (news_value >= v_grænse));
+  end if;
+
+  -- Og at der FINDES kort i begge lejre. Uden dette ville påstanden ovenfor
+  -- være tom sandhed på en fixture, hvor alle kort tilfældigvis var dæmpede.
+  if not exists (select 1 from public.stories where period = 'day' and news_value is not null and priority < 180) then
+    raise exception 'FEJL 14b: fixturen har ingen kort OVER tærsklen — påstand 14a beviser da ingenting';
+  end if;
+  if not exists (select 1 from public.stories where period = 'day' and news_value is not null and priority = 180) then
+    raise exception 'FEJL 14c: fixturen har ingen DÆMPEDE kort — påstand 14a beviser da ingenting';
   end if;
 end $$;
 

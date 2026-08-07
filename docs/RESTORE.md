@@ -143,6 +143,35 @@ lægger triggere og constraints i post-data, altså efter alle `COPY`. Det er ku
 den delvise, data-only-indlæsning, der møder et færdigt skema med levende
 triggere.)*
 
+### 🔴 Og så: regn det afledte om
+
+**Dette trin er ikke valgfrit, og det er det, man glemmer.** `--disable-triggers`
+gør præcis det, den lover: rækkerne kommer ind, og *intet* bliver regnet. Bagefter
+står rating, historier, kåringer og milepæle på de gamle data — uden en fejl,
+uden et rødt job og uden en tom skærm. Kun tal, der er lidt forkerte.
+
+```bash
+# Efter at rækkerne er skrevet ind i produktion. Returnerer én række pr. trin;
+# ingen af dem må stå med "FEJLEDE". Samme kald virker i Supabase SQL-editoren.
+psql "$SUPABASE_DB_URL" -c 'select * from public.recompute_derived();'
+```
+
+Rækkefølgen inde i kaldet er bindende (rating → historier → kåringer → milepæle →
+milepæls-kort) og står forklaret i [`../sql/recompute_derived.sql`](../sql/recompute_derived.sql).
+
+**Bagefter: spørg, om det virkede.** Kontrollen svarer på præcis dette:
+
+```bash
+psql "$SUPABASE_DB_URL" -q -At -F'|' \
+  -f sql/checks/rating_freshness.sql \
+  -c 'select manglende, foraeldede, overfloedige, tilstand from rating_freshness'
+```
+
+`tilstand = ok` betyder, at den gemte rating igen passer til kildedataene.
+Kontrollen kører også af sig selv hver halve time i `job-heartbeat.yml`, så en
+glemt genberegning bliver fanget inden for en time — men vent ikke på den, når du
+alligevel står ved tastaturet.
+
 **Ét privilegie er ikke afklaret:** om `--disable-triggers` / `session_replication_role`
 er tilladt for `postgres`-rollen **i Supabase**. Det gælder kun, hvis man
 indlæser direkte i produktion — hvilket denne opskrift netop undgår. Afklares ved
@@ -181,8 +210,11 @@ Derefter, i denne rækkefølge:
 5. **cron-job.org:** liga-UUID'erne er nye, hvis `leagues`-rækkerne er det. De er
    det ikke efter en gendannelse fra dumpet — id'erne følger med. Tjek alligevel
    job-URL'erne mod [`CRON.md`](./CRON.md).
-6. **Admin → "Opdater ratings"**, og derefter Admin → Drift: alle jobs skal melde
-   sig inden for deres tavshedsgrænse.
+6. **`select * from public.recompute_derived();`** i SQL-editoren — den regner
+   rating, historier, kåringer, milepæle og milepæls-kort om i den rigtige
+   rækkefølge. (Admin → "Opdater ratings" dækker kun det første af de fem.)
+   Derefter Admin → Drift: alle jobs skal melde sig inden for deres
+   tavshedsgrænse.
 
 > **Kan dumpet ikke læses**, er repoet det, der er tilbage — og siden 5. august
 > 2026 rækker det til et *tomt, men komplet* miljø: `sql/schema.sql` giver hele
@@ -216,6 +248,9 @@ Har migreringen derimod ændret **data** (ikke kun regler), er det scenarie 1.
 
 ## Når gendannelsen er ovre
 
+- **Er det afledte regnet om?** Kør `select * from public.recompute_derived();`
+  hvis du er i tvivl — den er idempotent, så et unødvendigt kald koster kun tid.
+  Kontrollen `sql/checks/rating_freshness.sql` siger, om det var nødvendigt.
 - `select count(*) from job_runs where started_at > now() - interval '1 hour';`
   — skriver jobbene igen?
 - Åbn appen som almindelig bruger: kan man logge ind (auth kom med), se sine tips
