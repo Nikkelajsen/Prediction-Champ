@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict z7nquY8arZpf5bBlcDaIEjEW8ujtyWchKCK2ZhuUDojzaXDW2oPTKr2R4tXMVT3
+\restrict c3q6MbHqg4hMqguJtnbAFGmJJbKw8hRxt2v8WUrlXbIbef9NzDeW8UWEL5t8juG
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
@@ -1279,6 +1279,23 @@ begin
   from seneste s
   left join seneste_ok o on o.job = s.job
   order by s.job;
+end;
+$$;
+
+
+--
+-- Name: admin_recompute_derived(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admin_recompute_derived() RETURNS TABLE(trin text, resultat text, varighed interval)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if not exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  return query select * from public.recompute_derived();
 end;
 $$;
 
@@ -4288,6 +4305,28 @@ $$;
 
 
 --
+-- Name: prune_analytics_events(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prune_analytics_events(keep_months integer DEFAULT 18) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  n integer;
+begin
+  -- `greatest(1, …)` som i de to søskende: et kald med 0 eller et negativt tal
+  -- ville ellers tømme hele tabellen, og en rydning må ikke kunne blive til en
+  -- sletning ved en tastefejl i en workflow.
+  delete from public.analytics_events
+   where created_at < now() - make_interval(months => greatest(1, keep_months));
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+
+--
 -- Name: prune_client_errors(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4319,6 +4358,88 @@ begin
   delete from public.job_runs where started_at < now() - (keep_days || ' days')::interval;
   get diagnostics removed = row_count;
   return removed;
+end;
+$$;
+
+
+--
+-- Name: recompute_derived(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.recompute_derived() RETURNS TABLE(trin text, resultat text, varighed interval)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  t0 timestamptz;
+  v_n int;
+  c record;
+  v_awards int := 0;
+  v_comps  int := 0;
+begin
+  -- ---------- 1. Rating ----------
+  t0 := clock_timestamp();
+  begin
+    perform public.recompute_ratings();
+    select count(*) into v_n from public.rating_history where scope = 'ALL';
+    trin := 'rating'; resultat := v_n || ' rækker i rating_history';
+  exception when others then
+    trin := 'rating'; resultat := 'FEJLEDE: ' || sqlerrm;
+  end;
+  varighed := clock_timestamp() - t0; return next;
+
+  -- ---------- 2. Historier ----------
+  -- `p_grace => 0`: bagstopperen springer normalt de seneste to dage over,
+  -- fordi en dag kan få flere resultater endnu. Efter en gendannelse er der
+  -- ingen grund til at vente — de data, der findes, er dem, der kommer.
+  t0 := clock_timestamp();
+  begin
+    select public.generate_stories_catchup(0) into v_n;
+    trin := 'historier'; resultat := v_n || ' dage/runder efterfyldt';
+  exception when others then
+    trin := 'historier'; resultat := 'FEJLEDE: ' || sqlerrm;
+  end;
+  varighed := clock_timestamp() - t0; return next;
+
+  -- ---------- 3. Lokale kåringer ----------
+  -- Kun konkurrencer, der har slået dem til. Funktionen er lazy og ville ellers
+  -- først skrive, når nogen åbnede boardet (B11).
+  t0 := clock_timestamp();
+  begin
+    for c in
+      select id from public.competitions
+       where coalesce((mode_params->>'awards')::boolean, false)
+       order by created_at
+    loop
+      v_comps := v_comps + 1;
+      v_awards := v_awards + coalesce(public.award_competition_periods(c.id), 0);
+    end loop;
+    trin := 'kåringer'; resultat := v_awards || ' nye i ' || v_comps || ' konkurrencer';
+  exception when others then
+    trin := 'kåringer'; resultat := 'FEJLEDE: ' || sqlerrm;
+  end;
+  varighed := clock_timestamp() - t0; return next;
+
+  -- ---------- 4. Milepæle ----------
+  t0 := clock_timestamp();
+  begin
+    select public.award_milestones(null) into v_n;
+    trin := 'milepæle'; resultat := v_n || ' nye';
+  exception when others then
+    trin := 'milepæle'; resultat := 'FEJLEDE: ' || sqlerrm;
+  end;
+  varighed := clock_timestamp() - t0; return next;
+
+  -- ---------- 5. Milepæls-kort ----------
+  -- SKAL stå efter 4. Se rækkefølgen i hovedet.
+  t0 := clock_timestamp();
+  begin
+    select public.apply_milestone_stories() into v_n;
+    trin := 'milepæls-kort'; resultat := v_n || ' dagskort kapret';
+  exception when others then
+    trin := 'milepæls-kort'; resultat := 'FEJLEDE: ' || sqlerrm;
+  end;
+  varighed := clock_timestamp() - t0; return next;
 end;
 $$;
 
@@ -6747,6 +6868,15 @@ GRANT ALL ON FUNCTION public.admin_job_health() TO service_role;
 
 
 --
+-- Name: FUNCTION admin_recompute_derived(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.admin_recompute_derived() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.admin_recompute_derived() TO authenticated;
+GRANT ALL ON FUNCTION public.admin_recompute_derived() TO service_role;
+
+
+--
 -- Name: FUNCTION admin_recompute_ratings(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -6949,6 +7079,14 @@ GRANT ALL ON FUNCTION public.pc_points(ph integer, pa integer, hs integer, as_ i
 
 
 --
+-- Name: FUNCTION prune_analytics_events(keep_months integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.prune_analytics_events(keep_months integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.prune_analytics_events(keep_months integer) TO service_role;
+
+
+--
 -- Name: FUNCTION prune_client_errors(keep_days integer); Type: ACL; Schema: public; Owner: -
 --
 
@@ -6963,6 +7101,14 @@ GRANT ALL ON FUNCTION public.prune_client_errors(keep_days integer) TO service_r
 GRANT ALL ON FUNCTION public.prune_job_runs(keep_days integer) TO anon;
 GRANT ALL ON FUNCTION public.prune_job_runs(keep_days integer) TO authenticated;
 GRANT ALL ON FUNCTION public.prune_job_runs(keep_days integer) TO service_role;
+
+
+--
+-- Name: FUNCTION recompute_derived(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.recompute_derived() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.recompute_derived() TO service_role;
 
 
 --
@@ -7350,5 +7496,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict z7nquY8arZpf5bBlcDaIEjEW8ujtyWchKCK2ZhuUDojzaXDW2oPTKr2R4tXMVT3
+\unrestrict c3q6MbHqg4hMqguJtnbAFGmJJbKw8hRxt2v8WUrlXbIbef9NzDeW8UWEL5t8juG
 
