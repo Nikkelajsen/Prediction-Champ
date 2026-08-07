@@ -15,6 +15,36 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 7. august 2026 — "Read-only" er to spørgsmål: rører den data, og efterlader den noget?
+
+**Beslutning (`A37`):** forespørgslen, der aflæser, om en liga står uden en
+levende administrator, flyttes fra `sql/dev/` til `sql/checks/` og skrives som en
+**temporær view** — samme form som `kickoff_coverage.sql` (`G84`). Den er nu det
+eneste af dagens to opslag, der må køres mod produktionen.
+
+**Begrundelsen er, at det første udkast var forkert på en måde, der ikke lyste
+op.** Filen blev kaldt read-only, og målt på data var den det: to `stable`
+funktioner, ingen `insert`, ingen `update`. Men den installerede et skema og to
+funktioner, som ville blive stående, til nogen huskede at droppe dem — og en
+`create function` uden et eksplicit `revoke` får `execute` til `PUBLIC` som
+default. At ingen rolle kan nå den, skyldes her, at ingen har `usage` på skemaet;
+altså en default, ikke en beslutning. Det er samme klasse som `G50`/`G58`, hvor
+pointen netop var, at bredden skal være en **regel** og ikke en liste over ting,
+der tilfældigvis ikke er ramt.
+
+**Reglen, der kommer ud af det, er kort nok til at huske:** *rører den data* og
+*efterlader den noget* er to spørgsmål, og "read-only" besvarer kun det første.
+Alt, der køres mod produktionen, skal svare nej til begge — og `sql/checks/`
+er den form, der garanterer det andet.
+
+**Det er ikke en ny model, det er den, der lige var skrevet ned.** `G84`s
+leverance (5. august) sluttede med sætningen om, at en temporær view installerer
+intet i produktionen og alligevel kan efterprøves i CI, og at modellen var værd
+at genbruge næste gang en kontrol skulle skrives. Næste gang kom to dage senere,
+og modellen blev ikke brugt, før nogen spurgte. **En model, der kun står i en
+changelog, er ikke en model** — derfor står vilkåret nu i `sql/README.md`s
+mappetabel, hvor man læser det, før man vælger mappe.
+
 ## 7. august 2026 — En uigenkaldelig funktion prøves af mod `schema.sql`, ikke mod staging
 
 **Beslutning (`G76`):** den første kørsel af `anonymize_my_account()` blev lagt i

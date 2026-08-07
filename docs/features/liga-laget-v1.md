@@ -205,8 +205,8 @@ Rækkefølgen respekterer roadmappens tommelfingerregel: Story Engine-kalibrerin
 > nemlig sin opretter. Efterprøvet under ægte RLS 7. august 2026 (fem forsøg fra
 > et almindeligt medlem, fem afvisninger). Eneste vej ud i dag er manuel SQL.
 > Spørgsmålet om, hvad der SKAL ske, er `A37` i `docs/BACKLOG.md`; opslaget, der
-> viser, om en liga allerede står sådan, er `rehearsal.leagues()` i
-> `sql/dev/anonymize_rehearsal.sql`.
+> viser, om en liga allerede står sådan, er
+> `sql/checks/league_admin_coverage.sql` (dækket af en test i CI).
 
 - **Medlems-administration** (admin fjerner/forfremmer medlemmer) — lille brugerbase af venner; udskydes til behovet opstår.
 - **Liga-identitet** (ikon, farve, beskrivelse) — navn er nok til at bevise strukturen.

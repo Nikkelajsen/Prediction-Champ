@@ -1,40 +1,43 @@
 -- =============================================================================
--- PRØVEKØRSEL AF KONTOLUKNINGEN — STAGING (og ét opslag, der må køres i drift)
+-- PRØVEKØRSEL AF KONTOLUKNINGEN — KUN STAGING
 -- =============================================================================
 --
 -- Formålet: at kunne SE, hvad `anonymize_my_account()` gør, før den køres på et
--- menneske. Filen skriver ingenting selv — den installerer to opslag, som
--- læses før og efter kørslen, så forskellen kan aflæses frem for formodes.
+-- menneske. Filen rører ingen DATA — men den er **ikke** harmløs i produktion,
+-- se advarslen nedenfor.
 --
 -- Rækken hedder `G76` i `docs/BACKLOG.md`. Anonymiseringen er **uigenkaldelig**
 -- og havde aldrig kørt på en rigtig database, da filen blev skrevet.
 --
 -- ---------------------------------------------------------------------------
--- HVORFOR TO OPSLAG OG IKKE ÉT
+-- 🛑 KØR IKKE DENNE FIL I PRODUKTION
+--
+-- Filen INSTALLERER noget: et skema og en funktion, som bliver stående, til
+-- nogen dropper dem. Det er præcis det, `sql/checks/`-modellen findes for at
+-- undgå — en forespørgsel, der skal køres mod produktion, skrives som en
+-- **temporær** view, der kun lever i sin egen psql-session (`G84`, 7. august
+-- 2026). En `create function` uden et eksplicit `revoke` får desuden `execute`
+-- til `PUBLIC` som default; her er den utilgængelig alene fordi ingen rolle har
+-- `usage` på skemaet, og "utilgængelig på grund af en default" er nøjagtig den
+-- slags bredde, `G50`/`G58` blev kørt for at fjerne.
+--
+-- **Skal du aflæse produktionen, er filen `sql/checks/league_admin_coverage.sql`.**
+-- Den installerer intet, er dækket af `sql/tests/league_admin_coverage.sql` i
+-- CI, og den svarer på det spørgsmål (`A37`), som denne fil oprindeligt bar.
+--
+-- ---------------------------------------------------------------------------
+-- HVAD OPSLAGET SVARER PÅ
 --
 -- `rehearsal.report()` svarer på "hvad skete der med brugeren?" og er hele
 -- kontrakten i `sql/liga_admin.sql` stillet op som før/efter: det personlige
 -- ryddes, historikken bevares, og deltagelser i konkurrencer, der ikke er
 -- begyndt, forsvinder (`A25`).
 --
--- `rehearsal.leagues()` svarer på noget andet, og det er dét, `A36` handler om:
--- hvad ligaen ser, når et af dens medlemmer er lukket. Den kan ikke aflæses på
--- brugeren, kun på LISTEN — og den har en kolonne, der ikke handler om
--- pseudonymet: `levende_admins`.
+-- Medlemslisten — altså `A36` og `A37` — læses IKKE herfra. Den læses med
+-- `sql/checks/league_admin_coverage.sql`, som virker begge steder:
 --
--- **`levende_admins = 0` er en liga, ingen kan administrere mere.** Admin-rollen
--- kan kun uddeles ÉN gang, ved oprettelsen, af opretteren selv
--- (`group_members_insert_self` tillader `role = 'admin'`, når
--- `groups.created_by = auth.uid()`), og der findes ingen UPDATE-policy på
--- `group_members`, altså ingen forfremmelse — det er bevidst udskudt fra v1
--- (`docs/features/liga-laget-v1.md`). En lukket konto kan aldrig logge ind igen
--- (`api/delete-account.js` soft-sletter `auth.users`), så `is_group_admin()`
--- kan aldrig blive sand for den liga igen. Ligaen kan derefter hverken omdøbes,
--- slettes, få fjernet en deltager eller få slettet en konkurrence. Nogensinde.
---
--- Rækken hedder `A37`, og opslaget er skrevet, så det kan køres **mod
--- produktionen** som et rent læse-opslag: det svarer på, om nogen liga allerede
--- står sådan.
+--   \ir ../checks/league_admin_coverage.sql
+--   select * from league_admin_coverage order by levende_admins, liga;
 --
 -- ---------------------------------------------------------------------------
 -- SÅDAN BRUGES DEN (staging, SQL-editoren, "Run without RLS")
@@ -43,7 +46,6 @@
 --
 --   2. Find testkontoen og læs FØR-billedet:
 --        select * from rehearsal.report('<bruger-id>');
---        select * from rehearsal.leagues('<bruger-id>');
 --
 --   3. Luk kontoen. I SQL-editoren findes der ingen `auth.uid()`, så det er
 --      kroppen, der kaldes — nøjagtig den, begge indgange bruger:
@@ -53,11 +55,13 @@
 --      `auth.users`), skal det gøres fra appen mod staging; RPC'en her er kun
 --      databasehalvdelen.
 --
---   4. Læs EFTER-billedet med de samme to kald. Kør gerne trin 3 en gang til:
+--   4. Læs EFTER-billedet med det samme kald. Kør gerne trin 3 en gang til:
 --      funktionen er idempotent og skal svare det samme pseudonym uden at
 --      flytte `anonymized_at`.
 --
---   5. Ryd op, når du er færdig:  drop schema rehearsal cascade;
+--   5. **Ryd op, når du er færdig:**  drop schema rehearsal cascade;
+--      Det er ikke pænhed — det er, hvad der gør denne fil forskellig fra en
+--      migrering: den efterlader intet, fordi den ikke er en del af skemaet.
 --
 -- ---------------------------------------------------------------------------
 -- Idempotent. Kan gen-køres.
@@ -66,7 +70,7 @@
 create schema if not exists rehearsal;
 
 -- ---------------------------------------------------------------------------
--- 1) Brugeren: hvad ryddes, hvad bevares
+-- Brugeren: hvad ryddes, hvad bevares
 -- ---------------------------------------------------------------------------
 create or replace function rehearsal.report(p_user_id uuid)
 returns table (felt text, vaerdi text)
@@ -128,46 +132,9 @@ as $fn$
 $fn$;
 
 -- ---------------------------------------------------------------------------
--- 2) Ligaerne: hvad listen viser — og om nogen kan administrere den (A36/A37)
--- ---------------------------------------------------------------------------
--- Kaldes med en bruger for at se netop dennes ligaer, eller med `null` for at
--- se dem ALLE. Sidstnævnte er det opslag, der må køres mod produktionen: det
--- læser kun, og det svarer på, om der allerede findes en liga uden en levende
--- administrator.
-create or replace function rehearsal.leagues(p_user_id uuid default null)
-returns table (
-  liga            text,
-  medlemmer       bigint,
-  lukkede         bigint,
-  levende_admins  bigint,
-  opretter_lukket boolean,
-  medlemsliste    text
-)
-language sql
-stable
-as $fn$
-  select
-    g.name,
-    count(*),
-    count(*) filter (where p.anonymized_at is not null),
-    count(*) filter (where gm.role = 'admin' and p.anonymized_at is null),
-    (select op.anonymized_at is not null from public.profiles op where op.id = g.created_by),
-    string_agg(
-      p.display_name || case when gm.role = 'admin' then ' (admin)' else '' end
-                     || case when p.anonymized_at is not null then ' · LUKKET' else '' end,
-      ', ' order by p.display_name)
-  from public.groups g
-  join public.group_members gm on gm.group_id = g.id
-  join public.profiles p       on p.id = gm.user_id
-  where p_user_id is null
-     or exists (select 1 from public.group_members me
-                 where me.group_id = g.id and me.user_id = p_user_id)
-  group by g.id, g.name, g.created_by
-  order by 4, g.name;   -- ligaer uden levende admin først
-$fn$;
-
--- ---------------------------------------------------------------------------
--- Verifikation efter kørsel: begge funktioner findes og kan kaldes.
---   select * from rehearsal.leagues();          -- alle ligaer, de frosne først
+-- Verifikation efter kørsel: funktionen findes og kan kaldes.
 --   select * from rehearsal.report('<id>');
+--
+-- Medlemslisten (`A36`/`A37`) læses med sql/checks/league_admin_coverage.sql,
+-- som virker både her og mod produktion.
 -- ---------------------------------------------------------------------------
