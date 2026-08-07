@@ -339,7 +339,7 @@ lå i repoet hele tiden.
 
 | # | Hvad | Hvorfor her |
 |---|---|---|
-| `G81` | **Aflæs, hvad football-data.org faktisk sender, når tiden ikke er fastsat** | Ét kald: `&dryRun=true` mod en football-data-liga med runder langt ude i fremtiden, og se på tidsfeltet. Kræver et deploy og et admin-token, altså ejeren. **Forudsætningen er efterprøvet 7. august 2026:** forhåndsvisningen bærer BEGGE rå felter uændret — `kickoff` er `m.utcDate` ordret og `state` er `m.status` ordret (`api/_providers/footballdata.js:90,102`) — så det ene kald svarer faktisk på spørgsmålet. Champions League er den rigtige at kalde: `/api/sync-matches?leagueId=<CL's id>&dryRun=true`, hvor slutspilsrunderne ligger måneder ude. |
+| `G81` | **Aflæs, hvad football-data.org faktisk sender, når tiden ikke er fastsat** | Ét kald: `&dryRun=true` mod en football-data-liga med runder langt ude i fremtiden, og se på tidsfeltet. Kræver et deploy og et admin-token, altså ejeren. **Forudsætningen er efterprøvet 7. august 2026:** forhåndsvisningen bærer BEGGE rå felter uændret — `kickoff` er `m.utcDate` ordret og `state` er `m.status` ordret (`api/_providers/footballdata.js:90,102`) — så det ene kald svarer faktisk på spørgsmålet. **Trin-for-trin-guide: [`features/flere-datakilder-v1.md`](./features/flere-datakilder-v1.md) §10.** ⚠️ **Kald IKKE bare Champions League**, som denne række først foreslog: dens 2026-sæson fandtes ikke hos leverandøren så sent som 1. august (§7.3), og en tom sæson svarer ingenting. Guidens trin 1 finder i stedet den turnering, hvor vi SELV tror, der står pladsholdere — og svarer samtidig "vent", hvis der lige nu ingen er. |
 
 *Alt nedenfor er historik: tieret er kørt tomt fire gange, alle fire 5. august 2026.*
 

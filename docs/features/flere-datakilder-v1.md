@@ -366,3 +366,116 @@ live slået til", hvilket er præcis den verden, migreringen endnu ikke har
    update public.leagues set is_visible = true where provider = 'footballdata';
    ```
    `is_official` forbliver `false`.
+
+---
+
+## 10. Aflæsning: hvad sender football-data.org, når tiden ikke er fastsat? (`G81`)
+
+**Status: ikke udført.** Rækken er `G81` i [`../BACKLOG.md`](../BACKLOG.md) og er
+det eneste punkt i Tier 1, der stadig kræver en adgang, arbejdsmaskinen ikke
+har. Guiden findes, fordi aflæsningen er billig og let at gøre forkert.
+
+### Hvorfor den skal laves
+
+`isMidnightPlaceholder()` (`api/_providers/kickoff.js`) er den ene regel, begge
+leverandører deles om: står der `00:00:00` i tidsfeltet, er klokkeslættet ikke
+fastsat. Filens eget hoved kalder midnat-testen "AFLÆST, ikke antaget" — men det,
+der blev aflæst, er, at en kamp gemt med 00:00 UTC vises som 02.00 i appen,
+altså at værdien går **ordret** igennem. Det er ikke det samme som at have set
+football-data.org sende midnat for en kamp uden fastsat tid.
+
+**Antagelsen er af samme slags som den, der allerede er afkræftet én gang.**
+2. august 2026 blev `status === "SCHEDULED"` valgt som markør ud fra
+leverandørens dokumentation; 6. august viste dataene, at den ikke holdt, og i
+mellemtiden stod alle fem football-data-turneringer uden klokkeslæt i fire døgn.
+Fejlretningen erstattede altså én udokumenteret aflæsning med en anden.
+
+### Trin 0 — bekræft, at deployet er i drift
+
+Springes dette over, aflæser man en gammel version og tror, man har et svar.
+Det er ikke hypotetisk: `B8` blev aflæst tre gange som kodens resultat, mens
+svaret kom fra en version, der var to merges gammel (§7.3). **Et uændret symptom
+efter en merge er ikke et resultat.**
+
+Åbn Vercel → Deployments og bekræft, at seneste commit på `main` er udrullet og
+grøn.
+
+### Trin 1 — find den rigtige turnering at kalde (i VORES data)
+
+Dette trin er det vigtigste, og det er det, der er let at springe over. Kald
+ikke bare Champions League: dens 2026-sæson fandtes ikke hos leverandøren så
+sent som 1. august 2026 (§7.3), og en tom sæson svarer ingenting. Find i stedet
+den turnering, hvor vi **selv** tror, der står pladsholdere:
+
+```sql
+select l.name                                            as turnering,
+       l.api_league_id                                   as kode,
+       s.api_season_id                                   as saeson,
+       l.id                                              as league_id,
+       count(*) filter (where m.kickoff_at >= now())      as kommende,
+       count(*) filter (where m.kickoff_at >= now()
+                          and m.kickoff_tbd)              as uden_tid,
+       min(m.kickoff_at) filter (where m.kickoff_at >= now()
+                                   and m.kickoff_tbd)     as foerste_uden_tid
+  from public.leagues l
+  join public.seasons s on s.league_id = l.id
+  left join public.matches m on m.season_id = s.id
+ where l.provider = 'footballdata'
+ group by l.id, l.name, l.api_league_id, s.api_season_id
+ order by 6 desc nulls last, 1;
+```
+
+Vælg rækken med det højeste `uden_tid`. Er `uden_tid` **nul overalt**, er der
+lige nu ingen pladsholdere at aflæse — så er svaret at vente, til en runde langt
+ude i fremtiden dukker op, frem for at kalde i blinde. Noter `league_id`.
+
+### Trin 2 — hent hemmeligheden
+
+Vercel → Settings → Environment Variables → **`SYNC_SECRET`**. Det er den
+nemmeste vej ind: den anden (`Authorization: Bearer <bruger-JWT>`) kræver, at
+man river et token ud af browseren, og den giver ikke et bedre svar.
+
+### Trin 3 — kald forhåndsvisningen
+
+```bash
+curl -s -H "x-sync-secret: $SYNC_SECRET" \
+  "https://<app>/api/sync-matches?leagueId=<league_id>&dryRun=true" | jq .
+```
+
+`dryRun=true` skriver **intet** til databasen og logger ikke en kørsel i
+`job_runs` (`createRunLogger(..., { skip: dryRun })`). Kaldet er ufarligt og kan
+gentages.
+
+### Trin 4 — læs svaret
+
+Forhåndsvisningen bærer begge rå felter **uændret**, og det er derfor det ene
+kald kan besvare spørgsmålet:
+
+| Felt i svaret | Kommer ordret fra | Kilde |
+|---|---|---|
+| `sample[].kickoff` | `m.utcDate` | `api/_providers/footballdata.js:90` |
+| `sample[].state` | `m.status` | `api/_providers/footballdata.js:102` |
+| `sample[].kickoffTbd` | **vores tolkning** af `kickoff` | `kickoffTbdOf()` |
+
+Find de rækker i `sample`, hvor `kickoffTbd` er `true`, og se på deres
+`kickoff`. Tre mulige udfald:
+
+1. **`"2026-11-04T00:00:00Z"` — midnat, ordret.** Antagelsen holder.
+   `isMidnightPlaceholder()` er nu aflæst og ikke gættet. Rækken lukkes, og
+   kommentaren i `kickoff.js` rettes fra "AFLÆST" (om noget andet) til en
+   henvisning til denne aflæsning med dato.
+2. **Noget andet — fx `null`, `"2026-11-04"` uden tidsdel, eller et rigtigt
+   klokkeslæt.** Så er reglen forkert, og det er et fund og ikke en skuffelse:
+   `isMidnightPlaceholder()` skal skrives om, og `matches.kickoff_tbd` er
+   forkert for de kampe, den har ramt. Kontrollen
+   `sql/checks/kickoff_coverage.sql` er den, der siger, hvor bredt.
+3. **`sample` er tom, eller `totalFixtures` er 0.** Så svarede turneringen ikke.
+   Kig på `emptySeason` i svaret — diagnosen fra §7.1 forklarer sig selv i
+   klartekst. Gå tilbage til trin 1 og vælg en anden turnering.
+
+### Trin 5 — skriv svaret ned, uanset hvad det er
+
+Aflæsningens værdi er, at den lukker en antagelse. Et svar, der kun står i en
+terminal, er ikke en aflæsning — noter det i `kickoff.js`' hoved med **dato**,
+og luk `G81` i backloggen. Blev udfaldet nr. 2, hører rettelsen og aflæsningen
+sammen i samme leverance.
