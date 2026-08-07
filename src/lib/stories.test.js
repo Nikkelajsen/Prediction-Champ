@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DAILY_QUIET_MIN, DAILY_RULES, isDailyQuiet, isFresh, isNewsworthy, isQuiet, pickDay, pickStory, priorityFor, PUBLISH_THRESHOLD, QUIET_TIER_MIN, renderFrame, renderStory, RULES, scoreDailyCandidates, sizeOf, SOFT_PRIORITY, THRESHOLDS, usableFrames } from "./stories.js";
+import { DAILY_QUIET_MIN, DAILY_RULES, DAY_CARD_MAX_AGE_MS, isDailyQuiet, isFresh, isNewsworthy, isQuiet, pickDay, pickStory, priorityFor, PUBLISH_THRESHOLD, QUIET_TIER_MIN, renderFrame, renderStory, ROUND_STORY_MAX_AGE_MS, RULES, scoreDailyCandidates, sizeOf, SOFT_PRIORITY, THRESHOLDS, usableFrames } from "./stories.js";
 
 // Testcases spejler docs/features/story-engine-v1.md afsnit 9 (det der kan
 // udtrykkes rent i JS; DB-idempotens og trigger-adfærd verificeres i skyggetilstand).
@@ -385,13 +385,33 @@ describe("ulæst-markering og udløb (v3)", () => {
     expect(isNewsworthy({ news_value: 90, priority: 180 })).toBe(false);
   });
 
-  it("udløber efter 48 timer", () => {
+  it("dagskortet udløber efter 48 timer", () => {
     const now = Date.parse("2026-03-05T12:00:00Z");
     const at = (h) => ({ created_at: new Date(now - h * 3600e3).toISOString() });
     expect(isFresh(at(47), now)).toBe(true);
     expect(isFresh(at(49), now)).toBe(false);
     expect(isFresh({}, now)).toBe(false);
     expect(isFresh({ created_at: "ikke en dato" }, now)).toBe(false);
+  });
+
+  // Rundestoryen har et ANDET ur. Dagskortet handler om én aften og bliver en
+  // løgn efter to døgn; ugens konklusion skal leve, indtil den nye runde har
+  // noget at fortælle. Den afløsning sker i visningsreglen (et nyere dagskort),
+  // ikke her — loftet er kun værnet mod sæsonpausen.
+  it("rundestoryen lever hele den følgende runde", () => {
+    const now = Date.parse("2026-03-05T12:00:00Z");
+    const at = (d) => ({ created_at: new Date(now - d * 24 * 3600e3).toISOString() });
+    // Fire dage inde i den følgende runde: stadig i live, hvor et dagskort for
+    // længst ville være væk.
+    expect(isFresh(at(4), now, ROUND_STORY_MAX_AGE_MS)).toBe(true);
+    expect(isFresh(at(4), now)).toBe(false);
+    // To runder senere uden en eneste kampdag = sæsonpause. Så skal den væk,
+    // ellers står den sidste runde før pausen på Hjem i månedsvis.
+    expect(isFresh(at(15), now, ROUND_STORY_MAX_AGE_MS)).toBe(false);
+  });
+
+  it("rundestoryens loft er mindst en hel runde længere end dagskortets", () => {
+    expect(ROUND_STORY_MAX_AGE_MS).toBeGreaterThan(DAY_CARD_MAX_AGE_MS + 7 * 24 * 3600e3);
   });
 });
 
