@@ -63,6 +63,17 @@ Anonymisering går uden om begge, fordi `profiles`-rækken bliver stående.
 
 *Rettet efter levering (5. august 2026, `A25`): sætningen gælder kun den ene retning, og det er dén, `A25`s framelding bruger. Invarianten er "deltager ⇒ medlem", så en sletning i **deltager**-enden bryder den ikke — det er kun den modsatte, at fjerne medlemskabet og beholde deltagelsen, der genskaber den forældreløse tilstand. Ligamedlemskabet står derfor urørt efter en framelding, og en lukket konto kan ende som ligamedlem uden en eneste deltagelse. Det er en helt almindelig tilstand i skemaet — men det er også et pseudonym på en liste, og den halvdel er noteret i backloggens indbakke frem for løst her.*
 
+*Rettet efter levering (7. august 2026): den halvdel hedder nu `A36` og er
+**stadig ikke afgjort** — men prøvekørslen af hele funktionen (`G76`) fandt, at
+det efterladte medlemskab er værre end kosmetisk, når den lukkede konto var
+ligaens **administrator**. Admin-rollen kan kun uddeles ved oprettelsen, der
+findes ingen forfremmelse, og en lukket konto kan aldrig logge ind igen — så
+ligaen kan aldrig administreres igen. Det er `A37`, og det er grunden til, at
+`A36` ikke må afgøres først: fjernes den lukkede konto fra medlemslisten,
+forsvinder også det eneste synlige spor af, hvorfor ligaen er frossen. Selve
+tabellen ovenfor er efterprøvet mod produktionsskemaet under ægte RLS ved samme
+kørsel, og hver eneste linje holdt.*
+
 `anonymize_my_account()` har **nul parametre**. Det er hele adgangsgarantien: der findes ikke et bruger-id at forfalske. `sql/tests/account_anonymization.sql` efterprøver det mekanisk med et `pg_proc`-opslag.
 
 ## 7. Endpointet

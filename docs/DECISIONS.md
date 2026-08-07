@@ -15,6 +15,52 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 7. august 2026 — En uigenkaldelig funktion prøves af mod `schema.sql`, ikke mod staging
+
+**Beslutning (`G76`):** den første kørsel af `anonymize_my_account()` blev lagt i
+en lokal PostgreSQL med `sql/schema.sql` kørt ind — ikke i staging, som rækken
+selv foreskrev — og rækken blev derefter **delt i to** frem for lukket.
+
+**Begrundelsen er, at rækken beskrev ét miljø og to opgaver.** Det, der bar
+risikoen, var en uigenkaldelig SQL-funktion, som aldrig havde rørt andet end et
+håndskrevet minischema i CI. Til dét spørgsmål er `sql/schema.sql` ikke en
+erstatning for produktionsskemaet — den **er** produktionsskemaet, den ligger i
+repoet, og den kan køres på et minut. Staging tilføjer ikke ét gram troværdighed
+til det svar; den tilføjer noget helt andet, nemlig knappen i Profil,
+`api/delete-account.js` og soft-sletningen i `auth.users`. **Den halvdel kan SQL
+ikke nå, og den er derfor stadig Tier 1.**
+
+Det er samme indsigt som `G74` traf 5. august, bare brugt et nyt sted: dér blev
+`schema.sql` svaret på "kan docs' SQL-blokke tjekkes uden produktionsadgang?", og
+her er den svaret på "kan en migreringsfunktion prøves af uden en database?". **Den
+generelle regel er værd at skrive ned:** et spørgsmål om SKEMA kan besvares i
+repoet; et spørgsmål om MILJØ kan ikke. En række, der blander de to, er to rækker.
+
+**Prisen, sagt højt:** en lokal kørsel har ingen rigtige data, så den kan ikke
+finde det, der kun gælder for produktionens rækker. Den kan kun efterprøve
+reglerne. Det var også præcis det, der skulle efterprøves her — men det er ikke
+et argument, der holder for enhver række i tieret, og `A32` er stadig det åbne
+spørgsmål om aflæsninger, der KRÆVER de rigtige tal.
+
+## 7. august 2026 — `A36` og `A37` er to rækker, ikke én
+
+**Beslutning:** fundet fra prøvekørslen — at en liga, hvis eneste administrator
+lukker sin konto, aldrig kan administreres igen — fik sit eget ID (`A37`) frem
+for at blive foldet ind i `A36`, som handler om den samme hændelse.
+
+**Begrundelsen er backloggens egen sammenlægningsregel, og den er den eneste, der
+er brugt:** to punkter lægges sammen, når de deler **rettelse** — ikke når de
+deler årsag. Det er samme afgørelse som `G81`/`G84` blev truffet på tidligere
+samme dag. Her deler de to endda mere end en årsag: de ses i det samme kig på den
+samme medlemsliste. Men rettelserne er modsatrettede. `A36` overvejer at **fjerne**
+den lukkede konto fra ligaen; gøres det, mister en frossen liga også det eneste
+synlige spor af, hvorfor den er frossen, og `A37` bliver sværere at opdage frem
+for lettere.
+
+**Rækkefølgen er derfor selv en beslutning:** `A36` afgøres efter `A37` og ikke
+før. Et pseudonym på en liste er kosmetik; en liga, ingen kan administrere, er
+ikke — og den billige rettelse må ikke lukke døren for den dyre.
+
 ## 7. august 2026 — En overvågnings-forespørgsel bor i en fil, ikke i en workflow
 
 **Beslutning (`G84`):** kontrollen af, om kampene har klokkeslæt, skrives som en

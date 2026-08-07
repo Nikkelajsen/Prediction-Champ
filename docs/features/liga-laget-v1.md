@@ -188,6 +188,26 @@ Rækkefølgen respekterer roadmappens tommelfingerregel: Story Engine-kalibrerin
 > liga-løse konkurrencer, og konkurrence-kortet er blevet fælles for de to
 > skærme.
 
+> **Rettelse efter levering (7. august 2026, `A37`).** Udskydelsen af
+> forfremmelse har en følge, udkastet ikke kunne se, fordi kontolukningen ikke
+> fandtes endnu: **en liga kan blive permanent uadministrerbar.**
+>
+> Admin-rollen kan kun uddeles ÉN gang — af opretteren til sig selv ved
+> oprettelsen (`group_members_insert_self` kræver `groups.created_by =
+> auth.uid()`) — og der findes ingen UPDATE-policy på `group_members`, altså
+> ingen forfremmelse. Lukker opretteren sin konto, kan vedkommende aldrig logge
+> ind igen (`api/delete-account.js` soft-sletter `auth.users`), og
+> `is_group_admin()` kan derfor aldrig blive sand for den liga mere. Ligaen kan
+> hverken omdøbes, slettes, få fjernet en deltager eller få slettet en
+> konkurrence. De øvrige medlemmer kan kun forlade den.
+>
+> **Det er ikke et hjørnetilfælde:** hver liga har præcis én administrator,
+> nemlig sin opretter. Efterprøvet under ægte RLS 7. august 2026 (fem forsøg fra
+> et almindeligt medlem, fem afvisninger). Eneste vej ud i dag er manuel SQL.
+> Spørgsmålet om, hvad der SKAL ske, er `A37` i `docs/BACKLOG.md`; opslaget, der
+> viser, om en liga allerede står sådan, er `rehearsal.leagues()` i
+> `sql/dev/anonymize_rehearsal.sql`.
+
 - **Medlems-administration** (admin fjerner/forfremmer medlemmer) — lille brugerbase af venner; udskydes til behovet opstår.
 - **Liga-identitet** (ikon, farve, beskrivelse) — navn er nok til at bevise strukturen.
 - **Per-liga-rating og per-liga-månedschampionship** — `scope`-kolonnen er forberedt; egen feature senere (åben beslutning A2 hænger sammen).
