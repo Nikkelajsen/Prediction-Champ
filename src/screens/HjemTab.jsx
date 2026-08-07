@@ -7,17 +7,17 @@
 // her, ER fanen: hvad hentes, i hvilken rækkefølge, og hvad tegnes hvornår.
 import { useState, useEffect } from "react";
 import { ChevronRight, Clock, Check, RefreshCw } from "lucide-react";
-import { currentRoundKey, formatKickoff } from "../lib/scoring.js";
-import { computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadHomePlacements, loadRecentMilestones, loadRoundCarousel, loadRatingBoard, loadRatingHistory, ratingSnapshot } from "../lib/data.js";
-import { CAROUSEL_LIMIT, isQuiet } from "../lib/stories.js";
-import { renderMilestone } from "../lib/milestones.js";
-import { readUserFlag, writeUserFlag, CARD_KEY } from "../lib/localFlags.js";
+import { formatKickoff } from "../lib/scoring.js";
+import { computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadDayCard, loadHomePlacements, loadLatestStory, loadRatingBoard, loadRatingHistory, ratingSnapshot } from "../lib/data.js";
+import { isFresh } from "../lib/stories.js";
+import { readUserFlag, writeUserFlag, readSeenStories, markStorySeen, CARD_KEY } from "../lib/localFlags.js";
 import { C, btnGhost, btnGreen, font, iconBtn } from "../ui/theme.js";
 import { usePushOptIn } from "../ui/usePushOptIn.js";
 import { Card, Collapsible, Eyebrow, FoldChevron, H, InfoDot, LiveBadge, Move, PlayerName, PointsPill } from "../ui/components.jsx";
 import GetStartedCard from "./GetStartedCard.jsx";
 import PushOptInCard from "./hjem/PushOptInCard.jsx";
-import StoryCarousel from "./hjem/StoryCarousel.jsx";
+import DayCard from "./hjem/DayCard.jsx";
+import RoundStory from "./hjem/RoundStory.jsx";
 import Placements from "./hjem/Placements.jsx";
 import { cardTight, shortKick } from "./hjem/shared.js";
 
@@ -27,7 +27,10 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
   const [roundOpen, setRoundOpen] = useState(false); // foldet som standard: viser kun X/Y + point
   const [snapshot, setSnapshot] = useState(null); // { rating, move, form, rank, total }
   const [placements, setPlacements] = useState(null); // [{ label, pos, gold, onClick }]
-  const [cards, setCards] = useState([]); // Story Engine v2 — rundens karrusel + nye milepæle
+  // Story Engine v3: ÉT dagskort og én rundestory — ikke en karrusel.
+  const [dayCard, setDayCard] = useState(null);
+  const [roundStory, setRoundStory] = useState(null);
+  const [seenStories, setSeenStories] = useState(() => readSeenStories(userId));
   const [, setTick] = useState(0);
   // Manuel genindlæsning (B13). Tælleren står i afhængighedslisterne for de tre
   // dataeffekter nedenfor, så et klik kører præcis de samme kald som en
@@ -39,50 +42,47 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
   const push = usePushOptIn(token, userId);
   const showChecklist = !!onboarding && !onboarding.complete && !cardHidden;
 
-  // Karusellen: rundens kort + milepæle opnået i samme runde.
+  // Dagens kort og rundens story.
   //
-  // Rundenøglen beregnes på KLIENTEN (currentRoundKey) og hentes ikke som
-  // `max(round_key)` fra tabellen. Forskellen er synlig hver tirsdag: i en ny
-  // rundes første dage findes der endnu ingen rækker, og et max ville vise den
-  // forrige uges kort i stedet for den tomme karrusel, en ny runde skal have.
+  // Der er ingen rundenøgle at beregne længere. Karusellen skulle bindes til
+  // den klient-beregnede runde, fordi den samlede kort op gennem ugen og skulle
+  // tømmes ved rundeskift; ét kort, der udløber efter 48 timer, har ikke det
+  // problem — tirsdagens tomhed opstår af sig selv.
+  //
+  // Milepæle hentes ikke mere: de får aldrig deres eget kort, men kaprer
+  // dagens slot i databasen (grundvægt 100 i scoringen). Karriereprofilen
+  // læser stadig milestones-tabellen direkte og er uberørt.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const roundKey = currentRoundKey();
-      const [rows, mds] = await Promise.all([
-        loadRoundCarousel(token, roundKey, CAROUSEL_LIMIT),
-        loadRecentMilestones(token, roundKey),
+      const [day, round] = await Promise.all([
+        loadDayCard(token),
+        loadLatestStory(token),
       ]);
       if (cancelled) return;
-
-      // Milepælene forrest: en bedrift, man lige har opnået, er det største,
-      // der kan stå på forsiden — og uden den plads ville de fleste aldrig
-      // opdage, at de havde opnået noget.
-      const milestoneCards = (mds || []).map((m) => {
-        const r = renderMilestone(m.key, m.payload || {});
-        return {
-          id: `ms:${m.key}`, kind: "milestone", rule: m.key,
-          competition_id: m.competition_id || null, priority: -1,
-          eyebrow: "Milepæl", headline: `${r.icon} ${r.title}`, body: r.body,
-        };
-      });
-      const storyCards = (rows || []).map((s) => ({
-        ...s,
-        kind: s.period === "day" ? "day" : isQuiet(s.priority) ? "quiet" : "highlight",
-        eyebrow: s.period === "day"
-          ? `Kampdag ${s.payload?.day || ""}`.trim()
-          : isQuiet(s.priority) ? "Runden kort" : "Rundens historie",
-      }));
-      setCards([...milestoneCards, ...storyCards].slice(0, CAROUSEL_LIMIT));
+      setDayCard(day);
+      setRoundStory(round && isFresh(round) ? round : null);
     })();
     return () => { cancelled = true; };
   }, [token, reloadKey]);
 
-  // Afvis ét kort: det fjernes fra karusellen med det samme, og dismissed_at
-  // sættes i baggrunden. Milepæle kan ikke afvises — de er permanente.
-  async function onDismissCard(item) {
-    setCards((prev) => prev.filter((c) => c.id !== item.id));
-    if (item?.id && item.kind !== "milestone") await dismissStory(token, item.id);
+  // VISNINGSREGLEN: findes der en frisk, uafvist rundestory, som er NYERE end
+  // dagskortet, taler kun den. Det er hele v3's løfte om ét øjeblik ad gangen —
+  // rundens sidste dag udgiver slet ikke noget dagskort, men en resultatrettelse
+  // tidligere i ugen kan lave et, og så må de to ikke stå oven på hinanden.
+  const roundIsNewer = roundStory && (!dayCard ||
+    String(roundStory.created_at || "") > String(dayCard.created_at || ""));
+
+  function onSeen(id) {
+    if (!id || seenStories.has(id)) return;
+    setSeenStories(markStorySeen(userId, id));
+  }
+
+  // Kun rundestoryen kan afvises. Dagskortet har hverken Del eller Afvis:
+  // det udløber af sig selv og erstattes hver kampdag.
+  async function onDismissRound(item) {
+    setRoundStory(null);
+    if (item?.id) await dismissStory(token, item.id);
   }
 
   useEffect(() => {
@@ -195,6 +195,24 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           </div>
         )}
       </div>
+
+      {/* Story Engine v3 — ØVERST, over alt andet indhold (spec §8).
+          Placeringen er en del af leverancen og ikke en smagssag: i v2 lå
+          karusellen under tips-status, hvor den var noget, man scrollede forbi.
+          Ét kort, der bærer dagens ene øjeblik, skal være det første, man ser —
+          ellers er der ingen grund til at have valgt det så omhyggeligt.
+
+          Kun ét af de to vises. Rundestoryen vinder, når den er nyere: den er
+          ugens konklusion, og dagskortet er en enkelt aften. */}
+      {roundIsNewer ? (
+        <RoundStory story={roundStory} token={token} competitions={competitions}
+          seen={seenStories.has(roundStory.id)} onSeen={onSeen}
+          onDismiss={onDismissRound} openProfile={openProfile} userId={userId} />
+      ) : (
+        <DayCard story={dayCard} token={token} competitions={competitions}
+          tips={tips} seen={seenStories.has(dayCard?.id)} onSeen={onSeen}
+          openPredictions={openPredictions} />
+      )}
 
       {/* "Kom godt i gang": erstatter de tidligere dashed tom-tilstande. De sagde
           hver især ÉN ting ("du har ingen liga" / "du har ingen konkurrence");
@@ -315,9 +333,6 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           <button style={{ ...btnGreen, marginTop: 12 }} onClick={() => openPredictions("all", tips.roundKey)}>Tip nu</button>
         </Card>
       )}
-
-      {/* Rundens karrusel (Story Engine v2) — direkte under tips-status, altid synlig */}
-      <StoryCarousel items={cards} onDismiss={onDismissCard} token={token} competitions={competitions} />
 
 
       {/* Indeværende runde: live-oversigt der opdaterer løbende.

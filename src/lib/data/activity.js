@@ -3,7 +3,7 @@
 
 import { db, restFetch } from "../supabase.js";
 import { readUserFlag, writeUserFlag, PING_KEY } from "../localFlags.js";
-import { compareMilestones } from "../milestones.js";
+import { isFresh } from "../stories.js";
 
 // ---------- Aktivitets-sporing + brugerstatistik ----------
 // touchActivity: letvægts-"ping" ved app-start. RPC'en registrerer, at brugeren har
@@ -43,57 +43,43 @@ async function loadLatestStory(token) {
   } catch { return null; }
 }
 
-// ---------- Story Engine v2: rundens karrusel ----------
-// Alle kort i den AKTUELLE runde, nyeste dag først. Kortene akkumulerer gennem
-// runden (0–2 pr. kampdag), og rundens afsluttende kort — som ikke har nogen
-// dag — lægger sig øverst via `nullsfirst`.
+// ---------- Story Engine v3: dagens ENE kort ----------
+// Erstatter v2's loadRoundCarousel. Der er ikke længere en liste at hente:
+// databasen håndhæver ét `period = 'day'`-kort pr. bruger pr. dag (det unikke
+// indeks stories_day_slot_uniq), så den nyeste række ER dagens kort.
 //
-// `roundKey` SKAL være den klient-beregnede nuværende runde (currentRoundKey i
-// src/lib/scoring.js) og ikke `max(round_key)` fra tabellen. Forskellen er
-// synlig hver tirsdag: i en ny rundes første dage findes der endnu ingen
-// rækker, og et max ville derfor vise den forrige uges kort i stedet for den
-// tomme karrusel, en ny runde skal starte med.
+// INGEN roundKey-parameter, og det er en forenkling, ikke en forglemmelse.
+// Karusellen skulle bindes til den klient-beregnede runde, fordi den samlede
+// kort op gennem ugen og skulle tømmes ved rundeskift. Ét kort, der udløber
+// efter 48 timer, har ikke det problem — tirsdagens tomhed opstår af sig selv,
+// når mandagens kort bliver for gammelt.
 //
-// Afviste kort filtreres væk her (modsat latest_story, hvor frontenden gjorde
-// det): karusellen viser en LISTE, så et afvist kort kan bare udelades uden at
-// afsløre noget ældre.
-async function loadRoundCarousel(token, roundKey, limit = 10) {
-  if (!roundKey) return [];
+// UDLØBET FILTRERES HER OG IKKE I SQL: rækken bliver stående som analysedata
+// (det er den, A35's tærskelmåling hviler på), men et kort ældre end 48 timer
+// er ikke "dagens historie" og må ikke vises. Uden filteret ville en tirsdag
+// efter en stille weekend præsentere fredagens kort som nyt.
+async function loadDayCard(token) {
   try {
     const rows = await db.select(token, "stories",
-      `round_key=eq.${roundKey}&dismissed_at=is.null` +
-      `&select=id,round_key,day_key,period,competition_id,rule,priority,league_size,payload,headline,body` +
-      `&order=day_key.desc.nullsfirst,priority.asc&limit=${limit}`);
-    return rows || [];
-  } catch { return []; }
-}
-
-// Milepæle opnået siden et tidspunkt — til karusellen på Hjem, hvor en nyopnået
-// milepæl lægger sig forrest som guldkort. Uden den ville en milepæl kun kunne
-// opdages ved at åbne karriereprofilen, og så ville de fleste aldrig se, at de
-// havde opnået noget. Teksten renderes af klienten (src/lib/milestones.js).
-// Rækkefølgen afgøres i JS og ikke af `order=` — se `compareMilestones`.
-// Databasen kan sortere på `achieved_at`, men ikke på familie-rangordenen, og
-// det er netop den, der skal afgøre, når flere milepæle deler dag (hvilket de
-// rutinemæssigt gør: `award_milestones()` er en batch-genberegning). Derfor
-// hentes der bredere end de tre, der vises, og de tre vælges her.
-const MILESTONE_FETCH = 12;
-
-async function loadRecentMilestones(token, sinceDateKey, limit = 3) {
-  if (!sinceDateKey) return [];
-  try {
-    const rows = await db.select(token, "milestones",
-      `achieved_at=gte.${sinceDateKey}&select=key,family,tier,competition_id,payload,achieved_at` +
-      `&order=achieved_at.desc&limit=${MILESTONE_FETCH}`);
-    return (rows || []).slice().sort(compareMilestones).slice(0, limit);
-  } catch { return []; }
+      `period=eq.day&dismissed_at=is.null` +
+      `&select=id,round_key,day_key,period,competition_id,rule,priority,league_size,` +
+      `news_value,payload,headline,body,created_at` +
+      `&order=day_key.desc&limit=1`);
+    const s = rows?.[0];
+    return s && isFresh(s) ? s : null;
+  } catch { return null; }
 }
 
 // Afvis en historie (sætter dismissed_at). Best-effort.
+//
+// Efter v3 kan KUN rundestoryen afvises. Dagskortet har hverken Del eller
+// Afvis: det udløber af sig selv efter 48 timer og erstattes hver kampdag, så
+// der er intet at rydde — spec §8's "ingen friktion, intet at åbne, intet at
+// rydde". Feltet og denne funktion bliver stående, fordi rundekortet bruger dem.
 async function dismissStory(token, id) {
   try {
     await db.update(token, "stories", `id=eq.${id}`, { dismissed_at: new Date().toISOString() });
   } catch { /* best-effort */ }
 }
 
-export { touchActivity, loadUserStats, loadLatestStory, loadRoundCarousel, loadRecentMilestones, dismissStory };
+export { touchActivity, loadUserStats, loadLatestStory, loadDayCard, dismissStory };
