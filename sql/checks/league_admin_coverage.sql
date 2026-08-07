@@ -44,13 +44,32 @@
 -- engangsdatabase i CI (`sql/tests/league_admin_coverage.sql`). En kontrol, der
 -- er skrevet ét sted og testet et andet, er to kontroller.
 --
--- Kræver en session-forbindelse (port 5432), som `SUPABASE_DB_URL` har.
+-- ---------------------------------------------------------------------------
+-- SÅDAN KØRES DEN — TO VEJE, OG DE ER IKKE OMBYTTELIGE
 --
--- Kør lokalt eller mod produktion:
+-- **Vej A — Supabase SQL-editoren.** Indsæt HELE denne fil og tilføj en linje
+-- til sidst:
+--
+--   select * from league_admin_coverage order by levende_admins, liga;
+--
+-- Begge sætninger skal sendes i SAMME kørsel, fordi en temporær view kun lever
+-- i sin egen session. Kører du dem hver for sig, findes viewet ikke i anden
+-- kørsel. Vil du hellere undgå det helt, så indsæt bare `select`-sætningen
+-- nederst i filen direkte — den står alene og kræver ingen view.
+--
+-- 🛑 **Editoren kan kun tage imod SQL.** `psql …` nedenfor er en
+-- TERMINAL-kommando; indsat i editoren giver den
+-- `42601: syntax error at or near "psql"`. Det er ikke en fejl i filen.
+--
+-- **Vej B — psql fra en terminal.** Kræver en session-forbindelse (port 5432),
+-- som `SUPABASE_DB_URL` har:
+--
 --   psql "$SUPABASE_DB_URL" -q -At -F'|' \
 --     -f sql/checks/league_admin_coverage.sql \
 --     -c 'select liga, medlemmer, lukkede, levende_admins, tilstand
 --           from league_admin_coverage order by levende_admins, liga'
+--
+-- Det er vej B, en workflow ville bruge; vej A er den, et menneske bruger.
 
 -- `or replace`, så filen kan læses to gange i samme session uden at fejle.
 create or replace temporary view league_admin_coverage as
