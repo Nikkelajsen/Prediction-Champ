@@ -15,6 +15,128 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 7. august 2026 — En lukket konto overdrager sin liga og forlader den (`A36` + `A37`)
+
+**Beslutning (produktejeren):** ved kontolukning **overdrages administratorrollen
+til det ældste levende medlem**, og den lukkede konto **forlader ligaen**. Er der
+ingen medlemmer tilbage at overdrage til, **bliver ligaen bare stående**.
+
+De to spørgsmål er afgjort sammen, fordi de har samme udløser og modsatrettede
+rettelser: `A36` (skal pseudonymet forlade medlemslisten?) ville alene have gjort
+`A37` sværere at opdage, fordi den fjerner det eneste synlige spor af, hvorfor en
+liga er frossen. Overdragelsen fjerner grunden til at have sporet.
+
+**Hvorfor overdragelse frem for de tre andre muligheder.** Rækken havde fire:
+overdrag, tillad forfremmelse, lad en platform-admin gribe ind, eller accepter
+vilkåret. Forfremmelse er en UI-funktion, der bevidst er udskudt fra liga-lagets
+v1 og stadig ikke er efterspurgt; en platform-admin-indgang løser det for os og
+ikke for brugerne; og at acceptere vilkåret var ikke længere gratis, da
+aflæsningen viste, at fire rigtige ligaer med 5–9 medlemmer hver har præcis én
+levende administrator. Overdragelsen er den eneste, der virker **uden at nogen
+skal opdage problemet først** — og det er hele pointen, for symptomet (en knap,
+der ikke virker) opstår måneder efter årsagen.
+
+**"Ældste" er `group_members.joined_at`, ikke `profiles.created_at`.** Det er den
+aflæsning, der giver mening i et fællesskab: den, der har været med i ligaen
+længst, er den, de andre kender — ikke den, der tilfældigvis oprettede sin konto
+først. `user_id` bryder uafgjort, så resultatet ikke afhænger af rækkefølgen på
+disken.
+
+**Frameldingen har invarianten som grænse, og det var ikke et valg.**
+`group_membership_invariant.sql` kræver deltager ⇒ medlem, så medlemskabet kan
+kun fjernes i de ligaer, hvor der ikke er en deltagelse tilbage. `A25` har lige
+fjernet dem, der ikke var begyndt; det, der står tilbage, er spillet historik, og
+dér **bliver** pseudonymet på listen. Det er samme skel som resten af funktionen:
+alt, der er sket, bevares. Bliver medlemskabet stående, degraderes rollen til
+`member` — en konto, der ikke kan logge ind, er ikke en administrator, og
+`league_admin_coverage` ville ellers tælle den som en.
+
+**Den tomme liga bliver stående, og det er en beslutning og ikke en mangel.** En
+liga uden medlemmer er usynlig — den vises kun for sine medlemmer — og koster
+ingenting. Alternativet ville være at slette den, altså at fjerne data på en
+formodning om, at ingen kommer tilbage.
+
+**Rækkefølgen i koden er selv en regel:** overdrag FØR framelding. Overdragelsen
+bruger den lukkede kontos egen `role = 'admin'` til at finde de ligaer, der skal
+have en ny administrator; bytter man om, er oplysningen væk, og ligaen fryser
+præcis som `A37` beskriver. En mutationstest låser det.
+
+## 7. august 2026 — "Read-only" er to spørgsmål: rører den data, og efterlader den noget?
+
+**Beslutning (`A37`):** forespørgslen, der aflæser, om en liga står uden en
+levende administrator, flyttes fra `sql/dev/` til `sql/checks/` og skrives som en
+**temporær view** — samme form som `kickoff_coverage.sql` (`G84`). Den er nu det
+eneste af dagens to opslag, der må køres mod produktionen.
+
+**Begrundelsen er, at det første udkast var forkert på en måde, der ikke lyste
+op.** Filen blev kaldt read-only, og målt på data var den det: to `stable`
+funktioner, ingen `insert`, ingen `update`. Men den installerede et skema og to
+funktioner, som ville blive stående, til nogen huskede at droppe dem — og en
+`create function` uden et eksplicit `revoke` får `execute` til `PUBLIC` som
+default. At ingen rolle kan nå den, skyldes her, at ingen har `usage` på skemaet;
+altså en default, ikke en beslutning. Det er samme klasse som `G50`/`G58`, hvor
+pointen netop var, at bredden skal være en **regel** og ikke en liste over ting,
+der tilfældigvis ikke er ramt.
+
+**Reglen, der kommer ud af det, er kort nok til at huske:** *rører den data* og
+*efterlader den noget* er to spørgsmål, og "read-only" besvarer kun det første.
+Alt, der køres mod produktionen, skal svare nej til begge — og `sql/checks/`
+er den form, der garanterer det andet.
+
+**Det er ikke en ny model, det er den, der lige var skrevet ned.** `G84`s
+leverance (5. august) sluttede med sætningen om, at en temporær view installerer
+intet i produktionen og alligevel kan efterprøves i CI, og at modellen var værd
+at genbruge næste gang en kontrol skulle skrives. Næste gang kom to dage senere,
+og modellen blev ikke brugt, før nogen spurgte. **En model, der kun står i en
+changelog, er ikke en model** — derfor står vilkåret nu i `sql/README.md`s
+mappetabel, hvor man læser det, før man vælger mappe.
+
+## 7. august 2026 — En uigenkaldelig funktion prøves af mod `schema.sql`, ikke mod staging
+
+**Beslutning (`G76`):** den første kørsel af `anonymize_my_account()` blev lagt i
+en lokal PostgreSQL med `sql/schema.sql` kørt ind — ikke i staging, som rækken
+selv foreskrev — og rækken blev derefter **delt i to** frem for lukket.
+
+**Begrundelsen er, at rækken beskrev ét miljø og to opgaver.** Det, der bar
+risikoen, var en uigenkaldelig SQL-funktion, som aldrig havde rørt andet end et
+håndskrevet minischema i CI. Til dét spørgsmål er `sql/schema.sql` ikke en
+erstatning for produktionsskemaet — den **er** produktionsskemaet, den ligger i
+repoet, og den kan køres på et minut. Staging tilføjer ikke ét gram troværdighed
+til det svar; den tilføjer noget helt andet, nemlig knappen i Profil,
+`api/delete-account.js` og soft-sletningen i `auth.users`. **Den halvdel kan SQL
+ikke nå, og den er derfor stadig Tier 1.**
+
+Det er samme indsigt som `G74` traf 5. august, bare brugt et nyt sted: dér blev
+`schema.sql` svaret på "kan docs' SQL-blokke tjekkes uden produktionsadgang?", og
+her er den svaret på "kan en migreringsfunktion prøves af uden en database?". **Den
+generelle regel er værd at skrive ned:** et spørgsmål om SKEMA kan besvares i
+repoet; et spørgsmål om MILJØ kan ikke. En række, der blander de to, er to rækker.
+
+**Prisen, sagt højt:** en lokal kørsel har ingen rigtige data, så den kan ikke
+finde det, der kun gælder for produktionens rækker. Den kan kun efterprøve
+reglerne. Det var også præcis det, der skulle efterprøves her — men det er ikke
+et argument, der holder for enhver række i tieret, og `A32` er stadig det åbne
+spørgsmål om aflæsninger, der KRÆVER de rigtige tal.
+
+## 7. august 2026 — `A36` og `A37` er to rækker, ikke én
+
+**Beslutning:** fundet fra prøvekørslen — at en liga, hvis eneste administrator
+lukker sin konto, aldrig kan administreres igen — fik sit eget ID (`A37`) frem
+for at blive foldet ind i `A36`, som handler om den samme hændelse.
+
+**Begrundelsen er backloggens egen sammenlægningsregel, og den er den eneste, der
+er brugt:** to punkter lægges sammen, når de deler **rettelse** — ikke når de
+deler årsag. Det er samme afgørelse som `G81`/`G84` blev truffet på tidligere
+samme dag. Her deler de to endda mere end en årsag: de ses i det samme kig på den
+samme medlemsliste. Men rettelserne er modsatrettede. `A36` overvejer at **fjerne**
+den lukkede konto fra ligaen; gøres det, mister en frossen liga også det eneste
+synlige spor af, hvorfor den er frossen, og `A37` bliver sværere at opdage frem
+for lettere.
+
+**Rækkefølgen er derfor selv en beslutning:** `A36` afgøres efter `A37` og ikke
+før. Et pseudonym på en liste er kosmetik; en liga, ingen kan administrere, er
+ikke — og den billige rettelse må ikke lukke døren for den dyre.
+
 ## 7. august 2026 — En overvågnings-forespørgsel bor i en fil, ikke i en workflow
 
 **Beslutning (`G84`):** kontrollen af, om kampene har klokkeslæt, skrives som en

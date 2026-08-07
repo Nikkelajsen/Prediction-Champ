@@ -188,6 +188,36 @@ Rækkefølgen respekterer roadmappens tommelfingerregel: Story Engine-kalibrerin
 > liga-løse konkurrencer, og konkurrence-kortet er blevet fælles for de to
 > skærme.
 
+> **Rettelse efter levering (7. august 2026, `A37`).** Udskydelsen af
+> forfremmelse har en følge, udkastet ikke kunne se, fordi kontolukningen ikke
+> fandtes endnu: **en liga kan blive permanent uadministrerbar.**
+>
+> Admin-rollen kan kun uddeles ÉN gang — af opretteren til sig selv ved
+> oprettelsen (`group_members_insert_self` kræver `groups.created_by =
+> auth.uid()`) — og der findes ingen UPDATE-policy på `group_members`, altså
+> ingen forfremmelse. Lukker opretteren sin konto, kan vedkommende aldrig logge
+> ind igen (`api/delete-account.js` soft-sletter `auth.users`), og
+> `is_group_admin()` kan derfor aldrig blive sand for den liga mere. Ligaen kan
+> hverken omdøbes, slettes, få fjernet en deltager eller få slettet en
+> konkurrence. De øvrige medlemmer kan kun forlade den.
+>
+> **Det er ikke et hjørnetilfælde:** hver liga har præcis én administrator,
+> nemlig sin opretter. Efterprøvet under ægte RLS 7. august 2026 (fem forsøg fra
+> et almindeligt medlem, fem afvisninger), og aflæst i produktion samme dag: én
+> liga stod allerede sådan, og fire rigtige ligaer med 5–9 medlemmer havde
+> præcis én levende administrator hver.
+>
+> **LØST samme dag (`A37`).** `_anonymize_account()` overdrager nu
+> administratorrollen til det **ældste levende medlem** (`joined_at`), før den
+> lukkede konto forlader ligaen — og en backfill i `sql/liga_admin.sql` retter
+> de ligaer, der allerede stod sådan. **Forfremmelse er stadig ikke bygget som
+> UI-funktion**, og udskydelsen ovenfor står derfor ved magt; det, der er
+> lukket, er den ene sti, hvor fraværet af forfremmelse gjorde en liga
+> permanent uadministrerbar. Er der ingen levende medlemmer at overdrage til,
+> bliver ligaen stående uden administrator — det er beslutningen, ikke en
+> mangel. Kontrollen `sql/checks/league_admin_coverage.sql` (dækket af en test i
+> CI) svarer på, om nogen liga står sådan.
+
 - **Medlems-administration** (admin fjerner/forfremmer medlemmer) — lille brugerbase af venner; udskydes til behovet opstår.
 - **Liga-identitet** (ikon, farve, beskrivelse) — navn er nok til at bevise strukturen.
 - **Per-liga-rating og per-liga-månedschampionship** — `scope`-kolonnen er forberedt; egen feature senere (åben beslutning A2 hænger sammen).

@@ -326,6 +326,25 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database kickofftest;'
           psql -h localhost -U postgres -d kickofftest -v ON_ERROR_STOP=1 -b -f kickoff_coverage.sql
 
+      # Kontrollen af liga-administratorer (A37). Jobbets anden overvågning, og
+      # den er skrevet efter samme model som G84's: forespørgslen i sql/checks/
+      # er en temporær view, så den kan køres mod produktion UDEN at installere
+      # noget, og mod en tom engangsdatabase her — samme fil begge steder.
+      #
+      # Testen skelner bevidst A37 fra A36: en lukket konto som almindeligt
+      # MEDLEM må ikke gøre ligaen rød, for de to spørgsmål har modsatrettede
+      # rettelser. Kontrollen er selv efterprøvet ved at mutere den syv gange og
+      # se testen fange hver enkelt — G84's lære om, at en test, man ikke har
+      # set fejle, er en formodning.
+      - name: Test af kontrollen for liga-administratorer
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database ladmintest;'
+          psql -h localhost -U postgres -d ladmintest -v ON_ERROR_STOP=1 -b -f league_admin_coverage.sql
+
       # SQL-blokkene i docs/ (G74). Det eneste trin i jobbet, der ikke tester en
       # migrering, men DOKUMENTATIONEN: hver ```sql-blok bygges om til et
       # `prepare` mod hele sql/schema.sql, så PostgreSQL selv siger, om
