@@ -78,8 +78,11 @@ create table public.competition_participants (
   competition_id uuid not null references public.competitions(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
   primary key (competition_id, user_id));
+-- `matches` er med, fordi build_round_frames() læser den til frame 1. Den findes
+-- i det rigtige view (sql/tournament_scope.sql); en stub uden den ville fejle
+-- inde i funktionen frem for i en måling.
 create table public.round_standings (
-  round_key date, scope text, user_id uuid,
+  round_key date, scope text, user_id uuid, matches int,
   total_points int, exact_count int, outcome_count int, avg_goal_error numeric);
 create table public.monthly_standings (
   month text, scope text, user_id uuid, total_points int, exact_count int,
@@ -102,6 +105,14 @@ create table public.analytics_completion_facts (
 \ir ../story_engine.sql
 \ir ../story_engine_v2.sql
 \ir ../milestones.sql
+-- v3 SKAL indlæses efter v2 og milestones: den erstatter generate_daily_stories
+-- med scorings-udgaven og tilføjer build_round_frames + apply_milestone_stories.
+-- Uden linjen ville forsøget måle v2's motor og melde v3 billigere, end den er.
+\ir ../story_engine_v3.sql
+-- ... og story_engine.sql gen-køres, fordi runde-motoren nu kalder
+-- build_round_frames() til sidst. Frames-bygningen er en del af det, en
+-- rundeafslutning koster, og skal med i den værste sætning nedenfor.
+\ir ../story_engine.sql
 
 -- ---------- syntetisk fuld sæson ----------
 -- Dimensionerne er valgt, så de ligner produktionen ni måneder senere:
@@ -197,20 +208,31 @@ begin
     (15, 'analytics_completion_facts',  (select count(*) from public.analytics_completion_facts)::text);
 end $$;
 
--- Dagsmotoren målt SIDST i sæsonen, hvor _sd_pts er størst — det er dér, loftet
+-- Dagsmotoren målt SENT i sæsonen, hvor _sd_pts er størst — det er dér, loftet
 -- ligger. Tre kørsler, så tallet ikke er en tilfældig cache-tilstand.
+--
+-- BEMÆRK — DAGEN MÅ IKKE VÆRE RUNDENS SIDSTE. Efter v3 returnerer motoren med
+-- det samme på rundens sidste kampdag (kun rundekortet taler den dag), så en
+-- måling dér ville vise 0,1 ms og påstå, at dagsmotoren er gratis. Vi vælger
+-- derfor den seneste kampdag, som har en kampdag efter sig i sin egen runde.
 do $$
 declare
   d date; v_start timestamptz; v_ms numeric; v_best numeric; i int;
 begin
-  select max(match_day) into d from public.matches;
+  select max(m.match_day) into d
+  from public.matches m
+  where exists (select 1 from public.matches m2
+                where m2.round_key = m.round_key and m2.match_day > m.match_day);
+  if d is null then
+    raise exception 'skalering: ingen dag med en senere kampdag i samme runde';
+  end if;
 
   for i in 1..3 loop
     v_start := clock_timestamp();
     perform public.generate_daily_stories(d);
     v_ms := extract(epoch from clock_timestamp() - v_start) * 1000;
     if v_best is null or v_ms < v_best then v_best := v_ms; end if;
-    insert into _scale values (20 + i, 'generate_daily_stories, sidste dag (' || i || '.)',
+    insert into _scale values (20 + i, 'generate_daily_stories, sen dag (' || i || '.)',
       round(v_ms, 1)::text || ' ms');
   end loop;
 

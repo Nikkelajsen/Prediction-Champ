@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CAROUSEL_LIMIT, DAILY_QUIET_MIN, DAILY_RULES, isQuiet, pickDailyStories, pickStory, priorityFor, QUIET_TIER_MIN, renderStory, RULES, SOFT_PRIORITY, sortCarousel, THRESHOLDS } from "./stories.js";
+import { DAILY_QUIET_MIN, DAILY_RULES, isDailyQuiet, isFresh, isNewsworthy, isQuiet, pickDay, pickStory, priorityFor, PUBLISH_THRESHOLD, QUIET_TIER_MIN, renderFrame, renderStory, RULES, scoreDailyCandidates, sizeOf, SOFT_PRIORITY, THRESHOLDS, usableFrames } from "./stories.js";
 
 // Testcases spejler docs/features/story-engine-v1.md afsnit 9 (det der kan
 // udtrykkes rent i JS; DB-idempotens og trigger-adfærd verificeres i skyggetilstand).
@@ -253,77 +253,240 @@ describe("nye regler (v1.1)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// v2 · daglige historier
+// v2/v3 · daglige historier
 // ---------------------------------------------------------------------------
 
-describe("pickDailyStories (dagens to kort)", () => {
-  const cand = (rule, priority, league_size = 5, competition_id = "c1") =>
-    ({ rule, priority, league_size, competition_id });
+describe("scoreDailyCandidates + pickDay (v3 · dagens ENE kort)", () => {
+  const cand = (rule, extra = {}) =>
+    ({ rule, league_size: 5, competition_id: "c1", rel: "self", ...extra });
 
-  it("giver højst to kort", () => {
-    const got = pickDailyStories([
-      cand("DAY_RESULT", 110), cand("CONTRARIAN", 120),
-      cand("DAY_TOP", 130), cand("SO_CLOSE", 160),
+  // TALLENE ER LÅST MED VILJE. De står også i sql/story_engine_v3.sql, og en
+  // afvigelse mellem de to giver ikke en fejl og ikke en forkert formulering,
+  // men et ANDET kort — uden log. Derfor påstås de præcist frem for at blive
+  // sammenlignet med "større end". Samme argument som de præcise news_value-tal
+  // i sql/tests/story_engine_daily.sql.
+  it("lægger grundvægt, størrelse og nærhed sammen", () => {
+    const [got] = scoreDailyCandidates([cand("DAY_TOP", { moved: 2, overAvg: 3, rel: "biggest" })]);
+    // 34 (grundvægt) + 12 (2 pladser) + 9 (3 point over snit) + 8 (største liga)
+    expect(got.news_value).toBe(34 + 12 + 9 + 8);
+  });
+
+  it("lofter hvert størrelsesbidrag for sig og summen ved 30", () => {
+    // 6 pladser = 36 → loftes til 18; 10 point over = 30 → loftes til 12;
+    // stime 20 = 30 → loftes til 12. Sum 42 → loftes til 30.
+    expect(sizeOf({ moved: 6, overAvg: 10, streak: 20 })).toBe(30);
+    expect(sizeOf({ moved: 6 })).toBe(18);
+    expect(sizeOf({ overAvg: 10 })).toBe(12);
+    expect(sizeOf({ streak: 20 })).toBe(12);
+  });
+
+  it("tæller et FALD lige så tungt som en fremgang", () => {
+    expect(sizeOf({ moved: -2 })).toBe(sizeOf({ moved: 2 }));
+  });
+
+  it("giver stimen point først OVER 5 runder", () => {
+    expect(sizeOf({ streak: 5 })).toBe(0);
+    expect(sizeOf({ streak: 6 })).toBe(2);
+  });
+
+  // Beviset for spec §5's påstand: "DAY_RESULT kan aldrig alene nå tærsklen".
+  // Holder den ikke, er hele det dæmpede fald-tilbage meningsløst — dagens
+  // facit ville kunne udgive sig selv som dagens historie.
+  it("DAY_RESULT kan ikke nå tærsklen, uanset hvor stor dagen var", () => {
+    const [max] = scoreDailyCandidates([
+      cand("DAY_RESULT", { moved: 99, overAvg: 99, streak: 99, rel: "self" }),
     ]);
-    expect(got).toHaveLength(2);
-    expect(got.map((x) => x.rule)).toEqual(["DAY_RESULT", "CONTRARIAN"]);
+    // Spec §5's regnestykke ORDRET: 8 + 12 + 20 = 40. Dagens facit får kun
+    // afstanden til dagens gennemsnit, ikke placeringsændring og ikke stime —
+    // fik den hele størrelsesloftet (30), ville den nå 58 og kunne udgive sig
+    // selv som dagens historie, og så ville der aldrig findes en dag under
+    // tærsklen at falde tilbage til.
+    expect(max.news_value).toBe(8 + 12 + 20);
+    expect(max.news_value).toBeLessThan(PUBLISH_THRESHOLD);
   });
 
-  // Uden regel-snittet ville en bruger med tre konkurrencer få to
-  // DAY_RESULT-kort og intet andet: reglen udløses i hver konkurrence og har
-  // den laveste prioritet af alle. Karusellen ville miste sin variation.
-  it("tager højst ét kort pr. regel, så to konkurrencer ikke fylder loftet", () => {
-    const got = pickDailyStories([
-      cand("DAY_RESULT", 110, 4, "c1"),
-      cand("DAY_RESULT", 110, 9, "c2"),
-      cand("DAY_RESULT", 110, 6, "c3"),
-      cand("DAY_TOP", 130, 4, "c1"),
+  // MILESTONE får intet størrelsesbidrag. Uden det ville motoren (som kender
+  // dagens tal) og cron-kapringen (som ikke gør) skrive forskellig news_value
+  // for det SAMME kort, og determinismen i acceptkriterie 7 ville falde.
+  it("milepælen scorer fast 120 og vinder alt", () => {
+    const [ms] = scoreDailyCandidates([cand("MILESTONE", { moved: 3, overAvg: 5, rel: "self" })]);
+    expect(ms.news_value).toBe(120);
+    const alle = scoreDailyCandidates([
+      cand("MILESTONE", { rel: "self" }),
+      cand("DAY_TOP", { moved: 6, overAvg: 10, rel: "self" }),
     ]);
-    expect(got.map((x) => x.rule)).toEqual(["DAY_RESULT", "DAY_TOP"]);
-    expect(got[0].league_size).toBe(9);   // største liga vinder inden for reglen
+    expect(pickDay(alle).rule).toBe("MILESTONE");
   });
 
-  it("er deterministisk ved lige store ligaer", () => {
-    const a = pickDailyStories([cand("DUEL", 150, 5, "b"), cand("DUEL", 150, 5, "a")]);
-    const b = pickDailyStories([cand("DUEL", 150, 5, "a"), cand("DUEL", 150, 5, "b")]);
-    expect(a[0].competition_id).toBe("a");
-    expect(b[0].competition_id).toBe("a");
+  it("nærheden afgør, om en fremmeds aften bliver din historie", () => {
+    const score = (rel) => scoreDailyCandidates([cand("CONTRARIAN", { rel })])[0].news_value;
+    expect(score("self")).toBe(32 + 20);
+    expect(score("rival")).toBe(32 + 14);
+    expect(score("biggest")).toBe(32 + 8);
+    expect(score("other")).toBe(32 + 4);
+    // En ukendt relation må falde til den svageste og ikke til NaN.
+    expect(score("vrøvl")).toBe(32 + 4);
   });
 
-  it("giver [] uden kandidater", () => {
-    expect(pickDailyStories([])).toEqual([]);
-    expect(pickDailyStories(null)).toEqual([]);
+  it("vælger højeste nyhedsværdi", () => {
+    const got = pickDay(scoreDailyCandidates([
+      cand("SO_CLOSE", { rel: "self" }),          // 18 + 20 = 38
+      cand("DAY_TOP", { rel: "biggest" }),        // 34 + 8  = 42
+      cand("DUEL", { rel: "self" }),              // 30 + 20 = 50
+    ]));
+    expect(got.rule).toBe("DUEL");
+  });
+
+  // Tiebreak-stigen: grundvægt → største konkurrence → rule alfabetisk. Uden
+  // det sidste led kunne to kandidater med samme score bytte plads mellem to
+  // kørsler, og gen-kørslen ville give et andet kort.
+  it("er deterministisk ved lige score", () => {
+    // COLLECTIVE_MISS 24 + 20 = 44; SO_CLOSE 18 + 20 = 38 → forskellige.
+    // To DUEL i lige store ligaer er derimod uadskillelige på alt andet end id.
+    const a = pickDay(scoreDailyCandidates([
+      cand("DUEL", { competition_id: "b" }), cand("DUEL", { competition_id: "a" }),
+    ]));
+    const b = pickDay(scoreDailyCandidates([
+      cand("DUEL", { competition_id: "a" }), cand("DUEL", { competition_id: "b" }),
+    ]));
+    expect(a.competition_id).toBe("a");
+    expect(b.competition_id).toBe("a");
+  });
+
+  it("lader grundvægten bryde uafgjort før konkurrencestørrelsen", () => {
+    // DAY_TOP 34 + 4 = 38; SO_CLOSE 18 + 20 = 38. Samme score, højeste
+    // grundvægt vinder — selv om SO_CLOSE ligger i den største liga.
+    const got = pickDay(scoreDailyCandidates([
+      cand("SO_CLOSE", { rel: "self", league_size: 20 }),
+      cand("DAY_TOP", { rel: "other", league_size: 3 }),
+    ]));
+    expect(got.rule).toBe("DAY_TOP");
+  });
+
+  it("giver null uden kandidater", () => {
+    expect(pickDay([])).toBe(null);
+    expect(pickDay(null)).toBe(null);
+    expect(scoreDailyCandidates(null)).toEqual([]);
   });
 });
 
-describe("sortCarousel (rundens karrusel)", () => {
-  it("sætter rundens afsluttende kort øverst og dagene nyeste først", () => {
-    const rows = [
-      { id: "d1", day_key: "2026-03-03", priority: 110 },
-      { id: "r", day_key: null, priority: 70 },
-      { id: "d2", day_key: "2026-03-05", priority: 110 },
-      { id: "d2b", day_key: "2026-03-05", priority: 125 },
-    ];
-    expect(sortCarousel(rows).map((x) => x.id)).toEqual(["r", "d2", "d2b", "d1"]);
+describe("ulæst-markering og udløb (v3)", () => {
+  // Ulæst-signalet skal være sjældent nok til at betyde noget. Et badge, der
+  // lyser hver dag, er ikke et signal, det er en baggrundsfarve.
+  it("markerer kun kort over tærsklen", () => {
+    expect(isNewsworthy({ news_value: 45, priority: 130 })).toBe(true);
+    expect(isNewsworthy({ news_value: 44, priority: 130 })).toBe(false);
+    expect(isNewsworthy(null)).toBe(false);
   });
 
-  it("respekterer loftet", () => {
-    const rows = Array.from({ length: 25 }, (_, i) =>
-      ({ id: `d${i}`, day_key: `2026-03-${String(i + 1).padStart(2, "0")}`, priority: 110 }));
-    expect(sortCarousel(rows)).toHaveLength(CAROUSEL_LIMIT);
+  it("markerer ALDRIG det dæmpede kort, uanset news_value", () => {
+    // Dagen kan have ligget ét point under tærsklen og stadig bære tallet —
+    // men kortet, der blev udgivet, er facit og skal ikke lyse.
+    expect(isNewsworthy({ news_value: 90, priority: 180 })).toBe(false);
+  });
+
+  it("udløber efter 48 timer", () => {
+    const now = Date.parse("2026-03-05T12:00:00Z");
+    const at = (h) => ({ created_at: new Date(now - h * 3600e3).toISOString() });
+    expect(isFresh(at(47), now)).toBe(true);
+    expect(isFresh(at(49), now)).toBe(false);
+    expect(isFresh({}, now)).toBe(false);
+    expect(isFresh({ created_at: "ikke en dato" }, now)).toBe(false);
+  });
+});
+
+describe("rundestoryens frames (v3)", () => {
+  it("bygger frame 1 med percentil, så den kan stå alene som billede", () => {
+    const v = renderFrame({
+      frame: "ROUND_SUM", label: "03.03 – 09.03",
+      points: 14, exact: 3, matches: 5, rank: 2, total: 41, percentile: 97,
+    });
+    expect(v.headline).toBe("14 point");
+    expect(v.body).toContain("Bedre end 97 %");
+    expect(v.body).toContain("3 præcise resultater");
+  });
+
+  it("springer rating-framen over, når brugeren ikke har en rating", () => {
+    expect(renderFrame({ frame: "RATING", rating: null })).toBe(null);
+    const v = renderFrame({ frame: "RATING", rating: 1187.6, delta: -12.4, rank: 7, moved: -2 });
+    expect(v.headline).toBe("1188 (-12)");
+    expect(v.body).toContain("2 pladser tilbage");
+  });
+
+  it("skriver et positivt ratingspring med fortegn", () => {
+    const v = renderFrame({ frame: "RATING", rating: 1200, delta: 8, rank: 3, moved: 4 });
+    expect(v.headline).toBe("1200 (+8)");
+    expect(v.body).toContain("4 pladser frem");
+  });
+
+  it("nævner den værste kamp uden bebrejdelse — og udelader den, hvis den er den bedste", () => {
+    const both = renderFrame({
+      frame: "BEST_WORST",
+      best: { home: "OB", away: "AGF", score: "2-1", guess: "2-1", points: 3 },
+      worst: { home: "FCK", away: "FCM", score: "0-3", guess: "2-0", points: 0 },
+    });
+    expect(both.headline).toContain("3 point");
+    expect(both.body).toContain("Den anden vej");
+    expect(both.body).not.toMatch(/dårlig|fejl|forkert/i);
+
+    const only = renderFrame({
+      frame: "BEST_WORST",
+      best: { home: "OB", away: "AGF", score: "2-1", guess: "2-1", points: 3 }, worst: null,
+    });
+    expect(only.body).toBe("");
+    expect(renderFrame({ frame: "BEST_WORST", best: null })).toBe(null);
+  });
+
+  it("markerer en delt rundesejr som delt", () => {
+    const v = renderFrame({
+      frame: "CHAMPION", winner: "Anna", winner_points: 15, shared: true,
+      month: "2026-03", month_rank: 4, month_total: 40, month_points: 52,
+    });
+    expect(v.headline).toContain("Delt: Anna");
+    expect(v.body).toContain("nr. 4 af 40");
+    expect(renderFrame({ frame: "CHAMPION", winner: null })).toBe(null);
+  });
+
+  it("renderer milepælsframen fra kataloget og ikke fra SQL'ens tekst", () => {
+    const v = renderFrame({
+      frame: "MILESTONE", milestone_key: "RATING_1200", milestone_payload: { peak: 1210 },
+    });
+    expect(v.headline).toContain("Rating 1200");
+    expect(v.body).toContain("1210");
+  });
+
+  it("usableFrames filtrerer de ubrugelige fra og bevarer rækkefølgen", () => {
+    const got = usableFrames({ frames: [
+      { frame: "ROUND_SUM", points: 9, rank: 1, total: 2 },
+      { frame: "BEST_WORST", best: null },          // ingen tips → ryger ud
+      { frame: "RATING", rating: 1100, delta: 3, rank: 1 },
+      { frame: "UKENDT_FRA_EN_NYERE_SERVER" },      // ryger ud, kaster ikke
+    ] });
+    expect(got.map((x) => x.raw.frame)).toEqual(["ROUND_SUM", "RATING"]);
+    expect(usableFrames(null)).toEqual([]);
   });
 });
 
 describe("dagens regler (tekst)", () => {
   // Prioritetsbåndet er hele grunden til, at karriereprofilens milepæle ikke
   // behøvede en kodeændring: dens filter er priority < QUIET_TIER_MIN.
-  it("ligger helt over det dæmpede runde-tier", () => {
+  it("ligger helt over det dæmpede runde-tier og inden for båndet 110–189", () => {
     for (const p of Object.values(DAILY_RULES)) {
       expect(p).toBeGreaterThan(QUIET_TIER_MIN);
-      expect(p).toBeLessThan(DAILY_QUIET_MIN);
+      expect(p).toBeLessThan(190);
     }
     const values = Object.values(DAILY_RULES);
     expect(new Set(values).size).toBe(values.length);
+  });
+
+  // v3 tog det reserverede dæmpede dagstier i brug: DAY_RESULT er dagens
+  // fald-tilbage og skal renderes uden guld, uden emoji og uden ulæst-prik.
+  // Alle andre dagsregler er højdepunkter og skal ligge under grænsen.
+  it("kun DAY_RESULT ligger i det dæmpede dagstier", () => {
+    for (const [rule, p] of Object.entries(DAILY_RULES)) {
+      expect(isDailyQuiet(p), `${rule} er i det forkerte tier`).toBe(rule === "DAY_RESULT");
+    }
+    expect(DAILY_RULES.DAY_RESULT).toBe(DAILY_QUIET_MIN);
   });
 
   it("Dagens facit nævner kun placeringen i den øverste halvdel", () => {

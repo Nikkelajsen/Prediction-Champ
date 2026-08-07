@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // db mockes, så loaderne kan testes uden netværk/Supabase
 vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn(), insert: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
-import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadRoundsAvailable, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data.js";
+import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadRoundsAvailable, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadDayCard, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data.js";
 
 // mock-svar pr. tabel/view. En værdi må være en funktion, når svaret afhænger
 // af selve forespørgslen (fx et filter, testen vil holde loaderen op på).
@@ -324,6 +324,33 @@ describe("loadLatestStory (latest_story-view)", () => {
   it("returnerer null uden historier", async () => {
     mockTables({ latest_story: [] });
     expect(await loadLatestStory("token")).toBeNull();
+  });
+});
+
+describe("loadDayCard (Story Engine v3 · dagens ene kort)", () => {
+  const fresh = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+
+  it("returnerer dagens kort, når det er under 48 timer gammelt", async () => {
+    mockTables({ stories: [{ id: "d1", period: "day", day_key: "2026-03-03",
+      news_value: 54, headline: "H", body: "B", created_at: fresh(3) }] });
+    const s = await loadDayCard("token");
+    expect(s.id).toBe("d1");
+  });
+
+  // Uden udløbet ville en tirsdag efter en stille weekend præsentere fredagens
+  // kort som "dagens historie". Rækken bliver stående i databasen — den er
+  // A35's måledata — men den må ikke vises.
+  it("returnerer null, når kortet er ældre end 48 timer", async () => {
+    mockTables({ stories: [{ id: "d1", period: "day", news_value: 54,
+      headline: "H", body: "B", created_at: fresh(49) }] });
+    expect(await loadDayCard("token")).toBeNull();
+  });
+
+  it("returnerer null uden kort og ved fejl", async () => {
+    mockTables({ stories: [] });
+    expect(await loadDayCard("token")).toBeNull();
+    mockTables({ stories: () => { throw new Error("nede"); } });
+    expect(await loadDayCard("token")).toBeNull();
   });
 });
 
