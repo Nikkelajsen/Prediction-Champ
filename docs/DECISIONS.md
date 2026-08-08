@@ -15,6 +15,39 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 8. august 2026 — Backloggen bærer kun den seneste log, og tier-overskrifterne bærer deres rækker
+
+**Beslutning:** `docs/BACKLOG.md` har ét historik-afsnit, **Log**, i bunden af
+filen, og det bærer **kun den nyeste kørsel**. Skrives en ny, slettes den
+forrige. Ingen indbakke og ingen tier-overskrift bærer sin egen historik længere;
+står der noget under en overskrift, er det tilstand. Tier 1–5 viser nu deres
+rækker i stedet for referater af, hvad der engang stod i dem.
+
+**Begrundelse — det var tredje eksemplar, ikke sidste.** Filen var vokset til 780
+linjer, hvoraf omkring 300 var referater af leverede rækker: syv
+indbakke-rydninger, fjorten daterede afsnit under Prioriteret rækkefølge og en
+kørselshistorik under hver af de fem øverste tiers. Ti stikprøver (`G2`, `G7`,
+`G58`, `G63`, `G65`, `G67`, `G71`, `G73`, `G74`, `G84`) blev slået op i
+`DECISIONS.md` og `CHANGELOG.md` før sletningen, og alle ti stod begge steder —
+med begrundelsen i den ene og leverancen i den anden, altså fyldigere end
+referatet. Backloggens egen regel om at **slette frem for at strege ud** gjaldt
+allerede rækkerne; den gjaldt bare ikke teksten om rækkerne, og derfor voksede
+den ene fil, der er skrevet til ikke at vokse.
+
+**Hvorfor kun én og ikke tre eller fem.** Formålet med at beholde noget er, at
+den næste session kan se, hvad der lige er sket, uden at læse hele listen. Det
+formål er opfyldt af den seneste; nummer to og frem tjener kun genlæsning, og
+genlæsning er præcis det, arkivfilerne findes til. Grænsen skal desuden være
+mekanisk — "de sidste par" er ingen grænse, og det var sådan, de syv opstod.
+
+**Prisen er sagt højt:** tværgående mønstre, der blev formuleret i et referat og
+ikke andre steder, forsvinder ved næste rydning. Modtrækket er, at en lære, der
+er værd at beholde, hører til i `DECISIONS.md` — dér kan den revideres, fordi
+den står med sin begrundelse. En lære, ingen gad flytte, var ikke værd at
+beholde.
+
+---
+
 ## 7. august 2026 (nat) — En historie skal enten være uafhængig af nuet eller trække sig, når nuet er løbet fra den (`A38`)
 
 **Beslutning:** rundestoryen afløses ikke længere kun af et nyere dagskort. Den
