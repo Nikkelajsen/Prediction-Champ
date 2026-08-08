@@ -639,8 +639,31 @@ begin
   -- var dens egne enhedstests. Kopien er slettet, og påstandene om de præcise
   -- news_value-tal står i sql/tests/story_engine_daily.sql, altså mod en
   -- rigtig PostgreSQL og ikke mod en genskrivning af beregningen.
+  -- NEWS_VALUE BEREGNES I EN YDRE SELECT OG IKKE MED add column + update, og det
+  -- er ikke en stilistisk omskrivning (8. august 2026). Den oprindelige form var
+  --
+  --     alter table _sd_scored add column news_value int;
+  --     update _sd_scored set news_value = base + size_pts + prox;
+  --
+  -- og den sidste linje har ingen `where`. Supabase indlæser **pg_safeupdate**
+  -- via `session_preload_libraries` på rollen `authenticator`, altså i enhver
+  -- session, PostgREST åbner — og den afviser `UPDATE` uden `where` med
+  -- `UPDATE requires a WHERE clause`. SQL-editoren forbinder som `postgres` og
+  -- indlæser den ikke.
+  --
+  -- Følgen var, at dagsmotoren virkede, hver gang et menneske kaldte den i
+  -- hånden, og fejlede HVER gang matches-triggeren kaldte den fra `sync-live` —
+  -- tavst, fordi triggerens exception-guard slugte fejlen. v3's dagslag skrev
+  -- derfor aldrig én eneste række i produktion mellem 7. og 8. august 2026.
+  --
+  -- `where true` ville ikke være en pålidelig rettelse: en konstant-sand qual
+  -- kan planlæggeren folde væk, og så står sætningen igen uden qual. Kolonnen
+  -- beregnes i stedet, hvor de tre led allerede findes, og så er der ingen
+  -- `update` at afvise.
   drop table if exists _sd_scored;
   create temporary table _sd_scored as
+  select sc.*, (sc.base + sc.size_pts + sc.prox)::int as news_value
+  from (
   select px.user_id, c.cid, c.subject_id, c.competition_id, c.rule, c.priority,
          c.base, c.league_size, c.payload, c.headline, c.body, c.headline3, c.body3,
          -- MILESTONE får INTET størrelsesbidrag, og det er ikke en forglemmelse.
@@ -666,11 +689,10 @@ begin
   from _sd_prox px
   join _sd_cand c on c.cid = px.cid
   left join _sd_mag mg on mg.competition_id = c.competition_id and mg.user_id = c.subject_id
-  left join _sd_streak st on st.user_id = c.subject_id;
+  left join _sd_streak st on st.user_id = c.subject_id
+  ) sc;
 
   create index on _sd_scored (user_id);
-  alter table _sd_scored add column news_value int;
-  update _sd_scored set news_value = base + size_pts + prox;
 
   -- HÅRD REGEL (acceptkriterie 8): en bruger uden ét eneste scoret tip på en
   -- kampdag får ALDRIG et drama-kort om andre. Uden denne linje kunne et

@@ -433,3 +433,56 @@ fordi de virker uanset årsagen:
 - **Rækkefølgen i `generate_daily_stories`.** Den tidlige udgang står nu **før**
   `delete`. Stod den efter, ville et gen-kald for en dag, der er *blevet* rundens
   sidste kampdag, tømme dagen og skrive intet tilbage.
+
+### 13.9 Årsagen blev fundet dagen efter: `pg_safeupdate` (8. august 2026)
+
+§13.8 sluttede med, at årsagen **ikke kunne fastslås**. Det holdt ét døgn.
+Instrumenteringen fra §13.8 blev afprøvet i staging, og dens allerførste rigtige
+kørsel svarede:
+
+```
+ok = false · error = "UPDATE requires a WHERE clause"
+```
+
+Det er `pg_safeupdate`s egen fejltekst. Supabase indlæser den via
+`session_preload_libraries = supautils, safeupdate` på rollen **`authenticator`**
+— den rolle, PostgREST forbinder med. SQL-editoren forbinder som `postgres` og
+indlæser den ikke.
+
+**Det forklarer hver eneste observation fra §13.8, inklusive dem, der pegede
+væk fra en fejl:**
+
+| Observation | Forklaring |
+|---|---|
+| Håndkaldet skrev 20 rækker | Editoren = `postgres`-session, ingen `safeupdate` |
+| Triggeren skrev nul, tavst | `sync-live` → PostgREST → `authenticator`-session → afvist → slugt af guarden |
+| Hele triggersætningen målte 141 ms | Målingen blev også lavet i editoren |
+| Rollen "kunne ikke betyde noget", fordi kæden er `security definer` | **Forkert slutning.** `security definer` skifter *rolle*, ikke *session*. Udvidelsen er indlæst i sessionen og gælder uanset, hvem funktionen kører som |
+| Dagslaget havde aldrig skrevet en række | Sætningen kom med v3 og ramte derfor fra første udrulning |
+
+Den skyldige var én linje i `generate_daily_stories`:
+
+```sql uddrag
+alter table _sd_scored add column news_value int;
+update _sd_scored set news_value = base + size_pts + prox;   -- ingen where
+```
+
+**Rettelsen fjerner sætningen frem for at give den en `where`.** `where true` er
+ikke pålideligt: en konstant-sand qual kan planlæggeren folde væk, og så står
+sætningen igen uden qual. `news_value` beregnes i stedet i en ydre `select`,
+hvor `base`, `size_pts` og `prox` allerede findes — samme tal, ingen `update`.
+`sql/tests/story_engine_daily.sql` påstår de præcise `news_value`-værdier mod en
+rigtig PostgreSQL og er grøn efter omskrivningen, hvilket er beviset for, at
+omskrivningen er værdi-identisk.
+
+**Fejlklassen er nu bevogtet i CI** (vagt 2 i `sql/migration_syntax.test.js`):
+ingen `UPDATE`/`DELETE` uden `where` i `sql/`. `sql/dev/` er undtaget, og
+undtagelsen vender modsat vagt 1's — de filer pastes i editoren, som er det ene
+sted, `safeupdate` ikke findes.
+
+**Det, der er værd at tage med sig,** er ikke udvidelsen, men formen: en
+afhængighed, der kun findes i den ene af to veje ind i databasen, gør at "jeg
+prøvede det i hånden, og det virkede" bliver et *misvisende* bevis. Det kostede
+fire afkræftede hypoteser og en måling, der alle så rigtige ud. Sporet fra §13.8
+løste det på første forsøg — og det er den egentlige bekræftelse af, at den
+rettelse var den rigtige at lave, dengang årsagen var ukendt.

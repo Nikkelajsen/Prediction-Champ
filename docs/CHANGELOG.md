@@ -9,6 +9,15 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+8. august 2026 — `pg_safeupdate`: dagsmotorens tavse fejl havde en årsag alligevel
+**Sporet fra `A38` løste det på sin første rigtige kørsel.** Instrumenteringen blev afprøvet i staging, og `job_runs` svarede `ok = false · error = "UPDATE requires a WHERE clause"` — `pg_safeupdate`s egen fejltekst.
+**Mekanismen.** Supabase indlæser udvidelsen via `session_preload_libraries = supautils, safeupdate` på rollen **`authenticator`**, som PostgREST forbinder med. SQL-editoren forbinder som `postgres` og indlæser den ikke. Story Engine v3's dagsmotor havde én `update` uden `where` (`update _sd_scored set news_value = base + size_pts + prox;`), så den **virkede hver gang et menneske kaldte den i hånden og fejlede hver gang matches-triggeren kaldte den** — tavst, bag exception-guarden. Det er derfor, v3's dagslag aldrig skrev én eneste række i produktion.
+**Det retter en slutning fra dagen før:** at den kaldende rolle var irrelevant, fordi kæden er `security definer` som `postgres`. Sandt om rollen, forkert om sessionen — `session_preload_libraries` hører til forbindelsen og gælder uanset, hvem funktionen kører som. Netop den fejlslutning gjorde det vellykkede håndkald til en afkræftelse, mens det i virkeligheden var symptomet.
+**Rettelsen fjerner sætningen frem for at give den en `where`.** `where true` er ikke pålideligt — en konstant-sand qual kan planlæggeren folde væk. `news_value` beregnes nu i en ydre `select`, hvor `base`, `size_pts` og `prox` allerede findes. `sql/tests/story_engine_daily.sql` påstår de præcise `news_value`-tal mod en rigtig PostgreSQL og er grøn, hvilket er beviset for, at omskrivningen er værdi-identisk.
+**Fejlklassen er nu bevogtet i CI:** vagt 2 i `sql/migration_syntax.test.js` afviser `UPDATE`/`DELETE` uden `where` i `sql/`. `sql/dev/` er undtaget, og undtagelsen vender modsat vagt 1's — de filer pastes i editoren, som er det ene sted, udvidelsen ikke findes. Fejlfindingsloggen (`DOCUMENTATION.md` §13) har fået symptomet, så næste forekomst kendes på ét opslag.
+🔴 **`sql/story_engine_v3.sql` skal gen-køres i Supabase** (produktion og staging).
+
+
 7. august 2026 (nat) — Rundestoryen kunne modsige stillingen, og dagsmotoren havde aldrig kørt (`A38`)
 **Rapporten.** En bruger så rundestoryen for 28.07 – 03.08 stå på Hjem med overskriften *"Du er nu foran Lis04 i Superliga Grundspil"*, mens STILLING viste Lis04 **over** vedkommende. Begge dele var rigtige: kortet beskrev en afsluttet runde, tabellen beskrev nuet — og den nye rundes første kamp var spillet.
 **To ure.** Stillingen er live pr. kamp (`computeCompetitionState` medregner en runde fra første resultat), mens afløseren — dagskortet — først skrives, når HELE kampdagen er færdigspillet, globalt over alle turneringer. `roundIsNewer` ventede på dagskortet, og hullet imellem kan være dagevis langt. Rundestoryen trækker sig nu også, når `roundStorySuperseded()` er sand: den runde, Hjem viser som indeværende, er strengt senere end storyens og har mindst ét resultat. Prisen er sagt højt — top-slottet kan stå tomt, indtil dagskortet lander.
