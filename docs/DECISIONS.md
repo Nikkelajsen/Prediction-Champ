@@ -15,6 +15,43 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 8. august 2026 (aften) — En kopi uden en vagt mod originalen er ikke en kilde (`G86`)
+
+**Beslutning:** en JS-konstant, der spejler noget, motoren ejer i SQL, må kun
+blive stående, hvis den har **både** en aftager i appen **og** en test, der
+læser SQL-filen og fejler ved drift. Har den ingen aftager, slettes den. Har den
+en aftager, men ingen vagt, er den en fejl, der venter.
+
+**Begrundelse.** `src/lib/stories.js` bar elleve exports uden en eneste aftager,
+og tolv tests, der så ud som invarianter: "ingen to regler deler prioritet",
+"kun DAY_RESULT ligger i det dæmpede dagstier", "den svage variant kan ikke
+fortrænge rundens vinder". De påstod alle sammen noget om en **kopi**, og en
+kopi kan være internt konsistent, mens originalen er drevet fra den — testen om
+`RULES` ville stå grøn dagen efter, at to regler i `sql/story_engine.sql` fik
+samme tal. Det er tredje form af samme fejl på to dage: `G78`s scoringstal,
+formiddagens tekstskabeloner, og nu katalogerne.
+
+**Modsætningen er selve reglen.** `STORY_RULES` i `src/lib/analytics.js` er også
+et regelkatalog i JS og bliver — fordi Analytics per definition ikke kan vise en
+regel, der aldrig har udløst (RPC'en ser kun rækker, der findes), og fordi
+`analytics.test.js` LÆSER `sql/story_engine*.sql` og fejler, når motoren udvides
+uden at listen følger med. Den kopi har en grund til at findes og en vagt mod
+originalen. De slettede havde ingen af delene.
+
+**Der blev bevidst IKKE skrevet nye tests som erstatning.** De fire ting, de
+tolv dækkede, påstås allerede mod den rigtige motor i
+`sql/tests/story_engine_daily.sql` (påstand 11b, 2d og 14) og i
+`analytics.test.js`. En ny JS-test for resten ville have været den samme
+illusion ét sted længere nede — og det, der IKKE længere er vogtet, er sagt højt
+i testfilen frem for at blive antaget dækket.
+
+**Prisen er sagt højt:** prioritetstallene kan nu kun læses i SQL'en. Det er
+hensigten — det er dér, de virker — men en læser, der før kunne slå stigen op i
+`RULES`, skal nu åbne `sql/story_engine.sql`. `DOCUMENTATION.md` §17 er rettet,
+så den peger på den rigtige kilde; den påstod indtil i dag det modsatte.
+
+---
+
 ## 8. august 2026 (eftermiddag) — Mini-stillingens form, og at et kort kun må have én kilde til sin tekst (`G88`, `G86`)
 
 **Beslutning 1 — vinduet er tre rækker OMKRING modtageren, klemt mod enderne.**

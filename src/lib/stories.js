@@ -36,84 +36,52 @@
 import { renderMilestone } from "./milestones.js";
 import { roundLabel } from "./scoring.js";
 
-// Prioritetsstige (lavere tal = vigtigere). Én kilde til sandhed for regel-metadata.
-// Værdien her er reglens STÆRKE prioritet; tre regler har også en svag variant,
-// se SOFT_PRIORITY og priorityFor() nedenfor.
-export const RULES = {
-  MONTH_CHAMP: 10,
-  // Lokal månedstitel: større end alt, hvad én runde kan producere, mindre end
-  // den globale månedstitel.
-  AWARD_MONTH: 15,
-  LEAD_TAKEN: 20,
-  LEAD_LOST: 21,
-  PODIUM_ENTER: 22,
-  RATING_HIGH: 30,
-  H2H_PASS: 40,
-  CLOSING_IN: 45,
-  COMEBACK: 50,
-  PERSONAL_BEST: 55,
-  STREAK: 60,
-  // Lokal ugetitel. Ligger LIGE over rundens vinder, fordi det er det samme
-  // øjeblik set fra konkurrencens eget navnesystem — og når den findes, springer
-  // ROUND_WON over (se sql/story_engine.sql regel 70).
-  AWARD_WEEK: 65,
-  ROUND_WON: 70,
-  SHARP: 80,
-  // Dæmpet tier (≥ QUIET_TIER_MIN): genereres KUN for brugere, der ellers ville
-  // stå helt uden historie i runden. Renderes uden guld, uden emoji og uden Del.
-  SEASON_OPENER: 90,
-  QUIET_ROUND: 100,
-};
+// PRIORITETSSTIGEN STÅR IKKE HER (G86, 8. august 2026).
+//
+// Filen bar frem til august 2026 to regelkataloger — `RULES` (16 runderegler)
+// og `DAILY_RULES` (8 dagsregler) — med hver regels prioritetstal, plus
+// `SOFT_PRIORITY`, `THRESHOLDS` og `priorityFor()`, der spejlede SQL'ens
+// `case`-udtryk. **Ikke én af dem havde en aftager i appen.** Motoren kører i
+// databasen og skriver `priority` på rækken; frontenden læser tallet og har
+// aldrig haft brug for at kunne udlede det. Deres eneste aftagere var deres
+// egne enhedstests, og de tests var selvrefererende: de påstod, at en JS-kopi
+// var internt konsistent, hvilket ville have været sandt, uanset hvor langt
+// SQL'en var drevet fra den.
+//
+// Tallene bor nu ét sted, i `sql/story_engine.sql` og `sql/story_engine_v3.sql`.
+// **Regelnavnene har stadig et katalog i JS**, men det er `STORY_RULES` i
+// `src/lib/analytics.js`, som har en rigtig aftager (Analytics kan ikke vise en
+// regel, der aldrig har udløst) og en test, der læser `sql/story_engine*.sql`
+// og fejler ved drift. Det er forskellen på de to: dette katalog blev vogtet
+// mod SQL'en, katalogerne her blev vogtet mod sig selv.
 
 // ---------------------------------------------------------------------------
-// v2 (august 2026) — DAGLIGE historier.
+// DAGSKORTETS DÆMPEDE TIER
 //
-// Reglerne ovenfor hører til RUNDEN og udløses, når rundens sidste resultat er
-// inde. Reglerne herunder hører til DAGEN og udløses, når dagens sidste kamp er
-// færdigspillet. Kortene akkumulerer gennem runden i karusellen på Hjem, og på
-// rundens sidste dag lægger runde-kortet sig øverst.
-//
-// BÅNDET 110–189 ER VALGT MED VILJE og ikke som en parallel 10–100-stige:
-//   1) karriereprofilens milepæle filtrerede på `priority < QUIET_TIER_MIN`, så
-//      dagskort udelukkes AUTOMATISK fra arkivet. En parallel stige ville have
+// Dagbåndet er 110–189, og 180–189 er det dæmpede tier. BÅNDET ER VALGT MED
+// VILJE og ikke som en parallel til rundens 10–100-stige:
+//   1) karriereprofilens milepæle filtrerer på `priority < 90`, så dagskort
+//      udelukkes AUTOMATISK fra arkivet. En parallel stige ville have
 //      oversvømmet minde-listen med "Dagens facit: 4 point" — netop den fejl,
 //      v2 er sat i verden for at rette.
 //   2) en forespørgsel, der glemmer at filtrere på periode, men sorterer på
 //      prioritet, sætter stadig runde-kort først. Sikker degradering.
-//   3) isQuiet() beholder sin betydning for latest_story, som nu er runde-only.
-// v3 (august 2026): MILESTONE er kommet til som dagbåndets top, og DAY_RESULT
-// er flyttet fra 110 til 180 — det reserverede dæmpede tier er taget i brug.
-// Med grundvægt 8 kan dagens facit aldrig nå publiceringstærsklen ved egen
-// kraft (8 + 12 + 20 = 40 < 45), så den udgives KUN som fald-tilbage, og et
+//
+// v3 (august 2026): MILESTONE er dagbåndets top (110), og DAY_RESULT er flyttet
+// fra 110 til 180 — det reserverede dæmpede tier er taget i brug. Med grundvægt
+// 8 kan dagens facit aldrig nå publiceringstærsklen ved egen kraft
+// (8 + 12 + 20 = 40 < 45), så den udgives KUN som fald-tilbage, og et
 // fald-tilbage skal se dæmpet ud.
-export const DAILY_RULES = {
-  MILESTONE: 110,
-  CONTRARIAN: 120,
-  COLLECTIVE_MISS: 125,
-  DAY_TOP: 130,
-  STREAK_STATUS: 140,
-  DUEL: 150,
-  SO_CLOSE: 160,
-  DAY_RESULT: 180,
-};
-
-// Båndets grænser. 180–189 er det dæmpede dagstier.
-export const DAILY_TIER_MIN = 110;
+//
+// TALLET 180 STÅR OGSÅ I SQL'EN og er dermed det sidste sted, hvor JS og SQL
+// deler en konstant. Invarianten `priority < 180 ⟺ over tærsklen` er låst af
+// påstand 14 i sql/tests/story_engine_daily.sql.
 export const DAILY_QUIET_MIN = 180;
-export function isDaily(priority) {
-  return (priority ?? 0) >= DAILY_TIER_MIN;
-}
+
 // Dæmpet dagskort: mindre overskrift, ingen emoji, ingen ulæst-markering.
 export function isDailyQuiet(priority) {
   return (priority ?? 0) >= DAILY_QUIET_MIN;
 }
-
-// Højst så mange dagskort pr. bruger pr. dag. ÉT — på tværs af alle
-// konkurrencer. I v2 var tallet 2 og loftet "pr. regel, derefter i alt"; nu er
-// der kun ét slot, og det håndhæves af et unikt indeks på (user_id, day_key) i
-// databasen frem for af koden her. Konstanten står tilbage som den værdi,
-// frontenden regner med at møde.
-export const DAILY_MAX_CARDS = 1;
 
 // ---------------------------------------------------------------------------
 // v3 · NYHEDSVÆRDI — OG HVORFOR DEN IKKE STÅR HER (G78, 7. august 2026)
@@ -138,41 +106,6 @@ export const DAILY_MAX_CARDS = 1;
 // en ulæst-markering? Se `isNewsworthy()` nedenfor — svaret kræver ikke
 // tærsklen, og det er hele grunden til, at rækken kunne lukkes uden en
 // migrering, sådan som backloggen ellers forudsagde.
-
-// Svage varianter (v1.1). Tærsklen for tre regler er sænket, så de udløses oftere,
-// men den svage udgave får et højere prioritetstal og kan derfor kun vises, når der
-// ikke er noget bedre. Princippet: **tærsklen afgør, om historien findes;
-// prioriteten afgør, om den vises.** 75 ligger under rundens vinder (70), så
-// "2. sejr i træk mod Jimmy" aldrig fortrænger "du vandt runden".
-export const SOFT_PRIORITY = { COMEBACK: 75, STREAK: 75, SHARP: 85 };
-
-// Grænsen mellem højdepunkt og dæmpet tier. Bruges af frontenden (kort-stil) og af
-// karriereprofilens milepæle, som kun må vise rigtige historier.
-export const QUIET_TIER_MIN = 90;
-export function isQuiet(priority) {
-  return (priority ?? 0) >= QUIET_TIER_MIN;
-}
-
-// Tærskler (spec afsnit 3). Kalibreret på live-data juli 2026 (beslutning A4):
-// comeback 3→2 pladser og 5→4 deltagere, stime 3→2 runder, præcise 3→2 — alle med
-// en svag variant, jf. SOFT_PRIORITY. `*Strong` er grænsen for den stærke prioritet.
-export const THRESHOLDS = {
-  comebackPlaces: 2, comebackStrongPlaces: 3, comebackMinPlayers: 4,
-  streakRounds: 2, streakStrongRounds: 3,
-  sharpExact: 2, sharpStrongExact: 3,
-  podiumMinPlayers: 6, closingInMaxGap: 3,
-};
-
-// Prioriteten for en udløst regel. Spejler `case`-udtrykkene i sql/story_engine.sql:
-// `strength` er antallet, der afgør styrken (rykkede pladser / sejre i træk / præcise).
-export function priorityFor(rule, strength) {
-  switch (rule) {
-    case "COMEBACK": return strength >= THRESHOLDS.comebackStrongPlaces ? RULES.COMEBACK : SOFT_PRIORITY.COMEBACK;
-    case "STREAK": return strength >= THRESHOLDS.streakStrongRounds ? RULES.STREAK : SOFT_PRIORITY.STREAK;
-    case "SHARP": return strength >= THRESHOLDS.sharpStrongExact ? RULES.SHARP : SOFT_PRIORITY.SHARP;
-    default: return RULES[rule] ?? DAILY_RULES[rule] ?? null;
-  }
-}
 
 // Fortjener kortet en ulæst-markering? Et badge, der lyser hver dag, er ikke et
 // signal, det er en baggrundsfarve.
@@ -263,21 +196,6 @@ export function roundStoryEyebrow(story) {
   const key = String(story?.round_key || "");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return ROUND_STORY_EYEBROW;
   return `${ROUND_STORY_EYEBROW} · ${roundLabel(key)}`;
-}
-
-// Deterministisk udvælgelse: præcis én historie pr. bruger pr. runde.
-// Laveste priority; ved lighed største liga (league_size); dernæst competition_id
-// (garanteret unik tiebreak). Spejler latest_story-viewets ORDER BY. Returnerer
-// null hvis der ingen kandidater er (= stilhed → intet kort).
-export function pickStory(candidates) {
-  if (!candidates || !candidates.length) return null;
-  const ranked = candidates.slice().sort((a, b) => {
-    if (a.priority !== b.priority) return a.priority - b.priority;
-    const as = a.league_size ?? -1, bs = b.league_size ?? -1; // null sidst (nulls last)
-    if (as !== bs) return bs - as;
-    return String(a.competition_id ?? "").localeCompare(String(b.competition_id ?? ""));
-  });
-  return ranked[0];
 }
 
 // ---------------------------------------------------------------------------

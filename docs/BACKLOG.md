@@ -47,7 +47,6 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- `pickStory`, `priorityFor`, `RULES`, `DAILY_RULES`, `THRESHOLDS`, `SOFT_PRIORITY`, `isDaily`, `isQuiet`, `QUIET_TIER_MIN` og `DAILY_MAX_CARDS` i `src/lib/stories.js` har heller ingen aftagere i appen — `G86` påstod det modsatte om de to første. Kun `isFresh`, `isDailyQuiet`, `isNewsworthy`, `roundStorySuperseded`, `roundStoryEyebrow`, `usableFrames` og de to konstanter importeres.
 - `sql/story_engine_v3.sql` står ikke i filindekset i `sql/README.md` (som går til #46), så der er ingen række at læse kørerækkefølge og gen-køringsadvarsler i for den fil, der oftest skal gen-køres.
 - `MiniStanding` viser ikke, hvor mange der er i konkurrencen — "3. Cecilie" af 4 eller af 40 er to forskellige oplysninger, og `league_size` står allerede på rækken.
 
@@ -235,44 +234,44 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 8. august 2026 (eftermiddag) — `G88` bygget, `G86` slettet
+### 8. august 2026 (aften) — `G86`s anden halvdel: elleve døde exports
 
-**Listen er 38 → 36, og de to rækker var hinandens modsætning:** den ene et
-felt, ingen skrev, den anden en funktion, ingen kaldte. Begge var **tavse** — en
-manglende mini-stilling efterlader intet tomt felt, og død kode med 36 grønne
-testkald ser levende ud. Det er samme fejlklasse som `G78` og `G74`, og det er
-nu fjerde og femte gang på tre dage.
+**Listen er uændret på 36** — arbejdet lukkede en indbakke-linje, ikke en række.
+Linjen kom af `G86`s egen fejl: rækken skrev, at `pickStory` og `priorityFor`
+"har rigtige aftagere og bliver", og de havde ingen. Ved eftersyn var det ikke to
+navne, men **elleve**: begge regelkataloger (`RULES`, `DAILY_RULES`), båndets
+øvre halvdel (`DAILY_TIER_MIN`, `isDaily`), `DAILY_MAX_CARDS`, `SOFT_PRIORITY`,
+`QUIET_TIER_MIN`, `isQuiet`, `THRESHOLDS`, `priorityFor` og `pickStory`.
+`src/lib/stories.js` er 566 → 274 linjer på to leverancer samme dag.
 
-**`G88`s række byggede på en forkert præmis, og den rigtige var større.** Den
-sagde, at mini-stillingen kunne modsige STILLING; nøglen blev slet ikke skrevet,
-så halvdelen af hverdagskortet havde manglet, siden v3 blev bygget. To ting blev
-afgjort ved bygningen: vinduet er tre rækker **omkring** modtageren og ikke
-over/dig/under (spec'ens form ville give føreren mindst indhold), og
-overskriften daterer stillingen, hvilket er `A38`s kur mod præcis den
-modsigelse, rækken frygtede. Milepæls-kort får ingen mini ad nogen af de to
-veje — kapringen flytter kortets `competition_id`, og en beholdt mini ville vise
-én konkurrences stilling under en andens kort.
+**Det afgørende fund var ikke antallet, men hvad testene beviste.** Tolv tests
+faldt med koden, og de så alle sammen ud som invarianter: "ingen to regler deler
+prioritet", "kun DAY_RESULT ligger i det dæmpede dagstier", "den svage variant
+kan ikke fortrænge rundens vinder". **Hver eneste påstod noget om en JS-KOPI af
+noget, der bor i SQL** — og en kopi kan være internt konsistent, mens
+originalen er drevet fra den. Testen "ingen to regler i `RULES` deler prioritet"
+ville stå grøn dagen efter, at nogen gav to regler i `sql/story_engine.sql`
+samme tal. Det er samme selvreference som `G78`s scoringstal og `G86`s
+tekstskabeloner, bare i sin tredje form: **et katalog vogtet mod sig selv.**
 
-**`G86` var rigtig om `renderStory` og forkert om resten af filen.** Rækken
-skrev, at "`renderFrame`, `pickStory`, `priorityFor` og resten af filen har
-rigtige aftagere og bliver". Det holder for `renderFrame` (kaldes af
-`usableFrames`) og ikke for de to andre: **ni exports mere har nul aftagere i
-appen.** De er noteret i indbakken frem for slettet, fordi de er et andet snit —
-`RULES` er prioritetsstigen, som docs peger på — men rækken var altså et
-undertal, præcis som `G67` var det 5. august.
+**Modsætningen, der gør reglen brugbar, stod ved siden af hele tiden.**
+`STORY_RULES` i `src/lib/analytics.js` er også et regelkatalog i JS — men det
+har en rigtig aftager (Analytics kan ikke vise en regel, der aldrig har udløst)
+og en test, der **læser `sql/story_engine*.sql`** og fejler ved drift. Det er
+forskellen på de to slags kopi, og den er værd at kunne se: en kopi med en vagt
+mod originalen er en kilde, en kopi uden er en påstand om fortiden.
 
-**Mutationstesten er dagens vigtigste lære, og den var kritisk to gange.**
-Tolv mutationer blev prøvet mod de nye påstande; ti blev fanget. **Den, der
-slap, afslørede en for svag fixture:** `rnk` erstattet af rækkens nummer i
-vinduet gjorde ingen forskel, fordi ingen to spillere i fixturen delte en
-placering. En syvende bruger med tips identiske med en andens giver nu c2 en
-ægte pointlighed, og mutationen fanges. **Den anden fandt et hul i en TRE UGER
-GAMMEL påstand:** determinismetesten sagde i sin egen kommentar, at
-fingerprintet "dækker ALT, der kan flytte sig", og den dækkede ikke payloaden —
-altså netop dér, mini-stillingen nu bor. Tre navne kunne have skiftet mellem to
-gen-kørsler, uden at ét bogstav i teksten ændrede sig. **De to sidste mutationer
-kan fixturen ikke fremtvinge**, og det står nu skrevet i testfilen frem for at
-blive glemt.
+**Intet blev erstattet af en ny test, og det er en beslutning.** De fire ting,
+de tolv tests dækkede, er allerede påstået mod den rigtige motor —
+udvælgelsesstigen af påstand 11b, båndet af 2d, tærsklen af 14, regelnavnene af
+`analytics.test.js`. At skrive nye JS-tests for de resterende ville have været
+at bygge illusionen op igen ét sted længere nede.
+
+**Tre dokumentationspåstande var forkerte og er rettet**, ikke bare slettet.
+`DOCUMENTATION.md` §17 skrev, at "prioriteterne er ét sted i JS … og spejles af
+`case`-udtryk i SQL'en" — retningen var vendt om, motoren kører i databasen. Og
+to steder stod `isQuiet()` opført som frontendens funktion; den er læst af
+ingen. En dokumentation, der udpeger den forkerte kilde, er dyrere end ingen.
 
 ---
 

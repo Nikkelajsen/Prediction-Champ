@@ -1,127 +1,33 @@
 import { describe, it, expect } from "vitest";
-import { DAILY_QUIET_MIN, DAILY_RULES, DAY_CARD_MAX_AGE_MS, isDailyQuiet, isFresh, isNewsworthy, isQuiet, pickStory, priorityFor, QUIET_TIER_MIN, renderFrame, roundStoryEyebrow, roundStorySuperseded, ROUND_STORY_EYEBROW, ROUND_STORY_MAX_AGE_MS, RULES, SOFT_PRIORITY, THRESHOLDS, usableFrames } from "./stories.js";
+import { DAY_CARD_MAX_AGE_MS, isFresh, isNewsworthy, renderFrame, roundStoryEyebrow, roundStorySuperseded, ROUND_STORY_EYEBROW, ROUND_STORY_MAX_AGE_MS, usableFrames } from "./stories.js";
 
 // Testcases spejler docs/features/story-engine-v1.md afsnit 9 (det der kan
 // udtrykkes rent i JS; DB-idempotens og trigger-adfærd verificeres i skyggetilstand).
 
-describe("pickStory (deterministisk udvælgelse)", () => {
-  it("vælger laveste prioritet", () => {
-    const chosen = pickStory([
-      { rule: "ROUND_WON", priority: 70, league_size: 8, competition_id: "c1" },
-      { rule: "LEAD_TAKEN", priority: 20, league_size: 4, competition_id: "c2" },
-      { rule: "RATING_HIGH", priority: 30, league_size: null, competition_id: null },
-    ]);
-    expect(chosen.rule).toBe("LEAD_TAKEN"); // §9.1: 1.-pladsskift vinder over rundevinder/rating
-  });
-
-  it("ved samme prioritet vinder den største liga", () => {
-    const chosen = pickStory([
-      { rule: "LEAD_TAKEN", priority: 20, league_size: 4, competition_id: "a" },
-      { rule: "LEAD_TAKEN", priority: 20, league_size: 8, competition_id: "b" },
-    ]);
-    expect(chosen.competition_id).toBe("b");
-  });
-
-  it("bruger competition_id som endelig, unik tiebreak", () => {
-    const chosen = pickStory([
-      { rule: "ROUND_WON", priority: 70, league_size: 5, competition_id: "zeta" },
-      { rule: "ROUND_WON", priority: 70, league_size: 5, competition_id: "alpha" },
-    ]);
-    expect(chosen.competition_id).toBe("alpha");
-  });
-
-  it("global historie (league_size null) taber en lighed til en liga-historie (nulls last)", () => {
-    // (opstår ikke i praksis pga. unikke globale prioriteter, men reglen skal være entydig)
-    const chosen = pickStory([
-      { rule: "X", priority: 50, league_size: null, competition_id: null },
-      { rule: "Y", priority: 50, league_size: 3, competition_id: "c" },
-    ]);
-    expect(chosen.competition_id).toBe("c");
-  });
-
-  it("ingen kandidater → null (stilhed, intet kort) — §9.2", () => {
-    expect(pickStory([])).toBeNull();
-    expect(pickStory(null)).toBeNull();
-  });
-
-  it("Comeback (50) vælges over Perfekt træfsikkerhed (80); begge er kandidater — §9.3", () => {
-    const candidates = [
-      { rule: "COMEBACK", priority: RULES.COMEBACK, league_size: 9, competition_id: "pk" },
-      { rule: "SHARP", priority: RULES.SHARP, league_size: null, competition_id: null },
-    ];
-    expect(pickStory(candidates).rule).toBe("COMEBACK");
-    expect(candidates).toHaveLength(2); // begge bevares (gemmes i DB), kun én vises
-  });
-});
-
-describe("tærskler (A4-kalibrering, v1.1)", () => {
-  it("comeback fra 2 pladser, stime fra 2 runder, præcise fra 2", () => {
-    expect(THRESHOLDS.comebackPlaces).toBe(2);
-    expect(THRESHOLDS.streakRounds).toBe(2);
-    expect(THRESHOLDS.sharpExact).toBe(2);
-  });
-
-  it("den svage variant får højere prioritetstal end den stærke", () => {
-    // "tærsklen afgør, om historien findes; prioriteten afgør, om den vises"
-    expect(priorityFor("COMEBACK", 3)).toBe(RULES.COMEBACK);
-    expect(priorityFor("COMEBACK", 2)).toBe(SOFT_PRIORITY.COMEBACK);
-    expect(priorityFor("STREAK", 4)).toBe(RULES.STREAK);
-    expect(priorityFor("STREAK", 2)).toBe(SOFT_PRIORITY.STREAK);
-    expect(priorityFor("SHARP", 3)).toBe(RULES.SHARP);
-    expect(priorityFor("SHARP", 2)).toBe(SOFT_PRIORITY.SHARP);
-  });
-
-  it("en svag variant kan ikke fortrænge rundens vinder", () => {
-    for (const rule of ["COMEBACK", "STREAK", "SHARP"]) {
-      expect(priorityFor(rule, 2)).toBeGreaterThan(RULES.ROUND_WON);
-    }
-    // … men den stærke variant af comeback/stime skal fortsat vinde over den
-    expect(priorityFor("COMEBACK", 3)).toBeLessThan(RULES.ROUND_WON);
-    expect(priorityFor("STREAK", 3)).toBeLessThan(RULES.ROUND_WON);
-  });
-
-  it("regler uden svag variant har én fast prioritet", () => {
-    expect(priorityFor("MONTH_CHAMP", 99)).toBe(RULES.MONTH_CHAMP);
-    expect(priorityFor("UKENDT", 1)).toBeNull();
-  });
-});
-
-describe("dæmpet tier (v1.1)", () => {
-  it("kun SEASON_OPENER og QUIET_ROUND er dæmpede", () => {
-    const quiet = Object.entries(RULES).filter(([, p]) => isQuiet(p)).map(([r]) => r);
-    expect(quiet.sort()).toEqual(["QUIET_ROUND", "SEASON_OPENER"]);
-    expect(isQuiet(RULES.SHARP)).toBe(false);
-    expect(isQuiet(SOFT_PRIORITY.SHARP)).toBe(false); // 85 er stadig en rigtig historie
-    expect(isQuiet(undefined)).toBe(false);
-  });
-
-  it("et dæmpet kort taber altid til en rigtig historie", () => {
-    const chosen = pickStory([
-      { rule: "QUIET_ROUND", priority: RULES.QUIET_ROUND, league_size: 12, competition_id: "a" },
-      { rule: "SHARP", priority: SOFT_PRIORITY.SHARP, league_size: 3, competition_id: "b" },
-    ]);
-    expect(chosen.rule).toBe("SHARP");
-    expect(QUIET_TIER_MIN).toBeGreaterThan(SOFT_PRIORITY.SHARP);
-  });
-
-  // DE FEM TEKST-TESTS, DER STOD HER, ER SLETTET MED `renderStory` (G86,
-  // 8. august 2026): emoji-signalet, "nævner aldrig placeringen i nederste
-  // halvdel", status quo-formuleringen og premiereugens udeladte afstand.
-  // De påstod alle sammen noget om skabeloner, ingen bruger nogensinde mødte —
-  // teksterne kommer fra SQL'en. **Designreglerne, de vogtede, er ikke
-  // ophævet**, og det er den eneste grund til, at det er værd at nævne her:
-  // "historier driller, men ydmyger aldrig" og "emoji findes kun i
-  // højdepunkt-tieret" gælder uændret, de gælder bare om `sql/story_engine.sql`,
-  // hvor teksterne står. En test af dem hører derfor til i et SQL-tjek og ikke i
-  // vitest, og indtil den findes, er de vogtet af gennemlæsning alene.
-});
-
-describe("nye regler (v1.1)", () => {
-  it("prioritetsstigen er entydig — ingen to regler deler prioritet", () => {
-    const values = Object.values(RULES);
-    expect(new Set(values).size).toBe(values.length);
-  });
-});
+// HVAD DER IKKE LÆNGERE TESTES HER, OG HVORFOR DET IKKE ER ET TAB
+// (G86, 8. august 2026)
+//
+// Filen bar tolv tests af `pickStory`, `priorityFor`, `THRESHOLDS`, `RULES` og
+// `DAILY_RULES` — udvælgelsesreglen, den svage/stærke prioritetsvariant,
+// A4-tærsklerne, at ingen to regler deler prioritet, og at kun DAY_RESULT ligger
+// i det dæmpede dagstier. Alle fem exports er slettet, fordi ingen del af appen
+// kaldte dem, og testene fulgte med.
+//
+// **De beviste mindre, end de så ud til.** Hver enkelt påstod noget om en
+// JS-KOPI af noget, der bor i SQL — og en kopi kan være internt konsistent, mens
+// originalen er drevet fra den. En test, der siger "ingen to regler i `RULES`
+// deler prioritet", ville stå grøn dagen efter, at nogen gav to regler i
+// `sql/story_engine.sql` samme tal.
+//
+// **Det, der bar noget, er dækket andetsteds og mod den rigtige motor:**
+//   · udvælgelsesstigen (priority → league_size → competition_id) er
+//     `latest_story`s ORDER BY, og påstand 11b i story_engine_daily.sql kræver,
+//     at build_round_frames bruger nøjagtig samme.
+//   · prioritetsbåndet 110–189 er påstand 2d.
+//   · `priority < 180 ⟺ over tærsklen` er påstand 14.
+//   · regelnavnenes katalog vogtes af `analytics.test.js`, som LÆSER
+//     `sql/story_engine*.sql` og fejler ved drift. Det er den eneste af de
+//     gamle kataloger, der havde en aftager og en rigtig vagt.
 
 // ---------------------------------------------------------------------------
 // v2/v3 · daglige historier
@@ -308,33 +214,22 @@ describe("rundestoryens frames (v3)", () => {
   });
 });
 
-describe("dagens regler (tekst)", () => {
-  // Prioritetsbåndet er hele grunden til, at karriereprofilens milepæle ikke
-  // behøvede en kodeændring: dens filter er priority < QUIET_TIER_MIN.
-  it("ligger helt over det dæmpede runde-tier og inden for båndet 110–189", () => {
-    for (const p of Object.values(DAILY_RULES)) {
-      expect(p).toBeGreaterThan(QUIET_TIER_MIN);
-      expect(p).toBeLessThan(190);
-    }
-    const values = Object.values(DAILY_RULES);
-    expect(new Set(values).size).toBe(values.length);
-  });
-
-  // v3 tog det reserverede dæmpede dagstier i brug: DAY_RESULT er dagens
-  // fald-tilbage og skal renderes uden guld, uden emoji og uden ulæst-prik.
-  // Alle andre dagsregler er højdepunkter og skal ligge under grænsen.
-  it("kun DAY_RESULT ligger i det dæmpede dagstier", () => {
-    for (const [rule, p] of Object.entries(DAILY_RULES)) {
-      expect(isDailyQuiet(p), `${rule} er i det forkerte tier`).toBe(rule === "DAY_RESULT");
-    }
-    expect(DAILY_RULES.DAY_RESULT).toBe(DAILY_QUIET_MIN);
-  });
-
-  // SYV TEKST-TESTS ER SLETTET HER MED `renderStory` (G86, 8. august 2026):
-  // dagens facit, kontrarian, kollektiv fiasko, stimen, duellen, "så tæt på" og
-  // dækningspåstanden "alle dagens regler har en skabelon". Den sidste er værd
-  // at nævne ved navn, fordi den lyder som en dækningsgaranti og ikke var det:
-  // den beviste, at hver af de otte dagsregler havde en skabelon i JS —
-  // ikke at motoren, der faktisk skriver teksten, har en. Den påstand hører til
-  // i sql/tests/story_engine_daily.sql, hvor teksterne kommer fra.
-});
+// ---------------------------------------------------------------------------
+// DAGENS REGLER HAR INGEN JS-TESTS TILBAGE (G86, 8. august 2026)
+//
+// Her lå ni tests: syv af `renderStory`s dagsskabeloner og to af `DAILY_RULES`.
+// Begge kilder er slettet, fordi ingen del af appen læste dem — teksterne
+// skrives af `sql/story_engine_v3.sql` på rækken, og prioritetstallene bor
+// samme sted.
+//
+// **Det, de vogtede, vogtes nu mod den rigtige motor** og ikke mod en kopi:
+//   · båndet 110–189 for hvert udgivet dagskort → påstand 2d
+//   · `priority < 180 ⟺ over tærsklen` → påstand 14
+//   · at hver dagsregel HAR en tekst → motoren skriver `headline`/`body`, og en
+//     tom tekst ville stå i selve rækken
+//   · regelnavnene → `analytics.test.js`, som læser `sql/story_engine*.sql`
+//
+// Den slettede påstand "alle dagens regler har en skabelon" er værd at nævne
+// ved navn, fordi den lød som en dækningsgaranti og ikke var det: den beviste,
+// at hver af de otte regler havde en skabelon **i JS** — ikke at motoren, der
+// faktisk skriver teksten, har en.

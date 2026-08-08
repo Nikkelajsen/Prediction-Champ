@@ -193,6 +193,8 @@ Ingen ny tabel. Ændringerne i `stories`:
 | Ny kolonne `news_value int` | gør tærskeljusteringen målbar bagudrettet, og gør et forkert valg debuggbart |
 | Prioritetsbåndet 110–189 **bevares** | `loadCareerMilestones` og `isQuiet()` afhænger af det; v2 §4 gælder uændret |
 
+> ⚠️ **RETTET EFTER LEVERING 8. august 2026 (`G86`):** `isQuiet()` er slettet — den havde ingen aftager. **Båndet bevares stadig**, og af de samme to grunde: karriereprofilens filter (`priority < 90`) og den sikre degradering. De to konstanter, der er tilbage i JS, er `DAILY_QUIET_MIN = 180` og `isDailyQuiet()`, som `DayCard` faktisk bruger. Samme afsnits `DAILY_MAX_CARDS` (§8) er også væk: ét slot pr. bruger pr. dag håndhæves af det unikke indeks, og konstanten stod tilbage uden at blive læst.
+
 **Delete-scopingen fra v2 §8 er uændret og lige så farlig som før.** `generate_stories` sletter kun `period = 'round'`, `generate_daily_stories` kun `period = 'day' and day_key = p_day`. `sql/tests/story_engine_daily.sql` skal udvides med v3-tilfældet: en gen-kørsel af dagsmotoren må ikke kunne producere to rækker for samme `(user_id, day_key)`.
 
 **Anbefaling, ikke krav:** flyt hverdagskortets tekst fra SQL til `src/lib/stories.js` og gem kun `rule` + `payload` i tabellen — præcis den model, `milepaele-v1.md` §8 allerede bruger med succes. Det fjerner den dobbelt-vedligeholdte tekst, som v1 og v2 begge har på listen over kendte begrænsninger. Det er en migrering af eksisterende rækker og hører derfor til efter, at v3's udvælgelse er valideret i drift.

@@ -59,6 +59,8 @@ Valgt frem for en parallel 10–100-stige, i vigtighedsrækkefølge:
 2. En forespørgsel, der glemmer `period`-filteret men sorterer på prioritet, sætter stadig runde-kort først. Sikker degradering.
 3. `isQuiet()` (≥ 90) beholder sin betydning for sin eneste forbruger, `latest_story`, som nu er pinnet til `period = 'round'`.
 
+> ⚠️ **RETTET EFTER LEVERING 8. august 2026 (`G86`):** punkt 3's funktion findes ikke mere. `isQuiet()` blev slettet sammen med ti andre exports i `src/lib/stories.js`, som ingen del af appen kaldte — `latest_story` er et SQL-view og har aldrig læst JS-funktionen; den var en beskrivelse af viewets filter, ikke dets implementering. **Grænsen ved 90 gælder uændret**, den står bare kun i SQL nu (viewet og `loadCareerMilestones`' filter).
+
 180–189 er reserveret til et dæmpet dagstier, hvis det bliver nødvendigt. Intet genereres dér i dag.
 
 ## 5. Den danske dag
