@@ -15,6 +15,54 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 8. august 2026 (eftermiddag) — Mini-stillingens form, og at et kort kun må have én kilde til sin tekst (`G88`, `G86`)
+
+**Beslutning 1 — vinduet er tre rækker OMKRING modtageren, klemt mod enderne.**
+Spec §8 sagde "over/dig/under". Det er fravalgt: nr. 1 har ingen over sig, så
+formen ville give føreren to rækker og den midterste tre — mindst indhold til
+den, der har præsteret mest. Vinduet klemmes i stedet, så nr. 1 ser 1-2-3 og den
+sidste ser de tre nederste.
+
+**Beslutning 2 — placeringen er `rnk`, udsnittet er en total orden.** De to tal
+er forskellige og skal være det: `rnk` deles ved pointlighed, så to spillere på
+tredjepladsen begge står som nr. 3 (det er den rigtige oplysning), mens
+udvælgelsen af de tre rækker sker på `(rnk, user_id)`, fordi et vindue skåret på
+et tal, der kan deles, ikke er deterministisk. Acceptkriterie 7 kræver, at to
+gen-kørsler giver samme kort — også samme tre navne.
+
+**Beslutning 3 — mini-stillingen daterer sig selv.** *"Stillingen efter kampdag
+03.08"* står over rækkerne. Rækkerne er et snapshot fra den dag, kortet lever i
+48 timer, og STILLING-fanen er live pr. kamp, så de KAN modsige hinanden. Det er
+nøjagtig `A38`s fejltype i lille format, og løsningen er den samme: kortet
+påstår ikke noget om nuet, det fortæller, hvad der gjaldt den dag. Alternativet
+— at lade mini'en være live — er ikke muligt uden at lade komponenten hente
+stillingen selv, og dét ville flytte designreglen om, hvem en historie må nævne,
+ud i en komponent, hvor den kan glemmes.
+
+**Beslutning 4 — milepæls-kort har ingen mini.** `apply_milestone_stories()`
+sætter kortets `competition_id` til milepælens, som kan være en anden end den,
+kortet blev skrevet for. Enten måtte kapringen genberegne stillingen, eller også
+måtte mini'en væk. Den fjernes, fordi et milepæls-kort er en engangsbedrift og
+ikke en stillingsopdatering — og fordi de to veje til et `MILESTONE`-kort
+(motoren og cron) skal give byte-samme række. Motoren udelader den, kapringen
+fjerner den.
+
+**Beslutning 5 — `renderStory()` slettes frem for at blive taget i brug.** Den
+lovede en fallback-rendering fra payload, og valget stod mellem at gøre løftet
+sandt (lade frontenden rendere fra payload) eller fjerne det. Fjernet, af samme
+grund som `G78` dagen før: **motoren skriver færdig `headline`/`body` på rækken,
+så en klient-side rendering ville være en anden kilde til samme tekst.** Prisen
+ved at lade den stå var ikke en fejl, men at hver tekstrettelse skulle laves to
+steder, hvoraf kun det ene kunne ses af en bruger — `A38` betalte den regning.
+
+**Grænsen, der IKKE flyttes: `renderFrame()` bliver.** Den ligner `renderStory`
+og er det modsatte. SQL'en bygger `payload.frames` som rene **data**, og teksten
+skrives kun i JS — der er ingen kopi at holde i sync. Reglen er derfor ikke
+"tekst hører til i SQL", men **"en tekst må kun have én kilde"**, og de to
+funktioner er hver sin lovlige side af den.
+
+---
+
 ## 8. august 2026 — Backloggen bærer kun den seneste log, og tier-overskrifterne bærer deres rækker
 
 **Beslutning:** `docs/BACKLOG.md` har ét historik-afsnit, **Log**, i bunden af

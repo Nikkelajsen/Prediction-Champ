@@ -1,10 +1,25 @@
-// Story Engine — ren regel-logik (prioritering, udvælgelse, tekst-rendering).
+// Story Engine — ren regel-logik (prioritering, udvælgelse, frame-rendering).
 //
 // Selve genereringen sker i databasen (sql/story_engine.sql, generate_stories),
-// som gemmer færdig headline+body. Dette modul spejler prioriterings-/udvælgelses-
-// reglen og tekst-skabelonerne, så logikken kan enhedstestes (vitest, jf.
-// docs/features/story-engine-v1.md afsnit 9) og genbruges i frontend (fallback-
-// rendering fra payload). Skabelonerne SKAL holdes i sync med SQL'ens tekster.
+// som gemmer færdig headline+body på rækken. Dette modul spejler prioriterings-
+// og udvælgelsesreglen, så logikken kan enhedstestes (vitest, jf.
+// docs/features/story-engine-v1.md afsnit 9).
+//
+// RUNDE- OG DAGSKORTENES TEKSTER STÅR IKKE HER (G86, 8. august 2026).
+// Filen bar frem til august 2026 en `renderStory()` med skabeloner for alle 16
+// regler, beskrevet som en "fallback-rendering fra payload", som SKULLE holdes i
+// sync med SQL'ens tekster. Den fallback blev aldrig taget i brug: ingen skærm
+// kaldte funktionen, og eneste aftager var dens egne 36 testkald. Prisen var
+// ikke en fejl, men en skjult dobbeltvedligeholdelse — `A38` rettede tre reglers
+// overskrifter til datid og skulle røre begge steder, hvoraf kun det ene kunne
+// ses af en bruger. Teksterne bor nu ét sted: sql/story_engine.sql og
+// sql/story_engine_v3.sql. Samme oprydning og samme begrundelse som `G78` én dag
+// tidligere, hvor v3's scoringstal viste sig at være en død kopi med sin egen
+// test som eneste aftager.
+//
+// FRAMES ER NOGET ANDET og bliver: `renderFrame()` nedenfor er den ENESTE kilde
+// til rundestoryens frame-tekster — SQL'en bygger `payload.frames` som rene
+// data, og teksten skrives her. Ingen kopi, intet at holde i sync.
 //
 // v1.1 (juli 2026): tre nye regler (PODIUM_ENTER, CLOSING_IN, PERSONAL_BEST),
 // sænkede tærskler med svag prioritet (SOFT_PRIORITY) og et dæmpet tier
@@ -15,8 +30,8 @@
 // om, så et kort aldrig kan modsige den kåring, boardet viser.
 //
 // v3 (august 2026): motoren VÆLGER frem for at udgive. Ét kort pr. bruger pr.
-// dag, valgt på en nyhedsværdi-score (scoreDailyCandidates/pickDay nedenfor),
-// og rundekortet er blevet en tap-through-story med frames (renderFrame).
+// dag, valgt på en nyhedsværdi-score, der bor i SQL'en alene (G78), og
+// rundekortet er blevet en tap-through-story med frames (renderFrame).
 
 import { renderMilestone } from "./milestones.js";
 import { roundLabel } from "./scoring.js";
@@ -263,231 +278,6 @@ export function pickStory(candidates) {
     return String(a.competition_id ?? "").localeCompare(String(b.competition_id ?? ""));
   });
   return ranked[0];
-}
-
-// Rendering fra payload → { headline, body }. Skabelonerne matcher SQL'ens tekster.
-// {label} = rundens dato-interval (fx "21.07 – 27.07"); leveres i payload som `label`.
-export function renderStory(rule, payload = {}) {
-  const p = payload;
-  const L = p.label || "";
-  switch (rule) {
-    case "MONTH_CHAMP":
-      return {
-        headline: `👑 Du er ${p.shared ? "delt " : ""}Månedens Champion — ${p.month}`,
-        body: `${p.points} point — flest af alle i ${p.month}${p.shared ? " (delt)" : ""}.` +
-          (p.gap != null && p.gap > 0 ? ` Nr. 2 var ${p.gap} point efter.` : ""),
-      };
-    case "AWARD_WEEK":
-      return {
-        headline: `🏅 Du er ${p.shared ? "delt " : ""}Ugens bedste i ${p.league}`,
-        body: `${p.points} point — flest af alle i ${p.league} i runden ${L}` +
-          (!p.shared ? "."
-            : p.others > 1 ? ` (delt med ${p.others} andre).`
-            : " (delt med 1 anden)."),
-      };
-    case "AWARD_MONTH":
-      return {
-        headline: `👑 Du er ${p.shared ? "delt " : ""}Månedens bedste i ${p.league} — ${p.month}`,
-        body: `${p.points} point — flest af alle i ${p.league} i ${p.month}` +
-          (!p.shared ? "."
-            : p.others > 1 ? ` (delt med ${p.others} andre).`
-            : " (delt med 1 anden)."),
-      };
-    case "LEAD_TAKEN":
-      return {
-        headline: `🏆 Du overtog førstepladsen i ${p.league}`,
-        body: `Efter runden ${L} fører du ${p.league}. Forspring til nr. 2: ${p.gap} point.`,
-      };
-    case "LEAD_LOST":
-      return {
-        headline: `⚡ ${p.rival} vippede dig af førstepladsen i ${p.league}`,
-        body: `Du førte ${p.league}, men ${p.rival} gik forbi i runden ${L}. Afstand op: ${p.gap} point.`,
-      };
-    case "RATING_HIGH":
-      return {
-        headline: `📈 Ny personlig ratingrekord: ${p.rating}`,
-        body: `Din runde ${L} sendte dig forbi din hidtidige rekord på ${p.old}. Efter runden var du nr. ${p.rank} af ${p.total} på ranglisten.`,
-      };
-    case "H2H_PASS":
-      return {
-        headline: `🔄 Du gik forbi ${p.rival} i ${p.league}`,
-        body: `Du overhalede ${p.rival} i runden ${L} og sluttede ${p.gap} point foran i ${p.league}.`,
-      };
-    case "COMEBACK":
-      return {
-        headline: `🚀 Fra nr. ${p.from} til nr. ${p.to} i ${p.league}`,
-        body: `Du rykkede ${p.from - p.to} pladser frem i runden ${L}. Toppen var ${p.gap} point væk, da den sluttede.`,
-      };
-    case "STREAK":
-      return {
-        headline: `🔥 ${p.n}. sejr i træk mod ${p.rival} i ${p.league}`,
-        body: `Du slog ${p.rival} igen i runden ${L} — ${p.mine} mod ${p.deres} point.`,
-      };
-    case "ROUND_WON":
-      return {
-        headline: `🥇 Du vandt runden ${L} i ${p.league}`,
-        body: `${p.points} point — flest af alle i ${p.league}` +
-          (!p.shared ? "."
-            : p.others > 1 ? ` (delt med ${p.others} andre).`
-            : " (delt med 1 anden)."),
-      };
-    case "SHARP":
-      return {
-        headline: `🎯 ${p.n} præcise resultater i runden`,
-        body: `Du ramte ${p.n} kampe præcist i runden ${L} — ${p.points} point i alt.`,
-      };
-    case "PODIUM_ENTER":
-      return {
-        headline: `🏅 Du gik ind i top 3 i ${p.league}`,
-        body: `Efter runden ${L} lå du nr. ${p.rank} af ${p.total} i ${p.league}. Toppen var ${p.gap} point væk.`,
-      };
-    case "CLOSING_IN":
-      return {
-        headline: `👀 Du sluttede runden ${p.gap} point fra toppen i ${p.league}`,
-        body: `Efter runden ${L} var der ${p.gap} point op til ${p.rival} i ${p.league}.`,
-      };
-    case "PERSONAL_BEST":
-      return {
-        headline: `📊 Din bedste runde hidtil: ${p.points} point`,
-        body: `Runden ${L} er din stærkeste i ${p.league} — din forrige rekord var ${p.old} point.`,
-      };
-    // --- v2 · dagens kort (110–189). `p.day` er dagens etiket ("03.03"), lagt
-    // i payload af generate_daily_stories; `p.label` er rundens interval og
-    // bruges ikke her — et dagskort taler om én dag.
-    // v3: DAY_RESULT er dagens dæmpede fald-tilbage og har derfor mistet sin
-    // emoji — emoji er højdepunktets signal, og et facit er ikke et højdepunkt.
-    // `variant: "no_tips"` er kortet til den, der slet ikke havde tips med:
-    // acceptkriterie 8 forbyder udtrykkeligt at give hende et drama-kort om
-    // andre, så hun får dagens omfang og en fremadrettet slutning.
-    case "DAY_RESULT": {
-      if (p.variant === "no_tips") {
-        return {
-          headline: "Ingen tips i dag",
-          body: `Der blev spillet ${p.matches}${p.matches === 1 ? " kamp" : " kampe"}` +
-            ` i ${p.league}, men du havde ingen tips med. Husk at tippe, inden næste kamp låser.`,
-        };
-      }
-      // Tonereglen: placeringen nævnes KUN i den øverste halvdel af tabellen.
-      // Nederst står afstanden op til toppen — aldrig "du er nr. 9 af 10".
-      const moved = p.moved || 0;
-      const place =
-        moved > 0 ? ` Du rykkede fra nr. ${p.rank + moved} til nr. ${p.rank}.`
-        : p.rank * 2 <= p.total ? ` Du ligger nr. ${p.rank} af ${p.total}.`
-        : p.gap > 0 ? ` Toppen er ${p.gap} point væk.`
-        : "";
-      return {
-        headline: `Dagens facit: ${p.points} point`,
-        body: `${p.matches}${p.matches === 1 ? " kamp" : " kampe"} i ${p.league}` +
-          (p.exact > 0 ? ` — ${p.exact}${p.exact === 1 ? " præcis." : " præcise."}` : ".") + place,
-      };
-    }
-    // v3 · TREDJEPERSON. Tre regler fan-outer til modtagere, der ikke er
-    // hovedpersonen (`payload.third`), fordi nærhedsleddet i scoringen kun
-    // giver mening, hvis en fremmeds aften kan blive din historie. Navnet i
-    // `p.subject` er altid en, modtageren deler konkurrence med — fan-outen
-    // sker gennem competition_participants og kan strukturelt ikke nå andre.
-    case "CONTRARIAN":
-      if (p.third) {
-        return {
-          headline: p.draw
-            ? `🧠 ${p.subject} var den eneste, der troede på uafgjort i ${p.home}–${p.away}`
-            : `🧠 ${p.subject} var den eneste, der troede på ${p.team}`,
-          body: `I ${p.league} tippede ${p.others}${p.others === 1 ? " anden" : " andre"} imod.` +
-            ` Det endte ${p.home} ${p.score} ${p.away} — ${p.points} point til ${p.subject}.`,
-        };
-      }
-      return {
-        headline: p.draw
-          ? `🧠 Du var den eneste, der troede på uafgjort i ${p.home}–${p.away}`
-          : `🧠 Du var den eneste, der troede på ${p.team}`,
-        body: `I ${p.league} havde ${p.others}${p.others === 1 ? " anden" : " andre"} tippet imod.` +
-          ` Det endte ${p.home} ${p.score} ${p.away} — ${p.points} point til dig.`,
-      };
-    case "COLLECTIVE_MISS":
-      return {
-        headline: `🙈 Ingen ramte ${p.home}–${p.away}`,
-        body: `${p.n} tippede kampen i ${p.league}. Den endte ${p.score} — og ingen havde den.`,
-      };
-    case "DAY_TOP": {
-      const tail = !p.shared ? "."
-        : p.others > 1 ? ` (delt med ${p.others} andre).`
-        : " (delt med 1 anden).";
-      const body = `${p.points} point — flest af alle i ${p.league} den ${p.day}${tail}`;
-      return p.third
-        ? { headline: `🔝 ${p.subject} fik dagens højeste i ${p.league}`, body }
-        : { headline: `🔝 Du fik dagens højeste i ${p.league}`, body };
-    }
-    case "STREAK_STATUS":
-      // Den brudte stime slutter fremadrettet — "driller, ydmyger aldrig".
-      // Tredjepersons-varianten dropper den opmuntring: "en ny begynder i
-      // morgen" er noget, man siger til sig selv, ikke om en anden.
-      if (p.third) {
-        return p.alive
-          ? {
-              headline: `🔥 ${p.subject} har ${p.n} kampe i træk med point`,
-              body: `${p.subject} har fået point i ${p.n} kampe i træk. Stimen lever efter den ${p.day}.`,
-            }
-          : {
-              headline: `💤 ${p.subject}s stime stoppede ved ${p.n}`,
-              body: `Efter ${p.n} kampe i træk med point brød ${p.subject}s stime den ${p.day}.`,
-            };
-      }
-      return p.alive
-        ? {
-            headline: `🔥 ${p.n} kampe i træk med point`,
-            body: `Du har fået point i ${p.n} kampe i træk. Stimen lever efter den ${p.day}.`,
-          }
-        : {
-            headline: `💤 Din stime stoppede ved ${p.n}`,
-            body: `Efter ${p.n} kampe i træk med point brød stimen den ${p.day}. En ny begynder i morgen.`,
-          };
-    case "DUEL":
-      return p.above
-        ? {
-            headline: `⚔️ Kun ${p.gap} point op til ${p.rival}`,
-            body: `Efter den ${p.day} er der ${p.gap} point op til ${p.rival} i ${p.league}.`,
-          }
-        : {
-            headline: `⚔️ ${p.rival} er ${p.gap} point efter dig`,
-            body: `Du fører ${p.league} med ${p.gap} point ned til ${p.rival} efter den ${p.day}.`,
-          };
-    case "SO_CLOSE":
-      return {
-        headline: `😤 Ét mål fra ${p.n} eksakte`,
-        body: `${p.n} af dine tips i ${p.league} den ${p.day} ramte målscoren på ét mål nær.`,
-      };
-    // --- Dæmpet tier: ingen emoji (emoji = højdepunkt), tekst altid fremadrettet.
-    // Placeringen nævnes KUN i den øverste halvdel af tabellen; i den nederste står
-    // afstanden op til toppen i stedet ("driller, men ydmyger aldrig").
-    case "SEASON_OPENER":
-      return {
-        headline: `Første runde i ${p.league} er i hus`,
-        body: p.rank * 2 <= p.total
-          ? `${p.points} point — du starter som nr. ${p.rank} af ${p.total}.` +
-            (p.gap > 0 ? ` Toppen er ${p.gap} point væk.` : "")
-          : `${p.points} point i den første runde. Toppen er ${p.gap} point væk — der er lang vej endnu.`,
-      };
-    case "QUIET_ROUND":
-      return {
-        headline: `Din runde: ${p.points} point`,
-        body: p.rank === 1
-          ? `Du fører fortsat ${p.league} efter runden ${L}.`
-          : p.rank * 2 <= p.total
-            ? `Du holder nr. ${p.rank} af ${p.total} i ${p.league} — ${p.gap} point op til toppen.`
-            : `${p.gap} point op til toppen i ${p.league}. Næste runde er en ny chance.`,
-      };
-    // v3 · Milepælen kaprer dagens slot og har derfor sin egen regel her — men
-    // ikke sin egen tekst. Kataloget bor i src/lib/milestones.js, og
-    // milestones-tabellen gemmer kun nøgle + payload, så en formulering kan
-    // rettes uden en migrering. SQL'ens headline/body er kun et faldback for en
-    // klient, der er ældre end nøglen.
-    case "MILESTONE": {
-      const m = renderMilestone(p.milestone_key, p.milestone_payload || {});
-      return { headline: `${m.icon} ${m.title}`, body: m.body };
-    }
-    default:
-      return { headline: "", body: "" };
-  }
 }
 
 // ---------------------------------------------------------------------------

@@ -72,6 +72,9 @@ Hver regel har et prioritetstal. Pr. bruger pr. runde vælges historien med lave
 
 Teksterne bor to steder og **skal holdes i sync**: `sql/story_engine.sql` skriver færdig `headline`/`body` ved genereringen, og `src/lib/stories.js` (`renderStory`) spejler skabelonerne til fallback-rendering og enhedstest. Ændrer du en tekst, så ændr begge.
 
+> ⚠️ **RETTET EFTER LEVERING 8. august 2026 (`G86`).** Dobbeltheden findes ikke mere: `renderStory()` er slettet af `src/lib/stories.js`, fordi ingen skærm nogensinde kaldte den — den lovede "fallback-rendering", og fallbacken blev aldrig taget i brug. Teksterne bor nu ét sted, i SQL'en, og der er intet at holde i sync. Skabelontabellerne herunder er stadig gyldige som BESKRIVELSE af, hvad motoren skriver; de er bare ikke længere en kontrakt mellem to filer. Samme oprydning og samme begrundelse som `G78` én dag tidligere.
+
+
 `{L}` = rundens dato-interval, fx `21.07 – 27.07`. Emojis er åben beslutning A5.
 
 | Prio | Regel | Headline | Body |
@@ -269,6 +272,9 @@ Kortet knyttes til brugerens største liga (deterministisk tiebreak på `competi
 ### 10.3 Teksterne (v1.1)
 
 Emoji i overskriften er nu et **signal**: den findes kun i højdepunkt-tieret. Teksterne bor fortsat to steder og skal holdes i sync (`sql/story_engine.sql` og `renderStory` i `src/lib/stories.js`).
+
+> ⚠️ **RETTET EFTER LEVERING 8. august 2026 (`G86`):** teksterne bor ét sted. Se rettelsen i afsnit 10.1.
+
 
 | Prio | Regel | Headline | Body |
 |---|---|---|---|

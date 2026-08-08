@@ -146,6 +146,26 @@ Frame 1 og 3 skal kunne stå alene som delbart billede uden kontekst — det er 
 
 **Hverdag: ét kort på Hjem, ingen tap-through.** Kortet sidder øverst på Hjem, over Aktive konkurrencer. Ingen friktion, intet at åbne, intet at rydde. Indholdet er overskrift + brødtekst + mini-stilling med brugerens række fremhævet + næste kamp og evt. manglende tips.
 
+> ⚠️ **MINI-STILLINGEN BLEV FØRST BYGGET 8. august 2026 (`G88`)** — tre uger
+> efter resten af kortet. `DayCard.jsx` renderede `payload.mini` fra dag ét, og
+> ingen SQL skrev nøglen, så `MiniStanding` fik altid en tom liste og returnerede
+> `null`. Halvdelen af hverdagskortet manglede **tavst**: ingen fejl, intet tomt
+> felt, ingenting at opdage. To ting blev afgjort ved bygningen og står ikke i
+> udkastet ovenfor:
+>
+> - **Vinduet er tre rækker OMKRING modtageren, klemt mod enderne** — nr. 1 ser
+>   1-2-3, den sidste ser de tre nederste. Spec'ens "over/dig/under" ville give
+>   føreren to rækker, altså mindst indhold til den, der har præsteret mest.
+> - **Overskriften daterer stillingen** (*"Stillingen efter kampdag 03.08"*).
+>   Rækkerne er et snapshot fra dagen, kortet lever i 48 timer, og STILLING-fanen
+>   er live pr. kamp — de kan modsige hinanden. Det er `A38`s fejltype i lille
+>   format, og datoen er samme kur.
+>
+> **Milepæls-kort har ingen mini**, uanset vej: `apply_milestone_stories()`
+> flytter kortets `competition_id` til milepælens, så en beholdt mini ville vise
+> én konkurrences stilling under en andens kort — og de to veje til samme kort
+> skal give samme række (acceptkriterie 7).
+
 **Runde: tap-through story** med ulæst-prik og delbart billede. Det sjældne format bliver dermed faktisk sjældent, og det er dét, der gør det til en begivenhed.
 
 Konkrete ændringer i koden:
@@ -289,8 +309,12 @@ arbejde. Bygget som:
 | `DAY_RESULT`, `SO_CLOSE`, `DUEL`, `MILESTONE`, `COLLECTIVE_MISS` | kun hovedpersonen |
 | `CONTRARIAN`, `DAY_TOP`, `STREAK_STATUS` | hovedpersonen + alle, der deler konkurrence med hen |
 
-De tre fan-out-regler har derfor hver en **tredjepersons-tekstvariant**, som
-skal spejles i `renderStory` som alt andet. Fan-out sker kun gennem
+De tre fan-out-regler har derfor hver en **tredjepersons-tekstvariant**.
+
+> ⚠️ **RETTET EFTER LEVERING 8. august 2026 (`G86`).** Her stod "som skal
+> spejles i `renderStory` som alt andet". Den spejling findes ikke mere:
+> `renderStory()` er slettet, fordi ingen skærm kaldte den, så begge varianter
+> bor kun i `sql/story_engine_v3.sql`. Fan-out sker kun gennem
 `competition_participants`, så designreglen om, hvem en historie må nævne, er
 strukturel og ikke en betingelse, nogen kan glemme.
 

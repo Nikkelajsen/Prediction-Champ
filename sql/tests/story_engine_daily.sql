@@ -163,6 +163,14 @@ create table public.monthly_standings (
 -- aldrig blive udøvet.
 --
 -- u6 deltager i c2 uden at afgive ét eneste tip — hun er acceptkriterie 8.
+--
+-- u7 tipper NØJAGTIG som u3 og er kun med i c2. Hun findes for én ting: at c2's
+-- stilling har en ÆGTE POINTLIGHED, hvor to spillere deler tredjepladsen på
+-- hele tiebreaker-stigen (point, præcise, udfald, målfejl). Uden hende er `rnk`
+-- og den totale orden det samme tal i hver eneste række i fixturen, og påstand
+-- 15 kunne ikke skelne "vis placeringen" fra "vis rækkens nummer" — en mini,
+-- der skriver 3. og 4. til to spillere, som begge ER nr. 3. Det slap netop
+-- igennem ved mutationstesten af påstand 15 (8. august 2026).
 do $$
 declare
   u1 uuid := '00000000-0000-0000-0000-000000000001';
@@ -171,6 +179,7 @@ declare
   u4 uuid := '00000000-0000-0000-0000-000000000004';
   u5 uuid := '00000000-0000-0000-0000-000000000005';
   u6 uuid := '00000000-0000-0000-0000-000000000006';
+  u7 uuid := '00000000-0000-0000-0000-000000000007';
   c1 uuid := '10000000-0000-0000-0000-000000000001';
   c2 uuid := '10000000-0000-0000-0000-000000000002';
   lg uuid; sn uuid;
@@ -178,7 +187,8 @@ declare
   m1 uuid; m2 uuid; m3 uuid; m4 uuid; m5 uuid; m6 uuid;
 begin
   insert into public.profiles (id, display_name) values
-    (u1,'Anna'), (u2,'Bo'), (u3,'Cecilie'), (u4,'David'), (u5,'Eva'), (u6,'Frida');
+    (u1,'Anna'), (u2,'Bo'), (u3,'Cecilie'), (u4,'David'), (u5,'Eva'), (u6,'Frida'),
+    (u7,'Gitte');
 
   insert into public.leagues (name) values ('Testliga') returning id into lg;
   insert into public.seasons (league_id, name) values (lg, '2025/26') returning id into sn;
@@ -214,29 +224,29 @@ begin
     (c1, 'Testkonkurrencen', 'custom'), (c2, 'Lillekonkurrencen', 'custom');
   insert into public.competition_participants (competition_id, user_id)
     values (c1,u1),(c1,u2),(c1,u3),(c1,u4),(c1,u5),
-           (c2,u1),(c2,u2),(c2,u3),(c2,u6);
+           (c2,u1),(c2,u2),(c2,u3),(c2,u6),(c2,u7);
   insert into public.competition_matches (competition_id, match_id)
     values (c1,m1),(c1,m2),(c1,m3),(c1,m4),(c1,m5),(c1,m6),
            (c2,m1),(c2,m2),(c2,m3),(c2,m4),(c2,m5),(c2,m6);
 
   -- m1 (2-1 hjemmesejr): KUN u1 rammer udfaldet → CONTRARIAN (5 tippere ≥ 4)
   insert into public.predictions (user_id, match_id, pred_home, pred_away) values
-    (u1,m1,2,1), (u2,m1,0,1), (u3,m1,0,2), (u4,m1,1,2), (u5,m1,0,3);
+    (u1,m1,2,1), (u2,m1,0,1), (u3,m1,0,2), (u4,m1,1,2), (u5,m1,0,3), (u7,m1,0,2);
   -- m2 (3-3): alle tipper hjemmesejr → INGEN rammer → COLLECTIVE_MISS
   insert into public.predictions (user_id, match_id, pred_home, pred_away) values
-    (u1,m2,2,0), (u2,m2,1,0), (u3,m2,2,1), (u4,m2,3,1), (u5,m2,4,0);
+    (u1,m2,2,0), (u2,m2,1,0), (u3,m2,2,1), (u4,m2,3,1), (u5,m2,4,0), (u7,m2,2,1);
   -- m3 (1-0): u3 og u4 rammer på ét mål nær
   insert into public.predictions (user_id, match_id, pred_home, pred_away) values
-    (u1,m3,1,0), (u2,m3,1,0), (u3,m3,2,0), (u4,m3,0,0), (u5,m3,0,1);
+    (u1,m3,1,0), (u2,m3,1,0), (u3,m3,2,0), (u4,m3,0,0), (u5,m3,0,1), (u7,m3,2,0);
   -- m4 (2-2): u3 og u4 rammer igen på ét mål nær → to nærmisser hver
   insert into public.predictions (user_id, match_id, pred_home, pred_away) values
-    (u1,m4,2,2), (u2,m4,1,1), (u3,m4,2,1), (u4,m4,1,2), (u5,m4,0,0);
+    (u1,m4,2,2), (u2,m4,1,1), (u3,m4,2,1), (u4,m4,1,2), (u5,m4,0,0), (u7,m4,2,1);
   -- onsdag: alle rammer det samme, så ingen skiller sig ud → dæmpet dag
   insert into public.predictions (user_id, match_id, pred_home, pred_away) values
-    (u1,m5,1,1), (u2,m5,1,1), (u3,m5,1,1), (u4,m5,1,1), (u5,m5,1,1);
+    (u1,m5,1,1), (u2,m5,1,1), (u3,m5,1,1), (u4,m5,1,1), (u5,m5,1,1), (u7,m5,1,1);
   -- torsdag
   insert into public.predictions (user_id, match_id, pred_home, pred_away) values
-    (u1,m6,0,0), (u2,m6,1,0), (u3,m6,0,1), (u4,m6,2,0), (u5,m6,0,0);
+    (u1,m6,0,0), (u2,m6,1,0), (u3,m6,0,1), (u4,m6,2,0), (u5,m6,0,0), (u7,m6,0,1);
 end $$;
 
 -- ---------- 0. Forudsætninger ----------
@@ -301,11 +311,11 @@ begin
     raise exception 'FEJL 2b: en bruger fik mere end ét kort';
   end if;
 
-  -- Alle seks brugere skal have præcis ét — også Frida, der ingen tips havde.
+  -- Alle syv brugere skal have præcis ét — også Frida, der ingen tips havde.
   select count(distinct user_id) into v_n
   from public.stories where period = 'day' and day_key = '2026-03-03';
-  if v_n <> 6 then
-    raise exception 'FEJL 2c: % brugere fik kort, forventede 6', v_n;
+  if v_n <> 7 then
+    raise exception 'FEJL 2c: % brugere fik kort, forventede 7', v_n;
   end if;
 
   -- Prioritetsbåndet — karriereprofilen filtrerer på priority < 90.
@@ -373,9 +383,18 @@ begin
   if v_nv <> 34 + 12 + 20 then
     raise exception 'FEJL 4c: Annas news_value var %, forventede %', v_nv, 34 + 12 + 20;
   end if;
+  -- Konkurrencen påstås ved ID og ikke kun ved `league_size`: c2 har fem
+  -- deltagere siden Gitte kom til (se fixturen), så størrelsen alene kan ikke
+  -- længere skelne de to. Rækkefølgen afgøres da af `competition_id asc`, og
+  -- dét er præcis det led, påstanden skal holde fast i.
+  if (select competition_id from public.stories where period = 'day'
+      and day_key = '2026-03-03' and user_id = '00000000-0000-0000-0000-000000000001')
+     <> '10000000-0000-0000-0000-000000000001'::uuid then
+    raise exception 'FEJL 4d: Annas kort kom ikke fra c1';
+  end if;
   if (select league_size from public.stories where period = 'day'
       and day_key = '2026-03-03' and user_id = '00000000-0000-0000-0000-000000000001') <> 5 then
-    raise exception 'FEJL 4d: Annas kort kom ikke fra den største konkurrence';
+    raise exception 'FEJL 4d2: Annas kort bærer et forkert deltagerantal';
   end if;
 
   -- Et fan-out-kort: Bo deler konkurrence med Anna og er ikke hovedperson.
@@ -481,18 +500,27 @@ end $$;
 
 -- ---------- 8. Determinisme (acceptkriterie 7) ----------
 -- Fingerprintet dækker ALT, der kan flytte sig: valgt regel, konkurrence,
--- score, prioritet og selve teksten. To kandidater i fixturen har samme score
--- (Cecilie og David har identiske tips), så tiebreak-stigen udøves faktisk.
+-- score, prioritet, teksten OG payloaden. To kandidater i fixturen har samme
+-- score (Cecilie og David har identiske tips), så tiebreak-stigen udøves faktisk.
+--
+-- PAYLOADEN KOM MED 8. AUGUST 2026 (G88), og udeladelsen var et hul og ikke et
+-- valg: kommentaren her har altid påstået "ALT, der kan flytte sig", mens
+-- fingerprintet kun dækkede overskrift og brødtekst. Da mini-stillingen flyttede
+-- ind i payloaden, blev udeladelsen dyr — tre navne og deres placeringer kunne
+-- have skiftet mellem to gen-kørsler, uden at én bogstav i teksten ændrede sig.
+-- `jsonb`s tekstform er kanonisk (sorterede nøgler), så md5 over den er stabil.
 do $$
 declare v_before text; v_after text;
 begin
   select string_agg(user_id::text || ':' || rule || ':' || coalesce(competition_id::text, '-') ||
-                    ':' || priority || ':' || news_value || ':' || md5(headline || body),
+                    ':' || priority || ':' || news_value || ':' || md5(headline || body) ||
+                    ':' || md5(payload::text),
                     '|' order by user_id, rule)
     into v_before from public.stories where period = 'day' and day_key = '2026-03-03';
   perform public.generate_daily_stories('2026-03-03');
   select string_agg(user_id::text || ':' || rule || ':' || coalesce(competition_id::text, '-') ||
-                    ':' || priority || ':' || news_value || ':' || md5(headline || body),
+                    ':' || priority || ':' || news_value || ':' || md5(headline || body) ||
+                    ':' || md5(payload::text),
                     '|' order by user_id, rule)
     into v_after from public.stories where period = 'day' and day_key = '2026-03-03';
   if v_before is distinct from v_after then
@@ -732,6 +760,195 @@ begin
   end if;
   if not exists (select 1 from public.stories where period = 'day' and news_value is not null and priority = 180) then
     raise exception 'FEJL 14c: fixturen har ingen DÆMPEDE kort — påstand 14a beviser da ingenting';
+  end if;
+end $$;
+
+-- ---------- 15. Mini-stillingen (G88) ----------
+-- Rækken, denne blok findes for, var ikke en fejl i en beregning, men et felt
+-- INGEN skrev: `DayCard.jsx` renderede `payload.mini`, spec §8 lovede den, og
+-- `MiniStanding` returnerer `null` på en tom liste — så halvdelen af kortet
+-- manglede uden at efterlade et spor. **15a er derfor den vigtigste påstand i
+-- blokken**: den fejler på præcis den tilstand, der stod i produktion, og en
+-- gennemlæsning af hverken SQL eller JSX kunne se den.
+--
+-- Påstand 15c er designreglen og ikke en formalitet: et navn i mini må aldrig
+-- være en, modtageren ikke deler konkurrence med. Nøjagtig dén regel blev brudt
+-- i juli 2026, da `_se_rp` manglede sit join, og fejlen var usynlig i alt andet
+-- end de navne, folk læste på kortet.
+do $$
+declare
+  u1 uuid := '00000000-0000-0000-0000-000000000001';
+  u5 uuid := '00000000-0000-0000-0000-000000000005';
+  u7 uuid := '00000000-0000-0000-0000-000000000007';
+  c1 uuid := '10000000-0000-0000-0000-000000000001';
+  c2 uuid := '10000000-0000-0000-0000-000000000002';
+  v_n int; v_mini jsonb;
+begin
+  -- (a) Et dagskort for en konkurrence, modtageren HAR scorede tip i, skal have
+  -- sin mini. Undtagelsen er MILESTONE (se 15f) og brugere uden ét eneste tip,
+  -- som ikke står i stillingen og derfor ikke kan vises i den.
+  select count(*) into v_n
+  from public.stories s
+  where s.period = 'day' and s.competition_id is not null and s.rule <> 'MILESTONE'
+    and exists (select 1 from public.competition_match_points cmp
+                where cmp.competition_id = s.competition_id
+                  and cmp.user_id = s.user_id and cmp.match_day <= s.day_key)
+    and not (s.payload ? 'mini');
+  if v_n > 0 then
+    raise exception 'FEJL 15a: % dagskort mangler payload.mini — kortet renderer en tom mini-stilling', v_n;
+  end if;
+
+  -- Og at der FINDES kort med mini. Uden dette var 15a en tom sandhed — præcis
+  -- den slags påstand, der stod grøn, mens feltet aldrig blev skrevet.
+  if not exists (select 1 from public.stories where period = 'day' and payload ? 'mini') then
+    raise exception 'FEJL 15b: ingen dagskort har en mini — 15a beviser da ingenting';
+  end if;
+
+  -- (c) DESIGNREGLEN: hvert navn i en mini tilhører en deltager i kortets egen
+  -- konkurrence.
+  if exists (
+    select 1 from public.stories s
+    cross join lateral jsonb_array_elements(s.payload -> 'mini') as r
+    where s.period = 'day' and s.payload ? 'mini'
+      and not exists (
+        select 1 from public.competition_participants cp
+        join public.profiles p on p.id = cp.user_id
+        where cp.competition_id = s.competition_id and p.display_name = r ->> 'name')
+  ) then
+    raise exception 'FEJL 15c: en mini nævner en, modtageren ikke deler konkurrence med';
+  end if;
+
+  -- (d) Præcis én række er markeret `me`, og det er modtagerens egen.
+  if exists (
+    select 1 from public.stories s
+    where s.period = 'day' and s.payload ? 'mini'
+      and (select count(*) from jsonb_array_elements(s.payload -> 'mini') r
+           where (r ->> 'me')::boolean) <> 1
+  ) then
+    raise exception 'FEJL 15d: en mini har ikke præcis én me-markeret række';
+  end if;
+  if exists (
+    select 1 from public.stories s
+    join public.profiles p on p.id = s.user_id
+    cross join lateral jsonb_array_elements(s.payload -> 'mini') as r
+    where s.period = 'day' and s.payload ? 'mini'
+      and (r ->> 'me')::boolean and r ->> 'name' <> p.display_name
+  ) then
+    raise exception 'FEJL 15e: me-rækken bærer et andet navn end modtagerens';
+  end if;
+
+  -- (f) Annas kort er c1 (fem deltagere, se 4d), og hun fører med 9 point.
+  -- Stillingen efter dag 1: Anna 9, Bo 4, Cecilie 1, Eva 1, David 0 — Cecilie
+  -- foran Eva på gennemsnitlig målfejl (2,0 mod 3,5), altså hele tiebreaker-
+  -- stigen og ikke bare point. Nr. 1 ser 1-2-3, fordi vinduet klemmes mod
+  -- toppen: alternativet ville give føreren mindst indhold.
+  select payload -> 'mini' into v_mini from public.stories
+  where period = 'day' and day_key = '2026-03-03' and user_id = u1;
+  if v_mini is null or jsonb_array_length(v_mini) <> 3 then
+    raise exception 'FEJL 15f: Annas mini har % rækker, forventede 3',
+      coalesce(jsonb_array_length(v_mini)::text, 'ingen');
+  end if;
+  if (v_mini -> 0 ->> 'name') <> 'Anna' or (v_mini -> 0 ->> 'rnk') <> '1'
+     or (v_mini -> 0 ->> 'pts') <> '9' or not (v_mini -> 0 ->> 'me')::boolean then
+    raise exception 'FEJL 15g: Annas egen række er %, forventede Anna/1/9/me', v_mini -> 0;
+  end if;
+  if (v_mini -> 1 ->> 'name') <> 'Bo' or (v_mini -> 1 ->> 'rnk') <> '2'
+     or (v_mini -> 2 ->> 'name') <> 'Cecilie' or (v_mini -> 2 ->> 'rnk') <> '3' then
+    raise exception 'FEJL 15h: Annas naboer er %/%, forventede Bo(2) og Cecilie(3)',
+      v_mini -> 1, v_mini -> 2;
+  end if;
+
+  -- (h2) DELT PLACERING VISES SOM DELT. Gitte tipper nøjagtig som Cecilie og er
+  -- kun med i c2, så de to deler tredjepladsen på hele tiebreaker-stigen.
+  -- Påstanden skelner `rnk` (placeringen, som er 3 for dem begge) fra rækkens
+  -- nummer i vinduet (3 og 4) — uden en pointlighed i fixturen er de to tal ens
+  -- overalt, og en mini, der skrev "4. Gitte" om en delt tredjeplads, ville stå
+  -- grøn. Det er samtidig det ENESTE kort i fixturen fra c2, og dermed det, der
+  -- giver 15c sine tænder: en mini hentet fra den forkerte konkurrence ville
+  -- her nævne David eller Eva, som ikke er med i c2.
+  select payload -> 'mini' into v_mini from public.stories
+  where period = 'day' and day_key = '2026-03-03' and user_id = u7;
+  if v_mini is null then
+    raise exception 'FEJL 15h2: Gitte har ingen mini — pointligheden afprøves da ikke';
+  end if;
+  if (select competition_id from public.stories where period = 'day'
+      and day_key = '2026-03-03' and user_id = u7) <> c2 then
+    raise exception 'FEJL 15h3: Gittes kort er ikke fra c2 — 15c er da stadig tom';
+  end if;
+  if (v_mini -> 1 ->> 'name') <> 'Cecilie' or (v_mini -> 2 ->> 'name') <> 'Gitte' then
+    raise exception 'FEJL 15h4: Gittes naboer er %/%, forventede Cecilie og Gitte',
+      v_mini -> 1, v_mini -> 2;
+  end if;
+  if (v_mini -> 1 ->> 'rnk') <> '3' or (v_mini -> 2 ->> 'rnk') <> '3' then
+    raise exception
+      'FEJL 15h5: to spillere, der DELER tredjepladsen, står som %. og %. — mini viser rækkens nummer og ikke placeringen',
+      v_mini -> 1 ->> 'rnk', v_mini -> 2 ->> 'rnk';
+  end if;
+
+  -- (i) VINDUET GLIDER. Uden denne påstand ville en implementering, der altid
+  -- viste top 3, bestå alt ovenstående — Anna ER nr. 1. Nogen i bunden af
+  -- stillingen skal se sine egne naboer og ikke førerfeltet.
+  if not exists (
+    select 1 from public.stories s
+    where s.period = 'day' and s.payload ? 'mini'
+      and (s.payload -> 'mini' -> 0 ->> 'rnk')::int > 1
+  ) then
+    raise exception 'FEJL 15i: ingen mini begynder under nr. 1 — vinduet er reelt "top 3"';
+  end if;
+
+  -- HVAD BLOK 15 IKKE BEVISER. Påstandene er muteret 12 gange (8. august 2026);
+  -- ti blev fanget, to slap igennem, og de står her frem for at blive glemt:
+  --
+  --   · **Et opslag i _sd_mini uden konkurrence-afgrænsning.** Den realistiske
+  --     form — `join ... on mn.user_id = w.user_id` alene — fanges af det unikke
+  --     indeks, fordi den giver et kort pr. konkurrence. Den kunstige form (vælg
+  --     brugerens laveste competition_id) gør intet forkert her, fordi
+  --     tiebreak-stigen altid lader c1 vinde for en bruger, der er med i begge.
+  --     Et kort på c2 for en bruger, der også er i c1, kan fixturen ikke
+  --     fremkalde uden at vælte de hårdkodede news_value-tal i påstand 4.
+  --   · **`row_number() over (order by rnk)` uden `user_id` som andet led.** Det
+  --     er en LATENT ikke-determinisme: rækkefølgen blandt to ligeplacerede er
+  --     fri, men PostgreSQL leverer den samme hver gang på en tabel af denne
+  --     størrelse, så påstand 8 kan ikke fremtvinge en forskel. Leddet står i
+  --     koden, fordi planen kan ændre sig — ikke fordi en test kræver det.
+  --
+  -- (j) MILEPÆLE HAR INGEN MINI, ad BEGGE veje til et sådant kort, og det er en
+  -- determinismes-betingelse (acceptkriterie 7) og ikke en smagssag.
+  --
+  -- Vej 1: motoren. Milepælen får her en `competition_id` MED VILJE — uden den
+  -- ville påstanden være tom, fordi et milepæls-kort uden konkurrence aldrig
+  -- kan slå op i _sd_mini alligevel, og guarden `rule <> 'MILESTONE'` kunne
+  -- slettes uden at nogen test blev rød.
+  insert into public.milestones (user_id, key, family, tier, competition_id, payload, achieved_at)
+    values (u1, 'COMP_STREAK_3', 'competition', 0, c1, '{"n": 3}', '2026-03-03 22:00:00+00');
+  perform public.generate_daily_stories('2026-03-03');
+  if (select rule from public.stories
+      where period = 'day' and day_key = '2026-03-03' and user_id = u1) <> 'MILESTONE' then
+    raise exception 'FEJL 15j: milepælen kaprede ikke Annas kort — 15k beviser da ingenting';
+  end if;
+  if exists (select 1 from public.stories where period = 'day' and rule = 'MILESTONE'
+             and competition_id is not null and payload ? 'mini') then
+    raise exception 'FEJL 15k: motoren gav et milepæls-kort med konkurrence en mini-stilling';
+  end if;
+
+  -- Vej 2: kapringen. Eva har stadig et almindeligt kort MED en mini, og hendes
+  -- milepæl lander bagefter — altså præcis den rækkefølge, `- 'mini'` findes
+  -- for. Kortets competition_id flyttes til milepælens (her: ingen), og en
+  -- beholdt mini ville så vise c1's stilling under et kort uden konkurrence.
+  if not (select payload ? 'mini' from public.stories
+          where period = 'day' and day_key = '2026-03-03' and user_id = u5) then
+    raise exception 'FEJL 15l: Evas kort har ingen mini at fjerne — 15m beviser da ingenting';
+  end if;
+  insert into public.milestones (user_id, key, family, tier, payload, achieved_at)
+    values (u5, 'TIPS_100', 'precision', 100, '{"n": 100}', '2026-03-03 22:30:00+00');
+  perform public.apply_milestone_stories(200000);
+  if (select rule from public.stories
+      where period = 'day' and day_key = '2026-03-03' and user_id = u5) <> 'MILESTONE' then
+    raise exception 'FEJL 15m: kapringen tog ikke Evas kort';
+  end if;
+  if (select payload ? 'mini' from public.stories
+      where period = 'day' and day_key = '2026-03-03' and user_id = u5) then
+    raise exception 'FEJL 15n: kapringen beholdt en mini fra kortets tidligere konkurrence';
   end if;
 end $$;
 

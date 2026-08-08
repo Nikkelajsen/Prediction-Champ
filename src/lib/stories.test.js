@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DAILY_QUIET_MIN, DAILY_RULES, DAY_CARD_MAX_AGE_MS, isDailyQuiet, isFresh, isNewsworthy, isQuiet, pickStory, priorityFor, QUIET_TIER_MIN, renderFrame, renderStory, roundStoryEyebrow, roundStorySuperseded, ROUND_STORY_EYEBROW, ROUND_STORY_MAX_AGE_MS, RULES, SOFT_PRIORITY, THRESHOLDS, usableFrames } from "./stories.js";
+import { DAILY_QUIET_MIN, DAILY_RULES, DAY_CARD_MAX_AGE_MS, isDailyQuiet, isFresh, isNewsworthy, isQuiet, pickStory, priorityFor, QUIET_TIER_MIN, renderFrame, roundStoryEyebrow, roundStorySuperseded, ROUND_STORY_EYEBROW, ROUND_STORY_MAX_AGE_MS, RULES, SOFT_PRIORITY, THRESHOLDS, usableFrames } from "./stories.js";
 
 // Testcases spejler docs/features/story-engine-v1.md afsnit 9 (det der kan
 // udtrykkes rent i JS; DB-idempotens og trigger-adfærd verificeres i skyggetilstand).
@@ -54,86 +54,6 @@ describe("pickStory (deterministisk udvælgelse)", () => {
   });
 });
 
-describe("renderStory (tekst-skabeloner)", () => {
-  it("ROUND_WON siger, hvor mange sejren deles med — i grammatisk dansk", () => {
-    expect(renderStory("ROUND_WON", { points: 9, league: "Kontoret", label: "L" }).body).toContain("Kontoret.");
-    expect(renderStory("ROUND_WON", { points: 9, league: "Kontoret", label: "L", shared: true, others: 1 }).body)
-      .toContain("(delt med 1 anden).");
-    expect(renderStory("ROUND_WON", { points: 9, league: "Kontoret", label: "L", shared: true, others: 3 }).body)
-      .toContain("(delt med 3 andre).");
-  });
-
-  // v1.2: skabelonerne skal matche SQL'ens tekster ORDRET — det er hele
-  // grunden til, at de findes to steder (fallback-rendering fra payload). En
-  // afvigelse ses ikke i drift: kortet henter headline/body fra rækken, og
-  // JS-skabelonen bruges kun, når payload skal renderes på ny.
-  it("AWARD_WEEK bruger kåringens navn og siger 'delt' som rundens vinder", () => {
-    const uden = renderStory("AWARD_WEEK", { league: "Kontorligaen", points: 14, label: "04.08 – 10.08" });
-    expect(uden.headline).toBe("🏅 Du er Ugens bedste i Kontorligaen");
-    expect(uden.body).toBe("14 point — flest af alle i Kontorligaen i runden 04.08 – 10.08.");
-    const delt = renderStory("AWARD_WEEK", { league: "Kontorligaen", points: 14, label: "L", shared: true, others: 1 });
-    expect(delt.headline).toBe("🏅 Du er delt Ugens bedste i Kontorligaen");
-    expect(delt.body).toContain("(delt med 1 anden).");
-    expect(renderStory("AWARD_WEEK", { league: "K", points: 1, label: "L", shared: true, others: 2 }).body)
-      .toContain("(delt med 2 andre).");
-  });
-
-  // Navnereglen (turnering-2 §3.6): lokalt hedder det "Månedens bedste" og
-  // ALDRIG "Månedens Champion", som er den globale titel. To niveauer
-  // må ikke konkurrere om samme navn.
-  it("AWARD_MONTH holder sig fra den globale titels navn", () => {
-    const { headline, body } = renderStory("AWARD_MONTH", { league: "Kontorligaen", month: "juli", points: 42 });
-    expect(headline).toBe("👑 Du er Månedens bedste i Kontorligaen — juli");
-    expect(headline).not.toContain("Champion");
-    expect(body).toBe("42 point — flest af alle i Kontorligaen i juli.");
-  });
-
-  // Stigen: en lokal månedskåring slår alt, hvad én runde kan producere, men
-  // taber til den globale månedstitel — og ugekåringen ligger lige over
-  // rundens vinder, fordi det er det samme øjeblik med et andet navn.
-  it("kåringernes plads på prioritetsstigen", () => {
-    expect(RULES.MONTH_CHAMP).toBeLessThan(RULES.AWARD_MONTH);
-    expect(RULES.AWARD_MONTH).toBeLessThan(RULES.LEAD_TAKEN);
-    expect(RULES.AWARD_WEEK).toBeLessThan(RULES.ROUND_WON);
-    expect(RULES.STREAK).toBeLessThan(RULES.AWARD_WEEK);
-    // Begge er højdepunkter og må derfor have emoji og Del-knap.
-    expect(isQuiet(RULES.AWARD_WEEK)).toBe(false);
-    expect(isQuiet(RULES.AWARD_MONTH)).toBe(false);
-  });
-
-  it("Månedens Champ angiver samlede point (aldrig gennemsnit) — acceptkriterie", () => {
-    const { headline, body } = renderStory("MONTH_CHAMP", { month: "juli", points: 31, gap: 3 });
-    expect(headline).toContain("Månedens Champion");
-    expect(headline).toContain("juli");
-    expect(body).toContain("31 point");
-    expect(body).not.toMatch(/gennemsnit/i);
-  });
-
-  it("hver body har præcis ét tal-anker og nævner runden", () => {
-    const { body } = renderStory("LEAD_TAKEN", { league: "Kontoret", gap: 2, label: "21.07 – 27.07" });
-    expect(body).toContain("Kontoret");
-    expect(body).toContain("2 point");
-    expect(body).toContain("21.07 – 27.07");
-  });
-
-  it("Comeback rendrer antal rykkede pladser", () => {
-    const { headline, body } = renderStory("COMEBACK", { from: 8, to: 4, gap: 5, league: "Padel", label: "L" });
-    expect(headline).toContain("Fra nr. 8 til nr. 4");
-    expect(body).toContain("4 pladser frem");
-    expect(body).toContain("5 point væk");
-  });
-
-  it("Stime mod rival nævner rival og rundens pointforskel", () => {
-    const { headline, body } = renderStory("STREAK", { n: 4, rival: "Nikolaj", mine: 7, deres: 4, league: "Kontoret", label: "L" });
-    expect(headline).toContain("4. sejr i træk mod Nikolaj");
-    expect(body).toContain("7 mod 4 point");
-  });
-
-  it("ukendt regel → tom tekst (defensivt)", () => {
-    expect(renderStory("UNKNOWN", {})).toEqual({ headline: "", body: "" });
-  });
-});
-
 describe("tærskler (A4-kalibrering, v1.1)", () => {
   it("comeback fra 2 pladser, stime fra 2 runder, præcise fra 2", () => {
     expect(THRESHOLDS.comebackPlaces).toBe(2);
@@ -184,71 +104,19 @@ describe("dæmpet tier (v1.1)", () => {
     expect(QUIET_TIER_MIN).toBeGreaterThan(SOFT_PRIORITY.SHARP);
   });
 
-  it("dæmpede tekster har ingen emoji — emoji er højdepunkternes signal", () => {
-    const emoji = /\p{Extended_Pictographic}/u;
-    const quiet = [
-      renderStory("SEASON_OPENER", { league: "Kontoret", points: 7, rank: 2, total: 8, gap: 1 }),
-      renderStory("QUIET_ROUND", { league: "Kontoret", points: 4, rank: 6, total: 8, gap: 9, label: "L" }),
-    ];
-    for (const s of quiet) expect(s.headline).not.toMatch(emoji);
-    for (const rule of ["MONTH_CHAMP", "LEAD_TAKEN", "ROUND_WON", "SHARP", "PODIUM_ENTER", "CLOSING_IN", "PERSONAL_BEST"]) {
-      expect(renderStory(rule, { n: 2, gap: 1, points: 5, rank: 3, total: 8 }).headline).toMatch(emoji);
-    }
-  });
-
-  it("nævner ALDRIG placeringen i nederste halvdel af tabellen", () => {
-    // designreglen: historier driller, men ydmyger aldrig
-    const opener = renderStory("SEASON_OPENER", { league: "Kontoret", points: 4, rank: 7, total: 8, gap: 4 });
-    expect(opener.body).not.toContain("nr. 7");
-    expect(opener.body).toContain("4 point væk");
-    const quiet = renderStory("QUIET_ROUND", { league: "Kontoret", points: 4, rank: 6, total: 8, gap: 9, label: "L" });
-    expect(quiet.body).not.toContain("nr. 6");
-    expect(quiet.body).toContain("Næste runde er en ny chance");
-  });
-
-  it("nævner placeringen i øverste halvdel", () => {
-    expect(renderStory("SEASON_OPENER", { league: "Kontoret", points: 7, rank: 2, total: 8, gap: 1 }).body)
-      .toContain("nr. 2 af 8");
-    expect(renderStory("QUIET_ROUND", { league: "Kontoret", points: 7, rank: 3, total: 8, gap: 2, label: "L" }).body)
-      .toContain("nr. 3 af 8");
-  });
-
-  it("en stille runde i front siger status quo frem for en placering", () => {
-    const { body } = renderStory("QUIET_ROUND", { league: "Kontoret", points: 6, rank: 1, total: 8, gap: 0, label: "18.08 – 24.08" });
-    expect(body).toBe("Du fører fortsat Kontoret efter runden 18.08 – 24.08.");
-  });
-
-  it("premiereugen udelader afstanden, når man selv fører", () => {
-    const { body } = renderStory("SEASON_OPENER", { league: "Kontoret", points: 8, rank: 1, total: 8, gap: 0 });
-    expect(body).toBe("8 point — du starter som nr. 1 af 8.");
-  });
+  // DE FEM TEKST-TESTS, DER STOD HER, ER SLETTET MED `renderStory` (G86,
+  // 8. august 2026): emoji-signalet, "nævner aldrig placeringen i nederste
+  // halvdel", status quo-formuleringen og premiereugens udeladte afstand.
+  // De påstod alle sammen noget om skabeloner, ingen bruger nogensinde mødte —
+  // teksterne kommer fra SQL'en. **Designreglerne, de vogtede, er ikke
+  // ophævet**, og det er den eneste grund til, at det er værd at nævne her:
+  // "historier driller, men ydmyger aldrig" og "emoji findes kun i
+  // højdepunkt-tieret" gælder uændret, de gælder bare om `sql/story_engine.sql`,
+  // hvor teksterne står. En test af dem hører derfor til i et SQL-tjek og ikke i
+  // vitest, og indtil den findes, er de vogtet af gennemlæsning alene.
 });
 
 describe("nye regler (v1.1)", () => {
-  it("Top 3 nævner både placering og afstand til toppen", () => {
-    const { headline, body } = renderStory("PODIUM_ENTER", { league: "Kontoret", rank: 3, from: 5, total: 8, gap: 6, label: "L" });
-    expect(headline).toContain("top 3 i Kontoret");
-    expect(body).toContain("nr. 3 af 8");
-    expect(body).toContain("6 point væk");
-  });
-
-  it("Tæt på toppen nævner føreren ved navn", () => {
-    const { headline, body } = renderStory("CLOSING_IN", { league: "Kontoret", rival: "Jimmy", gap: 1, rank: 2, label: "04.08 – 10.08" });
-    // Datid siden august 2026: "Kun 1 point op til føringen" er et udsagn om en
-    // stilling og bliver usandt ved næste kamp. Afstanden er den samme, men den
-    // hører til den runde, der er slut.
-    expect(headline).toContain("Du sluttede runden 1 point fra toppen");
-    expect(body).toContain("op til Jimmy");
-    expect(body).toContain("04.08 – 10.08");
-  });
-
-  it("Personlig runderekord sammenligner kun med brugeren selv", () => {
-    const { headline, body } = renderStory("PERSONAL_BEST", { points: 11, old: 8, league: "Kontoret", label: "L" });
-    expect(headline).toContain("11 point");
-    expect(body).toContain("forrige rekord var 8 point");
-    expect(body).not.toMatch(/nr\.|plads/); // rekorden er personlig, ikke en placering
-  });
-
   it("prioritetsstigen er entydig — ingen to regler deler prioritet", () => {
     const values = Object.values(RULES);
     expect(new Set(values).size).toBe(values.length);
@@ -462,70 +330,11 @@ describe("dagens regler (tekst)", () => {
     expect(DAILY_RULES.DAY_RESULT).toBe(DAILY_QUIET_MIN);
   });
 
-  it("Dagens facit nævner kun placeringen i den øverste halvdel", () => {
-    const top = renderStory("DAY_RESULT",
-      { points: 9, matches: 4, exact: 3, rank: 1, total: 5, moved: 0, gap: 0, league: "Kontoret" });
-    expect(top.body).toContain("Du ligger nr. 1 af 5");
-
-    const bottom = renderStory("DAY_RESULT",
-      { points: 1, matches: 4, exact: 0, rank: 4, total: 5, moved: 0, gap: 8, league: "Kontoret" });
-    expect(bottom.body).toContain("Toppen er 8 point væk");
-    expect(bottom.body).not.toMatch(/nr\. 4/);   // driller, ydmyger aldrig
-  });
-
-  it("Dagens facit fortæller om et ryk frem, når der var et", () => {
-    const { body } = renderStory("DAY_RESULT",
-      { points: 7, matches: 3, exact: 1, rank: 2, total: 8, moved: 3, gap: 4, league: "Kontoret" });
-    expect(body).toContain("fra nr. 5 til nr. 2");
-  });
-
-  it("Kontrarian formulerer uafgjort som en kamp og ikke som et hold", () => {
-    const win = renderStory("CONTRARIAN",
-      { team: "Randers", home: "Randers", away: "Silkeborg", score: "2-1", others: 4, points: 3, draw: false, league: "Kontoret" });
-    expect(win.headline).toContain("troede på Randers");
-    expect(win.body).toContain("4 andre tippet imod");
-
-    const draw = renderStory("CONTRARIAN",
-      { team: "uafgjort", home: "OB", away: "Viborg", score: "1-1", others: 1, points: 3, draw: true, league: "Kontoret" });
-    expect(draw.headline).toContain("uafgjort i OB–Viborg");
-    expect(draw.body).toContain("1 anden tippet imod");
-  });
-
-  it("Kollektiv fiasko nævner ingen ved navn", () => {
-    const { headline, body } = renderStory("COLLECTIVE_MISS",
-      { home: "OB", away: "Viborg", score: "3-3", n: 5, league: "Kontoret" });
-    expect(headline).toBe("🙈 Ingen ramte OB–Viborg");
-    expect(body).toContain("5 tippede kampen");
-  });
-
-  it("Stimen slutter fremadrettet, når den er brudt", () => {
-    const alive = renderStory("STREAK_STATUS", { n: 7, alive: true, day: "03.03" });
-    expect(alive.headline).toContain("7 kampe i træk");
-
-    const dead = renderStory("STREAK_STATUS", { n: 7, alive: false, day: "03.03" });
-    expect(dead.body).toContain("En ny begynder i morgen");
-    expect(dead.headline).not.toMatch(/dårlig|værste|sidst/i);
-  });
-
-  it("Duellen vender teksten om, når man selv fører", () => {
-    const up = renderStory("DUEL", { rival: "Bo", gap: 2, above: true, day: "03.03", league: "Kontoret" });
-    expect(up.headline).toContain("Kun 2 point op til Bo");
-
-    const down = renderStory("DUEL", { rival: "Bo", gap: 2, above: false, day: "03.03", league: "Kontoret" });
-    expect(down.headline).toContain("Bo er 2 point efter dig");
-    expect(down.body).toContain("Du fører Kontoret");
-  });
-
-  it("Så tæt på taler om nærmisser og ikke om fejl", () => {
-    const { headline, body } = renderStory("SO_CLOSE", { n: 3, day: "03.03", league: "Kontoret" });
-    expect(headline).toBe("😤 Ét mål fra 3 eksakte");
-    expect(body).toContain("på ét mål nær");
-  });
-
-  it("alle dagens regler har en skabelon", () => {
-    for (const rule of Object.keys(DAILY_RULES)) {
-      const { headline } = renderStory(rule, { n: 1, points: 1, matches: 1, rank: 1, total: 2, gap: 0, others: 1 });
-      expect(headline, `${rule} mangler en skabelon`).not.toBe("");
-    }
-  });
+  // SYV TEKST-TESTS ER SLETTET HER MED `renderStory` (G86, 8. august 2026):
+  // dagens facit, kontrarian, kollektiv fiasko, stimen, duellen, "så tæt på" og
+  // dækningspåstanden "alle dagens regler har en skabelon". Den sidste er værd
+  // at nævne ved navn, fordi den lyder som en dækningsgaranti og ikke var det:
+  // den beviste, at hver af de otte dagsregler havde en skabelon i JS —
+  // ikke at motoren, der faktisk skriver teksten, har en. Den påstand hører til
+  // i sql/tests/story_engine_daily.sql, hvor teksterne kommer fra.
 });

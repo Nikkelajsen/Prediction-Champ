@@ -47,13 +47,15 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*Tom (8. august 2026).*
+- `pickStory`, `priorityFor`, `RULES`, `DAILY_RULES`, `THRESHOLDS`, `SOFT_PRIORITY`, `isDaily`, `isQuiet`, `QUIET_TIER_MIN` og `DAILY_MAX_CARDS` i `src/lib/stories.js` har heller ingen aftagere i appen — `G86` påstod det modsatte om de to første. Kun `isFresh`, `isDailyQuiet`, `isNewsworthy`, `roundStorySuperseded`, `roundStoryEyebrow`, `usableFrames` og de to konstanter importeres.
+- `sql/story_engine_v3.sql` står ikke i filindekset i `sql/README.md` (som går til #46), så der er ingen række at læse kørerækkefølge og gen-køringsadvarsler i for den fil, der oftest skal gen-køres.
+- `MiniStanding` viser ikke, hvor mange der er i konkurrencen — "3. Cecilie" af 4 eller af 40 er to forskellige oplysninger, og `league_size` står allerede på rækken.
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 38 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 36 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -82,9 +84,7 @@ tieret skal have en anden betjening end ejeren.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
-| # | Hvad | Hvorfor her |
-|---|---|---|
-| `G88` | Dagskortets mini-stilling bliver aldrig vist, fordi ingen SQL skriver `payload.mini` | Halvdelen af et leveret kort mangler. Frontenden og spec'en lover den; motoren skriver den ikke. |
+Tomt.
 
 ### Tier 4 — Datarisiko med en lunte
 
@@ -98,7 +98,6 @@ tieret skal have en anden betjening end ejeren.
 
 | # | Hvad | Hvorfor her |
 |---|---|---|
-| `G86` | `renderStory()` er død kode, og historieteksterne står derfor to steder | Ingen fejl i dag, men hver tekstrettelse skal laves to steder, og kun det ene sted kan ses i appen. |
 | `G87` | Rundestoryens afløsning er per bruger, ikke per konkurrence | Et resultat i én turnering trækker også rundekortet for en anden. Upræcist, ikke forkert. |
 
 ### Tier 6 — Venter på en udløser
@@ -189,9 +188,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
 | G85 | **`kickoff_tbd` kan aldrig blive sand for tre af fem football-data-turneringer, og `G84`s kontrol er blind for netop dem.** | Aflæst 7. august 2026 mod leverandøren, fire turneringer, 1.446 kampe ([reviews/football-data-kickoff-aflaesning-2026-08-07.md](./reviews/football-data-kickoff-aflaesning-2026-08-07.md)). Bundesliga har begge markører rene — `TIMED` vs. `SCHEDULED`, og 261 af 306 kampe med midnat. **Premier League, Primera División og Serie A har ingen af dem:** nul midnat i 1.140 kampe, og `SCHEDULED` på hver eneste af dem, også dem med rigtige tider. Leverandøren sender i stedet et opdigtet klokkeslæt — turneringens typiske anspilstid lokalt frem til nytår, 12:00 UTC derefter. **Det er værre end fejlen fra 2.–6. august, ikke bedre.** Dengang stod alle kampe som "Tid ikke fastlagt", hvilket er synligt forkert; nu viser appen et konkret klokkeslæt for hver kamp fra oktober og frem i tre af Europas fem største rækker, uden noget sted, der markerer det som usikkert. Låsen sættes efter et tidspunkt, leverandøren har fundet på. **Følgeskaden er, at `sql/checks/kickoff_coverage.sql` (`G84`) ikke kan se det:** kontrollen leder efter en turnering, hvor ALLE nære kampe mangler tid, og det kan ikke ske, når flaget aldrig sættes. Kontrollen er grøn for præcis de turneringer, der er ramt. **To kandidater, ingen valgt:** (a) genkend pladsholderværdierne pr. turnering — virker, men er kalibrerede tal uden data at kalibrere på, samme indvending som `A35`; (b) sammenlign med forrige synkronisering, da vi kører hver 12. time og allerede gemmer `kickoff_at` — en tid, der ændrer sig, var ikke fastsat, hvilket kræver hverken tærskel eller antagelser om leverandøren, men først svarer bagudrettet og koster en kolonne. **Fire formodninger er allerede prøvet af og forkastet** (`status`, midnat som universel regel, formen på en runde, `lastUpdated`) — se aflæsningen, og lad være med at prøve dem igen. CL mangler at blive aflæst; sæsonen fandtes ikke hos leverandøren pr. 1. august (`B8`). | Mellem |
-| G86 | **`renderStory()` i `src/lib/stories.js` er død kode, og historieteksterne står derfor to steder.** | Ingen af appens skærme kalder funktionen; dens eneste aftager er `src/lib/stories.test.js`. Teksterne leveres i praksis af SQL'en, som skriver `headline` og `body` direkte på `stories`-rækken. Følgen er ikke en fejl, men en **skjult dobbeltvedligeholdelse**: `A38` rettede tre reglers overskrifter til datid og skulle røre begge steder, og kun det ene af dem kan ses af en bruger. Testen giver desuden falsk tryghed — den beviser, at en skabelon, ingen bruger møder, er rigtig. Samme form som `G78` én dag tidligere, hvor JS-kopien af v3's scoringstal viste sig at være død kode med sin egen test som eneste aftager. Sletningen skal tage `renderStory`, dens tekstskabeloner og de tests, der kun dækker dem — men `renderFrame`, `pickStory`, `priorityFor` og resten af filen har rigtige aftagere og bliver. | Lille |
 | G87 | **Rundestoryens afløsning er per bruger og ikke per konkurrence.** | `roundStorySuperseded()` (`A38`) trækker rundekortet, når den runde, Hjem viser som indeværende, er strengt senere end storyens og har mindst ét resultat. "Indeværende runde" er brugerens, ikke kortets konkurrence — så et resultat i én turnering kan trække rundekortet for en konkurrence i en anden, hvis runde stadig er den nyeste dér. Retningen er den skånsomme (kortet forsvinder for tidligt frem for at stå og lyve), og det er derfor rækken er gæld og ikke en fejl. Præcist ville kræve et opslag pr. `story.competition_id` — altså N opslag, hvor der i dag er ét, og det er hele afvejningen. | Lille |
-| G88 | **Dagskortets mini-stilling bliver aldrig vist, fordi ingen SQL skriver `payload.mini`.** | `src/screens/hjem/DayCard.jsx` renderer `<MiniStanding rows={story.payload?.mini} />`, og kommentaren over komponenten siger, at feltet er "pakket af SQL'en". Det er det ikke: nøglen `mini` findes ikke ét sted i `sql/`, heller ikke i `sql/schema.sql`. `MiniStanding` returnerer `null` på tom liste, så halvdelen af kortet mangler **tavst** — ingen fejl, intet tomt felt, ingenting at opdage. Spec'ens §147 lover "mini-stilling med brugerens række fremhævet" som en del af hverdagskortet, så det er en afvigelse fra det leverede og ikke et fravalg. **Rækken har to udgange**, og valget er, hvilken: byg feltet i dagsmotoren (afgrænset til personer, modtageren deler konkurrence med — den regel er strukturel og må ikke genopfindes i komponenten), eller fjern komponenten og ret spec'en. **Bygges det, arver det `A38`s problem:** en stilling pakket ind i kortet er et snapshot, og kortet lever i 48 timer, så mini-stillingen kan modsige STILLING på præcis samme måde, som rundestoryens overskrift kunne. Det taler for at datere den i teksten, som `A38` gjorde med øjenbrynet. | Mellem |
 | G89 | **`DAY_RESULT`- og `DUEL`-teksterne i `sql/story_engine_v3.sql` står i nutid.** | "Du ligger nr. 3 af 8" og "Kun N point op til R" er påstande om nuet, skrevet ind i et kort, der lever i 48 timer — samme fejltype som de tre runde-regler, `A38` satte i datid. Forskellen, der gør den mindre og ikke ufarlig: dagskortet er kortlivet OG dateret (`Kampdag 03.08` står i øjenbrynet siden `A38`), så konteksten er der, mens sætningen selv modsiger den. Rettelsen er tekst og ingen migrering — `stories`-rækkerne bærer den færdige streng, så gamle kort beholder den gamle formulering, og de er væk af sig selv inden for to døgn. | Lille |
 | G90 | **`generate_stories_catchup()`s runde-løkke er uden loft og uden selvterminering.** | Dagsløkken fik i `A38` to betingelser, der gør den selvafsluttende, plus `limit 20` — netop fordi der findes dage, som ALDRIG kan få et kort, og som ellers ville blive forsøgt igen ved hver kørsel og æde loftet. **Runde-løkken lige nedenunder har hverken loft eller de betingelser:** den tager hver `round_key`, hvis vindue er lukket og som mangler sit kort, og en runde, der ikke kan producere en historie (fx en hvis kampe ikke indgår i nogen konkurrence), kvalificerer sig igen ved hver eneste notifikations-kørsel — 48–96 gange i døgnet, for evigt. Prisen i dag er spildt arbejde og ikke forkerte data, og tidsfiltret (`round_key < v_today - 7 - p_grace`) er den eneste grund til, at det ikke vokser. **Præeksisterende — ikke indført af `A38`**, som kun rørte dagsløkken. Rettelsen er den samme kur: en betingelse, der udelukker runder uden konkurrence-kampe, og et loft. | Lille |
 | G91 | **`sql/tests/liga_admin.sql` og `sql/tests/account_anonymization.sql` bygger deres eget minischema.** | Begge tester funktioner, hvis rigtighed afhænger af tabeller, de selv opfinder — så de kan stå grønne i CI, mens funktionen fejler mod produktionens skema. `account_anonymization.sql` siger det selv i sit hoved ("⚠️ Deltagelses-påstanden gælder DENNE FILS krop og ikke produktionens"), hvilket er ærligt og ikke en løsning. **Vejen er allerede banet og har fire aftagere:** `sql/tests/_schema.mjs` (udskilt ved `G82`) bygger det RIGTIGE skema fra `sql/schema.sql`, og `A36`/`A37`s mutationstest kørte mod netop det — hvor `Testligaen` gik fra `INGEN LEVENDE ADMIN` til `ok`, en overgang minischemaet ikke kunne have vist. Prisen er kørselstid: `G82`s simulator-trin tog ~10 sekunder og er jobbets tungeste. | Lille |
@@ -238,39 +235,44 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 8. august 2026 — indbakken ryddet, og historikken flyttet ned
+### 8. august 2026 (eftermiddag) — `G88` bygget, `G86` slettet
 
-**Syv linjer blev til syv rækker: `G86`–`G91` og `A39`.** Listen er 31 → 38.
-**Ingen blev forkastet, og ingen blev foldet sammen** — de fem story-rækker
-deler kilde (`A38`s undersøgelse) men ikke rettelse, og det er
-sammenlægningsreglens eneste kriterium.
+**Listen er 38 → 36, og de to rækker var hinandens modsætning:** den ene et
+felt, ingen skrev, den anden en funktion, ingen kaldte. Begge var **tavse** — en
+manglende mini-stilling efterlader intet tomt felt, og død kode med 36 grønne
+testkald ser levende ud. Det er samme fejlklasse som `G78` og `G74`, og det er
+nu fjerde og femte gang på tre dage.
 
-**Én linjes præmis holdt ikke, og den blev større ved eftersyn.** Indbakken
-sagde, at dagskortets `payload.mini` er et snapshot, der kan modsige STILLING.
-Nøglen skrives ikke af nogen SQL i repoet — heller ikke i `sql/schema.sql` — så
-mini-stillingen er aldrig blevet vist for nogen. Linjen beskrev altså en risiko
-ved et felt, der ikke findes, og den rigtige række (`G88`) er, at halvdelen af
-v3's hverdagskort mangler tavst. Det er samme form som `G78`: rækken var en
-hypotese om en løsning, og gætværket var dyrere end opslaget.
+**`G88`s række byggede på en forkert præmis, og den rigtige var større.** Den
+sagde, at mini-stillingen kunne modsige STILLING; nøglen blev slet ikke skrevet,
+så halvdelen af hverdagskortet havde manglet, siden v3 blev bygget. To ting blev
+afgjort ved bygningen: vinduet er tre rækker **omkring** modtageren og ikke
+over/dig/under (spec'ens form ville give føreren mindst indhold), og
+overskriften daterer stillingen, hvilket er `A38`s kur mod præcis den
+modsigelse, rækken frygtede. Milepæls-kort får ingen mini ad nogen af de to
+veje — kapringen flytter kortets `competition_id`, og en beholdt mini ville vise
+én konkurrences stilling under en andens kort.
 
-**To linjer viste sig at være om død kode** (`G86`, og `G88`s komponent, hvis
-feltet fjernes frem for at bygges) — tredje og fjerde gang på tre dage efter
-`G78` og `G74`. Fællestrækket er ikke sjusk, men at en test er nok til at holde
-kode i live: `renderStory()` kaldes 36 gange i sin egen test og nul gange i appen.
+**`G86` var rigtig om `renderStory` og forkert om resten af filen.** Rækken
+skrev, at "`renderFrame`, `pickStory`, `priorityFor` og resten af filen har
+rigtige aftagere og bliver". Det holder for `renderFrame` (kaldes af
+`usableFrames`) og ikke for de to andre: **ni exports mere har nul aftagere i
+appen.** De er noteret i indbakken frem for slettet, fordi de er et andet snit —
+`RULES` er prioritetsstigen, som docs peger på — men rækken var altså et
+undertal, præcis som `G67` var det 5. august.
 
-**Historikken er flyttet ned i denne sektion, og alt ældre er slettet.**
-Filen bar syv indbakke-referater, fjorten daterede afsnit under Prioriteret
-rækkefølge og en kørselshistorik under hver af de fem øverste tier-overskrifter
-— tilsammen omkring 300 af 780 linjer, alle om leverede rækker. Ti stikprøver
-blev slået op i `DECISIONS.md` og `CHANGELOG.md` før sletningen — `G2`, `G7`,
-`G58`, `G63`, `G65`, `G67`, `G71`, `G73`, `G74`, `G84` — og alle ti stod begge
-steder. **Det var altså tredje eksemplar og ikke sidste,** hvilket er hele
-begrundelsen — reglen om, at backloggen sletter frem for at strege ud, gjaldt
-rækkerne, mens referaterne om rækkerne voksede frit ved siden af.
-**Tier-overskrifterne bærer nu deres rækker i stedet for deres fortid**, hvilket
-var afsnittets erklærede formål ("denne er svaret på 'hvad nu?'") og ikke var
-tilfældet: Tier 1–5 indeholdt ikke én eneste række, kun referater af, hvad der
-engang stod i dem.
+**Mutationstesten er dagens vigtigste lære, og den var kritisk to gange.**
+Tolv mutationer blev prøvet mod de nye påstande; ti blev fanget. **Den, der
+slap, afslørede en for svag fixture:** `rnk` erstattet af rækkens nummer i
+vinduet gjorde ingen forskel, fordi ingen to spillere i fixturen delte en
+placering. En syvende bruger med tips identiske med en andens giver nu c2 en
+ægte pointlighed, og mutationen fanges. **Den anden fandt et hul i en TRE UGER
+GAMMEL påstand:** determinismetesten sagde i sin egen kommentar, at
+fingerprintet "dækker ALT, der kan flytte sig", og den dækkede ikke payloaden —
+altså netop dér, mini-stillingen nu bor. Tre navne kunne have skiftet mellem to
+gen-kørsler, uden at ét bogstav i teksten ændrede sig. **De to sidste mutationer
+kan fixturen ikke fremtvinge**, og det står nu skrevet i testfilen frem for at
+blive glemt.
 
 ---
 

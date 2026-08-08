@@ -715,10 +715,77 @@ begin
   ) as rn
   from _sd_scored;
 
+  -- ---------- MINI-STILLINGEN (G88) ----------
+  -- Tre rækker af stillingen med modtagerens egen fremhævet, pakket på kortet.
+  -- Spec §8 har lovet den siden v3, og `DayCard.jsx` har renderet den lige så
+  -- længe — men ingen skrev nøglen, så `MiniStanding` fik altid en tom liste og
+  -- returnerede `null`. Halvdelen af hverdagskortet manglede TAVST: intet tomt
+  -- felt, ingen fejl, ingenting at opdage (backloggens `G88`, 8. august 2026).
+  --
+  -- DEN STRUKTURELLE REGEL LIGGER I JOINET og ikke i en betingelse: rækkerne
+  -- hentes fra `_sd_after` for kortets EGEN konkurrence, og modtageren er altid
+  -- deltager i den (`_sd_reach` når kun folk gennem en delt konkurrence). Derfor
+  -- kan et navn her aldrig være en, modtageren ikke deler konkurrence med — samme
+  -- designregel som resten af motoren, håndhævet samme sted. En komponent, der
+  -- selv hentede stillingen, ville skulle genopfinde den, og det er præcis dét,
+  -- der gik galt i juli 2026, da `_se_rp` manglede sit join.
+  --
+  -- VINDUET ER TRE RÆKKER OMKRING MODTAGEREN, klemt mod enderne: nr. 1 ser
+  -- 1-2-3, den sidste ser de tre nederste, og en konkurrence med to deltagere
+  -- giver to rækker. Alternativet — over/dig/under, som forsvinder i toppen og
+  -- bunden — ville give nr. 1 et kort med to rækker, altså mindst indhold til
+  -- den, der har præsteret mest.
+  --
+  -- `pos` er en TOTAL orden og ikke `rnk`, som deler tal ved pointlighed;
+  -- `order by a.rnk, a.user_id` er samme stige som `_sd_rival`, så to
+  -- gen-kørsler giver samme tre navne (acceptkriterie 7). `rnk` vises til
+  -- gengæld, fordi det er det rigtige tal at læse — to delte andenpladser skal
+  -- begge stå som 2.
+  --
+  -- KUN BRUGERE MED SCOREDE TIP FINDES HER. `_sd_after` bygger på
+  -- competition_match_points, så en deltager, der aldrig har tippet, har ingen
+  -- række — og får derfor ingen mini frem for en, hun ikke står i. Det gælder
+  -- også no-tips-kortet: har hun tippet på en tidligere dag, står hun der.
+  drop table if exists _sd_mini;
+  create temporary table _sd_mini as
+  with ordered as (
+    select a.competition_id, a.user_id, a.pts, a.rnk,
+           row_number() over (partition by a.competition_id order by a.rnk, a.user_id) as pos,
+           count(*)     over (partition by a.competition_id)                           as n
+    from _sd_after a
+  ),
+  anchored as (
+    select o.competition_id, o.user_id, o.pos,
+           least(greatest(o.pos - 1, 1), greatest(o.n - 2, 1)) as win_start
+    from ordered o
+  )
+  select me.competition_id, me.user_id,
+         jsonb_agg(jsonb_build_object(
+           'rnk',  nb.rnk,
+           'name', pr.display_name,
+           'pts',  nb.pts,
+           'me',   nb.user_id = me.user_id
+         ) order by nb.pos) as mini
+  from anchored me
+  join ordered nb on nb.competition_id = me.competition_id
+                 and nb.pos between me.win_start and me.win_start + 2
+  join public.profiles pr on pr.id = nb.user_id
+  group by me.competition_id, me.user_id;
+  create index on _sd_mini (competition_id, user_id);
+
   -- ---------- UDGIVELSEN ----------
   -- news_value på rækken er dagens HØJESTE kandidatscore for brugeren — også
   -- når kortet er dæmpet. Det er tallet, tærsklen blev målt imod, og dermed
   -- A35's måledata. runner_up_value er nr. 2.
+  --
+  -- MILEPÆLE FÅR INGEN MINI, og det er en determinismes-betingelse og ikke en
+  -- smagssag: `apply_milestone_stories()` kaprer et FÆRDIGT kort og sætter dets
+  -- `competition_id` til milepælens, som kan være en anden end den, kortet blev
+  -- skrevet for. Beholdt kapringen sin mini, ville stillingen være fra én
+  -- konkurrence og kolonnen sige en anden. De to veje til et MILESTONE-kort
+  -- skal give SAMME række (acceptkriterie 7), så motoren udelader mini, og
+  -- kapringen fjerner den. Det er også dét, `DayCard.jsx` har beskrevet hele
+  -- tiden: en milepæl er global og har ingen stilling at stå i.
   insert into public.stories
     (round_key, day_key, period, user_id, competition_id, rule, priority,
      league_size, news_value, payload, headline, body)
@@ -728,11 +795,14 @@ begin
            'day', v_daylabel, 'day_key', p_day,
            'third', w.user_id <> w.subject_id,
            'winner_rule', w.rule,
-           'runner_up_value', coalesce(up.news_value, 0)),
+           'runner_up_value', coalesce(up.news_value, 0))
+           || case when w.rule <> 'MILESTONE' and mn.mini is not null
+                   then jsonb_build_object('mini', mn.mini) else '{}'::jsonb end,
          case when w.user_id <> w.subject_id then w.headline3 else w.headline end,
          case when w.user_id <> w.subject_id then w.body3     else w.body     end
   from _sd_rank w
   left join _sd_rank up on up.user_id = w.user_id and up.rn = 2
+  left join _sd_mini mn on mn.competition_id = w.competition_id and mn.user_id = w.user_id
   where w.rn = 1 and w.news_value >= v_threshold;
 
   -- ---------- DET DÆMPEDE FALD-TILBAGE ----------
@@ -751,7 +821,9 @@ begin
          d.payload || jsonb_build_object(
            'day', v_daylabel, 'day_key', p_day, 'third', false,
            'winner_rule', coalesce(best.rule, 'DAY_RESULT'),
-           'runner_up_value', 0),
+           'runner_up_value', 0)
+           || case when mn.mini is not null
+                   then jsonb_build_object('mini', mn.mini) else '{}'::jsonb end,
          d.headline, d.body
   from (
     select distinct on (s.user_id) s.*
@@ -762,6 +834,7 @@ begin
   left join lateral (
     select r.news_value, r.rule from _sd_rank r where r.user_id = d.user_id and r.rn = 1
   ) best on true
+  left join _sd_mini mn on mn.competition_id = d.competition_id and mn.user_id = d.user_id
   where coalesce(best.news_value, 0) < v_threshold;
 
   -- ---------- TIPS-PÅMINDELSEN (acceptkriterie 8) ----------
@@ -777,7 +850,9 @@ begin
          jsonb_build_object('variant', 'no_tips', 'matches', q.matches,
                             'league', q.league, 'day', v_daylabel, 'day_key', p_day,
                             'third', false, 'winner_rule', 'DAY_RESULT',
-                            'runner_up_value', 0),
+                            'runner_up_value', 0)
+           || case when mn.mini is not null
+                   then jsonb_build_object('mini', mn.mini) else '{}'::jsonb end,
          'Ingen tips i dag',
          'Der blev spillet ' || q.matches ||
            case when q.matches = 1 then ' kamp' else ' kampe' end ||
@@ -794,7 +869,8 @@ begin
     where m.match_day = p_day and m.home_score is not null and m.away_score is not null
       and not exists (select 1 from _sd_today t where t.user_id = cp.user_id)
     order by cp.user_id, sz.n desc, cm.competition_id asc
-  ) q;
+  ) q
+  left join _sd_mini mn on mn.competition_id = q.competition_id and mn.user_id = q.user_id;
 
   drop table if exists _sd_pts;
   drop table if exists _sd_size;
@@ -811,6 +887,7 @@ begin
   drop table if exists _sd_prox;
   drop table if exists _sd_scored;
   drop table if exists _sd_rank;
+  drop table if exists _sd_mini;
 end;
 $fn$;
 
@@ -1060,7 +1137,13 @@ begin
   set rule = 'MILESTONE',
       priority = 110,
       competition_id = fresh.competition_id,
-      payload = s.payload || jsonb_build_object(
+      -- `- 'mini'` er ikke oprydning, men den ene halvdel af en invariant (G88,
+      -- 8. august 2026). Kapringen flytter kortets `competition_id` til
+      -- milepælens, og en mini-stilling, der blev pakket for den GAMLE
+      -- konkurrence, ville så vise én konkurrences stilling under en anden
+      -- konkurrences kort. Motoren udelader mini for MILESTONE af samme grund,
+      -- så de to veje til samme kort giver samme række — acceptkriterie 7.
+      payload = (s.payload - 'mini') || jsonb_build_object(
         'milestone_key', fresh.key, 'milestone_payload', fresh.payload,
         'winner_rule', 'MILESTONE'),
       -- 120 = grundvægt 100 + nærhed 20. Størrelsesbidraget er nul for en
