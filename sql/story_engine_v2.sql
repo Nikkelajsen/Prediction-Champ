@@ -512,15 +512,52 @@ declare
   d date;
   r date;
 begin
-  -- Dage med spillede kampe, uden ét eneste dag-kort, ældre end grace-vinduet.
+  -- Dage med spillede kampe og uden ét eneste dag-kort.
+  --
+  -- GRACE-VINDUET GÆLDER IKKE LÆNGERE DAGENE (august 2026). Indtil da så løkken
+  -- kun på `match_day < v_today - p_grace`, altså dage ældre end to døgn, og det
+  -- var for langsomt: 7. august 2026 blev dagens kort aldrig skrevet af
+  -- triggeren, og bagstopperen ville først have taget dagen den 9. Imens stod
+  -- rundestoryen på Hjem med en påstand, stillingen modsagde — dagskortet er
+  -- dét, der afløser den, så et tabt dagskort er ikke bare et manglende kort.
+  --
+  -- Dagen er sin egen afgrænsning: `match_day_complete` inde i
+  -- generate_daily_stories kræver, at ALLE dagens kampe har resultat, så en dag,
+  -- der stadig spilles, kan pr. konstruktion ikke få et kort for tidligt. Der er
+  -- derfor intet at beskytte med en forsinkelse. Runde-løkken nedenfor beholder
+  -- sit vindue: en runde må ikke få sit afsluttende kort, mens den stadig kan få
+  -- flere resultater, og dét er en anden slags påstand.
+  --
+  -- Loftet er ikke pynt: køres bagstopperen første gang mod en database med
+  -- huller langt tilbage, må én kørsel ikke generere hundredvis af dage. De
+  -- ældste tages først (`order by 1`), så efterslæbet afvikles i takt.
+  --
+  -- DE TO SIDSTE BETINGELSER GØR LØKKEN SELVAFSLUTTENDE, og uden dem ville
+  -- fjernelsen af grace-vinduet være en fejl. Der findes nemlig dage, som ALDRIG
+  -- kan få et kort, og som derfor ville blive forsøgt igen ved hver eneste
+  -- kørsel — 48-96 gange i døgnet, for evigt, og de ville æde loftet, så de
+  -- rigtige huller aldrig kom til:
+  --   · rundens SIDSTE kampdag udgiver kun rundekortet (generate_daily_stories
+  --     returnerer straks). Betingelsen her er den nøjagtige negation af den
+  --     udgang, så de dage aldrig tilbydes.
+  --   · en dag, hvor ingen af kampene indgår i en konkurrence, har intet at lave
+  --     et kort ud af — appen synkroniserer syv turneringer, men konkurrencerne
+  --     dækker ikke dem alle.
   for d in
-    select distinct m.match_day
+    select m.match_day
     from public.matches m
-    where m.match_day < v_today - p_grace
-      and m.home_score is not null and m.away_score is not null
+    where m.home_score is not null and m.away_score is not null
       and not exists (select 1 from public.stories s
                       where s.period = 'day' and s.day_key = m.match_day)
+      and exists (select 1 from public.matches m2
+                  where m2.round_key = public.round_key_of_date(m.match_day)
+                    and m2.match_day > m.match_day)
+      and exists (select 1 from public.competition_matches cm
+                  join public.matches m3 on m3.id = cm.match_id
+                  where m3.match_day = m.match_day)
+    group by m.match_day
     order by 1
+    limit 20
   loop
     perform public.generate_daily_stories(d);
     v_n := v_n + 1;

@@ -338,7 +338,98 @@ nyere dagskort er per konstruktion fra den nye runde: matches-triggeren kører
 dagsmotoren før runde-motoren, så den gamle rundes dagskort er altid ældre end
 rundekortet.
 
+> ⚠️ **Rettet igen 7. august 2026 (nat) — afsnittet ovenfor er ikke længere
+> sandt.** *"Afløsningen kræver ingen ny mekanik"* var påstanden, og den holdt
+> ikke en uge. Se **§13.7** nedenfor.
+
 `ROUND_STORY_MAX_AGE_MS` (14 dage) er derfor ikke den normale afløser, men et
 værn mod **sæsonpausen**: uden det ville den sidste runde før en pause stå på
 Hjem i månedsvis, fordi der aldrig kom et nyere dagskort. Fjorten dage = den
 følgende runde plus slæk til en runde, der sluttede sent.
+
+### 13.7 Afløsningen krævede alligevel ny mekanik (rettet efter brugerrapport)
+
+§13.6 skrev, at *"afløsningen kræver ingen ny mekanik"*. Den påstand holdt seks
+dage. En bruger meldte 7. august 2026 rundestoryen for 28.07 – 03.08 stående på
+Hjem med overskriften **"Du er nu foran Lis04 i Superliga Grundspil"**, mens
+STILLING viste Lis04 over vedkommende.
+
+**Fejlen i ræsonnementet er præcis lokaliserbar.** Et nyere dagskort *er* per
+konstruktion fra den nye runde — det er sandt. Men et dagskort skrives først, når
+**hele kampdagen** er færdigspillet (`match_day_complete`, og prædikatet er
+globalt over alle turneringer), mens stillingen flytter sig ved **hvert enkelt
+slutfløjt**: `computeCompetitionState` medregner en runde, så snart ÉN kamp har
+resultat. §13.6 målte "har den nye runde noget at fortælle?" på det forkerte ur.
+Hullet er ikke minutter — bagstopperen ventede dengang to døgn på en blokeret
+dag.
+
+**Bygget, tre greb:**
+
+1. `roundStorySuperseded(story, round)` i `src/lib/stories.js`: kortet trækker
+   sig, når `round.roundKey` er **strengt** senere end `story.round_key` og
+   `round.playedCount > 0`. Data findes allerede på skærmen (`computeCurrentRound`,
+   genindlæst hvert minut), så der kommer ingen nye kald. `round` initialiseres
+   til `undefined` frem for `null`, så kortet kan holdes tilbage, mens svaret er
+   *ukendt*, men ikke når det er *"ingen"* — ellers blinker kortet ind og ud, og
+   `story_viewed` logges for en visning, brugeren aldrig fik.
+2. Øjenbrynet bærer runden: `Rundens historie · 28.07 – 03.08`, udledt af
+   `round_key` med det eksisterende `roundLabel()`. Virker på rækker, der
+   allerede står i databasen.
+3. Tre regler sat i datid, fordi de hævdede en *tilstand* og ikke en
+   *begivenhed*: 22 `Du gik ind i top 3`, 40 `Du gik forbi X`, 45 `Du sluttede
+   runden N point fra toppen`. De øvrige tretten overskrifter beskrev allerede
+   afsluttede begivenheder. Brødteksterne var forankrede hele tiden — de
+   indleder alle med "Efter runden …" — og det var netop asymmetrien: man læser
+   overskriften først, og den er det eneste, der kommer med på et delt billede.
+
+**Prisen, sagt højt:** top-slottet på Hjem kan stå tomt fra den nye rundes første
+resultat, til dagskortet lander. Ingen historie er bedre end en forkert.
+**Accepteret upræcished:** reglen ser på brugerens runde på tværs af alle
+konkurrencer, så et resultat i én turnering trækker også et kort om en anden.
+
+**Ingen backfill.** Datelinen dækker de eksisterende rækker uden at røre dem, og
+`story_engine_backfill.sql` nulstiller `dismissed_at` — den ville genoplive kort,
+brugerne aktivt har afvist.
+
+### 13.8 Dagsmotoren havde aldrig kørt i produktion — og årsagen blev aldrig fundet
+
+Undersøgelsen af §13.7 afdækkede noget større: `select day_key, count(*) from
+stories where period = 'day' and news_value is not null group by 1` svarede
+**ingen rækker**. Dagsmotoren havde ikke skrevet én eneste række, siden v3 blev
+rullet ud.
+
+**Fire hypoteser blev afkræftet, i rækkefølge:**
+
+| Hypotese | Hvordan den døde |
+|---|---|
+| v3 blev udrullet efter kampens slutfløjt | `sql/schema.sql` er et `pg_dump` fra produktion; eksporten fra 19:35 dansk — under kampen — indeholdt allerede funktionen, **kodelinje-identisk** med repoets |
+| Fejl i funktionen eller i dagens data | Håndkaldt skrev `generate_daily_stories('2026-08-07')` **20 rækker** |
+| Dagen var ikke komplet, eller kampe var flyttet | Kun én kamp den dag, `finished`, og ingen kampe flyttet |
+| `statement_timeout` i PostgREST-stien | Hele triggersætningen måler **141 ms** (rating 23 ms, dagsmotor 75 ms). Rollen er desuden irrelevant: hele kæden er `security definer` som `postgres` |
+
+**Årsagen kunne ikke fastslås, og kan formentlig aldrig blive det.**
+`matches.updated_at` vedligeholdes ikke af syncen, så det kan ikke rekonstrueres,
+hvilke kampe der lå på dagen kl. 20:56; og rækker, der eventuelt blev skrevet og
+rullet tilbage af guardens subtransaktion, findes ikke længere.
+
+**Det er selve konklusionen.** Symptomet på en fejlet generering er **stilhed**,
+og stilhed er uskelnelig fra en rolig uge. Derfor blev der ikke rettet en
+formodet årsag, men observerbarheden — og de to øvrige rettelser blev valgt,
+fordi de virker uanset årsagen:
+
+- **Sporet.** Triggeren skriver `job = 'story-engine'` i `job_runs` med hver
+  berørt dag og runde, om dagen var komplet, antal kort og `sqlerrm`. **Uden for
+  guarden**, fordi `begin … exception … end` er en subtransaktion; indenfor ville
+  rækken blive rullet tilbage netop når der var noget at fortælle. Med sin egen
+  guard, fordi et fejlende spor ikke må vælte det, det sporer. Kontrollen
+  `sql/checks/day_card_coverage.sql` aflæser resultatet.
+- **Bagstopperen dækker nu i går og i dag.** Dagsløkken i
+  `generate_stories_catchup()` har mistet sit grace-vindue: dagen er sin egen
+  afgrænsning, fordi `match_day_complete` kræver alle resultater. To nye
+  betingelser gør løkken selvafsluttende — rundens sidste kampdag og dage uden
+  konkurrence-kampe kan **aldrig** få et kort og ville ellers blive forsøgt igen
+  48–96 gange i døgnet for evigt og æde loftet på 20. Runde-løkken beholder sit
+  vindue.
+- **Rækkefølgen i `generate_daily_stories`.** Den tidlige udgang står nu **før**
+  `delete`. Stod den efter, ville et gen-kald for en dag, der er *blevet* rundens
+  sidste kampdag, tømme dagen og skrive intet tilbage.

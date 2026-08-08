@@ -19,6 +19,7 @@
 // og rundekortet er blevet en tap-through-story med frames (renderFrame).
 
 import { renderMilestone } from "./milestones.js";
+import { roundLabel } from "./scoring.js";
 
 // Prioritetsstige (lavere tal = vigtigere). Én kilde til sandhed for regel-metadata.
 // Værdien her er reglens STÆRKE prioritet; tre regler har også en svag variant,
@@ -213,6 +214,42 @@ export function isFresh(story, now = Date.now(), maxAge = DAY_CARD_MAX_AGE_MS) {
   return Number.isFinite(t) && now - t < maxAge;
 }
 
+// ---------------------------------------------------------------------------
+// Rundestoryen skal trække sig, når virkeligheden er løbet fra den
+// ---------------------------------------------------------------------------
+// Rundestoryens overskrifter er udsagn om en STILLING ("du er nu foran Lis04"),
+// og en stilling er live pr. kamp: `computeCompetitionState` medregner en runde,
+// så snart ÉN kamp i den har resultat. Afløseren — dagskortet — skrives derimod
+// først, når HELE kampdagen er færdigspillet, og komplethedsprædikatet er globalt
+// over alle turneringer. Mellem "første resultat i den nye runde" og "dagens
+// sidste kamp er fløjtet af" stod Hjem derfor med et kort, STILLING modsagde. Det
+// hul er ikke teoretisk: det blev rapporteret 7. august 2026.
+//
+// Ét resultat er nok til at trække kortet. Ét resultat kan flytte en duel.
+export function roundStorySuperseded(story, round) {
+  if (!story || !round) return false;      // ingen rundedata → intet at modsige
+  if (!round.playedCount) return false;    // den nye runde har intet fortalt endnu
+  // STRENGT større: er runden den samme som storyens, handler kortet om præcis
+  // den runde, skærmen viser, og skal blive stående hele vejen igennem den.
+  return String(round.roundKey || "") > String(story.round_key || "");
+}
+
+// Overskriftslinjen på rundekortet bærer rundens interval: "Rundens historie ·
+// 28.07 – 03.08". Uden datoen læses en overskrift uden tidsangivelse som en
+// påstand om NU — og brødteksten, der har båret "Efter runden …" hele tiden,
+// læses først bagefter. Etiketten udledes af `round_key`, så den virker på
+// rækker, der allerede står i databasen; ingen migrering, ingen genberegning.
+//
+// Nøglen valideres, fordi roundLabel() på en ugyldig streng ville skrive
+// "Invalid Date – Invalid Date" hen over kortet.
+export const ROUND_STORY_EYEBROW = "Rundens historie";
+
+export function roundStoryEyebrow(story) {
+  const key = String(story?.round_key || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return ROUND_STORY_EYEBROW;
+  return `${ROUND_STORY_EYEBROW} · ${roundLabel(key)}`;
+}
+
 // Deterministisk udvælgelse: præcis én historie pr. bruger pr. runde.
 // Laveste priority; ved lighed største liga (league_size); dernæst competition_id
 // (garanteret unik tiebreak). Spejler latest_story-viewets ORDER BY. Returnerer
@@ -269,17 +306,17 @@ export function renderStory(rule, payload = {}) {
     case "RATING_HIGH":
       return {
         headline: `📈 Ny personlig ratingrekord: ${p.rating}`,
-        body: `Din runde ${L} sendte dig forbi din hidtidige rekord på ${p.old}. Du er nu nr. ${p.rank} af ${p.total} på ranglisten.`,
+        body: `Din runde ${L} sendte dig forbi din hidtidige rekord på ${p.old}. Efter runden var du nr. ${p.rank} af ${p.total} på ranglisten.`,
       };
     case "H2H_PASS":
       return {
-        headline: `🔄 Du er nu foran ${p.rival} i ${p.league}`,
-        body: `Efter runden ${L} fører du jeres duel i ${p.league} med ${p.gap} point.`,
+        headline: `🔄 Du gik forbi ${p.rival} i ${p.league}`,
+        body: `Du overhalede ${p.rival} i runden ${L} og sluttede ${p.gap} point foran i ${p.league}.`,
       };
     case "COMEBACK":
       return {
         headline: `🚀 Fra nr. ${p.from} til nr. ${p.to} i ${p.league}`,
-        body: `Du rykkede ${p.from - p.to} pladser frem i runden ${L}. Toppen er nu ${p.gap} point væk.`,
+        body: `Du rykkede ${p.from - p.to} pladser frem i runden ${L}. Toppen var ${p.gap} point væk, da den sluttede.`,
       };
     case "STREAK":
       return {
@@ -301,13 +338,13 @@ export function renderStory(rule, payload = {}) {
       };
     case "PODIUM_ENTER":
       return {
-        headline: `🏅 Du er inde i top 3 i ${p.league}`,
-        body: `Efter runden ${L} ligger du nr. ${p.rank} af ${p.total} i ${p.league}. Toppen er ${p.gap} point væk.`,
+        headline: `🏅 Du gik ind i top 3 i ${p.league}`,
+        body: `Efter runden ${L} lå du nr. ${p.rank} af ${p.total} i ${p.league}. Toppen var ${p.gap} point væk.`,
       };
     case "CLOSING_IN":
       return {
-        headline: `👀 Kun ${p.gap} point op til føringen i ${p.league}`,
-        body: `Efter runden ${L} er der ${p.gap} point op til ${p.rival} i ${p.league}.`,
+        headline: `👀 Du sluttede runden ${p.gap} point fra toppen i ${p.league}`,
+        body: `Efter runden ${L} var der ${p.gap} point op til ${p.rival} i ${p.league}.`,
       };
     case "PERSONAL_BEST":
       return {

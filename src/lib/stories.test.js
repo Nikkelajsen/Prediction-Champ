@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DAILY_QUIET_MIN, DAILY_RULES, DAY_CARD_MAX_AGE_MS, isDailyQuiet, isFresh, isNewsworthy, isQuiet, pickStory, priorityFor, QUIET_TIER_MIN, renderFrame, renderStory, ROUND_STORY_MAX_AGE_MS, RULES, SOFT_PRIORITY, THRESHOLDS, usableFrames } from "./stories.js";
+import { DAILY_QUIET_MIN, DAILY_RULES, DAY_CARD_MAX_AGE_MS, isDailyQuiet, isFresh, isNewsworthy, isQuiet, pickStory, priorityFor, QUIET_TIER_MIN, renderFrame, renderStory, roundStoryEyebrow, roundStorySuperseded, ROUND_STORY_EYEBROW, ROUND_STORY_MAX_AGE_MS, RULES, SOFT_PRIORITY, THRESHOLDS, usableFrames } from "./stories.js";
 
 // Testcases spejler docs/features/story-engine-v1.md afsnit 9 (det der kan
 // udtrykkes rent i JS; DB-idempotens og trigger-adfærd verificeres i skyggetilstand).
@@ -234,7 +234,10 @@ describe("nye regler (v1.1)", () => {
 
   it("Tæt på toppen nævner føreren ved navn", () => {
     const { headline, body } = renderStory("CLOSING_IN", { league: "Kontoret", rival: "Jimmy", gap: 1, rank: 2, label: "04.08 – 10.08" });
-    expect(headline).toContain("Kun 1 point op til føringen");
+    // Datid siden august 2026: "Kun 1 point op til føringen" er et udsagn om en
+    // stilling og bliver usandt ved næste kamp. Afstanden er den samme, men den
+    // hører til den runde, der er slut.
+    expect(headline).toContain("Du sluttede runden 1 point fra toppen");
     expect(body).toContain("op til Jimmy");
     expect(body).toContain("04.08 – 10.08");
   });
@@ -312,6 +315,56 @@ describe("ulæst-markering og udløb (v3)", () => {
 
   it("rundestoryens loft er mindst en hel runde længere end dagskortets", () => {
     expect(ROUND_STORY_MAX_AGE_MS).toBeGreaterThan(DAY_CARD_MAX_AGE_MS + 7 * 24 * 3600e3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Afløsningen (august 2026)
+//
+// Indtil da blev rundestoryen kun afløst af et NYERE dagskort. Den regel er
+// sand, men for smal: et dagskort kræver en færdigspillet kampdag, mens
+// stillingen flytter sig ved hvert enkelt slutfløjt. Hullet blev meldt 7. august
+// 2026 — kortet sagde "du er nu foran Lis04", mens Lis04 lå over brugeren i
+// STILLING, fordi den nye rundes første kamp var spillet.
+describe("rundestoryens afløsning", () => {
+  const story = { round_key: "2026-07-28" };
+
+  it("trækker sig, så snart den nye runde har sit første resultat", () => {
+    expect(roundStorySuperseded(story, { roundKey: "2026-08-04", playedCount: 1 })).toBe(true);
+  });
+
+  it("bliver stående, indtil den nye runde har spillet", () => {
+    // Tirsdagens tomhed: ny runde begyndt på kalenderen, men intet fortalt endnu.
+    expect(roundStorySuperseded(story, { roundKey: "2026-08-04", playedCount: 0 })).toBe(false);
+  });
+
+  it("bliver stående gennem sin EGEN runde, uanset hvor mange kampe der er spillet", () => {
+    // STRENGT større: kortet handler om præcis den runde, skærmen viser.
+    expect(roundStorySuperseded(story, { roundKey: "2026-07-28", playedCount: 6 })).toBe(false);
+  });
+
+  it("trækker sig ikke på en ældre runde", () => {
+    expect(roundStorySuperseded(story, { roundKey: "2026-07-21", playedCount: 3 })).toBe(false);
+  });
+
+  it("er tavs uden data — ufuldstændig viden må aldrig fjerne et kort", () => {
+    expect(roundStorySuperseded(null, { roundKey: "2026-08-04", playedCount: 1 })).toBe(false);
+    expect(roundStorySuperseded(story, null)).toBe(false);
+    expect(roundStorySuperseded(story, undefined)).toBe(false);
+    expect(roundStorySuperseded(story, { playedCount: 2 })).toBe(false);
+  });
+});
+
+describe("rundestoryens dateline", () => {
+  it("sætter rundens interval på overskriftslinjen", () => {
+    expect(roundStoryEyebrow({ round_key: "2026-07-28" })).toBe("Rundens historie · 28.07 – 03.08");
+  });
+
+  it("falder tilbage til den nøgne etiket ved manglende eller ugyldig rundenøgle", () => {
+    // roundLabel() ville ellers skrive "Invalid Date – Invalid Date" hen over kortet.
+    expect(roundStoryEyebrow({})).toBe(ROUND_STORY_EYEBROW);
+    expect(roundStoryEyebrow(null)).toBe(ROUND_STORY_EYEBROW);
+    expect(roundStoryEyebrow({ round_key: "ikke en dato" })).toBe(ROUND_STORY_EYEBROW);
   });
 });
 

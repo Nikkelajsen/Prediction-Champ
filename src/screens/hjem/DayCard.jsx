@@ -104,7 +104,10 @@ function DayCard({ story, token, competitions, tips, seen, onSeen, openPredictio
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <Eyebrow>
-          {milestone ? "Ny milepæl" : quiet ? "I dag" : `Kampdag ${story.payload?.day || ""}`.trim()}
+          {/* "I dag" stod her indtil august 2026 og var forkert på dag to:
+              kortet lever i 48 timer. Samme defekt som rundestoryens udaterede
+              overskrift, bare i lille format — datoen er den samme kur. */}
+          {milestone ? "Ny milepæl" : `Kampdag ${story.payload?.day || ""}`.trim()}
         </Eyebrow>
         {/* Ulæst-prikken er HELE pointen med tærsklen. Et badge, der lyser hver
             dag, er ikke et signal, det er en baggrundsfarve — derfor vises den

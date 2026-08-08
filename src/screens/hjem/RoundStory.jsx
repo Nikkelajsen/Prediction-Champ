@@ -17,7 +17,7 @@ import { useState, useEffect } from "react";
 import { Share2, X, ChevronRight } from "lucide-react";
 import { logEvent, logEventOnce } from "../../lib/analytics.js";
 import { shareImage, storyShareText } from "../../lib/share.js";
-import { usableFrames } from "../../lib/stories.js";
+import { roundStoryEyebrow, usableFrames } from "../../lib/stories.js";
 import { C, btnGhost, btnGold, font, iconBtn } from "../../ui/theme.js";
 import { Card, Eyebrow } from "../../ui/components.jsx";
 import { cardTight } from "./shared.js";
@@ -182,7 +182,7 @@ function RoundStory({ story, token, competitions, seen, onSeen, onDismiss, openP
   if (!frames.length) {
     return (
       <Card style={{ ...cardTight, borderColor: C.gold }}>
-        <Eyebrow>Rundens historie</Eyebrow>
+        <Eyebrow>{roundStoryEyebrow(story)}</Eyebrow>
         <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, lineHeight: 1.15 }}>
           {story.headline}
         </div>
@@ -198,7 +198,11 @@ function RoundStory({ story, token, competitions, seen, onSeen, onDismiss, openP
         background: "linear-gradient(135deg, #14212F 0%, #221E14 100%)",
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <Eyebrow>Rundens historie</Eyebrow>
+          {/* Datoen står HER og ikke i overskriften: overskriften er reglens
+              egen formulering og skal kunne stå alene, mens øjenbrynet er
+              kortets adresse. Uden den læses "Du gik forbi Lis04" som en
+              påstand om nu — og det er præcis den fejl, kortet blev meldt for. */}
+          <Eyebrow>{roundStoryEyebrow(story)}</Eyebrow>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
             {!seen && (
               <span aria-label="Ulæst" style={{

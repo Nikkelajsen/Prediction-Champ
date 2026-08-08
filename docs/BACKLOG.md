@@ -38,6 +38,11 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
+- `renderStory()` i `src/lib/stories.js` er død kode i appen — kun `stories.test.js` kalder den, og teksterne skulle rettes to steder ved `A38`. Samme argument som `G78` én dag tidligere.
+- Rundestoryens afløsning er per bruger og ikke per konkurrence: et resultat i én turnering trækker også et kort om en anden. Præcist ville kræve et opslag pr. `story.competition_id`.
+- Dagskortets `payload.mini` er et snapshot af stillingen og kan modsige STILLING inden for kortets 48 timer — samme fejltype som `A38`, bare i lille format.
+- `DAY_RESULT`- og `DUEL`-teksterne i `sql/story_engine_v3.sql` er nutid ("Du ligger nr. 3 af 8", "Kun N point op til R") — samme rettelse som runde-reglernes datid, men de er kortlivede og daterede.
+- `match_day_complete()` er global: én kamp uden resultat i en turnering, ingen tipper, blokerer alles dagskort. Prisen er dokumenteret som bevidst, men den blev betalt i `A38`s undersøgelse.
 - `sql/tests/liga_admin.sql` og `sql/tests/account_anonymization.sql` bygger deres eget håndskrevne minischema — de kan derfor være grønne, mens funktionen fejler mod det rigtige. `sql/schema.sql` ligger i repoet og kan køres i CI's postgres-service (kun `\restrict`, `CREATE SCHEMA public`, `COMMENT ON SCHEMA` og de 12 `ALTER DEFAULT PRIVILEGES` skal ud, jf. `docs/STAGING.md` trin 2).
 
 *Ryddet 7. august 2026 (aften): de otte linjer blev til `A36` og `G79`–`G84`.
