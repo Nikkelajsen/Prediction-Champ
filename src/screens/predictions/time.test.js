@@ -25,6 +25,22 @@ describe("hhmm", () => {
     expect(hhmm("2026-09-13T00:00:00Z", true)).toBe("");
     expect(hhmm("2026-09-13T00:00:00Z", false)).not.toBe("");
   });
+
+  // G85. Den svagere markør gør det MODSATTE af tbd: tiden bliver stående,
+  // fordi den er brugbar at planlægge efter, og siger bare at den er
+  // leverandørens gæt. Havde den skjult tiden, ville vi have byttet en forkert
+  // oplysning ud med ingen oplysning — og det er ikke en forbedring for en
+  // bruger, der skal vide, om kampen ligger lørdag formiddag eller aften.
+  it("sætter ~ foran, når tiden ikke er bekræftet", () => {
+    expect(hhmm("2026-12-12T15:00:00Z", false, true)).toMatch(/^~\d{2}[.:]\d{2}$/);
+    expect(hhmm("2026-12-12T15:00:00Z", false, false)).not.toMatch(/~/);
+  });
+
+  it("lader 'ingen tid' vinde over 'ikke bekræftet'", () => {
+    // Bærer en kamp begge markører, er der ikke noget klokkeslæt at sætte et
+    // tilde foran. Et "~02.00" ville være det værste af begge udgaver.
+    expect(hhmm("2026-09-13T00:00:00Z", true, true)).toBe("");
+  });
 });
 
 describe("dayKey", () => {
@@ -123,6 +139,36 @@ describe("groupIntoDays", () => {
     ]);
     expect(dage).toHaveLength(1);
     expect(dage[0].label).not.toMatch(/Tid ikke fastlagt/);
+  });
+
+  // G85. Tegnforklaringen skal med, så snart der står ét `~` på dagen — modsat
+  // "Tid ikke fastlagt", som kun sættes, når HELE dagen mangler tid. Forskellen
+  // er, at en tom tidskolonne forklarer sig selv, mens et tegn ikke gør.
+  it("forklarer tilden, også når kun én kamp på dagen er ubekræftet", () => {
+    const dage = groupIntoDays([
+      { id: "a", kickoff_at: "2026-12-12T15:00:00Z", kickoff_tbd: false, kickoff_uncertain: true },
+      { id: "b", kickoff_at: "2026-12-12T17:00:00Z", kickoff_tbd: false, kickoff_uncertain: false },
+    ]);
+    expect(dage).toHaveLength(1);
+    expect(dage[0].label).toMatch(/~ = tid ikke bekræftet/);
+  });
+
+  it("nævner ikke tilden på en dag helt uden ubekræftede tider", () => {
+    const dage = groupIntoDays([
+      { id: "a", kickoff_at: "2026-12-12T15:00:00Z", kickoff_tbd: false, kickoff_uncertain: false },
+    ]);
+    expect(dage[0].label).not.toMatch(/bekræftet/);
+  });
+
+  // Bærer alle dagens kampe begge markører, er "Tid ikke fastlagt" det rigtige
+  // svar: rækkerne viser ingen tid, så der er ingen tilde at forklare.
+  it("siger 'Tid ikke fastlagt' frem for tegnforklaringen, når begge markører står", () => {
+    const dage = groupIntoDays([
+      { id: "a", kickoff_at: "2026-09-13T00:00:00Z", kickoff_tbd: true, kickoff_uncertain: true },
+      { id: "b", kickoff_at: "2026-09-13T00:00:00Z", kickoff_tbd: true, kickoff_uncertain: true },
+    ]);
+    expect(dage[0].label).toMatch(/Tid ikke fastlagt/);
+    expect(dage[0].label).not.toMatch(/~/);
   });
 
   it("taber ingen kampe", () => {

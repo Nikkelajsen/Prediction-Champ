@@ -15,6 +15,61 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 8. august 2026 (nat) — En opdigtet tid genkendes på, at den flytter sig (`G85`)
+
+**Beslutning:** football-data.orgs opdigtede klokkeslæt for Premier League,
+Primera División og Serie A markeres af **kandidat B** — sammenlign med den
+forrige synkronisering — og markøren er en **ny, display-only kolonne**
+(`matches.kickoff_uncertain`), ikke `kickoff_tbd`. Læringen generaliseres fra
+kampen til turneringen med `G84`s eget gulv på tre.
+
+Tre valg, tre begrundelser.
+
+**B og ikke A, fordi A skulle bære en risiko, der ikke findes — og selv ville
+skabe en.** Backlogrækken sagde, at "låsen sættes efter et tidspunkt,
+leverandøren har fundet på". Det passer ikke: `public.match_lock_at()` og
+`lockAtOf()` regner låsen ved HVER læsning ud fra rækkens nuværende
+`kickoff_at`, og syncen kører hver 12. time, så en rettet tid retter låsen af
+sig selv. Skaden er displayet af fjerne kampe, ikke tipsvinduet. Dermed falder
+argumentet for kandidat A's hastværk væk — og tilbage står dens pris: en tabel
+over pladsholderværdier ville være kalibrerede tal uden data at kalibrere på
+(`A35`), og værre endnu, **efterårspladsholderen ER turneringens typiske
+anspilstid**. A ville markere ægte kampe på netop de klokkeslæt, de rigtigt
+spilles på. B bygger derimod på en kendsgerning om vores egne rækker: en tid,
+der flytter sig, var ikke fastsat.
+
+**En ny kolonne og ikke `kickoff_tbd`, fordi det flag gør tre ting og kun den
+ene er ønsket.** Det skjuler klokkeslættet (ønsket), rykker låsen fra kickoff−1t
+til midnat på spilledagen — 16 timer strengere — (ikke ønsket) og fjerner
+deadline-påmindelsen helt (ikke ønsket). At genbruge det ville have kostet
+brugerne tipstid for at rette en visning. Den nye markør rører hverken
+`match_lock_at()`, en eneste RLS-policy eller `analytics_match_locks`, og
+migreringen **kan** derfor ikke flytte en lås. Prisen er en kolonne mere og et
+begreb mere at holde adskilt fra det gamle; det er sagt højt i begge filhoveder
+og prøvet af som påstand 8 i `sql/tests/kickoff_uncertain.sql`.
+
+**Gulvet er tre, og det er `G84`s og ikke et nyt tal.** Uden generaliseringen
+kan B kun svare bagudrettet om den enkelte kamp, og det hjælper ingen bruger.
+Med den er spørgsmålet, hvornår en flytning er et regime frem for en
+omberammelse — og dét er præcis det spørgsmål, `G84` allerede har svaret på med
+et gulv på tre og en begrundelse, der holder her: én kamp, der flytter sig, er
+normalt (en tv-flytning), mens pladsholder-regimet flytter en hel måned ad
+gangen. **Et genbrugt tal er bedre end et nyt ukalibreret.** Grupperingen sker
+på UTC-klokkeslæt, fordi vi ikke gemmer en tidszone pr. turnering; prisen er, at
+sommertidsskiftet deler efterårspladsholderen i to værdier, der læres hver for
+sig, og det er den sikre retning at fejle i.
+
+**Det, der bevidst IKKE blev rettet:** `kickoffTbdOf()` i
+`api/_providers/footballdata.js`. Funktionen er ufuldstændig, ikke forkert —
+Bundesligas markør er aflæst og ren — og der findes ikke et felt hos de tre
+andre turneringer at læse tiden af. Rettelsen hører derfor et lag længere inde.
+
+**Kendt underdækning, som ikke lukkes med et gæt:** Premier Leagues december
+bærer to distinkte klokkeslæt, som læres hver for sig. Aflæsningen siger
+udtrykkeligt, at årsagen til det split ikke er efterprøvet.
+
+---
+
 ## 8. august 2026 (aften) — En kopi uden en vagt mod originalen er ikke en kilde (`G86`)
 
 **Beslutning:** en JS-konstant, der spejler noget, motoren ejer i SQL, må kun

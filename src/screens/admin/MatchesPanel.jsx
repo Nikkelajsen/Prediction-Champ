@@ -92,7 +92,7 @@ function MatchesPanel({ token, leagues, reloadLeagues }) {
           <table><tbody>
             {rounds[roundIndex].matches.map((m) => (
               <tr key={m.id} className="rowline">
-                <td style={{ color: C.muted, fontSize: 13, width: 130 }}>{formatKickoff(m.kickoff_at, m.kickoff_tbd)}</td>
+                <td style={{ color: C.muted, fontSize: 13, width: 130 }}>{formatKickoff(m.kickoff_at, m.kickoff_tbd, m.kickoff_uncertain)}</td>
                 <td style={{ color: C.text, fontWeight: 600 }}>{teamsById[m.home_team_id]} <span style={{ color: C.muted }}>vs</span> {teamsById[m.away_team_id]}</td>
                 <td style={{ textAlign: "right" }}>
                   {m.home_score !== null

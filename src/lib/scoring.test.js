@@ -283,6 +283,22 @@ describe("formatKickoff", () => {
     expect(formatKickoff(iso, true)).toBe(formatKickoff(iso).split(" kl. ")[0]);
   });
 
+  // G85. Den svagere markør beholder klokkeslættet og siger, at det ikke er
+  // bekræftet — modsat `tbd`, som fjerner det. De to må ikke kunne forveksles:
+  // "kl. 16.00 (ikke bekræftet)" og "tor. 12.12" er to forskellige påstande.
+  it("beholder klokkeslættet, men siger fra, når det ikke er bekræftet", () => {
+    const iso = "2026-12-12T15:00:00Z";
+    expect(formatKickoff(iso, false, true)).toContain(" kl. ");
+    expect(formatKickoff(iso, false, true)).toContain("(ikke bekræftet)");
+    expect(formatKickoff(iso, false, false)).not.toContain("bekræftet");
+  });
+
+  it("lader 'ingen tid' vinde over 'ikke bekræftet'", () => {
+    const iso = "2026-09-13T00:00:00Z";
+    expect(formatKickoff(iso, true, true)).toBe(formatKickoff(iso, true));
+    expect(formatKickoff(iso, true, true)).not.toContain("bekræftet");
+  });
+
   it("giver tom streng uden kickoff, uanset flaget", () => {
     expect(formatKickoff(null)).toBe("");
     expect(formatKickoff(null, true)).toBe("");

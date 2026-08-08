@@ -47,13 +47,13 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*Tom (8. august 2026).*
+- CL's kickoff-felt er stadig ikke aflæst — gentag aflæsningen i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md`, når ligafasen er lodtrukket (`B8`)
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 33 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -86,7 +86,6 @@ Tomt.
 
 | # | Hvad | Hvorfor her |
 |---|---|---|
-| `G85` | Tre af fem football-data-turneringer får et **opdigtet** klokkeslæt, og `G84`s kontrol er blind for netop dem | Appen viser i dag et konkret tidspunkt, leverandøren har fundet på, og sætter tipslåsen efter det. Tilstanden er aflæst; det, der mangler, er et valg mellem to kandidater. |
 | `G91` | To SQL-tests bygger deres eget minischema — og den ene tester oven i købet en **afløst** funktion | Undersøgt 8. august 2026 og større end "Lille": fixturerne bruger syntetiske fremmednøgler, som produktionsskemaet afviser, så det er en fixture-omskrivning og ikke et hovedskift. |
 
 ### Tier 5 — Robusthed og vedligehold
@@ -180,7 +179,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
-| G85 | **`kickoff_tbd` kan aldrig blive sand for tre af fem football-data-turneringer, og `G84`s kontrol er blind for netop dem.** | Aflæst 7. august 2026 mod leverandøren, fire turneringer, 1.446 kampe ([reviews/football-data-kickoff-aflaesning-2026-08-07.md](./reviews/football-data-kickoff-aflaesning-2026-08-07.md)). Bundesliga har begge markører rene — `TIMED` vs. `SCHEDULED`, og 261 af 306 kampe med midnat. **Premier League, Primera División og Serie A har ingen af dem:** nul midnat i 1.140 kampe, og `SCHEDULED` på hver eneste af dem, også dem med rigtige tider. Leverandøren sender i stedet et opdigtet klokkeslæt — turneringens typiske anspilstid lokalt frem til nytår, 12:00 UTC derefter. **Det er værre end fejlen fra 2.–6. august, ikke bedre.** Dengang stod alle kampe som "Tid ikke fastlagt", hvilket er synligt forkert; nu viser appen et konkret klokkeslæt for hver kamp fra oktober og frem i tre af Europas fem største rækker, uden noget sted, der markerer det som usikkert. **RÆKKEN SAGDE OGSÅ, AT "låsen sættes efter et tidspunkt, leverandøren har fundet på" — og dét er efterprøvet 8. august 2026 og passer ikke.** Låsen er ikke et gemt tidspunkt: `lockAtOf()` i `src/lib/scoring.js` og `public.match_lock_at()` i RLS regner den ved HVER læsning ud fra rækkens nuværende `kickoff_at`. Synkroniseringen kører hver 12. time, så når en kamp nærmer sig og leverandøren har sat den rigtige tid, følger låsen med af sig selv. Skaden er derfor **displayet af fjerne kampe** og ikke tipsvinduet — en bruger, der planlægger efter "12. december kl. 15", kan tage fejl, men ingen mister et tip. Det gør rækken mindre og flytter dens tyngdepunkt fra kandidat A til B. **Følgeskaden er, at `sql/checks/kickoff_coverage.sql` (`G84`) ikke kan se det:** kontrollen leder efter en turnering, hvor ALLE nære kampe mangler tid, og det kan ikke ske, når flaget aldrig sættes. Kontrollen er grøn for præcis de turneringer, der er ramt. **To kandidater, ingen valgt:** (a) genkend pladsholderværdierne pr. turnering — virker, men er kalibrerede tal uden data at kalibrere på, samme indvending som `A35`; (b) sammenlign med forrige synkronisering, da vi kører hver 12. time og allerede gemmer `kickoff_at` — en tid, der ændrer sig, var ikke fastsat, hvilket kræver hverken tærskel eller antagelser om leverandøren, men først svarer bagudrettet og koster en kolonne. **Fire formodninger er allerede prøvet af og forkastet** (`status`, midnat som universel regel, formen på en runde, `lastUpdated`) — se aflæsningen, og lad være med at prøve dem igen. CL mangler at blive aflæst; sæsonen fandtes ikke hos leverandøren pr. 1. august (`B8`). | Mellem |
 | G91 | **To SQL-tests bygger deres eget minischema — og `account_anonymization.sql`s test er rettet mod en AFLØST funktion.** | Begge tester funktioner, hvis rigtighed afhænger af tabeller, de selv opfinder, så de kan stå grønne, mens funktionen fejler mod produktionens skema. `account_anonymization.sql` siger det selv i sit hoved. **Undersøgt 8. august 2026, og rækken var både for lille og delvist forkert.** (a) **Omfanget er ikke "Lille":** fixturerne bruger syntetiske fremmednøgler — `predictions.match_id` sættes med `gen_random_uuid()`, og `stories`/`analytics_events` indsættes med tre kolonner — som produktionsskemaet afviser med det samme. Det er en fixture-omskrivning i to filer på 757 og 236 linjer, ikke et skift af filhoved. (b) **Den ene test rammer helt ved siden af:** `sql/tests/account_anonymization.sql` indlæser KUN `\ir ../account_anonymization.sql`, hvis `anonymize_my_account()` er #31's selvstændige udgave. Produktionen kører `sql/liga_admin.sql`s, som delegerer til `_anonymize_account()` med `A25`s framelding og `A36`/`A37`s admin-overdragelse — og den er allerede dækket af `sql/tests/liga_admin.sql`, der indlæser begge filer i rigtig rækkefølge. Testen vogter altså en funktionskrop, ingen kører. **Rettelsen er derfor to forskellige ting:** for `liga_admin.sql` en omskrivning til det rigtige skema via `_schema.mjs`; for `account_anonymization.sql` et valg mellem at slette den og folde dens unikke påstande ind i `liga_admin.sql`s test, eller at pege den på den funktion, produktionen faktisk kører. Den anden halvdel er den, der haster mindst og betyder mest. | Mellem |
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
@@ -226,55 +224,40 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 8. august 2026 (nat) — Tier 2 og 5 kørt tomme, Tier 4 halvt
+### 8. august 2026 (nat, anden runde) — `G85` leveret, Tier 4 har ét punkt tilbage
 
-**Listen er 36 → 33.** `G89`, `G90` og `G87` er leveret og slettet; Tier 2 og
-Tier 5 er tomme, og Tier 4 har `G85` og `G91` tilbage. **Begge de to
-tilbageværende blev væsentligt anderledes ved undersøgelsen, og det er dagens
-egentlige udbytte** — den ene skrumpede, den anden voksede, og begge gange var
-det rækkens egen påstand, der ikke holdt.
+**Listen er 33 → 32.** `G85` er leveret og slettet. Tier 1, 2, 3 og 5 er tomme,
+og Tier 4 har kun `G91` tilbage.
 
-**`G85` skrumpede, fordi låsen ikke er gemt.** Rækken sagde, at "låsen sættes
-efter et tidspunkt, leverandøren har fundet på". Det gør den ikke: `lockAtOf()`
-og `public.match_lock_at()` regner låsen ved HVER læsning ud fra rækkens
-nuværende `kickoff_at`, og synkroniseringen kører hver 12. time. Når en kamp
-nærmer sig og den rigtige tid er kommet, følger låsen med af sig selv. Skaden er
-**displayet af fjerne kampe** og ikke tipsvinduet. Det flytter valget mellem
-rækkens to kandidater: en bagudrettet detektion (B) er nok, når ingen mister et
-tip, mens kalibrerede pladsholder-tal (A) skulle bære en risiko, der ikke findes.
+**Rækkens tyngdepunkt havde allerede flyttet sig fra A til B, og kørslen
+bekræftede hvorfor — men fandt en grund mere, som ingen læsning havde fundet.**
+Kandidat A skulle ikke bare bære en risiko, der ikke findes (låsen regnes ved
+læsning); den ville selv skabe en. Efterårspladsholderen ER turneringens typiske
+anspilstid, så en tabel over pladsholderværdier ville markere ægte kampe på
+præcis de klokkeslæt, de rigtigt spilles på. Det er en stærkere indvending end
+`A35`-argumentet, rækken byggede på.
 
-**`G91` voksede, og den ene halvdel rammer helt ved siden af.**
-`sql/tests/account_anonymization.sql` indlæser kun `../account_anonymization.sql`
-og tester dermed **#31's afløste `anonymize_my_account()`** — produktionen kører
-`sql/liga_admin.sql`s, som delegerer til `_anonymize_account()` med `A25`s
-framelding og `A36`/`A37`s overdragelse. Testen vogter en funktionskrop, ingen
-kører. Dertil er omfanget ikke "Lille": fixturerne sætter `predictions.match_id`
-med `gen_random_uuid()` og indsætter `stories` med tre kolonner, og begge dele
-afvises af produktionsskemaet. Rækken er skrevet om til de to opgaver, den
-faktisk er.
+**Det største valg i kørslen stod ikke i rækken overhovedet.** Rækken beskrev to
+kandidater til at UDLEDE markøren og sagde intet om, hvilken markør der skulle
+sættes. `kickoff_tbd` gør tre ting — skjuler tiden, rykker låsen til midnat på
+spilledagen og fjerner deadline-påmindelsen — og kun den første var ønsket. Et
+genbrug ville have kostet brugerne tipstid for at rette en visning.
+`matches.kickoff_uncertain` er derfor ny og display-only, og at låsen ikke
+flytter sig er en påstand i testen frem for en hensigt i en kommentar.
 
-**Tre af dagens fund kom af at mutere en test, ikke af at læse den.**
-`G89`s sortliste mod `stories` fangede to af fem mutationer, fordi fixturen kun
-udgiver tre af de otte dagsregler — vagten er flyttet til at læse KILDEN
-(`sql/migration_syntax.test.js`) og fanger nu alle fem. `G90`s loft kunne
-slettes uden at én påstand blev rød, indtil fixturen fik enogtyve
-kvalificerende runder. Og `G87`s producent, `byCompetition`, var helt uden test,
-så to af tre mutationer slap. **Alle tre huller var i påstanden og ikke i koden**
-— syvende, ottende og niende gang på tre dage.
+**Gulvet er lånt og ikke fundet på.** Generaliseringen fra kamp til turnering
+skulle svare på, hvornår en flytning er et regime frem for en omberammelse —
+og `G84` havde allerede svaret med et gulv på tre og en begrundelse, der holder
+her. Et genbrugt tal er bedre end et nyt ukalibreret; det var hele
+`A35`-indvendingen mod kandidat A.
 
-**`G90` lærte desuden noget, rækken ikke vidste, og som nu står i koden:
-løkken er IKKE selvafsluttende.** Betingelsen om et scoret tip er nødvendig og
-ikke tilstrækkelig — en runde kan have et tip og alligevel ikke kunne give et
-kort. Det blev opdaget, fordi testens påstand 17e forventede, at efterslæbet
-drænes, og den var forkert. Det er **loftet**, der gør prisen endelig; en ægte
-terminering ville kræve, at et forsøg blev husket. Rækken bad om "en betingelse
-og et loft" og fik det — men den troede, de to tilsammen gav terminering.
-
-**`G87` er tredje række på to dage, hvor den forudsagte pris ikke fandtes.**
-Rækken sagde "N opslag, hvor der i dag er ét". `computeCurrentRound` henter
-allerede `competition_matches` for alle brugerens konkurrencer i ét kald og smed
-kolonnen væk. Præcisionen kostede ét ord i en `select`. Samme form som `G74` og
-`G78`.
+**To af fjorten mutationer slap igennem første udgave, og begge huller var i
+påstanden.** Prøven på, at læringen ikke smitter mellem turneringer, brugte det
+klokkeslæt, kampene var flyttet TIL, i stedet for det, turneringen lærte FRA —
+fixturen kunne ikke se forskel på en regel med og uden sæsonfilter. Og
+`home_score is null and away_score is null` kan ikke være uenig med sig selv, så
+den ene halvdel var en gren, ingen test kunne nå; den er væk. Tiende og ellevte
+gang på tre dage, at mutationen fandt det, læsningen ikke gjorde.
 
 ---
 

@@ -11,9 +11,17 @@ import { APP_TZ, byKickoffThenTeams, formatKickoff, zonedDateKey } from "../../l
 // pladsholder, som ville stå som "02.00" og se ud som en rigtig kampstart.
 // Tomt svar lader kalderens `|| "–"` slå igennem; forklaringen står i
 // dagsoverskriften, hvor der er plads til den.
-function hhmm(iso, tbd = false) {
+//
+// `uncertain` (G85) er den svagere markør og gør det MODSATTE af `tbd`: tiden
+// bliver stående, fordi den er brugbar at planlægge efter, og får et `~` foran.
+// Det er leverandørens gæt for tre af de fem football-data-turneringer, og
+// forskellen på "kl. 16.00" og "vi ved det ikke" er hele pointen — mens en
+// skjult tid ville koste brugeren den dato- og tidsplanlægning, der faktisk
+// holder. Tegnets betydning står i dagsoverskriften, hvor der er plads.
+function hhmm(iso, tbd = false, uncertain = false) {
   if (!iso || tbd) return "";
-  return new Date(iso).toLocaleTimeString("da-DK", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit" });
+  const t = new Date(iso).toLocaleTimeString("da-DK", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit" });
+  return uncertain ? "~" + t : t;
 }
 // Dagsnøglen er den DANSKE kalenderdato (G32). Med enhedens dato kunne en
 // søndagskamp kl. 20 dansk lande i lørdagens gruppe for en bruger vestpå — og
@@ -58,6 +66,13 @@ function groupIntoDays(matches, teamNameOf) {
     day.matches.sort(cmp);
     if (day.key !== "?" && day.matches.every((m) => m.kickoff_tbd)) {
       day.label += " · Tid ikke fastlagt";
+    // `some` og ikke `every` som ovenfor, og forskellen følger af, hvad rækkerne
+    // viser: en TBD-kamps tomme tidsfelt forklarer sig selv, mens et `~` er et
+    // tegn, der skal have sin betydning med. Står der ét på dagen, skal
+    // overskriften sige hvad det betyder — også hvis de øvrige kampe har
+    // bekræftede tider (G85).
+    } else if (day.key !== "?" && day.matches.some((m) => m.kickoff_uncertain && !m.kickoff_tbd)) {
+      day.label += " · ~ = tid ikke bekræftet";
     }
   }
   return days.sort((a, b) => (a.key === "?" ? 1 : b.key === "?" ? -1 : 0));
