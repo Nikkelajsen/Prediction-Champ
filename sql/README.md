@@ -206,6 +206,28 @@ fejl — reglen bliver bare den gamle igen.
   oprettet, står `stories` uden sikkerhedsnet mod dubletter**. *(Tilføjet august
   2026.)*
 
+  > 🛑 **DEN FARLIGSTE ER IKKE VIEWET, MEN DAGSMOTOREN (tilføjet 8. august
+  > 2026).** #38 indeholder sin EGEN `generate_daily_stories()`, og #47
+  > (`story_engine_v3.sql`) erstatter den. **Køres #38 uden at #47 køres
+  > BAGEFTER, er v3's dagsmotor væk** — ét kort pr. bruger pr. dag,
+  > nyhedsværdien, mini-stillingen og datid-teksterne — og produktionen falder
+  > tilbage til v2's to-kort-om-dagen uden at noget fejler. Det er præcis den
+  > tavse tilbagerulning, hele dette afsnit findes for, bare på den dyreste af
+  > filens objekter.
+  >
+  > **Rækkefølgen, når #38 skal gen-køres, er derfor bindende og har tre trin:**
+  >
+  > 1. `story_engine_v2.sql` (#38)
+  > 2. `story_engine_v3.sql` (#47) — genskaber dagsmotoren, #38 lige overskrev
+  > 3. `story_engine_v3_cleanup.sql` (#48) — #38 genskabte `stories_day_uniq`,
+  >    som #48 er skrevet for at fjerne. Harmløst i sig selv (v3's
+  >    `stories_day_slot_uniq` er strengere og afviser alt, det gamle ville),
+  >    men det efterlader databasen med et indeks, repoet mener er væk.
+  >
+  > `story_engine.sql` (#8) behøver **ikke** at komme med: den definerer kun
+  > `generate_stories()`, som hverken #38 eller #47 rører, og dens gamle
+  > `latest_story` er væk siden v3.
+
   Bemærk til gengæld, at `generate_stories()` **bevidst ikke** har en kopi i denne
   fil: den blev redigeret i #8 i stedet. En forældet kopi af netop den funktion
   ville være den farligste landmine i repoet — dens `delete` er periode-afgrænset,

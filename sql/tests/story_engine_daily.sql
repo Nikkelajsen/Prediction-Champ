@@ -952,4 +952,108 @@ begin
   end if;
 end $$;
 
+-- ---------- 16. Datid-formen bliver faktisk skrevet (G89) ----------
+-- **SORTLISTEN BOR IKKE HER, og det er en lære værd at gemme.** Første udgave
+-- af denne blok sortlistede de fem nutids-fraser mod `public.stories`. Den blev
+-- muteret, og to af fem blev fanget: fixturen udgiver kun DAY_RESULT, DAY_TOP og
+-- MILESTONE, så DUEL, SO_CLOSE, CONTRARIAN, COLLECTIVE_MISS og STREAK_STATUS
+-- kunne stå i nutid uden at én påstand blev rød. En sortliste mod RÆKKER kan
+-- kun se de regler, fixturen fyrer.
+--
+-- Sortlisten læser derfor KILDEN og bor i `sql/migration_syntax.test.js` (vagt
+-- 3), hvor den dækker alle otte regler og fanger alle fem mutationer. Tilbage
+-- her er den ene påstand, en fil-vagt ikke kan lave: at teksten også NÅR ud på
+-- en udgivet række.
+do $$ begin
+  if not exists (
+    select 1 from public.stories
+     where period = 'day'
+       and (body like '%Du sluttede dagen som nr.%' or body like '%Toppen var%')
+  ) then
+    raise exception 'FEJL 16: ingen udgivet DAY_RESULT bærer datid-formen — teksten er rettet i kilden, men når ikke ud på rækken';
+  end if;
+end $$;
+
+-- ---------- 17. Bagstopperens runde-løkke er selvafsluttende (G90) ----------
+-- En runde, der ALDRIG kan producere en historie, må ikke forsøges igen ved hver
+-- kørsel. Fixturen får derfor en runde, der er præcis dét: kampen har resultat,
+-- ligger langt i fortiden, er i ingen konkurrence, og INGEN har tippet den.
+--
+-- Uden betingelsen tæller `generate_stories_catchup()` den hver eneste gang —
+-- 48-96 gange i døgnet, for evigt — og æder det loft, de rigtige huller skal
+-- bruge. Påstanden er derfor, at TO kald i træk begge svarer 0.
+do $$
+declare
+  lg uuid; sn uuid; ta uuid; tb uuid; v_mid uuid;
+  v_1 int; v_2 int; i int;
+begin
+  -- En egen liga, så den ikke forstyrrer fixturens seasons/teams.
+  insert into public.leagues (name) values ('Spøgelsesligaen') returning id into lg;
+  insert into public.seasons (league_id, name) values (lg, '2025/26') returning id into sn;
+  insert into public.teams (league_id, name) values (lg, 'Spøgelse A') returning id into ta;
+  insert into public.teams (league_id, name) values (lg, 'Spøgelse B') returning id into tb;
+  -- 2026-01-06 er en tirsdag, altså sin egen rundes eneste kampdag, og den
+  -- ligger langt uden for både grace-vinduet og fixturens egen runde.
+  insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at, home_score, away_score)
+    values (sn, ta, tb, '2026-01-06 19:00:00+00', 1, 0);
+
+  -- Kaldes med grace 0, altså den strengeste udgave.
+  select public.generate_stories_catchup(0) into v_1;
+  select public.generate_stories_catchup(0) into v_2;
+
+  if v_1 <> 0 or v_2 <> 0 then
+    raise exception 'FEJL 17a: bagstopperen forsøgte en runde, der aldrig kan give en historie (% og % forsøg)', v_1, v_2;
+  end if;
+
+  -- Og runden fik naturligvis ikke et kort — den kunne jo ikke.
+  if exists (select 1 from public.stories where period = 'round' and round_key = '2026-01-06') then
+    raise exception 'FEJL 17b: spøgelsesrunden fik et kort';
+  end if;
+
+  -- MODPRØVEN, uden hvilken 17a ville være opfyldt af en løkke, der aldrig kører
+  -- overhovedet: gives runden ét scoret tip, ER den en kandidat igen.
+  insert into public.predictions (user_id, match_id, pred_home, pred_away)
+  select '00000000-0000-0000-0000-000000000001',
+         m.id, 1, 0
+    from public.matches m
+   where m.season_id = sn;
+  select public.generate_stories_catchup(0) into v_1;
+  if v_1 <> 1 then
+    raise exception 'FEJL 17c: en runde MED et scoret tip blev ikke forsøgt (% forsøg) — betingelsen er for stram', v_1;
+  end if;
+
+  -- (d) LOFTET. Betingelsen og loftet er to halvdele af samme kur, og et loft,
+  -- man aldrig har set holde, er en formodning: fixturen havde ÉN kvalificerende
+  -- runde, så `limit 20` kunne slettes uden at én påstand blev rød. Her er
+  -- enogtyve — kvalificerede, men hver med sin egen uge — og kaldet skal svare
+  -- nøjagtig 20. Enogtyve fordi tallet skal ligge ÉN over loftet: tyve ville
+  -- være opfyldt af både et loft på 20 og slet intet loft.
+  for i in 1..21 loop
+    insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at, home_score, away_score)
+      values (sn, ta, tb, ('2025-09-02'::date + (7 * i))::timestamptz + interval '19 hours', 2, 1)
+      returning id into v_mid;
+    insert into public.predictions (user_id, match_id, pred_home, pred_away)
+      values ('00000000-0000-0000-0000-000000000001', v_mid, 2, 1);
+  end loop;
+
+  select public.generate_stories_catchup(0) into v_1;
+  if v_1 <> 20 then
+    raise exception 'FEJL 17d: bagstopperen forsøgte % runder, forventede loftet på 20', v_1;
+  end if;
+
+  -- (e) LOFTET ER ET LOFT OG IKKE NUL. Uden denne ville et `limit 0` også bestå
+  -- 17d. Næste kald tager 20 igen — og dét tal er selv en oplysning: de tyve
+  -- runder fik ikke et kort, fordi de ikke KAN få et (tipperen er i ingen
+  -- konkurrence, og ingen global regel udløser), så de kvalificerer sig igen.
+  --
+  -- **Sådan blev det opdaget, at løkken ikke er selvafsluttende.** Påstanden her
+  -- forventede oprindeligt 1 — altså at efterslæbet drænes — og den var forkert.
+  -- Betingelsen ovenfor er nødvendig, ikke tilstrækkelig; det er loftet, der
+  -- gør prisen endelig. Se begrundelsen i sql/story_engine_v2.sql.
+  select public.generate_stories_catchup(0) into v_2;
+  if v_2 <> 20 then
+    raise exception 'FEJL 17e: næste kørsel tog % runder, forventede loftet på 20 igen', v_2;
+  end if;
+end $$;
+
 \echo 'story_engine_daily: alle påstande holdt'

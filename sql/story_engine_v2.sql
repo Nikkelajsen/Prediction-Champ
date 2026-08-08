@@ -565,6 +565,39 @@ begin
 
   -- Runder, hvis vindue er lukket (tirsdag + 7 dage) og som mangler
   -- afslutningskortet. round_key er date her og text i stories — derfor ::text.
+  --
+  -- LØKKEN HAR ET LOFT OG EN BETINGELSE (G90, 8. august 2026). Uden dem havde den
+  -- præcis det problem, `A38` lukkede for dagsløkken: en runde, der ALDRIG kan
+  -- producere en historie, mangler sit kort for evigt, kvalificerer sig derfor ved
+  -- hver eneste kørsel og bliver forsøgt 48-96 gange i døgnet. Prisen var spildt
+  -- arbejde og ikke forkerte data, men den var **ubegrænset**.
+  --
+  -- **LØKKEN ER IKKE SELVAFSLUTTENDE, og det skal stå her frem for at blive
+  -- antaget.** Betingelsen nedenfor er nødvendig og ikke tilstrækkelig: en runde
+  -- kan have et scoret tip og ALLIGEVEL ikke kunne give et kort — fx hvis
+  -- tipperen ikke deltager i en konkurrence, der dækker kampen, og ingen global
+  -- regel udløser. Den slags runde bliver stadig forsøgt ved hver kørsel.
+  -- Det blev opdaget af testens påstand 17e, som først antog, at efterslæbet
+  -- drænes, og det gør det ikke.
+  --
+  -- **Det, loftet gør, er at gøre prisen ENDELIG frem for ubegrænset**: højst 20
+  -- forsøg pr. kørsel uanset hvor mange golde runder der findes, og de ældste
+  -- først, så et rigtigt hul aldrig kan sulte bag dem. En ægte terminering ville
+  -- kræve, at et FORSØG blev husket — altså en tabel eller en kolonne — og det er
+  -- en større pris end den, der betales her.
+  --
+  -- **BETINGELSEN ER IKKE DEN SAMME SOM DAGSLØKKENS, og det er en fejl værd at
+  -- undgå.** Dagsløkken kræver, at dagen har kampe i en KONKURRENCE. Den regel
+  -- ville være forkert her: `SHARP` (80/85) og `MONTH_CHAMP` (10) læser
+  -- `round_standings`/`monthly_standings`, som bygger på `predictions` og
+  -- `leagues.is_official` — ikke på `competition_matches`. En runde uden
+  -- konkurrence-kampe kan altså stadig give et globalt kort, og en
+  -- konkurrence-betingelse ville have undertrykt det tavst.
+  --
+  -- Fællesnævneren for ALLE rundens regler — de globale, de konkurrence-nære og
+  -- det dæmpede tier — er, at de handler om nogens POINT. Findes der ikke ét
+  -- scoret tip i runden, kan ingen regel fyre, og runden kan aldrig få et kort.
+  -- Det er den betingelse, der står her, og den kan ikke undertrykke noget.
   for r in
     select distinct m.round_key
     from public.matches m
@@ -572,7 +605,13 @@ begin
       and m.home_score is not null and m.away_score is not null
       and not exists (select 1 from public.stories s
                       where s.period = 'round' and s.round_key = m.round_key::text)
+      and exists (select 1 from public.predictions pr
+                  join public.matches m2 on m2.id = pr.match_id
+                  where m2.round_key = m.round_key
+                    and m2.home_score is not null and m2.away_score is not null
+                    and pr.pred_home is not null and pr.pred_away is not null)
     order by 1
+    limit 20
   loop
     perform public.generate_stories(r::text);
     v_n := v_n + 1;

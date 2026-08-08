@@ -174,12 +174,35 @@ export function isFresh(story, now = Date.now(), maxAge = DAY_CARD_MAX_AGE_MS) {
 // hul er ikke teoretisk: det blev rapporteret 7. august 2026.
 //
 // Ét resultat er nok til at trække kortet. Ét resultat kan flytte en duel.
+//
+// AFGØRELSEN ER PR. KONKURRENCE OG IKKE PR. BRUGER (G87, 8. august 2026).
+// `A38` sammenlignede med brugerens globale indeværende runde, og den er
+// beregnet på tværs af ALLE hans konkurrencer. Følgen var, at et resultat i én
+// turnering kunne trække rundekortet for en konkurrence i en anden, hvis runde
+// stadig var den nyeste dér. Retningen var den skånsomme — kortet forsvandt for
+// tidligt frem for at stå og lyve — men det er stadig et kort, ingen bad om at
+// miste.
+//
+// **Rækken forudsagde, at præcision ville koste N opslag. Det gjorde den ikke.**
+// `computeCurrentRound` henter allerede `competition_matches` for alle brugerens
+// konkurrencer i ét kald og smed bare konkurrence-kolonnen væk. Den beholdes nu,
+// og `round.byCompetition` er en Map, der er regnet af data, kaldet ALLEREDE
+// havde i hånden — nul ekstra netværkskald. Samme form som `G74` og `G78`:
+// rækken var en hypotese om en løsning, og gætværket var dyrere end svaret.
+//
+// FALDER TILBAGE PÅ DEN GLOBALE RUNDE, når kortet ikke hører til en konkurrence
+// (de globale regler skriver `competition_id = null`), eller når konkurrencen
+// ikke står i kortet — fx fordi brugeren er meldt ud af den siden. Det er den
+// gamle adfærd, og den er den rigtige for netop de tilfælde: et globalt kort
+// afløses af, at brugerens verden er kommet videre.
 export function roundStorySuperseded(story, round) {
   if (!story || !round) return false;      // ingen rundedata → intet at modsige
-  if (!round.playedCount) return false;    // den nye runde har intet fortalt endnu
+  const egen = story.competition_id ? round.byCompetition?.get(story.competition_id) : null;
+  const mod = egen || round;
+  if (!mod.playedCount) return false;      // den nye runde har intet fortalt endnu
   // STRENGT større: er runden den samme som storyens, handler kortet om præcis
   // den runde, skærmen viser, og skal blive stående hele vejen igennem den.
-  return String(round.roundKey || "") > String(story.round_key || "");
+  return String(mod.roundKey || "") > String(story.round_key || "");
 }
 
 // Overskriftslinjen på rundekortet bærer rundens interval: "Rundens historie ·

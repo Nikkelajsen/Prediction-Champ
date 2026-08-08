@@ -127,6 +127,62 @@ describe("rundestoryens afløsning", () => {
     expect(roundStorySuperseded(story, undefined)).toBe(false);
     expect(roundStorySuperseded(story, { playedCount: 2 })).toBe(false);
   });
+
+  // --- pr. konkurrence (G87, 8. august 2026) ---
+  // Kortet hører til ÉN konkurrence. Brugerens globale runde er regnet på tværs
+  // af alle hans konkurrencer, så et resultat i en anden turnering kunne trække
+  // kortet, mens kortets egen konkurrence stadig var i den runde, det handler om.
+  const medComp = { round_key: "2026-07-28", competition_id: "c1" };
+
+  it("bruger kortets EGEN konkurrence, ikke brugerens globale runde", () => {
+    // Globalt er verden gået videre og har spillet — men c1 er stadig i storyens
+    // egen runde, og der skal kortet blive stående.
+    const round = {
+      roundKey: "2026-08-04", playedCount: 5,
+      byCompetition: new Map([["c1", { roundKey: "2026-07-28", playedCount: 5 }]]),
+    };
+    expect(roundStorySuperseded(medComp, round)).toBe(false);
+  });
+
+  it("trækker sig, når KONKURRENCEN er kommet videre — også hvis globalt intet er spillet", () => {
+    const round = {
+      roundKey: "2026-07-28", playedCount: 0,
+      byCompetition: new Map([["c1", { roundKey: "2026-08-04", playedCount: 1 }]]),
+    };
+    expect(roundStorySuperseded(medComp, round)).toBe(true);
+  });
+
+  it("kræver stadig, at konkurrencens nye runde HAR spillet", () => {
+    const round = {
+      roundKey: "2026-08-04", playedCount: 9,
+      byCompetition: new Map([["c1", { roundKey: "2026-08-04", playedCount: 0 }]]),
+    };
+    expect(roundStorySuperseded(medComp, round)).toBe(false);
+  });
+
+  it("falder tilbage på den globale runde for et kort UDEN konkurrence", () => {
+    // De globale regler (MONTH_CHAMP, SHARP) skriver competition_id = null.
+    // For dem ER brugerens egen verden den rigtige målestok.
+    const global = { round_key: "2026-07-28", competition_id: null };
+    const round = {
+      roundKey: "2026-08-04", playedCount: 1,
+      byCompetition: new Map([["c1", { roundKey: "2026-07-28", playedCount: 0 }]]),
+    };
+    expect(roundStorySuperseded(global, round)).toBe(true);
+  });
+
+  it("falder tilbage, når konkurrencen ikke står i kortet (fx meldt ud siden)", () => {
+    const round = {
+      roundKey: "2026-08-04", playedCount: 1,
+      byCompetition: new Map([["c2", { roundKey: "2026-07-28", playedCount: 0 }]]),
+    };
+    expect(roundStorySuperseded(medComp, round)).toBe(true);
+  });
+
+  it("virker uændret uden byCompetition — gamle kaldere mister ingenting", () => {
+    expect(roundStorySuperseded(medComp, { roundKey: "2026-08-04", playedCount: 1 })).toBe(true);
+    expect(roundStorySuperseded(medComp, { roundKey: "2026-07-28", playedCount: 1 })).toBe(false);
+  });
 });
 
 describe("rundestoryens dateline", () => {
