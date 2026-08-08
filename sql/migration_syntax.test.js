@@ -129,3 +129,58 @@ describe("ingen UPDATE/DELETE uden where (pg_safeupdate afviser dem via PostgRES
     expect(offending, offending.join("\n")).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Vagt 3: dagskortets tekster må ikke stå i nutid (G89, 8. august 2026)
+//
+// Et dagskort lever i 48 timer, og en stilling er live pr. kamp. En sætning som
+// "Du ligger nr. 3 af 8" eller "Kun 2 point op til Bo" er derfor en påstand om
+// NUET, der kan være usand, mens kortet stadig står på Hjem. Det er samme
+// fejltype, som `A38` rettede for tre af runde-reglerne, og `G89` for dagens.
+//
+// **VAGTEN LÆSER KILDEN OG IKKE RÆKKERNE, og det er hele grunden til, at den
+// findes her og ikke i sql/tests/story_engine_daily.sql.** En SQL-påstand kan
+// kun se kort, fixturen faktisk udgiver, og fixturen udgiver tre af de otte
+// dagsregler — DAY_RESULT, DAY_TOP og MILESTONE. En sortliste mod `stories`
+// var derfor grøn for DUEL, SO_CLOSE, CONTRARIAN, COLLECTIVE_MISS og
+// STREAK_STATUS, uanset hvad der stod i deres tekst. Det blev opdaget ved at
+// mutere alle fem fraser tilbage til nutid: to blev fanget, tre slap.
+//
+// Samme mønster som katalogvagten i src/lib/analytics.test.js, som læser
+// sql/story_engine*.sql for at fange drift, og af samme grund: filen er kilden.
+const NUTIDS_FRASER = [
+  " Du ligger nr. ",          // DAY_RESULT, øverste halvdel
+  " Toppen er ",              // DAY_RESULT, nederste halvdel
+  "'⚔️ Kun '",                // DUEL-overskrift: "Kun N point op til X"
+  " er ' || d.gap ||",        // DUEL-overskrift: "X er N point efter dig"
+  " er der ' ||",             // DUEL-brødtekst: "Efter den 03.08 er der …"
+];
+
+describe("dagskortets tekster står i datid (G89)", () => {
+  const DAGSMOTOR = "story_engine_v3.sql";
+
+  it("filen findes (vagten må ikke stå og bevogte ingenting)", () => {
+    expect(migrations).toContain(DAGSMOTOR);
+  });
+
+  // Fraserne er PRÆCISE og ikke brede med vilje. Første udgave sortlistede
+  // " point op til ' ||", som også rammer den nye, LOVLIGE brødtekst
+  // ("… var der N point op til X") — en vagt, der fælder rettelsen, bliver
+  // slået fra ved første kørsel. Hver frase peger derfor på den nøjagtige
+  // gamle formulering.
+  it.each(NUTIDS_FRASER)("ingen tekst indeholder %j", (frase) => {
+    // Kommentarer ud først. Uden det ville vagten fælde sin egen begrundelse:
+    // kommentaren over DUEL citerer de gamle formuleringer ved navn.
+    const src = readFileSync(join(SQL_DIR, DAGSMOTOR), "utf8").replace(/--[^\n]*/g, "");
+    expect(src, `"${frase}" er en udateret påstand om nuet — se G89`).not.toContain(frase);
+  });
+
+  // Og at datid-formen FAKTISK står der. Uden dette ville vagten ovenfor være
+  // grøn, hvis nogen slettede sætningerne helt i stedet for at rette dem.
+  it("datid-formen er den, der faktisk skrives", () => {
+    const src = readFileSync(join(SQL_DIR, DAGSMOTOR), "utf8").replace(/--[^\n]*/g, "");
+    for (const frase of [" Du sluttede dagen som nr. ", " Toppen var ", "Du sluttede dagen ' ||", " endte ' || d.gap ||", " var der ' ||"]) {
+      expect(src, `datid-formen "${frase}" mangler`).toContain(frase);
+    }
+  });
+});

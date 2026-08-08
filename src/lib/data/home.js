@@ -78,7 +78,11 @@ async function computeHomeTips(token, userId, competitions) {
 async function computeCurrentRound(token, userId, competitions) {
   const compIds = competitions.map((c) => c.id);
   if (!compIds.length) return null;
-  const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=match_id`);
+  // `competition_id` kommer med i SAMME kald (G87, 8. august 2026). Det er ikke
+  // en ekstra forespørgsel, men en kolonne, der blev hentet og smidt væk: uden
+  // den kan vi kun kende brugerens GLOBALE indeværende runde, og rundestoryens
+  // afløsning har brug for konkurrencens egen.
+  const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=competition_id,match_id`);
   const ids = [...new Set(cms.map((c) => c.match_id))];
   if (!ids.length) return null;
   const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
@@ -117,8 +121,31 @@ async function computeCurrentRound(token, userId, competitions) {
       kickoff: m.kickoff_at, played, live, inProgress, pred, points,
     };
   });
+  // Konkurrencens EGEN indeværende runde (G87). Regnet af `ms` og `cms`, som
+  // begge allerede er hentet — ingen netværkskald, kun den gruppering, der før
+  // kun blev lavet én gang for alle konkurrencer under ét.
+  //
+  // `playedCount` tælles inden for konkurrencens egen runde og ikke globalt:
+  // det er præcis dét tal, `roundStorySuperseded` spørger om ("har den nye
+  // runde fortalt noget endnu?"), og globalt kunne det være sandt for én
+  // turnering og falsk for den, kortet handler om.
+  const byMatch = new Map(ms.map((m) => [m.id, m]));
+  const byCompetition = new Map();
+  for (const cid of compIds) {
+    const egne = cms.filter((c) => c.competition_id === cid)
+      .map((c) => byMatch.get(c.match_id)).filter(Boolean);
+    if (!egne.length) continue;
+    const r = groupIntoRounds(egne);
+    const cur = r[currentRoundIndex(r)];
+    if (!cur || !cur.matches.length) continue;
+    byCompetition.set(cid, {
+      roundKey: cur.key,
+      playedCount: cur.matches.filter((m) => m.home_score != null && m.away_score != null).length,
+    });
+  }
+
   return {
-    roundKey: round.key, roundLabelText: round.label,
+    roundKey: round.key, roundLabelText: round.label, byCompetition,
     matches, myPoints, playedCount, totalCount: round.matches.length,
     // antal kampe der spilles LIGE NU — bruges til LIVE-mærket på det foldede kort
     liveCount: matches.filter((m) => m.live).length,

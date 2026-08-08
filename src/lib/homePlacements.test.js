@@ -16,7 +16,7 @@ vi.mock("./data/competitionState.js", () => ({ computeCompetitionState: vi.fn() 
 import { db } from "./supabase.js";
 import { loadMonthlyBoard } from "./data/standings.js";
 import { computeCompetitionState } from "./data/competitionState.js";
-import { loadHomePlacements, ratingSnapshot } from "./data/home.js";
+import { computeCurrentRound, loadHomePlacements, ratingSnapshot } from "./data/home.js";
 
 const MIG = "u1";
 
@@ -132,5 +132,83 @@ describe("ratingSnapshot", () => {
   // runde — og ikke en fejl. Kortet viser sin egen tomme udgave.
   it("svarer { none: true } for en bruger uden en række", () => {
     expect(ratingSnapshot(board, new Map(), "ukendt")).toEqual({ none: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeCurrentRound → `byCompetition` (G87, 8. august 2026)
+//
+// Rundestoryens afløsning spurgte indtil august 2026 om brugerens GLOBALE
+// indeværende runde, som er regnet på tværs af alle hans konkurrencer. Et
+// resultat i én turnering kunne derfor trække rundekortet for en konkurrence i
+// en anden. Kortet forsvandt altså for tidligt — den skånsomme retning, men
+// stadig et kort, ingen bad om at miste.
+//
+// `byCompetition` er svaret, og pointen er, at det er GRATIS: kaldet henter
+// allerede `competition_matches` for alle konkurrencer, det droppede bare
+// kolonnen. Testene her vogter de to ting, en mutationstest afslørede ikke var
+// dækket af noget: at kolonnen faktisk hentes, og at `playedCount` tæller de
+// SPILLEDE kampe i konkurrencens egen runde og ikke dens kampe i alt.
+describe("computeCurrentRound: konkurrencens egen runde (G87)", () => {
+  // To konkurrencer, hver med sin egen runde. c1 spiller i uge 28.07, c2 i
+  // uge 04.08 — altså præcis den situation, hvor en global runde er forkert.
+  // `round_key` er en GENERERET kolonne i databasen (rundens tirsdag), så en
+  // rigtig række bærer den altid — og `groupIntoRounds` grupperer på den og
+  // ikke på kickoff. En fixture uden den grupperer på `undefined`.
+  const KAMPE = [
+    { id: "m1", round_key: "2026-07-28", home_team_id: "t1", away_team_id: "t2", kickoff_at: "2026-07-29T18:00:00Z", home_score: 1, away_score: 0 },
+    { id: "m2", round_key: "2026-08-04", home_team_id: "t1", away_team_id: "t2", kickoff_at: "2026-08-05T18:00:00Z", home_score: null, away_score: null },
+    { id: "m3", round_key: "2026-08-04", home_team_id: "t3", away_team_id: "t4", kickoff_at: "2026-08-05T20:00:00Z", home_score: 2, away_score: 2 },
+  ];
+
+  function mockKald({ cms }) {
+    db.select.mockReset();
+    db.select.mockImplementation((_t, tabel, q) => {
+      if (tabel === "competition_matches") return Promise.resolve(cms);
+      if (tabel === "matches") return Promise.resolve(KAMPE.filter((m) => q.includes(m.id)));
+      if (tabel === "teams") return Promise.resolve([{ id: "t1", name: "A" }, { id: "t2", name: "B" }, { id: "t3", name: "C" }, { id: "t4", name: "D" }]);
+      return Promise.resolve([]);
+    });
+  }
+
+  it("henter competition_id med — uden den findes konkurrencens runde ikke", async () => {
+    mockKald({ cms: [{ competition_id: "c1", match_id: "m1" }] });
+    await computeCurrentRound("tok", MIG, [{ id: "c1" }]);
+    const kald = db.select.mock.calls.find((c) => c[1] === "competition_matches");
+    // `toContain("competition_id")` ville IKKE holde: strengen står også i
+    // filteret (`competition_id=in.(…)`), så påstanden var sand, uanset hvad
+    // der blev valgt. Den skal se på selve `select`-listen.
+    expect(kald[2]).toContain("select=competition_id,match_id");
+  });
+
+  it("giver hver konkurrence sin EGEN indeværende runde", async () => {
+    mockKald({ cms: [
+      { competition_id: "c1", match_id: "m1" }, { competition_id: "c1", match_id: "m2" },
+      { competition_id: "c2", match_id: "m3" },
+    ] });
+    const r = await computeCurrentRound("tok", MIG, [{ id: "c1" }, { id: "c2" }]);
+    // c1's kampe ligger i to runder; den indeværende er den med et uspillet
+    // resultat (04.08). c2 har kun 04.08-runden.
+    expect(r.byCompetition.get("c1").roundKey).toBe("2026-08-04");
+    expect(r.byCompetition.get("c2").roundKey).toBe("2026-08-04");
+  });
+
+  it("playedCount er de SPILLEDE kampe i konkurrencens runde, ikke dens kampe i alt", async () => {
+    mockKald({ cms: [
+      { competition_id: "c1", match_id: "m2" },   // 04.08, uspillet
+      { competition_id: "c2", match_id: "m3" },   // 04.08, spillet
+    ] });
+    const r = await computeCurrentRound("tok", MIG, [{ id: "c1" }, { id: "c2" }]);
+    // Dét er hele forskellen: c1's runde har fortalt INTET endnu, c2's har.
+    // Talte vi kampe i stedet for spillede kampe, ville begge stå på 1, og
+    // rundestoryen ville blive trukket for c1 uden grund.
+    expect(r.byCompetition.get("c1").playedCount).toBe(0);
+    expect(r.byCompetition.get("c2").playedCount).toBe(1);
+  });
+
+  it("en konkurrence uden kampe står slet ikke i kortet", async () => {
+    mockKald({ cms: [{ competition_id: "c1", match_id: "m1" }] });
+    const r = await computeCurrentRound("tok", MIG, [{ id: "c1" }, { id: "tom" }]);
+    expect(r.byCompetition.has("tom")).toBe(false);
   });
 });

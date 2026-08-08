@@ -307,9 +307,9 @@ begin
         when b.rnk is not null and b.rnk > a.rnk
           then ' Du rykkede fra nr. ' || b.rnk || ' til nr. ' || a.rnk || '.'
         when a.rnk * 2 <= sz.n
-          then ' Du ligger nr. ' || a.rnk || ' af ' || sz.n || '.'
+          then ' Du sluttede dagen som nr. ' || a.rnk || ' af ' || sz.n || '.'
         when (top.pts - a.pts) > 0
-          then ' Toppen er ' || (top.pts - a.pts) || ' point væk.'
+          then ' Toppen var ' || (top.pts - a.pts) || ' point væk.'
         else ''
       end
   from _sd_today t
@@ -497,16 +497,23 @@ begin
     left join _sd_before bu on bu.competition_id = p.competition_id and bu.user_id = p.user_id
     left join _sd_before br on br.competition_id = p.competition_id and br.user_id = p.rival_id
   )
+  -- TEKSTEN ER I DATID (G89, 8. august 2026). Den stod i nutid — "Kun N point op
+  -- til X", "X er N point efter dig", "Efter den 03.08 ER DER N point op til X" —
+  -- og det er en påstand om NUET på et kort, der lever i 48 timer. Duellen kan
+  -- være vendt dagen efter, mens kortet stadig ligger på Hjem og siger, hvordan
+  -- det står. Præcis samme rettelse som A38 lavede for tre af runde-reglerne, og
+  -- overskriften er skrevet efter regel 45's form: "Du sluttede runden N point
+  -- fra toppen" → "Du sluttede dagen N point fra X".
   select d.user_id, d.competition_id, 'DUEL', 150, 30, sz.n,
     jsonb_build_object('rival', pr.display_name, 'gap', d.gap,
                        'above', d.is_above, 'league', c.name),
     case when d.is_above
-         then '⚔️ Kun ' || d.gap || ' point op til ' || pr.display_name
-         else '⚔️ ' || pr.display_name || ' er ' || d.gap || ' point efter dig' end,
+         then '⚔️ Du sluttede dagen ' || d.gap || ' point fra ' || pr.display_name
+         else '⚔️ ' || pr.display_name || ' endte ' || d.gap || ' point efter dig' end,
     case when d.is_above
-         then 'Efter den ' || v_daylabel || ' er der ' || d.gap || ' point op til ' ||
+         then 'Efter den ' || v_daylabel || ' var der ' || d.gap || ' point op til ' ||
               pr.display_name || ' i ' || c.name || '.'
-         else 'Du fører ' || c.name || ' med ' || d.gap || ' point ned til ' ||
+         else 'Du førte ' || c.name || ' med ' || d.gap || ' point ned til ' ||
               pr.display_name || ' efter den ' || v_daylabel || '.' end
   from duel d
   join _sd_size sz on sz.competition_id = d.competition_id and sz.n >= 3
