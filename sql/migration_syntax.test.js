@@ -66,3 +66,66 @@ describe("migreringer i sql/ kan køres i Supabase SQL-editoren", () => {
     expect(offending, offending.join("\n")).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// VAGT 2: UPDATE/DELETE UDEN `where` (august 2026)
+//
+// Supabase indlæser **pg_safeupdate** via `session_preload_libraries` på rollen
+// `authenticator` — altså i enhver session, PostgREST åbner. Den afviser
+// `UPDATE`/`DELETE` uden `where` med `UPDATE requires a WHERE clause`.
+// SQL-editoren forbinder som `postgres` og indlæser den IKKE.
+//
+// Det giver den værst tænkelige asymmetri: en sætning uden `where` virker, hver
+// gang et menneske kører den i hånden, og fejler hver gang appen udløser den.
+// Story Engine v3 blev udrullet med præcis én af dem inde i
+// `generate_daily_stories` (`update _sd_scored set news_value = …`), og
+// dagslaget skrev derfor aldrig én eneste række i produktion. Fejlen var tavs,
+// fordi matches-triggerens exception-guard slugte den, og den overlevede fire
+// afkræftede hypoteser, en måling og en manuel kørsel, der alle så rigtige ud.
+//
+// Vagten er bevidst grov: den ser på sætninger, ikke på om de rent faktisk kan
+// nås fra PostgREST. En `where`-løs sætning i en funktion, ingen kalder over
+// API'et, er stadig en fælde, der venter på sin første kalder.
+//
+// `sql/dev/` er UNDTAGET her, og undtagelsen vender præcis modsat vagt 1's.
+// Vagt 1 tager dev/ MED, fordi filerne pastes i editoren ligesom en migrering.
+// Vagt 2 lader dem gå, af nøjagtig samme grund: editoren er det ene sted,
+// pg_safeupdate ikke er indlæst. Simulatorens `delete from sim.persona;` kan
+// aldrig nås fra PostgREST — `sql/dev/` er staging-værktøj, der køres i hånden,
+// og `sql/tests/simulate_season.sql` beviser i CI, at den kører.
+const SQL_ALL = [
+  ...migrations.filter((f) => !f.startsWith("dev")),
+  ...readdirSync(join(SQL_DIR, "checks"))
+    .filter((f) => f.endsWith(".sql"))
+    .sort()
+    .map((f) => join("checks", f)),
+];
+
+describe("ingen UPDATE/DELETE uden where (pg_safeupdate afviser dem via PostgREST)", () => {
+  it.each(SQL_ALL)("%s", (file) => {
+    const src = readFileSync(join(SQL_DIR, file), "utf8")
+      // Kommentarer ud først, ellers tæller et "-- … where …" som en qual.
+      .replace(/--[^\n]*/g, "");
+
+    // Sætninger, ikke linjer: `update x set …\n  where …` er lovlig, og en
+    // linjebaseret vagt ville melde den. Semikolon afgrænser, hvilket er groft
+    // nok — en semikolon inde i en streng ville give en falsk positiv, og den
+    // dag det sker, er svaret at omskrive strengen, ikke at svække vagten.
+    const offending = [];
+    const re = /\b(update|delete\s+from)\s+[a-z_][a-z0-9_."]*\b[\s\S]*?;/gi;
+    for (const m of src.matchAll(re)) {
+      const stmt = m[0];
+      // `create policy … for update to authenticated using (…)` og
+      // `grant update on …` er ikke sætninger — de rammes af regexet, men
+      // indeholder aldrig `set`/`from` i sætnings-forstand. Kræv derfor, at en
+      // UPDATE har `set` og en DELETE står alene.
+      const isUpdate = /^update\b/i.test(stmt);
+      if (isUpdate && !/\bset\b/i.test(stmt)) continue;
+      if (/\bwhere\b/i.test(stmt)) continue;
+      const n = src.slice(0, m.index).split("\n").length;
+      offending.push(`${file}:${n}: ${stmt.split("\n")[0].trim()}`);
+    }
+
+    expect(offending, offending.join("\n")).toEqual([]);
+  });
+});
