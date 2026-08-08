@@ -47,8 +47,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- `sql/story_engine_v3.sql` står ikke i filindekset i `sql/README.md` (som går til #46), så der er ingen række at læse kørerækkefølge og gen-køringsadvarsler i for den fil, der oftest skal gen-køres.
-- `MiniStanding` viser ikke, hvor mange der er i konkurrencen — "3. Cecilie" af 4 eller af 40 er to forskellige oplysninger, og `league_size` står allerede på rækken.
+*Tom (8. august 2026).*
 
 ---
 
@@ -223,6 +222,7 @@ steder — og fordi en forkastet idé ellers bliver foreslået igen.
 
 | Dato | Idé | Hvorfor ikke |
 |---|---|---|
+| 8. august 2026 | **Skrive feltets størrelse i dagskortets mini-stilling** — "3. Cecilie" siger ikke, om det er af 4 eller af 40, og `league_size` står allerede på rækken. | **Tallet er bevidst skjult for præcis de brugere, mini'en ville vise det til.** `DAY_RESULT`s brødtekst skriver "Du ligger nr. 3 af 8" **kun når `a.rnk * 2 <= sz.n`** — altså i den øverste halvdel; nederst siger den i stedet "Toppen er N point væk". Det er designreglen *"historier driller, men ydmyger aldrig"* fra v1, håndhævet i `sql/story_engine_v3.sql`. En mini-stilling vises til alle, så en nævner dér ville sige "nr. 7 af 8" til den, motoren netop har valgt ikke at sige det til — og for den øverste halvdel ville den gentage en oplysning, der står to linjer højere oppe. Placeringen selv er i øvrigt allerede synlig i mini'en; det er kun nævneren, der mangler, og det er den, reglen handler om. Skal noget laves om, er det brødtekstens regel og ikke mini'en — og dét er en anden diskussion end den, linjen rejste. |
 | 4. august 2026 | **Give `manifest.json` et `short_name`, der er kortere end `name`** — i dag er begge "Leagly". | `short_name` findes for at have et alternativ, når `name` er for langt til pladsen under et ikon. "Leagly" er seks tegn og bliver ikke afkortet nogen steder, så et kortere alternativ ville ikke være en forbedring, men et **andet navn** for det samme produkt — og navneskiftet 4. august 2026 blev netop kørt i ét hug for at sikre, at kun ét navn figurerer. To identiske værdier er det rigtige svar her og skal ikke læses som et udfyldningsfelt, nogen glemte. Bliver navnet nogensinde længere, opstår spørgsmålet af sig selv. |
 
 ---
@@ -234,44 +234,42 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 8. august 2026 (aften) — `G86`s anden halvdel: elleve døde exports
+### 8. august 2026 (sent) — indbakken tømt: én rettet med det samme, én forkastet
 
-**Listen er uændret på 36** — arbejdet lukkede en indbakke-linje, ikke en række.
-Linjen kom af `G86`s egen fejl: rækken skrev, at `pickStory` og `priorityFor`
-"har rigtige aftagere og bliver", og de havde ingen. Ved eftersyn var det ikke to
-navne, men **elleve**: begge regelkataloger (`RULES`, `DAILY_RULES`), båndets
-øvre halvdel (`DAILY_TIER_MIN`, `isDaily`), `DAILY_MAX_CARDS`, `SOFT_PRIORITY`,
-`QUIET_TIER_MIN`, `isQuiet`, `THRESHOLDS`, `priorityFor` og `pickStory`.
-`src/lib/stories.js` er 566 → 274 linjer på to leverancer samme dag.
+**Listen er uændret på 36, og ingen af de to linjer blev til en række.** Det er
+ikke fordi de var små, men fordi de var to forskellige slags: den ene var et
+stykke arbejde, hvor selve undersøgelsen ER svaret, og den anden var et forslag,
+der kolliderede med en regel, produktet allerede har truffet.
 
-**Det afgørende fund var ikke antallet, men hvad testene beviste.** Tolv tests
-faldt med koden, og de så alle sammen ud som invarianter: "ingen to regler deler
-prioritet", "kun DAY_RESULT ligger i det dæmpede dagstier", "den svage variant
-kan ikke fortrænge rundens vinder". **Hver eneste påstod noget om en JS-KOPI af
-noget, der bor i SQL** — og en kopi kan være internt konsistent, mens
-originalen er drevet fra den. Testen "ingen to regler i `RULES` deler prioritet"
-ville stå grøn dagen efter, at nogen gav to regler i `sql/story_engine.sql`
-samme tal. Det er samme selvreference som `G78`s scoringstal og `G86`s
-tekstskabeloner, bare i sin tredje form: **et katalog vogtet mod sig selv.**
+**`sql/README.md`s filindeks manglede v3 — og det var to filer, ikke én.**
+`story_engine_v3.sql` og `story_engine_v3_cleanup.sql` blev begge oprettet
+7. august og aldrig ført ind i tabellen; de er nu #47 og #48. **Nummeret er
+højere end filernes alder**, og det står skrevet i rækken: en omnummerering
+ville flytte de numre (`#8`, `#34`, `#38`), som resten af dokumentationen
+henviser til, og prisen for det er højere end prisen for en forklaring.
+Rækkerne er skrevet nu, fordi `G88` efterlod et 🔴 om at gen-køre netop den fil,
+og et 🔴 uden en indeksrække er en instruktion uden kørerækkefølge.
 
-**Modsætningen, der gør reglen brugbar, stod ved siden af hele tiden.**
-`STORY_RULES` i `src/lib/analytics.js` er også et regelkatalog i JS — men det
-har en rigtig aftager (Analytics kan ikke vise en regel, der aldrig har udløst)
-og en test, der **læser `sql/story_engine*.sql`** og fejler ved drift. Det er
-forskellen på de to slags kopi, og den er værd at kunne se: en kopi med en vagt
-mod originalen er en kilde, en kopi uden er en påstand om fortiden.
+**Eftersynet var bredere end linjen og fandt to ting til**, som er rettet i samme
+ombæring: overskriften "Ni filer må ikke gen-køres blindt" stod over en brødtekst,
+der sagde "Alle **syv**" — listen var vokset, sætningen ikke — og testafsnittet
+skrev, at `story_engine_daily.sql` dækker "Story Engine **v2's** dagsmotor". Den
+har dækket v3 siden 7. august og har nu femten påstande. Fire andre filer stod
+ikke i tabellen ved første optælling, men det viste sig at være min egen
+søgning: tre af dem står med `—` frem for et nummer, og `schema.sql` har sit eget
+afsnit. **Kun v3's to var reelt væk.**
 
-**Intet blev erstattet af en ny test, og det er en beslutning.** De fire ting,
-de tolv tests dækkede, er allerede påstået mod den rigtige motor —
-udvælgelsesstigen af påstand 11b, båndet af 2d, tærsklen af 14, regelnavnene af
-`analytics.test.js`. At skrive nye JS-tests for de resterende ville have været
-at bygge illusionen op igen ét sted længere nede.
-
-**Tre dokumentationspåstande var forkerte og er rettet**, ikke bare slettet.
-`DOCUMENTATION.md` §17 skrev, at "prioriteterne er ét sted i JS … og spejles af
-`case`-udtryk i SQL'en" — retningen var vendt om, motoren kører i databasen. Og
-to steder stod `isQuiet()` opført som frontendens funktion; den er læst af
-ingen. En dokumentation, der udpeger den forkerte kilde, er dyrere end ingen.
+**Mini-stillingens feltstørrelse er forkastet, og begrundelsen er den, der gør
+den værd at gemme:** tallet er bevidst skjult for præcis de brugere, mini'en
+ville vise det til. `DAY_RESULT`s brødtekst skriver "Du ligger nr. 3 af 8" **kun**
+når man er i den øverste halvdel; nederst siger den "Toppen er N point væk" i
+stedet. Det er v1's designregel *"driller, men ydmyger aldrig"*, håndhævet i
+SQL'en. En nævner i mini'en ville sige "nr. 7 af 8" til den, motoren netop har
+valgt ikke at sige det til — og gentage sig selv for alle andre. **Linjens
+præmis var rigtig** (tallet mangler), **og dens konklusion var forkert**, fordi
+den ikke kendte reglen bagved. Det er tredje gang på én dag, at en indbakke-linje
+skulle prøves mod koden frem for læses: `G88`s felt fandtes ikke, `G86`s
+optælling var for lav, og denne foreslog noget, der allerede var besluttet fra.
 
 ---
 
