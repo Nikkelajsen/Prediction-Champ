@@ -42,6 +42,7 @@ eller en linje i "Forkastede ideer".
 - Rundestoryens afløsning er per bruger og ikke per konkurrence: et resultat i én turnering trækker også et kort om en anden. Præcist ville kræve et opslag pr. `story.competition_id`.
 - Dagskortets `payload.mini` er et snapshot af stillingen og kan modsige STILLING inden for kortets 48 timer — samme fejltype som `A38`, bare i lille format.
 - `DAY_RESULT`- og `DUEL`-teksterne i `sql/story_engine_v3.sql` er nutid ("Du ligger nr. 3 af 8", "Kun N point op til R") — samme rettelse som runde-reglernes datid, men de er kortlivede og daterede.
+- `generate_stories_catchup()`s RUNDE-løkke har det selvtermineringsproblem, `A38` lukkede for dagsløkken: `not exists (story for runden)` uden loft, så en runde, der aldrig kan producere en historie (fx en hvis kampe ikke indgår i nogen konkurrence), forsøges igen ved hver notifikations-kørsel for evigt. Præeksisterende, ikke indført af `A38`.
 - `match_day_complete()` er global: én kamp uden resultat i en turnering, ingen tipper, blokerer alles dagskort. Prisen er dokumenteret som bevidst, men den blev betalt i `A38`s undersøgelse.
 - `sql/tests/liga_admin.sql` og `sql/tests/account_anonymization.sql` bygger deres eget håndskrevne minischema — de kan derfor være grønne, mens funktionen fejler mod det rigtige. `sql/schema.sql` ligger i repoet og kan køres i CI's postgres-service (kun `\restrict`, `CREATE SCHEMA public`, `COMMENT ON SCHEMA` og de 12 `ALTER DEFAULT PRIVILEGES` skal ud, jf. `docs/STAGING.md` trin 2).
 
