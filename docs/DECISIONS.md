@@ -15,6 +15,124 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 8. august 2026 (aften) — En kopi uden en vagt mod originalen er ikke en kilde (`G86`)
+
+**Beslutning:** en JS-konstant, der spejler noget, motoren ejer i SQL, må kun
+blive stående, hvis den har **både** en aftager i appen **og** en test, der
+læser SQL-filen og fejler ved drift. Har den ingen aftager, slettes den. Har den
+en aftager, men ingen vagt, er den en fejl, der venter.
+
+**Begrundelse.** `src/lib/stories.js` bar elleve exports uden en eneste aftager,
+og tolv tests, der så ud som invarianter: "ingen to regler deler prioritet",
+"kun DAY_RESULT ligger i det dæmpede dagstier", "den svage variant kan ikke
+fortrænge rundens vinder". De påstod alle sammen noget om en **kopi**, og en
+kopi kan være internt konsistent, mens originalen er drevet fra den — testen om
+`RULES` ville stå grøn dagen efter, at to regler i `sql/story_engine.sql` fik
+samme tal. Det er tredje form af samme fejl på to dage: `G78`s scoringstal,
+formiddagens tekstskabeloner, og nu katalogerne.
+
+**Modsætningen er selve reglen.** `STORY_RULES` i `src/lib/analytics.js` er også
+et regelkatalog i JS og bliver — fordi Analytics per definition ikke kan vise en
+regel, der aldrig har udløst (RPC'en ser kun rækker, der findes), og fordi
+`analytics.test.js` LÆSER `sql/story_engine*.sql` og fejler, når motoren udvides
+uden at listen følger med. Den kopi har en grund til at findes og en vagt mod
+originalen. De slettede havde ingen af delene.
+
+**Der blev bevidst IKKE skrevet nye tests som erstatning.** De fire ting, de
+tolv dækkede, påstås allerede mod den rigtige motor i
+`sql/tests/story_engine_daily.sql` (påstand 11b, 2d og 14) og i
+`analytics.test.js`. En ny JS-test for resten ville have været den samme
+illusion ét sted længere nede — og det, der IKKE længere er vogtet, er sagt højt
+i testfilen frem for at blive antaget dækket.
+
+**Prisen er sagt højt:** prioritetstallene kan nu kun læses i SQL'en. Det er
+hensigten — det er dér, de virker — men en læser, der før kunne slå stigen op i
+`RULES`, skal nu åbne `sql/story_engine.sql`. `DOCUMENTATION.md` §17 er rettet,
+så den peger på den rigtige kilde; den påstod indtil i dag det modsatte.
+
+---
+
+## 8. august 2026 (eftermiddag) — Mini-stillingens form, og at et kort kun må have én kilde til sin tekst (`G88`, `G86`)
+
+**Beslutning 1 — vinduet er tre rækker OMKRING modtageren, klemt mod enderne.**
+Spec §8 sagde "over/dig/under". Det er fravalgt: nr. 1 har ingen over sig, så
+formen ville give føreren to rækker og den midterste tre — mindst indhold til
+den, der har præsteret mest. Vinduet klemmes i stedet, så nr. 1 ser 1-2-3 og den
+sidste ser de tre nederste.
+
+**Beslutning 2 — placeringen er `rnk`, udsnittet er en total orden.** De to tal
+er forskellige og skal være det: `rnk` deles ved pointlighed, så to spillere på
+tredjepladsen begge står som nr. 3 (det er den rigtige oplysning), mens
+udvælgelsen af de tre rækker sker på `(rnk, user_id)`, fordi et vindue skåret på
+et tal, der kan deles, ikke er deterministisk. Acceptkriterie 7 kræver, at to
+gen-kørsler giver samme kort — også samme tre navne.
+
+**Beslutning 3 — mini-stillingen daterer sig selv.** *"Stillingen efter kampdag
+03.08"* står over rækkerne. Rækkerne er et snapshot fra den dag, kortet lever i
+48 timer, og STILLING-fanen er live pr. kamp, så de KAN modsige hinanden. Det er
+nøjagtig `A38`s fejltype i lille format, og løsningen er den samme: kortet
+påstår ikke noget om nuet, det fortæller, hvad der gjaldt den dag. Alternativet
+— at lade mini'en være live — er ikke muligt uden at lade komponenten hente
+stillingen selv, og dét ville flytte designreglen om, hvem en historie må nævne,
+ud i en komponent, hvor den kan glemmes.
+
+**Beslutning 4 — milepæls-kort har ingen mini.** `apply_milestone_stories()`
+sætter kortets `competition_id` til milepælens, som kan være en anden end den,
+kortet blev skrevet for. Enten måtte kapringen genberegne stillingen, eller også
+måtte mini'en væk. Den fjernes, fordi et milepæls-kort er en engangsbedrift og
+ikke en stillingsopdatering — og fordi de to veje til et `MILESTONE`-kort
+(motoren og cron) skal give byte-samme række. Motoren udelader den, kapringen
+fjerner den.
+
+**Beslutning 5 — `renderStory()` slettes frem for at blive taget i brug.** Den
+lovede en fallback-rendering fra payload, og valget stod mellem at gøre løftet
+sandt (lade frontenden rendere fra payload) eller fjerne det. Fjernet, af samme
+grund som `G78` dagen før: **motoren skriver færdig `headline`/`body` på rækken,
+så en klient-side rendering ville være en anden kilde til samme tekst.** Prisen
+ved at lade den stå var ikke en fejl, men at hver tekstrettelse skulle laves to
+steder, hvoraf kun det ene kunne ses af en bruger — `A38` betalte den regning.
+
+**Grænsen, der IKKE flyttes: `renderFrame()` bliver.** Den ligner `renderStory`
+og er det modsatte. SQL'en bygger `payload.frames` som rene **data**, og teksten
+skrives kun i JS — der er ingen kopi at holde i sync. Reglen er derfor ikke
+"tekst hører til i SQL", men **"en tekst må kun have én kilde"**, og de to
+funktioner er hver sin lovlige side af den.
+
+---
+
+## 8. august 2026 — Backloggen bærer kun den seneste log, og tier-overskrifterne bærer deres rækker
+
+**Beslutning:** `docs/BACKLOG.md` har ét historik-afsnit, **Log**, i bunden af
+filen, og det bærer **kun den nyeste kørsel**. Skrives en ny, slettes den
+forrige. Ingen indbakke og ingen tier-overskrift bærer sin egen historik længere;
+står der noget under en overskrift, er det tilstand. Tier 1–5 viser nu deres
+rækker i stedet for referater af, hvad der engang stod i dem.
+
+**Begrundelse — det var tredje eksemplar, ikke sidste.** Filen var vokset til 780
+linjer, hvoraf omkring 300 var referater af leverede rækker: syv
+indbakke-rydninger, fjorten daterede afsnit under Prioriteret rækkefølge og en
+kørselshistorik under hver af de fem øverste tiers. Ti stikprøver (`G2`, `G7`,
+`G58`, `G63`, `G65`, `G67`, `G71`, `G73`, `G74`, `G84`) blev slået op i
+`DECISIONS.md` og `CHANGELOG.md` før sletningen, og alle ti stod begge steder —
+med begrundelsen i den ene og leverancen i den anden, altså fyldigere end
+referatet. Backloggens egen regel om at **slette frem for at strege ud** gjaldt
+allerede rækkerne; den gjaldt bare ikke teksten om rækkerne, og derfor voksede
+den ene fil, der er skrevet til ikke at vokse.
+
+**Hvorfor kun én og ikke tre eller fem.** Formålet med at beholde noget er, at
+den næste session kan se, hvad der lige er sket, uden at læse hele listen. Det
+formål er opfyldt af den seneste; nummer to og frem tjener kun genlæsning, og
+genlæsning er præcis det, arkivfilerne findes til. Grænsen skal desuden være
+mekanisk — "de sidste par" er ingen grænse, og det var sådan, de syv opstod.
+
+**Prisen er sagt højt:** tværgående mønstre, der blev formuleret i et referat og
+ikke andre steder, forsvinder ved næste rydning. Modtrækket er, at en lære, der
+er værd at beholde, hører til i `DECISIONS.md` — dér kan den revideres, fordi
+den står med sin begrundelse. En lære, ingen gad flytte, var ikke værd at
+beholde.
+
+---
+
 ## 7. august 2026 (nat) — En historie skal enten være uafhængig af nuet eller trække sig, når nuet er løbet fra den (`A38`)
 
 **Beslutning:** rundestoryen afløses ikke længere kun af et nyere dagskort. Den

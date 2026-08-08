@@ -30,17 +30,30 @@ import { C, btnGreen, font } from "../../ui/theme.js";
 import { Card, Eyebrow } from "../../ui/components.jsx";
 import { cardTight } from "./shared.js";
 
-// Mini-stillingen: tre rækker (over / dig / under) fra kortets konkurrence.
+// Mini-stillingen: tre rækker omkring modtageren fra kortets konkurrence.
 // Pakket af SQL'en i payload.mini, fordi navnene skal være afgrænset til
 // personer, modtageren deler konkurrence med — den regel er strukturel i
 // dagsmotoren og må ikke genopfindes i en komponent.
 //
 // Globale kort (stimen, milepæle) har ingen konkurrence og dermed ingen mini;
 // så udelades sektionen helt frem for at vise en tom ramme.
-function MiniStanding({ rows }) {
+//
+// OVERSKRIFTEN DATERER STILLINGEN, og det er ikke pynt. Rækkerne er et snapshot
+// taget, da kampdagen blev gjort færdig, mens kortet lever i 48 timer og
+// STILLING-fanen er live pr. kamp — de to KAN modsige hinanden, præcis som
+// rundestoryens udaterede overskrift kunne det (A38, august 2026). Datoen er
+// samme kur: kortet påstår ikke noget om nuet, det fortæller, hvad der gjaldt
+// den dag. Mangler `day` mod forventning, udelades linjen frem for at vise
+// "efter kampdag" uden en dag.
+function MiniStanding({ rows, day }) {
   if (!rows?.length) return null;
   return (
     <div style={{ marginTop: 10, borderTop: `1px solid ${C.line}`, paddingTop: 8 }}>
+      {day && (
+        <div style={{ color: C.muted, fontSize: 11, letterSpacing: 0.3, marginBottom: 4 }}>
+          Stillingen efter kampdag {day}
+        </div>
+      )}
       {rows.map((r) => (
         <div key={`${r.rnk}:${r.name}`} style={{
           display: "flex", justifyContent: "space-between", gap: 8,
@@ -126,7 +139,7 @@ function DayCard({ story, token, competitions, tips, seen, onSeen, openPredictio
       </div>
       <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.45, marginTop: 6 }}>{story.body}</div>
 
-      <MiniStanding rows={story.payload?.mini} />
+      <MiniStanding rows={story.payload?.mini} day={story.payload?.day} />
 
       {/* Næste kamp og manglende tips står PÅ kortet og ikke i et kort mere.
           Dataene er dem, Hjem allerede har hentet (computeHomeTips) — kortet

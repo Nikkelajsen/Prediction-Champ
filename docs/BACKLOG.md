@@ -22,9 +22,18 @@ som ikke arkiveres andre steder — de får en linje nederst, så den samme idé
 foreslås tre gange.
 
 **ID'erne er stabile og genbruges ikke.** `A#` fortsætter beslutningsserien fra
-ROADMAP (næste ledige: **A38**; `A35`, `B27`, `G78` og `I19` blev brugt 7. august 2026 til Story Engine v3, `A36` samt `G79`–`G84` samme dags indbakke-rydning, `A37` 7. august aften ved prøvekørslen af kontolukningen, og `G85` samme aften ved aflæsningen af football-data.org) — `A11` er fx også navnet på en logadvarsel i
-`api/_shared.js`. `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale
-ID'er (`K2`, `F1`) beholder deres eget navn og linker til spec'en.
+ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
+`B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
+beholder deres eget navn og linker til spec'en.
+**Næste ledige: `A40` · `B28` · `G92` · `I20`.**
+
+**Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
+kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
+den bærer **kun den seneste**. Ældre kørsler slettes, når en ny skrives — de er
+allerede arkiveret i `DECISIONS.md` og `CHANGELOG.md`, som er de to filer, der
+har lov at vokse. Ingen tier-overskrift og ingen indbakke bærer sin egen
+kørselshistorik; står der noget under en overskrift her, er det tilstand og ikke
+et referat.
 
 **Rækkefølgen står i [Prioriteret rækkefølge](#prioriteret-rækkefølge) nedenfor**
 — tabellerne længere nede er opslagsværker sorteret efter ID, ikke efter, hvad
@@ -38,326 +47,15 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- `renderStory()` i `src/lib/stories.js` er død kode i appen — kun `stories.test.js` kalder den, og teksterne skulle rettes to steder ved `A38`. Samme argument som `G78` én dag tidligere.
-- Rundestoryens afløsning er per bruger og ikke per konkurrence: et resultat i én turnering trækker også et kort om en anden. Præcist ville kræve et opslag pr. `story.competition_id`.
-- Dagskortets `payload.mini` er et snapshot af stillingen og kan modsige STILLING inden for kortets 48 timer — samme fejltype som `A38`, bare i lille format.
-- `DAY_RESULT`- og `DUEL`-teksterne i `sql/story_engine_v3.sql` er nutid ("Du ligger nr. 3 af 8", "Kun N point op til R") — samme rettelse som runde-reglernes datid, men de er kortlivede og daterede.
-- `generate_stories_catchup()`s RUNDE-løkke har det selvtermineringsproblem, `A38` lukkede for dagsløkken: `not exists (story for runden)` uden loft, så en runde, der aldrig kan producere en historie (fx en hvis kampe ikke indgår i nogen konkurrence), forsøges igen ved hver notifikations-kørsel for evigt. Præeksisterende, ikke indført af `A38`.
-- `match_day_complete()` er global: én kamp uden resultat i en turnering, ingen tipper, blokerer alles dagskort. Prisen er dokumenteret som bevidst, men den blev betalt i `A38`s undersøgelse.
-- `sql/tests/liga_admin.sql` og `sql/tests/account_anonymization.sql` bygger deres eget håndskrevne minischema — de kan derfor være grønne, mens funktionen fejler mod det rigtige. `sql/schema.sql` ligger i repoet og kan køres i CI's postgres-service (kun `\restrict`, `CREATE SCHEMA public`, `COMMENT ON SCHEMA` og de 12 `ALTER DEFAULT PRIVILEGES` skal ud, jf. `docs/STAGING.md` trin 2).
-
-*Ryddet 7. august 2026 (aften): de otte linjer blev til `A36` og `G79`–`G84`.
-**Én blev ikke til en række, fordi den var en sortering og ikke en opgave:**
-`G76`s udløser er sprunget (staging findes siden 6. august), så rækken er flyttet
-fra Tier 6 til Tier 1 — den venter ikke længere på noget, den venter på et
-miljø. **Ingen blev forkastet, og ingen blev foldet sammen** — heller ikke de to,
-der kommer af samme hændelse: `G81` (hvad sender football-data.org, når tiden
-ikke er fastsat?) og `G84` (ville vi have opdaget det?) deler årsag, men ikke
-rettelse, og det er sammenlægningsreglens eneste kriterium.
-**Runden har en kilde, ingen tidligere runde har haft: at BRUGE det, vi har
-bygget.** Fem af de otte kom af at køre noget igennem som en bruger — `G80`
-opdages kun af den, der klikker "Hent nu" på `npm run dev`; `G82` og `G83` kun
-af den, der spillede en syntetisk sæson igennem i staging; og `G81`/`G84` kom af
-en fejl, der blev fundet, fordi nogen undrede sig over en sortering i appen. De
-fjorten fra 3. august kom af at læse dokumentationen op mod koden, de ti fra
-5. august af at spørge produktionen; disse kom af at gøre det, dokumentationen
-beskriver. **`G83` er den eneste, hvor
-indbakke-linjens præmis ikke holdt ved eftersyn:** de to funktioner skrives ikke
-"KUN lazy fra klienten" — notifikations-jobbet har været den pålidelige skriver
-siden `B11` (3. august) — men det, der er tilbage bagved, er større end linjen
-sagde, fordi ratingen slet ikke har en bagstopper.*
-
-*Ryddet 7. august 2026: én linje — `loadLatestStory` og viewet `latest_story`
-uden aftagere — og den blev **ikke** til en række. Story Engine v3-beslutningen
-gør den til en delmængde af `B27`: rundestoryen gør viewet relevant igen, så
-spørgsmålet er ikke længere "hvorfor vedligeholder vi det?", men "genbruges det
-eller slettes det bevidst?", og det svares inde i leverancen. Det er samme
-afgørelse som kontakt-mailen 4. august, hvor en linje blev foldet ind i `I10`
-frem for at få sit eget ID.*
-
-*Ryddet 5. august 2026: de ti linjer blev til `A32`–`A33` og `G70`–`G76`.
-**Én blev rettet med det samme frem for at få et ID:** bruger-flag-tællingen i
-`DOCUMENTATION.md` §13 og §20. Selve arbejdet var at tælle efter — der er ti
-navne i `LOKALE_NØGLER`, hvoraf ni er bruger-bundne — og da tællingen var lavet,
-var rettelsen to ord og en manglende nøgle (`pc_comp_done_seen`) i §20's
-opremsning. Samme afgørelse som `...font`-linjen 2. august. **Ingen blev
-forkastet**, og ingen blev foldet sammen: `G70`–`G76` deler ikke rettelse, selv
-om `G71`s test ville have fanget netop den drift, der lige er rettet.
-**Runden har en kilde, ingen tidligere runde har haft:** alle ti linjer kom af
-at **køre** noget — fem aflæsninger, hvoraf tre ikke kunne svare på det, de blev
-skrevet til. De fjorten fra 3. august kom af at læse dokumentationen op mod
-koden; disse kom af at spørge produktionen. Det er den dyreste måde at finde
-dem på og den eneste, der kunne have fundet dem: `G72` og `G76` er begge kode,
-der aldrig har kørt, og det kan ingen gennemlæsning se.*
-
-*Ryddet 4. august 2026: de seks linjer blev til `G69`, `B20`, `B21` og `I17` —
-og for de sidste to gjaldt, at rækken ikke var svaret. **Én blev foldet ind:**
-kontakt-mailen til hjemmesiden er ikke en opgave ved siden af `I10`, den ER
-`I10` — spørgsmålet er hvilken adresse, og svaret skal samme dag ind tre steder
-(`site/om.html`s `kontakt@leagly.example` og `legal.js`' `[NAVN]` og
-`[KONTAKT-E-MAIL]`, som allerede står på tjeklisten i `DOCUMENTATION.md` §11).
-**Én blev forkastet:** `manifest.json`s `short_name`. **Runden har samme kilde som
-3. august, men den modsatte retning:** de fjorten fra dokumentations-gennemgangen
-kom af at læse dokumentationen op mod koden; disse seks kom af at læse
-**navneskiftet** op mod alt det, det rørte — og fire af de seks handler om det, der
-ligger uden for appen (hjemmesiden, repoet, delebilledet). Det er der, et navneskifte
-efterlader sine rester, netop fordi intet build fejler af dem. **`B20` er den ene, der
-ikke kan vente uden at koste noget:** den kan først tælle fra udrulningsdagen, så hver
-uge, den ligger stille, er en uge uden data — alle de andre koster det samme om et år.*
-
-*Ryddet 3. august 2026 (anden runde): de femten linjer fra dokumentations-gennemgangen
-blev til `A27`, `B17`–`B18` og `G58`–`G68`. **To linjer blev til én række:** `#34`s
-efterladte default privileges og de `grant select … to anon`, der står nederst i
-`tournament_scope.sql`/`standings_tiebreakers.sql`, er to veje ind i **samme**
-tilstand — `anon` har adgang igen — og de lukkes af samme arbejde, så de er `G58`
-sammen. Det er samme sammenlægningsregel som `G36` og `G42` i første runde.
-**Fællesnævneren for runden er ikke en fejltype, men en kilde:** ingen af de femten
-kom fra en bruger eller en fejlet kørsel. De kom af at læse dokumentationen op mod
-koden — altså af at spørge, om det, der står skrevet, stadig passer. Det er en
-billigere måde at finde `G59` (et opslag uden paginering, præcis `G51`s fejl et nyt
-sted) end at vente på, at en runde igen melder et forkert deltagerantal.*
-
-*Ryddet 3. august 2026: de elleve linjer blev til `A25`–`A26`, `B15`–`B16`,
-`G53`–`G57` og `I16`. Én fik ikke eget ID: `B2`s testcase 3 er foldet ind i
-`G8`, som den handler om — den flytter rækkens spørgsmål fra "er stien nogensinde
-kørt?" til "står rækken i produktion?". Samtidig fik backloggen en **prioriteret
-rækkefølge i tiers**, som den ikke har haft siden ROADMAP'ens gamle liste blev
-delt op 31. juli; ID-tabellerne kunne kun læses som opslagsværk, ikke som
-"hvad nu".*
-
-*Ryddet 2. august 2026: `...font`-linjen blev rettet med det samme frem for at få et ID. `...font` satte CSS-egenskaben `display` til et skriftnavn i to `<pre>` i `OpsPanel.jsx`; spredningen er fjernet frem for erstattet, fordi en `<pre>` er monospace i forvejen, og det er dét, en rå fejltekst og et JSON-resumé skal have. Visningen er derfor uændret — kun løftet om at gøre noget er væk.*
-
-*Ryddet 1. august 2026 (fjerde runde): feedback-knappen blev `B14` og ikke en
-idé — den er en direkte anmodning fra produktejeren, altså besluttet, og det
-eneste åbne er, hvor beskeden lander. Holdnavne-normaliseringen blev `G52`.*
-
-*Ryddet 1. august 2026 (tredje runde): de tre driftslinjer er lukket sammen med
-Tier 1. `finishedRoundKeys()` og Champions League-dubletterne blev til kode
-(`api/send-notifications.js` og `ambiguousTeamNames()` i `api/sync-matches.js`);
-linjen om `ensureCompetitionAwards` **viste sig at være forkert** —
-funktionen har sin egen `try/catch` om hele kroppen (`src/lib/data/awards.js:12-18`)
-og kan derfor ikke afvise. Ingen ændring, ingen række.*
-
-*Ryddet 1. august 2026 (anden runde): de tre linjer om grants/RLS og
-paginering blev `G50` og `G51`; testtallene blev foldet ind i `G21`, som
-allerede bar dokumentationsdriften.*
-
-*Ryddet 1. august 2026: 35 linjer blev til `A23`, `B12`–`B13` og
-`G23`–`G49`. Tre af dem fik ikke eget ID, men blev foldet ind i den række, de
-hørte til (`rules.openDaysBefore` → `G3`, dev mod produktionsdata → `G4`,
-Google-fonten → `B4`), og to par blev slået sammen, fordi de deler rettelse
-(ubrugte exports + forældede modulhoveder → `G36`, fejltelemetri +
-versionsstempel → `G42`).*
+*Tom (8. august 2026).*
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 37 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 36 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
-
-*Tier 2, 3, 4 og 5 blev kørt tomme 3. august 2026 — 21 punkter leveret og slettet
-på én dag — og fyldtes samme aften delvist op igen af dokumentations-gennemgangen
-(14 nye rækker, `A27`, `B17`–`B18`, `G58`–`G68`). Det er ikke et tilbageskridt:
-de fjorten fandtes hele tiden, de stod bare ingen steder. **Tier 1 er stadig det
-næste** — den er vokset med `B17`, som er rykket øverst, fordi den er den eneste
-række på listen, hvor status quo betyder, at et løfte til brugerne ikke holdes.*
-
-*4. august 2026: `B17` er afløst af `B19` og slettet. Leverancen `A28`–`A31`
-skriver `anonymize_my_account()` forfra i `sql/liga_admin.sql` med den
-`client_errors`-nulstilling, `B17` skulle have leveret — så gen-kørslen af #31 er
-ikke længere en selvstændig opgave, men en delmængde af en kørsel, der skal ske
-alligevel. `G64` er slettet: `vercel.json` fik `maxDuration` på begge
-konto-endpoints i samme ombæring, fordi det nye ikke måtte fødes med samme hul.*
-
-*4. august 2026 (indbakken): fire nye rækker — `G69` øverst i Tier 2, og `B21`,
-`I17` og `B20` i Tier 7. **Tier 1 er urørt**, og det er pointen: ingen af de fire
-kan lukke en aflæsning, og `B19` er stadig det, hele leverancen fra samme dag
-hænger på. Tier 7 voksede fra otte til elleve rækker og er nu tieret med flest —
-en direkte følge af, at navneskiftet ramte alt det udadvendte, mens appen selv
-var færdig samme dag.*
-
-*5. august 2026: **Tier 2 er kørt tom igen** (`G69`, `G65`, `G67`, `G61`), og
-listen er dermed 39 → 35. **Tier 1 er stadig urørt og stadig det næste** — det er
-anden gang i træk, at et tier under den bliver kørt, mens `B19` og de fem
-aflæsninger står stille, og grunden er den samme begge gange: Tier 1 kræver en
-produktionsadgang, som ikke findes i den maskine, arbejdet bliver lavet i.
-Rækkefølgen er altså rigtig, men den beskriver en kø, der har to betjeninger.*
-
-*5. august 2026 (anden runde): **Tier 4 er kørt tom** (`G58`, `G59`, `G62`,
-`G63`, `G66`), og listen er 35 → 30. To tiers på én dag, og begge gange var det
-Tier 1, der ikke kunne røres. **`B19` er til gengæld vokset fra to SQL-filer til
-fem** — det er prisen for at køre et SQL-tungt tier uden produktionsadgang, og
-den er værd at se i øjnene: hver leverance, der ikke kan køres samme dag, gør
-den ene opgave, der venter på ejeren, større. Tre af de fem er billige (#3 er et
-no-op, #43 lukker intet kendt hul), men #10 er den, en bruger kan mærke.*
-
-*5. august 2026 (tredje runde): **alle fem SQL-filer er kørt af ejeren, `B19` er
-slettet, og Tier 5 er kørt** (`G60`, `G68`, `G2`; `G1` skrumpede). Listen er
-30 → 26, og **Tier 1 er endelig rene aflæsninger igen** — der er ikke længere en
-Run-knap på den. Fire tiers på én dag lyder som meget, men det er værd at bemærke
-hvorfor det kunne lade sig gøre: tre af de fire var fyldt af
-dokumentations-gennemgangen 3. august, altså af punkter, der aldrig havde ventet
-på en beslutning, kun på at nogen læste efter. **To af dagens rækker blev lukket
-som et NEJ** (`G2` og — 3. august — `G7`), og begge gange fordi rækkens præmis
-ikke holdt ved eftersyn. Det er den billigste slags leverance og den, der er
-lettest at springe over.*
-
-*5. august 2026 (fjerde runde): `B22` er kørt og slettet — `rating_core.sql` er
-gen-kørt, ratingene er regnet om, og en anden skema-eksport bekræfter, at
-`recompute_ratings()` i produktion nu bærer `order by score desc, exacts desc`.
-Listen er 27 → 26. **Dagens mest brugbare lære er ikke en af de tolv rækker, men
-mekanikken, der fandt den trettende:** en frisk skema-eksport er den eneste
-kilde, der kan modsige en påstand om, hvad der står i produktion, og den gjorde
-det to gange på én dag. Begge gange var påstanden vores egen.*
-
-*5. august 2026 (femte runde): **Tier 2 og Tier 5 er kørt** — `G73`, `G71`,
-`G74` og `G70`, og `G1` er skrumpet til `MainApp` alene og flyttet til Tier 6.
-Listen er 31 → 28. **To ting ved runden er værd at bemærke.** For det første er
-`G70` den første leverance, der gør ROADMAP'ens beslutningslog **tom**: 46
-rækker fordelt frem for kopieret, og udvælgelsen — beslutning eller leverance —
-var hele arbejdet. For det andet er `G74` bygget på det modsatte svar af det,
-rækken lagde op til: den spurgte, om blokkene kunne tjekkes **uden**
-produktionsskemaet, og svaret er nej, fordi `B12`s `42803` opstår i
-parse-analysen og kræver, at serveren kender tabellerne. Det behøver den heller
-ikke — `sql/schema.sql` ER skemaet, og det ligger i repoet. **Tier 1 blev fyldt
-igen af leverancen selv** (`B23`: `analytics_dashboard.sql`), præcis som `B19`
-blev det tidligere samme dag — en SQL-tung leverance uden produktionsadgang
-lægger sin sidste halvdel i ejerens kø. **Men denne gang blev den kørt samme
-dag, og `B23` er slettet igen**; køen med to betjeninger holdt trit for første
-gang. Listen er dermed 31 → 27.*
-
-*7. august 2026: **Story Engine v3 er besluttet, og listen er 30 → 34** — `B27`
-(byg v3), `A35` (er tærsklen 45 rigtig?), `G78` (scoringstallene står to steder)
-og `I19` (historik over gamle dagskort). **Tier 3 er fyldt igen for første gang
-siden 3. august**, og `B27` er den eneste af de fire, der ikke venter på noget:
-de tre andre kan først aflæses, når v3 kører. Det er den modsatte form af de
-seneste runders vækst — de kom af at læse eller aflæse noget bestående, mens
-disse fire er en beslutnings egen hale. **Én indbakke-linje er ryddet uden at
-blive til en række:** `loadLatestStory`/`latest_story` uden aftagere er ikke et
-selvstændigt spørgsmål længere, den er en delmængde af `B27`, fordi rundestoryen
-gør viewet relevant igen.*
-
-*7. august 2026 (eftermiddag): **v3 er bygget, og listen er 34 → 33.** `B27` er
-slettet, og `loadLatestStory` er genbrugt frem for slettet — rundestoryen læser
-viewet. De to andre rækker fra formiddagen har nu en opfyldt udløser: `A35` kan
-måles, fordi `news_value` gemmes på hver eneste v3-række, og `G78` er blevet
-konkret frem for hypotetisk, fordi tallene nu FAKTISK står to steder.
-**Leverancen efterlod ingen nye rækker**, og det er værd at bemærke, for tre
-ting afveg undervejs fra spec'en; alle tre blev løst inde i opgaven og noteret i
-spec'ens §13 frem for skudt til hjørne. Den mest lærerige var spec §5's eget
-regnestykke — 8 + 12 + 20 = 40 — som ikke holdt mod en implementering, der gav
-`DAY_RESULT` hele størrelsesloftet: den ville nå 58 og kunne udgive sig selv som
-dagens historie, og så ville der aldrig findes en dag under tærsklen at falde
-tilbage til. **En enhedstest fandt det, ikke en gennemlæsning** — samme form som
-`G72`s lære om kode, der aldrig har kørt.*
-
-*7. august 2026 (aften): **indbakken er ryddet, og listen er 33 → 40** — `A36` og
-`G79`–`G84`, plus `G76` flyttet fra Tier 6 til Tier 1. **Fire tomme tiers er
-fyldt på én gang** (1, 2, 4 og 5), og det er første gang siden 3. august, at det
-sker af andet end en dokumentations-gennemgang. **Fordelingen siger noget, tallet
-ikke gør:** to af de syv (`G81`, `G76`) kan kun besvares uden for repoet, og
-`A36` hænger på den ene af dem — altså tre punkter i den kø, der har to
-betjeninger, og som `A32` handler om. **Tier 4 er den, der bør læses først:**
-`G84` er en kontrol, der VILLE have fanget en fejl, brugerne allerede har mærket
-(alle football-data-kampe uden klokkeslæt i fire døgn), og `G83` er en
-gendannelsesvej, der efterlader ratingen forkert uden at sige det. De to er
-tilsammen svaret på "hvad opdager vi ikke?", og det spørgsmål har ikke haft en
-række på listen før i dag.*
-
-*7. august 2026 (sent): **`G84` er leveret og slettet — 40 → 39.** Rækken var
-under to timer gammel, og det er ikke en anbefaling om at haste; det er, hvad
-der sker, når en række beskriver en fejl, der ALLEREDE er sket, frem for en, der
-kunne. **Leverancen efterlod ingen ny række, men den flyttede en grænse:**
-`sql/checks/` er en ny slags fil i repoet — ikke en migrering, ikke en test, men
-en overvågnings-forespørgsel, der køres to steder og derfor kun må findes ét.
-Modellen er værd at genbruge, næste gang en kontrol skal skrives: en temporær
-view installerer intet i produktionen og kan alligevel efterprøves i CI.
-**Det mest lærerige skete i testen og ikke i kontrollen.** Otte mutationer blev
-prøvet mod den; syv blev fanget, og den ottende — "erstat 100 %-reglen med
-mindst halvdelen" — slap igennem, fordi testens blandede tilfælde var 2 af 5 og
-dermed lå under tærsklen. Testen påstod at bevise, at kontrollen ikke er en
-andel, og beviste det ikke. Den er nu 4 af 5. **En test, man ikke har set fejle,
-er en formodning** — samme lære som `G74`s blokke og `G72`s kode, der aldrig har
-kørt, bare stillet mod testen selv.*
-
-*7. august 2026 (nat): **Tier 1 er kørt for første gang siden 5. august — halvt.**
-`G76`s databasehalvdel er prøvet af og var ren; `G81` kunne ikke røres, fordi den
-kræver et token, ingen maskine i repoet har. **Listen er 39 → 40, og det er
-leverancens vigtigste tal:** en kørsel, der lukker en halv række og åbner en hel
-ny, har fundet mere, end den brugte. `A37` — en liga, hvis eneste administrator
-har lukket sin konto, kan aldrig administreres igen — stod ingen steder, og den
-kunne ikke stå nogen steder: den findes kun i mødet mellem tre ting, der hver
-især er rigtige og dokumenterede (admin uddeles kun ved oprettelsen, der er ingen
-forfremmelse, en lukket konto kan ikke logge ind). **Ingen af de tre er en fejl.
-Fejlen er, at ingen havde ganget dem sammen.** Det er samme form som `G84`s
-fordeling: hver enkelt række så rigtig ud, og kun helheden var forkert.
-**Metoden er værd at genbruge og var billigere, end tieret antog.** Rækken hed
-"kør den i staging", og staging var ikke nødvendig for den halvdel, der bar
-risikoen: `sql/schema.sql` ER produktionsskemaet, det ligger i repoet, og en
-lokal PostgreSQL kan køre det. Det er samme indsigt som `G74`s — at skemaet i
-repoet kan svare på spørgsmål, man troede krævede en database — bare brugt på en
-kørsel frem for på et tjek. **Det, der faktisk krævede staging, viste sig at være
-den anden halvdel:** knappen, endpointet og `auth.users`. Tieret hedder stadig
-det rigtige; rækken var bare to opgaver.*
-
-*7. august 2026 (nat, anden runde): **`A36`, `A37` og `G76` er lukket — listen er
-40 → 37, og Tier 1 er tilbage til ét punkt.** Ejeren traf beslutningen (overdrag
-admin til det ældste levende medlem, lad den lukkede konto forlade ligaen, lad
-en tom liga stå), og den er bygget, backfillet og mutationstestet samme dag.
-**Det opsigtsvækkende er ikke tallet, men hvor lidt af det, der krævede tieret:**
-`G76` blev besvaret af ét `select deleted_at`-opslag, som viste, at hele
-kontolukningen allerede var kørt i produktion 5. august — rækken havde ikke
-været sand i to døgn. `A37` blev fundet ved en prøvekørsel mod `sql/schema.sql`
-og lukket af en beslutning. **Tre rækker i "svaret ligger uden for repoet", og
-kun én af dem lå faktisk uden for repoet.** Læren er ikke, at tieret er forkert,
-men at en række, der VENTER på en adgang, skal spørges én gang til, før den
-venter videre: `G76` havde fem dage i køen efter at være blevet usand.*
-
-*7. august 2026 (aften): **`G81` er lukket ved aflæsning, og den efterlod `G85`,
-som er større end den selv.** Rækken bad om ét kald mod én turnering; det blev
-til fire turneringer og 1.446 kampe, fordi det første svar rejste spørgsmålet,
-om det gjaldt de øvrige — og det gjorde det ikke. **Midnats-antagelsen var
-hverken rigtig eller forkert, men ufuldstændig:** sand for Bundesliga, tom for
-Premier League, Primera División og Serie A. Det er en tredje mulighed, ingen af
-rækkens tre forventede udfald rummede, og den kunne kun ses ved at læse mere end
-én turnering. **Det dyreste, aflæsningen sparede, var ikke koden, men de fire
-formodninger, den slog ihjel undervejs:** `status` som markør (afkræftet på tre
-hele terminslister i stedet for på én runde), midnat som universel regel,
-formen på en runde, og `lastUpdated` pr. kamp. Nummer tre døde på Bundesligas
-sidste spillerunde, hvor ni kampe deler klokkeslæt og er ægte — heuristikken
-ville have markeret hver eneste sæsonafslutning som "tid ikke fastlagt". Nummer
-fire kostede to kald. **Alle fire ville være blevet skrevet, hvis designet var
-kommet før aflæsningen.** Samme lære som `G74`s: spørgsmålet, man troede krævede
-en bygning, krævede et opslag — bare her med den tilføjelse, at ét opslag ikke
-var nok, fordi svaret ikke var det samme alle steder.*
-
-*7. august 2026 (sent aften): **seks rækker kørt, og listen er 37 → 31.** `G80`,
-`G83`, `G79`, `G82`, `G77` og `G78` er leveret og slettet, og **tre tiers er
-tømt** (2, 4 og 5) — to af dem samme dag, de blev fyldt. **Fordelingen siger
-noget, tallet ikke gør:** fire af de seks handlede om noget, vi allerede havde
-bygget og ikke havde prøvet af — en fejlbesked, et forbehold, en manuel
-efterprøvning, en tabel uden loft — og kun `G83` var en manglende evne.
-**To af de seks havde ikke fået deres udløser** (`G77`, `G78`) og blev kørt efter
-anmodning; det står noteret i Tier 6, fordi en beslutning om at se bort fra en
-udløser skal kunne læses bagefter.
-
-**Rundens gennemgående lære er, at fejlen fire gange lå i PÅSTANDEN og ikke i
-koden.** Simulatorens determinisme (testen sprang et kald over og meldte filen
-ikke-deterministisk), rydningens gulv (`greatest(1, …)` er ikke en no-op),
-`pred_home is not null` (et filter mod en NOT NULL-kolonne, altså dødt) og to af
-ni mutationer i rating-kontrollen. Hver gang var koden rigtig, og hver gang var
-det først, da påstanden blev prøvet af, at det viste sig. Det er `G84`s lære
-gentaget fire gange på én dag: **en test, man ikke har set fejle, er en
-formodning.**
-
-**`G78` er den, der bør læses, hvis man kun læser én.** Rækken stod som "kræver
-en migrering af eksisterende rækker", og den migrering var ikke nødvendig — svaret
-stod allerede på rækken, fordi motoren kun har to udgange. En backlog-række er en
-hypotese om en LØSNING og ikke kun om et problem, og gætværket var her dyrere end
-svaret. Samme form som `G74`, der blev leveret på det modsatte svar af det, rækken
-lagde op til.*
 
 Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
@@ -372,293 +70,43 @@ Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
 ### Tier 1 — Produktionsadgang: svaret ligger uden for repoet
 
-**Kørt tom SJETTE gang 7. august 2026 (aften).** `G81` er lukket ved aflæsning —
-fire turneringer, 1.446 kampe, læst direkte hos football-data.org
-([reviews/football-data-kickoff-aflaesning-2026-08-07.md](./reviews/football-data-kickoff-aflaesning-2026-08-07.md)).
-Den efterlod `G85`, som er større end den selv, men som ikke hører til her:
-tilstanden er aflæst, og det, der mangler, er et valg mellem to kandidater.
-
-*Alt nedenfor er historik: tieret er kørt tomt fire gange, alle fire 5. august 2026.*
-
-**Kørt tom FJERDE gang 5. august 2026.** `B24` (gen-kør `sql/liga_admin.sql`)
-blev oprettet og lukket samme dag, præcis som `B23` få timer før: `A25` var
-merget og **inert** i databasen, indtil `_anonymize_account()` var gen-kørt, og
-ejeren kørte filen. **To kørsler samme dag er heller ikke et svar på `A32`** —
-men det er anden gang i træk, at køen holdt trit, og rækken er skrevet på det
-modsatte mønster.
-
-*Nedenfor står de tre tidligere kørsler.*
-
-**Kørt tom tredje gang 5. august 2026.** `B23` (gen-kør
-`sql/analytics_dashboard.sql`) blev oprettet og lukket samme dag: `G73` var
-merget og **inert** i databasen, indtil RPC'en var gen-kørt, og ejeren kørte
-den. Det er første gang, tieret ikke har været en flaskehals — `B19` voksede fra
-to SQL-filer til fem, mens den ventede, og `A32` (en vej til read-only opslag
-uden ejeren) er skrevet på præcis den erfaring. **Én kørsel samme dag er ikke et
-svar på `A32`**, men den er datapunktet, spørgsmålet mangler: bliver det
-mønstret, er rækken mindre værd, end den ser ud.
-
-*Og de to før den.*
-
-**Kørt tom to gange 5. august 2026: fem oprindelige aflæsninger, plus de to,
-kørslen selv efterlod.** Tieret dækker nu også svar, der ligger i cron-job.org og
-ikke kun i Supabase; fællesnævneren er, at adgangen ikke findes i den maskine,
-arbejdet laves i.
-
-**Alle fem oprindelige aflæsninger er lavet.** Tieret har været "det
-næste" i tre runder uden at kunne røres, fordi opslagene krævede en adgang,
-arbejdsmaskinen ikke har. De blev samlet til ét paste og kørt af ejeren.
-
-**To rækker er slettet:** `I16` (0 lukkede konti af 24) og `A11` (`header` for
-alle ni jobs, nul `query` — fallbacken er fjernet af koden). **Tre er flyttet
-til Tier 6**, fordi svaret viste, at spørgsmålet endnu ikke kan besvares: `G8`
-(nul multi-turneringskonkurrencer), `B12` (1 oprettelse efter mærkatet) og `A5`
-(nul delinger af 280 historier).
-
-**Det er tieret selv, resultatet siger mest om.** Tre af de fem punkter blev
-kaldt "aflæsninger", som om svaret lå og ventede — men to af opslagene kunne
-ikke køre som skrevet, ét pegede på den forkerte kilde, og tre svarede med tal
-for små til at bære den beslutning, rækken var skrevet for. **En formuleret
-forespørgsel er ikke det samme som et svar, der findes.**
-
-*Fyldt igen samme dag af de fund, kørslen selv efterlod (`G72`, `G75`) — og
-tømt igen samme dag, fordi begge var ét opslag. **Begge svarede "ikke en fejl":**
-`G72` gav 0 konkurrencer med `mode_params.awards`, så Story Engines to
-kåringsregler er uafprøvede og ikke døde; `G75` blev aflæst på cron-job.org, hvor
-skemaet ER hver 12. time — de fem jobs blev oprettet forkert 31. juli og er siden
-rettet. **`G75` er den mest lærerige af hele dagen, fordi den var vores fejl og
-ikke registrets:** et `count(*)` over fjorten dage er ét tal for hele perioden og
-kan ikke skelne "har altid kørt forkert" fra "kørte forkert og blev rettet".
-Udregningen var rigtig om vinduet og forkert om nutiden. Skal spørgsmålet stilles
-igen, kræver det afstanden mellem nabokørsler (`lag(started_at) over …`), ikke et
-gennemsnit. Samme aflæsning bekræftede alle syv minuttal, inklusive Scotlands 15,
-som indtil da kun var udledt.*
+Tomt. Fællesnævneren er, at adgangen ikke findes i den maskine, arbejdet laves i
+— Supabase eller cron-job.org, ikke repoet. `A32` er spørgsmålet om, hvorvidt
+tieret skal have en anden betjening end ejeren.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-**Kørt fjerde gang 7. august 2026 (sent aften) — tømt samme dag, det blev fyldt.**
-`G80` er leveret og slettet: `apiFetch()` i nye `src/lib/api.js` afviser et
-`/api/*`-svar, der ikke er JSON, og de fem kaldesteder oversætter ikke længere
-den samme observation til hver sin forklaring.
-
-**Rækken var tierets reneste eksempel til dato, og den blev renere ved
-eftersyn.** Fejlbeskederne var ikke upræcise — de var om noget helt andet end
-det, der skete, og de var det på en måde, der lød troværdig: hvert kaldested
-gættede fra sit eget domæne, så gættet passede altid til den knap, brugeren lige
-havde trykket på. "Kontoen kunne ikke lukkes" er den værste af de tre, fordi den
-melder den mest uigenkaldelige handling i appen AFVIST, uden at serveren
-nogensinde blev spurgt. **Den generelle regel står nu i `DOCUMENTATION.md` §13:**
-en fejl, hvis årsag ligger i MILJØET, må ikke oversættes af det kaldested, der
-tilfældigvis opdagede den.
-
-*Nedenfor står de tre tidligere kørsler.*
-
-**Kørt tredje gang 5. august 2026.** `G73` er leveret og slettet:
-`admin_analytics_stories` tæller nu `viewable` — kort skrevet, mens deres egen
-runde stadig var den nuværende — og bruger den som nævner under BÅDE visnings- og
-afvisningsraten. `generated` står uændret ved siden af, og forskellen mellem de to
-tal er selv oplysningen; derfor er "Vis-bar" også en synlig kolonne og ikke kun en
-nævner. **Rækken pegede på dagsreglerne, men fejlen var bredere:** definitionen
-(skrevet før rundens slutning) fanger også et runde-kort, hvis runde først blev
-spillet færdig efter den var forbi — en udsat kamp — og dét kan ske igen, mens
-efterfyldningen var en engangsudgift. **`analytics_dashboard.sql` er gen-kørt af
-ejeren samme dag** (den tidligere `B23`), så rettelsen er levende i databasen og
-ikke kun i koden.
-
-*Fyldt igen 5. august 2026 af `A5`-aflæsningen — og tømt samme dag. Nedenfor står
-de to tidligere kørsler.*
-
-**Kørt anden gang 5. august 2026.** De fire punkter fra dokumentations-gennemgangen
-er leveret og slettet: `G69` (privatlivspolitikken nævner nu `pc_pwa_onboarded`),
-`G65` (Scotland-skabelonen sætter `provider`, `live_enabled` og `is_official`),
-`G67` (Tier 2–5-beslutningerne og `B4` er ført til `DECISIONS.md`) og `G61`
-(`KIND_LABEL` kender alle fem beskedtyper).
-
-*Første kørsel var 3. august 2026 (otte punkter: `G54`, `G53`, `G3`, `B15`,
-`G55`, `G56`, `G57` og `G5`); tieret blev fyldt igen samme aften og er nu tømt
-igen. Det er selve pointen med at lade overskriften stå: kategorien fandtes
-begge gange, den var bare tom ind imellem.*
-
-To af de fire viste sig at være større end rækken sagde, og begge gange samme
-vej: **rækken pegede på ét sted, og fejlen havde to.** `G65` gjaldt ikke bare en
-manglende kolonne, men at `is_official` defaulter til `true` — så skabelonen
-ville have gjort en ny turnering officiel i samme sekund, den blev indsat, hvilket
-er stik imod §10's egen tommelfingerregel. Og `G67`s "Tier 2–5" var et undertal:
-`DECISIONS.md` mangler omkring tredive rækker fra ROADMAP'ens beslutningslog.
-De fem, rækken navngav, er ført over; resten er noteret i indbakken, fordi
-udvælgelsen — hvad der er en *beslutning* og hvad der er en *leverance* — er et
-spørgsmål og ikke en kopiering.
+| # | Hvad | Hvorfor her |
+|---|---|---|
+| `G89` | `DAY_RESULT`- og `DUEL`-teksterne i `sql/story_engine_v3.sql` står i nutid | Samme fejl som runde-reglernes, der blev rettet til datid i `A38` — kortet påstår en stilling, der kan være flyttet, mens det stadig ligger på Hjem. |
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
-**Tomt igen 7. august 2026.** Tieret blev fyldt af Story Engine v3-beslutningen
-om formiddagen og tømt af leverancen samme dag — `B27` var den eneste række på
-hele listen, der hverken ventede på en udløser eller på en produktionsadgang,
-og den er nu bygget. Leverancen efterlod ingen ny række her: de to ting, den
-udskød (`A35` og `G78`), venter begge på drift og hører til deres egne tiers.
-
-*Nedenfor står de tidligere kørsler.*
-
-**Kørt 3. august 2026.** Alle fire punkter er leveret og slettet: `B10` og `B11`
-som én leverance (Story Engine v1.2's to kåringsregler + push, hvor
-notifikations-jobbet blev den pålidelige skriver af kåringerne), `B9` (ny
-turnering) og `I5` (deling).
-
-`I5` viste sig at være **halvt leveret i forvejen**, og rækken sagde noget
-forkert: historie-kortet på Hjem har haft en Del-knap siden v1.1. Det, der
-manglede, var arkivet — karriereprofilens milepæle, altså netop dét sted, man
-kigger, når kortet er væk fra Hjem igen.
+Tomt.
 
 ### Tier 4 — Datarisiko med en lunte
 
-**`G84` er leveret og slettet samme dag, den blev oprettet (7. august 2026).**
-Heartbeat'en aflæser nu `kickoff_tbd` pr. turnering og slår alarm, når **alle**
-en turnerings kampe inden for ti dage står uden klokkeslæt. **Leverancen blev
-større end rækken sagde, og på ét bestemt punkt:** rækken bad om "én forespørgsel
-+ ét tjek", men en kontrol er kode, der per definition næsten aldrig udløser —
-den ville være tavs på nøjagtig samme måde, hvad enten den virkede eller ej.
-Forespørgslen bor derfor i `sql/checks/` som en **temporær** view, der læses af
-BÅDE heartbeat'en mod produktion og af en CI-test mod en tom database, og testen
-er selv efterprøvet ved at mutere kontrollen otte gange og se den fange hver
-enkelt. Den ottende mutation slap igennem første gang og afslørede en for svag
-test — det blandede tilfælde var 2 af 5 og skelnede ikke mod en 50 %-tærskel.
-
-**`G83` er leveret og slettet samme dag (7. august 2026, sent aften), og
-leverancen blev to ting frem for én.** Rækken bad om en samlet genberegning og en
-bagstopper i cron. Den første er `sql/recompute_derived.sql` — fem trin i en
-bindende rækkefølge, én række pr. trin i svaret — og `RESTORE.md` scenarie 1 har
-fået den linje, den manglede. **Den anden blev bevidst det modsatte af, hvad
-rækken foreslog:** genberegningen er IKKE sat på et skema. Den er dyr (hele
-`rating_history` bygges fra runde nul), og en gentagelse hvert kvarter ville
-rette tilstanden uden nogensinde at fortælle, at den var forkert — så vejene uden
-om triggeren ville forblive usynlige. I stedet kører `sql/checks/rating_freshness.sql`
-i heartbeat'en og SIGER, hvornår kaldet skal køres, med rettelsen i fejlteksten.
-
-**Det mest lærerige skete igen i testen og ikke i kontrollen** — tredje gang i
-træk. Ni mutationer blev prøvet; syv blev fanget, og to slap igennem. Den ene
-(`matches_predicted <> k.n`) kunne ingen fixture skelne, fordi `round_score` er et
-GENNEMSNIT: sletter man en kamp i en runde, hvor spilleren scorede ens på hver,
-flytter tallet sig ikke, og kun antallet gør. Den anden (`scope = 'ALL'`) slap
-igennem, fordi testens fixture-række lå på en nøgle, kilden også havde, så den
-matchede pænt i stedet for at stå alene. **Begge huller var i påstanden, ikke i
-koden**, og begge blev fundet af at mutere frem for at læse.
-
-*Nedenfor står de to tidligere kørsler.*
-
-**Kørt anden gang 5. august 2026.** Alle fem punkter er leveret og slettet:
-`G58` (`anon` mister også sekvenserne, view-filerne re-granter ikke, og tre
-heartbeat-kontroller aflæser tilstanden), `G59` (`round_standings` pagineres),
-`G62` (karriereprofilens tre globale komplethedsjoin er afgrænset til officielle
-turneringer), `G63` (brugernavnets unikhed og opslag har fået en versioneret
-migrering) og `G66` (auth-opslaget har en tidsgrænse).
-
-*Første kørsel var 3. august 2026 (`G52`, `G11` + `G32`, `G4` og `G50`); tieret
-blev fyldt igen samme aften og er nu tømt igen — samme mønster som Tier 2.*
-
-**To af de fem viste sig at være noget andet, end rækken sagde — og begge gange
-mindre farlige og mere principielle.** `G58`(a) lød som "hver ny tabel fødes
-åben"; men `alter default privileges FOR ROLE x` gælder kun objekter, der
-oprettes **af** rolle x, og alt, vi selv opretter, ejes af `postgres` — hvis
-defaults #34 lukkede. Det, der reelt stod tilbage, var sekvenserne, fordi ordet
-"tables" stod tre steder i #34s formulering. Og `G63`s hul var ikke, at
-garantien manglede, men at den kun fandtes i et **genereret** øjebliksbillede.
-Begge er nu dækket af en test i CI, hvilket er den egentlige leverance: en
-lunte, der er slukket, kan tændes igen, mens en test bliver ved med at spørge.
-
-*Begrundelserne for begge kørsler står i [`DECISIONS.md`](./DECISIONS.md) og
-[`CHANGELOG.md`](./CHANGELOG.md) — herunder `G50`s pointe om, at bredden var en
-**regel** og ikke en liste, som `G58` er anden halvdel af.*
+| # | Hvad | Hvorfor her |
+|---|---|---|
+| `G85` | Tre af fem football-data-turneringer får et **opdigtet** klokkeslæt, og `G84`s kontrol er blind for netop dem | Appen viser i dag et konkret tidspunkt, leverandøren har fundet på, og sætter tipslåsen efter det. Tilstanden er aflæst; det, der mangler, er et valg mellem to kandidater. |
+| `G90` | `generate_stories_catchup()`s runde-løkke er uden loft og uden selvterminering | En runde, der aldrig kan få en historie, forsøges igen ved hver notifikations-kørsel — for evigt. Præcis den fælde, `A38` lukkede for dagsløkken. |
+| `G91` | To SQL-tests bygger deres eget minischema og kan være grønne, mens funktionen fejler | En slukket lunte: testen bliver ved med at sige god, indtil den dag skemaet og minischemaet er uenige om noget, der betyder noget. |
 
 ### Tier 5 — Robusthed og vedligehold
 
-**Kørt fjerde gang 7. august 2026 (sent aften) — tømt samme dag, det blev
-fyldt.** `G79` og `G82` er begge leveret og slettet, og de delte den egenskab,
-der blev sagt højt ved oprettelsen: begge handlede om **kontroller, vi allerede
-havde bygget**, og ikke om kode, der manglede.
-
-**`G79` blev en måling frem for en advarsel.** `docs_sql.mjs` spørger nu
-migreringerne i `sql/`, hvilke 76 objekter de opretter, slår hver enkelt op i
-dumpet og skriver dommen øverst i kørslen. **Det afgørende valg var at RAPPORTERE
-og ikke afvise:** eksporten kører mandage og manuelt, så enhver PR med en ny
-SQL-fil er lovligt forud for den, og en gate ville gøre hver migrerings-PR rød på
-noget, der ikke er en fejl. Den grønne linje bærer lige så meget som den røde —
-"eksporten dækker alle N objekter" fjerner dumpet som mulig forklaring på en fejl
-længere nede. Leverancen udløser sin egen måling og siger det ved navn.
-
-**`G82` kostede det, rækken forudsagde, og fandt noget, den ikke gjorde.** Trinnet
-er jobbets tungeste (~10 sekunder) og kører mod det RIGTIGE skema — simulatoren
-rører hele kæden på én gang, og et miniskema kunne have stået grønt, mens filen
-fejler mod produktionen. Undervejs blev `sql/tests/_schema.mjs` udskilt, fordi
-viden om at læse et PG17-dump med en PG16-klient nu har to aftagere. **Den mest
-lærerige påstand var determinismen:** "samme frø + samme kald" er ét løfte, ikke
-to. Tips og resultater deler `random()`-strøm, så testens første udgave sprang et
-kald over i gentagelsen og meldte simulatoren ikke-deterministisk. Fejlen var
-testens, og den står nu skrevet i filen, så den næste ikke gentager den.
-
-*Nedenfor står de tre tidligere kørsler.*
-
-**Kørt tredje gang 5. august 2026.** `G71`, `G74` og `G70` er leveret og
-slettet, og `G1` er skrumpet til `MainApp` alene og **flyttet til Tier 6** med
-`A23` som udløser — den sidste fil er navigations-tilstandsmaskinen, og
-rækkefølgen er dermed ikke længere vores at vælge.
-
-**`G71` fandt en nøgle, ingen vidste manglede.** Testen kræver en
-oversættelsestabel (`NØGLENS_LØFTE` i `legal.test.js`), fordi politikken
-beskriver nøglerne i almindeligt sprog — og første gang den kørte, faldt
-`pc_onboarding_v1_card` igennem: "Kom godt i gang"-checklisten var ikke nævnt.
-Politikken har fået sin sætning; datoen står stille, som ved `G69`, fordi
-behandlingen er uændret. **Testen fejler i begge retninger**, så en nøgle, der
-FJERNES fra koden, heller ikke efterlader en sætning om noget, appen ikke gemmer.
-
-**`G74` blev leveret på det modsatte svar af det, rækken lagde op til.** Den
-spurgte, om blokkene kunne tjekkes "uden at kræve produktionsskemaet". Det kan
-de ikke, og det er hele pointen: `B12`s `42803` opstår i **parse-analysen** og
-kræver, at serveren kender `competitions` og dens kolonner — et syntakstjek
-ville have sagt god for den. Men de behøver det heller ikke, for `sql/schema.sql`
-ER skemaet, og det ligger i repoet. Hver blok bygges nu om til et `prepare`
-(ingen `execute`, ingen rækker røres), og en blok, der ikke er en hel sætning,
-markeres ` ```sql uddrag ` — **opt-out og ikke opt-in**, så en ny forespørgsel er
-dækket, fordi nogen skrev den, og ikke fordi nogen huskede en markør.
-
-*Første kørsel var 3. august 2026 (`G42`, `B16`, `G13`, `G7`), anden 5. august
-(`G60`, `G68`, `G2`). To af de ni er lukket som et **nej** — `G7` og `G2` — og
-begge gange fordi rækkens præmis ikke holdt ved eftersyn.*
-
-**`G2`s præmis holdt ikke, og dét afgjorde sagen.** Rækken sagde, at de syv
-advarsler var ÉT mønster — "hent data i en effekt og sæt state" — som kun kunne
-fjernes med et data-bibliotek, projektet bevidst har fravalgt. Gennemgangen
-viste tre af den slags. De fire andre er en afledt default, en engangs-gate på
-indlæst tilstand og to synkroniseringer af et rundeindeks. **Et data-bibliotek
-ville altså kun have fjernet tre af syv** — så den store beslutning, rækken
-ventede på, kunne ikke have løst problemet. De fire kan skrives om enkeltvis,
-men ingen af dem er en fejl, og skærmene har ingen interaktionstests. Loftet
-bliver stående på 7, og vilkåret står i `DOCUMENTATION.md` §12 sammen med den
-fælde, den næste ville falde i.
+| # | Hvad | Hvorfor her |
+|---|---|---|
+| `G87` | Rundestoryens afløsning er per bruger, ikke per konkurrence | Et resultat i én turnering trækker også rundekortet for en anden. Upræcist, ikke forkert. |
 
 ### Tier 6 — Venter på en udløser
 
 Står ikke her, fordi de er små, men fordi rækkefølgen ikke er vores at vælge.
 Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 
-> **To rækker er kørt 7. august 2026 UDEN at deres udløser var sprunget** —
-> `G77` (`analytics_events` vokser uden loft) og `G78` (v3's scoringstal står to
-> steder) — efter direkte anmodning. Det er værd at vide, når leverancerne
-> læses, fordi udløseren var det, der skulle have kalibreret dem: `G77`s 18
-> måneder er valgt af Analytics' eget retention-vindue (uge 52) og **ikke** af et
-> målt væksttal, som `A34`s Usage-aflæsning skulle have givet, og `G78` er lukket,
-> før `A35` har svaret på, om tærsklen 45 er rigtig. **`G78` viste sig ikke at
-> koste noget at haste:** den migrering, rækken forudsagde, var ikke nødvendig, så
-> tallene, `A35` skal måle på, er urørte. `G77` er den, der bør ses efter i
-> sømmene, hvis Usage-aflæsningen en dag siger noget andet — tallet er let at
-> ændre, det er ét argument i heartbeat'en og én sætning i politikken.
->
-> Reglen selv står uændret: **det, der venter på en udløser, prioriteres ikke.**
-> En anmodning er ikke en udløser; den er en beslutning om at se bort fra den, og
-> den slags skal kunne læses bagefter.
-
 | # | Hvad | Udløser |
 |---|---|---|
 | `A26` | `ambiguousTeams`: godkendte par eller accepteret støj | Turnering #3. |
+| `A39` | Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat? | **Når `day_card_coverage` melder en blokeret dag, nogen savnede.** `match_day_complete()` er global: én kamp uden resultat i én turnering blokerer alle dagskort, også for de konkurrencer, der intet har med turneringen at gøre. Prisen er dokumenteret som bevidst — den globale kampdag er produktets ene tvær-turneringsbegreb — men den blev betalt synligt under `A38`s undersøgelse. |
 | `B26` | E-mailbekræftelse + bot-værn (Turnstile) på signup | **Når linket deles åbent** (hjemmesiden publiceres eller invitationer går uden for det kontrollerede felt). Gated af `B25` — bekræftelsesmailen skal have en afsender, der kan levere. |
 | `A34` | Supabase Free → Pro? | **Når Usage-siden viser egress nær 5 GB/md, eller når fremmede udgør flertallet af de aktive** — de to falder formentlig sammen omkring 200–500 ugentligt aktive. |
 | `A33` | Er dagsmotorens variation tyndere, end regelantallet lover? | **Når vis-bare dagskort har visninger.** `G73` (5. august 2026) rettede MÅLINGEN og ikke synligheden: de 197 efterfyldte dagskort kan stadig ikke vises, de tælles bare ikke længere i nævneren. Fremadrettede dagskort skrives inde i deres egen runde og ER vis-bare, så udløseren kan nu aflæses direkte — vis-bar > 0 og vist > 0 for dagsreglerne i Analytics. `DAY_RESULT` alene er 123 af 280 historier (44 %). |
@@ -721,6 +169,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | A23 | **Skal appen have en router?** | Navigation er i dag to `useState` i `MainApp.jsx` (`tab` + `screen`), og deep links læses ved boot og strippes straks via `history.replaceState` (`App.jsx:104`, `MainApp.jsx:215,239`). Følgen er ingen tilbage-knap, ingen browser-historik og ingen delbare URL'er til interne skærme — mærkbart for en PWA, hvor telefonens tilbage-gestus forventes at virke. Men det er et arkitekturvalg, ikke en fejl: afhængighedsfattigheden er bevidst (fire runtime-deps, ingen router, `docs/reviews/2026-08-app-review.md` §7), og en router omskriver hele navigations-tilstandsmaskinen inkl. begge deep-link-join-flows, som ingen test dækker. | Når tilbage-knappen enten koster brugere (kan aflæses i analytics) eller en feature kræver ægte delbare interne URL'er — `I12`s offentlige ligaside er den første, der ville. |
 | A27 | **Skal `competitions.rules` droppes?** | Efter `G3` (3. august 2026) har kolonnen **ingen læsere overhovedet** — hverken i klienten, som holdt op med at skrive den, eller i SQL, hvor `pc_points()` altid har hardkodet 3/1. Den står altså tilbage som ren historik i hver eneste konkurrence-række. Men et `drop column` er uigenkaldeligt, og spørgsmålet bagved er et **produktspørgsmål og ikke en oprydning**: skal point nogensinde kunne variere pr. konkurrence? Siges ja, er kolonnen den halve implementering af noget, der skal bruges igen; siges nej, er den støj, der får den næste læser til at lede efter en konfigurerbarhed, som ikke findes — præcis den omkostning, `G3` blev kørt for at fjerne. Prisen ved at lade den stå er lav og løbende; prisen ved at fjerne den forkert er, at en fremtidig pointvariation skal bygge sit skema forfra. | Når produktet svarer på, om point skal kunne variere pr. konkurrence — ikke før. Indtil da koster kolonnen kun plads. |
 | A26 | **`ambiguousTeams`: godkendte par eller accepteret støj?** | Feltet i sync-resuméet er bygget på egenskaben *"kun til stede, når der ER noget at kigge på"* — og den holder ikke længere for Scotland: `Dundee` ligger inde i `Dundee United`, begge klubber bliver i Premiership, og feltet er derfor permanent tændt med et par, der allerede er afgjort som en ægte navnelighed (2. august 2026, [`features/turnering-2.md`](./features/turnering-2.md)). Et felt, der altid er der, holder man op med at læse — og så er kontrollen reelt væk, netop når turnering #8 tilføjer et par, ingen har set før. To veje: en liste over **godkendte** par (`Dundee`/`Dundee United`), så feltet igen kun melder det nye, eller en accept af, at dette ene felt læses med et kendt par i baghovedet. Den første koster en liste, der skal vedligeholdes pr. turnering; den anden koster kontrollens troværdighed. | Ved turnering #3 — det er dér, det viser sig, om det ene par er en undtagelse eller et mønster. |
+| A39 | **Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat?** | `match_day_complete()` er global: den kræver, at ALLE kampe på dagen har resultat, uanset turnering og uanset konkurrence. Én udsat eller uindberettet kamp i én turnering blokerer derfor dagskortet for hver eneste bruger, også dem, hvis konkurrencer slet ikke rører den turnering. **Prisen er bevidst og dokumenteret** — den globale kampdag er produktets ene tvær-turneringsbegreb, og et kort pr. konkurrence ville skulle vælge, hvilken dag der er *dagen* — men den blev betalt synligt under `A38`s undersøgelse, hvor det tog tid at afgøre, om stilheden var en fejl eller en ventende kamp. **To veje:** afgrænse fuldførtheden til de kampe, modtagerens egne konkurrencer dækker (kortet bliver personligt og kan skrives på forskellige tidspunkter for forskellige brugere), eller beholde den globale dag og gøre blokeringen aflæselig, så stilheden kan skelnes fra en fejl. Den første koster determinismen i acceptkriterie 7; den anden koster ingenting og løser heller ikke noget. | **Når `sql/checks/day_card_coverage.sql` melder en blokeret dag, nogen faktisk savnede.** Kontrollen findes siden `A38` og er dermed selve udløseren — indtil den melder noget, er problemet teoretisk. |
 
 ## Ubygget
 
@@ -737,6 +186,10 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
 | G85 | **`kickoff_tbd` kan aldrig blive sand for tre af fem football-data-turneringer, og `G84`s kontrol er blind for netop dem.** | Aflæst 7. august 2026 mod leverandøren, fire turneringer, 1.446 kampe ([reviews/football-data-kickoff-aflaesning-2026-08-07.md](./reviews/football-data-kickoff-aflaesning-2026-08-07.md)). Bundesliga har begge markører rene — `TIMED` vs. `SCHEDULED`, og 261 af 306 kampe med midnat. **Premier League, Primera División og Serie A har ingen af dem:** nul midnat i 1.140 kampe, og `SCHEDULED` på hver eneste af dem, også dem med rigtige tider. Leverandøren sender i stedet et opdigtet klokkeslæt — turneringens typiske anspilstid lokalt frem til nytår, 12:00 UTC derefter. **Det er værre end fejlen fra 2.–6. august, ikke bedre.** Dengang stod alle kampe som "Tid ikke fastlagt", hvilket er synligt forkert; nu viser appen et konkret klokkeslæt for hver kamp fra oktober og frem i tre af Europas fem største rækker, uden noget sted, der markerer det som usikkert. Låsen sættes efter et tidspunkt, leverandøren har fundet på. **Følgeskaden er, at `sql/checks/kickoff_coverage.sql` (`G84`) ikke kan se det:** kontrollen leder efter en turnering, hvor ALLE nære kampe mangler tid, og det kan ikke ske, når flaget aldrig sættes. Kontrollen er grøn for præcis de turneringer, der er ramt. **To kandidater, ingen valgt:** (a) genkend pladsholderværdierne pr. turnering — virker, men er kalibrerede tal uden data at kalibrere på, samme indvending som `A35`; (b) sammenlign med forrige synkronisering, da vi kører hver 12. time og allerede gemmer `kickoff_at` — en tid, der ændrer sig, var ikke fastsat, hvilket kræver hverken tærskel eller antagelser om leverandøren, men først svarer bagudrettet og koster en kolonne. **Fire formodninger er allerede prøvet af og forkastet** (`status`, midnat som universel regel, formen på en runde, `lastUpdated`) — se aflæsningen, og lad være med at prøve dem igen. CL mangler at blive aflæst; sæsonen fandtes ikke hos leverandøren pr. 1. august (`B8`). | Mellem |
+| G87 | **Rundestoryens afløsning er per bruger og ikke per konkurrence.** | `roundStorySuperseded()` (`A38`) trækker rundekortet, når den runde, Hjem viser som indeværende, er strengt senere end storyens og har mindst ét resultat. "Indeværende runde" er brugerens, ikke kortets konkurrence — så et resultat i én turnering kan trække rundekortet for en konkurrence i en anden, hvis runde stadig er den nyeste dér. Retningen er den skånsomme (kortet forsvinder for tidligt frem for at stå og lyve), og det er derfor rækken er gæld og ikke en fejl. Præcist ville kræve et opslag pr. `story.competition_id` — altså N opslag, hvor der i dag er ét, og det er hele afvejningen. | Lille |
+| G89 | **`DAY_RESULT`- og `DUEL`-teksterne i `sql/story_engine_v3.sql` står i nutid.** | "Du ligger nr. 3 af 8" og "Kun N point op til R" er påstande om nuet, skrevet ind i et kort, der lever i 48 timer — samme fejltype som de tre runde-regler, `A38` satte i datid. Forskellen, der gør den mindre og ikke ufarlig: dagskortet er kortlivet OG dateret (`Kampdag 03.08` står i øjenbrynet siden `A38`), så konteksten er der, mens sætningen selv modsiger den. Rettelsen er tekst og ingen migrering — `stories`-rækkerne bærer den færdige streng, så gamle kort beholder den gamle formulering, og de er væk af sig selv inden for to døgn. | Lille |
+| G90 | **`generate_stories_catchup()`s runde-løkke er uden loft og uden selvterminering.** | Dagsløkken fik i `A38` to betingelser, der gør den selvafsluttende, plus `limit 20` — netop fordi der findes dage, som ALDRIG kan få et kort, og som ellers ville blive forsøgt igen ved hver kørsel og æde loftet. **Runde-løkken lige nedenunder har hverken loft eller de betingelser:** den tager hver `round_key`, hvis vindue er lukket og som mangler sit kort, og en runde, der ikke kan producere en historie (fx en hvis kampe ikke indgår i nogen konkurrence), kvalificerer sig igen ved hver eneste notifikations-kørsel — 48–96 gange i døgnet, for evigt. Prisen i dag er spildt arbejde og ikke forkerte data, og tidsfiltret (`round_key < v_today - 7 - p_grace`) er den eneste grund til, at det ikke vokser. **Præeksisterende — ikke indført af `A38`**, som kun rørte dagsløkken. Rettelsen er den samme kur: en betingelse, der udelukker runder uden konkurrence-kampe, og et loft. | Lille |
+| G91 | **`sql/tests/liga_admin.sql` og `sql/tests/account_anonymization.sql` bygger deres eget minischema.** | Begge tester funktioner, hvis rigtighed afhænger af tabeller, de selv opfinder — så de kan stå grønne i CI, mens funktionen fejler mod produktionens skema. `account_anonymization.sql` siger det selv i sit hoved ("⚠️ Deltagelses-påstanden gælder DENNE FILS krop og ikke produktionens"), hvilket er ærligt og ikke en løsning. **Vejen er allerede banet og har fire aftagere:** `sql/tests/_schema.mjs` (udskilt ved `G82`) bygger det RIGTIGE skema fra `sql/schema.sql`, og `A36`/`A37`s mutationstest kørte mod netop det — hvor `Testligaen` gik fra `INGEN LEVENDE ADMIN` til `ok`, en overgang minischemaet ikke kunne have vist. Prisen er kørselstid: `G82`s simulator-trin tog ~10 sekunder og er jobbets tungeste. | Lille |
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
 
@@ -769,7 +222,54 @@ steder — og fordi en forkastet idé ellers bliver foreslået igen.
 
 | Dato | Idé | Hvorfor ikke |
 |---|---|---|
+| 8. august 2026 | **Skrive feltets størrelse i dagskortets mini-stilling** — "3. Cecilie" siger ikke, om det er af 4 eller af 40, og `league_size` står allerede på rækken. | **Tallet er bevidst skjult for præcis de brugere, mini'en ville vise det til.** `DAY_RESULT`s brødtekst skriver "Du ligger nr. 3 af 8" **kun når `a.rnk * 2 <= sz.n`** — altså i den øverste halvdel; nederst siger den i stedet "Toppen er N point væk". Det er designreglen *"historier driller, men ydmyger aldrig"* fra v1, håndhævet i `sql/story_engine_v3.sql`. En mini-stilling vises til alle, så en nævner dér ville sige "nr. 7 af 8" til den, motoren netop har valgt ikke at sige det til — og for den øverste halvdel ville den gentage en oplysning, der står to linjer højere oppe. Placeringen selv er i øvrigt allerede synlig i mini'en; det er kun nævneren, der mangler, og det er den, reglen handler om. Skal noget laves om, er det brødtekstens regel og ikke mini'en — og dét er en anden diskussion end den, linjen rejste. |
 | 4. august 2026 | **Give `manifest.json` et `short_name`, der er kortere end `name`** — i dag er begge "Leagly". | `short_name` findes for at have et alternativ, når `name` er for langt til pladsen under et ikon. "Leagly" er seks tegn og bliver ikke afkortet nogen steder, så et kortere alternativ ville ikke være en forbedring, men et **andet navn** for det samme produkt — og navneskiftet 4. august 2026 blev netop kørt i ét hug for at sikre, at kun ét navn figurerer. To identiske værdier er det rigtige svar her og skal ikke læses som et udfyldningsfelt, nogen glemte. Bliver navnet nogensinde længere, opstår spørgsmålet af sig selv. |
+
+---
+
+## Log — seneste kørsel
+
+**Kun den nyeste står her.** Skriver du en ny, sletter du den forrige — arkivet
+er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
+at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
+kan se, hvad der lige er sket, uden at læse hele listen.
+
+### 8. august 2026 (sent) — indbakken tømt: én rettet med det samme, én forkastet
+
+**Listen er uændret på 36, og ingen af de to linjer blev til en række.** Det er
+ikke fordi de var små, men fordi de var to forskellige slags: den ene var et
+stykke arbejde, hvor selve undersøgelsen ER svaret, og den anden var et forslag,
+der kolliderede med en regel, produktet allerede har truffet.
+
+**`sql/README.md`s filindeks manglede v3 — og det var to filer, ikke én.**
+`story_engine_v3.sql` og `story_engine_v3_cleanup.sql` blev begge oprettet
+7. august og aldrig ført ind i tabellen; de er nu #47 og #48. **Nummeret er
+højere end filernes alder**, og det står skrevet i rækken: en omnummerering
+ville flytte de numre (`#8`, `#34`, `#38`), som resten af dokumentationen
+henviser til, og prisen for det er højere end prisen for en forklaring.
+Rækkerne er skrevet nu, fordi `G88` efterlod et 🔴 om at gen-køre netop den fil,
+og et 🔴 uden en indeksrække er en instruktion uden kørerækkefølge.
+
+**Eftersynet var bredere end linjen og fandt to ting til**, som er rettet i samme
+ombæring: overskriften "Ni filer må ikke gen-køres blindt" stod over en brødtekst,
+der sagde "Alle **syv**" — listen var vokset, sætningen ikke — og testafsnittet
+skrev, at `story_engine_daily.sql` dækker "Story Engine **v2's** dagsmotor". Den
+har dækket v3 siden 7. august og har nu femten påstande. Fire andre filer stod
+ikke i tabellen ved første optælling, men det viste sig at være min egen
+søgning: tre af dem står med `—` frem for et nummer, og `schema.sql` har sit eget
+afsnit. **Kun v3's to var reelt væk.**
+
+**Mini-stillingens feltstørrelse er forkastet, og begrundelsen er den, der gør
+den værd at gemme:** tallet er bevidst skjult for præcis de brugere, mini'en
+ville vise det til. `DAY_RESULT`s brødtekst skriver "Du ligger nr. 3 af 8" **kun**
+når man er i den øverste halvdel; nederst siger den "Toppen er N point væk" i
+stedet. Det er v1's designregel *"driller, men ydmyger aldrig"*, håndhævet i
+SQL'en. En nævner i mini'en ville sige "nr. 7 af 8" til den, motoren netop har
+valgt ikke at sige det til — og gentage sig selv for alle andre. **Linjens
+præmis var rigtig** (tallet mangler), **og dens konklusion var forkert**, fordi
+den ikke kendte reglen bagved. Det er tredje gang på én dag, at en indbakke-linje
+skulle prøves mod koden frem for læses: `G88`s felt fandtes ikke, `G86`s
+optælling var for lav, og denne foreslog noget, der allerede var besluttet fra.
 
 ---
 
