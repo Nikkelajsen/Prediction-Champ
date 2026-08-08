@@ -86,8 +86,17 @@ function statusOf(m) {
 // måned kun har én af dem — men de er ikke kendelige på noget felt i svaret.
 //
 // Funktionen returnerer altså `false` for hver eneste PL-, PD- og SA-kamp fra
-// oktober og frem, og appen viser leverandørens gæt som et fastsat klokkeslæt.
-// Rettelsen er ikke besluttet endnu; de to kandidater står i `G85`.
+// oktober og frem — og det gør den STADIG. `G85` (8. august 2026) valgte ikke at
+// rette den her, og det er en beslutning og ikke en udeladelse: markøren i denne
+// funktion er leverandørens EGEN, den er aflæst, og for Bundesliga er den ren.
+// Der findes ikke et felt hos PL, PD og SA at læse den af.
+//
+// Rettelsen ligger i stedet ét lag længere inde, hvor der er noget at se på:
+// `matches.kickoff_uncertain` lærer turneringens pladsholder-klokkeslæt af de
+// tider, der HAR flyttet sig mellem to synkroniseringer, og markerer resten
+// (sql/matches_kickoff_uncertain.sql). Markøren er display-only — låsen og
+// påmindelserne er upåvirkede, modsat `kickoff_tbd`, hvis tre virkninger var
+// grunden til, at den ikke blev genbrugt.
 //
 // CL er ikke aflæst: sæsonen 2026 fandtes ikke hos leverandøren pr. 1. august
 // (`B8`). Gentag aflæsningen, når ligafasen er lodtrukket.

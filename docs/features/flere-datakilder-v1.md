@@ -374,9 +374,20 @@ live slået til", hvilket er præcis den verden, migreringen endnu ikke har
 **Status: UDFØRT 7. august 2026 — men ikke ad denne vej, og svaret var et andet
 end de tre, guiden forudså.** Resultatet står i
 [`../reviews/football-data-kickoff-aflaesning-2026-08-07.md`](../reviews/football-data-kickoff-aflaesning-2026-08-07.md),
-og den åbne rest hedder nu `G85`. Guiden bliver stående af to grunde: den skal
+og den åbne rest hed `G85`. Guiden bliver stående af to grunde: den skal
 gentages for Champions League, når ligafasen er lodtrukket, og trinnene er de
 samme, næste gang en leverandørs markør skal efterprøves.
+
+**`G85` er lukket 8. august 2026, og rettelsen ligger IKKE i providerlaget.**
+`kickoffTbdOf()` returnerer stadig `false` for hver eneste Premier League-,
+Primera División- og Serie A-kamp, fordi der ikke findes et felt hos
+leverandøren at læse tiden af. I stedet bærer `matches.kickoff_uncertain`
+svaret: en trigger gemmer den forrige `kickoff_at`, og
+`refresh_kickoff_uncertain()` lærer turneringens pladsholder-klokkeslæt af de
+tider, der har flyttet sig mellem to kørsler (mindst tre fra samme UTC-tid,
+`G84`s gulv), og markerer de øvrige kampe på det klokkeslæt. Markøren er
+**display-only** — låsen og deadline-påmindelserne er upåvirkede, modsat
+`kickoff_tbd`. Hele begrundelsen står i `sql/matches_kickoff_uncertain.sql`.
 
 > **Det, aflæsningen gjorde anderledes — og bedre.** Guiden nedenfor går gennem
 > `?dryRun=true`, altså gennem VORES normalisering. Aflæsningen gik uden om

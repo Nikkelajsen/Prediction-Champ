@@ -11,7 +11,7 @@
 // eneste kamp), og en for smal gør Champions League rød i seks uger for noget
 // forventeligt. Begge fejl ender samme sted — at ingen kigger på driftsloggen.
 import { describe, it, expect } from "vitest";
-import { seasonFetchVerdict, ambiguousTeamNames, normalizeTeamName, matchUpsertRow, readSeasonMeta } from "./sync-matches.js";
+import { seasonFetchVerdict, ambiguousTeamNames, normalizeTeamName, matchUpsertRow, readSeasonMeta, refreshKickoffUncertain } from "./sync-matches.js";
 
 const fejl = new Error("football-data.org: 404 {\"message\":\"The resource you are looking for does not exist.\"}");
 
@@ -202,5 +202,39 @@ describe("readSeasonMeta", () => {
   it("svarer null i stedet for at kaste, når opslaget fejler", async () => {
     const provider = { key: "x", fetchSeasonMeta: async () => { throw new Error("429"); } };
     await expect(readSeasonMeta(provider, {})).resolves.toBeNull();
+  });
+});
+
+// G85. Reglen selv bor i SQL og er dækket af sql/tests/kickoff_uncertain.sql;
+// det, der prøves her, er de to ting, JS-siden er ansvarlig for — at kaldet
+// rammer den rigtige funktion med den rigtige parameter, og at et svar, der
+// fejler, ikke kan vælte en kørsel, hvor kampene ellers kom rigtigt hjem.
+//
+// Den anden halvdel er den vigtige. Markeringen rører KUN visningen, så en
+// undtagelse herfra ville koste hele synkroniseringen for at redde et
+// klokkeslæt, ingen mister et tip på.
+describe("refreshKickoffUncertain", () => {
+  it("kalder funktionen med sæsonens id og giver tallet videre", async () => {
+    const kald = [];
+    const sb = async (path, opts) => { kald.push({ path, opts }); return 3; };
+    await expect(refreshKickoffUncertain(sb, "s-1")).resolves.toEqual({ marked: 3 });
+    expect(kald).toHaveLength(1);
+    expect(kald[0].path).toBe("/rest/v1/rpc/refresh_kickoff_uncertain");
+    expect(kald[0].opts.method).toBe("POST");
+    expect(JSON.parse(kald[0].opts.body)).toEqual({ p_season_id: "s-1" });
+  });
+
+  it("bærer fejlen ud i stedet for at kaste", async () => {
+    const sb = async () => { throw new Error("Supabase /rest/v1/rpc/...: 404 not found"); };
+    const r = await refreshKickoffUncertain(sb, "s-1");
+    expect(r.marked).toBe(0);
+    expect(r.error).toContain("404");
+  });
+
+  it("tæller nul, når funktionen svarer noget, der ikke er et tal", async () => {
+    // Sådan ser det ud, hvis migreringen ikke er kørt i produktion endnu og
+    // PostgREST svarer tomt: nul markerede, ingen fejl, kørslen går videre.
+    const sb = async () => null;
+    await expect(refreshKickoffUncertain(sb, "s-1")).resolves.toEqual({ marked: 0 });
   });
 });
