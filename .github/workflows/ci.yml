@@ -368,6 +368,32 @@ jobs:
           psql -h localhost -U postgres -d ratingfresh -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d ratingfresh -v ON_ERROR_STOP=1 -b -f sql/tests/rating_freshness.sql
 
+      # De ubekræftede klokkeslæt (G85). Kører mod det RIGTIGE skema af tre
+      # grunde, som et miniskema ikke kan levere: triggeren, der gemmer den
+      # forrige tid, ligger på `public.matches` SAMMEN med de tre statement-level
+      # rating-triggere; `analytics_match_locks` er det view, påstanden om låsen
+      # læses af; og `round_key`/`match_day` er genererede kolonner oven på
+      # tidszonelogikken. `G91` er en hel backlog-række om, hvad et miniskema
+      # koster her.
+      #
+      # Påstand 8 er den, der bærer selve beslutningen: markøren er DISPLAY-ONLY,
+      # og låsen skal give præcis samme svar før og efter markeringen. Havde vi
+      # genbrugt `kickoff_tbd`, ville den påstand have fejlet med 16 timer.
+      #
+      # Testen er selv efterprøvet ved at mutere migreringen ni gange — gulvet i
+      # begge retninger, begge sæsonfiltre, den lærte kolonne, ryddegrenen,
+      # triggerens betingelse og tidssammenligningen — og se den fange hver
+      # enkelt. To af de ni slap igennem den første udgave og gav fixturen en
+      # Serie A-kamp mere og migreringen én betingelse mindre.
+      - name: Test af de ubekræftede klokkeslæt
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database kickoffuncertain;'
+          psql -h localhost -U postgres -d kickoffuncertain -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d kickoffuncertain -v ON_ERROR_STOP=1 -b -f sql/tests/kickoff_uncertain.sql
+
       # Rydningen af analytics_events (G77). Et `delete` mod brugerdata, hvor
       # hele sikkerheden ligger i én sammenligning — og en fejl i den er ikke en
       # fejlbesked, men en tom tabel. Testen prøver begge retninger og gulvet.

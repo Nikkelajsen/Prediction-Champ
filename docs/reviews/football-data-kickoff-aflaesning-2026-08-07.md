@@ -152,6 +152,25 @@ at aflæsningen kom før designet.
 
 Ingen af de to er besluttet her — det hører til i `G85`.
 
+> **Rettelse efter levering, 8. august 2026: B er valgt og bygget.** Afsnittet
+> bliver stående som det stod, fordi det er dét, aflæsningen kunne se — men to
+> ting flyttede valget, og de var ikke kendt, da linjerne blev skrevet.
+>
+> **Låsen var aldrig i fare.** `public.match_lock_at()` og `lockAtOf()` regner
+> den ved HVER læsning ud fra rækkens nuværende `kickoff_at`, så en rettet tid
+> retter låsen af sig selv. Skaden er displayet af fjerne kampe, ikke
+> tipsvinduet — og dermed skulle A bære en risiko, der ikke fandtes.
+>
+> **A's indvending er værre end noteret her.** Efterårspladsholderen ER
+> turneringens typiske anspilstid, så en tabel over pladsholderværdier ville
+> markere ægte kampe på netop de klokkeslæt, de rigtigt spilles på.
+>
+> B fik desuden en generalisering, afsnittet ikke forudså: flytningerne læres
+> pr. turnering (mindst tre fra samme UTC-klokkeslæt, `G84`s gulv), så de
+> øvrige kampe på det klokkeslæt markeres uden selv at have flyttet sig.
+> Markøren er `matches.kickoff_uncertain` og er display-only. Se
+> `sql/matches_kickoff_uncertain.sql`.
+
 **A. Genkend pladsholderværdierne.** Kræver en tabel over hver turnerings
 efterårs- og forårspladsholder og en beslutning om, hvad der sker, når
 leverandøren ændrer dem. Det er kalibrerede tal uden data at kalibrere på —

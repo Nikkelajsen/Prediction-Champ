@@ -268,12 +268,24 @@ function modeLabel(mode, modeParams) {
 // `tbd` udelader klokkeslættet: er kampens tid ikke fastlagt, bærer kickoff_at
 // kun en dato, og et påhæftet "kl. 02.00" ville være opdigtet. Datoen står
 // stadig — den ER kendt.
-function formatKickoff(iso, tbd = false) {
+//
+// `uncertain` (G85) er den svagere af de to og gør noget andet: klokkeslættet
+// BLIVER stående, fordi det er brugbart at planlægge efter, og får i stedet
+// sagt højt, at leverandøren ikke har bekræftet det. Er begge sat, vinder
+// `tbd` — "der er ingen tid" gør spørgsmålet om bekræftelse ligegyldigt.
+//
+// Formuleringen er den lange her og et `~` på tip-skærmen (screens/predictions/
+// time.js). Det er ikke to begreber, men to pladsbudgetter: denne funktion
+// bruges i Admin → Kampe, Admin → Resultater og kampvælgeren, hvor der er en
+// hel kolonne at skrive i, mens tid-kolonnen på tip-skærmen er ~40 px bred og
+// bærer sin forklaring i dagsoverskriften i stedet.
+function formatKickoff(iso, tbd = false, uncertain = false) {
   if (!iso) return "";
   const d = new Date(iso);
   const date = d.toLocaleDateString("da-DK", { timeZone: APP_TZ, weekday: "short", day: "2-digit", month: "2-digit" });
   if (tbd) return date;
-  return date + " kl. " + d.toLocaleTimeString("da-DK", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit" });
+  const tid = date + " kl. " + d.toLocaleTimeString("da-DK", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit" });
+  return uncertain ? tid + " (ikke bekræftet)" : tid;
 }
 const LOCK_LEAD_MS = 60 * 60 * 1000; // 1 time før kampens eget kickoff
 

@@ -20,6 +20,37 @@
 -- nært forestående kampe fra "har tid" til "har ikke tid", er det en påstand om
 -- vores egen aflæsning af leverandøren, ikke om terminslisten.
 --
+-- HVORFOR DEN OGSÅ TÆLLER `kickoff_uncertain` (G85, august 2026)
+-- Fordi kontrollen indtil da var GRØN for præcis de turneringer, den var mest
+-- brug for. Aflæsningen 7. august viste, at Premier League, Primera División og
+-- Serie A ikke får en pladsholder fra football-data.org, men et OPDIGTET
+-- klokkeslæt — og `kickoff_tbd` kan derfor aldrig blive sand for dem. En kontrol,
+-- der leder efter "alle nære kampe mangler tid", kan ikke se en fejl, hvor tiden
+-- er der og bare er forkert.
+--
+-- `kickoff_uncertain` (sql/matches_kickoff_uncertain.sql) er markøren for netop
+-- det: klokkeslættet er sandsynligvis leverandørens gæt. Den er DISPLAY-ONLY og
+-- flytter ingen lås — men her er den den eneste kolonne, der overhovedet kan
+-- lyse for de tre turneringer.
+--
+-- 🔴 MIGRERINGEN SKAL VÆRE KØRT, FØR DENNE FIL LÆSES MOD PRODUKTION.
+-- `job-heartbeat.yml` kører den hvert 30. minut, og uden kolonnen fejler trinnet
+-- med `42703: column m.kickoff_uncertain does not exist` hver eneste gang. Det
+-- er en rækkefølge og ikke en risiko — men den er let at glemme, fordi
+-- migreringen køres i hånden, mens kontrollen deployes med koden.
+--
+-- De to tilstande holdes ADSKILT og lægges ikke sammen. "Ingen tid" og "en tid,
+-- vi ikke tror på" har forskellige årsager og forskellige rettelser: den første
+-- peger på aflæsningen af leverandørens markør, den anden på, at leverandøren
+-- aldrig nåede at bekræfte tiden. En sammenlagt kolonne ville have gjort begge
+-- svar uleselige.
+--
+-- HVORFOR DEN NYE TILSTAND OGSÅ ER 100 %
+-- Samme argument som nedenfor, og den er endda snævrere: markeringen rydder sig
+-- selv, så snart leverandøren sætter den rigtige tid, og syncen kører hver 12.
+-- time. En hel turnering, der ti dage før kampene STADIG kun bærer indlærte
+-- pladsholdere, betyder, at bekræftelsen aldrig kom.
+--
 -- HVORFOR 100 % OG IKKE EN ANDEL
 -- En andel kræver en tærskel, og vi har ingen data at kalibrere den på — præcis
 -- den slags ukalibrerede tal, `A35` står i backloggen for. 100 % er den eneste
@@ -56,14 +87,15 @@
 -- Kør lokalt eller mod produktion:
 --   psql "$SUPABASE_DB_URL" -q -At -F'|' \
 --     -f sql/checks/kickoff_coverage.sql \
---     -c 'select liga, provider, kommende, uden_tid, tilstand from kickoff_coverage order by liga'
+--     -c 'select liga, provider, kommende, uden_tid, ubekraeftet, tilstand from kickoff_coverage order by liga'
 
 -- `or replace`, så filen kan læses to gange i samme session uden at fejle.
 create or replace temporary view kickoff_coverage as
 with kommende as (
   select l.name     as liga,
          l.provider as provider,
-         m.kickoff_tbd
+         m.kickoff_tbd,
+         m.kickoff_uncertain
     from public.matches m
     join public.seasons s on s.id = m.season_id
     join public.leagues l on l.id = s.league_id
@@ -83,9 +115,14 @@ select liga,
        provider,
        count(*)::int                                    as kommende,
        count(*) filter (where kickoff_tbd)::int         as uden_tid,
+       count(*) filter (where kickoff_uncertain)::int   as ubekraeftet,
        case
          when count(*) < 3                              then 'for faa'
+         -- Rækkefølgen er ikke tilfældig: en kamp kan i princippet bære begge
+         -- markører, og "ingen tid overhovedet" er den værre af de to at melde
+         -- forkert. Den står derfor først.
          when count(*) filter (where kickoff_tbd) = count(*) then 'ALLE UDEN TID'
+         when count(*) filter (where kickoff_uncertain) = count(*) then 'ALLE UBEKRAEFTEDE'
          else 'ok'
        end                                              as tilstand
   from kommende

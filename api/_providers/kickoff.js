@@ -14,7 +14,11 @@
 //     bærer rigtige tider og står `TIMED`. Markøren er ægte og konsistent.
 //   · Premier League, Primera División, Serie A: **nul** af 1.140 kampe bærer
 //     midnat. Alle 1.140 står `SCHEDULED`. Denne funktion returnerer derfor
-//     ALDRIG true for dem, og `kickoff_tbd` er permanent falsk (`G85`).
+//     ALDRIG true for dem, og `kickoff_tbd` er permanent falsk. Det er stadig
+//     tilstanden efter `G85`, og med vilje: de tre turneringer dækkes i stedet
+//     af `matches.kickoff_uncertain`, som ikke leder efter en markør hos
+//     leverandøren, men efter tider, der flytter sig mellem to kørsler
+//     (sql/matches_kickoff_uncertain.sql).
 //
 // Funktionen er altså ikke forkert — den er ufuldstændig, og den fejler tavst
 // for de tre turneringer, hvor den ikke rammer. Rettelsen hører i den enkelte
