@@ -1,6 +1,14 @@
 <!--
   Supabase Auth → Email Templates → "Reset Password" (B25).
 
+  EMNE: Nulstil din adgangskode
+
+  Emnet er et SEPARAT felt i Supabase, over brødteksten — og det er nemt at
+  glemme, når man kopierer HTML'en. Første leverede mail 9. august 2026 kom
+  frem med Supabases engelske standard, "Reset your password", oven på en dansk
+  brødtekst. Emnet står derfor her sammen med teksten, det hører til, og
+  templates.test.js kræver, at linjen findes.
+
   Teksten bor HER og pastes ind i Supabase, af samme grund som migreringerne i
   sql/ gør det: så den findes ét sted og kan ses i en diff. Supabase har ingen
   import, så trin 4 i docs/MAIL.md er copy-paste — og en ændring her er ikke

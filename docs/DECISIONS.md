@@ -45,19 +45,33 @@ afsender, ingen kan svare på, eller en postkasse, der sender transaktionsmails.
 De har hver sin leverandør, og `noreply@` oprettes bevidst **ikke** som
 postkasse: at svar bouncer er den rigtige adfærd.
 
-**Hvorfor de to kan dele ét domæne.** Alt, hvad Resend har brug for, ligger under
-`send.leagly.app` — MX, SPF og DKIM. Roden er Microsofts alene. Den eneste
-fælles post er DMARC. Det er ikke en tilfældighed, man kan læne sig på uden at
+**Hvorfor de to kan dele ét domæne.** Resends MX og SPF ligger under
+`send.leagly.app`, og dens DKIM ligger på roden under sin egen selector
+(`resend._domainkey`), som Microsofts to (`selector1`/`selector2`) ikke hedder.
+Den eneste fælles post er DMARC.
+
+> **Rettet 9. august 2026, samme dag.** Denne beslutning blev skrevet med
+> "alt, hvad Resend har brug for, ligger under `send.leagly.app` — MX, SPF og
+> DKIM", udledt af Resends dokumentation, fordi egress-proxyen blokerer
+> `resend.com` fra arbejdsmaskinen. Panelet viser noget andet: DKIM ligger på
+> roden. **Konklusionen holder — der er stadig ingen kollision — men
+> begrundelsen var gættet, og gættet var forkert.** Sætningen står rettet frem
+> for omskrevet, fordi forskellen mellem "aflæst" og "set" er hele pointen med,
+> at runbogen mærkede tallene som antagelser. Det er ikke en tilfældighed, man kan læne sig på uden at
 skrive den ned: den nærliggende fejl er at lægge Resends SPF som en **anden**
 TXT-post på roden ved siden af Microsofts, og to SPF-poster på samme navn er
 `permerror` — hvorefter *begge* afsendere fejler på én gang. Advarslen står i
 `MAIL.md` med 🛑, fordi den vælter mere, end den ser ud til.
 
-**DMARC skal blive på relaxed alignment.** Resend signerer med
-`d=send.leagly.app`, mens afsenderen er `noreply@leagly.app`. Relaxed accepterer
-underdomænet; strict gør ikke, og så fejler DMARC, selv om både SPF og DKIM
-består hver for sig. En stramning, der ligner en forbedring og er en fejl, hører
-til i en beslutningslog.
+**DMARC bør blive på relaxed alignment.** Med DKIM på roden signerer Resend som
+`leagly.app` og aligner direkte, mens SPF kun aligner relaxed (Return-Path er
+`send.leagly.app`). DMARC kræver kun, at én af de to aligner, så den består
+begge veje — strict ville altså ikke vælte noget her. *(Denne post påstod
+oprindeligt det modsatte, af samme grund som ovenfor: den byggede på, at DKIM
+signerede med `d=send.leagly.app`.)* Relaxed er stadig det rigtige valg, fordi
+det er standarden og fordi strict gør opsætningen skrøbelig over for næste
+afsender — men det er en anbefaling, ikke et krav, og forskellen er værd at
+holde ren.
 
 **Skabelonerne bor i repoet.** `docs/mail/recovery.html` og
 `confirm-signup.html`, pastet ind i Supabase — samme mønster som
@@ -67,11 +81,17 @@ har pastet den ind igen; det står i runbogen. `confirm-signup.html` bruges før
 ved `B26`, men skrives nu, så dén række bliver ét klik frem for at have en
 skjult tekstopgave i sig.
 
-**Leverancen er ikke færdig, når den er merget.** Selve opsætningen ligger uden
-for repoet, og registeret i `MAIL.md` starter med `?` i hver `Sidst
-verificeret`-celle. Rækken er først lukket, når de fire kontroller i "Bevis, at
-det virker" er gået igennem — og den tredje, at linket faktisk åbner
-nulstillingsskærmen, er den eneste, der ikke kan snydes.
+**Leverancen var ikke færdig, da den blev merget** — selve opsætningen ligger
+uden for repoet, og registeret i `MAIL.md` startede med `?` i hver `Sidst
+verificeret`-celle. **Den er det nu:** alle fire kontroller bestod samme dag,
+inklusive den tredje, som er den eneste, der ikke kan snydes — at linket faktisk
+åbner nulstillingsskærmen.
+
+At skellet blev holdt, viste sig at være det værd. Kørslen fandt **tre** ting,
+dokumentationen havde gættet eller sprunget over: DKIM-postens placering (gættet
+forkert), GoDaddys konflikt ved håndindtastning, og at emnelinjen er et separat
+felt, som bliver stående på Supabases engelske standard. Ingen af dem kunne være
+fundet fra repoet.
 
 ---
 
