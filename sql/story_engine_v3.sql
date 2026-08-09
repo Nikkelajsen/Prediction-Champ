@@ -145,6 +145,45 @@ begin
     return;
   end if;
 
+  -- ---------- En dag, der stadig spilles, får intet kort ----------
+  -- REGLEN HAR ALTID VÆRET PRODUKTETS, MEN LÅ IKKE HER (august 2026). Kravet
+  -- "dagens sidste kamp er færdigspillet" stod ét eneste sted: matches-triggeren
+  -- i sql/rating_trigger_optimization.sql, som spørger `match_day_complete()`
+  -- FØR den kalder herind. Motoren selv spurgte aldrig.
+  --
+  -- Det holdt, så længe triggeren var eneste vej ind. Det er den ikke: motoren
+  -- har fem kaldere — triggeren, bagstopperen `generate_stories_catchup()`,
+  -- story_engine_v2_backfill.sql, story_engine_v2_measure.sql og manuelle kald.
+  -- Fire af dem tjekker selv. Bagstopperen gjorde ikke, og dens dagsløkke
+  -- filtrerer kun pr. KAMP (`home_score is not null`), så ÉN færdigspillet kamp
+  -- kvalificerede hele dagen. Den kaldes ved hver notifikations-kørsel, altså
+  -- hvert 15.-30. minut, og skrev derfor dagens kort midt på kampdagen med tal
+  -- beregnet på en halv dag: `_sd_today` tæller de af dagens kampe, der HAR et
+  -- resultat, ikke de kampe, dagen har. Aflæst på Hjem 9. august 2026, mens
+  -- rundekortet lige under stod med LIVE og 2/4 spillet.
+  --
+  -- Grace-vinduet var det, der skjulte hullet: indtil 8. august så dagsløkken
+  -- kun på dage ældre end `i dag − 2`, og sådan en dag er næsten altid komplet.
+  -- Fjernelsen af vinduet var rigtig — den var bare begrundet med, at værnet lå
+  -- her, og det gjorde det ikke. Nu gør det, og begrundelsen er blevet sand.
+  --
+  -- VÆRNET LIGGER I MOTOREN OG IKKE HOS KALDERNE, fordi en regel, hver kalder
+  -- skal huske, er en regel, den femte kalder glemmer. Prisen er et kald, der
+  -- returnerer med det samme, når triggeren allerede har spurgt — et `exists` mod
+  -- et indekseret prædikat, målt i mikrosekunder.
+  --
+  -- UDGANGEN STÅR FØR SLETNINGEN, af samme grund som udgangen ovenfor: stod den
+  -- efter, ville et kald midt på kampdagen tømme dagen og returnere uden at
+  -- skrive noget tilbage.
+  --
+  -- DEN ER IKKE EN TREDJE KORT-UDGANG. Advarslen i filens hoved — "en TREDJE
+  -- udgang herfra ville bryde det" — handler om de to UDGIVENDE grene, som
+  -- frontendens `priority < 180` hviler på. En udgang, der intet skriver, rører
+  -- ikke den invariant, lige så lidt som sidste-dag-udgangen gør det.
+  if not public.match_day_complete(p_day) then
+    return;
+  end if;
+
   -- Idempotens: KUN dagens dag-kort. `period = 'day'` er ikke pynt — uden det
   -- ville en gen-kørsel slette rundens afsluttende kort. Symmetrisk sletter
   -- generate_stories() kun `period = 'round'`. Den farligste linje i v2 er

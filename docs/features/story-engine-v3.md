@@ -456,6 +456,19 @@ fordi de virker uanset årsagen:
   konkurrence-kampe kan **aldrig** få et kort og ville ellers blive forsøgt igen
   48–96 gange i døgnet for evigt og æde loftet på 20. Runde-løkken beholder sit
   vindue.
+
+  > 🔴 **RETTET EFTER LEVERING (`G92`, 9. august 2026) — præmissen var forkert,
+  > konklusionen rigtig.** Vinduet skulle væk, og det står. Men begrundelsen
+  > "dagen er sin egen afgrænsning, fordi `match_day_complete` kræver alle
+  > resultater" beskrev en tilstand, der ikke fandtes: prædikatet lå i
+  > matches-triggeren, ikke i `generate_daily_stories`, og bagstopperen omgår
+  > triggeren pr. definition. Uden vinduet var der derfor intet tilbage til at
+  > holde dagen inde, og dagens kort blev udgivet efter dagens FØRSTE resultat.
+  > Værnet er nu flyttet ind i motoren, hvor sætningen påstod, det lå. **Prisen,
+  > afsnittet ikke kendte:** en ufuldstændig dag kvalificerer sig stadig til
+  > løkken og får et kald, der returnerer straks, så løkken ikke er
+  > selvafsluttende for en dag, der aldrig bliver færdig. Loftet på 20 gør
+  > prisen endelig — samme svar som runde-løkkens, og af samme grund.
 - **Rækkefølgen i `generate_daily_stories`.** Den tidlige udgang står nu **før**
   `delete`. Stod den efter, ville et gen-kald for en dag, der er *blevet* rundens
   sidste kampdag, tømme dagen og skrive intet tilbage.
