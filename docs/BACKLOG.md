@@ -51,7 +51,7 @@ eller en linje i "Forkastede ideer".
 
 ## Prioriteret rækkefølge
 
-Alle 33 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -74,9 +74,7 @@ tieret skal have en anden betjening end ejeren.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-| # | Hvad | Hvorfor her |
-|---|---|---|
-| `G94` | `competition_matches`' læsepolicy er en tautologi — og den koster en nyinviteret bruger hele ligasidens indhold | Reglen siger ikke, hvad den ser ud til at sige, og forskellen er synlig for præcis den bruger, produktet arbejder hårdest på at få ind. Rettelsen er én linje, men den er ikke den nærliggende: se rækken i Teknisk gæld. |
+Tomt.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -179,7 +177,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
-| G94 | **`competition_matches`' læsepolicy `read competition matches` er en tautologi.** Den siger `cp.competition_id = cp.competition_id` — altså intet — så betingelsen reduceres til "findes der en `competition_participants`-række med mit bruger-id". Det tilsigtede var åbenlyst `cp.competition_id = competition_matches.competition_id`. | **Reglen lyver om, hvad den gør, og der er en bruger, der betaler for det i dag.** Effekten er ikke "for løs" på den farlige måde — de fem nabotabeller (`competitions`, `competition_participants`, `matches`, `leagues`, `seasons`) har alle `auth.role() = 'authenticated'`, så begge sider af koblingen er i forvejen læsbare for enhver, der er logget ind, og der lækker ingen personoplysninger. Effekten er, at den er for **stram i den ene ende**: en bruger, der deltager i NUL konkurrencer, får nul rækker — og `competition_status` er en `security_invoker`-view oven på netop denne tabel, så den bliver tom for samme bruger. Efterprøvet 9. august 2026 mod produktionsskemaet: deltager → 1 kamp / 1 statusrække, nyinviteret ligamedlem → 0 / 0. **Symptomet er, at `GroupScreen` tegner et kort for hver af ligaens konkurrencer og henter status til dem alle, så en netop inviteret bruger ser hver eneste konkurrence som "0 kampe" og aldrig afsluttet** — præcis den skærm, onboardingen lander på. **Rettelsen er én linje, men IKKE den nærliggende:** skrives tautologien om til det tilsigtede, bliver kortene tomme for ALLE på de konkurrencer, de ikke selv er med i, og problemet bliver større. Det rigtige er formentlig `auth.role() = 'authenticated'` som naboerne, hvilket hverken åbner noget nyt eller lukker nogen ude. **Policyen findes desuden kun i `sql/schema.sql`** — ingen migrering i `sql/` opretter den — så rettelsen skal bære den ind i en nummereret fil, og det er halvdelen af arbejdet. Fundet under `G91`, hvor den fik en test til at bestå af den forkerte grund. | Lille |
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
 
@@ -224,26 +221,24 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 9. august 2026 — Indbakken tømt: én række, `G94`
+### 9. august 2026 — Tier 2 kørt tomt: `G94`
 
-**Listen er 32 → 33, og Tier 2 er ikke tom længere.** Linjen i indbakken var
-skrevet som en smagssag — en tautologi i en policy — og undersøgelsen flyttede
-den to tiers op.
+**Listen er 33 → 32, og Tier 1 til og med 5 er igen alle tomme.** Rækken blev
+skrevet og lukket samme dag: den kom ud af `G91`s mutationstest om formiddagen
+og var det eneste, der stod i Tier 2.
 
-**`G94`** er `competition_matches`' læsepolicy, som sammenligner
-`cp.competition_id = cp.competition_id`. Den umiddelbare læsning er "for løs", og
-den er forkert: de fem nabotabeller er alle åbne for enhver, der er logget ind, så
-der lækker intet. Det, tautologien i stedet gør, er at være for **stram** for en
-bruger uden en eneste deltagelse — og fordi `competition_status` er en
-`security_invoker`-view oven på tabellen, bliver også den tom. Aflæst mod
-produktionsskemaet: deltager 1/1, nyinviteret ligamedlem 0/0. Ligasiden tegner et
-kort for hver af ligaens konkurrencer, så en netop inviteret bruger ser dem alle
-som "0 kampe".
+**`G94`** var `competition_matches`' læsepolicy, hvis betingelse
+`cp.competition_id = cp.competition_id` er en tautologi. Den er nu
+`auth.role() = 'authenticated'` — samme regel som de fem nabotabeller — i
+`sql/competition_matches_read.sql` (#50), med en test og et CI-trin.
 
-Rækken ligger i Tier 2 og ikke i Tier 5, fordi den både lyver og har et symptom i
-dag. Den er lille, men **rettelsen er ikke den, man skriver først**: retter man
-tautologien til det tilsigtede, bliver kortene tomme for alle på de konkurrencer,
-de ikke selv er med i. Detaljerne står i rækken.
+**Rettelsen var ikke den nærliggende**, og det er rækkens vigtigste egenskab:
+skrives tautologien om til det tilsigtede, bliver reglen strammere end i dag, og
+ligasidens kort går tomme for alle på de konkurrencer, de ikke selv er med i.
+Begrundelsen for den valgte regel står i `DECISIONS.md`.
+
+🔴 **Filen skal køres i Supabase**, før symptomet forsvinder — se
+`CHANGELOG.md`.
 
 ---
 
