@@ -1,0 +1,58 @@
+<!--
+  Supabase Auth → Email Templates → "Reset Password" (B25).
+
+  Teksten bor HER og pastes ind i Supabase, af samme grund som migreringerne i
+  sql/ gør det: så den findes ét sted og kan ses i en diff. Supabase har ingen
+  import, så trin 4 i docs/MAIL.md er copy-paste — og en ændring her er ikke
+  udrullet, før nogen har gjort det.
+
+  LINKET ER {{ .ConfirmationURL }} OG MÅ IKKE SKRIVES I HÅNDEN. Supabase bygger
+  det af projektets Site URL, og appen læser `#type=recovery` i App.jsx:34.
+  Hardkodes app-adressen her, dør mailen den dag `B21` flytter domænet — og den
+  dør tavst, for skabelonen kan ikke testes af noget, der kender adressen.
+  docs/mail/templates.test.js håndhæver det.
+
+  Ingen billeder og ingen eksterne referencer. Dels leveringssikkerhed (en mail
+  med fjernindhold ryger oftere i spam), dels legal.js' løfte om ingen
+  tredjeparts-værktøjer: et sporingspixel-billede ville være præcis dét.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F7F8FA;margin:0;padding:24px 0;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background-color:#FFFFFF;border-radius:12px;padding:32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        <tr>
+          <td style="font-size:20px;font-weight:700;color:#0C1622;padding-bottom:16px;">
+            Nulstil din adgangskode
+          </td>
+        </tr>
+        <tr>
+          <td style="font-size:16px;line-height:1.5;color:#0C1622;padding-bottom:24px;">
+            Du har bedt om at nulstille adgangskoden til din Leagly-konto. Tryk på knappen, så vælger du en ny.
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-bottom:24px;">
+            <a href="{{ .ConfirmationURL }}" style="display:inline-block;background-color:#F2C14E;color:#0C1622;font-size:16px;font-weight:600;text-decoration:none;padding:12px 24px;border-radius:8px;">
+              Vælg ny adgangskode
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td style="font-size:14px;line-height:1.5;color:#5A6672;padding-bottom:8px;">
+            Linket kan kun bruges én gang og udløber efter en time. Virker knappen ikke, kan du kopiere denne adresse ind i browseren:
+          </td>
+        </tr>
+        <tr>
+          <td style="font-size:13px;line-height:1.5;color:#5A6672;word-break:break-all;padding-bottom:24px;">
+            {{ .ConfirmationURL }}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-size:14px;line-height:1.5;color:#5A6672;border-top:1px solid #E6E9ED;padding-top:16px;">
+            Har du ikke bedt om det, kan du roligt lade denne mail ligge — din adgangskode er uændret, indtil nogen bruger linket. Er du i tvivl, så skriv til <a href="mailto:kontakt@leagly.app" style="color:#0C1622;">kontakt@leagly.app</a>.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

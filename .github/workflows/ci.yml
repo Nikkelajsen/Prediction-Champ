@@ -415,6 +415,25 @@ jobs:
           psql -h localhost -U postgres -d daycardtest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d daycardtest -v ON_ERROR_STOP=1 -b -f sql/tests/day_card_coverage.sql
 
+      # Læsepolicyen på competition_matches (G94). Kører mod det RIGTIGE skema,
+      # og her er der ikke noget valg: en påstand om en RLS-policy kan kun
+      # stilles, hvis de andre policies er der — `G91` betalte for den lære — og
+      # påstand 3 går gennem `competition_status`, en `security_invoker`-view,
+      # som slet ikke findes i et miniskema.
+      #
+      # Skemaet indlæses FØR migreringen, fordi `sql/schema.sql` stadig bærer den
+      # GAMLE policy: trinnet gør dermed præcis det, en kørsel i Supabase gør.
+      # Testen kræver desuden af sig selv, at fixturen viser fejlen FØR
+      # migreringen læses — uden det kunne påstand 3 bestå på en harmløs fixture.
+      - name: Test af læsepolicyen på competition_matches
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database cmreadtest;'
+          psql -h localhost -U postgres -d cmreadtest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d cmreadtest -v ON_ERROR_STOP=1 -b -f sql/tests/competition_matches_read.sql
+
       # De ubekræftede klokkeslæt (G85). Kører mod det RIGTIGE skema af tre
       # grunde, som et miniskema ikke kan levere: triggeren, der gemmer den
       # forrige tid, ligger på `public.matches` SAMMEN med de tre statement-level

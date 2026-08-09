@@ -1,0 +1,93 @@
+-- Læsepolicyen på competition_matches sagde ikke, hvad den mente (G94).
+-- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
+--
+-- HVAD DER VAR GALT
+-- Policyen `read competition matches` stod med
+--
+--   using (exists (select 1 from public.competition_participants cp
+--                   where cp.competition_id = cp.competition_id
+--                     and cp.user_id = auth.uid()))
+--
+-- `cp.competition_id = cp.competition_id` er en tautologi. Betingelsen
+-- reducerer derfor til "findes der ÉN `competition_participants`-række med mit
+-- bruger-id" — altså "deltager du et eller andet sted". Det tilsigtede var
+-- åbenlyst `cp.competition_id = competition_matches.competition_id`.
+--
+-- DEN NÆRLIGGENDE RETTELSE ER DEN FORKERTE, og det er hele grunden til, at
+-- denne fil har et hoved og ikke bare en linje. Skrives tautologien om til det
+-- tilsigtede, bliver reglen STRAMMERE end i dag, og ligasiden går i stykker for
+-- alle: `GroupScreen` tegner et kort for hver af ligaens konkurrencer — også de
+-- konkurrencer, man ikke selv er med i, dem med "Deltag"-knappen — og henter
+-- status til dem alle. Scoper man til egne konkurrencer, bliver netop de kort
+-- tomme for enhver.
+--
+-- HVORFOR `auth.role() = 'authenticated'`
+-- Fordi det er den regel, tabellen deler med hele sit nabolag, og fordi den
+-- ikke åbner noget. `competitions`, `competition_participants`, `matches`,
+-- `leagues` og `seasons` har ALLE præcis denne policy. `competition_matches` er
+-- en ren `(competition_id, match_id)`-kobling mellem to tabeller, der i forvejen
+-- er læsbare for enhver, der er logget ind — der er ingen personoplysning at
+-- beskytte, og en bruger, der ville udlede koblingen alligevel, kan gøre det i
+-- dag. Det, der lukkes, er en uenighed mellem seks policies, hvor de fem siger
+-- det samme.
+--
+-- Skal konkurrence-strukturen en dag være mindre offentlig — `I12`s offentlige
+-- ligaside er det første sted, spørgsmålet ville blive stillet — er det de seks
+-- policies samlet, der skal strammes. Én af dem alene ville ikke skjule noget,
+-- og en halv stramning er værre end ingen, fordi den ligner en beslutning.
+--
+-- HVAD DET RETTER FOR EN BRUGER
+-- Tautologien er ikke bare upræcis; den er for STRAM i den ene ende. En bruger
+-- med NUL deltagelser får nul rækker — og `competition_status` er en
+-- `security_invoker`-view oven på denne tabel, så den bliver tom for samme
+-- bruger. Aflæst mod produktionsskemaet 9. august 2026: en deltager fik 1 kamp
+-- og 1 statusrække, et nyinviteret ligamedlem fik 0 og 0.
+--
+-- Symptomet lå derfor på onboardingens egen skærm: den, der lige har taget imod
+-- en invitation og endnu ikke har meldt sig til noget, så hver eneste af ligaens
+-- konkurrencer som "0 kampe" og aldrig afsluttet. Det er den bruger, hele
+-- invitationsflowet findes for.
+--
+-- HVORDAN DEN BLEV FUNDET
+-- Under `G91`, hvor den fik en test til at bestå af den forkerte grund: et
+-- almindeligt medlem kunne ikke slette en liga, men ikke på grund af
+-- `is_group_admin` — `competition_status` var tom for netop den bruger.
+-- Fixturen måtte give medlemmet en deltagelse, før mutationen af den rigtige
+-- betingelse kunne fanges.
+--
+-- POLICYEN FANDTES IKKE I NOGEN MIGRERING før denne fil. Den var lavet i hånden
+-- i Supabase og levede kun i den genererede `sql/schema.sql`, hvilket er anden
+-- halvdel af, hvorfor fejlen kunne stå: der var ingen fil at læse den i, og
+-- ingen diff at se den i. Nu er der begge dele.
+--
+-- ADFÆRDSÆNDRING VED KØRSEL: ja, og den er tilsigtet — en bruger uden
+-- deltagelser begynder at se ligaens konkurrencekort med rigtige tal. Ingen
+-- rækker røres, og ingen mister adgang til noget.
+
+-- Samme navn som den, der står i dag: policyen ERSTATTES. Oprettes den under et
+-- nyt navn uden at den gamle droppes, gælder begge (RLS er et OR mellem
+-- permissive policies), og tautologien ville blive stående usynligt.
+drop policy if exists "read competition matches" on public.competition_matches;
+
+create policy "read competition matches" on public.competition_matches
+  for select
+  using (auth.role() = 'authenticated');
+
+-- ======================= Verifikation efter kørsel =======================
+--
+-- 1) Reglen er den, naboerne har — seks rækker, samme `qual`:
+--
+--      select tablename, policyname, qual
+--        from pg_policies
+--       where cmd = 'SELECT'
+--         and tablename in ('competition_matches', 'competitions',
+--                           'competition_participants', 'matches',
+--                           'leagues', 'seasons')
+--       order by tablename;
+--
+-- 2) Og der er kun ÉN læsepolicy på tabellen (to ville betyde, at den gamle
+--    står tilbage under et andet navn):
+--
+--      select count(*) from pg_policies
+--       where tablename = 'competition_matches' and cmd = 'SELECT';
+--      -- skal være 1
