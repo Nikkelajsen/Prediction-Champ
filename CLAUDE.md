@@ -28,6 +28,7 @@
 | onboarding | §20 · `docs/features/onboarding-v1.md` |
 | analytics og måle-ordbogen | §21 · `docs/features/analytics-v1.md` |
 | planlagte jobs (cron) | `docs/CRON.md` |
+| mails: afsender, modtager, DNS, skabeloner | `docs/MAIL.md` · `docs/mail/` |
 | backup, gendannelse efter tabt data | `docs/RESTORE.md` · §22 · `.github/workflows/data-backup.yml` |
 | feedback fra brugerne | §23 · `sql/feedback.sql` · `src/screens/FeedbackCard.jsx` |
 | privatliv, vilkår, kontolukning | §24 · `src/lib/legal.js` · `api/delete-account.js` · `docs/features/privatliv-og-vilkaar-v1.md` |

@@ -15,6 +15,66 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 9. august 2026 — Egen afsender til auth-mails: Resend, ikke Outlook (`B25`)
+
+**Beslutning:** appens to auth-mails sendes fra `noreply@leagly.app` gennem
+**Resend**. `kontakt@leagly.app` er en separat, allerede eksisterende Microsoft
+365-postkasse. Opskrift og register: [`MAIL.md`](./MAIL.md).
+
+`B25` blev erklæret besluttet i august 2026 uden nogensinde at nå denne fil.
+Backloggens egen regel siger, at en truffet beslutning flyttes hertil — det
+rettes her, samtidig med at den leveres.
+
+**Hvorfor ikke Outlooks egen SMTP, når Microsoft 365 alligevel er der.** Det var
+det oplagte spørgsmål, og svaret er ikke smag. Microsoft slår SMTP AUTH med
+basic auth **fra som standard for eksisterende lejere ved udgangen af december
+2026** og har varslet den endelige fjernelse i anden halvdel af 2027. En
+opsætning bygget på den ville altså holde op med at virke af sig selv om godt
+fire måneder — og symptomet ville være **tavshed**, ikke en fejlmeddelelse:
+mails, der ikke kommer frem, til brugere, der i forvejen ikke kan logge ind. Det
+er nøjagtig den fejlklasse, `A9`, `G92` og dagskort-kontrollen alle handler om.
+Dertil: 30 mails/minut, ingen leveringslog, og transaktionsmails, der blander sig
+med en personpostkasses omdømme. Prisen ved i stedet at vælge Resend er én linje
+i privatlivspolitikken.
+
+**Hvorfor `noreply@` og `kontakt@` er to forskellige problemer.** Det er den
+skelnen, hele opsætningen hviler på. `legal.js` lover, at kontaktadressen
+*"virker også, hvis du ikke kan logge ind"* — altså at den kan **modtage**.
+Resend kan kun sende. En løsning, der blandede de to, ville enten give en
+afsender, ingen kan svare på, eller en postkasse, der sender transaktionsmails.
+De har hver sin leverandør, og `noreply@` oprettes bevidst **ikke** som
+postkasse: at svar bouncer er den rigtige adfærd.
+
+**Hvorfor de to kan dele ét domæne.** Alt, hvad Resend har brug for, ligger under
+`send.leagly.app` — MX, SPF og DKIM. Roden er Microsofts alene. Den eneste
+fælles post er DMARC. Det er ikke en tilfældighed, man kan læne sig på uden at
+skrive den ned: den nærliggende fejl er at lægge Resends SPF som en **anden**
+TXT-post på roden ved siden af Microsofts, og to SPF-poster på samme navn er
+`permerror` — hvorefter *begge* afsendere fejler på én gang. Advarslen står i
+`MAIL.md` med 🛑, fordi den vælter mere, end den ser ud til.
+
+**DMARC skal blive på relaxed alignment.** Resend signerer med
+`d=send.leagly.app`, mens afsenderen er `noreply@leagly.app`. Relaxed accepterer
+underdomænet; strict gør ikke, og så fejler DMARC, selv om både SPF og DKIM
+består hver for sig. En stramning, der ligner en forbedring og er en fejl, hører
+til i en beslutningslog.
+
+**Skabelonerne bor i repoet.** `docs/mail/recovery.html` og
+`confirm-signup.html`, pastet ind i Supabase — samme mønster som
+`sql/`-migreringerne: teksten findes ét sted og kan ses i en diff. Supabase har
+ingen import, så prisen er, at en ændring i repoet ikke er udrullet, før nogen
+har pastet den ind igen; det står i runbogen. `confirm-signup.html` bruges først
+ved `B26`, men skrives nu, så dén række bliver ét klik frem for at have en
+skjult tekstopgave i sig.
+
+**Leverancen er ikke færdig, når den er merget.** Selve opsætningen ligger uden
+for repoet, og registeret i `MAIL.md` starter med `?` i hver `Sidst
+verificeret`-celle. Rækken er først lukket, når de fire kontroller i "Bevis, at
+det virker" er gået igennem — og den tredje, at linket faktisk åbner
+nulstillingsskærmen, er den eneste, der ikke kan snydes.
+
+---
+
 ## 9. august 2026 — `competition_matches` læses af enhver, der er logget ind (`G94`)
 
 **Beslutning:** læsepolicyen på `competition_matches` er

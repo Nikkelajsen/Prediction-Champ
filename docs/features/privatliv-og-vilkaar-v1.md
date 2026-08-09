@@ -39,7 +39,7 @@ Ti `woff2`-filer i `public/fonts/`: fem vægte (Barlow 400/600/700, Barlow Conde
 
 Data i `src/lib/legal.js`, tegnet af `LegalDocument.jsx`. **Kontrakten er, at komponenten hverken tager `token` eller callbacks** — det er dét, der gør den brugbar både inde i `AuthShell` (ingen session, ingen `MainApp`) og som skærm. `LegalDocument.test.jsx` fastholder det.
 
-To pladsholdere skal udfyldes før offentliggørelse: `[NAVN]` og `[KONTAKT-E-MAIL]`. En test håndhæver, **hvor** de står — ikke at de er væk. Se tjeklisten nedenfor.
+To pladsholdere skulle udfyldes før offentliggørelse: `[NAVN]` og `[KONTAKT-E-MAIL]`. En test håndhæver, **hvor** de står — ikke at de er væk. **Begge er udfyldt 9. august 2026 med `B25`; se §12.**
 
 ## 6. Kontolukning = anonymisering
 
@@ -118,11 +118,11 @@ Fejler trin 3 efter trin 2, svares `kode: "kun_anonymiseret"`. Brugeren skal vid
 - [x] Kontolukningen kan ikke udføres for en anden bruger — mekanisk, ikke ved en vagt.
 - [x] Efter lukning: brugssporet er væk, spillet står uændret, og ligaen findes med alle sine medlemmer.
 - [x] Politikken siger, hvad anonymiseringen **ikke** når.
-- [ ] `[NAVN]` og `[KONTAKT-E-MAIL]` er udfyldt. **Kan først krydses af af ejeren.**
+- [x] `[NAVN]` og `[KONTAKT-E-MAIL]` er udfyldt. **Krydset af 9. august 2026 med `B25`** — se §12.
 
 ## 10. Før teksten regnes som offentliggjort
 
-1. Udfyld `[NAVN]` og `[KONTAKT-E-MAIL]` i `src/lib/legal.js`.
+1. ~~Udfyld `[NAVN]` og `[KONTAKT-E-MAIL]` i `src/lib/legal.js`.~~ **Gjort 9. august 2026 (`B25`)** — se §12.
 2. Kør `sql/account_anonymization.sql` i Supabase ("Run without RLS").
 3. Efterprøv den bløde sletnings e-mail-adfærd (§7).
 4. Kør de tre `B4`-punkter i "Tjekliste før merge" (`DOCUMENTATION.md` §11).
@@ -130,3 +130,33 @@ Fejler trin 3 efter trin 2, svares `kode: "kun_anonymiseret"`. Brugeren skal vid
 ## 11. Bevidst ikke med i v1
 
 Rigtig sletning (kræver oprydning i fremmednøgler og en beslutning om ligaers skæbne) · cookie-banner (der er ingen cookies) · afkrydsningsboks ved samtykke (implicit accept er standarden for en tjeneste uden markedsføring eller profilering) · databehandleraftaler med Supabase og Vercel (relevant først ved en forretning) · engelsk oversættelse · en offentlig, delbar URL til teksterne (kræver en router, `A23`) · `Content-Security-Policy: font-src 'self'` som hærdning oven på selv-hostningen.
+
+## 12. Rettelse efter levering: to nye databehandlere og to udfyldte pladsholdere (9. august 2026)
+
+`B25` gav appen sin egen mailafsender, og det ramte denne spec to steder.
+
+**Pladsholderne er udfyldt.** `[NAVN]` blev den dataansvarliges navn, og
+`[KONTAKT-E-MAIL]` blev `kontakt@leagly.app`. Spec'ens §10 kunne først krydses af
+af ejeren, fordi hverken domænet eller postkassen fandtes, da udkastet blev
+skrevet — nu gør de begge.
+
+**To databehandlere kom til, og det var den ufravigelige regel, der fangede dem:**
+
+- **Resend** sender bekræftelses- og nulstillingsmails og ser derfor
+  brugerens e-mailadresse. En ny tredjepart, og reglen i `DOCUMENTATION.md` §24
+  siger, at den skal have en linje i samme ombæring.
+- **Microsoft** bærer postkassen bag kontakt-adressen. Den lå der i forvejen —
+  det er gæld, ikke en ny beslutning — men blev først synlig i det øjeblik
+  politikken udpegede adressen som kanalen for indsigt og sletning. En
+  leverandør, man henviser brugere til, er en leverandør, man skal nævne.
+
+`LEGAL_OPDATERET` er flyttet til 9. august 2026. En ny modtager af persondata er
+den mest oplagte af alle "væsentlige ændringer", som dokumentet selv definerer
+dem.
+
+**Én ting står åben og hører til her:** Resends region. Vælges EU (Irland), kan
+linjen om Resend udvides med det, som linjen om Supabase har; vælges en region
+uden for EU, **skal** den i stedet sige det. Teksten står i dag uden
+regionsangivelse, fordi valget træffes i runbogens trin 1
+([`../MAIL.md`](../MAIL.md)) — og den er dermed sand, men mindre præcis end den
+kan blive.

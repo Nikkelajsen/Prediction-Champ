@@ -1,0 +1,54 @@
+<!--
+  Supabase Auth → Email Templates → "Confirm signup" (B25, forberedt til B26).
+
+  DENNE SKABELON ER IKKE I BRUG ENDNU. "Confirm email" er slået fra i
+  produktionen (docs/BACKLOG.md, B26; docs/STAGING.md siger det samme fra den
+  anden side). Den skrives nu alligevel, så `B26` bliver ren konfiguration — én
+  knap i Supabase — frem for at have en skjult tekstopgave i sig. En række, der
+  ser ud som "Lille (konfiguration)" og i virkeligheden også kræver, at nogen
+  finder på en dansk mailtekst, er en række, der er målt forkert.
+
+  Samme regler som recovery.html: linket er {{ .ConfirmationURL }} og må ikke
+  skrives i hånden, ingen billeder, ingen eksterne referencer. Se hovedet dér
+  for hvorfor.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F7F8FA;margin:0;padding:24px 0;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background-color:#FFFFFF;border-radius:12px;padding:32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        <tr>
+          <td style="font-size:20px;font-weight:700;color:#0C1622;padding-bottom:16px;">
+            Bekræft din e-mail
+          </td>
+        </tr>
+        <tr>
+          <td style="font-size:16px;line-height:1.5;color:#0C1622;padding-bottom:24px;">
+            Velkommen til Leagly. Tryk på knappen, så er din konto klar, og du kan komme i gang med at tippe.
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-bottom:24px;">
+            <a href="{{ .ConfirmationURL }}" style="display:inline-block;background-color:#F2C14E;color:#0C1622;font-size:16px;font-weight:600;text-decoration:none;padding:12px 24px;border-radius:8px;">
+              Bekræft e-mail
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td style="font-size:14px;line-height:1.5;color:#5A6672;padding-bottom:8px;">
+            Virker knappen ikke, kan du kopiere denne adresse ind i browseren:
+          </td>
+        </tr>
+        <tr>
+          <td style="font-size:13px;line-height:1.5;color:#5A6672;word-break:break-all;padding-bottom:24px;">
+            {{ .ConfirmationURL }}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-size:14px;line-height:1.5;color:#5A6672;border-top:1px solid #E6E9ED;padding-top:16px;">
+            Har du ikke oprettet en konto, kan du lade denne mail ligge — så bliver kontoen aldrig taget i brug. Er du i tvivl, så skriv til <a href="mailto:kontakt@leagly.app" style="color:#0C1622;">kontakt@leagly.app</a>.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

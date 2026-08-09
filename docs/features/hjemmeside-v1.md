@@ -73,11 +73,16 @@ mappen flyttes.
 ## Udestår før publicering
 
 1. **Ejer-godkendelse af copy og udtryk** — dette er et førsteudkast.
-2. **Kontakt-mail** — `om.html` bruger pladsholderen
-   `kontakt@leagly.example`; den rigtige adresse er en del af `I10`
-   (professionel e-mail). Står i backloggens indbakke.
+2. ~~**Kontakt-mail**~~ — **lukket 9. august 2026 med `B25`.** `om.html` bruger
+   nu `kontakt@leagly.app`, som er en rigtig Microsoft 365-postkasse; den samme
+   adresse står i `src/lib/legal.js`, og `docs/mail/templates.test.js` holder de
+   to i trit. *(Punktet henviste til backloggens indbakke — den henvisning var
+   forældet allerede, fordi punktet var foldet ind i `I10`.)*
 3. **Domæne og hosting-beslutning** (`I10`) — eget domæne eller en sti på
    Vercel-projektet; afgør også, om appens CSP-headere skal justeres.
+   **Halvt afklaret 9. august 2026:** domænet ER `leagly.app`, og det bruges
+   allerede til mail. Tilbage står kun at pege selve hjemmesiden derhen, hvilket
+   er samme flytning som `B21`.
 4. **SEO** (`I9`) — OG-tags, sitemap, indeksering.
 
 ## Verifikation af udkastet

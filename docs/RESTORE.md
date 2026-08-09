@@ -60,6 +60,7 @@ værd at gentage, hvis krypteringstrinnet nogensinde ændres.
   | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API | ✅ |
   | `SYNC_SECRET` | Ingen — den er selvvalgt. Kan skiftes, men så skal **alle** cron-jobs i [`CRON.md`](./CRON.md) opdateres samme dag | ⚠️ |
   | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Ingen leverandør — men **ejeren har parret liggende uden for Vercel** (bekræftet 6. august 2026) | ✅ |
+  | Resends SMTP-nøgle | Resend-kontoen — men den vises **kun én gang** ved oprettelsen og kan derefter kun erstattes af en ny. Den bor i Supabase → Auth → SMTP Settings, ikke i Vercel | ⚠️ |
 
   **Handlingen er den samme som for `BACKUP_PASSPHRASE`:** værdierne hører til i
   en passwordmanager, ikke kun i Vercel. VAPID-parret er det eneste, der hverken
@@ -68,6 +69,11 @@ værd at gentage, hvis krypteringstrinnet nogensinde ændres.
   nøglerne skiftes**, for et nyt par uden kopi er samme hul igen.
 - **cron-job.org-kontoen.** Jobbene står i [`CRON.md`](./CRON.md), men skal
   oprettes på ny i hånden.
+- **DNS-posterne for mail.** SPF, DKIM og MX for både afsendelsen (Resend) og
+  postkassen (Microsoft) står i [`MAIL.md`](./MAIL.md), men bor hos
+  domæneregistratoren og indgår i intet dump. Ryddes de ved en fejl, holder
+  nulstillingsmails op med at nå frem — og symptomet er tavshed, ikke en fejl.
+  Samme rolle som cron-job.org-kontoen ovenfor.
 - **Supabase Storage.** Appen bruger ikke buckets i dag. Gør den det en dag, er
   dumpet ikke længere hele historien.
 

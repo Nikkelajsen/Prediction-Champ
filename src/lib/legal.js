@@ -20,10 +20,17 @@
 // den sætning, der beskriver det — og fejler i begge retninger. De to andre
 // dele af reglen (en ny tabel, en ny tredjepart) står stadig kun her.
 
-// Pladsholdere. Må KUN stå i kontakt-afsnittet, og en test håndhæver det.
-// Teksten må ikke offentliggøres, før de er udfyldt.
-const DATAANSVARLIG = "[NAVN]";
-const KONTAKT_EMAIL = "[KONTAKT-E-MAIL]";
+// Udfyldt 9. august 2026 med `B25`. De stod som `[NAVN]` og `[KONTAKT-E-MAIL]`
+// fra august 2026, fordi hverken domænet eller postkassen fandtes endnu — og
+// tjeklisten i DOCUMENTATION.md §11 sagde, at teksten ikke måtte regnes som
+// offentliggjort før. Nu findes begge dele.
+//
+// En test håndhæver stadig, at de kun står i kontakt- og rettigheds-afsnittene.
+// Den kan pr. konstruktion ikke se, om de ER udfyldt — men det kan
+// docs/mail/templates.test.js, som kræver, at skabelonerne nævner den samme
+// adresse, og som fejler på en pladsholder med kantede parenteser.
+const DATAANSVARLIG = "Nikolaj Aarslev Rasmussen";
+const KONTAKT_EMAIL = "kontakt@leagly.app";
 
 // Én dato for begge dokumenter. To ville uvægerligt komme ud af trit.
 //
@@ -39,7 +46,10 @@ const KONTAKT_EMAIL = "[KONTAKT-E-MAIL]";
 // Flyttet igen 7. august 2026 (`G77`): brugsloggen slettes nu efter 18 måneder.
 // Ændringen er til brugerens fordel, og det gør den ikke mindre væsentlig —
 // hvor længe noget gemmes, er en af de få ting, en politik faktisk lover.
-const LEGAL_OPDATERET = "2026-08-07";
+// Flyttet igen 9. august 2026 (`B25`): to databehandlere kom til — Resend, som
+// sender login-mailene, og Microsoft, som bærer kontakt-postkassen. En ny
+// modtager af persondata er den mest oplagte af alle "væsentlige ændringer".
+const LEGAL_OPDATERET = "2026-08-09";
 
 const MINDSTEALDER = 13;
 
@@ -119,6 +129,8 @@ const PRIVATLIV = {
           punkter: [
             "Supabase leverer database og login. Alle data ligger i Irland (regionen eu-west-1).",
             "Vercel leverer selve appen og de baggrundsjob, der henter kampe. Serverne står i Dublin.",
+            "Resend sender de to mails, login kræver: bekræftelse af din e-mail og nulstilling af adgangskode. De ser din e-mailadresse og mailens indhold — ikke andet om dig.",
+            "Microsoft leverer den postkasse, kontakt-adressen peger på. Skriver du til os, ligger din henvendelse dér.",
             "Push-tjenesterne hos Google, Apple og Mozilla leverer notifikationer til din telefon. De kan se, at der sendes en besked til din enhed og hvornår — selve indholdet er krypteret undervejs.",
             "GitHub opbevarer den daglige, krypterede sikkerhedskopi af databasen i 90 dage.",
           ],
