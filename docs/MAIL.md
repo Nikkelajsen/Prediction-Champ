@@ -126,7 +126,7 @@ ganske vist på roden, men under sin egen selector, som Microsofts to ikke hedde
 
 | Indstilling | Værdi | Sidst verificeret |
 |---|---|---|
-| SMTP Settings | Resends host, port, brugernavn, API-nøgle som password | ? |
+| SMTP Settings | `smtp.resend.com` · port `465` · brugernavn `resend` · API-nøglen som password | ? |
 | Sender email | `noreply@leagly.app` | ? |
 | Sender name | Leagly | ? |
 | Rate Limits → e-mails | Hævet fra standarden | ? |
@@ -232,12 +232,41 @@ Derefter:
 
 ### Trin 3 — Supabase → Auth → SMTP Settings
 
-1. Slå custom SMTP til, og indsæt Resends host, port, brugernavn og API-nøgle.
-2. Sender email `noreply@leagly.app`, sender name `Leagly`.
-3. **Hæv rate limit** under Auth → Rate Limits. Det er et selvstændigt trin og
-   ikke pynt: loftet er lavt, *fordi* den indbyggede service er delt, og skifter
-   du kun SMTP'en, sidder halvdelen af problemet der endnu.
-4. Kontrollér **Site URL**. Den bestemmer, hvor linket i mailen peger hen, og
+Lav først en API-nøgle i Resend under **API Keys** med sende-rettighed. Den
+vises **kun én gang** — læg den i passwordmanageren med det samme
+([`RESTORE.md`](./RESTORE.md) har en række om den).
+
+Slå **Enable custom SMTP** til, og udfyld felt for felt:
+
+| Felt i Supabase | Værdi |
+|---|---|
+| Sender email address | `noreply@leagly.app` |
+| Sender name | `Leagly` |
+| Host | `smtp.resend.com` |
+| Port number | `465` |
+| Username | `resend` |
+| Password | API-nøglen, inkl. `re_`-præfikset |
+| Minimum interval per user | `60` sekunder (standarden) |
+
+> ⚠️ **Brugernavnet er det ord, alle gætter forkert.** Det er den lille
+> bogstavstreng `resend` — ikke din e-mail, ikke domænet, ikke kontonavnet. Alle
+> Resend-konti bruger det samme; det er API-nøglen i password-feltet, der
+> identificerer dig.
+
+Port `465` er Resends egen anbefaling og kører SSL/TLS. `587` virker også
+(STARTTLS); `25` skal undgås, da udbydere ofte blokerer den.
+
+`Minimum interval per user` er ikke det samme som rate limit nedenfor: den er
+et værn mod, at én bruger kan udløse mail på stribe, og 60 sekunder er fint til
+en nulstillingsmail.
+
+Derefter:
+
+1. **Hæv rate limit** under Auth → Rate Limits (linket "Rate limits" står øverst
+   på SMTP-siden). Det er et selvstændigt trin og ikke pynt: loftet er lavt,
+   *fordi* den indbyggede service er delt, og skifter du kun SMTP'en, sidder
+   halvdelen af problemet der endnu.
+2. Kontrollér **Site URL**. Den bestemmer, hvor linket i mailen peger hen, og
    der findes ingen `emailRedirectTo` i koden til at overstyre den.
    > ⚠️ **`B21` flytter appens adresse.** Sker det, skal Site URL med — ellers
    > peger hver nulstillingsmail på en adresse, der ikke svarer, mens alt andet
@@ -292,6 +321,7 @@ er `B25` ikke leveret** — koden i dette repo er kun det halve.
 | Resend verificerer ikke domænet | Værdien er skrevet af fra skærmen og dermed afkortet | Brug kopi-knappen. Panelet viser `[…]` midt i værdien |
 | Resend verificerer ikke domænet | DNS-udbyderen har tilføjet domænet til MX-værdien, så den ender på `…amazonses.com.leagly.app` | Afslut værdien med et punktum |
 | Mailen kommer aldrig | Supabase bruger stadig den indbyggede service | Custom SMTP er ikke slået til i trin 3 |
+| Supabase afviser SMTP-loginet | Brugernavnet er sat til e-mail eller domæne | Det er den lille bogstavstreng `resend` for alle konti; API-nøglen er password |
 | Mailen kommer, men lander i spam | DKIM eller DMARC fejler | Læs headeren (kontrol 2). Er `dkim=pass` men `dmarc=fail`, står DMARC på strict — se ⚠️ ovenfor |
 | Nogle mails kommer, andre ikke | Rate limit | Trin 3.3 |
 | Linket åbner appen, men ikke nulstillingsskærmen | Site URL peger forkert, eller `#type=recovery` er strippet | Trin 3.4. Appen læser hash'et i `src/App.jsx:34` |
