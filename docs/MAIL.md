@@ -132,6 +132,13 @@ ganske vist på roden, men under sin egen selector, som Microsofts to ikke hedde
 | Rate Limits → e-mails | `30`/time (custom SMTPs egen default; den delte service gav 2) | 9. august 2026 — aflæst |
 | Site URL | `https://prediction-champ.vercel.app` — **bestemmer linket i mailen**. Redirect URLs: `…/*` | 9. august 2026 |
 | Confirm email | **Slået fra** indtil `B26` | 9. august 2026 |
+| Skabelon: Reset Password | Emne + brødtekst fra [`mail/recovery.html`](./mail/recovery.html) | 9. august 2026 — **begge dele indsat** |
+| Skabelon: Confirm signup | Emne + brødtekst fra [`mail/confirm-signup.html`](./mail/confirm-signup.html) | ? — ikke bekræftet indsat. Den bruges først ved `B26`, så den kan ikke aflæses på en modtaget mail endnu |
+
+> ⚠️ **En skabelon kan være HALVT installeret, og det er ikke synligt i Supabase.**
+> Emne og brødtekst er to felter, og den første leverede mail havde kun det ene
+> rettet. Rækkerne ovenfor dækker derfor begge dele — er kun brødteksten skiftet,
+> er rækken ikke sand.
 
 ## Runbog: opsætning fra bunden
 
