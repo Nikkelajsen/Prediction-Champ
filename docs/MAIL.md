@@ -232,9 +232,12 @@ Derefter:
 
 ### Trin 3 — Supabase → Auth → SMTP Settings
 
-Lav først en API-nøgle i Resend under **API Keys** med sende-rettighed. Den
-vises **kun én gang** — læg den i passwordmanageren med det samme
-([`RESTORE.md`](./RESTORE.md) har en række om den).
+Lav først en API-nøgle i Resend under **API Keys** i venstre menu →
+**Create API Key** → navngiv den (fx `Supabase Auth`), vælg **Sending access**,
+og begræns den gerne til `leagly.app`. Den starter med `re_` og vises **kun én
+gang** — kopiér den direkte ind i Supabase og læg den i passwordmanageren i
+samme bevægelse ([`RESTORE.md`](./RESTORE.md) har en række om, at den ikke kan
+hentes igen, kun erstattes).
 
 Slå **Enable custom SMTP** til, og udfyld felt for felt:
 
@@ -252,6 +255,17 @@ Slå **Enable custom SMTP** til, og udfyld felt for felt:
 > bogstavstreng `resend` — ikke din e-mail, ikke domænet, ikke kontonavnet. Alle
 > Resend-konti bruger det samme; det er API-nøglen i password-feltet, der
 > identificerer dig.
+
+> 🛑 **Password er API-nøglen — IKKE DKIM-værdien fra DNS Records.** De to ligner
+> hinanden på skærmen (begge er lange, uigennemskuelige strenge i Resends panel),
+> og forvekslingen er nem at lave. Men de er hinandens modsætninger: DKIM-værdien
+> er en **offentlig** nøgle, der ligger i DNS, netop for at hele verden kan slå
+> den op og kontrollere din signatur. API-nøglen er en hemmelighed, der beviser,
+> hvem du er. *(Forvekslet 9. august 2026, ved første opsætning. Ingen skade —
+> en offentlig nøgle kan ikke lække.)*
+>
+> DNS Records-siden er færdig, når alle tre står `Verified`. Nøglen laves et
+> andet sted: **API Keys** i venstre menu.
 
 Port `465` er Resends egen anbefaling og kører SSL/TLS. `587` virker også
 (STARTTLS); `25` skal undgås, da udbydere ofte blokerer den.
@@ -322,6 +336,7 @@ er `B25` ikke leveret** — koden i dette repo er kun det halve.
 | Resend verificerer ikke domænet | DNS-udbyderen har tilføjet domænet til MX-værdien, så den ender på `…amazonses.com.leagly.app` | Afslut værdien med et punktum |
 | Mailen kommer aldrig | Supabase bruger stadig den indbyggede service | Custom SMTP er ikke slået til i trin 3 |
 | Supabase afviser SMTP-loginet | Brugernavnet er sat til e-mail eller domæne | Det er den lille bogstavstreng `resend` for alle konti; API-nøglen er password |
+| Supabase afviser SMTP-loginet | DKIM-værdien fra DNS Records er brugt som password | Den er en OFFENTLIG nøgle, ikke en hemmelighed. Password er API-nøglen (`re_…`) fra **API Keys** |
 | Mailen kommer, men lander i spam | DKIM eller DMARC fejler | Læs headeren (kontrol 2). Er `dkim=pass` men `dmarc=fail`, står DMARC på strict — se ⚠️ ovenfor |
 | Nogle mails kommer, andre ikke | Rate limit | Trin 3.3 |
 | Linket åbner appen, men ikke nulstillingsskærmen | Site URL peger forkert, eller `#type=recovery` er strippet | Trin 3.4. Appen læser hash'et i `src/App.jsx:34` |
