@@ -154,9 +154,18 @@ skrevet — nu gør de begge.
 den mest oplagte af alle "væsentlige ændringer", som dokumentet selv definerer
 dem.
 
-**Én ting står åben og hører til her:** Resends region. Vælges EU (Irland), kan
-linjen om Resend udvides med det, som linjen om Supabase har; vælges en region
-uden for EU, **skal** den i stedet sige det. Teksten står i dag uden
-regionsangivelse, fordi valget træffes i runbogens trin 1
-([`../MAIL.md`](../MAIL.md)) — og den er dermed sand, men mindre præcis end den
-kan blive.
+**Regionen er afgjort samme dag:** Resend-domænet er oprettet i **EU (Irland,
+`eu-west-1`)**, altså samme region som Supabase. Linjen om Resend siger det nu
+med samme formulering som linjen om Supabase lige over. Punktet stod åbent i
+nogle timer, fordi svaret hører hjemme i en privatlivspolitik og ikke måtte
+sluttes af et bounce-endpoint — det blev aflæst på domænets side i Resend.
+
+`LEGAL_OPDATERET` er **ikke** flyttet af den grund. Behandlingen har hele tiden
+ligget i Irland; det var teksten, der manglede at sige det. Datoen findes for at
+markere, at behandlingen er blevet en anden — ikke at formuleringen er blevet
+bedre. *(Den står i forvejen på 9. august fra `B25` selv, så forskellen er
+teoretisk her, men reglen er værd at følge også når den ikke koster noget.)*
+
+**Flyttes domænet nogensinde til en anden region, skal linjen med i samme
+ombæring.** En overførsel uden for EU er en oplysning, politikken skylder
+brugeren.

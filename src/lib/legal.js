@@ -129,7 +129,7 @@ const PRIVATLIV = {
           punkter: [
             "Supabase leverer database og login. Alle data ligger i Irland (regionen eu-west-1).",
             "Vercel leverer selve appen og de baggrundsjob, der henter kampe. Serverne står i Dublin.",
-            "Resend sender de to mails, login kræver: bekræftelse af din e-mail og nulstilling af adgangskode. De ser din e-mailadresse og mailens indhold — ikke andet om dig.",
+            "Resend sender de to mails, login kræver: bekræftelse af din e-mail og nulstilling af adgangskode. De ser din e-mailadresse og mailens indhold — ikke andet om dig. Serverne står i Irland, som hos Supabase.",
             "Microsoft leverer den postkasse, kontakt-adressen peger på. Skriver du til os, ligger din henvendelse dér.",
             "Push-tjenesterne hos Google, Apple og Mozilla leverer notifikationer til din telefon. De kan se, at der sendes en besked til din enhed og hvornår — selve indholdet er krypteret undervejs.",
             "GitHub opbevarer den daglige, krypterede sikkerhedskopi af databasen i 90 dage.",

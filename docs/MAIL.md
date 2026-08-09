@@ -53,10 +53,10 @@ leverandører og to helt forskellige krav.
 
 | Felt | Værdi | Sidst verificeret |
 |---|---|---|
-| Udbyder | Resend | ? |
+| Udbyder | Resend | 9. august 2026 |
 | Afsender | `noreply@leagly.app` | ? |
-| Verificeret domæne | `leagly.app` (MX og SPF lægges på `send.leagly.app`, DKIM på roden) | 9. august 2026 — aflæst i panelet |
-| Region | ? — sættes i trin 1, og `legal.js` afhænger af svaret | ? |
+| Verificeret domæne | `leagly.app` (MX og SPF på `send.leagly.app`, DKIM på roden) | 9. august 2026 — **verificeret i Resend** |
+| Region | **EU (Irland, `eu-west-1`)** — samme region som Supabase | 9. august 2026 — aflæst på domænets side |
 | Plan | Free | ? |
 | Loft | 3.000 mails/md, 100/dag (aflæses på planen) | ? |
 
@@ -83,7 +83,7 @@ ganske vist på roden, men under sin egen selector, som Microsofts to ikke hedde
 | `leagly.app` | MX | Microsoft 365 (indgående `kontakt@`) | ? |
 | `leagly.app` | TXT · SPF | Microsoft (`include:spf.protection.outlook.com`) | ? |
 | `selector1._domainkey`, `selector2._domainkey` | CNAME | Microsofts DKIM | ? |
-| `send.leagly.app` | MX | Resend (bounce, peger på AWS SES), prioritet 10 | 9. august 2026 — form aflæst i Resends panel, **posten ikke oprettet endnu** |
+| `send.leagly.app` | MX | Resend (bounce, peger på AWS SES i `eu-west-1`), prioritet 10 | 9. august 2026 — **oprettet via Domain Connect og verificeret** |
 | `send.leagly.app` | TXT · SPF | Resend | 9. august 2026 — som ovenfor |
 | `resend._domainkey.leagly.app` | TXT | Resends DKIM | 9. august 2026 — som ovenfor |
 | `_dmarc.leagly.app` | TXT | Fælles for begge afsendere | ? |
@@ -92,13 +92,16 @@ ganske vist på roden, men under sin egen selector, som Microsofts to ikke hedde
 > SES-værten er kontospecifikke, og formen kan ændre sig hos Resend. Kopiér dem
 > fra Resends egen skærm ved opsætningen.
 >
-> **Formen er aflæst i panelet 9. august 2026 — og antagelsen var forkert på ét
+> **Formen blev aflæst i panelet 9. august 2026 — og antagelsen var forkert på ét
 > punkt.** Tabellen sagde indtil da, at DKIM lå på
 > `resend._domainkey.send.leagly.app`. Den ligger på roden. Skellet mellem
 > "aflæst i dokumentationen" og "set i panelet" var altså ikke pedanteri: den
 > forkerte placering ville have givet en fejlsøgning, hvis symptom er, at
-> domænet bare ikke verificerer. **`Sidst verificeret` betyder her, at FORMEN er
-> set** — posterne er endnu ikke oprettet, og Resend melder `Not Started`.
+> domænet bare ikke verificerer.
+>
+> **De tre poster er siden oprettet og verificeret** (samme dag, via Domain
+> Connect). `Sidst verificeret` betyder derfor her det fulde: posten findes, og
+> Resend har set den.
 
 > 🛑 **Fælden, der vælter begge afsendere på én gang.** Resends SPF-post hører til
 > på `send.leagly.app`. Lægges den i stedet som en **anden** TXT-post på roden ved
@@ -147,18 +150,34 @@ vende tilbage til trin 1 for at trykke "Verify".
 
 1. Opret konto på Resend, og tilføj domænet **`leagly.app`** (ikke
    `send.leagly.app` — Resend laver selv underdomænet).
-2. **Vælg region.**
-   > ⚠️ **Dette valg står i privatlivspolitikken.** Vælges EU (Irland), kan
-   > linjen om Resend i `src/lib/legal.js` udvides med, at serverne står i
-   > Irland — som linjen om Supabase gør. Vælges en region uden for EU, **skal**
-   > linjen i stedet sige, at mails behandles uden for EU. Teksten står i dag
-   > uden regionsangivelse, netop fordi valget ikke var truffet. Ret den i samme
-   > ombæring som dette trin.
+2. **Vælg region — EU (Irland).** Valgt 9. august 2026, samme region som
+   Supabase kører i.
+   > ⚠️ **Dette valg står i privatlivspolitikken.** `src/lib/legal.js` siger nu
+   > om Resend, at serverne står i Irland, i samme form som linjen om Supabase.
+   > **Oprettes domænet nogensinde på ny i en anden region, skal den linje med i
+   > samme ombæring** — en overførsel uden for EU er en oplysning, politikken
+   > skylder brugeren, og ikke en detalje.
 3. Noter de DNS-poster, Resend viser. Skriv dem ind i registeret ovenfor.
 
 ### Trin 2 — DNS-posterne
 
 Læs 🛑-advarslen om SPF ovenfor, **før** du tilføjer noget.
+
+### Den nemme vej: "Auto configure" i Resend
+
+**Gør dette først.** Resends panel har en `Auto configure`-knap, som bruger
+Domain Connect, og GoDaddy understøtter det. Den skriver de tre poster med de
+rigtige navne og springer hele oversættelsen mellem Resends `Name` og
+registratorens `Host` over — som er den eneste rigtige kilde til fejl i dette
+trin. **Det var sådan, posterne blev oprettet 9. august 2026.**
+
+Kontrollér bagefter, at rodens MX og SPF stadig er Microsofts. Domain Connect
+skal ikke røre dem og gjorde det heller ikke — men prisen ved at se efter er ét
+blik, og prisen ved at lade være er `kontakt@`.
+
+### Fallback: skriv dem i hånden
+
+Kun nødvendigt, hvis Domain Connect ikke er en mulighed hos registratoren.
 
 **Resends `Name`-kolonne er allerede relativ til domænet**, og det er præcis, hvad
 GoDaddy og Namecheap forventer i deres `Host`-felt. De tre poster kan derfor
@@ -265,6 +284,9 @@ er `B25` ikke leveret** — koden i dette repo er kun det halve.
 
 | Symptom | Årsag | Løsning |
 |---|---|---|
+| GoDaddy: "Postnavnet … er i konflikt med en anden post" | **Posterne findes allerede** — `Auto configure` har skrevet dem via Domain Connect. *Konstateret 9. august 2026, ved første kørsel.* | Annullér de rækker, du er ved at oprette, og tryk Verify i Resend. Arbejdet er gjort |
+| Samme, men posterne står ikke i listen | En **CNAME** på samme navn. DNS forbyder, at en CNAME sameksisterer med andre poster på samme navn — modsat MX og TXT, som gerne må dele navn. Fejlteksten siger ikke hvilken af de to den mener | Slet eller omdøb CNAME'en |
+| Samme, og der er ingen CNAME | Registratorens batch-validering. GoDaddy melder falske konflikter, når flere rækker gemmes på én gang, og `send` optræder to gange (MX + TXT) | Gem én post ad gangen |
 | Resend verificerer ikke domænet | MX eller SPF står på roden i stedet for `send` | Flyt dem. Se 🛑-advarslen om SPF og mappingen i trin 2 |
 | Resend verificerer ikke domænet | DKIM lagt under `send` i stedet for på roden | Den hedder `resend._domainkey`, ikke `resend._domainkey.send` — se tabellen i trin 2 |
 | Resend verificerer ikke domænet | Værdien er skrevet af fra skærmen og dermed afkortet | Brug kopi-knappen. Panelet viser `[…]` midt i værdien |
