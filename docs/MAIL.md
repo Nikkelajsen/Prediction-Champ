@@ -55,7 +55,7 @@ leverandører og to helt forskellige krav.
 |---|---|---|
 | Udbyder | Resend | ? |
 | Afsender | `noreply@leagly.app` | ? |
-| Verificeret domæne | `leagly.app` (poster lægges på `send.leagly.app`) | ? |
+| Verificeret domæne | `leagly.app` (MX og SPF lægges på `send.leagly.app`, DKIM på roden) | 9. august 2026 — aflæst i panelet |
 | Region | ? — sættes i trin 1, og `legal.js` afhænger af svaret | ? |
 | Plan | Free | ? |
 | Loft | 3.000 mails/md, 100/dag (aflæses på planen) | ? |
@@ -75,24 +75,30 @@ kontoens levetid — én bekræftelse, og en nulstilling hvis de glemmer. Selv
 ### DNS-poster
 
 To afsendere deler ét domæne. **De kan sameksistere, fordi de ikke rører de samme
-navne** — alt, hvad Resend har brug for, ligger under `send.leagly.app`, og roden
-er Microsofts alene:
+navne** — Resends MX og SPF ligger under `send.leagly.app`, og dens DKIM ligger
+ganske vist på roden, men under sin egen selector, som Microsofts to ikke hedder:
 
 | Navn | Type | Ejer | Sidst verificeret |
 |---|---|---|---|
 | `leagly.app` | MX | Microsoft 365 (indgående `kontakt@`) | ? |
 | `leagly.app` | TXT · SPF | Microsoft (`include:spf.protection.outlook.com`) | ? |
 | `selector1._domainkey`, `selector2._domainkey` | CNAME | Microsofts DKIM | ? |
-| `send.leagly.app` | MX | Resend (bounce, peger på AWS SES) | ? |
-| `send.leagly.app` | TXT · SPF | Resend | ? |
-| `resend._domainkey.send.leagly.app` | TXT | Resends DKIM | ? |
+| `send.leagly.app` | MX | Resend (bounce, peger på AWS SES), prioritet 10 | 9. august 2026 — form aflæst i Resends panel, **posten ikke oprettet endnu** |
+| `send.leagly.app` | TXT · SPF | Resend | 9. august 2026 — som ovenfor |
+| `resend._domainkey.leagly.app` | TXT | Resends DKIM | 9. august 2026 — som ovenfor |
 | `_dmarc.leagly.app` | TXT | Fælles for begge afsendere | ? |
 
 > ⚠️ **De præcise værdier står ikke her, og det er med vilje.** DKIM-nøglen og
 > SES-værten er kontospecifikke, og formen kan ændre sig hos Resend. Kopiér dem
-> fra Resends egen skærm ved opsætningen. Formen ovenfor er aflæst af Resends
-> dokumentation 9. august 2026 og er en **antagelse**, indtil den er set i
-> panelet — udfyld `Sidst verificeret`, når den er.
+> fra Resends egen skærm ved opsætningen.
+>
+> **Formen er aflæst i panelet 9. august 2026 — og antagelsen var forkert på ét
+> punkt.** Tabellen sagde indtil da, at DKIM lå på
+> `resend._domainkey.send.leagly.app`. Den ligger på roden. Skellet mellem
+> "aflæst i dokumentationen" og "set i panelet" var altså ikke pedanteri: den
+> forkerte placering ville have givet en fejlsøgning, hvis symptom er, at
+> domænet bare ikke verificerer. **`Sidst verificeret` betyder her, at FORMEN er
+> set** — posterne er endnu ikke oprettet, og Resend melder `Not Started`.
 
 > 🛑 **Fælden, der vælter begge afsendere på én gang.** Resends SPF-post hører til
 > på `send.leagly.app`. Lægges den i stedet som en **anden** TXT-post på roden ved
@@ -100,12 +106,18 @@ er Microsofts alene:
 > `permerror` efter specifikationen, ikke "begge gælder". Så fejler *både*
 > nulstillingsmails og almindelig post til og fra `kontakt@`. Skal to afsendere
 > nogensinde stå på samme navn, skal de flettes til **én** post med to `include:`.
+>
+> I praksis er det ét felt, det afhænger af: skriv `send` i registratorens
+> Host-felt, aldrig `@`. Se mappingen i trin 2.
 
-> ⚠️ **DMARC skal stå på relaxed alignment, som er standarden.** Resend signerer
-> med `d=send.leagly.app`, mens afsenderen er `noreply@leagly.app`. Relaxed
-> alignment accepterer et underdomæne; **strict** (`adkim=s`/`aspf=s`) gør ikke,
-> og så fejler DMARC, selv om både SPF og DKIM består hver for sig. Det er en
-> fælde, fordi den ser ud som en stramning, der ikke kan skade.
+> ⚠️ **Lad DMARC stå på relaxed alignment, som er standarden.** Det er en
+> anbefaling og ikke et krav — og den nuance er værd at have med, fordi noten
+> indtil 9. august påstod, at strict *ville* fejle. Det byggede på, at DKIM
+> signerede som `send.leagly.app`; med nøglen på roden signerer den som
+> `leagly.app` og aligner direkte. SPF aligner fortsat kun relaxed (Return-Path
+> er `send.leagly.app`), men DMARC kræver kun, at **én** af de to aligner, så den
+> består begge veje. Relaxed er stadig det fornuftige valg; strict køber ingen
+> sikkerhed her og gør opsætningen skrøbelig over for næste afsender.
 
 ### Supabase → Auth
 
@@ -148,10 +160,56 @@ vende tilbage til trin 1 for at trykke "Verify".
 
 Læs 🛑-advarslen om SPF ovenfor, **før** du tilføjer noget.
 
-1. Tilføj Resends MX, SPF og DKIM på de navne, Resend angiver — alle under
-   `send.leagly.app`. Rør ikke rodens MX eller SPF; de er Microsofts.
-2. Sæt eller efterse `_dmarc.leagly.app`. Relaxed alignment.
-3. Tryk "Verify" i Resend. Fejler den, se fejlfindingstabellen.
+**Resends `Name`-kolonne er allerede relativ til domænet**, og det er præcis, hvad
+GoDaddy og Namecheap forventer i deres `Host`-felt. De tre poster kan derfor
+skrives af direkte:
+
+| # | Type | Host / Name | Value | Priority |
+|---|---|---|---|---|
+| 1 | TXT | `resend._domainkey` | `p=MIGfMA0GCSqG…` (DKIM) | — |
+| 2 | MX | `send` | `feedback-smtp.<region>.amazonses.com` | `10` |
+| 3 | TXT | `send` | `v=spf1 include:…amazonses.com ~all` | — |
+
+Kræver din registrator det fulde navn i stedet, skrives de som
+`resend._domainkey.leagly.app` og `send.leagly.app`. **Skriv aldrig `@`** — det
+er roden, og SPF dér kolliderer med Microsofts.
+
+**Hos GoDaddy**, som er den, `leagly.app` ligger hos: log ind → **Domain
+Portfolio** → klik `leagly.app` → **Domain Settings** → **DNS**. Derfra
+**Add New Record** pr. post; felterne hedder `Type`, `Name`, `Value`, `TTL` og —
+kun for MX — `Priority`. `Add More Records` lader dig lægge alle tre ind, før du
+trykker **Save**.
+
+GoDaddys `Name`-felt er **prefikset uden domænet**, altså præcis Resends
+`Name`-kolonne. `@` betyder roden dér, og det er netop dét felt, 🛑-advarslen
+handler om. `TTL` må gerne blive på standarden (1 time); Resends "Auto" er ikke
+et krav om noget bestemt. Regn med op til en time, før "Verify" i Resend
+lykkes — i sjældne tilfælde længere.
+
+> ⚠️ **Er Microsoft 365 købt GENNEM GoDaddy, administrerer GoDaddy selv
+> mail-posterne.** Så kan rodens MX, SPF og `selector1/2._domainkey` være låst
+> eller blive skrevet tilbage, hvis nogen retter dem i hånden. Det rører ikke
+> Resends tre poster — de ligger på navne, GoDaddys automatik ikke kender — men
+> det er værd at vide, før man begynder at "rydde op" i rodens poster.
+> **Ikke efterprøvet for denne konto** (9. august 2026); står posterne åbne at
+> redigere, er svaret nej, og denne note kan slettes.
+
+Fire ting undervejs:
+
+- **Kopiér værdierne med Resends kopi-knap.** Panelet afkorter dem med `[…]`, og
+  en DKIM-nøgle skrevet af i hånden bliver forkert på en måde, der ser ud som
+  "domænet verificerer bare ikke".
+- **Tilføj ikke selv anførselstegn** om TXT-værdierne; registratoren gør det.
+- **Fejler MX-posten**, så afslut værdien med et punktum
+  (`…amazonses.com.`). Nogle registratorer tilføjer ellers domænet igen og laver
+  `…amazonses.com.leagly.app`.
+- **Lad "Enable Receiving" være slukket i Resend.** Indgående post er Microsofts
+  bord; tændes den, vil Resend have MX-poster, der kolliderer med postkassen.
+
+Derefter:
+
+1. Sæt eller efterse `_dmarc.leagly.app`. Relaxed alignment.
+2. Tryk "Verify" i Resend. Fejler den, se fejlfindingstabellen.
 
 ### Trin 3 — Supabase → Auth → SMTP Settings
 
@@ -207,7 +265,9 @@ er `B25` ikke leveret** — koden i dette repo er kun det halve.
 
 | Symptom | Årsag | Løsning |
 |---|---|---|
-| Resend verificerer ikke domænet | Posterne står på roden i stedet for `send.leagly.app` | Flyt dem. Se 🛑-advarslen om SPF |
+| Resend verificerer ikke domænet | MX eller SPF står på roden i stedet for `send` | Flyt dem. Se 🛑-advarslen om SPF og mappingen i trin 2 |
+| Resend verificerer ikke domænet | DKIM lagt under `send` i stedet for på roden | Den hedder `resend._domainkey`, ikke `resend._domainkey.send` — se tabellen i trin 2 |
+| Resend verificerer ikke domænet | Værdien er skrevet af fra skærmen og dermed afkortet | Brug kopi-knappen. Panelet viser `[…]` midt i værdien |
 | Resend verificerer ikke domænet | DNS-udbyderen har tilføjet domænet til MX-værdien, så den ender på `…amazonses.com.leagly.app` | Afslut værdien med et punktum |
 | Mailen kommer aldrig | Supabase bruger stadig den indbyggede service | Custom SMTP er ikke slået til i trin 3 |
 | Mailen kommer, men lander i spam | DKIM eller DMARC fejler | Læs headeren (kontrol 2). Er `dkim=pass` men `dmarc=fail`, står DMARC på strict — se ⚠️ ovenfor |
@@ -229,7 +289,8 @@ er `B25` ikke leveret** — koden i dette repo er kun det halve.
 - **Skifter appens adresse (`B21`):** Site URL i Supabase skal med. Skabelonerne
   skal *ikke* røres — de indeholder ingen adresse, og
   `docs/mail/templates.test.js` håndhæver det.
-- **Skifter afsender væk fra Resend:** fjern posterne under `send.leagly.app`,
+- **Skifter afsender væk fra Resend:** fjern posterne under `send.leagly.app` og
+  DKIM-posten `resend._domainkey` på roden,
   ret SMTP-indstillingerne, og **slet linjen om Resend i `src/lib/legal.js`** i
   samme ombæring. En databehandler, der står i politikken uden at findes, er
   samme slags fejl som en, der findes uden at stå der.
