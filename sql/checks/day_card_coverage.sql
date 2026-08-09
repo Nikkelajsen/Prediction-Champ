@@ -20,7 +20,25 @@
 --
 -- HVAD DEN PÅSTÅR
 -- En færdigspillet kampdag, hvis kampe indgår i mindst én konkurrence, og som
--- ikke er sin rundes sidste kampdag, har mindst ét dagskort.
+-- ikke er sin rundes sidste kampdag, har mindst ét dagskort — **og omvendt: en
+-- dag, der stadig spilles, har INTET dagskort.**
+--
+-- DEN ANDEN HALVDEL KOM TIL EFTER, AT DEN FØRSTE HAVDE VÆRET BLIND (august
+-- 2026). Kontrollen så kun efter et MANGLENDE kort og meldte roligt "spilles
+-- endnu" om en dag, der både var uafsluttet og allerede havde fået sit kort.
+-- Det var netop den tilstand, `generate_stories_catchup()` producerede, da den
+-- mistede sit grace-vindue: bagstopperen kaldte dagsmotoren, som dengang ikke
+-- selv spurgte `match_day_complete()`, og "Dagens facit" blev udgivet midt på
+-- kampdagen med tal beregnet på en halv dag. Fejlen blev meldt af en bruger,
+-- ikke af denne fil — og de to fejl har ikke samme vægt: et manglende kort er
+-- et udeblevet svar, et for tidligt kort er et FORKERT svar, brugeren allerede
+-- har læst. Derfor står tilstanden først i `case`-udtrykket og med versaler.
+--
+-- `news_value is not null` afgrænser til v3-æraen — samme æra-skel som det
+-- unikke indeks `stories_day_slot_uniq` i sql/story_engine_v3.sql. Uden det
+-- ville historiske v2-rækker og de kort, der blev skrevet før værnet kom,
+-- holde alarmen rød for evigt, og en alarm, der ikke kan blive grøn, bliver
+-- ignoreret. `>= current_date - 30` nedenfor gør det samme for tiden.
 --
 -- De tre forbehold er ikke slæk — de er nøjagtig de tre tilfælde, hvor motoren
 -- med vilje ikke skriver noget, og de spejler ordret dens egne betingelser:
@@ -100,6 +118,13 @@ select
   (select count(*)::int from public.stories s
     where s.period = 'day' and s.day_key = d.dag)            as kort,
   case
+    -- DEN MODSATTE FEJL FØRST, fordi den er værre. Et kort på en dag, der
+    -- stadig spilles, er ikke et manglende svar — det er et FORKERT svar, som
+    -- brugeren allerede har læst. Se begrundelsen for tilstanden nedenfor.
+    when d.uden_resultat > 0
+     and exists (select 1 from public.stories s3
+                  where s3.period = 'day' and s3.day_key = d.dag
+                    and s3.news_value is not null)          then 'KORT PÅ EN DAG, DER SPILLES'
     when d.uden_resultat > 0 then 'spilles endnu'
     -- Ordret samme udtryk som den tidlige udgang i generate_daily_stories().
     -- Ændres den ene, skal den anden med — ellers lyver kontrollen om en

@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A40` · `B28` · `G92` · `I20`.**
+**Næste ledige: `A40` · `B28` · `G93` · `I20`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -48,6 +48,7 @@ pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor
 eller en linje i "Forkastede ideer".
 
 - CL's kickoff-felt er stadig ikke aflæst — gentag aflæsningen i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md`, når ligafasen er lodtrukket (`B8`)
+- `sql/checks/day_card_coverage.sql` er den eneste kontrol i `sql/checks/` uden en test i `sql/tests/` og et CI-trin — `kickoff_coverage` og `league_admin_coverage` har begge, og det er derfor den var blind for `G92`
 
 ---
 

@@ -528,6 +528,25 @@ begin
   -- sit vindue: en runde må ikke få sit afsluttende kort, mens den stadig kan få
   -- flere resultater, og dét er en anden slags påstand.
   --
+  -- 🔴 DEN PÅSTAND VAR FORKERT, DA DEN BLEV SKREVET, OG BLEV DET FØRST RIGTIG
+  -- (august 2026). `match_day_complete` lå IKKE i generate_daily_stories — den
+  -- lå kun i matches-triggeren, som denne løkke pr. definition omgår. Filteret
+  -- nedenfor er pr. KAMP (`home_score is not null`), så én færdigspillet kamp
+  -- kvalificerede hele dagen, og bagstopperen skrev dagens kort midt på
+  -- kampdagen. Uden grace-vinduet var der intet tilbage til at maskere det.
+  -- Værnet er nu flyttet ind i generate_daily_stories, hvor sætningen ovenfor
+  -- hele tiden har påstået, at det lå — se begrundelsen i story_engine_v3.sql.
+  --
+  -- FØLGEN FOR DENNE LØKKE: en ufuldstændig dag kvalificerer sig stadig og får
+  -- nu et kald, der returnerer straks, frem for et forkert kort. Det er en
+  -- tilsigtet byttehandel, men den koster løkken sin selvafslutning for netop
+  -- de dage — se afsnittet nedenfor. Prisen er to `exists` mod indekserede
+  -- prædikater, betalt før motoren rører en temporær tabel.
+  --
+  -- ⚠️ FILEN MÅ IKKE GEN-KØRES for at levere rettelsen ovenfor. #38 genskaber
+  -- v2's dagsmotor og ruller v3 tavst tilbage (sql/README.md). Kommentaren her
+  -- er kildetekst; produktionen får værnet via en gen-kørsel af #47.
+  --
   -- Loftet er ikke pynt: køres bagstopperen første gang mod en database med
   -- huller langt tilbage, må én kørsel ikke generere hundredvis af dage. De
   -- ældste tages først (`order by 1`), så efterslæbet afvikles i takt.
@@ -543,6 +562,23 @@ begin
   --   · en dag, hvor ingen af kampene indgår i en konkurrence, har intet at lave
   --     et kort ud af — appen synkroniserer syv turneringer, men konkurrencerne
   --     dækker ikke dem alle.
+  --
+  -- **DER ER KOMMET EN TREDJE SLAGS DAG, OG DEN ER IKKE SELVAFSLUTTENDE**
+  -- (august 2026, sammen med værnet ovenfor): dagen, der er ufuldstændig.
+  -- Motoren returnerer straks, så dagen får intet kort og tilbydes igen ved
+  -- næste kørsel. For en dag, der stadig spilles, er det ØNSKET — det er
+  -- præcis sådan, bagstopperen skal samle dagen op, når den bliver færdig.
+  -- For en dag, hvis sidste kamp aldrig får et resultat (afbrudt, annulleret,
+  -- uindberettet i en anden turnering — den globale afgrænsning, `A39`), er det
+  -- forgæves arbejde for evigt.
+  --
+  -- Betingelsen står bevidst IKKE i `where`-klausulen nedenfor. Reglen ville så
+  -- ligge to steder, og en regel, der ligger to steder, er den, der driver fra
+  -- hinanden — det var netop dét, der lod fejlen opstå. Prisen er den samme,
+  -- som runde-løkken nedenfor allerede betaler og dokumenterer: loftet gør den
+  -- ENDELIG frem for ubegrænset, højst 20 forsøg pr. kørsel, ældste først, så
+  -- et rigtigt hul aldrig kan sulte bag en blokeret dag. Hvert forsøg er to
+  -- `exists` og ingen temporær tabel.
   for d in
     select m.match_day
     from public.matches m

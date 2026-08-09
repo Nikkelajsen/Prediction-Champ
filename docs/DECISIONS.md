@@ -15,6 +15,53 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 9. august 2026 — Fuldstændighedsreglen hører i motoren, ikke hos kalderne (`G92`)
+
+**Beslutning:** kravet "hele kampdagen skal være færdigspillet" håndhæves som en
+tidlig udgang **inde i `generate_daily_stories()`** — efter sidste-dag-udgangen
+og før dens `delete` — og ikke ved at hver kalder spørger `match_day_complete()`
+først. Bagstopperens dagsløkke får **ikke** betingelsen kopieret ind i sin
+`where`-klausul.
+
+**Hvorfor det overhovedet skulle besluttes.** Reglen fandtes allerede, men lå ét
+sted: matches-triggeren. `generate_stories_catchup()` omgår triggeren pr.
+definition og filtrerede kun pr. kamp, så én færdigspillet kamp kvalificerede
+hele dagen — og "Dagens facit" blev udgivet midt på kampdagen med tal beregnet
+på en halv dag. Meldt af en bruger 9. august.
+
+**I motoren og ikke hos kalderne, fordi der er fem kaldere.** Triggeren,
+bagstopperen, `story_engine_v2_backfill.sql`, `story_engine_v2_measure.sql` og
+manuelle kald. Fire spurgte selv. Den femte gjorde ikke, og det kunne ikke ses
+noget sted — hverken i en test, i kontrollen eller i `job_runs`. En regel, hver
+kalder skal huske, er den regel, den næste kalder glemmer; det er præcis, hvad
+der skete her. Prisen ved at flytte den er et kald, der returnerer på to
+`exists` mod indekserede prædikater, før motoren rører en temporær tabel.
+
+**Og derfor IKKE også i løkkens `where`.** Det ville gøre reglen til to regler,
+som skal holdes ens — nøjagtig den tilstand, der lod fejlen opstå, bare med et
+sted mere at drive fra. **Prisen er reel og accepteret:** en ufuldstændig dag
+kvalificerer sig stadig og får et kald, der returnerer straks, så løkken ikke er
+selvafsluttende for en dag, der aldrig bliver færdig (`A39`s globale
+afgrænsning). Det er samme afvejning, `G90` allerede traf for runde-løkken, og
+svaret er det samme: **loftet på 20 gør prisen endelig frem for ubegrænset**,
+ældste først, så et rigtigt hul aldrig sulter bag en blokeret dag. En ægte
+terminering ville kræve, at et forsøg blev husket — altså en tabel eller en
+kolonne — og det er en større pris end den, der betales her.
+
+**Kontrollen fik den modsatte påstand, og rækkefølgen i `case`-udtrykket er
+selv en beslutning.** `day_card_coverage` ledte kun efter et manglende kort.
+Den melder nu også `KORT PÅ EN DAG, DER SPILLES`, og den tilstand står **først**,
+fordi de to fejl ikke vejer det samme: et manglende kort er et udeblevet svar,
+et for tidligt kort er et forkert svar, brugeren allerede har læst. Afgrænset
+med `news_value is not null` (v3-æraen, samme skel som `stories_day_slot_uniq`),
+så kortene fra før rettelsen ikke holder alarmen rød for evigt — en alarm, der
+ikke kan blive grøn, bliver ignoreret.
+
+**`A39` er ikke afgjort af dette.** Om `match_day_complete()` skal blive ved med
+at være global — én kamp uden resultat i én turnering blokerer alle dagskort —
+er et andet spørgsmål, og rettelsen her tager ikke stilling til det. Den gør
+kun, at reglen, uanset hvordan den en dag lyder, håndhæves ét sted.
+
 ## 8. august 2026 (nat) — En opdigtet tid genkendes på, at den flytter sig (`G85`)
 
 **Beslutning:** football-data.orgs opdigtede klokkeslæt for Premier League,

@@ -43,6 +43,11 @@
 --      stod som en kopi af `v_threshold`. Frontendens ulæst-markering læser nu
 --      prioriteten, og hvis motoren en dag får en TREDJE udgang, skal det
 --      opdages her frem for som et badge, der lyser den forkerte dag.
+--  15. **EN DAG, DER STADIG SPILLES, FÅR INTET KORT** (august 2026). Kravet lå
+--      kun i matches-triggeren, så bagstopperen — som pr. definition omgår den
+--      — udgav "Dagens facit" midt på kampdagen med tal beregnet på en halv
+--      dag. Påstanden dækker BEGGE veje ind i motoren og har en modprøve, uden
+--      hvilken en motor, der er holdt op med at skrive, ville bestå.
 --
 -- OM TIDSVINDUER: fixturen ligger i marts 2026, mens `now()` er hvad det er.
 -- apply_milestone_stories() måler alder mod `now()`, så testen kalder den med
@@ -1053,6 +1058,82 @@ begin
   select public.generate_stories_catchup(0) into v_2;
   if v_2 <> 20 then
     raise exception 'FEJL 17e: næste kørsel tog % runder, forventede loftet på 20 igen', v_2;
+  end if;
+end $$;
+
+-- ---------- 18. En dag, der stadig spilles, får INTET kort ----------
+-- REGRESSIONEN FRA 9. AUGUST 2026. Kravet "dagens sidste kamp er færdigspillet"
+-- lå kun i matches-triggeren, mens `generate_daily_stories()` selv aldrig
+-- spurgte. Bagstopperens dagsløkke filtrerer pr. KAMP (`home_score is not
+-- null`), så én færdigspillet kamp kvalificerede hele dagen, og et kort med
+-- "Dagens facit" og "Du sluttede dagen som nr. 2 af 6" blev udgivet kl. 18.03,
+-- mens dagens næste kamp stadig kørte. Tallene var beregnet på en halv dag.
+--
+-- Testen står SIDST, fordi den gør fixturens tirsdag ufuldstændig, og påstand
+-- 0c kræver det modsatte. Rækkefølgen er derfor bindende.
+--
+-- **TRIN 4 ER SELVE REGRESSIONEN.** Trin 3 ville have bestået også før
+-- rettelsen, hvis triggeren havde været indlæst — men den er ikke, og den var
+-- heller ikke vejen ind. Bagstopperen var. En test, der kun kaldte motoren
+-- direkte, ville bevise noget, der aldrig var i tvivl.
+--
+-- **TRIN 5 ER LIGE SÅ NØDVENDIG.** Uden modprøven ville 18a-18b være opfyldt af
+-- en motor, der var holdt op med at skrive overhovedet — nøjagtig den slags
+-- tavshed, hele denne fils punkt 1 findes for.
+do $$
+declare
+  v_sn uuid; v_ta uuid; v_tb uuid; v_mid uuid; v_n int; v_før int;
+begin
+  select id into v_sn from public.seasons
+   where league_id = (select id from public.leagues where name = 'Testliga');
+  select id into v_ta from public.teams where name = 'Vejle';
+  select id into v_tb from public.teams where name = 'Lyngby';
+
+  select count(*) into v_før from public.stories
+   where period = 'day' and day_key = '2026-03-03';
+  if v_før = 0 then
+    raise exception 'FEJL 18a: tirsdagen havde ingen kort at fjerne — fixturen er ikke, hvad testen tror';
+  end if;
+  delete from public.stories where period = 'day' and day_key = '2026-03-03';
+
+  -- En femte kamp på tirsdagen UDEN resultat. Samme runde, så torsdagen
+  -- (2026-03-05) forbliver rundens sidste kampdag, og tirsdagen derfor stadig
+  -- er en dag, der SKAL kunne få et kort — når den bliver færdig.
+  insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at)
+    values (v_sn, v_ta, v_tb, '2026-03-03 16:00:00+00') returning id into v_mid;
+  insert into public.competition_matches (competition_id, match_id)
+    values ('10000000-0000-0000-0000-000000000001', v_mid);
+
+  if public.match_day_complete('2026-03-03') then
+    raise exception 'FEJL 18b: dagen meldes komplet, selvom en kamp mangler resultat';
+  end if;
+
+  -- (3) Direkte kald til motoren.
+  perform public.generate_daily_stories('2026-03-03');
+  select count(*) into v_n from public.stories
+   where period = 'day' and day_key = '2026-03-03';
+  if v_n <> 0 then
+    raise exception 'FEJL 18c: motoren udgav % kort for en dag, der stadig spilles', v_n;
+  end if;
+
+  -- (4) Bagstopperen — vejen, kortet faktisk kom ad.
+  perform public.generate_stories_catchup(0);
+  select count(*) into v_n from public.stories
+   where period = 'day' and day_key = '2026-03-03';
+  if v_n <> 0 then
+    raise exception 'FEJL 18d: bagstopperen udgav % kort for en dag, der stadig spilles', v_n;
+  end if;
+
+  -- (5) MODPRØVEN: dagen bliver færdig, og kortene kommer.
+  update public.matches set home_score = 1, away_score = 1 where id = v_mid;
+  if not public.match_day_complete('2026-03-03') then
+    raise exception 'FEJL 18e: dagen meldes stadig ufuldstændig, efter sidste resultat er inde';
+  end if;
+  perform public.generate_daily_stories('2026-03-03');
+  select count(*) into v_n from public.stories
+   where period = 'day' and day_key = '2026-03-03';
+  if v_n = 0 then
+    raise exception 'FEJL 18f: den færdige dag gav ingen kort — værnet lukker mere end den skal';
   end if;
 end $$;
 
