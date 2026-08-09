@@ -130,7 +130,7 @@ ganske vist på roden, men under sin egen selector, som Microsofts to ikke hedde
 | Sender email | `noreply@leagly.app` | ? |
 | Sender name | Leagly | ? |
 | Rate Limits → e-mails | `30`/time (custom SMTPs egen default; den delte service gav 2) | ? |
-| Site URL | Appens adresse — **bestemmer linket i mailen** | ? |
+| Site URL | `https://prediction-champ.vercel.app` — **bestemmer linket i mailen**. Redirect URLs: `…/*` | 9. august 2026 |
 | Confirm email | **Slået fra** indtil `B26` | ? |
 
 ## Runbog: opsætning fra bunden
@@ -292,9 +292,14 @@ Derefter:
    > brugeren får en fejl, og Supabase svarer `429: Email rate limit exceeded`.
 2. Kontrollér **Site URL**. Den bestemmer, hvor linket i mailen peger hen, og
    der findes ingen `emailRedirectTo` i koden til at overstyre den.
-   > ⚠️ **`B21` flytter appens adresse.** Sker det, skal Site URL med — ellers
-   > peger hver nulstillingsmail på en adresse, der ikke svarer, mens alt andet
-   > ser rigtigt ud.
+   > ⚠️ **`B21` flytter appens adresse.** Sker det, skal **både Site URL og
+   > Redirect URLs** med i samme ombæring — ellers peger hver nulstillingsmail på
+   > en adresse, der ikke svarer, mens alt andet ser rigtigt ud.
+   >
+   > Allow-listen bruges i praksis næsten ikke: der findes ingen
+   > `emailRedirectTo` i koden, så Supabase falder altid tilbage på Site URL. Det
+   > gør den ikke mindre vigtig at rette — det gør bare Site URL til den, der
+   > faktisk bærer linket.
 
 ### Trin 4 — skabelonerne
 
