@@ -129,7 +129,7 @@ ganske vist på roden, men under sin egen selector, som Microsofts to ikke hedde
 | SMTP Settings | `smtp.resend.com` · port `465` · brugernavn `resend` · API-nøglen som password | ? |
 | Sender email | `noreply@leagly.app` | ? |
 | Sender name | Leagly | ? |
-| Rate Limits → e-mails | Hævet fra standarden | ? |
+| Rate Limits → e-mails | `30`/time (custom SMTPs egen default; den delte service gav 2) | ? |
 | Site URL | Appens adresse — **bestemmer linket i mailen** | ? |
 | Confirm email | **Slået fra** indtil `B26` | ? |
 
@@ -276,10 +276,20 @@ en nulstillingsmail.
 
 Derefter:
 
-1. **Hæv rate limit** under Auth → Rate Limits (linket "Rate limits" står øverst
-   på SMTP-siden). Det er et selvstændigt trin og ikke pynt: loftet er lavt,
-   *fordi* den indbyggede service er delt, og skifter du kun SMTP'en, sidder
-   halvdelen af problemet der endnu.
+1. **Efterse rate limit** under Auth → Rate Limits (linket "Rate limits" står
+   øverst på SMTP-siden). At slå custom SMTP til flytter selv loftet fra `2` til
+   `30` mails i timen — de 2 var den delte services tal, ikke en indstilling,
+   nogen havde valgt. Kontrollér, at der nu står 30, frem for at taste et nyt tal.
+   > **Bliv på 30.** Appen sender to mails i en brugers hele levetid, og den
+   > største realistiske spids er en liga, der melder sig samlet til på én aften
+   > — 5–10 personer, altså langt under loftet. Opad er grænsen ikke Supabases,
+   > men **Resends 100/dag**: ved 30/time koster én ondsindet time 30 % af dagens
+   > kvote, mens et loft på 100 lader én time tømme hele døgnet. Så ville den
+   > næste rigtige bruger, der glemmer sin adgangskode, være låst ude — præcis
+   > den tilstand, `B25` blev kørt for at komme ud af.
+   >
+   > Rør den først, hvis en rigtig spids bliver blokeret. Symptomet er synligt:
+   > brugeren får en fejl, og Supabase svarer `429: Email rate limit exceeded`.
 2. Kontrollér **Site URL**. Den bestemmer, hvor linket i mailen peger hen, og
    der findes ingen `emailRedirectTo` i koden til at overstyre den.
    > ⚠️ **`B21` flytter appens adresse.** Sker det, skal Site URL med — ellers
@@ -338,7 +348,7 @@ er `B25` ikke leveret** — koden i dette repo er kun det halve.
 | Supabase afviser SMTP-loginet | Brugernavnet er sat til e-mail eller domæne | Det er den lille bogstavstreng `resend` for alle konti; API-nøglen er password |
 | Supabase afviser SMTP-loginet | DKIM-værdien fra DNS Records er brugt som password | Den er en OFFENTLIG nøgle, ikke en hemmelighed. Password er API-nøglen (`re_…`) fra **API Keys** |
 | Mailen kommer, men lander i spam | DKIM eller DMARC fejler | Læs headeren (kontrol 2). Er `dkim=pass` men `dmarc=fail`, står DMARC på strict — se ⚠️ ovenfor |
-| Nogle mails kommer, andre ikke | Rate limit | Trin 3.3 |
+| Nogle mails kommer, andre ikke | Rate limit — Supabase svarer `429: Email rate limit exceeded` | Efterse de 30/time i trin 3. Hæv kun, hvis en RIGTIG spids blev blokeret, og hold dig under Resends 100/dag |
 | Linket åbner appen, men ikke nulstillingsskærmen | Site URL peger forkert, eller `#type=recovery` er strippet | Trin 3.4. Appen læser hash'et i `src/App.jsx:34` |
 | Post til `kontakt@` er holdt op med at komme | To SPF-poster på roden | 🛑-advarslen ovenfor |
 
