@@ -231,9 +231,10 @@ kanal, der ikke er rate-begrænset til udvikling.
 
 **Selve opsætningen ligger uden for repoet**, så leverancen her er
 [`MAIL.md`](./MAIL.md): register og runbog i én fil, efter `CRON.md`s form med en
-`Sidst verificeret`-kolonne, der starter med `?`. **Rækken er først lukket, når
-de fire kontroller i "Bevis, at det virker" er gået igennem** — og det er ejerens
-arbejde, ikke repoets.
+`Sidst verificeret`-kolonne. **Alle fire kontroller i "Bevis, at det virker" er
+bestået samme dag:** mailen kom fra `noreply@leagly.app`, headerne gav `pass` på
+alle tre signaturer, linket åbnede nulstillingsskærmen, og post udefra lander i
+`kontakt@leagly.app`. Rækken er dermed reelt lukket og ikke kun merget.
 
 **Tre ting, rækken ikke selv nævnte, kom med:** en linje om Resend i
 `src/lib/legal.js` (husets ufravigelige regel om nye tredjeparter — og Microsoft

@@ -54,7 +54,7 @@ leverandører og to helt forskellige krav.
 | Felt | Værdi | Sidst verificeret |
 |---|---|---|
 | Udbyder | Resend | 9. august 2026 |
-| Afsender | `noreply@leagly.app` | ? |
+| Afsender | `noreply@leagly.app` | 9. august 2026 — **set i en modtaget mail** |
 | Verificeret domæne | `leagly.app` (MX og SPF på `send.leagly.app`, DKIM på roden) | 9. august 2026 — **verificeret i Resend** |
 | Region | **EU (Irland, `eu-west-1`)** — samme region som Supabase | 9. august 2026 — aflæst på domænets side |
 | Plan | Free | ? |
@@ -68,9 +68,9 @@ kontoens levetid — én bekræftelse, og en nulstilling hvis de glemmer. Selv
 
 | Felt | Værdi | Sidst verificeret |
 |---|---|---|
-| Adresse | `kontakt@leagly.app` | ? |
-| Hvor | Microsoft 365-postkasse på domænet | ? |
-| Bruges af | `src/lib/legal.js` (indsigt/sletning), `site/om.html` | ? |
+| Adresse | `kontakt@leagly.app` | 9. august 2026 — post udefra kommer frem |
+| Hvor | Microsoft 365-postkasse på domænet | 9. august 2026 |
+| Bruges af | `src/lib/legal.js` (indsigt/sletning), `site/om.html` | 9. august 2026 |
 
 ### DNS-poster
 
@@ -80,13 +80,13 @@ ganske vist på roden, men under sin egen selector, som Microsofts to ikke hedde
 
 | Navn | Type | Ejer | Sidst verificeret |
 |---|---|---|---|
-| `leagly.app` | MX | Microsoft 365 (indgående `kontakt@`) | ? |
-| `leagly.app` | TXT · SPF | Microsoft (`include:spf.protection.outlook.com`) | ? |
-| `selector1._domainkey`, `selector2._domainkey` | CNAME | Microsofts DKIM | ? |
+| `leagly.app` | MX | Microsoft 365 (indgående `kontakt@`) | 9. august 2026 — bevist af, at `kontakt@` modtager |
+| `leagly.app` | TXT · SPF | Microsoft (`include:spf.protection.outlook.com`) | 9. august 2026 — `spf=pass` i headerne |
+| `selector1._domainkey`, `selector2._domainkey` | CNAME | Microsofts DKIM | 9. august 2026 — `dkim=pass` i headerne |
 | `send.leagly.app` | MX | Resend (bounce, peger på AWS SES i `eu-west-1`), prioritet 10 | 9. august 2026 — **oprettet via Domain Connect og verificeret** |
 | `send.leagly.app` | TXT · SPF | Resend | 9. august 2026 — som ovenfor |
 | `resend._domainkey.leagly.app` | TXT | Resends DKIM | 9. august 2026 — som ovenfor |
-| `_dmarc.leagly.app` | TXT | Fælles for begge afsendere | ? |
+| `_dmarc.leagly.app` | TXT | Fælles for begge afsendere | 9. august 2026 — `dmarc=pass` i headerne |
 
 > ⚠️ **De præcise værdier står ikke her, og det er med vilje.** DKIM-nøglen og
 > SES-værten er kontospecifikke, og formen kan ændre sig hos Resend. Kopiér dem
@@ -126,12 +126,12 @@ ganske vist på roden, men under sin egen selector, som Microsofts to ikke hedde
 
 | Indstilling | Værdi | Sidst verificeret |
 |---|---|---|
-| SMTP Settings | `smtp.resend.com` · port `465` · brugernavn `resend` · API-nøglen som password | ? |
-| Sender email | `noreply@leagly.app` | ? |
-| Sender name | Leagly | ? |
-| Rate Limits → e-mails | `30`/time (custom SMTPs egen default; den delte service gav 2) | ? |
+| SMTP Settings | `smtp.resend.com` · port `465` · brugernavn `resend` · API-nøglen som password | 9. august 2026 |
+| Sender email | `noreply@leagly.app` | 9. august 2026 — vist som `Leagly <noreply@leagly.app>` i indbakken |
+| Sender name | Leagly | 9. august 2026 |
+| Rate Limits → e-mails | `30`/time (custom SMTPs egen default; den delte service gav 2) | 9. august 2026 — aflæst |
 | Site URL | `https://prediction-champ.vercel.app` — **bestemmer linket i mailen**. Redirect URLs: `…/*` | 9. august 2026 |
-| Confirm email | **Slået fra** indtil `B26` | ? |
+| Confirm email | **Slået fra** indtil `B26` | 9. august 2026 |
 
 ## Runbog: opsætning fra bunden
 
@@ -305,10 +305,20 @@ Derefter:
 
 Under Auth → Email Templates. Indsæt indholdet af:
 
-| Skabelon i Supabase | Fil |
-|---|---|
-| Reset Password | [`mail/recovery.html`](./mail/recovery.html) |
-| Confirm signup | [`mail/confirm-signup.html`](./mail/confirm-signup.html) |
+| Skabelon i Supabase | Emne | Brødtekst |
+|---|---|---|
+| Reset Password | `Nulstil din adgangskode` | [`mail/recovery.html`](./mail/recovery.html) |
+| Confirm signup | `Bekræft din e-mail` | [`mail/confirm-signup.html`](./mail/confirm-signup.html) |
+
+> ⚠️ **Emnet er et SEPARAT felt over brødteksten — og det er nemt at glemme.**
+> Den første leverede nulstillingsmail (9. august 2026) kom frem med dansk
+> brødtekst under Supabases engelske standard, *"Reset your password"*. Runbogen
+> sagde dengang kun "indsæt indholdet af filen", og skabelonen bar derfor kun det
+> halve af teksten — den halvdel, brugeren ser først i sin indbakke.
+>
+> Emnet står nu i hver skabelons hoved sammen med brødteksten, og
+> `docs/mail/templates.test.js` kræver, at linjen findes. Det fanger den samme
+> fejl på `confirm-signup`, som først tages i brug ved `B26`.
 
 De øvrige fire — Invite user, Magic Link, Change Email Address,
 Reauthentication — beholder Supabases standard. Ingen af flowene er i brug:
@@ -323,6 +333,15 @@ appen har hverken invitationsmails, magic links eller e-mailskift.
 
 ## Bevis, at det virker
 
+> ✅ **Alle fire bestået 9. august 2026.** Nulstillingsmailen kom fra
+> `Leagly <noreply@leagly.app>`, headerne gav `pass` på alle tre signaturer,
+> linket åbnede `ResetPasswordScreen`, adgangskoden blev opdateret, og post
+> udefra lander i `kontakt@leagly.app`. Registerets datoer stammer herfra.
+>
+> Kontrollerne bliver stående som **instruktion** og ikke som historik: de skal
+> køres igen, hver gang afsenderen, domænet eller Site URL flytter sig — og
+> `B21` kommer til at flytte den sidste.
+
 Fire kontroller. **Den tredje er den eneste, der ikke kan snydes.**
 
 1. **Send.** Nulstil adgangskoden fra appen mod en engangsadresse, du kan læse.
@@ -335,8 +354,15 @@ Fire kontroller. **Den tredje er den eneste, der ikke kan snydes.**
    Resend-posterne ikke rørte den indgående post. Springes den over, opdages en
    SPF-kollision først, den dag nogen forgæves prøver at kontakte os om sine data.
 
-Udfyld `Sidst verificeret` i registeret, når de fire er gået igennem. **Indtil da
-er `B25` ikke leveret** — koden i dette repo er kun det halve.
+Udfyld `Sidst verificeret` i registeret, når de fire er gået igennem. Det er dét,
+der gør forskel på "aldrig kørt" og "kørt og bestået" — og uden den forskel er
+registeret en ønskeseddel.
+
+**Første kørsel fandt tre ting, runbogen ikke vidste:** at DKIM ligger på roden
+og ikke under `send.`, at GoDaddy afviser håndindtastning, når Domain Connect
+allerede har skrevet posterne, og at emnelinjen er et separat felt, der bliver
+stående på engelsk. Alle tre er skrevet ind ovenfor. Det er den slags, en runbog
+kun kan lære af at blive fulgt.
 
 ## Fejlfinding
 

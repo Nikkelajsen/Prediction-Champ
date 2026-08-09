@@ -81,11 +81,17 @@ har pastet den ind igen; det står i runbogen. `confirm-signup.html` bruges før
 ved `B26`, men skrives nu, så dén række bliver ét klik frem for at have en
 skjult tekstopgave i sig.
 
-**Leverancen er ikke færdig, når den er merget.** Selve opsætningen ligger uden
-for repoet, og registeret i `MAIL.md` starter med `?` i hver `Sidst
-verificeret`-celle. Rækken er først lukket, når de fire kontroller i "Bevis, at
-det virker" er gået igennem — og den tredje, at linket faktisk åbner
-nulstillingsskærmen, er den eneste, der ikke kan snydes.
+**Leverancen var ikke færdig, da den blev merget** — selve opsætningen ligger
+uden for repoet, og registeret i `MAIL.md` startede med `?` i hver `Sidst
+verificeret`-celle. **Den er det nu:** alle fire kontroller bestod samme dag,
+inklusive den tredje, som er den eneste, der ikke kan snydes — at linket faktisk
+åbner nulstillingsskærmen.
+
+At skellet blev holdt, viste sig at være det værd. Kørslen fandt **tre** ting,
+dokumentationen havde gættet eller sprunget over: DKIM-postens placering (gættet
+forkert), GoDaddys konflikt ved håndindtastning, og at emnelinjen er et separat
+felt, som bliver stående på Supabases engelske standard. Ingen af dem kunne være
+fundet fra repoet.
 
 ---
 
