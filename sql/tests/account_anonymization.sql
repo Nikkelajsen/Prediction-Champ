@@ -1,7 +1,33 @@
--- Test af kontolukning ved anonymisering (sql/account_anonymization.sql, B4).
+-- Test af kontolukning ved anonymisering (B4) — den vej, brugeren selv går.
 --
--- Kører mod en TOM engangsdatabase (CI: postgres-service). Rører aldrig
--- produktion. Samme mønster som feedback.sql.
+-- Kører mod en engangsdatabase, hvor PRODUKTIONSSKEMAET allerede er indlæst
+-- (`node sql/tests/_schema.mjs`). Rører aldrig produktion.
+--
+-- HVAD `G91` LAVEDE OM (9. august 2026) — TO TING, OG DEN ANDEN ER DEN VIGTIGE
+--
+-- 1. **Skemaet.** Filen byggede sit eget: femten tabeller med syntetiske
+--    fremmednøgler, hvor `predictions.match_id` fx var et `gen_random_uuid()`,
+--    som produktionens `references matches(id)` ville afvise med det samme. En
+--    test, hvis rigtighed hviler på tabeller, den selv har opfundet, kan stå
+--    grøn, mens funktionen fejler mod det rigtige skema.
+--
+-- 2. **Den testede funktion var AFLØST.** Filen indlæste kun
+--    `\ir ../account_anonymization.sql` og prøvede dermed #31's selvstændige
+--    `anonymize_my_account()` — en funktionskrop, INGEN kører. Produktionen
+--    kører `sql/liga_admin.sql`s udgave, som er en tynd skal om
+--    `_anonymize_account()` med `A25`s framelding og `A36`/`A37`s
+--    admin-overdragelse oveni. Testen vogtede altså en funktion, der kun findes,
+--    fordi migreringerne læses i rækkefølge.
+--
+--    **Valget faldt på at pege den om frem for at slette den.** De otte
+--    påstande nedenfor findes ikke i `sql/tests/liga_admin.sql`, som handler om
+--    administratorens grænser: pseudonymets form og længde, at brugssporet er
+--    ryddet tabel for tabel, at spillet står uændret, at ligaen overlever, at
+--    vennen er urørt, og at to lukkede konti ikke kolliderer. At folde dem ind i
+--    en fil på 800 linjer ville have gjort begge filer sværere at læse for at
+--    spare en fixture. De to filer deler nu skema og migreringer, men stiller
+--    hvert sit spørgsmål: her "hvad sker der med MIN konto", dér "hvad må en
+--    administrator".
 --
 -- HVAD DEN BEVISER
 --   1. Funktionen har NUL parametre. Det er ikke en stilkontrol — det er selve
@@ -12,102 +38,114 @@
 --      stadig deltager og ligamedlem. Det er hele grunden til, at anonymisering
 --      blev valgt frem for sletning — går denne påstand tabt, får vennernes
 --      stillinger huller.
---      ⚠️ Deltagelses-påstanden gælder DENNE FILS krop og ikke produktionens.
---      Produktionen kalder `_anonymize_account()` (sql/liga_admin.sql), som
---      siden A25 også melder den lukkede af de konkurrencer, der IKKE er
---      begyndt. Skellet kan ikke måles her — dette skema har hverken `matches`
---      eller `competition_matches`, så en konkurrence kan ikke være begyndt —
---      og hører derfor hjemme i afsnit 12 af sql/tests/liga_admin.sql, hvor
---      begge tabeller findes. Den fulde regel er: begge kroppe bevarer
---      deltagelsen i alt, der er spillet.
+--      Konkurrencen i fixturen har en SPILLET kamp, og det er nu et krav og ikke
+--      en tilfældighed: `A25` melder den lukkede af alt, der ikke er begyndt.
+--      Det skel kunne den gamle fil ikke måle — dens skema havde hverken
+--      `matches` eller `competition_matches` — og den skrev derfor en advarsel
+--      om, at påstanden kun gjaldt dens egen krop. Advarslen kan nu slettes:
+--      reglen er den samme her og i produktionen, og dens fire udfald er dækket
+--      af afsnit 12 i `sql/tests/liga_admin.sql`.
 --   5. **Ligaen, A oprettede, findes stadig med alle sine medlemmer.** En
 --      sletning ville have kaskaderet den væk via groups.created_by.
 --   6. A's feedback-række overlever uden user_id.
 --   7. B er fuldstændig urørt.
 --   8. Andet kald er et no-op, og to brugere kan lukkes uden at kollidere på
 --      unikhedsindekset.
+--
+-- KØR LOKALT
+--   node sql/tests/_schema.mjs > /tmp/skema.sql
+--   psql -d anontest -v ON_ERROR_STOP=1 -f /tmp/skema.sql
+--   psql -d anontest -v ON_ERROR_STOP=1 -b -f sql/tests/account_anonymization.sql
 
 \set ON_ERROR_STOP on
 \timing off
 
-do $blk$ begin
-  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
-  if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
-end $blk$;
+-- Story Engine-triggeren på `matches` ville skrive sine egne historier, og
+-- påstand 3 og 7 tæller netop historier. Samme greb og samme grund som i
+-- `sql/tests/liga_admin.sql`.
+alter table public.matches disable trigger all;
 
-create schema if not exists auth;
-create or replace function auth.uid() returns uuid language sql stable as
-  $q$ select nullif(current_setting('test.uid', true), '')::uuid $q$;
-create table if not exists auth.users (id uuid primary key);
-
--- ---------- minimalt skema ----------
--- Kun det, funktionen rører, plus de constraints, pseudonymet skal overholde.
-create table public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  display_name text not null,
-  is_admin boolean not null default false,
-  last_seen_at timestamptz
-);
-create unique index profiles_display_name_lower_idx on public.profiles (lower(display_name));
-alter table public.profiles add constraint profiles_display_name_len
-  check (char_length(btrim(display_name)) between 2 and 20);
-
-create table public.push_subscriptions (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, endpoint text);
-create table public.notification_log   (user_id uuid not null references auth.users(id) on delete cascade, key text, primary key (user_id, key));
-create table public.stories            (id uuid primary key default gen_random_uuid(), user_id uuid not null references public.profiles(id) on delete cascade, headline text);
-create table public.analytics_events   (id uuid primary key default gen_random_uuid(), user_id uuid references auth.users(id) on delete cascade, event_name text);
-create table public.user_activity_days (user_id uuid not null references auth.users(id) on delete cascade, day date, primary key (user_id, day));
-create table public.feedback           (id uuid primary key default gen_random_uuid(), user_id uuid references auth.users(id) on delete set null, message text);
-create table public.client_errors      (id uuid primary key default gen_random_uuid(), user_id uuid references auth.users(id) on delete set null, message text);
-
--- Det, der SKAL overleve.
-create table public.predictions     (user_id uuid not null references public.profiles(id) on delete cascade, match_id uuid, pred_home int, pred_away int, primary key (user_id, match_id));
-create table public.ratings         (user_id uuid not null references public.profiles(id) on delete cascade, scope text, rating numeric, primary key (user_id, scope));
-create table public.rating_history  (user_id uuid not null references public.profiles(id) on delete cascade, scope text, round_key date, rating_after numeric, primary key (user_id, scope, round_key));
-create table public.groups          (id uuid primary key default gen_random_uuid(), name text, created_by uuid references public.profiles(id) on delete cascade);
-create table public.group_members   (group_id uuid not null references public.groups(id) on delete cascade, user_id uuid not null references public.profiles(id) on delete cascade, primary key (group_id, user_id));
-create table public.competitions    (id uuid primary key default gen_random_uuid(), name text, created_by uuid references public.profiles(id));
-create table public.competition_participants (competition_id uuid not null references public.competitions(id) on delete cascade, user_id uuid not null references public.profiles(id) on delete cascade, primary key (competition_id, user_id));
-create table public.competition_awards (competition_id uuid not null references public.competitions(id) on delete cascade, period_key text, user_id uuid not null references public.profiles(id) on delete cascade, primary key (competition_id, period_key, user_id));
-
-grant usage on schema public, auth to anon, authenticated;
-grant execute on function auth.uid() to anon, authenticated;
-
--- ---------- migreringen under test ----------
+-- ---------- migreringerne under test ----------
+-- Produktionens rækkefølge: #31 lægger `profiles.anonymized_at` og den
+-- oprindelige `anonymize_my_account()`, og liga_admin.sql erstatter den med
+-- skallen om `_anonymize_account()`. Det er skallen, der er under test — at
+-- læse begge filer er samtidig en prøve på, at opdelingen kan lægges oven på
+-- den gamle.
 \ir ../account_anonymization.sql
+\ir ../season_end.sql
+\ir ../liga_admin.sql
 
 -- ---------- fixture ----------
 -- A lukker sin konto. B er vennen, hvis historik ikke må røre sig.
-do $blk$
-declare
-  a uuid := 'aaaaaaaa-1111-2222-3333-444444444444';
-  b uuid := 'bbbbbbbb-1111-2222-3333-444444444444';
-  g uuid; c uuid;
-begin
-  insert into auth.users (id) values (a), (b);
-  insert into public.profiles (id, display_name, is_admin, last_seen_at)
-    values (a, 'Anna', true, now()), (b, 'Bo', false, now());
+insert into auth.users (id, email, created_at) values
+  ('aaaaaaaa-1111-2222-3333-444444444444', 'a@test.local', now()),
+  ('bbbbbbbb-1111-2222-3333-444444444444', 'b@test.local', now());
+insert into public.profiles (id, display_name, is_admin, last_seen_at) values
+  ('aaaaaaaa-1111-2222-3333-444444444444', 'Anna', true,  now()),
+  ('bbbbbbbb-1111-2222-3333-444444444444', 'Bo',   false, now());
 
-  insert into public.groups (name, created_by) values ('Kontorligaen', a) returning id into g;
-  insert into public.group_members (group_id, user_id) values (g, a), (g, b);
-  insert into public.competitions (name, created_by) values ('Sæson 26/27', a) returning id into c;
-  insert into public.competition_participants (competition_id, user_id) values (c, a), (c, b);
-  insert into public.competition_awards (competition_id, period_key, user_id) values (c, '2026-W31', a);
+-- Turneringen bag kampen. Den er ny med `G91`: kampen skal findes, for at
+-- konkurrencen kan være BEGYNDT, og et tip skal pege på en rigtig kamp.
+insert into public.leagues (id, name) values
+  ('10000000-1111-2222-3333-444444444444', 'Testligaen');
+insert into public.seasons (id, league_id, name, is_finished) values
+  ('20000000-1111-2222-3333-444444444444', '10000000-1111-2222-3333-444444444444', '25/26', true);
+insert into public.teams (id, league_id, name) values
+  ('30000000-1111-2222-3333-444444444444', '10000000-1111-2222-3333-444444444444', 'Hjemme'),
+  ('30000000-1111-2222-3333-555555555555', '10000000-1111-2222-3333-444444444444', 'Ude');
+insert into public.matches (id, season_id, home_team_id, away_team_id, kickoff_at, home_score, away_score) values
+  ('40000000-1111-2222-3333-444444444444', '20000000-1111-2222-3333-444444444444',
+   '30000000-1111-2222-3333-444444444444', '30000000-1111-2222-3333-555555555555',
+   now() - interval '20 days', 2, 1);
 
-  insert into public.predictions (user_id, match_id, pred_home, pred_away)
-    values (a, gen_random_uuid(), 2, 1), (b, gen_random_uuid(), 0, 0);
-  insert into public.ratings (user_id, scope, rating) values (a, 'ALL', 1042), (b, 'ALL', 998);
-  insert into public.rating_history (user_id, scope, round_key, rating_after)
-    values (a, 'ALL', date '2026-07-28', 1042), (b, 'ALL', date '2026-07-28', 998);
+insert into public.groups (id, name, created_by) values
+  ('50000000-1111-2222-3333-444444444444', 'Kontorligaen', 'aaaaaaaa-1111-2222-3333-444444444444');
+insert into public.group_members (group_id, user_id, role) values
+  ('50000000-1111-2222-3333-444444444444', 'aaaaaaaa-1111-2222-3333-444444444444', 'admin'),
+  ('50000000-1111-2222-3333-444444444444', 'bbbbbbbb-1111-2222-3333-444444444444', 'member');
 
-  insert into public.push_subscriptions (user_id, endpoint) values (a, 'https://push/1'), (b, 'https://push/2');
-  insert into public.notification_log (user_id, key) values (a, 'deadline:2026-08-01'), (b, 'deadline:2026-08-01');
-  insert into public.stories (user_id, headline) values (a, 'Anna overhalede Bo'), (b, 'Bo blev nr. 2');
-  insert into public.analytics_events (user_id, event_name) values (a, 'login'), (b, 'login');
-  insert into public.user_activity_days (user_id, day) values (a, current_date), (b, current_date);
-  insert into public.feedback (user_id, message) values (a, 'Push virker ikke på min iPhone');
-  insert into public.client_errors (user_id, message) values (a, 'TypeError hos Anna'), (b, 'TypeError hos Bo');
-end $blk$;
+insert into public.competitions (id, name, mode, created_by, group_id) values
+  ('60000000-1111-2222-3333-444444444444', 'Sæson 26/27', 'custom',
+   'aaaaaaaa-1111-2222-3333-444444444444', '50000000-1111-2222-3333-444444444444');
+insert into public.competition_matches (competition_id, match_id) values
+  ('60000000-1111-2222-3333-444444444444', '40000000-1111-2222-3333-444444444444');
+insert into public.competition_participants (competition_id, user_id) values
+  ('60000000-1111-2222-3333-444444444444', 'aaaaaaaa-1111-2222-3333-444444444444'),
+  ('60000000-1111-2222-3333-444444444444', 'bbbbbbbb-1111-2222-3333-444444444444');
+insert into public.competition_awards (competition_id, period_type, period_key, user_id, points) values
+  ('60000000-1111-2222-3333-444444444444', 'round', '2026-07-28',
+   'aaaaaaaa-1111-2222-3333-444444444444', 3);
+
+insert into public.predictions (user_id, match_id, pred_home, pred_away) values
+  ('aaaaaaaa-1111-2222-3333-444444444444', '40000000-1111-2222-3333-444444444444', 2, 1),
+  ('bbbbbbbb-1111-2222-3333-444444444444', '40000000-1111-2222-3333-444444444444', 0, 0);
+insert into public.ratings (user_id, scope, rating, rounds_played, provisional) values
+  ('aaaaaaaa-1111-2222-3333-444444444444', 'ALL', 1042, 4, false),
+  ('bbbbbbbb-1111-2222-3333-444444444444', 'ALL',  998, 4, false);
+insert into public.rating_history (user_id, scope, round_key, rating_after, delta, round_score, matches_predicted, rnk) values
+  ('aaaaaaaa-1111-2222-3333-444444444444', 'ALL', '2026-07-28', 1042, 12, 3, 1, 1),
+  ('bbbbbbbb-1111-2222-3333-444444444444', 'ALL', '2026-07-28',  998, -6, 1, 1, 2);
+
+insert into public.push_subscriptions (user_id, endpoint, p256dh, auth) values
+  ('aaaaaaaa-1111-2222-3333-444444444444', 'https://push/1', 'k1', 'a1'),
+  ('bbbbbbbb-1111-2222-3333-444444444444', 'https://push/2', 'k2', 'a2');
+insert into public.notification_log (user_id, key) values
+  ('aaaaaaaa-1111-2222-3333-444444444444', 'deadline:2026-08-01'),
+  ('bbbbbbbb-1111-2222-3333-444444444444', 'deadline:2026-08-01');
+insert into public.stories (round_key, user_id, rule, priority, headline, body) values
+  ('2026-07-28', 'aaaaaaaa-1111-2222-3333-444444444444', 'DUEL', 120, 'Anna overhalede Bo', 'Et point.'),
+  ('2026-07-28', 'bbbbbbbb-1111-2222-3333-444444444444', 'DUEL', 120, 'Bo blev nr. 2',      'Et point.');
+insert into public.analytics_events (user_id, event_name) values
+  ('aaaaaaaa-1111-2222-3333-444444444444', 'login'),
+  ('bbbbbbbb-1111-2222-3333-444444444444', 'login');
+insert into public.user_activity_days (user_id, day) values
+  ('aaaaaaaa-1111-2222-3333-444444444444', current_date),
+  ('bbbbbbbb-1111-2222-3333-444444444444', current_date);
+insert into public.feedback (user_id, kind, message) values
+  ('aaaaaaaa-1111-2222-3333-444444444444', 'problem', 'Push virker ikke på min iPhone');
+insert into public.client_errors (user_id, kind, message) values
+  ('aaaaaaaa-1111-2222-3333-444444444444', 'error', 'TypeError hos Anna'),
+  ('bbbbbbbb-1111-2222-3333-444444444444', 'error', 'TypeError hos Bo');
 
 -- ---------- 1) funktionen har nul parametre ----------
 do $blk$
@@ -181,7 +219,10 @@ begin
   if (select count(*) from public.ratings        where user_id = a) <> 1 then raise exception 'rating forsvandt'; end if;
   if (select count(*) from public.rating_history where user_id = a) <> 1 then raise exception 'ratinghistorik forsvandt'; end if;
   if (select count(*) from public.competition_awards where user_id = a) <> 1 then raise exception 'kåring forsvandt'; end if;
-  if (select count(*) from public.competition_participants where user_id = a) <> 1 then raise exception 'deltagelse forsvandt'; end if;
+  -- Konkurrencen er BEGYNDT (dens kamp er spillet), så A25 frameldingen rører
+  -- den ikke. Var kampen ikke spillet, ville rækken være væk — og det ville
+  -- være rigtigt. Se afsnit 12 i sql/tests/liga_admin.sql.
+  if (select count(*) from public.competition_participants where user_id = a) <> 1 then raise exception 'deltagelse forsvandt fra en konkurrence, der ER begyndt'; end if;
   if (select count(*) from public.group_members where user_id = a) <> 1 then raise exception 'ligamedlemskab forsvandt'; end if;
 end $blk$;
 
@@ -196,6 +237,18 @@ begin
   end if;
   if not exists (select 1 from public.competitions where name = 'Sæson 26/27') then
     raise exception 'konkurrencen forsvandt';
+  end if;
+  -- A36/A37: administratorrollen gik videre til det eneste levende medlem, og
+  -- den lukkede konto står tilbage som almindeligt medlem, fordi deltagelsen i
+  -- den begyndte konkurrence forbyder at fjerne den. Påstanden er ny med `G91`
+  -- — overdragelsen fandtes ikke i den funktion, filen testede før.
+  if not exists (select 1 from public.group_members
+                  where user_id = 'bbbbbbbb-1111-2222-3333-444444444444' and role = 'admin') then
+    raise exception 'administratorrollen blev ikke overdraget til det levende medlem';
+  end if;
+  if exists (select 1 from public.group_members
+              where user_id = 'aaaaaaaa-1111-2222-3333-444444444444' and role = 'admin') then
+    raise exception 'den lukkede konto står stadig som administrator';
   end if;
 end $blk$;
 

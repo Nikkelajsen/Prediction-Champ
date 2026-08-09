@@ -8,8 +8,8 @@
 -- SAMMEN med de tre statement-level rating-triggere, `analytics_match_locks`
 -- er det view, påstanden om låsen læses af, og `round_key`/`match_day` er
 -- genererede kolonner oven på tidszonelogikken. Et miniskema ville have svaret
--- på et andet spørgsmål end det, produktionen stiller — `G91` er en hel række
--- om præcis dét.
+-- på et andet spørgsmål end det, produktionen stiller — og `G91` (9. august
+-- 2026) flyttede de sidste to store tests herover af præcis den grund.
 --
 -- **Rating-triggerne slås derfor bevidst IKKE fra.** Påstand 9 er, at
 -- markeringen kan skrives, uden at maskineriet på den tabel vælter.

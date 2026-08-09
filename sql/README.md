@@ -64,7 +64,7 @@ den regenereres med guiden nedenfor.
 | Mappe | Hvad | Køres |
 |---|---|---|
 | `sql/tests/` | SQL-testene, som CI's `sql`-job kører mod en rigtig PostgreSQL | Af CI. Bruger `\ir`/`\set` med vilje og kan derfor **ikke** pastes i SQL-editoren |
-| `sql/checks/` | **Overvågning**, ikke migreringer. Tre filer: [`kickoff_coverage.sql`](./checks/kickoff_coverage.sql) (`G84`), som spørger, om de nært forestående kampe har et rigtigt klokkeslæt — og siden `G85` også, om det er BEKRÆFTET, hvilket var den halvdel, den var blind for i præcis de tre turneringer, fejlen ramte; [`league_admin_coverage.sql`](./checks/league_admin_coverage.sql) (`A37`), som spørger, om hver liga stadig har en administrator, der kan logge ind; og [`rating_freshness.sql`](./checks/rating_freshness.sql) (`G83`), som spørger, om den gemte rating stadig passer til de data, den er udledt af. Alle tre opretter en **temporær** view og installerer derfor intet — de lever kun i den psql-session, der læser dem | Mod produktion med `psql "$SUPABASE_DB_URL" -f …` (kickoff- og rating-kontrollen desuden af `job-heartbeat.yml` hver halve time), og i CI mod en tom database af den tilsvarende fil i `sql/tests/`. **Samme fil begge steder** — det er hele grunden til, at de er filer og ikke heredocs i en workflow. **Det er dén form, en forespørgsel skal have, før den må køres mod produktion** |
+| `sql/checks/` | **Overvågning**, ikke migreringer. Fire filer: [`kickoff_coverage.sql`](./checks/kickoff_coverage.sql) (`G84`), som spørger, om de nært forestående kampe har et rigtigt klokkeslæt — og siden `G85` også, om det er BEKRÆFTET, hvilket var den halvdel, den var blind for i præcis de tre turneringer, fejlen ramte; [`league_admin_coverage.sql`](./checks/league_admin_coverage.sql) (`A37`), som spørger, om hver liga stadig har en administrator, der kan logge ind; [`rating_freshness.sql`](./checks/rating_freshness.sql) (`G83`), som spørger, om den gemte rating stadig passer til de data, den er udledt af; og [`day_card_coverage.sql`](./checks/day_card_coverage.sql) (`A38`), som spørger, om en færdigspillet kampdag fik sit dagskort — og siden `G92` også det modsatte, om en dag, der stadig spilles, har fået et, den ikke skulle have. Alle fire opretter en **temporær** view og installerer derfor intet — de lever kun i den psql-session, der læser dem. **Alle fire har siden `G93` (9. august 2026) en test i `sql/tests/` og et CI-trin;** dagskort-kontrollen var den sidste uden, og det var netop derfor, den kunne stå grøn, mens reglen bag den fejlede | Mod produktion med `psql "$SUPABASE_DB_URL" -f …` (kickoff- og rating-kontrollen desuden af `job-heartbeat.yml` hver halve time), og i CI mod en tom database af den tilsvarende fil i `sql/tests/`. **Samme fil begge steder** — det er hele grunden til, at de er filer og ikke heredocs i en workflow. **Det er dén form, en forespørgsel skal have, før den må køres mod produktion** |
 | `sql/dev/` | Værktøjer til **staging**, ikke migreringer. To filer: [`simulate_season.sql`](./dev/simulate_season.sql), som spiller en hel sæson igennem for testbrugerne — tips, resultater, stillinger, rating, historier og kåringer — i sin EGEN turnering, som ingen synkronisering kan røre (**dækket af `sql/tests/simulate_season.sql` i CI siden `G82`, 7. august 2026** — den er jobbets tungeste trin og kører mod det rigtige skema, fordi filen rører hele kæden på én gang); og [`anonymize_rehearsal.sql`](./dev/anonymize_rehearsal.sql) (`G76`), som stiller kontolukningens kontrakt op som før/efter, så man kan se, hvad den gør, før den køres på et menneske | I hånden i staging-projektets SQL-editor. 🛑 **Ingen af dem i produktion.** `simulate_season.sql` er selv låst med `sim.arm('JA - DETTE ER STAGING')` og et loft over antallet af brugere. `anonymize_rehearsal.sql` rører ingen data, men **installerer** et skema og en funktion, der bliver stående — derfor hører den til her og ikke i `sql/checks/`. Skal produktionen aflæses, er det `checks/league_admin_coverage.sql` |
 
 Filerne i `sql/dev/` pastes i editoren ligesom migreringerne og er derfor
@@ -307,7 +307,8 @@ den første halvdel. Kørslen støjer bevidst med to forventede fejl til sidst
 (vagten mod dubletter, der findes i forvejen).
 
 **`sql/tests/account_anonymization.sql`** (samme CI-job, egen database) kører
-migreringen `account_anonymization.sql` mod et minimalt skema og efterprøver den
+`account_anonymization.sql` + `liga_admin.sql` i produktionens rækkefølge mod
+**produktionsskemaet** og efterprøver den
 påstand, hele valget af anonymisering frem for sletning hviler på: at brugerens
 **tips, rating, ratinghistorik og kåringer står uændret**, at de stadig er
 deltager og ligamedlem, og at **den liga, de oprettede, findes med alle sine
@@ -316,6 +317,15 @@ medlemmer**. En rigtig sletning ville have kaskaderet ligaen væk via
 funktionen har nul parametre (den mekaniske udgave af "kan ikke ramme en anden
 bruger"), at brugssporet er væk, at feedback-rækken overlever uden afsender, at
 en anden bruger er urørt, og at andet kald er et no-op.
+
+**Begge dele — det rigtige skema og `liga_admin.sql` — kom til med `G91`
+(9. august 2026), og den anden er den vigtige.** Filen indlæste indtil da kun
+`account_anonymization.sql` og prøvede dermed #31's SELVSTÆNDIGE
+`anonymize_my_account()`, som ingen kører: produktionen kører #42's skal om
+`_anonymize_account()`. Testen vogtede altså en funktionskrop, der kun findes,
+fordi migreringerne læses i rækkefølge. Samme runde flyttede
+`sql/tests/liga_admin.sql` over på produktionsskemaet, og dér kostede
+miniskemaet en påstand, der var direkte forkert — se `docs/DECISIONS.md`.
 
 **`sql/tests/story_engine_daily.sql`** (samme CI-job, egen database) dækker Story
 Engine **v3's** dagsmotor — femten påstande, fra ét-slot-invarianten til

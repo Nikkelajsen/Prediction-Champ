@@ -47,11 +47,13 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
+- `competition_matches`' læsepolicy `read competition matches` sammenligner `cp.competition_id = cp.competition_id` — en tautologi, så den reelt siger "deltager du et eller andet sted, må du læse alle konkurrencers kampe". Fundet under `G91`.
+
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 34 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -82,10 +84,7 @@ Tomt.
 
 ### Tier 4 — Datarisiko med en lunte
 
-| # | Hvad | Hvorfor her |
-|---|---|---|
-| `G91` | To SQL-tests bygger deres eget minischema — og den ene tester oven i købet en **afløst** funktion | Undersøgt 8. august 2026 og større end "Lille": fixturerne bruger syntetiske fremmednøgler, som produktionsskemaet afviser, så det er en fixture-omskrivning og ikke et hovedskift. |
-| `G93` | `sql/checks/day_card_coverage.sql` er den eneste kontrol i `sql/checks/` uden en test og et CI-trin | `kickoff_coverage` og `league_admin_coverage` har begge en test i `sql/tests/` og et CI-trin, der kører den ved hver pull request — `day_card_coverage.sql` har ingen af delene, og det er den blinde vinkel, der lod `G92` stå upåtalt: en kontrol uden bevis for sig selv kan stå grøn, mens reglen bag den fejler. |
+Tomt.
 
 ### Tier 5 — Robusthed og vedligehold
 
@@ -180,10 +179,8 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
-| G91 | **To SQL-tests bygger deres eget minischema — og `account_anonymization.sql`s test er rettet mod en AFLØST funktion.** | Begge tester funktioner, hvis rigtighed afhænger af tabeller, de selv opfinder, så de kan stå grønne, mens funktionen fejler mod produktionens skema. `account_anonymization.sql` siger det selv i sit hoved. **Undersøgt 8. august 2026, og rækken var både for lille og delvist forkert.** (a) **Omfanget er ikke "Lille":** fixturerne bruger syntetiske fremmednøgler — `predictions.match_id` sættes med `gen_random_uuid()`, og `stories`/`analytics_events` indsættes med tre kolonner — som produktionsskemaet afviser med det samme. Det er en fixture-omskrivning i to filer på 757 og 236 linjer, ikke et skift af filhoved. (b) **Den ene test rammer helt ved siden af:** `sql/tests/account_anonymization.sql` indlæser KUN `\ir ../account_anonymization.sql`, hvis `anonymize_my_account()` er #31's selvstændige udgave. Produktionen kører `sql/liga_admin.sql`s, som delegerer til `_anonymize_account()` med `A25`s framelding og `A36`/`A37`s admin-overdragelse — og den er allerede dækket af `sql/tests/liga_admin.sql`, der indlæser begge filer i rigtig rækkefølge. Testen vogter altså en funktionskrop, ingen kører. **Rettelsen er derfor to forskellige ting:** for `liga_admin.sql` en omskrivning til det rigtige skema via `_schema.mjs`; for `account_anonymization.sql` et valg mellem at slette den og folde dens unikke påstande ind i `liga_admin.sql`s test, eller at pege den på den funktion, produktionen faktisk kører. Den anden halvdel er den, der haster mindst og betyder mest. | Mellem |
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
-| G93 | **`sql/checks/day_card_coverage.sql` har ingen test i `sql/tests/` og intet CI-trin.** | De to andre kontroller i `sql/checks/` — `kickoff_coverage` og `league_admin_coverage` — har begge en test, der beviser dem mod en engangsdatabase, og et CI-trin, der kører den ved hver pull request (`.github/workflows/ci.yml`). `day_card_coverage.sql` har ingen af delene, og det er præcis derfor kontrollen var blind for `G92`: intet greb ind, da fuldstændighedsreglen bag den selv fejlede — kontrollen kan i princippet stå grøn uden at nogen har bevist, at den faktisk melder det, den skal. En test ville følge samme model som `sql/tests/kickoff_coverage.sql`: en engangsdatabase med en kampdag, hvor `match_day_complete()`s regel bevidst brydes, og en efterprøvning af, at `day_card_coverage.sql` melder det. | Lille |
 
 ## Ideer
 
@@ -226,24 +223,27 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 9. august 2026 — Indbakken tømt: to rækker, `B28` og `G93`
+### 9. august 2026 — Tier 4 kørt tomt: `G93` og `G91`
 
-**Listen er 32 → 34.** Begge indbakke-linjer var allerede undersøgt af den, der
-skrev dem — ingen af de to krævede ny research, kun et ID og en placering.
+**Listen er 34 → 32, og Tier 1–5 er nu alle tomme.** De to rækker var samme
+fejltype set fra hver sin side: en kontrol uden et bevis for sig selv, og to
+beviser, der målte noget andet end det, produktionen kører.
 
-**`B28`** er en gentagelse, ikke en ny opgave. CL var den ene af fem
-turneringer, `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md`
-(7. august 2026) ikke kunne dække, fordi `B8` stod åben — leverandøren havde
-endnu ikke oprettet sæsonen 2026. `B8` blev lukket 1. august 2026 (sæsonen
-fandtes ganske enkelt ikke endnu, ikke en fejl), men opfølgningen — læs CL, når
-den findes — havde ingen række at bo i, så den flyttes til Tier 6 med
-ligafasens lodtrækning som udløser, samme mønster som `A26`.
+**`G93`** gav `sql/checks/day_card_coverage.sql` den test og det CI-trin, de tre
+andre kontroller i mappen havde. Testen kører mod produktionsskemaet — kontrollen
+grupperer på `matches.match_day` og sammenligner `matches.round_key` med
+`round_key_of_date()`, og begge er genererede kolonner oven på tidszonelogikken.
+Ti mutationer af kontrollen, alle fanget.
 
-**`G93`** er tavshedens egen art: en kontrol uden en test, der beviser den, kan
-stå grøn uden at have bevist noget. `kickoff_coverage` og `league_admin_coverage`
-har begge en test og et CI-trin; `day_card_coverage.sql` har ingen, og det var
-derfor den ikke opdagede `G92`, mens fejlen stod på. Placeret i Tier 4 ved siden
-af `G91` — samme slags fuse, samme manglende bevis for kontrollen selv.
+**`G91`** flyttede `sql/tests/liga_admin.sql` og
+`sql/tests/account_anonymization.sql` fra deres håndskrevne miniskemaer til det
+samme rigtige skema — og begge halvdele af rækken viste sig at være
+underdrevne. Miniskemaet havde ikke bare syntetiske fremmednøgler; det havde
+gjort én påstand direkte **forkert** (liga-admins egen framelding, målt uden den
+policy, der afgør sagen), og anonymiseringstesten prøvede en funktionskrop, ingen
+kører. Undervejs faldt to utestede led i policyerne ud af mutationstesten og fik
+hver sin nye påstand. Beslutningen om at pege testen om frem for at slette den
+står i `DECISIONS.md`.
 
 ---
 

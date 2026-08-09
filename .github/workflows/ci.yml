@@ -83,6 +83,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # Produktionsskemaet bygges ÉN gang og bruges af alle de trin nedenfor,
+      # der ikke kan nøjes med et miniskema. Det lå indtil `G91` inde i
+      # rating-friskhedens trin, altså midt i jobbet — og da `G91` flyttede to
+      # tests mere over på det rigtige skema, blev den placering en usynlig
+      # rækkefølgeafhængighed: et trin, der læser filen, skulle stå EFTER et
+      # bestemt andet trin, uden at noget sagde det. Nu er den en forudsætning
+      # på linje med checkout.
+      - name: Byg produktionsskemaet
+        run: node sql/tests/_schema.mjs > "$RUNNER_TEMP/skema.gen.sql"
+
       - name: Ækvivalenstest for ratingberegningen
         env:
           PGPASSWORD: postgres
@@ -269,14 +279,21 @@ jobs:
       # valget hviler på — at brugerens tips, rating, kåringer OG den liga,
       # de oprettede, står uændret bagefter. En rigtig sletning ville have
       # kaskaderet ligaen væk og taget de andre medlemmer med.
+      #
+      # KØRER MOD DET RIGTIGE SKEMA SIDEN `G91` (9. august 2026), og skiftet var
+      # ikke kosmetisk: filen testede indtil da #31's SELVSTÆNDIGE
+      # `anonymize_my_account()` — en funktionskrop, ingen kører. Produktionen
+      # kører `liga_admin.sql`s skal om `_anonymize_account()`, og den kan kun
+      # læses oven på et skema, der har `matches` og `competition_matches`, fordi
+      # `A25`s framelding spørger, om konkurrencen er begyndt.
       - name: Test af kontolukning
         env:
           PGPASSWORD: postgres
-        working-directory: sql/tests
         run: |
           set -euo pipefail
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database anontest;'
-          psql -h localhost -U postgres -d anontest -v ON_ERROR_STOP=1 -b -f account_anonymization.sql
+          psql -h localhost -U postgres -d anontest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d anontest -v ON_ERROR_STOP=1 -b -f sql/tests/account_anonymization.sql
 
       # Sæson-gaten (season_end.sql): en konkurrence, der KAN vokse, må ikke
       # meldes færdig, blot fordi dens kendte kampe har resultat — en sæson med
@@ -296,14 +313,20 @@ jobs:
       # STRAM policy viser sig som en knap, der ikke virker, og bliver opdaget —
       # en for LØS viser sig som en andens historik, der forsvandt, og der er
       # ikke noget tilbage at opdage det på.
+      #
+      # KØRER MOD DET RIGTIGE SKEMA SIDEN `G91` (9. august 2026). Miniskemaet
+      # målte de tre policies i et rum, hvor de andre ikke fandtes — og RLS er et
+      # OR mellem permissive policies, så en påstand om, at noget er FORBUDT, kan
+      # ikke stilles uden dem alle. Filens gamle påstand 4 var forkert af netop
+      # den grund.
       - name: Test af administratorens grænser
         env:
           PGPASSWORD: postgres
-        working-directory: sql/tests
         run: |
           set -euo pipefail
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database admintest;'
-          psql -h localhost -U postgres -d admintest -v ON_ERROR_STOP=1 -b -f liga_admin.sql
+          psql -h localhost -U postgres -d admintest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d admintest -v ON_ERROR_STOP=1 -b -f sql/tests/liga_admin.sql
 
       # Kontrollen af klokkeslæt (G84). Det eneste trin i jobbet, der tester en
       # OVERVÅGNING og ikke en migrering: forespørgslen i sql/checks/ læses af
@@ -363,18 +386,42 @@ jobs:
           PGPASSWORD: postgres
         run: |
           set -euo pipefail
-          node sql/tests/_schema.mjs > "$RUNNER_TEMP/skema.gen.sql"
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database ratingfresh;'
           psql -h localhost -U postgres -d ratingfresh -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d ratingfresh -v ON_ERROR_STOP=1 -b -f sql/tests/rating_freshness.sql
+
+      # Kontrollen af dagskortene (G93). Jobbets fjerde overvågning, og den
+      # sidste af de fire i `sql/checks/`, der fik en test.
+      #
+      # DEN STÅR HER OG IKKE VED SINE TO SØSKENDE længere oppe, fordi den kræver
+      # `$RUNNER_TEMP/skema.gen.sql`, som trinnet ovenfor bygger. Grunden til det
+      # rigtige skema er den samme som `rating_freshness`': kontrollen grupperer
+      # på `matches.match_day` og sammenligner `matches.round_key` med
+      # `round_key_of_date()` — to GENEREREDE kolonner oven på tidszonelogikken —
+      # og et miniskema ville have gjort dem til kolonner, testen selv udfyldte.
+      # Skemaet bærer desuden `stories_day_key_shape`, som er dét, der gør
+      # kontrollens `period = 'day'`-filter uangribeligt.
+      #
+      # Rækken blev skrevet, fordi kontrollen var den eneste i `sql/checks/` uden
+      # et bevis for sig selv — og det var netop derfor, den kunne stå grøn under
+      # `G92`, mens reglen bag den fejlede. Testen er selv efterprøvet ved at
+      # mutere kontrollen ti gange og se den fange hver enkelt.
+      - name: Test af kontrollen for dagskortene
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database daycardtest;'
+          psql -h localhost -U postgres -d daycardtest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d daycardtest -v ON_ERROR_STOP=1 -b -f sql/tests/day_card_coverage.sql
 
       # De ubekræftede klokkeslæt (G85). Kører mod det RIGTIGE skema af tre
       # grunde, som et miniskema ikke kan levere: triggeren, der gemmer den
       # forrige tid, ligger på `public.matches` SAMMEN med de tre statement-level
       # rating-triggere; `analytics_match_locks` er det view, påstanden om låsen
       # læses af; og `round_key`/`match_day` er genererede kolonner oven på
-      # tidszonelogikken. `G91` er en hel backlog-række om, hvad et miniskema
-      # koster her.
+      # tidszonelogikken. `G91` (9. august 2026) flyttede de sidste to store
+      # tests herover af samme grund.
       #
       # Påstand 8 er den, der bærer selve beslutningen: markøren er DISPLAY-ONLY,
       # og låsen skal give præcis samme svar før og efter markeringen. Havde vi

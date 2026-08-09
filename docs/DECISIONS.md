@@ -15,6 +15,57 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 9. august 2026 — En test mod et miniskema er en test af noget andet (`G91`)
+
+**Beslutning:** `sql/tests/liga_admin.sql` og `sql/tests/account_anonymization.sql`
+kører fra i dag mod **produktionsskemaet** (`sql/tests/_schema.mjs`) og ikke mod
+hvert sit håndskrevne miniskema. Og `account_anonymization.sql`s test **peges om**
+på den funktion, produktionen faktisk kører, frem for at blive slettet.
+
+**Hvorfor det andet valg overhovedet var et valg.** Testen indlæste kun
+`sql/account_anonymization.sql` og prøvede dermed #31's selvstændige
+`anonymize_my_account()` — en funktionskrop, ingen kører: produktionen kører #42's
+skal om `_anonymize_account()`. De to udveje var at slette filen og folde dens
+unikke påstande ind i `liga_admin.sql`s test, eller at pege den om. Valget faldt på
+det sidste, fordi de otte påstande *ikke* findes i den anden fil — pseudonymets
+form og længde, brugssporet ryddet tabel for tabel, at spillet står uændret, at
+ligaen overlever, at vennen er urørt, at to lukkede konti ikke kolliderer — og
+fordi de to filer stiller hvert sit spørgsmål: "hvad sker der med MIN konto" mod
+"hvad må en administrator". At folde dem sammen ville have sparet en fixture og
+kostet to læsbare filer.
+
+**Hvorfor det første valg ikke bare var oprydning.** Miniskemaet havde ikke kun
+syntetiske fremmednøgler. Det havde gjort én påstand **direkte forkert**:
+"liga-admin kan ikke fjerne sig selv fra en konkurrence" blev målt i et skema, hvor
+`comp_participants_delete_own_unlocked` ikke fandtes. RLS er et OR mellem
+permissive policies, konkurrencen i fixturen var færdigspillet, og i produktionen
+kan hun. Testen beviste altså ikke en regel, men fraværet af en anden fil — og det
+er den generelle lære, der er værd at tage med: **en påstand om, at noget er
+FORBUDT, kan ikke stilles mod et delvist policy-sæt.** En påstand om, at noget er
+tilladt, kan; det er derfor miniskemaer holdt så længe.
+
+**Selvudelukkelsen kan ikke måles, og det er nu skrevet ned.** `user_id <>
+auth.uid()` i admin-policyen overlevede sin mutation: egen-frameldingen siger nej
+netop når den lukkede selv har tippet i konkurrencen, og så siger admin-policyens
+"ingen tips"-led allerede nej. Leddet er et værn, ikke en regel, nogen kan læne sig
+på — det står i testens hoved frem for at blive fjernet, fordi et værn, der er
+gratis, er billigere end en fremtidig policy, der glemmer det.
+
+**To utestede led faldt ud undervejs** og fik hver sin nye påstand:
+`coalesce(cs.concluded, false)` i liga-policyen havde aldrig mødt en konkurrence
+uden kampe, og `is_group_admin(id)` i samme policy var aldrig blevet prøvet af et
+almindeligt medlem. Begge slap igennem mutationstesten, indtil fixturen fik dem —
+og ingen af dem kunne være fundet uden det rigtige skema, fordi
+`competition_status` er en `security_invoker`-view, hvis synlighed afhænger af
+`competition_matches`' egen læsepolicy.
+
+**Prisen** er en fixture, der skal overholde rigtige fremmednøgler, og et
+`disable trigger all` på `matches` i begge filer. **Gevinsten** er, at de policies
+og funktioner, testene måler, er dem, der ligger i produktionen — sammen med alle
+de andre, de konkurrerer med.
+
+---
+
 ## 9. august 2026 — Fuldstændighedsreglen hører i motoren, ikke hos kalderne (`G92`)
 
 **Beslutning:** kravet "hele kampdagen skal være færdigspillet" håndhæves som en
