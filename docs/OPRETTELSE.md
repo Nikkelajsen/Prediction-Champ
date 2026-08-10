@@ -166,7 +166,17 @@ Authentication → Email Templates → **Confirm signup**.
 
 ## Trin 7 — Slå bekræftelsen til
 
-Authentication → Sign In / Providers → Email → **Confirm email** → til.
+Authentication → **Sign In / Providers** → klik rækken **Email** under *Auth
+Providers*, så den folder sig ud → **Confirm email** → til → **Save**.
+
+> ⚠️ **Det er en anden underside end trin 6, og det er nemt at lede forgæves.**
+> Skabelonen indsættes under Authentication → *Emails*; kontakten sidder på
+> **Email-provideren**. Den er hverken under *Emails*, *Attack Protection*
+> (det var trin 4) eller *URL Configuration*. Hedder undersiden bare
+> *Providers*, er det den samme — Supabase har omdøbt den undervejs, så gå
+> efter **Email-provideren** frem for efter sidens navn.
+>
+> *(Konstateret under første kørsel, 10. august 2026.)*
 
 Fra nu af svarer signup uden session, og appen viser "Konto oprettet …" i stedet
 for at logge brugeren ind.
