@@ -338,8 +338,11 @@ appen har hverken invitationsmails, magic links eller e-mailskift.
 > bekræftelseslinket, logger brugeren ind på hash'ets tokens (`type=signup`,
 > `src/App.jsx`) og skriver den `profiles`-række, oprettelsen ikke kunne skrive.
 > Bekræftelsen er derfor ét klik i Supabase, sådan som denne linje lovede. Den
-> ANDEN halvdel af `B26`, bot-værnet, viste sig ikke at være det: se
-> `DOCUMENTATION.md` §9 om `VITE_TURNSTILE_SITE_KEY`, som skal sættes først.
+> ANDEN halvdel af `B26`, bot-værnet, viste sig ikke at være det.
+>
+> **Trinnene for begge halvdele står i [`OPRETTELSE.md`](./OPRETTELSE.md)** —
+> inklusive den ufravigelige rækkefølge (nøgle i Vercel før Bot Protection) og
+> hvorfor skabelonen ovenfor skal indsættes, FØR bekræftelsen slås til.
 
 > ⚠️ **Supabase har ingen import.** Ændres en skabelon i repoet, er ændringen
 > ikke udrullet, før nogen har pastet den ind igen. Der er ingen maskine, der

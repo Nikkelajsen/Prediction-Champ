@@ -13,9 +13,14 @@
 -- `competition_matches`, og det er hele mekanismen, symptomet gik igennem.
 --
 -- Testen indlæser skemaet FØRST og migreringen BAGEFTER, hvilket er den
--- rigtige rækkefølge og ikke en tilfældighed: `sql/schema.sql` er et
--- øjebliksbillede af produktionen og bærer stadig den GAMLE policy, så filen
--- gør præcis, hvad en kørsel i Supabase gør — erstatter den.
+-- rigtige rækkefølge og ikke en tilfældighed: migreringen gør her præcis, hvad
+-- en kørsel i Supabase gør — erstatter den policy, der står i forvejen.
+--
+-- **Den gamle policy sættes op af testen selv** og læses IKKE af `schema.sql`.
+-- Sådan var det ikke oprindeligt, og det kostede en rød CI 10. august 2026:
+-- snapshottet bar den gamle regel, indtil migreringen blev kørt i produktionen,
+-- og skiftede derefter side. Begrundelsen står i fuld længde ved selve
+-- opsætningen nedenfor.
 --
 -- HVAD DEN BEVISER
 --   1. Der er nøjagtig ÉN læsepolicy på tabellen bagefter. To ville betyde, at
@@ -113,11 +118,38 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- Den GAMLE policy sættes op af testen selv
+-- ---------------------------------------------------------------------------
+-- **Testen hentede indtil 10. august 2026 den gamle policy fra `schema.sql`,
+-- og dén antagelse udløb den dag.** Migreringen blev kørt i produktionen,
+-- skema-eksporten fangede den rettede regel, og den negative kontrol nedenfor
+-- kunne ikke længere genskabe fejlen: `nybegynderen skulle se 0/0 med den
+-- GAMLE policy, men så 1/1`. Testen var altså selvophævende — den blev rød i
+-- præcis det øjeblik, den beviste, at rettelsen var nået frem.
+--
+-- Det er ikke et særtilfælde for denne test, men et vilkår for enhver test, der
+-- måler en migrering mod et øjebliksbillede af produktionen: snapshottet
+-- skifter side, når migreringen køres. **Derfor ejer testen nu sin egen
+-- før-tilstand** og læser den ikke af skemaet. Formen nedenfor er den, der stod
+-- i produktionen indtil #50 blev kørt, ordret fra hovedet i
+-- `sql/competition_matches_read.sql`.
+--
+-- Migreringen dropper og gen-opretter policyen under samme navn, så den er
+-- stadig under test: den skal stadig erstatte det, der står her.
+drop policy if exists "read competition matches" on public.competition_matches;
+create policy "read competition matches" on public.competition_matches
+  for select
+  using (exists (select 1 from public.competition_participants cp
+                  where cp.competition_id = cp.competition_id
+                    and cp.user_id = auth.uid()));
+
+-- ---------------------------------------------------------------------------
 -- FØR migreringen: fixturen SKAL vise fejlen, ellers beviser testen ingenting
 -- ---------------------------------------------------------------------------
 -- Uden dette afsnit kunne påstand 3 bestå, fordi fixturen tilfældigvis var
 -- harmløs. Det er samme krav som `G92`s "negativ kontrol før påstand": en test,
--- man ikke har set fejle, er en formodning.
+-- man ikke har set fejle, er en formodning. Kontrollen er uændret og har nu
+-- fået sin egen betingelse skrevet ovenfor frem for lånt af et snapshot.
 
 do $$
 declare r record;
