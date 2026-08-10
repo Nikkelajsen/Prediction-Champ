@@ -3,8 +3,10 @@
 // identitet — derfor én grupperet dropdown (optgroup pr. turnering) som
 // tilføj-flade og de valgte hold som chips med liganavn.
 import { C, chip } from "../../ui/theme.js";
+import RoundStartChoice from "./RoundStartChoice.jsx";
 
-function TeamFields({ leagues, teamsByLeague, seasonByLeague, selected, onAdd, onRemove }) {
+function TeamFields({ leagues, teamsByLeague, seasonByLeague, selected, onAdd, onRemove,
+  roundStart, onRoundStart, currentRoundMatches, currentRoundOpen, nextRound }) {
   const leagueName = Object.fromEntries(leagues.map((l) => [l.id, l.name]));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -40,6 +42,16 @@ function TeamFields({ leagues, teamsByLeague, seasonByLeague, selected, onAdd, o
             );
           })}
         </select>
+      )}
+      {/* Vises først, når der ER valgt hold: uden hold er nævneren tom, og et
+          valg uden tal er præcis det, hele startrunde-arbejdet handlede om at
+          undgå. Tælleren dækker KUN de valgte holds kampe — det er dem,
+          konkurrencen kommer til at bestå af. */}
+      {selected.length > 0 && (
+        <div style={{ marginTop: 4 }}>
+          <RoundStartChoice value={roundStart} onChange={onRoundStart}
+            roundMatches={currentRoundMatches} currentOpen={currentRoundOpen} nextRound={nextRound} />
+        </div>
       )}
     </div>
   );

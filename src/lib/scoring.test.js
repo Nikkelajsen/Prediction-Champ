@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { currentRoundKey, roundKeyOfDate, nextRoundKey, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, isLocked, filterTippable, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { currentRoundKey, roundKeyOfDate, nextRoundKey, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, isLocked, filterTippable, filterFromRoundStart, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 describe("outcome", () => {
   it("giver 1 ved hjemmesejr, X ved uafgjort, 2 ved udesejr", () => {
@@ -144,6 +144,35 @@ describe("filterTippable", () => {
   it("tåler tom og manglende liste", () => {
     expect(filterTippable([])).toEqual([]);
     expect(filterTippable(null)).toEqual([]);
+  });
+});
+
+describe("filterFromRoundStart", () => {
+  const pool = [
+    { id: "a1", round_key: "2026-08-04" },
+    { id: "b1", round_key: "2026-08-11" },
+    { id: "c1", round_key: "2026-08-18" },
+  ];
+
+  it("lader puljen være i fred, når der startes i indeværende runde", () => {
+    expect(filterFromRoundStart(pool, { start: "current", currentKey: "2026-08-04" })).toEqual(pool);
+  });
+
+  it("smider indeværende runde væk, når der startes i en ny", () => {
+    expect(filterFromRoundStart(pool, { start: "next", currentKey: "2026-08-04" }).map((m) => m.id))
+      .toEqual(["b1", "c1"]);
+  });
+
+  // Er indeværende runde allerede væk af sig selv (alt spillet), giver de to
+  // valg samme pulje — og det er den rigtige adfærd, ikke en tom liste.
+  it("er uskadelig, når puljen allerede er forbi indeværende runde", () => {
+    const senere = pool.slice(1);
+    expect(filterFromRoundStart(senere, { start: "next", currentKey: "2026-08-04" })).toEqual(senere);
+  });
+
+  it("uden rundenøgle filtreres der ikke — et gæt ville være værre end intet", () => {
+    expect(filterFromRoundStart(pool, { start: "next", currentKey: "" })).toEqual(pool);
+    expect(filterFromRoundStart(null, {})).toEqual([]);
   });
 });
 

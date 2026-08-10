@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   CREATE_TYPES, MAX_MATCHES_PER_ROUND, createTypeById, pickRandomFromRounds, pickPerRound,
-  lockedPicks, filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
+  lockedPicks, roundProgress, weeklyCouponName, buildSpec,
 } from "./createTypes.js";
 import { filterTippable } from "./scoring.js";
 
@@ -112,43 +112,6 @@ describe("lockedPicks", () => {
   });
 });
 
-describe("filterFromRoundStart", () => {
-  const pool = [
-    { id: "a1", round_key: "2026-08-04" },
-    { id: "b1", round_key: "2026-08-11" },
-    { id: "c1", round_key: "2026-08-18" },
-  ];
-
-  it("lader puljen være i fred, når der startes i indeværende runde", () => {
-    expect(filterFromRoundStart(pool, { start: "current", currentKey: "2026-08-04" })).toEqual(pool);
-  });
-
-  it("smider indeværende runde væk, når der startes i en ny", () => {
-    expect(filterFromRoundStart(pool, { start: "next", currentKey: "2026-08-04" }).map((m) => m.id))
-      .toEqual(["b1", "c1"]);
-  });
-
-  // Vinduet i pickRandomFromRounds tager de N FØRSTE rundenøgler, så filtreringen
-  // er alt, der skal til for at rykke hele Quick League-vinduet en uge frem.
-  it("rykker hele rundevinduet med, ikke kun den første runde", () => {
-    const uden = filterFromRoundStart(pool, { start: "next", currentKey: "2026-08-04" });
-    expect(pickRandomFromRounds(uden, { count: 1, rounds: 2, shuffle: (a) => a }))
-      .toEqual(["b1", "c1"]);
-  });
-
-  // Er indeværende runde allerede væk af sig selv (alt spillet), giver de to
-  // valg samme pulje — og det er den rigtige adfærd, ikke en tom liste.
-  it("er uskadelig, når puljen allerede er forbi indeværende runde", () => {
-    const senere = pool.slice(1);
-    expect(filterFromRoundStart(senere, { start: "next", currentKey: "2026-08-04" })).toEqual(senere);
-  });
-
-  it("uden rundenøgle filtreres der ikke — et gæt ville være værre end intet", () => {
-    expect(filterFromRoundStart(pool, { start: "next", currentKey: "" })).toEqual(pool);
-    expect(filterFromRoundStart(null, {})).toEqual([]);
-  });
-});
-
 describe("roundProgress", () => {
   // Nævneren er hele runden, også de spillede kampe — det er dét, valget mellem
   // indeværende og ny runde skal træffes på. "1 i nærmeste runde" fortalte kun,
@@ -218,8 +181,23 @@ describe("buildSpec", () => {
       tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     })).toEqual({
       name: "S", groupId: "g1", awards: true, mode: "full_season",
+      startRound: "current",
       tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     });
+  });
+
+  // Startrunden er med for de to sæson-typer og defaulter til indeværende, så
+  // en kalder, der intet sender (fx onboarding-guiden), får uændret adfærd.
+  it("Sæson og Favorithold bærer startrunden, med indeværende som standard", () => {
+    expect(buildSpec({ typeId: "season", name: "S", groupId: "g1", startRound: "next" }))
+      .toMatchObject({ mode: "full_season", startRound: "next" });
+    expect(buildSpec({ typeId: "team", name: "F", groupId: "g1", startRound: "next" }))
+      .toMatchObject({ mode: "team", startRound: "next" });
+    expect(buildSpec({ typeId: "season", name: "S", groupId: "g1" }))
+      .toMatchObject({ startRound: "current" });
+    // Et ukendt ord må ikke smutte igennem som "ikke current".
+    expect(buildSpec({ typeId: "team", name: "F", groupId: "g1", startRound: "sludder" }))
+      .toMatchObject({ startRound: "current" });
   });
 
   it("Favorithold-kortet bliver team med teams-listen", () => {

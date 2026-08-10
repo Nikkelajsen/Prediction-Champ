@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // db mockes, så loaderne kan testes uden netværk/Supabase
 vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn(), insert: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
+import { currentRoundKey, nextRoundKey } from "./scoring.js";
 import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadRoundsAvailable, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadDayCard, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data.js";
 
 // mock-svar pr. tabel/view. En værdi må være en funktion, når svaret afhænger
@@ -741,6 +742,63 @@ describe("createCompetition", () => {
     await create({ name: "X", mode: "full_season", tournaments: [{ leagueId: "L1", seasonId: "S1" }] });
     expect(queries[0]).toContain("kickoff_at");
     expect(queries[0]).toContain("kickoff_tbd");
+  });
+
+  // STARTRUNDE for de to sæson-typer (august 2026). En hel sæson afgøres ikke af
+  // sin første runde, men vilkåret er det samme som for de korte typer: opretter
+  // man søndag aften, består første runde af de kampe, der tilfældigvis var
+  // tilbage. Rundenøglerne bygges ud fra den RIGTIGE nuværende runde, så testen
+  // måler reglen og ikke en dato, der forældes.
+  describe("startrunde", () => {
+    const NU = currentRoundKey();
+    const NAeSTE = nextRoundKey(NU);
+    const om = (min) => new Date(Date.now() + min * 60000).toISOString();
+    const puljen = [
+      { id: "iuge", round_key: NU, kickoff_at: om(4000), home_score: null },
+      { id: "naeste", round_key: NAeSTE, kickoff_at: om(12000), home_score: null },
+    ];
+
+    it("full sæson: 'ny runde' springer indeværende runde over", async () => {
+      setup(puljen);
+      const res = await create({
+        name: "Fra næste uge", mode: "full_season", startRound: "next",
+        tournaments: [{ leagueId: "L1", seasonId: "S1" }],
+      });
+      expect(matchRows().map((r) => r.match_id)).toEqual(["naeste"]);
+      expect(res.matchCount).toBe(1);
+    });
+
+    it("full sæson: standarden er indeværende runde, så en kalder uden feltet er uændret", async () => {
+      setup(puljen);
+      await create({ name: "Nu", mode: "full_season", tournaments: [{ leagueId: "L1", seasonId: "S1" }] });
+      expect(matchRows().map((r) => r.match_id)).toEqual(["iuge", "naeste"]);
+    });
+
+    it("favorithold: 'ny runde' virker også på den gamle ét-hold-form", async () => {
+      setup(puljen);
+      await create({ name: "Mit hold", mode: "team", leagueId: "L1", seasonId: "S1", teamId: "T1", startRound: "next" });
+      expect(matchRows().map((r) => r.match_id)).toEqual(["naeste"]);
+    });
+
+    it("favorithold: flere hold på tværs af turneringer følger samme valg", async () => {
+      setup(puljen);
+      await create({
+        name: "To hold", mode: "team", startRound: "next",
+        teams: [{ leagueId: "L1", seasonId: "S1", teamId: "T1" }, { leagueId: "L2", seasonId: "S2", teamId: "T2" }],
+      });
+      expect(matchRows().every((r) => r.match_id === "naeste")).toBe(true);
+    });
+
+    // Perioden har sit svar i startdatoen. To kontroller om det samme ville
+    // kunne modsige hinanden, så feltet må IKKE smitte af her.
+    it("periode ignorerer startrunden — dens svar ligger i datoerne", async () => {
+      setup(puljen);
+      await create({
+        name: "August", mode: "time_range", startRound: "next",
+        leagueId: "L1", seasonId: "S1", startDate: "2026-08-01", endDate: "2026-08-31",
+      });
+      expect(matchRows().map((r) => r.match_id)).toEqual(["iuge", "naeste"]);
+    });
   });
 
   // A20: fase-afgrænsning findes ikke længere. "Hel sæson" betyder hele

@@ -2,7 +2,7 @@
 // eksisterende: invitationskode og flytning til en liga.
 
 import { db, restFetch } from "../supabase.js";
-import { filterTippable } from "../scoring.js";
+import { filterTippable, filterFromRoundStart, currentRoundKey } from "../scoring.js";
 import { logEvent } from "../analytics.js";
 import { loadGroupByCode, joinGroup, joinCompetition } from "./groups.js";
 
@@ -43,6 +43,11 @@ import { loadGroupByCode, joinGroup, joinCompetition } from "./groups.js";
 //                         mode_params, men KUN når > 1, så gamle rækkers form
 //                         er uændret og `modeLabel` kan skelne på feltet
 //   awards                kårings-tilvalget (I13/A22): true ⇒ mode_params.awards
+//   startRound            full_season | team: "current" (standard) eller "next" —
+//                         skal konkurrencen begynde i den runde, der er i gang,
+//                         eller vente på den næste? `time_range` har sit eget
+//                         svar i startdatoen, og `custom`/`random` er allerede
+//                         filtreret i klienten, når de når hertil
 //
 // Returnerer `matchCount`, så kalderen kan se, at en konkurrence blev tom —
 // fx en sæson, der er spillet færdig (`filterTippable` giver da et tomt sæt).
@@ -54,12 +59,29 @@ import { loadGroupByCode, joinGroup, joinCompetition } from "./groups.js";
 // allerede spillede kampe med, og da `predictions` deles på tværs af
 // konkurrencer, havde den, der havde tippet dem andetsteds, point fra første
 // sekund. Se begrundelsen ved funktionen.
+// De kampe, en ny konkurrence må starte med: dem der stadig kan tippes, og —
+// hvis brugeren har valgt at vente på en ny runde — kun dem fra og med den.
+//
+// Startrunde-valget findes for Sæson og Favorithold af samme grund som for de
+// tilfældige typer: opretter man søndag aften, er indeværende runde næsten
+// forbi, og konkurrencens første runde bliver de kampe, der tilfældigvis var
+// tilbage. For en hel sæson er det ikke afgørende for udfaldet, men det er
+// stadig et vilkår, man skal kunne vælge frem for at arve.
+//
+// `time_range` går IKKE gennem den: perioden er defineret af sine datoer, og
+// startrunde-valget dér sætter startdatoen. To kontroller om samme ting ville
+// kunne modsige hinanden.
+function startingMatches(ms, startRound) {
+  return filterFromRoundStart(filterTippable(ms), { start: startRound, currentKey: currentRoundKey() });
+}
+
 async function createCompetition(token, userId, spec) {
   const {
     name, groupId = null, mode = "full_season",
     tournaments = [], leagueId = null, seasonId = null,
     teamId = null, teams = null, startDate = null, endDate = null,
     matchIds = [], randomCount = null, rounds = null, awards = false,
+    startRound = "current",
   } = spec;
 
   // En NY konkurrence skal høre til en liga (august 2026).
@@ -102,8 +124,8 @@ async function createCompetition(token, userId, spec) {
     const picked = [];
     const ids = [];
     for (const t of sel) {
-      let ms = await db.select(token, "matches", `season_id=eq.${t.seasonId}&select=id,home_score,kickoff_at,kickoff_tbd`);
-      ms = filterTippable(ms);
+      let ms = await db.select(token, "matches", `season_id=eq.${t.seasonId}&select=id,round_key,home_score,kickoff_at,kickoff_tbd`);
+      ms = startingMatches(ms, startRound);
       for (const m of ms) ids.push(m.id);
       picked.push({ league_id: t.leagueId, season_id: t.seasonId });
     }
@@ -148,8 +170,8 @@ async function createCompetition(token, userId, spec) {
     const ids = [];
     for (const [sid, e] of bySeason) {
       let ms = await db.select(token, "matches",
-        `season_id=eq.${sid}&select=id,home_score,kickoff_at,kickoff_tbd&or=(home_team_id.in.(${e.teamIds.join(",")}),away_team_id.in.(${e.teamIds.join(",")}))`);
-      ms = filterTippable(ms);
+        `season_id=eq.${sid}&select=id,round_key,home_score,kickoff_at,kickoff_tbd&or=(home_team_id.in.(${e.teamIds.join(",")}),away_team_id.in.(${e.teamIds.join(",")}))`);
+      ms = startingMatches(ms, startRound);
       for (const m of ms) ids.push(m.id);
     }
     const [competition] = await db.insert(token, "competitions", [{
@@ -194,7 +216,7 @@ async function createCompetition(token, userId, spec) {
     const picked = [];
     for (const t of sel) {
       let ms = await db.select(token, "matches",
-        `season_id=eq.${t.seasonId}&select=id,home_score,kickoff_at,kickoff_tbd` +
+        `season_id=eq.${t.seasonId}&select=id,round_key,home_score,kickoff_at,kickoff_tbd` +
         `&kickoff_at=gte.${startDate}&kickoff_at=lte.${endDate}T23:59:59`);
       ms = filterTippable(ms);
       for (const m of ms) ids.push(m.id);
@@ -241,11 +263,14 @@ async function createCompetition(token, userId, spec) {
     return { competition, matchCount: matchIds.length };
   }
 
-  let query = `season_id=eq.${seasonId}&select=id,home_score,kickoff_at,kickoff_tbd`;
+  let query = `season_id=eq.${seasonId}&select=id,round_key,home_score,kickoff_at,kickoff_tbd`;
   if (mode === "team" && teamId) query += `&or=(home_team_id.eq.${teamId},away_team_id.eq.${teamId})`;
   if (mode === "time_range" && startDate && endDate) query += `&kickoff_at=gte.${startDate}&kickoff_at=lte.${endDate}T23:59:59`;
   let matched = await db.select(token, "matches", query);
-  matched = filterTippable(matched);
+  // Den generiske sti bærer to modes: `team` i legacy-formen (ét hold) og
+  // `time_range` med én turnering. Kun den første har et startrunde-valg —
+  // periodens ligger i dens datoer.
+  matched = mode === "team" ? startingMatches(matched, startRound) : filterTippable(matched);
   if (matched.length) {
     await db.insert(token, "competition_matches", matched.map((m) => ({ competition_id: competition.id, match_id: m.id })));
   }

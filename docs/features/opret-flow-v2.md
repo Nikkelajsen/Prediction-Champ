@@ -45,8 +45,8 @@ konkurrencen lever.
 
 | Kort | Mærkat | Mode + params | Opfølgning |
 |---|---|---|---|
-| **Sæson** (Anbefalet) | Hele sæsonen | `full_season` | turnerings-chips med kampantal |
-| **Favorithold** | Hele sæsonen | `team`, evt. flere hold: `mode_params.team_ids` + `tournaments` | hold på tværs af turneringer (grupperet dropdown + chips) |
+| **Sæson** (Anbefalet) | Hele sæsonen | `full_season` | turnerings-chips med kampantal · **startrunde** |
+| **Favorithold** | Hele sæsonen | `team`, evt. flere hold: `mode_params.team_ids` + `tournaments` | hold på tværs af turneringer (grupperet dropdown + chips) · **startrunde** |
 | **Quick League** | Nogle uger | `random`, `mode_params.rounds` 2–10 (default 6) | turneringer · **startrunde** · runder · kampe **pr. runde** |
 | **Quick Pick** | Én runde | `random`, rounds=1 | turneringer · **startrunde** · antal kampe |
 | **Ugens kupon** | Én runde | `random`, preset count=8, rounds=1, alle turneringer | **startrunde** — navnet forudfyldes "Ugens kupon <runde-label>" (det ENESTE kort med forudfyldt navn) |
@@ -68,8 +68,9 @@ kupon (`B6` — et foreslået navn blev bare beholdt).
 > To ting er ændret, og de hænger sammen:
 >
 > 1. **Startrunde-valget** ("Indeværende runde" / "Ny runde", standard
->    indeværende) er nu et felt på alle fire typer med en startrunde — de tre
->    `random`-kort og Custom/periode. Vælges indeværende, står nævneren ved
+>    indeværende) er nu et felt på **alle seks kort**. Sæson og Favorithold kom
+>    med i anden omgang: deres kampe findes af en regel på skriverens side, så
+>    valget rejser med som `spec.startRound` frem for at filtrere en pulje. Vælges indeværende, står nævneren ved
 >    siden af: *"5 af 6 kampe i indeværende runde er allerede i gang eller
 >    spillet — 1 kamp kan stadig tippes."* Det kræver et opslag på **hele**
 >    runden (`loadCurrentRoundMatches`), fordi puljen af kommende kampe per

@@ -371,6 +371,27 @@ function filterTippable(matches) {
   return (matches || []).filter((m) => !isLocked(m));
 }
 
+// Startrunde: skal konkurrencen begynde i den runde, der allerede er i gang,
+// eller vente på den næste?
+//
+// Valget fandtes ikke før august 2026 — startrunden var en konsekvens af,
+// hvornår man trykkede Opret. Reglen er en ren filtrering, netop fordi det er
+// alt, den skal være: `pickRandomFromRounds` tager de `rounds` FØRSTE
+// rundenøgler, den finder, så fjernes indeværende runde, rykker hele Quick
+// Leagues vindue med. For Sæson og Favorithold er der ikke noget vindue at
+// rykke — dér er det simpelthen den runde, kampene tælles fra.
+//
+// Reglen bor her hos `filterTippable` og ikke i opret-flowets typekatalog,
+// fordi de to nu bruges af det samme sæt kaldere: skærmens pulje OG
+// materialiseringen i `data/competitions.js`. Rundenøglen er en runde-regel,
+// ikke et gallerikort.
+//
+// Uden rundenøgle filtreres der ikke: et gæt ville være værre end intet.
+function filterFromRoundStart(matches, { start, currentKey } = {}) {
+  if (start !== "next" || !currentKey) return matches || [];
+  return (matches || []).filter((m) => m.round_key > currentKey);
+}
+
 // De runder, hvor andres tips må vises — nemlig fra låsen, hvor ingen længere
 // kan rette sit gæt. Hver runde beskæres til sine LÅSTE kampe, så et gæt aldrig
 // kan ses før deadline. Med per-kamp-låsen er en delvist låst runde reglen frem
@@ -442,4 +463,4 @@ function liveInfo(m) {
   };
 }
 
-export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, nextRoundKey, currentRoundKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, isLocked, filterTippable, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };
+export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, nextRoundKey, currentRoundKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, isLocked, filterTippable, filterFromRoundStart, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };

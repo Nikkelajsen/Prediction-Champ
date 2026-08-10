@@ -110,6 +110,17 @@ dér slukkes chippen.
 **Standarden er indeværende runde.** Man vil som regel i gang nu, og valget er
 først et problem, når det er usynligt. Med nævneren på skærmen er det synligt.
 
+**Udvidet samme dag til Sæson og Favorithold.** Spørgsmålet, der afgjorde
+omfanget, tilbød kun de fire korte typer, og de to sæson-typer blev derfor
+udeladt uden at være fravalgt. De har det samme vilkår — opretter man søndag
+aften, består første runde af de kampe, der tilfældigvis var tilbage — og selv
+om en hel sæson ikke afgøres af sin første runde, er det et vilkår, man skal
+kunne vælge frem for at arve. Mekanikken er en tredje af slagsen: deres kampe
+findes af en REGEL på skriverens side, så valget rejser med som
+`spec.startRound` frem for at filtrere en pulje i klienten. `time_range` er
+fortsat undtaget, fordi dens svar ligger i startdatoen — pinnet af en test, så
+feltet ikke kan komme til at smitte af.
+
 ---
 
 ## 10. august 2026 — `B26`s kode leveres før konfigurationen, og værnet slås til med en nøgle

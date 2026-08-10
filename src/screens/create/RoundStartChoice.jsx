@@ -42,14 +42,21 @@ function RoundStartChoice({ value, onChange, roundMatches, currentOpen, nextRoun
 
       {/* role="status" — teksten skifter som SVAR på et klik, og en skærmlæser
           skal have ændringen med uden at skulle lede efter den. */}
+      {/* `nextRound.count` er valgfri. De tilfældige typer KENDER antallet —
+          de har puljen liggende — mens Sæson og Favorithold ville skulle hente
+          op til 800 kommende kampe for at sige det. Dér nævnes runden i stedet
+          uden tal, og sætningen er formuleret så den også passer, hvis netop
+          dén runde er tom (landskampspause): kampene tælles FRA OG MED den. */}
       <p role="status" style={{ ...muted, margin: "6px 0 0" }}>
         {!total
-          ? "Ingen kampe i indeværende runde i de valgte turneringer."
+          ? "Ingen kampe i indeværende runde i det valgte."
           : value === "current"
             ? `${locked} af ${total} kampe i indeværende runde er allerede i gang eller spillet — ${open} ${open === 1 ? "kamp kan" : "kampe kan"} stadig tippes.`
-            : nextRound
-              ? `Starter i runden ${nextRound.label} med ${nextRound.matches.length} ${nextRound.matches.length === 1 ? "kamp" : "kampe"}.`
-              : "Ingen kommende runde fundet i de valgte turneringer."}
+            : !nextRound
+              ? "Ingen kommende runde fundet i det valgte."
+              : nextRound.count == null
+                ? `Indeværende runde springes over — kampene tælles fra og med runden ${nextRound.label}.`
+                : `Starter i runden ${nextRound.label} med ${nextRound.count} ${nextRound.count === 1 ? "kamp" : "kampe"}.`}
       </p>
 
       {/* Den låste runde forklares, i stedet for at knappen bare står grå. */}

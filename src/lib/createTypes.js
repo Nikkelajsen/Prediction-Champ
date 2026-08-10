@@ -143,20 +143,6 @@ function lockedPicks(pickedIds, pool) {
   return (pickedIds || []).filter((id) => !tippable.has(id));
 }
 
-// ---------- startrunde: indeværende eller ny ----------
-// Konkurrencen kan begynde i den runde, der allerede er i gang, eller vente på
-// den næste. Valget fandtes ikke før august 2026: puljen blev hentet fra `nu` og
-// frem, så man ALTID startede i indeværende runde — og trykkede man søndag
-// aften, var konkurrencens første runde de to kampe, der var tilbage.
-//
-// Reglen er en ren filtrering af puljen, netop fordi det er alt, den skal være:
-// `pickRandomFromRounds` tager de `rounds` FØRSTE rundenøgler, den finder, så
-// fjernes indeværende runde fra puljen, rykker hele vinduet med.
-function filterFromRoundStart(pool, { start, currentKey } = {}) {
-  if (start !== "next" || !currentKey) return pool || [];
-  return (pool || []).filter((m) => m.round_key > currentKey);
-}
-
 // Indeværende rundes status i de valgte turneringer: `{ total, locked, open }`.
 //
 // Nævneren er hele runden — også de kampe, der er spillet — for det er dét, der
@@ -240,6 +226,7 @@ function weeklyCouponName(roundKey) {
 //   awards       kårings-tilvalget (I13) — kun meningsfuldt for multiRound-typer
 //   tournaments  season: [{ leagueId, seasonId }]
 //   teams        team: [{ leagueId, seasonId, teamId }]
+//   startRound   season/team: "current" (standard) | "next"
 //   method       custom: "pick" (håndpluk) | "period" (time_range)
 //   leagueId, seasonId, startDate, endDate   custom/period
 //   tournaments  custom/period med FLERE turneringer: [{ leagueId, seasonId }]
@@ -251,8 +238,12 @@ function buildSpec(state) {
   if (!type) throw new Error(`Ukendt korttype: ${state.typeId}`);
   const shared = { name: state.name, groupId: state.groupId || null, awards: !!state.awards };
 
-  if (type.id === "season") return { ...shared, mode: "full_season", tournaments: state.tournaments || [] };
-  if (type.id === "team") return { ...shared, mode: "team", teams: state.teams || [] };
+  // Startrunden følger med for de to sæson-typer. `custom` og `random` har
+  // filtreret puljen i klienten, før de når skriveren, så feltet er kun
+  // meningsfuldt dér, hvor kampene findes af en REGEL frem for af en liste.
+  const startRound = state.startRound === "next" ? "next" : "current";
+  if (type.id === "season") return { ...shared, mode: "full_season", startRound, tournaments: state.tournaments || [] };
+  if (type.id === "team") return { ...shared, mode: "team", startRound, teams: state.teams || [] };
   if (type.id === "custom") {
     if (state.method === "period") {
       // Et LOFT gør perioden til et håndplukket udvalg, og det er et bevidst
@@ -293,5 +284,5 @@ function buildSpec(state) {
 
 export {
   CREATE_TYPES, MAX_MATCHES_PER_ROUND, createTypeById, pickRandomFromRounds, pickPerRound,
-  lockedPicks, filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
+  lockedPicks, roundProgress, weeklyCouponName, buildSpec,
 };
