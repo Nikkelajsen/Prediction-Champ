@@ -16,8 +16,10 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { auth } from "../lib/supabase.js";
+import { turnstileAktiv } from "../lib/turnstile.js";
 import { C, btnGreen, fieldFull, muted, wrapOuter } from "../ui/theme.js";
 import { Card } from "../ui/components.jsx";
+import { Turnstile, TurnstileVenter } from "../ui/Turnstile.jsx";
 import { Wordmark } from "../ui/Wordmark.jsx";
 import { findDokument, MINDSTEALDER } from "../lib/legal.js";
 import LegalDocument from "./LegalDocument.jsx";
@@ -96,11 +98,19 @@ function JuraLinje({ mode, onÅbn }) {
 // en bruger realistisk rammer; alt andet vises som det kommer, fordi en tavs
 // omskrivning af en ukendt fejl ville gøre fejlsøgning sværere end den engelske
 // tekst gør det for brugeren.
+//
+// Den fjerde er bot-værnets (`B26`) og hører her af en anden grund end de tre
+// første: den rammer en bruger, der intet har gjort forkert. Er Turnstile-
+// scriptet blokeret af en annonceblokering — eller er kvitteringen udløbet,
+// mens formularen stod åben — svarer GoTrue "captcha protection: request
+// disallowed", og uden en oversættelse ville en helt almindelig person møde en
+// engelsk sætning om captchas på den skærm, de skal igennem for at komme ind.
 const AUTH_FEJL = [
   [/invalid login credentials/i, "Forkert e-mail eller adgangskode."],
   [/user already registered/i, "Der findes allerede en konto med den e-mail. Log ind i stedet."],
   [/password should be at least/i, "Adgangskoden er for kort — den skal være mindst 6 tegn."],
   [/unable to validate email|invalid format/i, "E-mailen ser ikke rigtig ud."],
+  [/captcha/i, "Bot-tjekket kunne ikke gennemføres. Prøv igen — hjælper det ikke, så genindlæs siden."],
 ];
 
 export function daAuthError(besked) {
@@ -194,6 +204,17 @@ function AuthScreen({ onAuthed, booting }) {
   // nulstillingslink", og værst: submit()'s else-gren kalder auth.signIn(), så
   // et Enter-tryk på en politik-side ville forsøge et login.
   const [jura, setJura] = useState(null); // null | "privatliv" | "vilkaar"
+  // Bot-værnet (`B26`). Begge er døde værdier, når `VITE_TURNSTILE_SITE_KEY`
+  // ikke er sat: widgeten tegner intet og kalder aldrig `setCaptchaToken`, og
+  // `medCaptcha()` i supabase.js udelader feltet, når tokenen er tom.
+  //
+  // `captchaNonce` er tælleren, der beder om en FRISK udfordring. Kvitteringen
+  // er engangs og bruges op af det kald, den blev sendt med — også når kaldet
+  // fejler. Uden en nulstilling ville anden forsøg på en forkert adgangskode
+  // blive afvist af captcha'en i stedet, altså med en fejl om noget helt andet
+  // end det, brugeren rettede.
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaNonce, setCaptchaNonce] = useState(0);
 
   async function submit(e) {
     e?.preventDefault?.();
@@ -210,21 +231,29 @@ function AuthScreen({ onAuthed, booting }) {
         if (password.length < 6) { setError("Adgangskoden skal være mindst 6 tegn"); setLoading(false); return; }
         const available = await auth.checkUsername(uname);
         if (!available) { setError("Brugernavnet er allerede taget. Vælg et andet."); setLoading(false); return; }
-        const res = await auth.signUp(email, password);
+        // `displayName` sendes med som brugermetadata, så navnet overlever en
+        // bekræftelses-mail (B26): svarer signup uden session, findes der
+        // ingen token at skrive `profiles` med, og valget ville ellers være
+        // tabt, når brugeren kom tilbage fra mailen.
+        const res = await auth.signUp(email, password, { captchaToken, displayName: uname });
         if (res.access_token) { await onAuthed(res, uname, "signup"); return; }
         setInfo("Konto oprettet. Har du fået en bekræftelses-mail, skal du følge linket i den — log derefter ind.");
         setMode("signin");
       } else if (mode === "forgot") {
-        await auth.recover(email);
+        await auth.recover(email, captchaToken);
         setInfo("Hvis e-mailen findes, er der sendt et link til at nulstille adgangskoden.");
       } else {
-        const res = await auth.signIn(email, password);
+        const res = await auth.signIn(email, password, captchaToken);
         await onAuthed(res, undefined, "signin");
       }
     } catch (e2) {
       setError(daAuthError(e2.message));
     } finally {
       setLoading(false);
+      // Efter HVERT forsøg, også et vellykket, der ikke navigerede væk
+      // (oprettelse med bekræftelse slået til): kvitteringen er brugt op.
+      setCaptchaToken("");
+      setCaptchaNonce((n) => n + 1);
     }
   }
 
@@ -266,6 +295,20 @@ function AuthScreen({ onAuthed, booting }) {
         {/* Bekræftelser er ikke fejl, så `status` frem for `alert`: den læses op,
             når skærmlæseren har tid, i stedet for at afbryde. */}
         {info && <p role="status" style={{ color: C.green, fontSize: 13 }}>{info}</p>}
+        {/* Bot-værnet (`B26`) står i ALLE tre tilstande, fordi Supabases Bot
+            Protection gør det samme: knappen dækker signup, login OG
+            nulstilling under ét. Et værn kun på oprettelsen ville lade
+            adgangskode-gætteriet stå åbent — og ville sende login af sted uden
+            den kvittering, GoTrue så kræver.
+
+            Komponenten tegner intet uden en nøgle, så indtil knappen i
+            Supabase trykkes, ser skærmen ud præcis som før. */}
+        <Turnstile onToken={setCaptchaToken} nulstil={captchaNonce} handling="auth" />
+        <TurnstileVenter vises={turnstileAktiv() && !captchaToken} />
+        {/* Knappen deaktiveres IKKE, mens kvitteringen mangler. Det ville være
+            den pæne løsning lige indtil den dag, scriptet er blokeret — og så
+            ville login være lukket uden en fejl at læse. I stedet sendes
+            forsøget, og GoTrues afvisning oversættes af `daAuthError`. */}
         <button type="submit" style={btnGreen} disabled={loading || booting}>
           {loading || booting ? <Loader2 size={16} className="spin" /> : mode === "signin" ? "Log ind" : mode === "signup" ? "Opret konto" : "Send nulstillingslink"}
         </button>

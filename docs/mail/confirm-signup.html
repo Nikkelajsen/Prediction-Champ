@@ -14,6 +14,17 @@
   ser ud som "Lille (konfiguration)" og i virkeligheden også kræver, at nogen
   finder på en dansk mailtekst, er en række, der er målt forkert.
 
+  RETTELSE 10. august 2026: forudsigelsen holdt for teksten og ikke for koden.
+  Skabelonen var stadig det rigtige at skrive i forvejen — men "én knap i
+  Supabase" var forkert på to punkter, som først kunne ses, da nogen gik
+  rækken efter. (1) Signup uden session kan ikke skrive `profiles`, så
+  brugernavnet ville være tabt mellem oprettelsen og bekræftelsen; det rejser
+  nu som brugermetadata og skrives af `sikrProfil()` ved første login.
+  (2) Appen læste kun `type=recovery` i adressens hash, så knappen i DENNE mail
+  ville lande brugeren på login-skærmen med en ubrugt session i adresselinjen.
+  Begge dele er bygget; bekræftelsen er nu reelt ét klik. Bot-værnet, rækkens
+  anden halvdel, var aldrig konfiguration alene — se `src/lib/turnstile.js`.
+
   Samme regler som recovery.html: linket er {{ .ConfirmationURL }} og må ikke
   skrives i hånden, ingen billeder, ingen eksterne referencer. Se hovedet dér
   for hvorfor.

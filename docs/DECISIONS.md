@@ -15,6 +15,58 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 10. august 2026 — `B26`s kode leveres før konfigurationen, og værnet slås til med en nøgle
+
+**Beslutning:** klientsiden af `B26` bygges og merges nu, mens begge knapper i
+Supabase bliver stående på "fra". Bot-værnet aktiveres af, at
+`VITE_TURNSTILE_SITE_KEY` sættes i Vercel — ikke af en udrulning — og den nøgle
+skal sættes **før** Bot Protection slås til i Supabase.
+
+**Hvorfor ikke bare vente, til rækken skal køres.** Fordi rækkefølgen ikke er
+symmetrisk, og den forkerte er dyr. Appen taler REST direkte med GoTrue (ingen
+SDK, se `src/lib/supabase.js`), og GoTrue kræver kvitteringen i
+`gotrue_meta_security.captcha_token` på **tre** endpoints, ikke ét: signup,
+password-grant og recover. Slås Bot Protection til, mens klienten intet sender,
+svarer serveren `captcha protection: request disallowed (not-provided)` på dem
+alle — altså login og glemt-adgangskode for alle eksisterende brugere, ikke
+bare oprettelsen af nye konti. Den fejl opdages først, når nogen prøver at logge
+ind, og den rettes ikke af at trykke knappen tilbage, hvis den, der trykkede,
+ikke er den, der opdager det. Med koden på plads først er den forkerte
+rækkefølge stadig mulig, men den er nu skrevet ned tre steder (`.env.example`,
+`DOCUMENTATION.md` §9, `MAIL.md`) i stedet for at være en fælde, ingen kendte.
+
+**Hvorfor en nøgle og ikke et flag.** Et separat `VITE_TURNSTILE_ENABLED` ville
+være to ting at holde enige om, og de kan blive uenige. Site key'en er den ene
+oplysning, værnet ikke kan fungere uden, så den er også det ærligste udtryk for
+"er det slået til". Uden den tegnes ingen widget, hentes intet script og sendes
+intet ekstra felt — kaldene ser ud præcis som før, hvilket en test håndhæver.
+
+**Knappen deaktiveres bevidst IKKE, mens kvitteringen mangler.** Det er den pæne
+løsning lige indtil den dag, Cloudflares script er blokeret af en
+annonceblokering eller en firewall — og så er login lukket uden en fejl at læse.
+I stedet sendes forsøget, GoTrue afviser, og `daAuthError` oversætter afvisningen
+til dansk. En fejl, man kan handle på, slår en knap, der aldrig bliver aktiv.
+
+**Rækken hed "begge dele er Supabase-konfiguration, ikke kode". Det var forkert,
+og det er værd at skrive ned hvorfor.** Påstanden er sand for et projekt, der
+bruger `supabase-js` — biblioteket har en `captchaToken`-option, og
+bekræftelsesflowet håndteres af `detectSessionInUrl`. Dette projekt har bevidst
+ingen SDK (fire runtime-afhængigheder, se `DOCUMENTATION.md` §1), og dermed
+arver det heller ikke SDK'ens færdige halvdel af en leverandørfunktion. Det er
+den generelle lære: **et estimat, der er lånt fra leverandørens dokumentation,
+antager leverandørens klient.** Samme fælde vil gælde næste gang en Supabase-
+feature beskrives som "slå den til".
+
+**Navnekollisionen efter en bekræftelses-mail løses med et suffiks, ikke med en
+ny skærm.** Var navnet ledigt ved oprettelsen og taget, når mailen læses,
+skriver `sikrProfil()` `Anna2`, `Anna3` … frem for at afvise. Alternativet var
+at bede om et nyt navn på det værst tænkelige tidspunkt, på en skærm der ikke
+findes. Et navn med et 2-tal er til at leve med; en konto, der ikke kan bruges,
+er ikke. At navnet derefter ikke kan ændres er en reel mangel og ligger i
+backloggens indbakke.
+
+---
+
 ## 9. august 2026 — Egen afsender til auth-mails: Resend, ikke Outlook (`B25`)
 
 **Beslutning:** appens to auth-mails sendes fra `noreply@leagly.app` gennem

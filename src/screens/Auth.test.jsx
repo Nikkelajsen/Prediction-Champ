@@ -57,6 +57,21 @@ describe("login-skærmen er en rigtig formular (G28)", () => {
   });
 });
 
+// Bot-værnet (`B26`) er slået til med en NØGLE, ikke med en udrulning.
+//
+// Testen vogter den halvdel, der er dyrest at tage fejl af: at koden kan ligge
+// i produktionen uden at ændre noget. Uden `VITE_TURNSTILE_SITE_KEY` må der
+// hverken tegnes en widget, hentes et script eller stå en tekst om robotter på
+// den skærm, alle brugere møder — og rækkefølgen "kode først, konfiguration
+// bagefter" er den eneste, der er sikker: den omvendte lukker login for alle.
+describe("bot-værnet er usynligt uden en nøgle (B26)", () => {
+  it("tegner hverken widget eller ventetekst", () => {
+    const html = render();
+    expect(html).not.toContain("Bot-tjek");
+    expect(html).not.toContain("robot");
+  });
+});
+
 describe("nulstil-skærmen", () => {
   it("er også en formular med navngivne felter", () => {
     const html = renderToStaticMarkup(<ResetPasswordScreen accessToken="t" onDone={() => {}} />);

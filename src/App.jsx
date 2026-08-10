@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { auth, clearSession, db, loadSession, saveSession } from "./lib/supabase.js";
-import { touchActivity } from "./lib/data.js";
+import { sikrProfil, touchActivity } from "./lib/data.js";
 import { logEvent } from "./lib/analytics.js";
 import { disablePush } from "./lib/push.js";
 import { registerServiceWorker } from "./lib/pwa.js";
@@ -29,13 +29,26 @@ const STALE_MS = 10 * 60 * 1000;
 // effekt, der sætter state umiddelbart efter mount (G2, august 2026) — den
 // gamle form gav en ekstra render, hvor appen troede, der ingen invitation var,
 // og React Compiler kalder den slags "cascading renders" med rette.
+//
+// Hash'et bærer TO slags links, og de skal ikke behandles ens. `type=recovery`
+// er en nulstilling og fører til ResetPasswordScreen; `type=signup` er
+// bekræftelses-mailen (B26) og bærer en FULD session — access- og refresh-token
+// — som skal logges ind med det samme. Uden den anden ville en bruger, der
+// netop har trykket "Bekræft e-mail", lande på login-skærmen med et ubrugt
+// hash i adresselinjen og skulle taste den kode, de valgte for fem minutter
+// siden. Selve kontoen ville virke; det er ankomsten, der ville være forkert.
 function readUrlIntent() {
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  const recovery = hash.get("type") === "recovery" ? hash.get("access_token") : null;
+  const type = hash.get("type");
+  const recovery = type === "recovery" ? hash.get("access_token") : null;
+  const bekræftet = type === "signup" && hash.get("access_token")
+    ? { access_token: hash.get("access_token"), refresh_token: hash.get("refresh_token") }
+    : null;
   const params = new URLSearchParams(window.location.search);
   const pn = params.get("pn");
   return {
     recoveryToken: recovery || null,
+    confirmed: bekræftet,
     join: params.get("join") || null,
     liga: params.get("liga") || null,
     push: pn ? { kind: pn, roundKey: params.get("rk") || null } : null,
@@ -64,8 +77,12 @@ export default function App() {
         const rows = await db.upsert(access_token, "profiles", [{ id: user.id, display_name: chosenUsername }], "id");
         setProfile(rows[0]);
       } else {
-        const rows = await db.select(access_token, "profiles", `id=eq.${user.id}&select=*`);
-        setProfile(rows[0] || null);
+        // `sikrProfil` og ikke et bart opslag (B26): mangler rækken, skrives
+        // den af det brugernavn, oprettelsen gemte som metadata. Det er den
+        // eneste vej, en konto oprettet MED e-mailbekræftelse nogensinde får
+        // et navn — signup svarede uden token, så rækken kunne ikke skrives
+        // dengang. Findes rækken, rører funktionen den ikke.
+        setProfile(await sikrProfil(access_token, user));
       }
     } catch {
       const rows = await db.select(access_token, "profiles", `id=eq.${user.id}&select=*`);
@@ -116,6 +133,29 @@ export default function App() {
     if (urlIntent.recoveryToken) return;
 
     (async () => {
+      // Bekræftelses-linket (B26) går FORAN den gemte session: den, der lige
+      // har trykket "Bekræft e-mail", skal ind på den konto, linket gælder —
+      // ikke på en anden, enheden tilfældigvis havde liggende.
+      //
+      // Hash'et bærer tokens, men ikke brugeren, så `getUser` henter den.
+      // Kilden er "signup": det er HER kontoen bliver til noget, der kan
+      // bruges, og det er derfor her `account_created` skal tælles.
+      if (urlIntent.confirmed?.access_token) {
+        try {
+          const user = await auth.getUser(urlIntent.confirmed.access_token);
+          await completeAuth({ ...urlIntent.confirmed, user }, undefined, "signup");
+          // Hash'et ryddes, så et refresh ikke prøver at logge ind igen med en
+          // token, der nu er gammel. `search` bevares — et `?join=` fra samme
+          // adresse er stadig noget, appen skal handle på.
+          window.history.replaceState({}, "", window.location.pathname + window.location.search);
+          setBooting(false);
+          return;
+        } catch {
+          // Udløbet eller allerede brugt link. Login-skærmen er det rigtige
+          // sted at lande — kontoen er bekræftet, hvis linket blev åbnet før.
+        }
+      }
+
       const saved = loadSession();
       if (saved?.refresh_token) {
         try {

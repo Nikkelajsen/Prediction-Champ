@@ -122,17 +122,50 @@ const db = {
   del: (token, table, query) =>
     restFetch(`/rest/v1/${table}?${query}`, { method: "DELETE", token, prefer: "return=representation" }),
 };
+// Bot-værnets kvittering (B26). GoTrue læser den i `gotrue_meta_security` —
+// samme felt på alle tre kald, der kan slås til under Auth → Bot Protection:
+// signup, password-grant og recover. Feltet udelades helt, når der ingen token
+// er, frem for at sendes tomt: et projekt UDEN Bot Protection ville ellers få
+// et felt, det ikke har bedt om, og det er netop den tilstand appen står i,
+// indtil nogen trykker på knappen.
+function medCaptcha(body, captchaToken) {
+  return captchaToken ? { ...body, gotrue_meta_security: { captcha_token: captchaToken } } : body;
+}
+
 const auth = {
-  signUp: (email, password) =>
-    restFetch(`/auth/v1/signup`, { method: "POST", body: { email, password } }),
-  signIn: (email, password) =>
-    restFetch(`/auth/v1/token?grant_type=password`, { method: "POST", body: { email, password } }),
+  // `displayName` rejser med som brugermetadata og IKKE som en profilrække.
+  //
+  // Med e-mailbekræftelse slået til (B26) svarer signup uden session, så der
+  // findes ingen token at skrive `profiles` med — og brugernavnet, personen
+  // lige valgte, ville være væk, når de kom tilbage fra mailen. Metadataen
+  // overlever på auth-brugeren og bruges af `sikrProfil()` ved første login.
+  //
+  // Feltet er ikke en garanti og skal ikke forveksles med en: enhver kan sætte
+  // sin egen metadata. Unikheden håndhæves af `profiles_display_name_lower_idx`
+  // i databasen, præcis som før.
+  signUp: (email, password, { captchaToken, displayName } = {}) =>
+    restFetch(`/auth/v1/signup`, {
+      method: "POST",
+      body: medCaptcha(
+        displayName ? { email, password, data: { display_name: displayName } } : { email, password },
+        captchaToken,
+      ),
+    }),
+  signIn: (email, password, captchaToken) =>
+    restFetch(`/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      body: medCaptcha({ email, password }, captchaToken),
+    }),
   refresh: (refresh_token) =>
     restFetch(`/auth/v1/token?grant_type=refresh_token`, { method: "POST", body: { refresh_token } }),
-  recover: (email) =>
-    restFetch(`/auth/v1/recover`, { method: "POST", body: { email } }),
+  recover: (email, captchaToken) =>
+    restFetch(`/auth/v1/recover`, { method: "POST", body: medCaptcha({ email }, captchaToken) }),
   updatePassword: (accessToken, password) =>
     restFetch(`/auth/v1/user`, { method: "PUT", token: accessToken, body: { password } }),
+  // Bekræftelseslinket sender kun tokens tilbage i adressens hash — ikke
+  // brugeren. `completeAuth` har brug for `user.id`, så den hentes her.
+  getUser: (accessToken) =>
+    restFetch(`/auth/v1/user`, { token: accessToken }),
   checkUsername: (name) =>
     restFetch(`/rest/v1/rpc/username_available`, { method: "POST", body: { name } }),
 };
