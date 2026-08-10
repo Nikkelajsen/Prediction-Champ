@@ -126,6 +126,25 @@ function pickRandomFromRounds(pool, { count = 6, rounds = 1, shuffle } = {}) {
   return ids;
 }
 
+// ---------- kun kampe, der stadig kan tippes ----------
+// Puljen hentes med `kickoff_at >= nu`, men låsen falder en TIME før kickoff
+// (`A21`). De to er ikke det samme, og forskellen er et helt vindue: en Quick
+// Pick oprettet en halv time før kampstart trak kampe, ingen af deltagerne
+// kunne nå at tippe — de stod i konkurrencen som nul point for alle, hvilket er
+// den værste slags kamp at have med, fordi den hverken kan spilles eller ses.
+//
+// Kampe uden kendt kickoff er IKKE låst (`isLocked`) og kommer med. Det er den
+// rigtige vej at tage fejl: en kamp uden tidspunkt kan stadig tippes, og
+// policyens skrivegren siger det samme.
+//
+// Filteret bruges to gange — når puljen bygges, og igen ved oprettelsen. Det er
+// med vilje: puljen er et øjebliksbillede, og en skærm, der har stået åben en
+// time, ville ellers kunne oprette en konkurrence med en kamp, der låste,
+// mens brugeren valgte navn.
+function filterTippable(pool) {
+  return (pool || []).filter((m) => !isLocked(m));
+}
+
 // ---------- startrunde: indeværende eller ny ----------
 // Konkurrencen kan begynde i den runde, der allerede er i gang, eller vente på
 // den næste. Valget fandtes ikke før august 2026: puljen blev hentet fra `nu` og
@@ -276,5 +295,5 @@ function buildSpec(state) {
 
 export {
   CREATE_TYPES, MAX_MATCHES_PER_ROUND, createTypeById, pickRandomFromRounds, pickPerRound,
-  filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
+  filterTippable, filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
 };

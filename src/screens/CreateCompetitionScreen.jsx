@@ -13,7 +13,7 @@ import { loadNewestSeasons, countMatchesPerLeague, loadTeamsByLeague, loadUpcomi
 import { validateGroupName } from "../lib/onboarding.js";
 import { ChevronLeft } from "lucide-react";
 import { groupIntoRounds, currentRoundKey, nextRoundKey, roundKeyOfDate, zonedDateKey, isLocked } from "../lib/scoring.js";
-import { createTypeById, pickRandomFromRounds, pickPerRound, filterFromRoundStart, weeklyCouponName, buildSpec } from "../lib/createTypes.js";
+import { createTypeById, pickRandomFromRounds, pickPerRound, filterTippable, filterFromRoundStart, weeklyCouponName, buildSpec } from "../lib/createTypes.js";
 import { C, btnGhost, btnGreen, font } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
 import TypeGallery, { ICONS } from "./create/TypeGallery.jsx";
@@ -256,9 +256,13 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   // klik, hver gang turneringsvalget ændrede svaret.
   const effectiveRoundStart = randomStart.currentOpen ? roundStart : "next";
 
+  // Låste kampe ryger ud AF PULJEN og ikke først ved udvælgelsen: gjorde de
+  // ikke det, ville tallene ved siden af felterne ("38 kampe pr. runde",
+  // "1 kamp kan stadig tippes") tælle kampe, udvælgelsen ikke ville bruge — og
+  // to tal, der er uenige om den samme runde, er værre end ét, der er for højt.
   const randomPool = useMemo(() => {
     const allowed = randomLeagueIds || leagues.map((l) => l.id);
-    return filterFromRoundStart(upcoming.filter((m) => allowed.includes(m._leagueId)),
+    return filterFromRoundStart(filterTippable(upcoming.filter((m) => allowed.includes(m._leagueId))),
       { start: effectiveRoundStart, currentKey });
   }, [upcoming, randomLeagueIds, leagues, effectiveRoundStart, currentKey]);
   const randomRounds = useMemo(() => groupIntoRounds(randomPool), [randomPool]);
@@ -337,9 +341,14 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
       return buildSpec({ ...shared, method, matchIds: pickedIds });
     }
     const rounds = typeId === "quick_league" ? roundsCount : 1;
+    // Filtreret ÉN GANG TIL her, selv om puljen allerede er det: puljen er et
+    // øjebliksbillede fra dengang, felterne blev tegnet, og en skærm, der har
+    // stået åben, mens brugeren fandt på et navn, ville ellers kunne trække en
+    // kamp, der låste undervejs. Udvælgelsen er det sidste sted, sandheden
+    // stadig kan tjekkes.
     return buildSpec({
       ...shared,
-      matchIds: pickRandomFromRounds(randomPool, { count: randomCount, rounds }),
+      matchIds: pickRandomFromRounds(filterTippable(randomPool), { count: randomCount, rounds }),
       randomCount, rounds,
     });
   }

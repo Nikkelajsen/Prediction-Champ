@@ -87,6 +87,14 @@ kupon (`B6` — et foreslået navn blev bare beholdt).
 > er samtidig flyttet **øverst** på de to Quick-kort, fordi felterne under det
 > nu svarer med tal, der kun gælder for de valgte turneringer.
 >
+> Arbejdet fandt undervejs en fejl, der var ældre end det selv: puljen filtrerer
+> på `kickoff_at >= nu`, mens låsen falder en **time** før kickoff (`A21`), så
+> en Quick Pick oprettet en halv time før kampstart trak kampe, ingen kunne nå
+> at tippe. `filterTippable` skærer dem fra i alle tre `random`-typer — både når
+> puljen bygges og igen ved oprettelsen, fordi puljen er et øjebliksbillede.
+> Custom er ikke omfattet (håndpluk og periodens loft-gren viser/tager stadig
+> låste kampe); rækken står i `docs/BACKLOG.md`.
+>
 > Fuld beskrivelse i `DOCUMENTATION.md` §3; beslutningen i `docs/DECISIONS.md`.
 
 *Rettet efter levering (august 2026): liga-feltet er ikke længere blot altid

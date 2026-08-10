@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   CREATE_TYPES, MAX_MATCHES_PER_ROUND, createTypeById, pickRandomFromRounds, pickPerRound,
-  filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
+  filterTippable, filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
 } from "./createTypes.js";
 
 // Galleriet er kun en oversættelse: seks kort → de fem eksisterende modes plus
@@ -74,6 +74,55 @@ describe("pickRandomFromRounds", () => {
 
   it("tom pulje giver tom liste", () => {
     expect(pickRandomFromRounds([], { count: 8, rounds: 6 })).toEqual([]);
+  });
+});
+
+describe("filterTippable", () => {
+  // Puljen hentes med `kickoff_at >= nu`, men låsen falder en TIME før kickoff
+  // (A21). Forskellen er et helt vindue, hvor en kamp ser kommende ud og ikke
+  // kan tippes — og en Quick Pick oprettet dér gav alle deltagere nul point på
+  // en kamp, de aldrig fik at se.
+  const om = (min) => new Date(Date.now() + min * 60000).toISOString();
+  const siden = (min) => new Date(Date.now() - min * 60000).toISOString();
+
+  it("smider kampe væk, der låser inden for timen, selv om de ikke er spillet", () => {
+    const pool = [
+      { id: "snart", kickoff_at: om(20) },   // kickoff om 20 min → LÅST
+      { id: "senere", kickoff_at: om(180) }, // kickoff om 3 timer → kan tippes
+    ];
+    expect(filterTippable(pool).map((m) => m.id)).toEqual(["senere"]);
+  });
+
+  it("smider kampe væk, der er i gang eller færdigspillet", () => {
+    const pool = [
+      { id: "igang", kickoff_at: siden(30) },
+      { id: "faerdig", kickoff_at: siden(200), home_score: 2, away_score: 1 },
+      { id: "aaben", kickoff_at: om(3000) },
+    ];
+    expect(filterTippable(pool).map((m) => m.id)).toEqual(["aaben"]);
+  });
+
+  // En kamp uden kendt kickoff er ikke låst — den rigtige vej at tage fejl,
+  // og samme svar som RLS-policyens skrivegren giver.
+  it("beholder en kamp uden kendt kickoff", () => {
+    expect(filterTippable([{ id: "ukendt", kickoff_at: null }]).map((m) => m.id)).toEqual(["ukendt"]);
+  });
+
+  // Tallene ved siden af felterne tælles på den SAMME pulje, udvælgelsen bruger.
+  // Var de to uenige, ville skærmen love kampe, konkurrencen ikke fik.
+  it("giver samme antal som roundProgress' `open` for den samme runde", () => {
+    const runde = [
+      { id: "m1", kickoff_at: siden(200), home_score: 1, away_score: 1 },
+      { id: "m2", kickoff_at: siden(5) },
+      { id: "m3", kickoff_at: om(30) },
+      { id: "m4", kickoff_at: om(4000) },
+    ];
+    expect(filterTippable(runde)).toHaveLength(roundProgress(runde).open);
+  });
+
+  it("tåler tom og manglende pulje", () => {
+    expect(filterTippable([])).toEqual([]);
+    expect(filterTippable(null)).toEqual([]);
   });
 });
 
