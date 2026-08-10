@@ -47,7 +47,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-Tom.
+- Modal-fokusfejlen kunne kun ses i en rigtig browser (Chromium + playwright-core, ~40 linjer) — skal den slags have en plads i CI, eller er "uden jsdom" stadig svaret?
 
 ---
 
