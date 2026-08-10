@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { auth, db } from "./supabase.js";
+import { auth, db, fejltekst } from "./supabase.js";
 
 // Fanger den ene ting, `select` ikke kunne: et tal, der er større end det antal
 // rækker PostgREST vil levere i ét svar. Regressionen bag "Premier League ·
@@ -68,6 +68,19 @@ describe("restFetch/restCount — fejlens status", () => {
     await expect(db.select("tok", "matches")).rejects.toMatchObject({ status: 401, message: "JWT expired" });
   });
 
+  // Hele vejen igennem, og ikke kun i `fejltekst()`: det var dén sti, der var
+  // brudt. GoTrues krop plus en tom statusText — som er, hvad HTTP/2 giver.
+  it("bærer GoTrues `msg` helt ud til kalderen, også når statusText er tom", async () => {
+    globalThis.fetch.mockResolvedValue({
+      ok: false, status: 400, statusText: "",
+      headers: { get: () => null },
+      json: async () => ({ code: 400, error_code: "validation_failed", msg: "captcha protection: request disallowed" }),
+    });
+    await expect(db.select("tok", "matches")).rejects.toMatchObject({
+      status: 400, message: "captcha protection: request disallowed",
+    });
+  });
+
   it("sætter status på fejlen fra et tælle-kald", async () => {
     fejl(403);
     await expect(db.count("tok", "matches")).rejects.toMatchObject({ status: 403 });
@@ -84,6 +97,48 @@ describe("restFetch/restCount — fejlens status", () => {
     await expect(db.select("tok", "matches")).rejects.toMatchObject({
       status: 500, message: "Internal Server Error",
     });
+  });
+});
+
+// Fejlteksten skal findes, uanset hvilken server der svarer (10. august 2026).
+//
+// Regressionen er dyrt betalt: vi læste kun `message`, men GoTrue svarer `msg`,
+// og `res.statusText` er TOM over HTTP/2. Hver eneste auth-fejl endte derfor
+// som en fejl uden tekst, og skærmen viste "Noget gik galt" — også når kroppen
+// indeholdt et præcist svar. To helt forskellige fejl så ens ud på skærmen
+// under `B26`s første kørsel, og det var dét, der gjorde den blind.
+describe("fejltekst — de to servere staver det forskelligt", () => {
+  it("læser PostgRESTs `message`", () => {
+    expect(fejltekst({ message: "duplicate key" })).toBe("duplicate key");
+  });
+
+  // DEN VIGTIGE. Uden denne linje kan ingen af oversættelserne i AUTH_FEJL
+  // nogensinde ramme en auth-fejl.
+  it("læser GoTrues `msg`", () => {
+    expect(fejltekst({ code: 400, error_code: "validation_failed", msg: "Email not confirmed" }))
+      .toBe("Email not confirmed");
+  });
+
+  it("læser token-endpointets `error_description`", () => {
+    expect(fejltekst({ error: "invalid_grant", error_description: "Invalid login credentials" }))
+      .toBe("Invalid login credentials");
+  });
+
+  // En kode er dårligere end en sætning og bedre end ingenting.
+  it("falder tilbage på `error`, når den er en streng", () => {
+    expect(fejltekst({ error: "invalid_grant" })).toBe("invalid_grant");
+  });
+
+  // `error` er et objekt på nogle svar. "[object Object]" på skærmen er værre
+  // end den tomme streng, der lader kalderen vælge sin egen fallback.
+  it("bruger ikke `error`, når den ikke er en streng", () => {
+    expect(fejltekst({ error: { code: 400 } })).toBe("");
+  });
+
+  it("svarer tomt på en krop, der intet siger", () => {
+    expect(fejltekst({})).toBe("");
+    expect(fejltekst(null)).toBe("");
+    expect(fejltekst("ikke et objekt")).toBe("");
   });
 });
 

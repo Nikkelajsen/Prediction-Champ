@@ -45,9 +45,35 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 //
 // Egenskaben tilføjes på et almindeligt Error frem for en ny fejlklasse: alle
 // eksisterende `catch`-blokke læser `e.message` og er uændrede.
+// De to servere bag samme URL staver "fejltekst" forskelligt, og det kostede en
+// hel fejlsøgning 10. august 2026 (`B26`s første kørsel).
+//
+// PostgREST svarer `{"message": "..."}`. **GoTrue svarer `{"msg": "..."}`** —
+// og på token-endpointet i OAuth-form, `{"error_description": "..."}`. Vi læste
+// kun `message`, så HVER eneste auth-fejl faldt tilbage på `res.statusText`,
+// som er TOM over HTTP/2. Resultatet var en fejl uden tekst, og `daAuthError()`
+// viste sin sidste udvej: "Noget gik galt".
+//
+// Prisen var ikke kosmetisk. Da bot-værnet blev slået til uden en kvittering i
+// buildet, og da en ubekræftet konto blev afvist, sagde appen det SAMME
+// intetsigende om to helt forskellige fejl — begge med et præcist svar
+// tilgængeligt i kroppen, som ingen kunne se. Oversættelserne i `AUTH_FEJL`
+// kunne pr. konstruktion aldrig ramme, fordi teksten aldrig nåede frem.
+function fejltekst(body) {
+  if (!body || typeof body !== "object") return "";
+  // Rækkefølgen er den, der giver den mest specifikke tekst først. `error` står
+  // sidst og kun som streng: på nogle svar er den en kode ("invalid_grant"), på
+  // andre et objekt — og en kode er bedre end ingenting, men dårligere end en
+  // sætning.
+  for (const kandidat of [body.message, body.msg, body.error_description, body.error]) {
+    if (typeof kandidat === "string" && kandidat) return kandidat;
+  }
+  return "";
+}
+
 async function restError(res) {
   let msg = res.statusText;
-  try { msg = (await res.json()).message || msg; } catch { /* ikke JSON */ }
+  try { msg = fejltekst(await res.json()) || msg; } catch { /* ikke JSON */ }
   const err = new Error(msg);
   err.status = res.status;
   return err;
@@ -188,4 +214,4 @@ function clearAllLocalState() {
   for (const n of LOKALE_NØGLER) removeFlag(n);
 }
 
-export { restError, isAborted, restFetch, restCount, db, auth, saveSession, loadSession, clearSession, clearAllLocalState, LOKALE_NØGLER };
+export { fejltekst, restError, isAborted, restFetch, restCount, db, auth, saveSession, loadSession, clearSession, clearAllLocalState, LOKALE_NØGLER };

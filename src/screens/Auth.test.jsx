@@ -92,6 +92,15 @@ describe("daAuthError", () => {
     expect(daAuthError("Password should be at least 6 characters")).toMatch(/for kort/);
   });
 
+  // De to fra `B26`s første kørsel. Begge nåede en rigtig bruger som "Noget gik
+  // galt", fordi teksten aldrig kom ud af HTTP-kroppen — se `fejltekst()` i
+  // supabase.js. Oversættelserne er intet værd uden den rettelse, og
+  // rettelsen er svær at holde fast i uden disse to.
+  it("oversætter de to, `B26` ramte", () => {
+    expect(daAuthError("captcha protection: request disallowed (not-provided)")).toMatch(/Bot-tjekket/);
+    expect(daAuthError("Email not confirmed")).toMatch(/ikke bekræftet endnu/);
+  });
+
   it("lader en ukendt fejl passere uændret frem for at gætte", () => {
     expect(daAuthError("Database connection reset")).toBe("Database connection reset");
   });

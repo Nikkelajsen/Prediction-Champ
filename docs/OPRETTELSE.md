@@ -236,9 +236,33 @@ uændret efter et tryk, blev der ikke gemt.
 | Nøglen i Vercel | **Lad den stå** | Uden Bot Protection ignorerer GoTrue kvitteringen |
 
 ⚠️ **Konti oprettet, mens bekræftelsen var slået til, og som ikke nåede at
-bekræfte, kan ikke logge ind — heller ikke efter et rollback.** De skal
-bekræftes i hånden under Authentication → Users. Det er den ene ting ved
-bekræftelsen, der ikke ruller tilbage af sig selv.
+bekræfte, kan ikke logge ind — heller ikke efter et rollback.** Kontakten
+gælder kun NYE oprettelser; den går ikke tilbage og bekræfter dem, der allerede
+står med `email_confirmed_at = null`. Det er den ene ting ved bekræftelsen, der
+ikke ruller tilbage af sig selv.
+
+**Sådan bekræfter du for dem.** Knappen ligger i ⋯-menuen på brugerens række
+under Authentication → Users og vises kun for ubekræftede konti — men gå i SQL
+Editor i stedet, hvis den ikke er til at finde:
+
+```sql
+update auth.users
+   set email_confirmed_at = now()
+ where email = 'deres@mail.dk'
+returning email, email_confirmed_at;
+```
+
+Rør kun `email_confirmed_at`; `confirmed_at` er genereret af den og kan ikke
+sættes. **Vær opmærksom på, hvad det koster:** en manuel bekræftelse springer
+netop det bevis over, bekræftelsen findes for — at adressen tilhører dem.
+I en vennekreds er det uproblematisk, men adressen står fremover som verificeret
+uden at være det. Vil du hellere have flowet kørt rigtigt, så brug **Resend
+confirmation** fra samme menu.
+
+> **Bekræftelsen alene skaber ikke profilrækken.** Den skrives af appen ved
+> brugerens første *login* — det er der, der findes en token. Kig derfor ikke
+> efter dem i `public.profiles` eller i appens Admin → Brugere umiddelbart efter
+> en bekræftelse; de dukker først op, når de har logget ind.
 
 ---
 
@@ -268,3 +292,40 @@ bekræftelsen, der ikke ruller tilbage af sig selv.
 - **Slås værnet fra permanent:** fjern også `VITE_TURNSTILE_SITE_KEY` fra
   Vercel, så koden og konfigurationen siger det samme. En nøgle, der er sat uden
   at blive brugt, får den næste læser til at tro, at værnet er aktivt.
+
+---
+
+## Første kørsel, 10. august 2026 — hvad den lærte
+
+Runbogen blev fulgt samme dag, den blev skrevet, og gik i stå tre gange. Alle
+tre er rettet ovenfor; de står her, fordi det er den slags, der ellers findes
+igen ved næste kørsel.
+
+**1. Trin 7 stod tre forskellige steder, før den stod rigtigt.** `Confirm email`
+sidder i blokken `User Signups` ØVERST på Sign In / Providers — ikke i
+Email-provideren og ikke under Emails. Runbogen gættede to gange forkert, fordi
+Supabase har flyttet indstillingen mellem dashboard-versioner. Det er derfor
+kontrollen i trin 7 nu spørger GoTrues `/auth/v1/settings` frem for menuen: den
+er sand, uanset hvad knappen hedder i denne uge.
+
+**2. Trin 3 blev sprunget over, og prisen var, at ingen kunne logge ind.** Bot
+Protection blev slået til, uden at kontrollen "se widgeten stå på login-skærmen"
+var kørt — og en `VITE_`-variabel virker først efter en NY deploy. Klienten
+sendte derfor ingen kvittering, og døren lukkede for alle. **Trin 3 er ikke en
+formalitet; den er hele forskellen på en knap, der kan trykkes tilbage, og en
+hændelse.**
+
+**3. Appen sagde "Noget gik galt" til to helt forskellige fejl — og det var en
+rigtig fejl i koden.** `restError()` læste kun `message`, men GoTrue svarer
+`msg`, og `res.statusText` er tom over HTTP/2. Hver eneste auth-fejl endte
+derfor uden tekst, og både bot-værnets afvisning og "Email not confirmed" blev
+til appens mest intetsigende sætning — med det præcise svar liggende i kroppen,
+hvor ingen kunne se det. Rettet samme dag (`fejltekst()` i `src/lib/supabase.js`
+plus to oversættelser i `AUTH_FEJL`).
+
+**Det, der virkede efter hensigten:** en bruger oprettede sig 08:04, mens
+bekræftelsen var slået til, nåede ikke linket inden for den time, det gælder, og
+blev bekræftet i hånden. Ved hans første login skrev `sikrProfil()` hans
+brugernavn på plads fra `raw_user_meta_data` — altså præcis det hul, `B26`s
+klientside blev bygget for at lukke, efterprøvet på en rigtig konto frem for i
+en test.

@@ -111,6 +111,12 @@ const AUTH_FEJL = [
   [/password should be at least/i, "Adgangskoden er for kort — den skal være mindst 6 tegn."],
   [/unable to validate email|invalid format/i, "E-mailen ser ikke rigtig ud."],
   [/captcha/i, "Bot-tjekket kunne ikke gennemføres. Prøv igen — hjælper det ikke, så genindlæs siden."],
+  // Femte linje, tilføjet 10. august 2026 efter `B26`s første kørsel. Den ramte
+  // en rigtig bruger: han oprettede sig, mens bekræftelsen var slået til, nåede
+  // ikke at følge linket inden for den time, det gælder, og fik derefter
+  // "Noget gik galt" — en tekst, der hverken siger, hvad der er galt, eller
+  // hvad man gør ved det. Hans konto FANDTES; den manglede ét klik.
+  [/email not confirmed/i, "Din e-mail er ikke bekræftet endnu. Følg linket i bekræftelses-mailen — kig også i spam."],
 ];
 
 export function daAuthError(besked) {
