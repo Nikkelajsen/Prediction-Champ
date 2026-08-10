@@ -166,20 +166,48 @@ Authentication → Email Templates → **Confirm signup**.
 
 ## Trin 7 — Slå bekræftelsen til
 
-Authentication → **Sign In / Providers** → klik rækken **Email** under *Auth
-Providers*, så den folder sig ud → **Confirm email** → til → **Save**.
+Authentication → **Sign In / Providers** → fanen **Supabase Auth** → blokken
+**User Signups** ØVERST på siden → **Confirm email** → til → **Save changes**.
 
-> ⚠️ **Det er en anden underside end trin 6, og det er nemt at lede forgæves.**
-> Skabelonen indsættes under Authentication → *Emails*; kontakten sidder på
-> **Email-provideren**. Den er hverken under *Emails*, *Attack Protection*
-> (det var trin 4) eller *URL Configuration*. Hedder undersiden bare
-> *Providers*, er det den samme — Supabase har omdøbt den undervejs, så gå
-> efter **Email-provideren** frem for efter sidens navn.
+> ⚠️ **Kontakten sidder på SIDEN, ikke i Email-provideren — og det er den
+> forveksling, der koster tid.** Folder man Email-rækken ud under *Auth
+> Providers* længere nede, finder man `Enable email provider`, `Secure email
+> change`, adgangskodereglerne og OTP-felterne — men ikke denne. Den står i
+> `User Signups` sammen med `Allow new users to sign up`, altså i den blok, der
+> handler om oprettelse frem for om e-mail som metode.
 >
-> *(Konstateret under første kørsel, 10. august 2026.)*
+> Lad **`Allow new users to sign up`** blive stående på til. Uden den kan ingen
+> oprette sig overhovedet, og symptomet ligner til forveksling et bot-værn, der
+> afviser alt.
+>
+> **Husk `Save changes`.** Blokken gemmer ikke af sig selv, og en vippet kontakt
+> uden et tryk på knappen ser fuldstændig rigtig ud.
+>
+> *(Stien er konstateret på skærmen under første kørsel, 10. august 2026. Her
+> stod indtil da "klik rækken Email under Auth Providers", hvilket var forkert —
+> og før dét pegede runbogen på Authentication → Emails, hvilket også var
+> forkert. Supabase har flyttet indstillingen mellem dashboard-versioner, og
+> det er præcis derfor kontrollen nedenfor ikke spørger menuen, men GoTrue.)*
 
 Fra nu af svarer signup uden session, og appen viser "Konto oprettet …" i stedet
 for at logge brugeren ind.
+
+**Kontrollér, at det blev gemt — uden at spørge menuen.** GoTrue offentliggør
+sin egen indstilling, så svaret er uafhængigt af, hvad dashboardet kalder
+kontakten i denne uge:
+
+```bash
+curl -s 'https://qfcjbpvttburccdyfnkx.supabase.co/auth/v1/settings' \
+  -H 'apikey: sb_publishable_Et9Dahm8LOhZk6cS1XRqhA_9RuNmnvC'
+```
+
+| `mailer_autoconfirm` | Betyder |
+|---|---|
+| `true` | Bekræftelse **slået fra** — konti auto-bekræftes. Udgangspunktet |
+| `false` | Bekræftelse **slået til**. Det er den, trin 7 skal give |
+
+Feltet er GoTrues eget, og det er dét, kontakten skriver til. Er værdien
+uændret efter et tryk, blev der ikke gemt.
 
 ## Trin 8 — Bevis, at bekræftelsen virker
 
