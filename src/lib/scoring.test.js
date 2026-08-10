@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { currentRoundKey, roundKeyOfDate, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { currentRoundKey, roundKeyOfDate, nextRoundKey, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 describe("outcome", () => {
   it("giver 1 ved hjemmesejr, X ved uafgjort, 2 ved udesejr", () => {
@@ -466,6 +466,32 @@ describe("roundKeyOfDate / currentRoundKey", () => {
     expect(currentRoundKey(new Date("2026-03-09T22:30:00Z"))).toBe("2026-03-03");
     // 2026-03-09 23.30 UTC = 00.30 dansk tirsdag → NY runde.
     expect(currentRoundKey(new Date("2026-03-09T23:30:00Z"))).toBe("2026-03-10");
+  });
+});
+
+describe("nextRoundKey", () => {
+  // Runder er ugentlige og forankret på tirsdagen, så "runden efter" er nøglen
+  // plus syv dage — samme regning som SQL'ens `s.round_key::date + 7`.
+  it("lægger præcis én uge til", () => {
+    expect(nextRoundKey("2026-03-03")).toBe("2026-03-10");
+    expect(nextRoundKey("2026-03-10")).toBe("2026-03-17");
+  });
+
+  it("krydser måneds- og årsskifte", () => {
+    expect(nextRoundKey("2026-12-29")).toBe("2027-01-05");
+    expect(nextRoundKey("2026-02-24")).toBe("2026-03-03");
+  });
+
+  // Sommertid må ikke kunne flytte datoen: nøglen er en dansk kalenderdato, og
+  // ugen 2026-03-24 → 2026-03-31 ligger hen over det danske sommertidsskifte.
+  it("holder datoen hen over sommertidsskiftet", () => {
+    expect(nextRoundKey("2026-03-24")).toBe("2026-03-31");
+    expect(nextRoundKey("2026-10-20")).toBe("2026-10-27");
+  });
+
+  it("giver tom streng for ugyldigt input frem for at kaste", () => {
+    expect(nextRoundKey("")).toBe("");
+    expect(nextRoundKey("ikke-en-dato")).toBe("");
   });
 });
 

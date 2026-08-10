@@ -6,7 +6,20 @@
 // mode_params — `competitions_mode_check` er urørt, og ingen eksisterende
 // række skal migreres. Quick League er fx `random` med `rounds > 1`, og
 // Ugens kupon er `random` med et fast preset.
-import { roundLabel } from "./scoring.js";
+import { roundLabel, isLocked } from "./scoring.js";
+
+// ---------- hvor mange kampe må man bede om pr. runde? ----------
+// Loftet er TEKNISK og ikke sportsligt (august 2026). Feltet var før klippet til
+// antallet af kampe i nærmeste runde, og det var forkert af en grund, der kun
+// kan ses hen over tid: nærmeste runde er ofte halvspillet, og flere turneringer
+// starter forskudt. Med én kamp tilbage i indeværende runde kunne man kun skrive
+// "1" i et felt, der bestemmer antallet i ALLE seks runder — også de runder, der
+// har fyrre kampe at vælge imellem.
+//
+// `pickRandomFromRounds` klipper i forvejen til rundens faktiske udbud, så et
+// højt tal er ufarligt: det betyder "så mange som muligt". Loftet her findes
+// alene for at fange en tastefejl (500 i stedet for 50).
+const MAX_MATCHES_PER_ROUND = 50;
 
 // Rækkefølgen ER varigheds-spørgsmålet (I14: "varighed før turnering"), men
 // den står langt → kort (vendt 1. august 2026): det øverste kort er dét,
@@ -111,6 +124,36 @@ function pickRandomFromRounds(pool, { count = 6, rounds = 1, shuffle } = {}) {
     for (const m of doShuffle(byRound[key]).slice(0, perRound)) ids.push(m.id);
   }
   return ids;
+}
+
+// ---------- startrunde: indeværende eller ny ----------
+// Konkurrencen kan begynde i den runde, der allerede er i gang, eller vente på
+// den næste. Valget fandtes ikke før august 2026: puljen blev hentet fra `nu` og
+// frem, så man ALTID startede i indeværende runde — og trykkede man søndag
+// aften, var konkurrencens første runde de to kampe, der var tilbage.
+//
+// Reglen er en ren filtrering af puljen, netop fordi det er alt, den skal være:
+// `pickRandomFromRounds` tager de `rounds` FØRSTE rundenøgler, den finder, så
+// fjernes indeværende runde fra puljen, rykker hele vinduet med.
+function filterFromRoundStart(pool, { start, currentKey } = {}) {
+  if (start !== "next" || !currentKey) return pool || [];
+  return (pool || []).filter((m) => m.round_key > currentKey);
+}
+
+// Indeværende rundes status i de valgte turneringer: `{ total, locked, open }`.
+//
+// Nævneren er hele runden — også de kampe, der er spillet — for det er dét, der
+// gør valget oplysende frem for bare et valg. "1 i nærmeste runde" fortalte kun,
+// hvad der var tilbage; "5 af 6 kampe er allerede i gang eller spillet" fortæller
+// hvorfor.
+//
+// "Spillet" er her det samme som LÅST (`isLocked`): en kamp, der er fløjtet i
+// gang, kan ikke tippes, og for den, der skal beslutte sig, er forskellen på "i
+// gang" og "færdig" uden betydning. Samme svar som Tip-skærmen giver.
+function roundProgress(matches) {
+  const list = matches || [];
+  const open = list.filter((m) => !isLocked(m)).length;
+  return { total: list.length, locked: list.length - open, open };
 }
 
 // ---------- loft pr. runde (custom/periode) ----------
@@ -231,4 +274,7 @@ function buildSpec(state) {
   };
 }
 
-export { CREATE_TYPES, createTypeById, pickRandomFromRounds, pickPerRound, weeklyCouponName, buildSpec };
+export {
+  CREATE_TYPES, MAX_MATCHES_PER_ROUND, createTypeById, pickRandomFromRounds, pickPerRound,
+  filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
+};

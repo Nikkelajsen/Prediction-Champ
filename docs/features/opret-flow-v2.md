@@ -47,15 +47,47 @@ konkurrencen lever.
 |---|---|---|---|
 | **Sæson** (Anbefalet) | Hele sæsonen | `full_season` | turnerings-chips med kampantal |
 | **Favorithold** | Hele sæsonen | `team`, evt. flere hold: `mode_params.team_ids` + `tournaments` | hold på tværs af turneringer (grupperet dropdown + chips) |
-| **Quick League** | Nogle uger | `random`, `mode_params.rounds` 2–10 (default 6) | runder · kampe **pr. runde** · turneringer |
-| **Quick Pick** | Én runde | `random`, rounds=1 | antal kampe · turneringer |
-| **Ugens kupon** | Én runde | `random`, preset count=8, rounds=1, alle turneringer | ingen — navnet forudfyldes "Ugens kupon <runde-label>" (det ENESTE kort med forudfyldt navn) |
-| **Custom** | Du bestemmer | `custom` (håndpluk) eller `time_range` (periode) | metode · kampvælger ELLER datointerval + turnering |
+| **Quick League** | Nogle uger | `random`, `mode_params.rounds` 2–10 (default 6) | turneringer · **startrunde** · runder · kampe **pr. runde** |
+| **Quick Pick** | Én runde | `random`, rounds=1 | turneringer · **startrunde** · antal kampe |
+| **Ugens kupon** | Én runde | `random`, preset count=8, rounds=1, alle turneringer | **startrunde** — navnet forudfyldes "Ugens kupon <runde-label>" (det ENESTE kort med forudfyldt navn) |
+| **Custom** | Du bestemmer | `custom` (håndpluk) eller `time_range` (periode) | metode · kampvælger ELLER **startrunde** + datointerval + turnering |
 
 Vilkår, der bevidst er ført videre uændret: liga-feltet er aldrig skjult
 (liga-løs må ikke ske tavst), tomme turneringer kan ikke vælges (frossen-liste-
 problemet), og navne-forudfyldningen er FJERNET for alle andre kort end Ugens
 kupon (`B6` — et foreslået navn blev bare beholdt).
+
+> **Rettet efter levering (august 2026) — startrunde og kampantal.** Udkastet
+> beskrev opfølgningen på de tre `random`-kort som "antal + turneringer" og
+> antog stiltiende, at konkurrencen begynder i **nærmeste kommende runde**.
+> Antagelsen var usynlig, fordi den lå i dataopslaget og ikke i en kontrol:
+> `loadUpcomingMatches` henter fra `nu` og frem, så en konkurrence oprettet
+> søndag aften fik ugens to resterende kampe som hele sin første runde — og
+> skærmen sagde det ikke, den skrev bare "(1 i nærmeste runde)".
+>
+> To ting er ændret, og de hænger sammen:
+>
+> 1. **Startrunde-valget** ("Indeværende runde" / "Ny runde", standard
+>    indeværende) er nu et felt på alle fire typer med en startrunde — de tre
+>    `random`-kort og Custom/periode. Vælges indeværende, står nævneren ved
+>    siden af: *"5 af 6 kampe i indeværende runde er allerede i gang eller
+>    spillet — 1 kamp kan stadig tippes."* Det kræver et opslag på **hele**
+>    runden (`loadCurrentRoundMatches`), fordi puljen af kommende kampe per
+>    definition ikke kan se de kampe, der allerede er væk.
+> 2. **Kampantallet er ikke længere klippet til nærmeste runde.** Feltets `max`
+>    var antallet i nærmeste runde, hvilket gjorde en halvspillet startrunde til
+>    reglen for **alle** Quick Leagues runder: med én kamp tilbage kunne man kun
+>    skrive "1" i et felt, der gælder seks uger frem. Loftet er nu teknisk
+>    (`MAX_MATCHES_PER_ROUND` = 50), og udbuddet er oplysning — for Quick League
+>    spændet over de valgte runder ("4–38 kampe pr. runde").
+>
+> Custom/periode oversætter valget til sin **startdato** i stedet for at
+> filtrere en pulje, og chippen er dér afledt af datoen: to kontroller, der
+> begge kunne bestemme starten, ville kunne modsige hinanden. Turneringsvalget
+> er samtidig flyttet **øverst** på de to Quick-kort, fordi felterne under det
+> nu svarer med tal, der kun gælder for de valgte turneringer.
+>
+> Fuld beskrivelse i `DOCUMENTATION.md` §3; beslutningen i `docs/DECISIONS.md`.
 
 *Rettet efter levering (august 2026): liga-feltet er ikke længere blot altid
 synligt — det er **påkrævet**. "Ingen liga" er væk, og en liga kan oprettes i

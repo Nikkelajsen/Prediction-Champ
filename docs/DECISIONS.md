@@ -15,6 +15,54 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 10. august 2026 — Startrunden er et valg, og kampantallet er ikke en konsekvens af den
+
+**Beslutning:** opret-flowet spørger, om konkurrencen skal begynde i
+**indeværende** eller en **ny runde** (standard: indeværende), og feltet "Kampe
+pr. runde" er ikke længere klippet til antallet i nærmeste runde. Loftet er
+teknisk (`MAX_MATCHES_PER_ROUND` = 50); udbuddet er oplysning.
+
+**Hvorfor valget skal findes.** Puljen blev hentet fra `nu` og frem, så
+startrunden var en konsekvens af, hvornår man trykkede. Det er ikke en neutral
+default: en Quick League oprettet mandag aften har en førsteplads afgjort af én
+kamp, og seks runders konkurrence bliver dermed afgjort af den runde, der havde
+mindst indhold. Ingen på skærmen sagde det.
+
+**Hvorfor nævneren, og ikke bare valget.** "1 i nærmeste runde" er et sandt tal,
+der ikke kan bruges: det siger, hvad der er tilbage, aldrig hvorfor der kun er
+én. Samme fejlklasse som `G35`, hvor turneringer med nul kampe så ud som
+turneringer uden problemer. Derfor står "5 af 6 kampe … er allerede i gang eller
+spillet" ved siden af valget — og derfor er der et nyt opslag
+(`loadCurrentRoundMatches`), for nævneren findes ikke i puljen af kommende
+kampe.
+
+**"Spillet" = låst, ikke "har resultat".** For den, der skal beslutte, om en
+runde er værd at starte i, er en kamp i gang lige så tabt som en, der er fløjtet
+af — begge kan ikke tippes. Tælleren bruger derfor `isLocked`, samme svar som
+Tip-skærmen giver, frem for at skelne mellem to tilstande, brugeren ikke kan
+handle forskelligt på.
+
+**Hvorfor loftet var forkert.** `max` = nærmeste rundes størrelse gjorde ét
+tilfældigt tidspunkt til reglen for **alle** runder i en flerrunde-konkurrence.
+Turneringerne går i gang forskudt — én kamp tilbage i indeværende runde siger
+intet om de fyrre, der venter i runden efter. `pickRandomFromRounds` klipper i
+forvejen pr. runde, så et for højt tal har altid betydet "så mange som muligt";
+loftet beskyttede mod ingenting og spærrede for noget rigtigt.
+
+**Hvorfor perioden får samme valg, men ikke samme mekanik.** Custom/periode er
+defineret af sine datoer. Valget sætter derfor **startdatoen** og aflæses af
+den, i stedet for at være sin egen state — to kontroller, der begge kunne
+bestemme starten, ville kunne stå og modsige hinanden. Af samme grund er
+"Indeværende runde" ikke slukket for perioden, når rundens kampe er spillet:
+perioden løber over uger, så "start i dag" er stadig et lovligt valg. På de
+tilfældige typer ER startrunden konkurrencens første (eller eneste) runde, og
+dér slukkes chippen.
+
+**Standarden er indeværende runde.** Man vil som regel i gang nu, og valget er
+først et problem, når det er usynligt. Med nævneren på skærmen er det synligt.
+
+---
+
 ## 10. august 2026 — `B26`s kode leveres før konfigurationen, og værnet slås til med en nøgle
 
 **Beslutning:** klientsiden af `B26` bygges og merges nu, mens begge knapper i

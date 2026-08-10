@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { CREATE_TYPES, createTypeById, pickRandomFromRounds, pickPerRound, weeklyCouponName, buildSpec } from "./createTypes.js";
+import {
+  CREATE_TYPES, MAX_MATCHES_PER_ROUND, createTypeById, pickRandomFromRounds, pickPerRound,
+  filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
+} from "./createTypes.js";
 
 // Galleriet er kun en oversættelse: seks kort → de fem eksisterende modes plus
 // parametre. Testene her holder oversættelsen fast, så opret-skærmen kan være
@@ -71,6 +74,83 @@ describe("pickRandomFromRounds", () => {
 
   it("tom pulje giver tom liste", () => {
     expect(pickRandomFromRounds([], { count: 8, rounds: 6 })).toEqual([]);
+  });
+});
+
+describe("filterFromRoundStart", () => {
+  const pool = [
+    { id: "a1", round_key: "2026-08-04" },
+    { id: "b1", round_key: "2026-08-11" },
+    { id: "c1", round_key: "2026-08-18" },
+  ];
+
+  it("lader puljen være i fred, når der startes i indeværende runde", () => {
+    expect(filterFromRoundStart(pool, { start: "current", currentKey: "2026-08-04" })).toEqual(pool);
+  });
+
+  it("smider indeværende runde væk, når der startes i en ny", () => {
+    expect(filterFromRoundStart(pool, { start: "next", currentKey: "2026-08-04" }).map((m) => m.id))
+      .toEqual(["b1", "c1"]);
+  });
+
+  // Vinduet i pickRandomFromRounds tager de N FØRSTE rundenøgler, så filtreringen
+  // er alt, der skal til for at rykke hele Quick League-vinduet en uge frem.
+  it("rykker hele rundevinduet med, ikke kun den første runde", () => {
+    const uden = filterFromRoundStart(pool, { start: "next", currentKey: "2026-08-04" });
+    expect(pickRandomFromRounds(uden, { count: 1, rounds: 2, shuffle: (a) => a }))
+      .toEqual(["b1", "c1"]);
+  });
+
+  // Er indeværende runde allerede væk af sig selv (alt spillet), giver de to
+  // valg samme pulje — og det er den rigtige adfærd, ikke en tom liste.
+  it("er uskadelig, når puljen allerede er forbi indeværende runde", () => {
+    const senere = pool.slice(1);
+    expect(filterFromRoundStart(senere, { start: "next", currentKey: "2026-08-04" })).toEqual(senere);
+  });
+
+  it("uden rundenøgle filtreres der ikke — et gæt ville være værre end intet", () => {
+    expect(filterFromRoundStart(pool, { start: "next", currentKey: "" })).toEqual(pool);
+    expect(filterFromRoundStart(null, {})).toEqual([]);
+  });
+});
+
+describe("roundProgress", () => {
+  // Nævneren er hele runden, også de spillede kampe — det er dét, valget mellem
+  // indeværende og ny runde skal træffes på. "1 i nærmeste runde" fortalte kun,
+  // hvad der var tilbage, og aldrig hvorfor der kun var én.
+  const om = (min) => new Date(Date.now() + min * 60000).toISOString();
+  const siden = (min) => new Date(Date.now() - min * 60000).toISOString();
+
+  it("tæller spillede, igangværende og resterende kampe i samme runde", () => {
+    const ud = roundProgress([
+      { id: "m1", kickoff_at: siden(200), home_score: 2, away_score: 1 }, // færdig
+      { id: "m2", kickoff_at: siden(30) },                                // i gang
+      { id: "m3", kickoff_at: om(20) },                                   // låser om 20 min (inden for 1 time)
+      { id: "m4", kickoff_at: om(3000) },                                 // kan stadig tippes
+    ]);
+    expect(ud).toEqual({ total: 4, locked: 3, open: 1 });
+  });
+
+  // "Spillet" er her det samme som LÅST: for den, der skal beslutte sig, er en
+  // kamp i gang lige så tabt som en, der er fløjtet af.
+  it("regner en igangværende kamp som væk, ikke som tilgængelig", () => {
+    expect(roundProgress([{ id: "m", kickoff_at: siden(10) }])).toEqual({ total: 1, locked: 1, open: 0 });
+  });
+
+  it("en tom runde giver nul hele vejen igennem", () => {
+    expect(roundProgress([])).toEqual({ total: 0, locked: 0, open: 0 });
+    expect(roundProgress(null)).toEqual({ total: 0, locked: 0, open: 0 });
+  });
+});
+
+describe("MAX_MATCHES_PER_ROUND", () => {
+  // Loftet er TEKNISK, ikke sportsligt: det fanger en tastefejl og skal ikke
+  // kunne forveksles med rundens udbud. pickRandomFromRounds klipper alligevel.
+  it("er højere end nogen rigtig runde og bruges ikke som udbudsgrænse", () => {
+    expect(MAX_MATCHES_PER_ROUND).toBeGreaterThanOrEqual(50);
+    const pool = [{ id: "a1", round_key: "2026-08-04" }, { id: "a2", round_key: "2026-08-04" }];
+    expect(pickRandomFromRounds(pool, { count: MAX_MATCHES_PER_ROUND, rounds: 1, shuffle: (a) => a }))
+      .toEqual(["a1", "a2"]);
   });
 });
 

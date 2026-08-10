@@ -6,6 +6,7 @@
 import { C, chip, muted } from "../../ui/theme.js";
 import { formatKickoff } from "../../lib/scoring.js";
 import LeagueChips from "./LeagueChips.jsx";
+import RoundStartChoice from "./RoundStartChoice.jsx";
 
 // Loftets valgmuligheder. 0 = "Alle" og er standarden, så en periode uden
 // stillingtagen opfører sig præcis som før.
@@ -16,6 +17,7 @@ function CustomFields({
   leagues, pickLeagueIds, onPickLeagueIds, upcomingRounds, upcomingTeams, pickedIds, onPickedIds,
   periodLeagueIds, onPeriodLeagueIds, startDate, endDate, onStartDate, onEndDate,
   perRound, onPerRound, periodCount,
+  roundStart, onRoundStart, currentRoundMatches, currentRoundOpen, nextRound,
 }) {
   return (
     <>
@@ -35,9 +37,17 @@ function CustomFields({
               kunne dække ÉN turnering — mens håndpluk lige ved siden af kunne
               vælge frit blandt dem alle. */}
           <LeagueChips leagues={leagues} selectedIds={periodLeagueIds} onChange={onPeriodLeagueIds} />
+          {/* Samme startrunde-valg som de tilfældige typer — men her SÆTTER det
+              startdatoen frem for at filtrere en pulje: perioden er defineret af
+              sine datoer, og to kontroller, der begge kunne bestemme starten,
+              ville kunne stå og modsige hinanden. Valget er derfor AFLEDT af
+              datoen (se `periodRoundStart` i opret-skærmen): retter man datoen i
+              hånden, følger chippen med, og ingen af dem kan lyve. */}
+          <RoundStartChoice value={roundStart} onChange={onRoundStart}
+            roundMatches={currentRoundMatches} currentOpen={currentRoundOpen} nextRound={nextRound} />
           <div style={{ display: "flex", gap: 8 }}>
-            <input className="field" type="date" value={startDate} onChange={(e) => onStartDate(e.target.value)} />
-            <input className="field" type="date" value={endDate} onChange={(e) => onEndDate(e.target.value)} />
+            <input className="field" type="date" aria-label="Startdato" value={startDate} onChange={(e) => onStartDate(e.target.value)} />
+            <input className="field" type="date" aria-label="Slutdato" value={endDate} onChange={(e) => onEndDate(e.target.value)} />
           </div>
 
           <div>

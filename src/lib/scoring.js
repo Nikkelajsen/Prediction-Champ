@@ -112,6 +112,19 @@ function roundKeyOfDate(dateKey) {
   return d.toISOString().slice(0, 10);
 }
 
+// Rundenøglen for runden EFTER en given runde. Runder er ugentlige og forankret
+// på tirsdagen, så det er nøglen plus syv dage — samme regning som SQL'ens
+// `s.round_key::date + 7`. Nøglen er allerede en tirsdag, så der er intet at
+// rulle tilbage til, og datoen kan lægges sammen i UTC uden zonefælden:
+// `roundKeyOfDate` har allerede oversat til dansk kalender.
+function nextRoundKey(key) {
+  if (!key) return "";
+  const d = new Date(key + "T12:00:00Z");
+  if (Number.isNaN(d.getTime())) return "";
+  d.setUTCDate(d.getUTCDate() + 7);
+  return d.toISOString().slice(0, 10);
+}
+
 // Rundenøglen lige NU. Karusellen på Hjem skal filtrere på denne og ALDRIG på
 // `max(round_key)` fra tabellen: i en ny rundes første dage findes der endnu
 // ingen rækker, og et max ville derfor vise den forrige runde i stedet for en
@@ -403,4 +416,4 @@ function liveInfo(m) {
   };
 }
 
-export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, currentRoundKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };
+export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, nextRoundKey, currentRoundKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };

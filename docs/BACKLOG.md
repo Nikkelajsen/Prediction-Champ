@@ -47,7 +47,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-Tom.
+- Quick Pick/Quick League kan trække en kamp, der allerede er låst: puljen filtreres på `kickoff_at >= nu`, ikke på `isLocked` (som låser en time før kickoff), så en konkurrence oprettet en halv time før kampstart kan indeholde en kamp, ingen kan nå at tippe
 
 ---
 
