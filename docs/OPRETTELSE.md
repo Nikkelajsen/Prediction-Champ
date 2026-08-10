@@ -24,7 +24,7 @@ konfiguration uden for repoet, som kun kan udføres af ejeren.
 | Værtsnavne på widgeten | `prediction-champ.vercel.app` | ? — widgeten TEGNES på login, men det beviser ikke, at værtsnavnet accepteres |
 | Widget-tilstand | Managed | ? |
 | Site key (offentlig) | `VITE_TURNSTILE_SITE_KEY` i Vercel | **10. august 2026 — sat OG udrullet.** Aflæst på, at widgeten tegnes på login-skærmen; komponenten returnerer `null` uden nøgle, så der er ingen mellemtilstand |
-| Site key i **Preview** | Samme variabel, Preview-miljøet | ? — ikke bekræftet sat |
+| Site key i **Preview** | **Bevidst ikke sat** — preview kører mod staging (`B18`), som ikke har Bot Protection | 10. august 2026 |
 | Secret key (hemmelig) | Kun i Supabase → Authentication → Attack Protection | 10. august 2026 — indtastet, og siden rullet tilbage |
 | Bot Protection | **Slået fra** | 10. august 2026. Var slået til om formiddagen og lukkede adgangen for alle, fordi trin 3 var sprunget over — se "Første kørsel" nederst |
 | Confirm email | **Slået fra** | 10. august 2026. Var slået til 08:04–ca. 09:43 og efterlod én ubekræftet konto, som blev bekræftet i hånden |
@@ -75,15 +75,16 @@ Produktsiden på `cloudflare.com` fører kun til en Enterprise-salgsformular —
 > alene listen over adresser, widgeten må vises på — ikke en overtagelse af
 > domænet.
 
-> ⚠️ **Preview-deploys får hver deres værtsnavn** (`…-git-<branch>-…vercel.app`)
-> og står ikke på listen. Når Bot Protection er slået til, kan man derfor **ikke
-> logge ind på en preview** — widgeten nægter at udstede en kvittering på et
-> ukendt værtsnavn, og GoTrue afviser kaldet. Prisen betales, indtil
-> staging-projektet (`B18`) findes; indtil da er svaret enten at tilføje det
-> konkrete værtsnavn til widgeten, mens du tester, eller at slå Bot Protection
-> fra imens. Skriv `localhost` på listen, hvis du også vil bruge værnet i
-> `npm run dev` — men det kræver, at nøglen står i `.env.local`, og det er
-> bevidst ikke standard.
+> **Preview-deploys rammes ikke, og det skyldes `B18`.** Preview peger på sit
+> eget Supabase-projekt (staging, leveret 6. august 2026 — se
+> [`STAGING.md`](./STAGING.md)), og Bot Protection er en indstilling **pr.
+> projekt**. Slås den til i produktionen, gælder den kun dér. Derfor står
+> preview-værtsnavnene heller ikke på widgeten, og derfor sættes nøglen kun i
+> Production (trin 2).
+>
+> Skriv `localhost` på listen, hvis du vil kunne bruge værnet i `npm run dev` —
+> men det kræver, at nøglen står i `.env.local`, og det er bevidst ikke
+> standard.
 
 ## Trin 2 — Vercel: sæt nøglen
 
@@ -93,13 +94,16 @@ Settings → Environment Variables → Add.
 |---|---|
 | Name | `VITE_TURNSTILE_SITE_KEY` |
 | Value | Site key fra trin 1 |
-| Environments | **Production _og_ Preview** |
+| Environments | **Kun Production** |
 
-> **Preview skal med, selv om previews ikke kan logge ind bagefter.** Preview og
-> produktion deler Supabase-projekt (`DOCUMENTATION.md` §9), så Bot Protection
-> gælder også dér. Uden nøglen i Preview ville previewet ikke engang tegne
-> widgeten og dermed fejle af to grunde i stedet for én — og den ene ville
-> skjule den anden, næste gang nogen fejlsøger.
+> **Preview skal IKKE have nøglen.** Preview peger på staging-projektet
+> (`B18`), som har sin egen Attack Protection — slået fra. En widget dér ville
+> udstede kvitteringer, ingen kontrollerer, og fejle på et værtsnavn, der ikke
+> står på listen, uden at det betød noget. Støj uden gevinst.
+>
+> *(Rettet 10. august 2026. Her stod "Production og Preview" med den begrundelse,
+> at de to miljøer deler Supabase-projekt. Det var sandt indtil 6. august, hvor
+> `B18` gav preview sit eget projekt.)*
 
 Variablen er en `VITE_`-variabel og bages ind i buildet. **Den virker først
 efter en ny deploy** — en ændret miljøvariabel rører ikke det build, der kører.
@@ -293,8 +297,11 @@ confirmation** fra samme menu.
   skal med i samme ombæring som Site URL og Redirect URLs. Glemmes widgeten,
   fejler bot-tjekket på den nye adresse, mens alt andet ser rigtigt ud — og
   symptomet er, at ingen kan logge ind på det nye domæne.
-- **Kommer staging-projektet (`B18`):** slå værnet til dér først næste gang.
-  Så bortfalder hele preview-forbeholdet i trin 1.
+- **Skal værnet afprøves uden risiko:** slå det til i **staging** først (`B18`,
+  leveret 6. august 2026). Preview peger derind, og projektet har sine egne
+  Attack Protection-indstillinger, så en fejl koster ingen rigtige brugere
+  adgang. Det kræver en widget mere hos Cloudflare med preview-værtsnavnet på
+  — og det er den billigste måde at tage trin 3–5 om på.
 - **Slås værnet fra permanent:** fjern også `VITE_TURNSTILE_SITE_KEY` fra
   Vercel, så koden og konfigurationen siger det samme. En nøgle, der er sat uden
   at blive brugt, får den næste læser til at tro, at værnet er aktivt.
