@@ -30,8 +30,8 @@
 //    låsetidspunkt, som for langt de fleste kampe er kickoff minus en time og
 //    for en kamp uden fastlagt klokkeslæt er midnat på spilledagen (G55). Så kan
 //    en efterfyldning aldrig give point for et tip, der allerede er afgivet —
-//    den fejl, `filterFromNextUnfinishedRound` findes for at forhindre ved
-//    oprettelsen.
+//    den fejl, `filterTippable` findes for at forhindre ved oprettelsen (den
+//    afløste runde-reglen `filterFromNextUnfinishedRound` i august 2026).
 //
 //    Reglen var før den samme som tipslåsen, men er det IKKE længere. Efter A21
 //    (1. august 2026) låser hver kamp for sig, og en mekanisk oversættelse

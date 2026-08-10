@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { CREATE_TYPES, createTypeById, pickRandomFromRounds, pickPerRound, weeklyCouponName, buildSpec } from "./createTypes.js";
+import {
+  CREATE_TYPES, MAX_MATCHES_PER_ROUND, createTypeById, pickRandomFromRounds, pickPerRound,
+  lockedPicks, roundProgress, weeklyCouponName, buildSpec,
+} from "./createTypes.js";
+import { filterTippable } from "./scoring.js";
 
 // Galleriet er kun en oversættelse: seks kort → de fem eksisterende modes plus
 // parametre. Testene her holder oversættelsen fast, så opret-skærmen kan være
@@ -72,6 +76,152 @@ describe("pickRandomFromRounds", () => {
   it("tom pulje giver tom liste", () => {
     expect(pickRandomFromRounds([], { count: 8, rounds: 6 })).toEqual([]);
   });
+
+  // JÆVN FORDELING PÅ TVÆRS AF TURNERINGER (august 2026).
+  //
+  // Før blev hele rundens kampe blandet i én bunke, og de første `count` blev
+  // taget — men en bunke afspejler turneringernes STØRRELSE, ikke brugerens
+  // valg. Superligaen (6 kampe pr. runde) + La Liga (10) gav otte kampe i snit
+  // 3/5 og i praksis nemt 2/6, selv om brugeren havde valgt netop de to.
+  describe("fordeler jævnt på de valgte turneringer", () => {
+    const kamp = (id, liga) => ({ id, round_key: "2026-08-18", _leagueId: liga });
+    const superliga = ["s1", "s2", "s3", "s4", "s5", "s6"].map((id) => kamp(id, "SUPER"));
+    const laliga = ["l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10"].map((id) => kamp(id, "LALIGA"));
+    const tael = (ids, præfiks) => ids.filter((x) => x.startsWith(præfiks)).length;
+
+    it("otte kampe fra to turneringer bliver 4/4 og ikke 2/6", () => {
+      const ud = pickRandomFromRounds([...superliga, ...laliga], { count: 8, rounds: 1, shuffle: keep });
+      expect(ud).toHaveLength(8);
+      expect(tael(ud, "s")).toBe(4);
+      expect(tael(ud, "l")).toBe(4);
+    });
+
+    // Round-robin og ikke en kvote: har en turnering færre kampe end sin andel,
+    // fylder de øvrige pladsen frem for at efterlade et hul.
+    it("en turnering med for få kampe efterlader ikke et hul", () => {
+      const ud = pickRandomFromRounds([kamp("s1", "SUPER"), ...laliga], { count: 6, rounds: 1, shuffle: keep });
+      expect(ud).toHaveLength(6);
+      expect(tael(ud, "s")).toBe(1);
+      expect(tael(ud, "l")).toBe(5);
+    });
+
+    it("beder man om flere kampe end runden har, kommer de alle med", () => {
+      const ud = pickRandomFromRounds([...superliga, ...laliga], { count: 50, rounds: 1, shuffle: keep });
+      expect(ud).toHaveLength(16);
+    });
+
+    // Fordelingen gælder HVER runde for sig — ikke samlet over de seks.
+    it("fordeler pr. runde, ikke over hele Quick League", () => {
+      const runde2 = [...superliga, ...laliga].map((m) => ({ ...m, id: `x${m.id}`, round_key: "2026-08-25" }));
+      const ud = pickRandomFromRounds([...superliga, ...laliga, ...runde2], { count: 4, rounds: 2, shuffle: keep });
+      expect(ud).toHaveLength(8);
+      expect(tael(ud, "s")).toBe(2);          // runde 1
+      expect(tael(ud, "xs")).toBe(2);         // runde 2
+    });
+
+    // Ét valgt turnering (eller en pulje uden turnerings-id) skal opføre sig
+    // præcis som før: bland og tag de første.
+    it("er uændret, når der kun er én turnering i puljen", () => {
+      expect(pickRandomFromRounds(superliga, { count: 3, rounds: 1, shuffle: keep }))
+        .toEqual(["s1", "s2", "s3"]);
+    });
+
+    // Køerne tømmes med `shift`; en injiceret shuffle må ikke give kalderens
+    // egen liste videre og dermed lade puljen skrumpe under fødderne på den.
+    it("lader kalderens pulje være urørt", () => {
+      const pulje = [...superliga, ...laliga];
+      pickRandomFromRounds(pulje, { count: 8, rounds: 1, shuffle: keep });
+      expect(pulje).toHaveLength(16);
+      expect(superliga).toHaveLength(6);
+    });
+  });
+});
+
+describe("lockedPicks", () => {
+  // Håndpluk behandles modsat de øvrige typer: dér bad brugeren om et ANTAL, så
+  // en kamp, der falder fra, er vores liste og ikke hans. Her har han udpeget
+  // hver kamp ved navn, og skærmen skal derfor kunne SIGE, hvad der forsvandt.
+  const om = (min) => new Date(Date.now() + min * 60000).toISOString();
+  const siden = (min) => new Date(Date.now() - min * 60000).toISOString();
+  const pool = [
+    { id: "aaben", kickoff_at: om(3000) },
+    { id: "snart", kickoff_at: om(20) },
+    { id: "igang", kickoff_at: siden(30) },
+  ];
+
+  it("peger på de valgte kampe, der er nået at låse", () => {
+    expect(lockedPicks(["aaben", "snart", "igang"], pool).sort()).toEqual(["igang", "snart"]);
+  });
+
+  it("siger ingenting, når alle valgte stadig kan tippes", () => {
+    expect(lockedPicks(["aaben"], pool)).toEqual([]);
+  });
+
+  // Et id, puljen slet ikke kender, tælles som låst: det eneste, der kan gøre en
+  // kamp ukendt her, er, at den er faldet ud af puljen — og så kan den heller
+  // ikke tippes. Den sikre vej at tage fejl.
+  it("regner et ukendt id som låst frem for at lade det slippe igennem", () => {
+    expect(lockedPicks(["findes-ikke"], pool)).toEqual(["findes-ikke"]);
+  });
+
+  it("tåler tomt valg og tom pulje", () => {
+    expect(lockedPicks([], pool)).toEqual([]);
+    expect(lockedPicks(null, pool)).toEqual([]);
+    expect(lockedPicks(["aaben"], [])).toEqual(["aaben"]);
+  });
+});
+
+describe("roundProgress", () => {
+  // Nævneren er hele runden, også de spillede kampe — det er dét, valget mellem
+  // indeværende og ny runde skal træffes på. "1 i nærmeste runde" fortalte kun,
+  // hvad der var tilbage, og aldrig hvorfor der kun var én.
+  const om = (min) => new Date(Date.now() + min * 60000).toISOString();
+  const siden = (min) => new Date(Date.now() - min * 60000).toISOString();
+
+  it("tæller spillede, igangværende og resterende kampe i samme runde", () => {
+    const ud = roundProgress([
+      { id: "m1", kickoff_at: siden(200), home_score: 2, away_score: 1 }, // færdig
+      { id: "m2", kickoff_at: siden(30) },                                // i gang
+      { id: "m3", kickoff_at: om(20) },                                   // låser om 20 min (inden for 1 time)
+      { id: "m4", kickoff_at: om(3000) },                                 // kan stadig tippes
+    ]);
+    expect(ud).toEqual({ total: 4, locked: 3, open: 1 });
+  });
+
+  // "Spillet" er her det samme som LÅST: for den, der skal beslutte sig, er en
+  // kamp i gang lige så tabt som en, der er fløjtet af.
+  it("regner en igangværende kamp som væk, ikke som tilgængelig", () => {
+    expect(roundProgress([{ id: "m", kickoff_at: siden(10) }])).toEqual({ total: 1, locked: 1, open: 0 });
+  });
+
+  // Tælleren og PULJEN skal være enige om den samme runde: skærmen skriver
+  // "1 kamp kan stadig tippes" ved siden af en pulje, udvælgelsen trækker fra,
+  // og to tal, der er uenige, ville love kampe, konkurrencen ikke fik.
+  it("`open` er det samme som antallet, filterTippable ville give", () => {
+    const runde = [
+      { id: "m1", kickoff_at: siden(200), home_score: 1, away_score: 1 },
+      { id: "m2", kickoff_at: siden(5) },
+      { id: "m3", kickoff_at: om(30) },
+      { id: "m4", kickoff_at: om(4000) },
+    ];
+    expect(roundProgress(runde).open).toBe(filterTippable(runde).length);
+  });
+
+  it("en tom runde giver nul hele vejen igennem", () => {
+    expect(roundProgress([])).toEqual({ total: 0, locked: 0, open: 0 });
+    expect(roundProgress(null)).toEqual({ total: 0, locked: 0, open: 0 });
+  });
+});
+
+describe("MAX_MATCHES_PER_ROUND", () => {
+  // Loftet er TEKNISK, ikke sportsligt: det fanger en tastefejl og skal ikke
+  // kunne forveksles med rundens udbud. pickRandomFromRounds klipper alligevel.
+  it("er højere end nogen rigtig runde og bruges ikke som udbudsgrænse", () => {
+    expect(MAX_MATCHES_PER_ROUND).toBeGreaterThanOrEqual(50);
+    const pool = [{ id: "a1", round_key: "2026-08-04" }, { id: "a2", round_key: "2026-08-04" }];
+    expect(pickRandomFromRounds(pool, { count: MAX_MATCHES_PER_ROUND, rounds: 1, shuffle: (a) => a }))
+      .toEqual(["a1", "a2"]);
+  });
 });
 
 describe("weeklyCouponName", () => {
@@ -90,8 +240,23 @@ describe("buildSpec", () => {
       tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     })).toEqual({
       name: "S", groupId: "g1", awards: true, mode: "full_season",
+      startRound: "current",
       tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     });
+  });
+
+  // Startrunden er med for de to sæson-typer og defaulter til indeværende, så
+  // en kalder, der intet sender (fx onboarding-guiden), får uændret adfærd.
+  it("Sæson og Favorithold bærer startrunden, med indeværende som standard", () => {
+    expect(buildSpec({ typeId: "season", name: "S", groupId: "g1", startRound: "next" }))
+      .toMatchObject({ mode: "full_season", startRound: "next" });
+    expect(buildSpec({ typeId: "team", name: "F", groupId: "g1", startRound: "next" }))
+      .toMatchObject({ mode: "team", startRound: "next" });
+    expect(buildSpec({ typeId: "season", name: "S", groupId: "g1" }))
+      .toMatchObject({ startRound: "current" });
+    // Et ukendt ord må ikke smutte igennem som "ikke current".
+    expect(buildSpec({ typeId: "team", name: "F", groupId: "g1", startRound: "sludder" }))
+      .toMatchObject({ startRound: "current" });
   });
 
   it("Favorithold-kortet bliver team med teams-listen", () => {

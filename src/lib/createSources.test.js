@@ -10,6 +10,7 @@ vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), count: vi.fn() } }));
 import { db } from "./supabase.js";
 import {
   loadNewestSeasons, countMatchesPerLeague, loadTeamsByLeague, loadUpcomingMatches,
+  loadCurrentRoundMatches,
 } from "./data/createSources.js";
 
 const LIGAER = [{ id: "l1", name: "Superliga" }, { id: "l2", name: "Premiership" }];
@@ -153,6 +154,44 @@ describe("loadUpcomingMatches", () => {
   it("spørger slet ikke uden en eneste sæson", async () => {
     const ud = await loadUpcomingMatches("t", {}, LIGAER, { limit: 10 });
     expect(ud).toEqual({ matches: [], teams: {}, truncated: false });
+    expect(db.select).not.toHaveBeenCalled();
+  });
+});
+
+describe("loadCurrentRoundMatches", () => {
+  const SÆSONER = { l1: { id: "s1", league_id: "l1" }, l2: { id: "s2", league_id: "l2" } };
+
+  // NÆVNEREN er hele pointen: `loadUpcomingMatches` henter fra `nu` og frem og
+  // kan derfor ikke se de kampe, der ALLEREDE er spillet — så en runde, hvor
+  // fem af seks er fløjtet i gang, ligner en runde med én kamp.
+  it("henter hele runden, også de kampe der er spillet", async () => {
+    mockTables({ matches: [
+      { id: "m1", season_id: "s1", home_score: 2, away_score: 1 },
+      { id: "m2", season_id: "s2" },
+    ] });
+    const ud = await loadCurrentRoundMatches("t", SÆSONER, LIGAER, { roundKey: "2026-08-04" });
+    expect(ud.map((m) => m.id)).toEqual(["m1", "m2"]);
+    expect(db.select.mock.calls[0][2]).not.toContain("kickoff_at=gte");
+  });
+
+  // Rundenøglen er en KOLONNE, sat af public.round_key() i dansk tid. Regnede vi
+  // selv rundens start og slut her, ville vi have en fjerde kopi af den regel.
+  it("spørger på rundenøglen frem for at regne et tidsinterval ud", async () => {
+    mockTables({ matches: [] });
+    await loadCurrentRoundMatches("t", SÆSONER, LIGAER, { roundKey: "2026-08-04" });
+    expect(db.select.mock.calls[0][2]).toContain("round_key=eq.2026-08-04");
+    expect(db.select.mock.calls[0][2]).toContain("season_id=in.(s1,s2)");
+  });
+
+  it("beriger med turneringens id og navn, så tælleren kan følge turneringsvalget", async () => {
+    mockTables({ matches: [{ id: "m1", season_id: "s2" }] });
+    const [m] = await loadCurrentRoundMatches("t", SÆSONER, LIGAER, { roundKey: "2026-08-04" });
+    expect(m._leagueId).toBe("l2");
+    expect(m._leagueName).toBe("Premiership");
+  });
+
+  it("spørger slet ikke uden en eneste sæson", async () => {
+    expect(await loadCurrentRoundMatches("t", {}, LIGAER, { roundKey: "2026-08-04" })).toEqual([]);
     expect(db.select).not.toHaveBeenCalled();
   });
 });

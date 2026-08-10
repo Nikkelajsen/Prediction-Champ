@@ -112,6 +112,19 @@ function roundKeyOfDate(dateKey) {
   return d.toISOString().slice(0, 10);
 }
 
+// Rundenøglen for runden EFTER en given runde. Runder er ugentlige og forankret
+// på tirsdagen, så det er nøglen plus syv dage — samme regning som SQL'ens
+// `s.round_key::date + 7`. Nøglen er allerede en tirsdag, så der er intet at
+// rulle tilbage til, og datoen kan lægges sammen i UTC uden zonefælden:
+// `roundKeyOfDate` har allerede oversat til dansk kalender.
+function nextRoundKey(key) {
+  if (!key) return "";
+  const d = new Date(key + "T12:00:00Z");
+  if (Number.isNaN(d.getTime())) return "";
+  d.setUTCDate(d.getUTCDate() + 7);
+  return d.toISOString().slice(0, 10);
+}
+
 // Rundenøglen lige NU. Karusellen på Hjem skal filtrere på denne og ALDRIG på
 // `max(round_key)` fra tabellen: i en ny rundes første dage findes der endnu
 // ingen rækker, og et max ville derfor vise den forrige runde i stedet for en
@@ -148,17 +161,10 @@ function groupIntoRounds(matches, teamNameOf) {
     matches: map[key].slice().sort(cmp),
   }));
 }
-// beholder kun kampe fra og med den første runde, der IKKE er helt afsluttet endnu
-function filterFromNextUnfinishedRound(matches) {
-  if (!matches.length) return matches;
-  const byRound = {};
-  for (const m of matches) { (byRound[m.round_key] ||= []).push(m); }
-  const roundKeys = Object.keys(byRound).sort();
-  const isRoundFinished = (key) => byRound[key].every((m) => m.home_score !== null && m.home_score !== undefined);
-  const nextUnfinished = roundKeys.find((key) => !isRoundFinished(key));
-  if (nextUnfinished === undefined) return [];
-  return matches.filter((m) => m.round_key >= nextUnfinished);
-}
+// `filterFromNextUnfinishedRound` stod her indtil august 2026. Den er erstattet
+// af `filterTippable` længere nede — se begrundelsen dér: runde-reglen holdt sit
+// løfte for hele runder og brød det inde i én.
+
 // indeks for den runde, der indeholder i dag — eller den nærmeste kommende
 //
 // "I dag" er den DANSKE dato (G32). Før var det UTC-datoen, hvilket er den
@@ -332,6 +338,60 @@ function isLocked(match) {
   return Date.now() >= lockAt;
 }
 
+// Kun de kampe, der stadig kan tippes.
+//
+// Reglen bor her, fordi den nu har fire kaldere: opret-flowets pulje, dens
+// håndpluk-kontrol, dens periode-loft og selve materialiseringen af en ny
+// konkurrence (`data/competitions.js`).
+//
+// Det sidste var indtil august 2026 en RUNDE-regel, `filterFromNextUnfinishedRound`:
+// find den første runde, hvor ikke alle kampe har resultat, og tag alt fra og
+// med den. Den holdt sit løfte for hele runder og brød det inde i én. En
+// konkurrence oprettet MIDT i en runde fik rundens allerede spillede kampe med,
+// og da `predictions` deles på tværs af konkurrencer, stod deltagerne dermed
+// ikke lige: den, der havde tippet kampen i en anden konkurrence, havde point
+// fra første sekund, og den, der ikke havde, kunne ikke nå at gætte. Præcis den
+// fejl, reglen var skrevet for at forhindre — bare et niveau længere nede.
+//
+// Kamp-reglen INDEHOLDER runde-reglen: en færdigspillet runde består kun af
+// spillede kampe, og en spillet kamp er låst. Den er samtidig strengere det ene
+// sted, det betyder noget, og derfor er runde-reglen fjernet frem for at stå
+// ved siden af.
+//
+// Låst og ikke "har resultat": en kamp, der er fløjtet i gang, kan heller ikke
+// tippes, og en kamp, ingen kan gætte på, hører ikke til i en ny konkurrence.
+// En kamp uden kendt kickoff er ikke låst og kommer med — samme svar som
+// RLS-policyens skrivegren.
+//
+// Efterfyldningen (`api/_backfill.js`) beholder sin egen, strengere RUNDE-regel.
+// Den løser et andet problem: dér findes deltagerne allerede, har tippet og set
+// stillingen, så en ny kamp midt i en igangværende runde ville flytte noget,
+// nogen har set. Ved oprettelsen findes hverken deltagere eller stilling.
+function filterTippable(matches) {
+  return (matches || []).filter((m) => !isLocked(m));
+}
+
+// Startrunde: skal konkurrencen begynde i den runde, der allerede er i gang,
+// eller vente på den næste?
+//
+// Valget fandtes ikke før august 2026 — startrunden var en konsekvens af,
+// hvornår man trykkede Opret. Reglen er en ren filtrering, netop fordi det er
+// alt, den skal være: `pickRandomFromRounds` tager de `rounds` FØRSTE
+// rundenøgler, den finder, så fjernes indeværende runde, rykker hele Quick
+// Leagues vindue med. For Sæson og Favorithold er der ikke noget vindue at
+// rykke — dér er det simpelthen den runde, kampene tælles fra.
+//
+// Reglen bor her hos `filterTippable` og ikke i opret-flowets typekatalog,
+// fordi de to nu bruges af det samme sæt kaldere: skærmens pulje OG
+// materialiseringen i `data/competitions.js`. Rundenøglen er en runde-regel,
+// ikke et gallerikort.
+//
+// Uden rundenøgle filtreres der ikke: et gæt ville være værre end intet.
+function filterFromRoundStart(matches, { start, currentKey } = {}) {
+  if (start !== "next" || !currentKey) return matches || [];
+  return (matches || []).filter((m) => m.round_key > currentKey);
+}
+
 // De runder, hvor andres tips må vises — nemlig fra låsen, hvor ingen længere
 // kan rette sit gæt. Hver runde beskæres til sine LÅSTE kampe, så et gæt aldrig
 // kan ses før deadline. Med per-kamp-låsen er en delvist låst runde reglen frem
@@ -403,4 +463,4 @@ function liveInfo(m) {
   };
 }
 
-export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, currentRoundKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };
+export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, nextRoundKey, currentRoundKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, isLocked, filterTippable, filterFromRoundStart, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };

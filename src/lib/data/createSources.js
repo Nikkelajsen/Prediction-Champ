@@ -26,6 +26,7 @@
 // SNITTET: funktionerne svarer med DATA, ikke med state. Skærmen sætter selv
 // sin `useState` — den beholder altså sit eget flow, mens opslagene flytter ud.
 import { db } from "../supabase.js";
+import { currentRoundKey } from "../scoring.js";
 
 // Nyeste sæson pr. turnering: `{ [leagueId]: season }`.
 //
@@ -112,4 +113,34 @@ async function loadUpcomingMatches(token, seasonByLeague, leagues, { limit, hori
   };
 }
 
-export { loadNewestSeasons, countMatchesPerLeague, loadTeamsByLeague, loadUpcomingMatches };
+// Indeværende rundes kampe — ALLE, også dem der er i gang eller færdigspillet.
+//
+// Det er den ENE ting, `loadUpcomingMatches` ikke kan svare på. Den henter fra
+// `nu` og frem, så en runde, hvor fem af seks kampe er fløjtet i gang, ser ud
+// som en runde med én kamp — og en bruger, der opretter en konkurrence dér,
+// ville få et førstested afgjort af, hvor sent på ugen han trykkede, uden at
+// noget på skærmen fortalte hvorfor. Nævneren skal med, for at det kan siges.
+//
+// Ét opslag på rundenøglen frem for et tidsinterval: `round_key` er en kolonne
+// på kampen, sat af `public.round_key()` i dansk tid (G11/G32). Regnede vi selv
+// rundens start og slut i klienten, ville vi have en fjerde kopi af den regel,
+// der allerede findes tre steder — og en kopi, der kun er uenig to timer om
+// natten, er værre end ingen.
+async function loadCurrentRoundMatches(token, seasonByLeague, leagues, { roundKey = null } = {}) {
+  const key = roundKey || currentRoundKey();
+  const seasons = Object.values(seasonByLeague);
+  if (!seasons.length || !key) return [];
+
+  const seasonToLeague = Object.fromEntries(seasons.map((s) => [s.id, s.league_id]));
+  const leagueNames = Object.fromEntries(leagues.map((l) => [l.id, l.name]));
+  const rows = await db.select(token, "matches",
+    `season_id=in.(${seasons.map((s) => s.id).join(",")})&round_key=eq.${key}&select=*&order=kickoff_at`);
+
+  return rows.map((m) => ({
+    ...m,
+    _leagueId: seasonToLeague[m.season_id],
+    _leagueName: leagueNames[seasonToLeague[m.season_id]],
+  }));
+}
+
+export { loadNewestSeasons, countMatchesPerLeague, loadTeamsByLeague, loadUpcomingMatches, loadCurrentRoundMatches };

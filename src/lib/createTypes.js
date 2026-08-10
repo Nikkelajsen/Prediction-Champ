@@ -6,7 +6,20 @@
 // mode_params — `competitions_mode_check` er urørt, og ingen eksisterende
 // række skal migreres. Quick League er fx `random` med `rounds > 1`, og
 // Ugens kupon er `random` med et fast preset.
-import { roundLabel } from "./scoring.js";
+import { roundLabel, isLocked, filterTippable } from "./scoring.js";
+
+// ---------- hvor mange kampe må man bede om pr. runde? ----------
+// Loftet er TEKNISK og ikke sportsligt (august 2026). Feltet var før klippet til
+// antallet af kampe i nærmeste runde, og det var forkert af en grund, der kun
+// kan ses hen over tid: nærmeste runde er ofte halvspillet, og flere turneringer
+// starter forskudt. Med én kamp tilbage i indeværende runde kunne man kun skrive
+// "1" i et felt, der bestemmer antallet i ALLE seks runder — også de runder, der
+// har fyrre kampe at vælge imellem.
+//
+// `pickRandomFromRounds` klipper i forvejen til rundens faktiske udbud, så et
+// højt tal er ufarligt: det betyder "så mange som muligt". Loftet her findes
+// alene for at fange en tastefejl (500 i stedet for 50).
+const MAX_MATCHES_PER_ROUND = 50;
 
 // Rækkefølgen ER varigheds-spørgsmålet (I14: "varighed før turnering"), men
 // den står langt → kort (vendt 1. august 2026): det øverste kort er dét,
@@ -91,15 +104,61 @@ function createTypeById(id) {
   return CREATE_TYPES.find((t) => t.id === id) || null;
 }
 
+// ---------- jævn fordeling på tværs af turneringer ----------
+// Round-robin: tag én kamp ad gangen fra hver turnering, indtil loftet er nået
+// eller kampene er sluppet op. Den fælles kerne under BÅDE den tilfældige
+// udvælgelse og periodens loft — de to adskiller sig kun i, hvordan køerne
+// ordnes (tilfældigt eller efter kickoff).
+//
+// Round-robin og ikke en kvote-udregning, og det er dét, der gør reglen robust:
+// har en turnering færre kampe end sin andel, bliver den bare sprunget over i
+// næste omgang, og de øvrige fylder pladsen. Med 10 kampe og tre turneringer
+// giver det 4/3/3; har den ene kun én kamp, giver det 1/5/4 frem for et hul.
+//
+// `arrange` får turneringernes lister og skal svare med de KØER, der skal
+// tømmes — i den rækkefølge, turneringerne skal betjenes. Den skal kopiere:
+// køerne tømmes med `shift`, og kalderens pulje må ikke ændre sig under den.
+function drawAcrossLeagues(matches, { cap, leagueOf, arrange }) {
+  const byLeague = new Map();
+  for (const m of matches) {
+    const lid = leagueOf(m) ?? "";
+    if (!byLeague.has(lid)) byLeague.set(lid, []);
+    byLeague.get(lid).push(m);
+  }
+  const queues = arrange([...byLeague.values()]);
+  const ids = [];
+  let taken = 0;
+  while (taken < cap && queues.some((q) => q.length)) {
+    for (const q of queues) {
+      if (taken >= cap) break;
+      if (!q.length) continue;
+      ids.push(q.shift().id);
+      taken++;
+    }
+  }
+  return ids;
+}
+
 // ---------- tilfældig udvælgelse over én eller flere runder ----------
 // Generalisering af den gamle pickRandomMatchIds (som kun kendte den nærmeste
 // runde): tag de første `rounds` runde-nøgler stigende og træk op til `count`
 // kampe PR. RUNDE — "8 kampe, 6 runder frem" betyder 8 i hver uge, klippet til
 // rundens faktiske udbud. `rounds = 1` er præcis dagens Quick Pick-adfærd.
 //
+// Kampene fordeles JÆVNT på de valgte turneringer (august 2026). Før blev hele
+// rundens kampe blandet i én bunke, og de første `count` blev taget — og en
+// bunke afspejler turneringernes STØRRELSE, ikke brugerens valg. Med Superligaen
+// (6 kampe pr. runde) og La Liga (10) gav otte kampe i snit 3/5 og i praksis
+// nemt 2/6, selv om brugeren havde valgt præcis to turneringer og dermed sagt,
+// at de begge skulle være med. Nu er det 4/4.
+//
+// Turneringernes RÆKKEFØLGE blandes også. Går kampantallet ikke op, får nogen
+// den ekstra, og over Quick Leagues seks runder skal det ikke være den samme
+// hver gang.
+//
 // `shuffle` kan injiceres, så testene er deterministiske; standarden er den
 // samme Fisher-Yates-agtige sort, den gamle funktion brugte.
-function pickRandomFromRounds(pool, { count = 6, rounds = 1, shuffle } = {}) {
+function pickRandomFromRounds(pool, { count = 6, rounds = 1, shuffle, leagueOf = (m) => m._leagueId } = {}) {
   if (!pool.length) return [];
   const byRound = {};
   for (const m of pool) (byRound[m.round_key] ||= []).push(m);
@@ -108,26 +167,60 @@ function pickRandomFromRounds(pool, { count = 6, rounds = 1, shuffle } = {}) {
   const perRound = Math.max(1, Number(count) || 6);
   const ids = [];
   for (const key of keys) {
-    for (const m of doShuffle(byRound[key]).slice(0, perRound)) ids.push(m.id);
+    ids.push(...drawAcrossLeagues(byRound[key], {
+      cap: perRound, leagueOf,
+      // `.slice()` uanset hvad: en injiceret `shuffle` kan svare med selve
+      // listen, og køerne tømmes med `shift`.
+      arrange: (lists) => doShuffle(lists.map((l) => doShuffle(l).slice())),
+    }));
   }
   return ids;
 }
 
+// ---------- håndplukkede kampe, der er nået at låse ----------
+// Hvilke af de HÅNDPLUKKEDE kampe er nået at låse? Svarer med id'erne.
+//
+// Håndpluk behandles modsat de øvrige typer: dér bad brugeren om et ANTAL, så
+// listen er vores, og en kamp, der falder fra, er ikke hans problem. Her har han
+// udpeget hver enkelt kamp ved navn, og at fjerne en af dem i stilhed ville
+// være at ændre hans valg uden at sige det. Kalderen stopper derfor
+// oprettelsen og fortæller, hvad der skete.
+//
+// Et id, puljen slet ikke kender, tælles med som låst. Det er den sikre vej at
+// tage fejl: det eneste, der kan gøre en kamp ukendt her, er, at den er faldet
+// ud af puljen — og så kan den heller ikke tippes.
+function lockedPicks(pickedIds, pool) {
+  const tippable = new Set(filterTippable(pool).map((m) => m.id));
+  return (pickedIds || []).filter((id) => !tippable.has(id));
+}
+
+// Indeværende rundes status i de valgte turneringer: `{ total, locked, open }`.
+//
+// Nævneren er hele runden — også de kampe, der er spillet — for det er dét, der
+// gør valget oplysende frem for bare et valg. "1 i nærmeste runde" fortalte kun,
+// hvad der var tilbage; "5 af 6 kampe er allerede i gang eller spillet" fortæller
+// hvorfor.
+//
+// "Spillet" er her det samme som LÅST (`isLocked`): en kamp, der er fløjtet i
+// gang, kan ikke tippes, og for den, der skal beslutte sig, er forskellen på "i
+// gang" og "færdig" uden betydning. Samme svar som Tip-skærmen giver.
+function roundProgress(matches) {
+  const list = matches || [];
+  const open = list.filter((m) => !isLocked(m)).length;
+  return { total: list.length, locked: list.length - open, open };
+}
+
 // ---------- loft pr. runde (custom/periode) ----------
 // Vælg højst `perRound` kampe i hver runde, fordelt JÆVNT på de valgte
-// turneringer. Ren funktion, så reglen kan efterprøves uden en skærm.
+// turneringer. Ren funktion, så reglen kan efterprøves uden en skærm. Brugeren
+// bad netop om, at et loft på ti i en runde med syv kampe bare betyder syv —
+// det følger af round-robin'en i `drawAcrossLeagues`.
 //
-// Fordelingen er en round robin og ikke en kvote-udregning, og det er dét, der
-// gør reglen robust: har en turnering færre kampe end sin andel, bliver den
-// bare sprunget over i næste omgang, og de øvrige fylder pladsen. Med 10 kampe
-// og tre turneringer giver det 4/3/3; har den ene kun én kamp, giver det 1/5/4
-// frem for et hul. Brugeren bad netop om, at et loft på ti i en runde med syv
-// kampe bare betyder syv.
-//
-// Rækkefølgen er fastlagt hele vejen ned, så to kørsler giver samme kampe:
-// turneringerne tages i rækkefølge efter deres TIDLIGSTE kickoff i runden (ved
-// ulige deling går den ekstra altså til den, der spiller først), og inden for
-// en turnering tages kampene i kickoff-rækkefølge med id'et som sidste nøgle.
+// Forskellen fra den tilfældige udvælgelse er KUN rækkefølgen, og her er den
+// fastlagt hele vejen ned, så to kørsler giver samme kampe: turneringerne tages
+// efter deres TIDLIGSTE kickoff i runden (ved ulige deling går den ekstra altså
+// til den, der spiller først), og inden for en turnering tages kampene i
+// kickoff-rækkefølge med id'et som sidste nøgle.
 function pickPerRound(pool, { perRound, leagueOf = (m) => m._leagueId } = {}) {
   const cap = Math.max(0, Number(perRound) || 0);
   if (!cap) return (pool || []).map((m) => m.id); // 0/null = "Alle"
@@ -135,29 +228,18 @@ function pickPerRound(pool, { perRound, leagueOf = (m) => m._leagueId } = {}) {
   const byRound = {};
   for (const m of pool || []) (byRound[m.round_key] ||= []).push(m);
 
+  const order = (a, b) =>
+    String(a.kickoff_at || "").localeCompare(String(b.kickoff_at || "")) ||
+    String(a.id || "").localeCompare(String(b.id || ""));
+
   const ids = [];
   for (const key of Object.keys(byRound).sort()) {
-    const byLeague = new Map();
-    for (const m of byRound[key]) {
-      const lid = leagueOf(m) ?? "";
-      if (!byLeague.has(lid)) byLeague.set(lid, []);
-      byLeague.get(lid).push(m);
-    }
-    const order = (a, b) =>
-      String(a.kickoff_at || "").localeCompare(String(b.kickoff_at || "")) ||
-      String(a.id || "").localeCompare(String(b.id || ""));
-    const queues = [...byLeague.values()].map((list) => list.slice().sort(order));
-    queues.sort((qa, qb) => order(qa[0], qb[0]));
-
-    let taken = 0;
-    while (taken < cap && queues.some((q) => q.length)) {
-      for (const q of queues) {
-        if (taken >= cap) break;
-        if (!q.length) continue;
-        ids.push(q.shift().id);
-        taken++;
-      }
-    }
+    ids.push(...drawAcrossLeagues(byRound[key], {
+      cap, leagueOf,
+      arrange: (lists) => lists
+        .map((list) => list.slice().sort(order))
+        .sort((qa, qb) => order(qa[0], qb[0])),
+    }));
   }
   return ids;
 }
@@ -180,6 +262,7 @@ function weeklyCouponName(roundKey) {
 //   awards       kårings-tilvalget (I13) — kun meningsfuldt for multiRound-typer
 //   tournaments  season: [{ leagueId, seasonId }]
 //   teams        team: [{ leagueId, seasonId, teamId }]
+//   startRound   season/team: "current" (standard) | "next"
 //   method       custom: "pick" (håndpluk) | "period" (time_range)
 //   leagueId, seasonId, startDate, endDate   custom/period
 //   tournaments  custom/period med FLERE turneringer: [{ leagueId, seasonId }]
@@ -191,8 +274,12 @@ function buildSpec(state) {
   if (!type) throw new Error(`Ukendt korttype: ${state.typeId}`);
   const shared = { name: state.name, groupId: state.groupId || null, awards: !!state.awards };
 
-  if (type.id === "season") return { ...shared, mode: "full_season", tournaments: state.tournaments || [] };
-  if (type.id === "team") return { ...shared, mode: "team", teams: state.teams || [] };
+  // Startrunden følger med for de to sæson-typer. `custom` og `random` har
+  // filtreret puljen i klienten, før de når skriveren, så feltet er kun
+  // meningsfuldt dér, hvor kampene findes af en REGEL frem for af en liste.
+  const startRound = state.startRound === "next" ? "next" : "current";
+  if (type.id === "season") return { ...shared, mode: "full_season", startRound, tournaments: state.tournaments || [] };
+  if (type.id === "team") return { ...shared, mode: "team", startRound, teams: state.teams || [] };
   if (type.id === "custom") {
     if (state.method === "period") {
       // Et LOFT gør perioden til et håndplukket udvalg, og det er et bevidst
@@ -231,4 +318,7 @@ function buildSpec(state) {
   };
 }
 
-export { CREATE_TYPES, createTypeById, pickRandomFromRounds, pickPerRound, weeklyCouponName, buildSpec };
+export {
+  CREATE_TYPES, MAX_MATCHES_PER_ROUND, createTypeById, pickRandomFromRounds, pickPerRound,
+  lockedPicks, roundProgress, weeklyCouponName, buildSpec,
+};

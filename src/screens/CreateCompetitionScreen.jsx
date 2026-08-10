@@ -9,11 +9,11 @@
 // kan divergere.
 import { useState, useEffect, useMemo, useRef } from "react";
 import { loadMyGroups, createCompetition, createGroup } from "../lib/data.js";
-import { loadNewestSeasons, countMatchesPerLeague, loadTeamsByLeague, loadUpcomingMatches } from "../lib/data/createSources.js";
+import { loadNewestSeasons, countMatchesPerLeague, loadTeamsByLeague, loadUpcomingMatches, loadCurrentRoundMatches } from "../lib/data/createSources.js";
 import { validateGroupName } from "../lib/onboarding.js";
 import { ChevronLeft } from "lucide-react";
-import { groupIntoRounds } from "../lib/scoring.js";
-import { createTypeById, pickRandomFromRounds, pickPerRound, weeklyCouponName, buildSpec } from "../lib/createTypes.js";
+import { groupIntoRounds, currentRoundKey, nextRoundKey, roundKeyOfDate, roundLabel, zonedDateKey, isLocked, filterTippable, filterFromRoundStart } from "../lib/scoring.js";
+import { createTypeById, pickRandomFromRounds, pickPerRound, lockedPicks, weeklyCouponName, buildSpec } from "../lib/createTypes.js";
 import { C, btnGhost, btnGreen, font } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
 import TypeGallery, { ICONS } from "./create/TypeGallery.jsx";
@@ -29,6 +29,7 @@ import SeasonFields from "./create/SeasonFields.jsx";
 import TeamFields from "./create/TeamFields.jsx";
 import RandomFields from "./create/RandomFields.jsx";
 import CustomFields from "./create/CustomFields.jsx";
+import RoundStartChoice from "./create/RoundStartChoice.jsx";
 
 function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null, onBack, onCreated, openBoard }) {
   const [typeId, setTypeId] = useState(null); // null = galleriet
@@ -68,6 +69,15 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   const [upcoming, setUpcoming] = useState([]);
   const [upcomingTeams, setUpcomingTeams] = useState({});
   const [upcomingTruncated, setUpcomingTruncated] = useState(false); // ramte vi loftet? (G35)
+  // Startrunde: begynder konkurrencen i den runde, der er i gang, eller den
+  // næste? Standarden er "current" — man vil som regel i gang med det samme —
+  // men valget skal FINDES, fordi en konkurrence oprettet sent i ugen ellers
+  // tavst fik en halvspillet runde som sin første.
+  const [roundStart, setRoundStart] = useState("current");
+  // Indeværende rundes kampe, ALLE af dem. Puljen ovenfor går fra `nu` og frem
+  // og kan derfor ikke svare på, hvor mange der allerede er væk — og det er
+  // netop nævneren, valget skal træffes på.
+  const [currentRoundMatches, setCurrentRoundMatches] = useState([]);
 
   const type = createTypeById(typeId);
   const TypeIcon = ICONS[typeId] || null;
@@ -156,10 +166,15 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   }
 
   // Puljen af kommende kampe. Quick League skal kunne se flere runder frem, så
-  // dens opslag går 11 uger ud (maks. 10 runder + margen) med et højere loft —
+  // dens opslag går 12 uger ud (maks. 10 runder + margen, og én runde ekstra
+  // siden startrunde-valget kan skubbe vinduet en uge frem) med et højere loft —
   // det gamle `limit=300` fra nærmeste runde og frem rakte kun til én runde
   // ad gangen med 7+ turneringer. Selve opslaget, og hvordan afkortning gøres
   // MÆRKBAR, bor i lib/data/createSources.js.
+  //
+  // Indeværende rundes kampe hentes i samme ombæring og af samme grund som
+  // puljen: de fire typer, der har en startrunde, skal kunne vise, hvor meget af
+  // runden der allerede er væk.
   useEffect(() => {
     if (!type || (type.mode !== "random" && typeId !== "custom")) return;
     if (!Object.keys(seasonByLeague).length) return;
@@ -167,13 +182,25 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
       const quick = typeId === "quick_league";
       const { matches, teams, truncated } = await loadUpcomingMatches(token, seasonByLeague, leagues, {
         limit: quick ? UPCOMING_LIMIT_QUICK : UPCOMING_LIMIT_PICK,
-        horizonMs: quick ? 11 * 7 * 24 * 3600 * 1000 : null,
+        horizonMs: quick ? 12 * 7 * 24 * 3600 * 1000 : null,
       });
       setUpcomingTruncated(truncated);
       setUpcomingTeams(teams);
       setUpcoming(matches);
       setPickedIds([]);
     })();
+  }, [typeId, seasonByLeague, leagues]); // eslint-disable-line
+
+  // Indeværende rundes kampe hentes for ALLE korttyper: alle seks har et
+  // startrunde-valg, og nævneren ("5 af 6 kampe er allerede spillet") er det
+  // ene tal, puljen af KOMMENDE kampe per definition ikke kan svare på.
+  //
+  // Eget opslag frem for en gren i puljens effekt: Sæson og Favorithold henter
+  // ikke puljen — deres kampe findes af en regel på skriverens side — og skal
+  // alligevel kunne vise det samme.
+  useEffect(() => {
+    if (!typeId || !Object.keys(seasonByLeague).length) return;
+    (async () => { setCurrentRoundMatches(await loadCurrentRoundMatches(token, seasonByLeague, leagues)); })();
   }, [typeId, seasonByLeague, leagues]); // eslint-disable-line
 
   const upcomingRounds = useMemo(() => {
@@ -196,10 +223,15 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   // Puljen er den samme `upcoming`, håndpluk bruger, og den er skåret ved et
   // loft fra nærmeste runde og frem. Advarslen om afkortning står allerede over
   // felterne (`upcomingTruncated`) og gælder derfor også her.
+  //
+  // Låste kampe skæres fra HER og ikke i visningen, fordi brugeren aldrig har
+  // set dem enkeltvis: loftet er en regel ("højst ti pr. runde"), ikke en
+  // liste, og en kamp, der ikke kan tippes, hører ikke til i den. Håndpluk er
+  // det modsatte og behandles derfor modsat — se kampvælgeren i CustomFields.
   const periodMatchIds = useMemo(() => {
     if (!perRound || !startDate || !endDate) return [];
     const allowed = periodTournaments.map((t) => t.leagueId);
-    const pool = upcoming.filter((m) => {
+    const pool = filterTippable(upcoming).filter((m) => {
       if (!allowed.includes(m._leagueId) || !m.kickoff_at) return false;
       const day = m.kickoff_at.slice(0, 10);
       return day >= startDate && day <= endDate;
@@ -207,11 +239,90 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     return pickPerRound(pool, { perRound });
   }, [perRound, startDate, endDate, periodTournaments, upcoming]);
 
+  // ---------- startrunde ----------
+  // Rundenøglen lige nu er stabil for hele besøget: den skifter én gang om ugen,
+  // og en skærm, der genberegnede den ved hver render, ville kun kunne opdage
+  // skiftet ved et tilfælde. Den aflæses derfor én gang.
+  const currentKey = useMemo(() => currentRoundKey(), []);
+
+  // Det, valget skal træffes på, for ét sæt turneringer: rundens kampe (hele
+  // runden, også de spillede), om der overhovedet er noget tilbage at starte på,
+  // og hvilken runde "ny runde" så er. Beregnes pr. type, fordi de tilfældige
+  // typer og perioden har hver sit turneringsvalg.
+  function startInfoOf(leagueIds) {
+    const allowed = leagueIds || leagues.map((l) => l.id);
+    const roundMatches = currentRoundMatches.filter((m) => allowed.includes(m._leagueId));
+    return {
+      roundMatches,
+      currentOpen: roundMatches.some((m) => !isLocked(m)),
+      nextRound: nextRoundOf(upcoming.filter((m) => allowed.includes(m._leagueId))),
+    };
+  }
+  // Næste runde MED antal — de tilfældige typer og perioden har puljen liggende.
+  function nextRoundOf(pool) {
+    const r = groupIntoRounds(pool.filter((m) => m.round_key > currentKey))[0];
+    return r ? { label: r.label, count: r.matches.length } : null;
+  }
+  // Næste runde UDEN antal. Sæson og Favorithold henter ikke puljen af kommende
+  // kampe — de materialiseres af en regel på serversiden — så etiketten regnes
+  // ud af rundenøglen frem for at koste et opslag på op til 800 rækker.
+  const nextRoundLabelOnly = { label: roundLabel(nextRoundKey(currentKey)), count: null };
+  const randomStart = useMemo(() => startInfoOf(randomLeagueIds), [currentRoundMatches, upcoming, randomLeagueIds, leagues, currentKey]); // eslint-disable-line
+  const periodStart = useMemo(() => startInfoOf(periodLeagueIds), [currentRoundMatches, upcoming, periodLeagueIds, leagues, currentKey]); // eslint-disable-line
+
+  // Sæson og Favorithold har hver sit udsnit af indeværende runde: Sæson de
+  // valgte turneringers kampe, Favorithold kun de valgte HOLDS kampe — ellers
+  // ville nævneren tælle kampe, konkurrencen aldrig kommer til at indeholde.
+  const seasonRoundMatches = useMemo(
+    () => currentRoundMatches.filter((m) => fsLeagueIds.includes(m._leagueId)),
+    [currentRoundMatches, fsLeagueIds]);
+  const teamRoundMatches = useMemo(() => {
+    const ids = teamSel.map((t) => t.teamId);
+    return currentRoundMatches.filter((m) => ids.includes(m.home_team_id) || ids.includes(m.away_team_id));
+  }, [currentRoundMatches, teamSel]);
+
+  // Er der intet tilbage i indeværende runde, ER startrunden den næste — uanset
+  // hvad chippen står på. Valget klemmes her frem for at blive skrevet tilbage i
+  // state: en `setRoundStart` inde i en effekt ville kunne kæmpe med brugerens
+  // klik, hver gang turneringsvalget ændrede svaret.
+  const effectiveRoundStart = randomStart.currentOpen ? roundStart : "next";
+  // Samme klemme for de to sæson-typer, hver med sit udsnit af runden.
+  const seasonRoundOpen = seasonRoundMatches.some((m) => !isLocked(m));
+  const teamRoundOpen = teamRoundMatches.some((m) => !isLocked(m));
+  const seasonRoundStart = seasonRoundOpen ? roundStart : "next";
+  const teamRoundStart = teamRoundOpen ? roundStart : "next";
+
+  // Låste kampe ryger ud AF PULJEN og ikke først ved udvælgelsen: gjorde de
+  // ikke det, ville tallene ved siden af felterne ("38 kampe pr. runde",
+  // "1 kamp kan stadig tippes") tælle kampe, udvælgelsen ikke ville bruge — og
+  // to tal, der er uenige om den samme runde, er værre end ét, der er for højt.
   const randomPool = useMemo(() => {
     const allowed = randomLeagueIds || leagues.map((l) => l.id);
-    return upcoming.filter((m) => allowed.includes(m._leagueId));
-  }, [upcoming, randomLeagueIds, leagues]);
+    return filterFromRoundStart(filterTippable(upcoming.filter((m) => allowed.includes(m._leagueId))),
+      { start: effectiveRoundStart, currentKey });
+  }, [upcoming, randomLeagueIds, leagues, effectiveRoundStart, currentKey]);
   const randomRounds = useMemo(() => groupIntoRounds(randomPool), [randomPool]);
+
+  // Perioden har allerede sin startdato, så valget er AFLEDT af den frem for at
+  // være sin egen state — ellers ville to kontroller kunne stå og modsige
+  // hinanden om, hvornår konkurrencen begynder. Chippen skriver datoen; datoen
+  // skriver chippen.
+  const periodRoundStart = startDate && roundKeyOfDate(startDate) > currentKey ? "next" : "current";
+  function setPeriodRoundStart(v) {
+    setStartDate(v === "next" ? nextRoundKey(currentKey) : zonedDateKey(new Date().toISOString()));
+  }
+  // Standarden er indeværende runde, altså i dag. Datoen sættes i KLIKKET på
+  // "Periode" og ikke i en effekt: en effekt, der skriver state, koster en ekstra
+  // render (og en advarsel fra `react-hooks/set-state-in-effect`) for noget, der
+  // har et præcist tidspunkt i forvejen — brugeren valgte metoden.
+  //
+  // Det er ikke en forudfyldning, man glemmer at rette (B6): perioden kan ikke
+  // oprettes uden datoer alligevel (se `canSubmit`), og datoen er præcis dét,
+  // startrunde-valget allerede står og siger.
+  function chooseMethod(m) {
+    setMethod(m);
+    if (m === "period" && !startDate) setStartDate(zonedDateKey(new Date().toISOString()));
+  }
 
   // Ugens kupon er det ENE kort, der forudfylder navnet — det genererede navn
   // ("Ugens kupon 12/08 – 18/08") er selve featuren. Alle andre kort starter
@@ -226,6 +337,9 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     const t = createTypeById(id);
     setTypeId(id);
     setErr("");
+    // Startrunden er et valg pr. konkurrence, ikke en indstilling, der følger
+    // med over i næste korttype — den nulstilles sammen med typens presets.
+    setRoundStart("current");
     if (t.mode === "random") {
       setRandomCount(t.presets.count);
       setRoundsCount(t.presets.rounds > 1 ? t.presets.rounds : 6);
@@ -240,13 +354,13 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     const shared = { typeId, name, groupId, awards: !!(type?.multiRound && awards) };
     if (typeId === "season") {
       return buildSpec({
-        ...shared,
+        ...shared, startRound: seasonRoundStart,
         tournaments: fsLeagueIds
           .filter((id) => seasonByLeague[id] && countByLeague[id] !== 0)
           .map((lid) => ({ leagueId: lid, seasonId: seasonByLeague[lid].id })),
       });
     }
-    if (typeId === "team") return buildSpec({ ...shared, teams: teamSel });
+    if (typeId === "team") return buildSpec({ ...shared, startRound: teamRoundStart, teams: teamSel });
     if (typeId === "custom") {
       if (method === "period") {
         const only = periodTournaments.length === 1 ? periodTournaments[0] : null;
@@ -263,9 +377,14 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
       return buildSpec({ ...shared, method, matchIds: pickedIds });
     }
     const rounds = typeId === "quick_league" ? roundsCount : 1;
+    // Filtreret ÉN GANG TIL her, selv om puljen allerede er det: puljen er et
+    // øjebliksbillede fra dengang, felterne blev tegnet, og en skærm, der har
+    // stået åben, mens brugeren fandt på et navn, ville ellers kunne trække en
+    // kamp, der låste undervejs. Udvælgelsen er det sidste sted, sandheden
+    // stadig kan tjekkes.
     return buildSpec({
       ...shared,
-      matchIds: pickRandomFromRounds(randomPool, { count: randomCount, rounds }),
+      matchIds: pickRandomFromRounds(filterTippable(randomPool), { count: randomCount, rounds }),
       randomCount, rounds,
     });
   }
@@ -281,8 +400,30 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     : randomPool.length > 0
   );
 
+  // Håndplukkets sidste kontrol før oprettelsen. Selve spørgsmålet — hvilke af
+  // de udpegede kampe er nået at låse — er en ren regel og bor i
+  // `lockedPicks` (createTypes.js); her står kun, hvad skærmen gør ved svaret.
+  //
+  // Vinduet er lille (skærmen skal have stået åben hen over en lås) og præcis
+  // derfor værd at lukke: det er den slags, der aldrig ses i en test og rammer
+  // en rigtig bruger en søndag aften.
+  function stripLockedPicks() {
+    if (typeId !== "custom" || method !== "pick" || !pickedIds.length) return false;
+    const laaste = new Set(lockedPicks(pickedIds, upcoming));
+    if (!laaste.size) return false;
+    const tilbage = pickedIds.filter((id) => !laaste.has(id));
+    setPickedIds(tilbage);
+    const hvorMange = laaste.size === 1 ? "Én af de valgte kampe" : `${laaste.size} af de valgte kampe`;
+    // Er der intet tilbage, er "tryk igen" en blindgyde — knappen er slukket af
+    // `canSubmit`, og beskeden skal derfor pege på det, der faktisk mangler.
+    setErr(`${hvorMange} er låst, mens skærmen stod åben, og er fjernet fra dit valg. `
+      + (tilbage.length ? "Tryk Opret igen." : "Vælg mindst én kamp, der ikke er låst."));
+    return true;
+  }
+
   async function submit() {
     if (!canSubmit) return;
+    if (stripLockedPicks()) return;
     setBusy(true); setErr("");
     try {
       const { competition } = await createCompetition(token, userId, specFromState());
@@ -319,25 +460,43 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
             </div>
 
             {typeId === "season" && (
-              <SeasonFields leagues={leagues} fsLeagueIds={fsLeagueIds} countByLeague={countByLeague} onToggle={toggleFsLeague} />
+              <SeasonFields leagues={leagues} fsLeagueIds={fsLeagueIds} countByLeague={countByLeague} onToggle={toggleFsLeague}
+                roundStart={seasonRoundStart} onRoundStart={setRoundStart}
+                currentRoundMatches={seasonRoundMatches} currentRoundOpen={seasonRoundOpen}
+                nextRound={nextRoundLabelOnly} />
             )}
             {typeId === "team" && (
               <TeamFields leagues={leagues} teamsByLeague={teamsByLeague} seasonByLeague={seasonByLeague}
-                selected={teamSel} onAdd={addTeam} onRemove={(tid) => setTeamSel((prev) => prev.filter((t) => t.teamId !== tid))} />
+                selected={teamSel} onAdd={addTeam} onRemove={(tid) => setTeamSel((prev) => prev.filter((t) => t.teamId !== tid))}
+                roundStart={teamRoundStart} onRoundStart={setRoundStart}
+                currentRoundMatches={teamRoundMatches} currentRoundOpen={teamRoundOpen}
+                nextRound={nextRoundLabelOnly} />
             )}
             {(typeId === "quick_pick" || typeId === "quick_league") && (
               <RandomFields isQuickLeague={typeId === "quick_league"}
                 count={randomCount} onCount={setRandomCount}
                 rounds={roundsCount} onRounds={setRoundsCount}
                 leagues={leagues} leagueIds={randomLeagueIds} onLeagueIds={setRandomLeagueIds}
-                poolRounds={randomRounds} />
+                poolRounds={randomRounds}
+                roundStart={effectiveRoundStart} onRoundStart={setRoundStart}
+                currentRoundMatches={randomStart.roundMatches} currentRoundOpen={randomStart.currentOpen}
+                nextRound={randomStart.nextRound} />
             )}
             {typeId === "weekly_coupon" && (
-              <span style={{ color: C.muted, fontSize: 12.5, lineHeight: 1.45 }}>
-                {randomRounds.length
-                  ? `${Math.min(8, randomRounds[0].matches.length)} tilfældige kampe fra runden ${randomRounds[0].label} — på tværs af alle turneringer.`
-                  : "Henter den kommende runde…"}
-              </span>
+              <>
+                {/* Ugens kupon har ellers ingen felter — "klar med to tryk" er
+                    hele kortet. Startrunden er den ene undtagelse: kuponen ER
+                    én runde, så en halvspillet startrunde er ikke en detalje,
+                    den er konkurrencen. */}
+                <RoundStartChoice value={effectiveRoundStart} onChange={setRoundStart}
+                  roundMatches={randomStart.roundMatches} currentOpen={randomStart.currentOpen}
+                  nextRound={randomStart.nextRound} />
+                <span style={{ color: C.muted, fontSize: 12.5, lineHeight: 1.45 }}>
+                  {randomRounds.length
+                    ? `${Math.min(8, randomRounds[0].matches.length)} tilfældige kampe fra runden ${randomRounds[0].label} — fordelt jævnt på tværs af alle turneringer.`
+                    : "Henter den kommende runde…"}
+                </span>
+              </>
             )}
             {/* Loftet siges HØJT (G35). Uden linjen ser listen komplet ud, og en
                 bruger, der leder efter en kamp langt ude i fremtiden, ville tro,
@@ -349,13 +508,20 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
                 skal du bruge en kamp længere ude i fremtiden, så opret konkurrencen som en periode eller en hel sæson.
               </p>
             )}
+            {/* `currentRoundOpen` er altid sand for perioden: den løber over
+                uger, så "start i dag" er et lovligt valg, også når indeværende
+                runde er spillet færdig. For de tilfældige typer slukkes chippen,
+                fordi startrunden dér ER konkurrencens første (eller eneste). */}
             {typeId === "custom" && (
-              <CustomFields method={method} onMethod={setMethod}
+              <CustomFields method={method} onMethod={chooseMethod}
                 perRound={perRound} onPerRound={setPerRound} periodCount={periodMatchIds.length}
                 leagues={leagues} pickLeagueIds={pickLeagueIds} onPickLeagueIds={setPickLeagueIds}
                 upcomingRounds={upcomingRounds} upcomingTeams={upcomingTeams} pickedIds={pickedIds} onPickedIds={setPickedIds}
                 periodLeagueIds={periodLeagueIds} onPeriodLeagueIds={setPeriodLeagueIds}
-                startDate={startDate} endDate={endDate} onStartDate={setStartDate} onEndDate={setEndDate} />
+                startDate={startDate} endDate={endDate} onStartDate={setStartDate} onEndDate={setEndDate}
+                roundStart={periodRoundStart} onRoundStart={setPeriodRoundStart}
+                currentRoundMatches={periodStart.roundMatches} nextRound={periodStart.nextRound}
+                currentRoundOpen />
             )}
 
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>

@@ -15,6 +15,151 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 10. august 2026 — En tilfældig kupon fordeler jævnt på de valgte turneringer, ikke proportionalt med deres størrelse
+
+**Beslutning:** `pickRandomFromRounds` fordeler kampene **jævnt** på de valgte
+turneringer i hver runde, i samme round-robin som periodens loft
+(`drawAcrossLeagues`). Otte kampe fra Superligaen + La Liga bliver 4/4.
+
+**Hvad der var galt.** Hele rundens kampe blev blandet i én bunke, og de første
+`count` blev taget. En bunke afspejler turneringernes **størrelse**: La Liga har
+10 kampe i en runde, Superligaen 6, så otte kampe gav i snit 3/5 og i praksis
+nemt 2/6. At vælge to turneringer i chip-rækken er en udtalelse om, at begge
+skal være med — ikke en anmodning om at blive vejet efter, hvor mange hold de
+har.
+
+**Hvorfor jævnt og ikke proportionalt.** Proportionalt er præcis dét, den gamle
+adfærd var, bare uden garantien: den store turnering fylder mest. Med syv
+turneringer valgt og otte kampe ville proportional fordeling betyde, at flere
+turneringer slet ikke kom med — et valg, brugeren havde truffet, uden virkning.
+Jævnt er den eneste fordeling, hvor hver valgt turnering er repræsenteret, så
+længe den har kampe i runden.
+
+**Hvorfor round-robin og ikke en kvote.** Samme begrundelse som `pickPerRound`
+allerede havde: har en turnering færre kampe end sin andel, bliver den sprunget
+over i næste omgang, og de øvrige fylder pladsen. 1 + 10 kampe med et loft på 6
+giver 1/5 frem for 3/3 med et hul. Reglen findes nu ét sted i stedet for at være
+implementeret to gange med kun den ene dokumenteret.
+
+**Turneringernes rækkefølge blandes også.** Går kampantallet ikke op, får nogen
+den ekstra. Over Quick Leagues seks runder må det ikke være den samme hver gang;
+målt over 2000 kørsler falder den 993/1007.
+
+**Fordelingen gælder pr. runde, ikke samlet.** En konkurrence over seks runder
+balancerer hver uge for sig — ellers ville en runde uden kampe i den ene
+turnering skulle kompenseres i en anden, og reglen ville afhænge af rækkefølgen,
+runderne blev behandlet i.
+
+---
+
+## 10. august 2026 — 0-punkts-reglen flyttes fra runde-niveau til kamp-niveau, og runde-reglen slettes
+
+**Beslutning:** en ny konkurrence materialiserer de kampe, der **stadig kan
+tippes** (`filterTippable`), i stedet for "alt fra og med den første
+ikke-færdigspillede runde" (`filterFromNextUnfinishedRound`). Den gamle regel er
+**fjernet**, ikke sat ved siden af. Gælder `full_season`, `team` og `time_range`.
+
+**Hvorfor den gamle regel var forkert.** Den holdt sit løfte for hele runder og
+brød det inde i én. En konkurrence oprettet onsdag fik tirsdagens allerede
+spillede kamp med, fordi runden ikke var færdig — og da `predictions` er **én
+række pr. bruger pr. kamp, delt på tværs af alle konkurrencer**, havde den, der
+havde tippet den i en anden konkurrence, point fra første sekund, mens den, der
+ikke havde, ikke kunne nå det. Det er præcis den ulighed, reglen blev skrevet
+for at forhindre; den var bare formuleret et niveau for højt.
+
+**Hvorfor den gamle slettes frem for at suppleres.** Kamp-reglen *indeholder*
+runde-reglen: en færdigspillet runde består kun af spillede kampe, og en spillet
+kamp er låst. To regler, hvor den ene er en svagere udgave af den anden, er ikke
+to sikkerhedsnet — det er et sted, hvor en senere læser skal gætte, hvilken der
+gælder.
+
+**"Låst" og ikke "har resultat".** En kamp, der er fløjtet i gang, kan heller
+ikke tippes, og en kamp, ingen i konkurrencen kan gætte på, hører ikke til i den.
+Det er samme svar, opret-flowets fire andre stier giver, så hele oprettelsen nu
+bruger ét begreb for "kan denne kamp stadig komme med". En kamp uden kendt
+kickoff er ikke låst og kommer med — samme vej at tage fejl som RLS-policyens
+skrivegren.
+
+**Prisen er kendt: konkurrencen kan starte midt i en runde.** En sæson oprettet
+onsdag har søndagskampen med, men ikke tirsdagens, så dens første runde er
+mindre end de følgende. Det er den rigtige pris: alternativet — at springe hele
+runden over — ville udskyde starten i op til en uge for at undgå en skævhed, der
+kun findes i én runde af otteogtredive. For de typer, hvor den første runde
+**er** konkurrencen, findes valget i stedet som startrunde-chippen (se
+beslutningen nedenfor).
+
+**Efterfyldningen beholder sin egen, strengere RUNDE-regel** (`api/_backfill.js`
+regel 3: en runde, der er gået i gang, vokser aldrig). Den er ikke inkonsistent
+med denne beslutning, den løser et andet problem: ved en efterfyldning findes
+deltagerne allerede, har tippet og set stillingen, så en ny kamp midt i en
+igangværende runde ville flytte noget, nogen har set. Ved oprettelsen findes
+hverken deltagere eller stilling.
+
+**Opslagene henter nu `kickoff_at` og `kickoff_tbd`.** Uden dem er filteret
+blindt uden at fejle — en kamp, der sparkes i gang om ti minutter, har intet
+resultat og ville se frit tipbar ud. Derfor er kolonnerne pinnet af en egen test.
+
+---
+
+## 10. august 2026 — Startrunden er et valg, og kampantallet er ikke en konsekvens af den
+
+**Beslutning:** opret-flowet spørger, om konkurrencen skal begynde i
+**indeværende** eller en **ny runde** (standard: indeværende), og feltet "Kampe
+pr. runde" er ikke længere klippet til antallet i nærmeste runde. Loftet er
+teknisk (`MAX_MATCHES_PER_ROUND` = 50); udbuddet er oplysning.
+
+**Hvorfor valget skal findes.** Puljen blev hentet fra `nu` og frem, så
+startrunden var en konsekvens af, hvornår man trykkede. Det er ikke en neutral
+default: en Quick League oprettet mandag aften har en førsteplads afgjort af én
+kamp, og seks runders konkurrence bliver dermed afgjort af den runde, der havde
+mindst indhold. Ingen på skærmen sagde det.
+
+**Hvorfor nævneren, og ikke bare valget.** "1 i nærmeste runde" er et sandt tal,
+der ikke kan bruges: det siger, hvad der er tilbage, aldrig hvorfor der kun er
+én. Samme fejlklasse som `G35`, hvor turneringer med nul kampe så ud som
+turneringer uden problemer. Derfor står "5 af 6 kampe … er allerede i gang eller
+spillet" ved siden af valget — og derfor er der et nyt opslag
+(`loadCurrentRoundMatches`), for nævneren findes ikke i puljen af kommende
+kampe.
+
+**"Spillet" = låst, ikke "har resultat".** For den, der skal beslutte, om en
+runde er værd at starte i, er en kamp i gang lige så tabt som en, der er fløjtet
+af — begge kan ikke tippes. Tælleren bruger derfor `isLocked`, samme svar som
+Tip-skærmen giver, frem for at skelne mellem to tilstande, brugeren ikke kan
+handle forskelligt på.
+
+**Hvorfor loftet var forkert.** `max` = nærmeste rundes størrelse gjorde ét
+tilfældigt tidspunkt til reglen for **alle** runder i en flerrunde-konkurrence.
+Turneringerne går i gang forskudt — én kamp tilbage i indeværende runde siger
+intet om de fyrre, der venter i runden efter. `pickRandomFromRounds` klipper i
+forvejen pr. runde, så et for højt tal har altid betydet "så mange som muligt";
+loftet beskyttede mod ingenting og spærrede for noget rigtigt.
+
+**Hvorfor perioden får samme valg, men ikke samme mekanik.** Custom/periode er
+defineret af sine datoer. Valget sætter derfor **startdatoen** og aflæses af
+den, i stedet for at være sin egen state — to kontroller, der begge kunne
+bestemme starten, ville kunne stå og modsige hinanden. Af samme grund er
+"Indeværende runde" ikke slukket for perioden, når rundens kampe er spillet:
+perioden løber over uger, så "start i dag" er stadig et lovligt valg. På de
+tilfældige typer ER startrunden konkurrencens første (eller eneste) runde, og
+dér slukkes chippen.
+
+**Standarden er indeværende runde.** Man vil som regel i gang nu, og valget er
+først et problem, når det er usynligt. Med nævneren på skærmen er det synligt.
+
+**Udvidet samme dag til Sæson og Favorithold.** Spørgsmålet, der afgjorde
+omfanget, tilbød kun de fire korte typer, og de to sæson-typer blev derfor
+udeladt uden at være fravalgt. De har det samme vilkår — opretter man søndag
+aften, består første runde af de kampe, der tilfældigvis var tilbage — og selv
+om en hel sæson ikke afgøres af sin første runde, er det et vilkår, man skal
+kunne vælge frem for at arve. Mekanikken er en tredje af slagsen: deres kampe
+findes af en REGEL på skriverens side, så valget rejser med som
+`spec.startRound` frem for at filtrere en pulje i klienten. `time_range` er
+fortsat undtaget, fordi dens svar ligger i startdatoen — pinnet af en test, så
+feltet ikke kan komme til at smitte af.
+
+---
+
 ## 10. august 2026 — `B26`s kode leveres før konfigurationen, og værnet slås til med en nøgle
 
 **Beslutning:** klientsiden af `B26` bygges og merges nu, mens begge knapper i
