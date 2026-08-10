@@ -121,7 +121,7 @@ Guiden fik brug for de samme to skrivninger, som lå inline i skærmene. To kopi
 
 | Tilfælde | Adfærd |
 |---|---|
-| **Sæsonen er spillet færdig** | `filterFromNextUnfinishedRound` giver `[]`. `loadStarterTournaments` markerer turneringen `hasUpcoming: false`; knappen skifter fra "Opret og tip" til "Opret liga" og siger hvorfor |
+| **Sæsonen er spillet færdig** | `filterTippable` giver `[]` (var `filterFromNextUnfinishedRound` indtil august 2026). `loadStarterTournaments` markerer turneringen `hasUpcoming: false`; knappen skifter fra "Opret og tip" til "Opret liga" og siger hvorfor |
 | **Ingen turnering med kampprogram** | Ligaen oprettes alene. Fællesskabet er det, der består |
 | **Oprettet midt i en runde** | Første tipbare runde er næste uge. Landing forgrenes på `matchCount`, ikke på et løfte |
 | **Liga oprettet, konkurrence fejlede** | Rulles **ikke** tilbage — en tom liga er brugbar og kan slettes af sin admin. Brugeren sendes til liga-siden med besked |

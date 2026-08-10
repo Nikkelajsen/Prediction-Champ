@@ -703,6 +703,46 @@ describe("createCompetition", () => {
     expect(res.matchCount).toBe(2);
   });
 
+  // 0-PUNKTS-REGLEN, DER BRØD SIG SELV INDE I EN RUNDE (august 2026).
+  //
+  // Runde-reglen `filterFromNextUnfinishedRound` tog alt fra og med den første
+  // ikke-færdigspillede runde — også dens ALLEREDE SPILLEDE kampe. Da
+  // `predictions` deles på tværs af konkurrencer, gav en konkurrence oprettet
+  // onsdag point fra første sekund til den, der havde tippet tirsdagens kamp
+  // i en anden konkurrence, mens den, der ikke havde, ikke kunne nå det.
+  // Præcis den fejl, reglen fandtes for at forhindre — bare et niveau nede.
+  it("en konkurrence oprettet MIDT i en runde får ikke rundens spillede kampe med", async () => {
+    const om = (min) => new Date(Date.now() + min * 60000).toISOString();
+    const siden = (min) => new Date(Date.now() - min * 60000).toISOString();
+    setup([
+      { id: "tirsdag", round_key: "2026-08-04", kickoff_at: siden(3000), home_score: 2 },
+      { id: "igang", round_key: "2026-08-04", kickoff_at: siden(20) },
+      { id: "soendag", round_key: "2026-08-04", kickoff_at: om(4000), home_score: null },
+      { id: "naeste", round_key: "2026-08-11", kickoff_at: om(12000), home_score: null },
+    ]);
+    const res = await create({
+      name: "Midt i ugen", mode: "full_season",
+      tournaments: [{ leagueId: "L1", seasonId: "S1" }],
+    });
+    // Søndagskampen er stadig med — runden er ikke tabt, kun dens låste kampe.
+    expect(matchRows().map((r) => r.match_id)).toEqual(["soendag", "naeste"]);
+    expect(res.matchCount).toBe(2);
+  });
+
+  // Låsen er en egenskab ved kampens TIDSPUNKT og ikke kun ved dens resultat, så
+  // opslaget skal hente kickoff med. Gør det ikke det, ser en kamp, der sparkes i
+  // gang om ti minutter, ud som en kamp, der frit kan tippes — og filteret bliver
+  // blindt uden at fejle.
+  it("henter kickoff med, så låsen kan afgøres", async () => {
+    const queries = [];
+    db.select.mockImplementation(async (token, table, q) => { queries.push(q); return []; });
+    db.insert.mockImplementation(async (token, table, rows) =>
+      (table === "competitions" ? [{ id: "c1", ...rows[0] }] : undefined));
+    await create({ name: "X", mode: "full_season", tournaments: [{ leagueId: "L1", seasonId: "S1" }] });
+    expect(queries[0]).toContain("kickoff_at");
+    expect(queries[0]).toContain("kickoff_tbd");
+  });
+
   // A20: fase-afgrænsning findes ikke længere. "Hel sæson" betyder hele
   // sæsonen, også mesterskabsspillet — og `mode_params.stages` skrives aldrig,
   // fordi feltet nu er efterfyldningens mærkat for "afgrænset i hånden".

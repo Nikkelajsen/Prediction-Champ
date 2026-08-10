@@ -15,6 +15,55 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 10. august 2026 — 0-punkts-reglen flyttes fra runde-niveau til kamp-niveau, og runde-reglen slettes
+
+**Beslutning:** en ny konkurrence materialiserer de kampe, der **stadig kan
+tippes** (`filterTippable`), i stedet for "alt fra og med den første
+ikke-færdigspillede runde" (`filterFromNextUnfinishedRound`). Den gamle regel er
+**fjernet**, ikke sat ved siden af. Gælder `full_season`, `team` og `time_range`.
+
+**Hvorfor den gamle regel var forkert.** Den holdt sit løfte for hele runder og
+brød det inde i én. En konkurrence oprettet onsdag fik tirsdagens allerede
+spillede kamp med, fordi runden ikke var færdig — og da `predictions` er **én
+række pr. bruger pr. kamp, delt på tværs af alle konkurrencer**, havde den, der
+havde tippet den i en anden konkurrence, point fra første sekund, mens den, der
+ikke havde, ikke kunne nå det. Det er præcis den ulighed, reglen blev skrevet
+for at forhindre; den var bare formuleret et niveau for højt.
+
+**Hvorfor den gamle slettes frem for at suppleres.** Kamp-reglen *indeholder*
+runde-reglen: en færdigspillet runde består kun af spillede kampe, og en spillet
+kamp er låst. To regler, hvor den ene er en svagere udgave af den anden, er ikke
+to sikkerhedsnet — det er et sted, hvor en senere læser skal gætte, hvilken der
+gælder.
+
+**"Låst" og ikke "har resultat".** En kamp, der er fløjtet i gang, kan heller
+ikke tippes, og en kamp, ingen i konkurrencen kan gætte på, hører ikke til i den.
+Det er samme svar, opret-flowets fire andre stier giver, så hele oprettelsen nu
+bruger ét begreb for "kan denne kamp stadig komme med". En kamp uden kendt
+kickoff er ikke låst og kommer med — samme vej at tage fejl som RLS-policyens
+skrivegren.
+
+**Prisen er kendt: konkurrencen kan starte midt i en runde.** En sæson oprettet
+onsdag har søndagskampen med, men ikke tirsdagens, så dens første runde er
+mindre end de følgende. Det er den rigtige pris: alternativet — at springe hele
+runden over — ville udskyde starten i op til en uge for at undgå en skævhed, der
+kun findes i én runde af otteogtredive. For de typer, hvor den første runde
+**er** konkurrencen, findes valget i stedet som startrunde-chippen (se
+beslutningen nedenfor).
+
+**Efterfyldningen beholder sin egen, strengere RUNDE-regel** (`api/_backfill.js`
+regel 3: en runde, der er gået i gang, vokser aldrig). Den er ikke inkonsistent
+med denne beslutning, den løser et andet problem: ved en efterfyldning findes
+deltagerne allerede, har tippet og set stillingen, så en ny kamp midt i en
+igangværende runde ville flytte noget, nogen har set. Ved oprettelsen findes
+hverken deltagere eller stilling.
+
+**Opslagene henter nu `kickoff_at` og `kickoff_tbd`.** Uden dem er filteret
+blindt uden at fejle — en kamp, der sparkes i gang om ti minutter, har intet
+resultat og ville se frit tipbar ud. Derfor er kolonnerne pinnet af en egen test.
+
+---
+
 ## 10. august 2026 — Startrunden er et valg, og kampantallet er ikke en konsekvens af den
 
 **Beslutning:** opret-flowet spørger, om konkurrencen skal begynde i

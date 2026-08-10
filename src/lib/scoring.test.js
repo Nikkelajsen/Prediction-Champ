@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { currentRoundKey, roundKeyOfDate, nextRoundKey, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, filterFromNextUnfinishedRound, currentRoundIndex, formatKickoff, isLocked, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { currentRoundKey, roundKeyOfDate, nextRoundKey, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, isLocked, filterTippable, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 describe("outcome", () => {
   it("giver 1 ved hjemmesejr, X ved uafgjort, 2 ved udesejr", () => {
@@ -93,25 +93,57 @@ describe("stageBadgeLabel", () => {
   });
 });
 
-describe("filterFromNextUnfinishedRound", () => {
-  const finished = (key) => ({ round_key: key, home_score: 1, away_score: 0 });
-  const upcoming = (key) => ({ round_key: key, home_score: null, away_score: null });
+describe("filterTippable", () => {
+  // Afløste RUNDE-reglen `filterFromNextUnfinishedRound` i august 2026. Den gamle
+  // regel holdt sit løfte for hele runder og brød det inde i én: en konkurrence
+  // oprettet MIDT i en runde fik rundens spillede kampe med, og da `predictions`
+  // deles på tværs af konkurrencer, havde den, der havde tippet dem andetsteds,
+  // point fra første sekund. Testene her er de gamle plus det, de ikke fangede.
+  const om = (min) => new Date(Date.now() + min * 60000).toISOString();
+  const siden = (min) => new Date(Date.now() - min * 60000).toISOString();
+  const spillet = (key) => ({ round_key: key, kickoff_at: siden(3000), home_score: 1, away_score: 0 });
+  const kommende = (key) => ({ round_key: key, kickoff_at: om(3000), home_score: null, away_score: null });
 
   it("udelader allerede afsluttede runder (nye konkurrencer starter fra 0)", () => {
-    const result = filterFromNextUnfinishedRound([
-      finished("2026-07-07"), finished("2026-07-07"),
-      upcoming("2026-07-14"), upcoming("2026-07-21"),
+    const ud = filterTippable([
+      spillet("2026-07-07"), spillet("2026-07-07"),
+      kommende("2026-07-14"), kommende("2026-07-21"),
     ]);
-    expect(result.map((m) => m.round_key)).toEqual(["2026-07-14", "2026-07-21"]);
+    expect(ud.map((m) => m.round_key)).toEqual(["2026-07-14", "2026-07-21"]);
   });
 
-  it("beholder en delvist spillet runde", () => {
-    const result = filterFromNextUnfinishedRound([finished("2026-07-07"), upcoming("2026-07-07")]);
-    expect(result).toHaveLength(2);
+  // DET, RUNDE-REGLEN IKKE KUNNE. Den beholdt hele den delvist spillede runde,
+  // altså også dens spillede kampe — præcis den fejl, den fandtes for at undgå.
+  it("beholder KUN den delvist spillede rundes resterende kampe", () => {
+    const ud = filterTippable([spillet("2026-07-07"), kommende("2026-07-07")]);
+    expect(ud).toHaveLength(1);
+    expect(ud[0].home_score).toBeNull();
   });
 
   it("giver tom liste når hele sæsonen er spillet", () => {
-    expect(filterFromNextUnfinishedRound([finished("2026-07-07")])).toEqual([]);
+    expect(filterTippable([spillet("2026-07-07")])).toEqual([]);
+  });
+
+  // Låst, ikke "har resultat": en kamp, der er fløjtet i gang, kan heller ikke
+  // tippes, og en kamp, ingen kan gætte på, hører ikke til i en ny konkurrence.
+  it("udelader en kamp, der er i gang eller låser inden for timen", () => {
+    const ud = filterTippable([
+      { id: "igang", kickoff_at: siden(30) },
+      { id: "snart", kickoff_at: om(20) },
+      { id: "aaben", kickoff_at: om(180) },
+    ]);
+    expect(ud.map((m) => m.id)).toEqual(["aaben"]);
+  });
+
+  // En kamp uden kendt kickoff er ikke låst — samme svar som RLS-policyens
+  // skrivegren, og den rigtige vej at tage fejl.
+  it("beholder en kamp uden kendt kickoff", () => {
+    expect(filterTippable([{ id: "ukendt", kickoff_at: null }]).map((m) => m.id)).toEqual(["ukendt"]);
+  });
+
+  it("tåler tom og manglende liste", () => {
+    expect(filterTippable([])).toEqual([]);
+    expect(filterTippable(null)).toEqual([]);
   });
 });
 

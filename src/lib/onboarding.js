@@ -109,7 +109,7 @@ function validateGroupName(name) {
 // Guiden skal kunne vælge rigtigt UDEN at gætte på navne: turneringen findes
 // via data (nyeste sæson med kampe uden resultat), ikke via et regex på "Superliga".
 // Uden `hasUpcoming` kunne guiden love et tip på en sæson, der er spillet
-// færdig — `filterFromNextUnfinishedRound` ville da give en helt tom konkurrence.
+// færdig — `filterTippable` ville da give en helt tom konkurrence.
 async function loadStarterTournaments(token, leagues) {
   const ids = (leagues || []).map((l) => l.id);
   if (!ids.length) return [];

@@ -98,8 +98,8 @@ kupon (`B6` — et foreslået navn blev bare beholdt).
 > periodens loft-gren skærer dem fra i stilhed (et loft er en regel, ikke en
 > liste). Låser en kamp, mens skærmen står åben, taber de tilfældige typer den
 > bare, mens håndpluk stopper oprettelsen og siger det. Periode uden loft er
-> `time_range` og deler `filterFromNextUnfinishedRound` med `full_season` og
-> `team` — ikke omfattet, noteret i `docs/BACKLOG.md`.
+> `time_range` og materialiseres serverside. Runde-reglen dér havde sin egen
+> udgave af samme fejl og er rettet i samme ombæring — se `DOCUMENTATION.md` §3.
 >
 > Fuld beskrivelse i `DOCUMENTATION.md` §3; beslutningen i `docs/DECISIONS.md`.
 

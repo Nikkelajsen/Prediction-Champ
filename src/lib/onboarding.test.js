@@ -145,7 +145,7 @@ describe("createStarterLeague", () => {
   });
 
   it("en tom sæson giver matchCount 0 — ligaen står stadig", async () => {
-    // Færdigspillet sæson: filterFromNextUnfinishedRound giver et tomt sæt.
+    // Færdigspillet sæson: filterTippable giver et tomt sæt.
     setup({ matches: [{ id: "m1", round_key: "2026-05-01", home_score: 2, stage_name: null }] });
     const res = await createStarterLeague("token", "u1", { groupName: "X", competitionName: "Y", leagueId: "L1" });
     expect(res.matchCount).toBe(0);

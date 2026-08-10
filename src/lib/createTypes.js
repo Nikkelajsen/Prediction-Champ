@@ -6,7 +6,7 @@
 // mode_params — `competitions_mode_check` er urørt, og ingen eksisterende
 // række skal migreres. Quick League er fx `random` med `rounds > 1`, og
 // Ugens kupon er `random` med et fast preset.
-import { roundLabel, isLocked } from "./scoring.js";
+import { roundLabel, isLocked, filterTippable } from "./scoring.js";
 
 // ---------- hvor mange kampe må man bede om pr. runde? ----------
 // Loftet er TEKNISK og ikke sportsligt (august 2026). Feltet var før klippet til
@@ -126,25 +126,7 @@ function pickRandomFromRounds(pool, { count = 6, rounds = 1, shuffle } = {}) {
   return ids;
 }
 
-// ---------- kun kampe, der stadig kan tippes ----------
-// Puljen hentes med `kickoff_at >= nu`, men låsen falder en TIME før kickoff
-// (`A21`). De to er ikke det samme, og forskellen er et helt vindue: en Quick
-// Pick oprettet en halv time før kampstart trak kampe, ingen af deltagerne
-// kunne nå at tippe — de stod i konkurrencen som nul point for alle, hvilket er
-// den værste slags kamp at have med, fordi den hverken kan spilles eller ses.
-//
-// Kampe uden kendt kickoff er IKKE låst (`isLocked`) og kommer med. Det er den
-// rigtige vej at tage fejl: en kamp uden tidspunkt kan stadig tippes, og
-// policyens skrivegren siger det samme.
-//
-// Filteret bruges to gange — når puljen bygges, og igen ved oprettelsen. Det er
-// med vilje: puljen er et øjebliksbillede, og en skærm, der har stået åben en
-// time, ville ellers kunne oprette en konkurrence med en kamp, der låste,
-// mens brugeren valgte navn.
-function filterTippable(pool) {
-  return (pool || []).filter((m) => !isLocked(m));
-}
-
+// ---------- håndplukkede kampe, der er nået at låse ----------
 // Hvilke af de HÅNDPLUKKEDE kampe er nået at låse? Svarer med id'erne.
 //
 // Håndpluk behandles modsat de øvrige typer: dér bad brugeren om et ANTAL, så
@@ -311,5 +293,5 @@ function buildSpec(state) {
 
 export {
   CREATE_TYPES, MAX_MATCHES_PER_ROUND, createTypeById, pickRandomFromRounds, pickPerRound,
-  filterTippable, lockedPicks, filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
+  lockedPicks, filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
 };

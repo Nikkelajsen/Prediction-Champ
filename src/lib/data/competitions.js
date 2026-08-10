@@ -2,7 +2,7 @@
 // eksisterende: invitationskode og flytning til en liga.
 
 import { db, restFetch } from "../supabase.js";
-import { filterFromNextUnfinishedRound } from "../scoring.js";
+import { filterTippable } from "../scoring.js";
 import { logEvent } from "../analytics.js";
 import { loadGroupByCode, joinGroup, joinCompetition } from "./groups.js";
 
@@ -45,8 +45,15 @@ import { loadGroupByCode, joinGroup, joinCompetition } from "./groups.js";
 //   awards                kårings-tilvalget (I13/A22): true ⇒ mode_params.awards
 //
 // Returnerer `matchCount`, så kalderen kan se, at en konkurrence blev tom —
-// fx en sæson, der er spillet færdig (`filterFromNextUnfinishedRound` giver da
-// et tomt sæt). Guiden bruger det til ikke at love et tip, der ikke findes.
+// fx en sæson, der er spillet færdig (`filterTippable` giver da et tomt sæt).
+// Guiden bruger det til ikke at love et tip, der ikke findes.
+//
+// Kampene, der materialiseres, er dem, der STADIG KAN TIPPES (`filterTippable`,
+// scoring.js). Det var indtil august 2026 en runde-regel, og den brød sit eget
+// løfte inde i en runde: en konkurrence oprettet midt i en runde fik rundens
+// allerede spillede kampe med, og da `predictions` deles på tværs af
+// konkurrencer, havde den, der havde tippet dem andetsteds, point fra første
+// sekund. Se begrundelsen ved funktionen.
 async function createCompetition(token, userId, spec) {
   const {
     name, groupId = null, mode = "full_season",
@@ -95,8 +102,8 @@ async function createCompetition(token, userId, spec) {
     const picked = [];
     const ids = [];
     for (const t of sel) {
-      let ms = await db.select(token, "matches", `season_id=eq.${t.seasonId}&select=id,round_key,home_score`);
-      ms = filterFromNextUnfinishedRound(ms);
+      let ms = await db.select(token, "matches", `season_id=eq.${t.seasonId}&select=id,home_score,kickoff_at,kickoff_tbd`);
+      ms = filterTippable(ms);
       for (const m of ms) ids.push(m.id);
       picked.push({ league_id: t.leagueId, season_id: t.seasonId });
     }
@@ -141,8 +148,8 @@ async function createCompetition(token, userId, spec) {
     const ids = [];
     for (const [sid, e] of bySeason) {
       let ms = await db.select(token, "matches",
-        `season_id=eq.${sid}&select=id,round_key,home_score&or=(home_team_id.in.(${e.teamIds.join(",")}),away_team_id.in.(${e.teamIds.join(",")}))`);
-      ms = filterFromNextUnfinishedRound(ms);
+        `season_id=eq.${sid}&select=id,home_score,kickoff_at,kickoff_tbd&or=(home_team_id.in.(${e.teamIds.join(",")}),away_team_id.in.(${e.teamIds.join(",")}))`);
+      ms = filterTippable(ms);
       for (const m of ms) ids.push(m.id);
     }
     const [competition] = await db.insert(token, "competitions", [{
@@ -187,9 +194,9 @@ async function createCompetition(token, userId, spec) {
     const picked = [];
     for (const t of sel) {
       let ms = await db.select(token, "matches",
-        `season_id=eq.${t.seasonId}&select=id,round_key,home_score` +
+        `season_id=eq.${t.seasonId}&select=id,home_score,kickoff_at,kickoff_tbd` +
         `&kickoff_at=gte.${startDate}&kickoff_at=lte.${endDate}T23:59:59`);
-      ms = filterFromNextUnfinishedRound(ms);
+      ms = filterTippable(ms);
       for (const m of ms) ids.push(m.id);
       picked.push({ league_id: t.leagueId, season_id: t.seasonId });
     }
@@ -234,11 +241,11 @@ async function createCompetition(token, userId, spec) {
     return { competition, matchCount: matchIds.length };
   }
 
-  let query = `season_id=eq.${seasonId}&select=id,round_key,home_score`;
+  let query = `season_id=eq.${seasonId}&select=id,home_score,kickoff_at,kickoff_tbd`;
   if (mode === "team" && teamId) query += `&or=(home_team_id.eq.${teamId},away_team_id.eq.${teamId})`;
   if (mode === "time_range" && startDate && endDate) query += `&kickoff_at=gte.${startDate}&kickoff_at=lte.${endDate}T23:59:59`;
   let matched = await db.select(token, "matches", query);
-  matched = filterFromNextUnfinishedRound(matched);
+  matched = filterTippable(matched);
   if (matched.length) {
     await db.insert(token, "competition_matches", matched.map((m) => ({ competition_id: competition.id, match_id: m.id })));
   }
