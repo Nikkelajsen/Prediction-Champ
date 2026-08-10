@@ -15,6 +15,163 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 10. august 2026 — Brugernavnet kan skiftes — og retten til at skrive sin egen profil bliver smal først (`B29`)
+
+**Beslutning:** en bruger kan skifte sit brugernavn fra sin egen karriereprofil.
+Skiftet er ubegrænset i antal, men stemples (`profiles.display_name_changed_at`),
+og gamle historie-kort omskrives **ikke**.
+
+**Rækkefølgen i leverancen er selv beslutningen, og den er den vigtigste linje
+her.** Spørgsmålet "hvordan må en bruger skrive sit eget navn?" havde allerede et
+svar i skemaet, og det var for bredt: `grant all on public.profiles to
+authenticated` plus policyen `update own profile using (auth.uid() = id)`. En
+policy afgrænser **rækken**, ikke **kolonnen** — det kan kun kolonne-privilegier
+— så enhver indlogget bruger kunne sende `PATCH /rest/v1/profiles?id=eq.<sit
+eget> {"is_admin": true}` og blive administrator. `is_admin` er den ENE
+betingelse i admin-vagten i `admin_user_stats()`, `admin_feedback()`,
+`admin_client_errors()`, `admin_job_health()` og `admin_anonymize_account()`.
+Efterprøvet mod `sql/schema.sql` i en PostgreSQL 16: sætningen svarede `UPDATE 1`
+som rollen `authenticated`.
+
+Hullet er ældre end `B29` og har intet med brugernavne at gøre — men det er
+`B29`, der finder det, fordi rækken tvinger nogen til at spørge, hvilken
+rettighed skærmen egentlig bygger på. **Rettelsen kommer derfor i samme
+migrering og før funktionen:** `authenticated` har nu UPDATE på præcis `id` og
+`display_name`. En bred rettighed, produktet er begyndt at BRUGE, er sværere at
+tage tilbage end en, ingen har bygget på endnu.
+
+**`id` skal med, og det er ikke et skøn.** PostgREST's upsert
+(`resolution=merge-duplicates`, brugt af `sikrProfil()` og `App.jsx`) bliver til
+`insert … on conflict (id) do update set id = excluded.id, display_name = …`, og
+PostgreSQL kræver UPDATE-privilegiet på hver kolonne i `set`-listen — også når
+konflikt-grenen aldrig tages. Uden `id` fejler oprettelsen af enhver ny profil.
+Rettigheden er ufarlig, fordi policyens `auth.uid() = id` også bruges som WITH
+CHECK: rækken kan ikke flyttes til en anden bruger.
+
+**Navnet trimmes nu ved hver skrivning, og det lukker et hul, ingen ledte
+efter.** Unikhedsindekset står på `lower(display_name)`, mens
+`username_available()` sammenligner med `lower(trim(name))`. Et gemt navn med et
+mellemrum til sidst svarede derfor "ledigt" på det trimmede navn og kunne
+indsættes ved siden af det — to brugere, der ser ud til at hedde det samme, uden
+at nogen garanti var brudt et sted, man kunne pege på. Trimmes værdien i en
+trigger, måler alle tre regler det samme navn.
+
+**Gamle historier omskrives ikke, og det er et valg og ikke en forglemmelse.**
+`stories` gemmer navnet som tekst i overskrift, brødtekst og payload. En historie
+er skrevet en bestemt dag; at rette den bagud ville ændre, hvad der stod, dengang
+den blev læst. Prisen betales ét sted mere: karriereprofilens rival-tæller joiner
+`payload->>'rival'` på `display_name`, så tælleren nulstilles for en rival, der
+skifter navn. `sql/career_profile.sql` sagde allerede før denne beslutning, at
+tallet er en FARVE og aldrig en rangering — netop derfor er prisen til at betale.
+Dialogen siger det højt til brugeren frem for at skjule det.
+
+**Ingen karantæne, men et tidsstempel.** En grænse på "ét skift pr. 30 dage"
+ville være en regel opfundet før det første misbrug. Stemplet er det, en sådan
+regel skal bruge, hvis den nogensinde bliver nødvendig — og det kan ikke udledes
+bagudrettet, hvis det ikke gemmes fra i dag.
+
+## 10. august 2026 — `A26` lukkes med en liste over godkendte holdpar
+
+**Beslutning:** `ambiguousTeams` filtreres mod en liste over **godkendte** par
+(`GODKENDTE_HOLDPAR` i `api/sync-matches.js`), så feltet igen kun melder det, der
+ikke er set på. `Dundee`/`Dundee United` er listens første og indtil videre eneste
+række.
+
+**Hvorfor listen og ikke den anden vej.** Alternativet var at acceptere, at
+feltet læses med et kendt par i baghovedet. Det koster kontrollens
+troværdighed: `ambiguousTeams` er bygget på egenskaben *"kun til stede, når der
+ER noget at kigge på"*, og et felt, der altid er der, holder man op med at
+læse — netop den dag turnering #8 tilføjer et par, ingen har set før. En liste,
+der skal vedligeholdes pr. turnering, er en pris, der betales, når en turnering
+tilføjes; den anden pris betales hver gang nogen åbner Admin → Drift.
+
+**`ambiguousTeamNames()` returnerer nu `{ nye, kendte }` og ikke én liste**, og
+den anden halvdel er ikke pynt. Uden den ville filteret være usynligt: en forkert
+linje i listen kunne sluge et ægte fund i tavshed, og en linje, hvis to klubber
+ikke længere er i turneringen, ville blive stående for evigt. `ambiguousKnown` er
+derfor et TAL i kørslens resumé — det er ikke noget at handle på, men det er
+kvitteringen for, at godkendelsen stadig bider.
+
+**Nøglen er de normaliserede navne, og en tilføjelse til et navn lader
+godkendelsen bortfalde.** Kasse, mellemrum og tegnsætning må ikke kunne udløbe en
+afgørelse. Men skifter et hold navn ("Dundee" → "Dundee FC"), er det præcis den
+situation, hvor den fuzzy match kan begynde at ramme forkert — og så skal fejlen
+pege mod alarmen, ikke mod tavshed.
+
+## 10. august 2026 — `A36` lukkes: den lukkede konto bliver ved med at forlade ligaen
+
+**Beslutning (produktejeren):** `A36` lukkes uden ændring. Reglen fra 7. august
+2026 står — en lukket konto forlader de ligaer, hvor den ikke har en deltagelse
+tilbage, og bliver stående som pseudonym, hvor der er spillet historik.
+
+**Hvorfor rækken overhovedet stod tilbage.** `A36` og `A37` blev afgjort sammen
+7. august, fordi de havde modsatrettede rettelser, og adfærden blev bygget samme
+dag. Det, der ikke blev ryddet op, var **spørgsmålet**: `sql/checks/league_admin_coverage.sql`
+skrev stadig, at `A36` var åben, og at kolonnerne `lukkede`/`opretter_lukket`
+fandtes for at kunne besvare den. Kommentaren beskrev altså en verden fra før den
+beslutning, filen selv står i. Den er rettet, og kolonnerne er beholdt: de
+forklarer stadig et tal, de bare ikke længere afventer et svar på.
+
+## 10. august 2026 — `A32` lukkes: aflæsninger i produktion er ejerens arbejde (`A32`)
+
+**Beslutning (produktejeren):** der bygges **ingen** vej til at køre read-only
+opslag i produktion uden ejeren. Det er ejeren, der afgør, hvad der køres.
+
+**Hvorfor ikke.** Den nærliggende mekanik var en GitHub Actions-workflow med
+`SUPABASE_DB_URL`, som `schema-export.yml` allerede har. Den ville lægge
+produktionstal — deltagertal, hændelser, i værste fald pseudonymer — i
+Actions-logs, altså et sted, hvor brugerdata ikke har været før, og som ikke kan
+gøres usynligt bagefter. Spørgsmålet var aldrig en oprydning, men en beslutning
+om, hvor brugerdata må stå, og svaret er, at de bliver i databasen.
+
+**Prisen er kendt og accepteret:** et tier kan blive blokeret af, at ejeren ikke
+har kørt et opslag endnu, og `B19` viste, at ventetid kan gøre den ventende
+opgave større. Det er billigere end den anden vej. **Det, der arbejdes på i
+stedet, er at gøre en bestilling billig** — ét paste, ét svar, som 5. august — og
+den disciplin har allerede et sted at bo: `sql/checks/` installerer intet i
+produktionen og kan køres af ejeren på et minut.
+
+## 10. august 2026 — `A5` lukkes: emojis bliver i historie-kortene
+
+**Beslutning (produktejeren):** emojis bliver, som de er — kun i højdepunkt-tieret,
+ikke på de dæmpede kort. Spørgsmålet er lukket og genåbnes ikke af den første
+deling.
+
+**Hvorfor det ikke længere skal vente på data.** Rækken ventede på et signal, der
+ikke kan opstå: aflæsningen 5. august 2026 viste 280 historier, 21 af 21 brugere
+dækket og **0 delinger**, og del-knappen er præcis det, højdepunkt-tieret har og
+det dæmpede ikke. Nævneren manglede desuden helt — det dæmpede tier har seks
+historier, fordi det per design kun genereres til brugere, der ellers ville stå
+uden kort. Et spørgsmål, hvis udløser er en hændelse, der aldrig er indtruffet på
+tre måneder, er ikke en åben beslutning; det er en beslutning, ingen har truffet.
+
+**Emojien er allerede et signal og ikke pynt** (v1.1, juli 2026): den findes kun
+på højdepunkterne, så et kort med emoji betyder noget andet end et uden. Den
+skelnen er selve grunden til, at spørgsmålet blev snævret ind, og den taber
+produktet, hvis emojien fjernes. Skulle det nogensinde vise sig, at
+højdepunkt-kortene virker mindre klassiske end ønsket, er det en tone-beslutning
+om hele Story Engine og ikke en A/B-test af et tegn.
+
+## 10. august 2026 — `A27` lukkes: `competitions.rules` bliver stående
+
+**Beslutning (produktejeren):** kolonnen droppes **ikke**. Den bliver stående, i
+tilfælde af at pointvariation pr. konkurrence bliver aktuelt senere.
+
+**Hvorfor det er det rigtige svar på et produktspørgsmål.** Kolonnen har ingen
+læsere overhovedet efter `G3` (3. august 2026) — hverken i klienten eller i SQL,
+hvor `pc_points()` altid har hardkodet 3/1. Men et `drop column` er
+uigenkaldeligt, og spørgsmålet bagved er, om point nogensinde skal kunne variere
+pr. konkurrence. Ejeren holder den dør åben. Prisen ved at lade kolonnen stå er
+lav og løbende (plads i hver konkurrence-række); prisen ved at fjerne den forkert
+er, at en fremtidig pointvariation skal bygge sit skema forfra.
+
+**Det, der er lukket, er ikke kolonnen men spørgsmålet.** Vilkåret står nu i
+`DOCUMENTATION.md` §12 frem for som en åben række: `competitions.rules` er
+historik uden læsere, og den næste, der finder den, skal kunne se, at det er
+bevidst — ellers begynder eftersøgningen efter en konfigurerbarhed, som ikke
+findes, forfra. Beslutningen revideres, hvis pointvariation faktisk bygges; da er
+kolonnen den halve implementering og ikke støj.
+
 ## 10. august 2026 — En tilfældig kupon fordeler jævnt på de valgte turneringer, ikke proportionalt med deres størrelse
 
 **Beslutning:** `pickRandomFromRounds` fordeler kampene **jævnt** på de valgte

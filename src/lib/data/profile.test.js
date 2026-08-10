@@ -10,7 +10,7 @@
 // derfor det skal stå her: det er den slags, der ellers først opdages af den
 // første rigtige bruger efter en konfigurationsændring.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { navneforslag, sikrProfil } from "./profile.js";
+import { navneforslag, sikrProfil, changeDisplayName } from "./profile.js";
 
 const ORIGINAL = globalThis.fetch;
 afterEach(() => { globalThis.fetch = ORIGINAL; vi.restoreAllMocks(); });
@@ -115,5 +115,65 @@ describe("sikrProfil", () => {
     const kald = stub({ rows: [] }, ...Array.from({ length: 5 }, () => ({ konflikt: true })));
     expect(await sikrProfil("tok", bruger("Anna"))).toBeNull();
     expect(kald).toHaveLength(6); // ét opslag + fem forsøg
+  });
+});
+
+// Skift af brugernavn (B29). `sikrProfil` ovenfor er grunden til, at den findes:
+// et navn, der blev til `Anna2`, mens bekræftelses-mailen lå ulæst, skal kunne
+// rettes bagefter.
+describe("changeDisplayName", () => {
+  // `username_available` svarer `true`/`false` som en bar JSON-værdi, ikke en
+  // række — derfor `rows` og ikke `{rows: [...]}` i stubben nedenfor.
+  const ledigt = { rows: true };
+  const taget = { rows: false };
+
+  it("skriver kun display_name, og kun på egen række", async () => {
+    const kald = stub(ledigt, { rows: [{ id: "u1", display_name: "Annabel" }] });
+    expect(await changeDisplayName("tok", "u1", "Annabel")).toMatchObject({ display_name: "Annabel" });
+    expect(kald[0].url).toContain("/rest/v1/rpc/username_available");
+    expect(kald[1].url).toContain("/rest/v1/profiles?id=eq.u1");
+    // Præcis ét felt. Siden `sql/username_change.sql` har `authenticated` kun
+    // UPDATE på `id` og `display_name`, og et felt mere ville blive afvist af
+    // databasen frem for stille ignoreret.
+    expect(kald[1].body).toEqual({ display_name: "Annabel" });
+  });
+
+  it("trimmer navnet, før det sendes", async () => {
+    const kald = stub(ledigt, { rows: [{ id: "u1", display_name: "Annabel" }] });
+    await changeDisplayName("tok", "u1", "  Annabel  ");
+    expect(kald[0].body).toEqual({ name: "Annabel" });
+    expect(kald[1].body).toEqual({ display_name: "Annabel" });
+  });
+
+  // Længden tjekkes FØR nettet: databasens svar er `23514` og en engelsk
+  // constraint-tekst, og en bruger, der lige har tastet ét bogstav, skal ikke
+  // vente på et rundturskald for at få det at vide.
+  it("afviser for korte og for lange navne uden at kalde serveren", async () => {
+    const kald = stub();
+    await expect(changeDisplayName("tok", "u1", "A")).rejects.toThrow("2–20 tegn");
+    await expect(changeDisplayName("tok", "u1", "a".repeat(21))).rejects.toThrow("2–20 tegn");
+    expect(kald).toHaveLength(0);
+  });
+
+  it("siger til, når navnet er taget — uden at skrive", async () => {
+    const kald = stub(taget);
+    await expect(changeDisplayName("tok", "u1", "Bo")).rejects.toThrow("allerede taget");
+    expect(kald).toHaveLength(1);
+  });
+
+  // Opslaget er en høflighed, ikke en garanti: mellem "ledigt" og skrivningen
+  // kan en anden nå navnet. Unikhedsindekset er det, der faktisk holder, og dets
+  // 409 skal kunne læses af et menneske.
+  it("oversætter unikhedsfejlen, når navnet blev taget imellem de to kald", async () => {
+    stub(ledigt, { konflikt: true });
+    await expect(changeDisplayName("tok", "u1", "Bo")).rejects.toThrow("taget af en anden");
+  });
+
+  // Nul rækker tilbage betyder, at RLS ikke fandt rækken. Uden dette led ville
+  // en fejl i policyen se ud som en succes, og navnet ville skifte i
+  // brugerfladen og ikke i basen.
+  it("regner et tomt svar som en fejl og ikke som en succes", async () => {
+    stub(ledigt, { rows: [] });
+    await expect(changeDisplayName("tok", "u1", "Annabel")).rejects.toThrow("Kunne ikke skifte");
   });
 });

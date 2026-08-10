@@ -27,10 +27,20 @@
 -- 100 %-reglen var selve beslutningen).
 --
 -- HVORFOR OGSÅ `lukkede` OG `opretter_lukket`
--- De to kolonner dømmer ikke, de forklarer. `A36` — om en lukket konto også
--- skal forlade ligaen — er stadig åben, og svaret på den ændrer, hvad man ser i
--- `lukkede`. Kolonnerne gør, at den samme kørsel kan besvare begge spørgsmål,
--- og det var hele grunden til, at de to blev holdt sammen i backloggen.
+-- De to kolonner dømmer ikke, de forklarer: de siger, HVORFOR en liga står uden
+-- en levende administrator, og det er forskellen på et tal, man kan handle på,
+-- og et tal, man skal undersøge.
+--
+-- *(Rettet 10. august 2026, da `A36` blev lukket: her stod, at spørgsmålet — om
+-- en lukket konto også skal forlade ligaen — var STADIG ÅBENT, og at
+-- kolonnerne fandtes for at kunne besvare det. Det passede, da filen blev
+-- skrevet 7. august, og holdt op med at passe samme dag: `A36` og `A37` blev
+-- afgjort sammen og bygget, netop fordi de havde modsatrettede rettelser. Fra
+-- 10. august er også selve spørgsmålet lukket — reglen står, som den er, se
+-- `DECISIONS.md`. Kolonnerne beholdes: en forklaring er ikke mindre værd, fordi
+-- beslutningen bag den er truffet. Hvad `lukkede` VISER, er dermed en følge af
+-- reglen og ikke længere et åbent valg: pseudonymet står kun på listen, hvor
+-- der er spillet historik.)*
 --
 -- HVORFOR `left join` OG IKKE `join`
 -- En liga uden ét eneste medlem har heller ingen levende admin, og den er endnu

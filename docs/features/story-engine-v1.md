@@ -75,7 +75,7 @@ Teksterne bor to steder og **skal holdes i sync**: `sql/story_engine.sql` skrive
 > ⚠️ **RETTET EFTER LEVERING 8. august 2026 (`G86`).** Dobbeltheden findes ikke mere: `renderStory()` er slettet af `src/lib/stories.js`, fordi ingen skærm nogensinde kaldte den — den lovede "fallback-rendering", og fallbacken blev aldrig taget i brug. Teksterne bor nu ét sted, i SQL'en, og der er intet at holde i sync. Skabelontabellerne herunder er stadig gyldige som BESKRIVELSE af, hvad motoren skriver; de er bare ikke længere en kontrakt mellem to filer. Samme oprydning og samme begrundelse som `G78` én dag tidligere.
 
 
-`{L}` = rundens dato-interval, fx `21.07 – 27.07`. Emojis er åben beslutning A5.
+`{L}` = rundens dato-interval, fx `21.07 – 27.07`. *(Rettet efter levering, 10. august 2026: her stod, at emojis var åben beslutning `A5`. Den er **lukket** — emojis bliver, og de findes kun i højdepunkt-tieret, hvor de er et signal og ikke pynt. Se `DECISIONS.md`.)*
 
 | Prio | Regel | Headline | Body |
 |---|---|---|---|
@@ -426,4 +426,4 @@ Gen-kør `sql/story_engine.sql` ("Run without RLS"). Triggeren er uændret, og `
 
 ---
 
-*Status: v1.2 live (august 2026). A3 (stille runder) og A4 (tærskler) blev lukket med v1.1; A5 (emojis) er delvist besvaret — emoji er nu et signal, der adskiller de to tiers, frem for et spørgsmål om til/fra.*
+*Status: v1.2 live (august 2026). A3 (stille runder) og A4 (tærskler) blev lukket med v1.1; A5 (emojis) blev delvist besvaret samtidig — emoji er et signal, der adskiller de to tiers, frem for et spørgsmål om til/fra — og **lukket helt 10. august 2026**: emojis bliver. Rækken ventede på delingsdata, der efter 280 historier stadig var nul, og et spørgsmål, hvis udløser ikke indtræffer, er ikke en åben beslutning.*

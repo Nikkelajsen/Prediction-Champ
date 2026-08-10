@@ -183,6 +183,24 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database usernametest;'
           psql -h localhost -U postgres -d usernametest -v ON_ERROR_STOP=1 -b -f username_constraints.sql
 
+      # Navneskiftet (B29) — og den rettighed, det blev bygget oven på. Kører mod
+      # det RIGTIGE skema og ikke et miniskema, fordi halvdelen af påstandene er
+      # om grants og RLS: en påstand om, at noget er FORBUDT, kan ikke stilles
+      # uden alle policies (G91).
+      #
+      # Den ene påstand, det hele hænger på, er en regression og ikke en feature:
+      # `grant all on profiles to authenticated` lod enhver bruger sætte sin egen
+      # `is_admin`, og det ER admin-vagten i fem funktioner. Testen har set hullet
+      # stå åbent, før den lukker det.
+      - name: Test af navneskift og profil-rettigheder
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database unavntest;'
+          psql -h localhost -U postgres -d unavntest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d unavntest -v ON_ERROR_STOP=1 -b -f sql/tests/username_change.sql
+
       # Story Engine v1.2's kåringsregler (B10): kører rating_core +
       # competition_awards + story_engine i én tom database og efterprøver
       # kæden fra kåringsrække til historie-kort. Egen database, som de andre.

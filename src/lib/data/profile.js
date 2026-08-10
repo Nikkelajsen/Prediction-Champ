@@ -11,7 +11,7 @@
 // appen har ingen skærm, hvor et brugernavn kan vælges bagefter — kontoen ville
 // være en blindgyde. Derfor gemmes ønsket som brugermetadata ved signup, og
 // rækken skrives her ved første login, der faktisk har en token.
-import { db } from "../supabase.js";
+import { db, auth } from "../supabase.js";
 
 // Databasen håndhæver 2–20 tegn (`profiles_display_name_len`) og unikhed på
 // små bogstaver (`profiles_display_name_lower_idx`). Begge dele gælder også
@@ -60,4 +60,58 @@ async function sikrProfil(token, user) {
   return null;
 }
 
-export { navneforslag, sikrProfil };
+// Skift af brugernavn (B29).
+//
+// Indtil nu blev `display_name` skrevet én gang — ved oprettelsen eller af
+// `sikrProfil()` ovenfor — og aldrig rørt igen. Manglen har været der hele
+// tiden og blev SYNLIG med `B26`: skrives profilrækken først ved første login
+// efter en bekræftelse, kan navnet være taget imens, og `sikrProfil()` vælger da
+// `Anna2` frem for at efterlade kontoen navnløs. Det valg er bevidst — en konto,
+// der kan bruges, slår et pænt navn — men prisen er, at der SKAL findes en vej
+// tilbage til det navn, man ville have haft.
+//
+// Rækkefølgen er "spørg, skriv, oversæt", og hvert led har en grund:
+//
+//   1. Længden tjekkes her, fordi databasens svar på et for kort navn er
+//      `23514` og en engelsk constraint-tekst. Brugeren skal have at vide, hvad
+//      der er galt, uden et rundturskald.
+//   2. `username_available()` er det samme opslag, oprettelsen bruger, og giver
+//      den venlige besked FØR skrivningen. Den er en høflighed og ikke en
+//      garanti: mellem opslag og skrivning kan navnet nås af en anden.
+//   3. Derfor oversættes 409 alligevel. Unikhedsindekset er den egentlige
+//      garanti, og det er dét, der skal kunne ses af brugeren.
+//
+// Skrivningen sender KUN `display_name`. Det er ikke en tilfældighed: siden
+// `sql/username_change.sql` har `authenticated` udelukkende UPDATE på `id` og
+// `display_name`, og en PATCH med et felt mere ville blive afvist af
+// databasen — hvilket er hele meningen med den rettighed.
+async function changeDisplayName(token, userId, ønsket) {
+  const navn = String(ønsket || "").trim();
+  if (navn.length < 2 || navn.length > NAVN_MAX) {
+    throw new Error(`Brugernavnet skal være 2–${NAVN_MAX} tegn`);
+  }
+
+  if (!(await auth.checkUsername(navn))) {
+    throw new Error("Brugernavnet er allerede taget. Vælg et andet.");
+  }
+
+  try {
+    const rows = await db.update(token, "profiles", `id=eq.${userId}`, { display_name: navn });
+    // Nul rækker tilbage betyder, at RLS ikke fandt rækken at skrive — ikke at
+    // skrivningen lykkedes tomt. Uden dette led ville en fejl i policyen se ud
+    // som en succes, og navnet ville "skifte" i brugerfladen og ikke i basen.
+    if (!rows[0]) throw new Error("Kunne ikke skifte brugernavn. Prøv igen.");
+    return rows[0];
+  } catch (e) {
+    const tekst = String(e?.message ?? e);
+    if (/duplicate key|23505/i.test(tekst)) {
+      throw new Error("Brugernavnet blev taget af en anden. Vælg et andet.", { cause: e });
+    }
+    if (/23514|display_name_len/i.test(tekst)) {
+      throw new Error(`Brugernavnet skal være 2–${NAVN_MAX} tegn`, { cause: e });
+    }
+    throw e;
+  }
+}
+
+export { navneforslag, sikrProfil, changeDisplayName };

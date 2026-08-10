@@ -17,5 +17,5 @@ export { moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCode
 export { loadMyGroups, loadGroupDetail, loadGroupByCode, createGroup, joinGroup, leaveGroup, deleteGroup, joinCompetition, leaveCompetition, setCompetitionHidden, loadCompetitionParticipants, removeParticipant, deleteCompetition } from "./data/groups.js";
 export { computeHomeTips, computeCurrentRound, loadHomePlacements, ratingSnapshot, daFullDate, fmtCountdown, monthName } from "./data/home.js";
 export { resolveCompetitionInvite, resolveLeagueInvite, stripInviteParam } from "./data/invites.js";
-export { navneforslag, sikrProfil } from "./data/profile.js";
+export { navneforslag, sikrProfil, changeDisplayName } from "./data/profile.js";
 export { loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard } from "./data/standings.js";

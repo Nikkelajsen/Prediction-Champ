@@ -11,7 +11,7 @@
 // eneste kamp), og en for smal gør Champions League rød i seks uger for noget
 // forventeligt. Begge fejl ender samme sted — at ingen kigger på driftsloggen.
 import { describe, it, expect } from "vitest";
-import { seasonFetchVerdict, ambiguousTeamNames, normalizeTeamName, matchUpsertRow, readSeasonMeta, refreshKickoffUncertain } from "./sync-matches.js";
+import { seasonFetchVerdict, ambiguousTeamNames, GODKENDTE_HOLDPAR, normalizeTeamName, matchUpsertRow, readSeasonMeta, refreshKickoffUncertain } from "./sync-matches.js";
 
 const fejl = new Error("football-data.org: 404 {\"message\":\"The resource you are looking for does not exist.\"}");
 
@@ -68,28 +68,96 @@ describe("ambiguousTeamNames", () => {
   const hold = (...navne) => navne.map((name) => ({ name }));
 
   it("finder ingenting i en liga med entydige navne", () => {
-    expect(ambiguousTeamNames(hold("Celtic", "Aberdeen", "Hibernian"))).toEqual([]);
+    expect(ambiguousTeamNames(hold("Celtic", "Aberdeen", "Hibernian"))).toEqual({ nye: [], kendte: [] });
   });
 
   // Den ægte skotske fælde: findByName() falder tilbage til en delstrengs-match,
   // så et nyt "Rangers" kan blive knyttet til "Queen's Park Rangers"' række.
   it("fanger et navn, der ligger inde i et andet", () => {
     const ud = ambiguousTeamNames(hold("Rangers", "Queen's Park Rangers"));
-    expect(ud).toHaveLength(1);
-    expect(ud[0].teams).toEqual(["Rangers", "Queen's Park Rangers"]);
+    expect(ud.nye).toHaveLength(1);
+    expect(ud.nye[0].teams).toEqual(["Rangers", "Queen's Park Rangers"]);
   });
 
   // To rækker for samme klub — det, dubletkontrollen hed i drejebogen.
   it("fanger to rækker, der normaliserer til det samme", () => {
     const ud = ambiguousTeamNames(hold("Celtic FC", "Celtic F.C."));
-    expect(ud).toHaveLength(1);
-    expect(ud[0].why).toBe("identiske navne");
+    expect(ud.nye).toHaveLength(1);
+    expect(ud.nye[0].why).toBe("identiske navne");
   });
 
   it("tåler tomme og manglende navne", () => {
-    expect(ambiguousTeamNames([])).toEqual([]);
-    expect(ambiguousTeamNames(undefined)).toEqual([]);
-    expect(ambiguousTeamNames([{ name: null }, { name: "" }, { name: "Celtic" }])).toEqual([]);
+    expect(ambiguousTeamNames([])).toEqual({ nye: [], kendte: [] });
+    expect(ambiguousTeamNames(undefined)).toEqual({ nye: [], kendte: [] });
+    expect(ambiguousTeamNames([{ name: null }, { name: "" }, { name: "Celtic" }])).toEqual({ nye: [], kendte: [] });
+  });
+
+  // A26: det par, der gjorde feltet permanent tændt for Scotland. Det skal ud af
+  // alarmen — og med i kvitteringen, så filteret ikke er usynligt.
+  it("flytter et godkendt par fra nye til kendte", () => {
+    const ud = ambiguousTeamNames(hold("Dundee", "Dundee United", "Celtic"));
+    expect(ud.nye).toEqual([]);
+    expect(ud.kendte).toHaveLength(1);
+    expect(ud.kendte[0].teams).toEqual(["Dundee", "Dundee United"]);
+  });
+
+  // Godkendelsen er hele grunden til, at den næste tvetydighed kan ses. Melder
+  // kørslen både et godkendt og et nyt par, må kun det nye stå i alarmen.
+  it("melder stadig et nyt par i samme turnering som et godkendt", () => {
+    const ud = ambiguousTeamNames(hold("Dundee", "Dundee United", "Rangers", "Queen's Park Rangers"));
+    expect(ud.nye).toHaveLength(1);
+    expect(ud.nye[0].teams).toEqual(["Rangers", "Queen's Park Rangers"]);
+    expect(ud.kendte).toHaveLength(1);
+  });
+
+  // Nøglen er de NORMALISEREDE navne, så kasse, mellemrum og tegnsætning ikke
+  // kan lade godkendelsen udløbe ved et kosmetisk skift hos leverandøren.
+  it("holder godkendelsen på tværs af kasse og tegnsætning", () => {
+    const ud = ambiguousTeamNames(hold("  DUNDEE  ", "Dundee-United"));
+    expect(ud.nye).toEqual([]);
+    expect(ud.kendte).toHaveLength(1);
+  });
+
+  // Men et TILFØJET ord er ikke kosmetik, og godkendelsen bortfalder — med
+  // vilje. Fejlretningen peger da mod alarmen og ikke mod tavshed: et hold, der
+  // skifter navn, er præcis den situation, hvor den fuzzy match kan begynde at
+  // ramme forkert, og listen skal opdateres i hånden, når det er set efter.
+  it("lader godkendelsen bortfalde, når et navn får et ord mere", () => {
+    const ud = ambiguousTeamNames(hold("Dundee", "Dundee United FC"));
+    expect(ud.nye).toHaveLength(1);
+    expect(ud.kendte).toEqual([]);
+  });
+
+  // En godkendelse gælder ét PAR og ikke et navn: et tredje hold, der ligner
+  // det ene af dem, er ikke afgjort af noget.
+  it("godkender ikke et nyt par, bare fordi det ene navn står på listen", () => {
+    const ud = ambiguousTeamNames(hold("Dundee", "Dundee Athletic"));
+    expect(ud.nye).toHaveLength(1);
+    expect(ud.kendte).toEqual([]);
+  });
+});
+
+// Listen er den ene ting i kontrollen, et menneske vedligeholder, så den skal
+// kunne læses af den, der tilføjer turnering #8: to navne, en begrundelse og en
+// dato. En række uden dem er en godkendelse, ingen kan efterprøve.
+describe("GODKENDTE_HOLDPAR", () => {
+  it("har to navne, en begrundelse og en dato på hver række", () => {
+    for (const par of GODKENDTE_HOLDPAR) {
+      expect(par.teams).toHaveLength(2);
+      expect(par.teams.every((n) => typeof n === "string" && n.trim())).toBe(true);
+      expect(par.why).toBeTruthy();
+      expect(par.godkendt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
+  // Et par, der ikke er tvetydigt, hører ikke til på en liste over godkendte
+  // tvetydigheder — så er det enten en tastefejl eller en regel, der har flyttet
+  // sig under listen.
+  it("indeholder kun par, kontrollen faktisk ville melde", () => {
+    for (const par of GODKENDTE_HOLDPAR) {
+      const ud = ambiguousTeamNames(par.teams.map((name) => ({ name })));
+      expect([...ud.nye, ...ud.kendte]).toHaveLength(1);
+    }
   });
 });
 

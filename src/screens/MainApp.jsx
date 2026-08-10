@@ -37,7 +37,7 @@ import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
 // hente dem enkeltvis ville bytte én ventetid ud med fem.
 const AdminScreen = lazy(() => import("./AdminScreen.jsx"));
 
-function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoinCode, pendingLigaCode, clearPendingLigaCode }) {
+function MainApp({ session, profile, onProfileChanged, onLogout, pendingJoinCode, clearPendingJoinCode, pendingLigaCode, clearPendingLigaCode }) {
   const token = session.access_token;
   const userId = session.user.id;
   const isAdmin = !!profile?.is_admin;
@@ -415,7 +415,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     );
   } else if (screen?.type === "profile") {
     body = <ProfileScreen token={token} viewerUserId={userId} profileUserId={screen.profileUserId}
-      onBack={() => setScreen(null)} openProfile={openProfile} />;
+      onBack={() => setScreen(null)} openProfile={openProfile} onProfileChanged={onProfileChanged} />;
   } else if (screen?.type === "how") {
     body = <HowItWorksScreen onBack={() => setScreen(null)} token={token} openLegal={openLegal} />;
   } else if (screen?.type === "legal") {
