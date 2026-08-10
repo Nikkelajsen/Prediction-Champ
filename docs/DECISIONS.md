@@ -15,6 +15,73 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 10. august 2026 — Revisionen efter `B29`: fladen er dækket, og svaret er skrevet som en kontrol
+
+**Beslutning:** `B29`s fejlklasse — en policy afgrænser rækken, ikke kolonnen —
+er efterprøvet på hele skemaet. `profiles` var det eneste sted, det gjorde en
+forskel, og revisionen er lagt ned som `sql/tests/write_surface.sql` frem for som
+et svar i en changelog.
+
+**Hvad der blev målt.** 29 objekter har `grant all` til `authenticated`. For
+hvert enkelt: er der en skrive-policy, og hvad tillader den? Svaret deler sig
+rent i to. Ti tabeller (`ratings`, `rating_history`, `milestones`,
+`competition_awards`, `teams`, `seasons`, `leagues`, `job_runs`,
+`notification_log`, `user_activity_days`) har RLS uden en eneste skrive-policy,
+så grant'en er inert — RLS afviser alt. Resten har policies, der er scopet til
+`auth.uid()`, `created_by`, `is_admin` eller `is_group_admin`, og ingen af dem
+efterlader en kolonne, der kan skrives, og som betyder noget.
+
+**Den fælde, der kostede en runde, er selve grunden til, at kontrollen måler
+rækkeantal.** Første måling meldte fem huller: rating sat til 9999, et hold
+omdøbt, et resultat skrevet uden admin. Alle fem var falske. **RLS uden en policy
+skjuler bare rækkerne**, så en fjendtlig `update` rammer nul rækker og svarer
+`UPDATE 0` — ingen fejl, ingen ændring. Måler man på fravær af en fejl, ser fem
+værn ud som fem huller. Kontrollen skelner derfor mellem `afvist`, `nul` og
+`tilladt`, og den skelnen er hele forskellen på et svar og et gæt.
+
+**Hvorfor en test og ikke et notat.** Et svar fra en bestemt dag er ikke en
+kontrol — det er præcis den forskel, `B2` blev lukket på 2. august, og
+`ambiguousTeams` findes af samme grund. Næste `grant`, næste policy eller næste
+kolonne kan flytte fladen, og den slags viser sig ikke som en fejl, men som
+noget, der pludselig virker. Fortegnelsen står nu i en påstand, så en ny
+permissiv policy skal VÆLGES ind — RLS er et OR mellem permissive policies, så
+en tilføjelse kan kun gøre fladen større.
+
+**Én påstand er svagere, end den ser ud, og det står i filen.** Påstand 3
+(`profiles`' kolonneliste) måler migreringens resultat og ikke produktionens
+tilstand, fordi testen selv indlæser `username_change.sql` — en udvidelse lagt
+ind før den, rulles tilbage af testens egen opsætning. Årsagen er, at
+`sql/schema.sql` endnu er ældre end migreringen; **når skema-eksporten er kørt,
+skal `\ir`-linjen fjernes**, og påstanden begynder da at måle produktionen. Det
+er `G94`s udløbsdato den anden vej rundt: dér blev en test rød, da migreringen
+nåede frem, her bliver en påstand først skarp.
+
+## 10. august 2026 — `A40`: en liga kan læses og tilmeldes af enhver indlogget bruger
+
+**Beslutning: ingen — rækken åbnes, den lukkes ikke.** Fundet står som `A40` med
+`B26`s udløser, og det er med vilje ikke rettet i samme ombæring som `B29`.
+
+**Fordi det er en anden fejlklasse, og forskellen er værd at holde fast i.**
+`B29`s hul var en KOLONNE, ingen policy kunne beskytte — der fandtes ingen måde
+at udtrykke reglen på, og rettelsen var derfor ren teknik uden et produktvalg i
+sig. `A40` er det modsatte: `groups_select_all` er `using (true)`, og policyen
+gør præcis, hvad der står i den. Spørgsmålet er, om det ER den rigtige regel, og
+det er et produktspørgsmål: skal en liga kunne findes af nogen, der ikke er
+inviteret?
+
+**Bredden har en grund, og den skal med i svaret.** Klienten slår ligaen op på
+`invite_code` med et almindeligt tabelopslag, og opslaget sker FØR man er
+medlem — den brede læsning er prisen for, at join-flowet er et opslag og ikke en
+funktion. Rettelsen er derfor ikke en policy-linje, men en flytning: koden slås
+op i en `security definer`-funktion, der svarer med ÉN liga, hvorefter policyen
+kan smalnes. **Den kan ikke laves halvt** — smalnes policyen uden funktionen, kan
+ingen længere tage imod en invitation.
+
+**Rækkefølgen er selv en del af beslutningen:** `A40` står FORAN `B26` i tieret.
+`B26` er det, der gør fremmede konti mulige; `A40` er det, de derefter kan gøre.
+Prisen i dag er nul — 21 brugere, alle inviterede — og bliver reel i samme
+sekund den anden række køres.
+
 ## 10. august 2026 — Brugernavnet kan skiftes — og retten til at skrive sin egen profil bliver smal først (`B29`)
 
 **Beslutning:** en bruger kan skifte sit brugernavn fra sin egen karriereprofil.

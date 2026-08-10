@@ -201,6 +201,25 @@ jobs:
           psql -h localhost -U postgres -d unavntest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d unavntest -v ON_ERROR_STOP=1 -b -f sql/tests/username_change.sql
 
+      # Hele skrive-fladen (revisionen efter `B29`, 10. august 2026). `B29`s hul
+      # var, at en policy afgrænser RÆKKEN og ikke KOLONNEN; revisionen viste, at
+      # `profiles` var det eneste sted, det gjorde en forskel — men et svar fra en
+      # bestemt dag er ikke en kontrol. Filen er revisionen skrevet som en
+      # påstand: fortegnelsen over skrive-policies, ingen skrivbar view uden
+      # `security_invoker`, og tyve fjendtlige skrivninger med hvert sit
+      # forventede udfald.
+      #
+      # Måler RÆKKEANTAL og ikke fravær af en fejl: RLS uden en policy skjuler
+      # bare rækkerne, så en fjendtlig UPDATE rammer nul rækker og svarer OK.
+      - name: Test af skrive-fladen for en indlogget bruger
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database fladetest;'
+          psql -h localhost -U postgres -d fladetest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d fladetest -v ON_ERROR_STOP=1 -b -f sql/tests/write_surface.sql
+
       # Story Engine v1.2's kåringsregler (B10): kører rating_core +
       # competition_awards + story_engine i én tom database og efterprøver
       # kæden fra kåringsrække til historie-kort. Egen database, som de andre.
