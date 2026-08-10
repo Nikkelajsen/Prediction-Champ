@@ -13,7 +13,7 @@ import { loadNewestSeasons, countMatchesPerLeague, loadTeamsByLeague, loadUpcomi
 import { validateGroupName } from "../lib/onboarding.js";
 import { ChevronLeft } from "lucide-react";
 import { groupIntoRounds, currentRoundKey, nextRoundKey, roundKeyOfDate, zonedDateKey, isLocked } from "../lib/scoring.js";
-import { createTypeById, pickRandomFromRounds, pickPerRound, filterTippable, filterFromRoundStart, weeklyCouponName, buildSpec } from "../lib/createTypes.js";
+import { createTypeById, pickRandomFromRounds, pickPerRound, filterTippable, lockedPicks, filterFromRoundStart, weeklyCouponName, buildSpec } from "../lib/createTypes.js";
 import { C, btnGhost, btnGreen, font } from "../ui/theme.js";
 import { BackBar, Card } from "../ui/components.jsx";
 import TypeGallery, { ICONS } from "./create/TypeGallery.jsx";
@@ -215,10 +215,15 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
   // Puljen er den samme `upcoming`, håndpluk bruger, og den er skåret ved et
   // loft fra nærmeste runde og frem. Advarslen om afkortning står allerede over
   // felterne (`upcomingTruncated`) og gælder derfor også her.
+  //
+  // Låste kampe skæres fra HER og ikke i visningen, fordi brugeren aldrig har
+  // set dem enkeltvis: loftet er en regel ("højst ti pr. runde"), ikke en
+  // liste, og en kamp, der ikke kan tippes, hører ikke til i den. Håndpluk er
+  // det modsatte og behandles derfor modsat — se kampvælgeren i CustomFields.
   const periodMatchIds = useMemo(() => {
     if (!perRound || !startDate || !endDate) return [];
     const allowed = periodTournaments.map((t) => t.leagueId);
-    const pool = upcoming.filter((m) => {
+    const pool = filterTippable(upcoming).filter((m) => {
       if (!allowed.includes(m._leagueId) || !m.kickoff_at) return false;
       const day = m.kickoff_at.slice(0, 10);
       return day >= startDate && day <= endDate;
@@ -364,8 +369,30 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     : randomPool.length > 0
   );
 
+  // Håndplukkets sidste kontrol før oprettelsen. Selve spørgsmålet — hvilke af
+  // de udpegede kampe er nået at låse — er en ren regel og bor i
+  // `lockedPicks` (createTypes.js); her står kun, hvad skærmen gør ved svaret.
+  //
+  // Vinduet er lille (skærmen skal have stået åben hen over en lås) og præcis
+  // derfor værd at lukke: det er den slags, der aldrig ses i en test og rammer
+  // en rigtig bruger en søndag aften.
+  function stripLockedPicks() {
+    if (typeId !== "custom" || method !== "pick" || !pickedIds.length) return false;
+    const laaste = new Set(lockedPicks(pickedIds, upcoming));
+    if (!laaste.size) return false;
+    const tilbage = pickedIds.filter((id) => !laaste.has(id));
+    setPickedIds(tilbage);
+    const hvorMange = laaste.size === 1 ? "Én af de valgte kampe" : `${laaste.size} af de valgte kampe`;
+    // Er der intet tilbage, er "tryk igen" en blindgyde — knappen er slukket af
+    // `canSubmit`, og beskeden skal derfor pege på det, der faktisk mangler.
+    setErr(`${hvorMange} er låst, mens skærmen stod åben, og er fjernet fra dit valg. `
+      + (tilbage.length ? "Tryk Opret igen." : "Vælg mindst én kamp, der ikke er låst."));
+    return true;
+  }
+
   async function submit() {
     if (!canSubmit) return;
+    if (stripLockedPicks()) return;
     setBusy(true); setErr("");
     try {
       const { competition } = await createCompetition(token, userId, specFromState());

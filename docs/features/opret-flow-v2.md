@@ -92,8 +92,14 @@ kupon (`B6` — et foreslået navn blev bare beholdt).
 > en Quick Pick oprettet en halv time før kampstart trak kampe, ingen kunne nå
 > at tippe. `filterTippable` skærer dem fra i alle tre `random`-typer — både når
 > puljen bygges og igen ved oprettelsen, fordi puljen er et øjebliksbillede.
-> Custom er ikke omfattet (håndpluk og periodens loft-gren viser/tager stadig
-> låste kampe); rækken står i `docs/BACKLOG.md`.
+> Custom er omfattet, men svarer modsat på sine to grene: håndpluk lader den
+> låste kamp blive stående, slukket, med "Låst" (man leder dér efter en bestemt
+> kamp, og en, der var væk, ville se ud som en, der ikke fandtes), mens
+> periodens loft-gren skærer dem fra i stilhed (et loft er en regel, ikke en
+> liste). Låser en kamp, mens skærmen står åben, taber de tilfældige typer den
+> bare, mens håndpluk stopper oprettelsen og siger det. Periode uden loft er
+> `time_range` og deler `filterFromNextUnfinishedRound` med `full_season` og
+> `team` — ikke omfattet, noteret i `docs/BACKLOG.md`.
 >
 > Fuld beskrivelse i `DOCUMENTATION.md` §3; beslutningen i `docs/DECISIONS.md`.
 

@@ -145,6 +145,22 @@ function filterTippable(pool) {
   return (pool || []).filter((m) => !isLocked(m));
 }
 
+// Hvilke af de HÅNDPLUKKEDE kampe er nået at låse? Svarer med id'erne.
+//
+// Håndpluk behandles modsat de øvrige typer: dér bad brugeren om et ANTAL, så
+// listen er vores, og en kamp, der falder fra, er ikke hans problem. Her har han
+// udpeget hver enkelt kamp ved navn, og at fjerne en af dem i stilhed ville
+// være at ændre hans valg uden at sige det. Kalderen stopper derfor
+// oprettelsen og fortæller, hvad der skete.
+//
+// Et id, puljen slet ikke kender, tælles med som låst. Det er den sikre vej at
+// tage fejl: det eneste, der kan gøre en kamp ukendt her, er, at den er faldet
+// ud af puljen — og så kan den heller ikke tippes.
+function lockedPicks(pickedIds, pool) {
+  const tippable = new Set(filterTippable(pool).map((m) => m.id));
+  return (pickedIds || []).filter((id) => !tippable.has(id));
+}
+
 // ---------- startrunde: indeværende eller ny ----------
 // Konkurrencen kan begynde i den runde, der allerede er i gang, eller vente på
 // den næste. Valget fandtes ikke før august 2026: puljen blev hentet fra `nu` og
@@ -295,5 +311,5 @@ function buildSpec(state) {
 
 export {
   CREATE_TYPES, MAX_MATCHES_PER_ROUND, createTypeById, pickRandomFromRounds, pickPerRound,
-  filterTippable, filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
+  filterTippable, lockedPicks, filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
 };

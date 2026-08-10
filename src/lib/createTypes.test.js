@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   CREATE_TYPES, MAX_MATCHES_PER_ROUND, createTypeById, pickRandomFromRounds, pickPerRound,
-  filterTippable, filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
+  filterTippable, lockedPicks, filterFromRoundStart, roundProgress, weeklyCouponName, buildSpec,
 } from "./createTypes.js";
 
 // Galleriet er kun en oversættelse: seks kort → de fem eksisterende modes plus
@@ -123,6 +123,40 @@ describe("filterTippable", () => {
   it("tåler tom og manglende pulje", () => {
     expect(filterTippable([])).toEqual([]);
     expect(filterTippable(null)).toEqual([]);
+  });
+});
+
+describe("lockedPicks", () => {
+  // Håndpluk behandles modsat de øvrige typer: dér bad brugeren om et ANTAL, så
+  // en kamp, der falder fra, er vores liste og ikke hans. Her har han udpeget
+  // hver kamp ved navn, og skærmen skal derfor kunne SIGE, hvad der forsvandt.
+  const om = (min) => new Date(Date.now() + min * 60000).toISOString();
+  const siden = (min) => new Date(Date.now() - min * 60000).toISOString();
+  const pool = [
+    { id: "aaben", kickoff_at: om(3000) },
+    { id: "snart", kickoff_at: om(20) },
+    { id: "igang", kickoff_at: siden(30) },
+  ];
+
+  it("peger på de valgte kampe, der er nået at låse", () => {
+    expect(lockedPicks(["aaben", "snart", "igang"], pool).sort()).toEqual(["igang", "snart"]);
+  });
+
+  it("siger ingenting, når alle valgte stadig kan tippes", () => {
+    expect(lockedPicks(["aaben"], pool)).toEqual([]);
+  });
+
+  // Et id, puljen slet ikke kender, tælles som låst: det eneste, der kan gøre en
+  // kamp ukendt her, er, at den er faldet ud af puljen — og så kan den heller
+  // ikke tippes. Den sikre vej at tage fejl.
+  it("regner et ukendt id som låst frem for at lade det slippe igennem", () => {
+    expect(lockedPicks(["findes-ikke"], pool)).toEqual(["findes-ikke"]);
+  });
+
+  it("tåler tomt valg og tom pulje", () => {
+    expect(lockedPicks([], pool)).toEqual([]);
+    expect(lockedPicks(null, pool)).toEqual([]);
+    expect(lockedPicks(["aaben"], [])).toEqual(["aaben"]);
   });
 });
 

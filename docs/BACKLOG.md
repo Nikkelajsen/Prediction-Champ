@@ -47,7 +47,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- Custom kan stadig få låste kampe med: håndplukkens kampliste viser dem med afkrydsningsfelt, og periodens loft-gren (`pickPerRound`) tager dem med — de tre `random`-typer er rettet 10. august 2026 (`filterTippable`), men puljen filtreres stadig på `kickoff_at >= nu`, og låsen falder en time før kickoff
+- "Nye konkurrencer starter altid på 0 point" (§3) holder ikke for en konkurrence oprettet MIDT i en runde: `filterFromNextUnfinishedRound` beholder hele den første ikke-færdigspillede runde, altså også dens allerede spillede kampe — og da `predictions` deles på tværs af konkurrencer, giver den point med det samme for tips, der var afgivet i en anden konkurrence. Gælder `full_season`, `team` og `time_range` (de to `custom`-stier og alle tre `random`-typer er lukket 10. august 2026 med `filterTippable`)
 
 ---
 
