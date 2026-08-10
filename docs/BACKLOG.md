@@ -236,9 +236,12 @@ kommentar påstod, at invarianten ville AFVISE en deltagelse uden medlemskab. De
 udfylder det i stedet, og indmeldingen i `accept_invite()` er derfor kun
 nødvendig for `A8`-reparationen — nu dækket af påstand 8c.
 
-🔴 **`sql/invite_lookup.sql` (#52) skal køres SAMMEN MED frontend-mergen**, ikke
-før og ikke efter: migreringen alene lukker join-flowet, klienten alene kalder
-funktioner, der ikke findes.
+🔴 **Migreringen er delt i to, og rækkefølgen er et krav:** `#52` (funktionerne,
+sikker at køre når som helst) → merge og udrul → `#53` (policyerne). Første
+udgave var én fil med instruksen "kør sammen med frontend-mergen", og den kan
+ikke følges — Supabase betjenes i hånden, Vercel deployer af sig selv. Delt i to
+har hvert trin en tilstand, hvor det, der er i produktion, virker.
+**Runbog: [`UDRULNING-A40.md`](./UDRULNING-A40.md).**
 
 ---
 

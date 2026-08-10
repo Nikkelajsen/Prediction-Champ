@@ -17,6 +17,10 @@
 -- foretager i invitations-flowet, har derfor sin egen påstand.
 --
 -- HVAD DEN BEVISER
+--   Mellemtilstanden (a–c): trin 1 alene rører ingen policy, den gamle klients
+--     opslag virker uændret, og den nye klients kald virker allerede. Det er
+--     dét, der gør migreringen sikker at køre FØR udrulningen — og det er hele
+--     grunden til, at `A40` er delt i to filer.
 --   Hullet (1–4):
 --     1. En fremmed kan ikke LÆSE en liga, hun ikke er medlem af — heller ikke
 --        `invite_code`. Negativ kontrol FØR migreringen: med den gamle policy
@@ -177,6 +181,47 @@ end $$;
 -- Migreringen under test
 -- ---------------------------------------------------------------------------
 \ir ../invite_lookup.sql
+
+-- ---------------------------------------------------------------------------
+-- MELLEMTILSTANDEN efter trin 1 — den, hele delingen findes for
+-- ---------------------------------------------------------------------------
+-- `A40` køres i to trin, fordi Supabase betjenes i hånden og Vercel deployer af
+-- sig selv: "samtidig" er ikke en instruks, et menneske kan følge. Delingen er
+-- kun noget værd, hvis trin 1 er ufarligt at køre FØR udrulningen — altså hvis
+-- den GAMLE klient stadig virker, mens den NYE allerede kan.
+--
+-- Uden dette afsnit ville det være en påstand i en kommentar. Her er det målt.
+do $$
+declare v_n bigint; v_svar jsonb;
+begin
+  -- a) Trin 1 rører ingen policy. De fire gamle står der endnu, så alt, den
+  --    gamle klient gør, virker uændret.
+  select count(*) into v_n from pg_policies
+   where schemaname = 'public'
+     and policyname in ('groups_select_all', 'read all competitions',
+                        'group_members_insert_self', 'join competition');
+  if v_n <> 4 then
+    raise exception 'mellemtilstand a) trin 1 har rørt policies (% af 4 gamle tilbage) — så er den ikke sikker at køre før udrulningen', v_n;
+  end if;
+
+  -- b) Den gamle klients opslag virker stadig: en fremmed kan læse ligaen på
+  --    koden, præcis som før. Det er dét, der gør trin 1 ufarligt.
+  v_n := pg_temp.tael('f2ed0000-0000-4000-8000-000000000002',
+    $s$select count(*) from public.groups where invite_code = 'LIGAKODE'$s$);
+  if v_n <> 1 then
+    raise exception 'mellemtilstand b) den gamle klients opslag er brudt af trin 1';
+  end if;
+
+  -- c) …og den NYE klients kald virker allerede. Begge udgaver kan altså køre
+  --    mod denne tilstand, og udrulningen kan ske i ro.
+  v_svar := pg_temp.kald('f2ed0000-0000-4000-8000-000000000002',
+    $s$select public.invite_lookup('LIGAKODE')$s$);
+  if v_svar->>'kind' is distinct from 'group' then
+    raise exception 'mellemtilstand c) den nye klients opslag virker ikke efter trin 1: %', v_svar;
+  end if;
+end $$;
+
+\ir ../invite_policies.sql
 
 -- ---------------------------------------------------------------------------
 -- Påstandene

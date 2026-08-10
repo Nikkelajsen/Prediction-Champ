@@ -83,6 +83,7 @@ alter table public.matches disable trigger all;
 -- påstand 3 ovenfor.
 \ir ../username_change.sql
 \ir ../invite_lookup.sql
+\ir ../invite_policies.sql
 
 grant usage on schema auth to authenticated;
 

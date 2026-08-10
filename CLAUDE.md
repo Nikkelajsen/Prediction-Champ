@@ -30,6 +30,7 @@
 | planlagte jobs (cron) | `docs/CRON.md` |
 | mails: afsender, modtager, DNS, skabeloner | `docs/MAIL.md` · `docs/mail/` |
 | bot-værn og e-mailbekræftelse ved oprettelse | `docs/OPRETTELSE.md` · `src/lib/turnstile.js` · `src/lib/data/profile.js` |
+| udrulning af `A40`s to migreringer (invitationskoden) | `docs/UDRULNING-A40.md` · `sql/invite_lookup.sql` · `sql/invite_policies.sql` |
 | backup, gendannelse efter tabt data | `docs/RESTORE.md` · §22 · `.github/workflows/data-backup.yml` |
 | feedback fra brugerne | §23 · `sql/feedback.sql` · `src/screens/FeedbackCard.jsx` |
 | privatliv, vilkår, kontolukning | §24 · `src/lib/legal.js` · `api/delete-account.js` · `docs/features/privatliv-og-vilkaar-v1.md` |

@@ -1,12 +1,31 @@
--- Invitationskoden bliver hemmeligheden igen (A40).
+-- Invitationskoden bliver hemmeligheden igen — TRIN 1 af 2 (A40).
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
 --
--- ⚠️ **SKAL KØRES SAMMEN MED FRONTEND-MERGEN, IKKE FØR.** Filen smalner de to
--- læsepolicies, klienten i dag bruger til at slå en invitation op. Køres den
--- alene, kan ingen tage imod en invitation, før den nye klient er udrullet.
--- Modsat rækkefølge (frontend først) er heller ikke rigtig: den nye klient
--- kalder funktioner, der ikke findes endnu. **Kør migreringen og udrul samme
--- deploy.**
+-- ✅ **DENNE FIL ER SIKKER AT KØRE NÅR SOM HELST, OGSÅ FØR FRONTEND-MERGEN.**
+-- Den TILFØJER kun: to funktioner, en hjælpefunktion og deres grants. Ingen
+-- policy røres, ingen rettighed smalnes, ingen række ændres. Den nuværende
+-- klient kalder ikke funktionerne og mærker derfor intet.
+--
+-- 🔴 **Selve hullet lukkes af trin 2, `sql/invite_policies.sql` (#53)**, som
+-- SKAL køres EFTER at den nye klient er udrullet. Se rækkefølgen i den fil.
+--
+-- HVORFOR TO FILER OG IKKE ÉN. Første udgave var én migrering med instruksen
+-- "kør sammen med frontend-mergen". Den instruks kan ikke følges: Supabase
+-- køres i hånden, Vercel deployer af sig selv, og de to kan ikke ramme samme
+-- sekund. Uanset hvilken rækkefølge man så valgte, var der et vindue, hvor
+-- invitationer ikke virkede — enten fordi klienten slog op i en tabel, der lige
+-- var blevet lukket, eller fordi den kaldte funktioner, der endnu ikke fandtes.
+--
+-- Delt i to har hvert trin en tilstand, hvor BEGGE udgaver af klienten virker,
+-- og rækkefølgen er dermed et krav frem for et sammentræf:
+--
+--   1. Kør #52 (denne fil).  Gammel klient: uændret. Ny klient: virker.
+--   2. Merge og udrul.       Gammel klient væk. Ny klient: virker.
+--   3. Kør #53.              Hullet lukket. Ny klient: virker.
+--
+-- Vinduet mellem 1 og 3 er ikke gratis — hullet står åbent imens — men det har
+-- stået åbent siden liga-laget blev bygget, og en time mere er en anden pris
+-- end en invitation, ingen kan tage imod.
 --
 -- ---------------------------------------------------------------------------
 -- HVAD DER VAR GALT
@@ -221,43 +240,6 @@ $$;
 revoke execute on function public.accept_invite(text) from public;
 grant execute on function public.accept_invite(text) to authenticated, service_role;
 
--- ---------------------------------------------------------------------------
--- 3. Policies: fra "alle" til "dem, der er med"
---
--- ⚠️ Fra dette punkt kan en invitation kun tages imod gennem funktionerne
--- ovenfor. Det er hele pointen — og også grunden til, at filen skal køres
--- sammen med frontend-mergen.
-
--- Ligaen: kun medlemmer. Opretteren er altid medlem (`createGroup` skriver
--- admin-rækken i samme ombæring), så der er ingen grund til et `or created_by`
--- — og et sådant led ville gøre en liga synlig for en opretter, der har forladt
--- den.
-drop policy if exists groups_select_all on public.groups;
-create policy groups_select_member on public.groups
-  for select to authenticated
-  using (public.is_group_member(id));
-
--- Konkurrencen: deltagere, ligaens medlemmer og opretteren.
---
--- **Ligaens medlemmer og ikke kun deltagerne**, fordi ligasiden viser alle
--- ligaens konkurrencer med en "Deltag"-knap ved dem, man ikke er med i — det er
--- selve måden, en konkurrence findes på, når man først er i ligaen.
---
--- **Opretteren**, fordi en liga-løs konkurrence ellers ville blive usynlig for
--- den, der lige har lavet den, i det sekund hun forlader den igen.
---
--- Underforespørgslen på `competition_participants` er ufarlig for rekursion:
--- dens egen læsepolicy (`read all participation`) peger ikke tilbage hertil.
-drop policy if exists "read all competitions" on public.competitions;
-create policy competitions_select_involved on public.competitions
-  for select to authenticated
-  using (
-    created_by = auth.uid()
-    or (group_id is not null and public.is_group_member(group_id))
-    or exists (select 1 from public.competition_participants cp
-                where cp.competition_id = competitions.id and cp.user_id = auth.uid())
-  );
-
 -- Er kalderen den, der har OPRETTET ligaen?
 --
 -- SECURITY DEFINER, og det er ikke pynt — det er hønen og ægget. Policyen
@@ -283,65 +265,24 @@ $$;
 
 grant execute on function public.is_group_creator(uuid) to authenticated, service_role;
 
--- Medlemskabet: kun opretteren skriver sin egen række direkte. Alle andre
--- kommer ind gennem `accept_invite()`.
---
--- Den gamle policy tillod `role = 'member'` i en HVILKEN SOM HELST liga, og det
--- var den halvdel, der gjorde et id nok. Den nye tillader kun opretterens
--- admin-række — præcis det ene tilfælde, hvor der endnu ikke findes en
--- invitation at fremvise, fordi ligaen lige er opstået.
-drop policy if exists group_members_insert_self on public.group_members;
-create policy group_members_insert_creator on public.group_members
-  for insert to authenticated
-  with check (
-    user_id = auth.uid()
-    and role = 'admin'
-    and public.is_group_creator(group_members.group_id)
-  );
-
--- Deltagelsen: ligaens medlemmer og opretteren. Koden-stien går gennem
--- `accept_invite()`, som er `security definer` og derfor ikke rører denne
--- policy.
---
--- `created_by` skal med: opretteren skriver sin egen deltager-række umiddelbart
--- efter konkurrencen (`createCompetition`), og for en liga-løs konkurrence er
--- der intet medlemskab at hvile på.
-drop policy if exists "join competition" on public.competition_participants;
-create policy competition_participants_insert_involved on public.competition_participants
-  for insert to authenticated
-  with check (
-    user_id = auth.uid()
-    and exists (select 1 from public.competitions c
-                 where c.id = competition_participants.competition_id
-                   and (c.created_by = auth.uid()
-                        or (c.group_id is not null and public.is_group_member(c.group_id))))
-  );
-
 -- ============================================================================
--- Verifikation — kør efter migreringen
+-- Verifikation — kør efter trin 1
 -- ============================================================================
--- 1) De to funktioner findes og er security definer. Forvent to rækker med 't'.
+-- 1) De tre funktioner findes og er security definer. Forvent tre rækker, alle 't'.
 -- select proname, prosecdef from pg_proc
 --  where pronamespace = 'public'::regnamespace
---    and proname in ('invite_lookup', 'accept_invite') order by proname;
+--    and proname in ('invite_lookup', 'accept_invite', 'is_group_creator')
+--  order by proname;
 
--- 2) De fire policies er skiftet ud. Forvent præcis disse fire navne.
--- select tablename, policyname from pg_policies
---  where schemaname = 'public'
---    and policyname in ('groups_select_member', 'competitions_select_involved',
---                       'group_members_insert_creator',
---                       'competition_participants_insert_involved')
---  order by tablename;
-
--- 3) De gamle er væk. Forvent NUL rækker.
+-- 2) Intet er smalnet endnu — de fire gamle policies står stadig.
+--    Forvent FIRE rækker. Er der nul, er #53 kørt for tidligt.
 -- select tablename, policyname from pg_policies
 --  where schemaname = 'public'
 --    and policyname in ('groups_select_all', 'read all competitions',
---                       'group_members_insert_self', 'join competition');
+--                       'group_members_insert_self', 'join competition')
+--  order by tablename;
 
--- 4) Ingen liga er blevet usynlig for sine egne: hver liga har mindst ét
---    medlem, der kan se den. Forvent NUL rækker (en liga uden medlemmer er
---    tilladt og forventet efter en kontolukning — se `A36` — men den skal
---    kunne ses her, ikke opdages senere).
--- select g.id, g.name from public.groups g
---  where not exists (select 1 from public.group_members m where m.group_id = g.id);
+-- 3) Opslaget svarer. Brug en rigtig invitationskode fra din egen liga:
+--    forvent `{"kind": "group", ...}`. Kaldet kræver en session, så det virker
+--    IKKE i SQL-editoren (auth.uid() er null dér) — prøv det fra appen efter
+--    udrulningen i stedet.

@@ -15,6 +15,37 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 10. august 2026 — En migrering, der skal følges ad med en udrulning, deles i to
+
+**Beslutning:** `A40`s migrering er delt i `#52` (funktionerne, additiv) og
+`#53` (policyerne, indsnævrende), og rækkefølgen er #52 → udrul → #53.
+
+**Fordi den oprindelige instruks ikke kunne følges.** Første udgave var én fil
+med *"kør sammen med frontend-mergen"*. Supabase betjenes i hånden, Vercel
+deployer af sig selv, og de to kan ikke ramme samme sekund — så instruksen var i
+praksis "vælg selv, hvilken vej invitationerne skal være i stykker". SQL først:
+den gamle klient slår ligaen op i en tabel, der lige er blevet lukket.
+Frontend først: den nye klient kalder funktioner, der ikke findes endnu.
+
+**Delingen fjerner vinduet frem for at gøre det kort.** Efter #52 virker BEGGE
+udgaver af klienten, fordi filen kun tilføjer. Udrulningen kan derfor tage den
+tid, den tager, og #53 køres, når det passer. Prisen er, at hullet står åbent
+mellem de to trin — men det har stået åbent, siden liga-laget blev bygget, og
+det er en anden pris end en invitation, ingen kan tage imod.
+
+**Mellemtilstanden er målt og ikke lovet.** Tre påstande (a–c) i
+`sql/tests/invite_lookup.sql` siger, at #52 ikke rører en eneste policy, at den
+gamle klients opslag stadig virker, og at den nye klients kald allerede gør.
+Uden dem ville "sikker at køre før udrulningen" være en kommentar, nogen skrev.
+Efterprøvet med to mutationer: en policy sneget ind i #52 fanges af (a), og
+`is_group_creator()` fjernet fra #52 gør #53 ukørbar.
+
+**Den generelle regel er værd at have:** en migrering, der skal følges ad med en
+udrulning, deles i en additiv og en indsnævrende halvdel. Det er samme form som
+`B26`s ufravigelige rækkefølge (nøgle udrullet FØR værnet slås til) — dér blev
+prisen betalt kontant, fordi trinnet blev sprunget over, og hele adgangen lukkede
+kortvarigt for alle.
+
 ## 10. august 2026 — `A40` bygget: invitationskoden er hemmeligheden igen
 
 **Beslutning:** en liga og en konkurrence kan kun ses og tilmeldes af den, der

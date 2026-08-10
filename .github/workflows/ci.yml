@@ -226,6 +226,11 @@ jobs:
       # invitationen stadig kan tages imod. Smalnes policyerne uden at opslaget
       # flyttes, lukkes ikke et hul men hele join-flowet, og det ville blive
       # opdaget af den næste bruger frem for af os.
+      #
+      # Testen læser BEGGE migreringer i produktionens rækkefølge (#52 så #53) og
+      # måler MELLEMTILSTANDEN imellem dem: at trin 1 alene ikke rører en eneste
+      # policy. Det er dét, der gør den sikker at køre før udrulningen — og hele
+      # grunden til, at migreringen er delt i to.
       - name: Test af invitations-opslaget og de smalnede policies
         env:
           PGPASSWORD: postgres
