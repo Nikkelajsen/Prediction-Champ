@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { db } from "./supabase.js";
+import { auth, db } from "./supabase.js";
 
 // Fanger den ene ting, `select` ikke kunne: et tal, der er større end det antal
 // rækker PostgREST vil levere i ét svar. Regressionen bag "Premier League ·
@@ -84,5 +84,66 @@ describe("restFetch/restCount — fejlens status", () => {
     await expect(db.select("tok", "matches")).rejects.toMatchObject({
       status: 500, message: "Internal Server Error",
     });
+  });
+});
+
+// Bot-værnet og brugernavnet gennem mailen (B26).
+//
+// Begge dele er FORMEN på en HTTP-krop, og formen er det eneste, der kan
+// efterprøves herfra — GoTrue ligger uden for repoet. Til gengæld er det
+// præcis dér, fejlen ville ligge: `gotrue_meta_security` er GoTrues eget
+// feltnavn, og et forkert stavet felt fejler ikke, det ignoreres bare. Slås
+// Bot Protection så til i Supabase, afviser serveren hvert eneste login,
+// oprettelse og nulstilling — altså hele adgangen til appen.
+describe("auth — captcha og brugernavn i kroppen", () => {
+  beforeEach(() => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true, status: 200, statusText: "OK",
+      headers: { get: () => null },
+      text: async () => JSON.stringify({ access_token: "a" }),
+    });
+  });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  const krop = () => JSON.parse(globalThis.fetch.mock.calls[0][1].body);
+
+  it("sender kvitteringen i GoTrues eget felt ved oprettelse", async () => {
+    await auth.signUp("a@b.dk", "hemmelig", { captchaToken: "kv1", displayName: "Anna" });
+    expect(krop()).toEqual({
+      email: "a@b.dk", password: "hemmelig",
+      data: { display_name: "Anna" },
+      gotrue_meta_security: { captcha_token: "kv1" },
+    });
+  });
+
+  it("sender den også ved login og nulstilling — Bot Protection dækker alle tre", async () => {
+    await auth.signIn("a@b.dk", "hemmelig", "kv2");
+    expect(krop()).toEqual({
+      email: "a@b.dk", password: "hemmelig",
+      gotrue_meta_security: { captcha_token: "kv2" },
+    });
+
+    globalThis.fetch.mockClear();
+    await auth.recover("a@b.dk", "kv3");
+    expect(krop()).toEqual({ email: "a@b.dk", gotrue_meta_security: { captcha_token: "kv3" } });
+  });
+
+  // Det er DENNE, der gør, at koden kan ligge i produktionen længe før nogen
+  // trykker på knappen i Supabase: uden nøgle sendes intet ekstra felt, og
+  // kaldene ser ud præcis som før `B26`.
+  it("udelader feltet helt, når værnet ikke er slået til", async () => {
+    await auth.signIn("a@b.dk", "hemmelig");
+    expect(krop()).toEqual({ email: "a@b.dk", password: "hemmelig" });
+
+    globalThis.fetch.mockClear();
+    await auth.signUp("a@b.dk", "hemmelig");
+    expect(krop()).toEqual({ email: "a@b.dk", password: "hemmelig" });
+  });
+
+  // Brugernavnet er det eneste, der ikke kan skrives, når signup svarer uden
+  // session. Metadataen er dets eneste vej over på den anden side af mailen.
+  it("lægger brugernavnet i metadata, så det overlever bekræftelses-mailen", async () => {
+    await auth.signUp("a@b.dk", "hemmelig", { displayName: "Anna" });
+    expect(krop().data).toEqual({ display_name: "Anna" });
   });
 });

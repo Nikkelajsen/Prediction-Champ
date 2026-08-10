@@ -214,12 +214,18 @@ Fallbacken gælder kun produktions-buildet.
 Før den første bruger:
 
 - Authentication → Sign In / Providers: slå **"Confirm email" fra** i staging.
-  **Det er ikke bekvemmelighed, det er nødvendigt:** med bekræftelse slået til
-  returnerer signup ingen session, og uden token kan appen ikke skrive
-  `profiles`-rækken (`Auth.jsx` kræver `access_token` for at gå videre). Det
-  brugernavn, du lige valgte, går tabt, og kontoen ender uden profil. Ved næste
-  login slås profilen kun OP — den oprettes ikke. Produktionens indstilling er
-  en anden sag og røres ikke.
+  **Nu er det bekvemmelighed** — testbrugere er hurtigere at oprette, når der
+  ikke skal hentes en mail til hver. Produktionens indstilling er en anden sag
+  og røres ikke.
+
+  *(Rettet 10. august 2026. Her stod indtil da, at det var **nødvendigt**: med
+  bekræftelse slået til returnerer signup ingen session, og uden token kunne
+  appen ikke skrive `profiles`-rækken — brugernavnet gik tabt, og kontoen endte
+  uden profil, fordi næste login kun slog profilen OP. Beskrivelsen var rigtig,
+  og hullet er nu lukket i klienten: navnet rejser med som brugermetadata ved
+  signup og skrives af `sikrProfil()` ved første login, der har en token
+  (`B26`, `src/lib/data/profile.js`). Vil du **afprøve** bekræftelsesflowet, er
+  staging netop stedet — slå den til her frem for i produktionen.)*
 - Gør dig selv til administrator bagefter:
 
   ```sql

@@ -334,6 +334,13 @@ appen har hverken invitationsmails, magic links eller e-mailskift.
 `Confirm signup` bruges først, når `B26` slår bekræftelse til. Den skrives nu, så
 `B26` bliver ét klik og ikke en skjult tekstopgave.
 
+> **Klientsiden af `B26` er bygget 10. august 2026** — appen tager nu imod
+> bekræftelseslinket, logger brugeren ind på hash'ets tokens (`type=signup`,
+> `src/App.jsx`) og skriver den `profiles`-række, oprettelsen ikke kunne skrive.
+> Bekræftelsen er derfor ét klik i Supabase, sådan som denne linje lovede. Den
+> ANDEN halvdel af `B26`, bot-værnet, viste sig ikke at være det: se
+> `DOCUMENTATION.md` §9 om `VITE_TURNSTILE_SITE_KEY`, som skal sættes først.
+
 > ⚠️ **Supabase har ingen import.** Ændres en skabelon i repoet, er ændringen
 > ikke udrullet, før nogen har pastet den ind igen. Der er ingen maskine, der
 > opdager forskellen.
@@ -409,6 +416,11 @@ kun kan lære af at blive fulgt.
   ret SMTP-indstillingerne, og **slet linjen om Resend i `src/lib/legal.js`** i
   samme ombæring. En databehandler, der står i politikken uden at findes, er
   samme slags fejl som en, der findes uden at stå der.
-- **Slås "Confirm email" til (`B26`):** skabelonen ligger klar, og
+- **Slås "Confirm email" til (`B26`):** skabelonen ligger klar, appen tager imod
+  linket og skriver brugernavnet på plads bagefter (10. august 2026), og
   `DOCUMENTATION.md` §12's linje om, at "alle kan oprette konti uden
-  godkendelse", holder op med at være sand.
+  godkendelse", holder op med at være sand. **Slås Bot Protection til i samme
+  ombæring, skal `VITE_TURNSTILE_SITE_KEY` sættes i Vercel FØRST** — gøres det
+  i den omvendte rækkefølge, afviser GoTrue også login og glemt-adgangskode for
+  alle eksisterende brugere, og runbogens kontrol 3 herover holder op med at
+  kunne gennemføres.

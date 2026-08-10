@@ -47,6 +47,8 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
+- Et brugernavn kan aldrig ændres efter oprettelsen — der findes ingen skærm til det. Mærkes første gang `B26`s navnekollision giver nogen et navn med et 2-tal.
+
 ---
 
 ## Prioriteret rækkefølge
@@ -98,7 +100,7 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 | `A26` | `ambiguousTeams`: godkendte par eller accepteret støj | Turnering #3. |
 | `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. |
 | `A39` | Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat? | **Når `day_card_coverage` melder en blokeret dag, nogen savnede.** `match_day_complete()` er global: én kamp uden resultat i én turnering blokerer alle dagskort, også for de konkurrencer, der intet har med turneringen at gøre. Prisen er dokumenteret som bevidst — den globale kampdag er produktets ene tvær-turneringsbegreb — men den blev betalt synligt under `A38`s undersøgelse. |
-| `B26` | E-mailbekræftelse + bot-værn (Turnstile) på signup | **Når linket deles åbent** (hjemmesiden publiceres eller invitationer går uden for det kontrollerede felt). **Ikke længere gated af `B25`** (leveret 9. august 2026): afsenderen findes, og bekræftelses-skabelonen ligger klar i `docs/mail/confirm-signup.html`. Tilbage er ét klik i Supabase og ét i Bot Protection. |
+| `B26` | E-mailbekræftelse + bot-værn (Turnstile) på signup | **Når linket deles åbent** (hjemmesiden publiceres eller invitationer går uden for det kontrollerede felt). **Klientsiden er bygget 10. august 2026**, og rækken er nu det, den hele tiden er blevet målt som: to klik i Supabase. Rækkefølgen er ufravigelig — `VITE_TURNSTILE_SITE_KEY` i Vercel **før** Bot Protection, ellers afvises også login for eksisterende brugere. Se `docs/MAIL.md` og `DOCUMENTATION.md` §9. |
 | `A34` | Supabase Free → Pro? | **Når Usage-siden viser egress nær 5 GB/md, eller når fremmede udgør flertallet af de aktive** — de to falder formentlig sammen omkring 200–500 ugentligt aktive. |
 | `A33` | Er dagsmotorens variation tyndere, end regelantallet lover? | **Når vis-bare dagskort har visninger.** `G73` (5. august 2026) rettede MÅLINGEN og ikke synligheden: de 197 efterfyldte dagskort kan stadig ikke vises, de tælles bare ikke længere i nævneren. Fremadrettede dagskort skrives inde i deres egen runde og ER vis-bare, så udløseren kan nu aflæses direkte — vis-bar > 0 og vist > 0 for dagsreglerne i Analytics. `DAY_RESULT` alene er 123 af 280 historier (44 %). |
 | `A35` | Er Story Engine v3's publiceringstærskel på 45 den rigtige? | **To uger med v3 i drift og mindst ti kampdage.** Bygget 7. august 2026, så uret er startet. Måles på `stories.news_value`, som gemmes på alle rækker — også de dæmpede — netop for at kunne svare bagudrettet. Mål: 40–60 % af kampdagene med ulæst-markering. |
@@ -166,7 +168,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | # | Hvad | Hvorfor / hvad den venter på | Omfang |
 |---|---|---|---|
 | B21 | **Omdøb GitHub-repoet og Vercel-projektet, og ret hjemmesidens links** | Navneskiftet 4. august 2026 gik gennem app, manifest, ikoner, tekster og dokumentation, men stoppede ved projektnavnene — **med vilje**, fordi et skifte af Vercel-projektet ændrer `.vercel.app`-adressen og dermed knækker hvert link, der peger på den. Prisen ved status quo er, at produktet hedder Leagly overalt undtagen i den adresse, en ny bruger faktisk taster ind: 23 CTA'er i `site/` (4+5+6+4+4) plus README'ens live-link peger på `prediction-champ.vercel.app`. **Rækkefølgen er bindende og er hele grunden til, at rækken står lige efter `I10`:** vælges et rigtigt domæne, skal linkene alligevel skiftes, og gøres omdøbningen først, skiftes de to gange. Vercels gamle URL redirigerer ikke af sig selv, så et delt link fra før skiftet dør — det er kun ufarligt, så længe hjemmesiden ikke er publiceret. `docs/RESTORE.md`s omtale skal IKKE rettes: den navngiver backup-filer, der faktisk hedder det gamle. | Lille (men mange steder) |
-| B26 | **E-mailbekræftelse + Turnstile på signup** | I det kontrollerede felt er ubekræftede konti harmløse; offentligt kan hvem som helst oprette konti med hvem som helsts e-mail — både en spam-vektor og et lille GDPR-problem (adresser opbevares, som ingen har verificeret er deres). Begge dele er Supabase-konfiguration, ikke kode: bekræftelse slås til under Auth, Turnstile under Auth → Bot Protection. **`B25` er leveret 9. august 2026**, så afsenderen er der, og den danske skabelon ligger i `docs/mail/confirm-signup.html` — netop for at rækken ikke skulle vise sig at have en skjult tekstopgave i sig. Prisen er ét ekstra trin i onboardingen — derfor først ved åben deling, ikke før. | Lille (konfiguration) |
+| B26 | **E-mailbekræftelse + Turnstile på signup** | I det kontrollerede felt er ubekræftede konti harmløse; offentligt kan hvem som helst oprette konti med hvem som helsts e-mail — både en spam-vektor og et lille GDPR-problem (adresser opbevares, som ingen har verificeret er deres). **Klientsiden er bygget 10. august 2026**, og rækken er nu ægte konfiguration: bekræftelse slås til under Auth, Turnstile under Auth → Attack Protection. **Rækkefølgen er ufravigelig:** `VITE_TURNSTILE_SITE_KEY` i Vercel FØRST, Bot Protection bagefter — omvendt afviser GoTrue også login og glemt-adgangskode for eksisterende brugere, altså hele adgangen og ikke kun nye konti. Prisen er ét ekstra trin i onboardingen — derfor først ved åben deling, ikke før. *(Her stod "begge dele er Supabase-konfiguration, ikke kode". Det holdt for bekræftelsen og ikke for værnet; se `DECISIONS.md` 10. august 2026.)* | Lille (konfiguration) |
 | B20 | **Personlige invite-links** (`invite_links` + `invited_by` på `group_members`/`competition_participants`) | Attributionen "hvem inviterede hvem" findes ikke i skemaet: `groups.invite_code` er én kode pr. liga og ikke pr. bruger, og ingen af medlemstabellerne gemmer afsenderen. Det er derfor, milepælen **"5/10 venner tilmeldt via dit link" ikke kunne bygges** — `milestones` tæller i stedet `LEAGUE_GREW_5/10`, altså hvor mange der kom med i en liga, man har oprettet, hvilket er en anden bedrift. Begrundelsen står ved koden begge steder (`sql/milestones.sql`, `src/lib/milestones.js`) og peger på denne række. **Ventetid er ikke gratis her, og det er rækkens vigtigste egenskab:** attribution kan kun registreres fremad, så en bedrift bygget på den kan først tælle fra udrulningsdagen — de brugere, der allerede er inviteret, tælles aldrig. Gater desuden `I6` (ambassadørprogram), som ikke kan måle noget uden. | Mellem |
 | B28 | **Gentag CL's kickoff-aflæsning, når ligafasen er lodtrukket** | Champions League var den ene af fem turneringer, [`docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md`](./reviews/football-data-kickoff-aflaesning-2026-08-07.md) ikke kunne dække — leverandøren havde pr. 1. august 2026 endnu ikke oprettet sæsonen 2026, fordi ligafasen ikke var lodtrukket (`B8`, lukket 1. august 2026). De fire aflæste turneringer delte sig i to: kun Bundesliga sender en ren midnats-pladsholder (`status: SCHEDULED` + `00:00`), de tre andre sender et opdigtet klokkeslæt for hver ufastsat kamp uden nogen markør at skelne på. Om CL ligner Bundesliga eller de tre andre, afgør om `kickoff_uncertain`s mønstergenkendelse (`G84`/`G85`) også dækker turneringen — og er kun kendt, når svaret aflæses. | Lille (samme PowerShell-opslag, gentaget) |
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. Forespørgslen står i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). **Rækken har stået siden august 2026 med teksten "tilbage står at køre den" — og da den blev kørt 5. august 2026, kunne den ikke:** vinduet partitionerede på `(e.created_at < m.fra)`, som hverken står i `group by` eller er aggregeret, så PostgreSQL afviste den med `42803`. Perioden udledes nu i en CTE, efterprøvet mod PostgreSQL 16.13. **Anden kørsel samme dag afslørede, at kilden var forkert valgt:** hændelsesloggen svarede med tre oprettelser i alt, alle `random` — plausibelt nok ved ~20 testbrugere, men ubrugeligt, fordi `analytics_events` først findes fra 30. juli 2026, så "før mærkatet" var to døgn og ikke appens historik. `competitions.mode` + `created_at` bærer samme oplysning som **rigtige rækker over hele historikken**, og spec'ens §5F er byttet om, så tabellen er den primære kilde og hændelsen kontrollen. **Opslaget er kørt 5. august 2026, og svaret er "ikke endnu":** hele appens historik rummer **syv** konkurrencer — 6 før mærkatet (`time_range` 2, `random` 2, `full_season` 2) og **1** efter (`random`). Med n=1 i den ene periode kan ingen fordeling måles, hvilket er præcis rækkens eget første forbehold. Rækken er derfor flyttet til Tier 6 med en udløser, der kan aflæses med samme opslag: **tosifret `antal` i `efter`-perioden.** Det, der er leveret, er ikke svaret, men at spørgsmålet nu kan stilles — forespørgslen kunne hverken køre eller pege på den rigtige kilde, da rækken blev skrevet. | Lille (opslag) |
@@ -219,35 +221,37 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 9. august 2026 — `B25` leveret: appen har sin egen afsender
+### 10. august 2026 — `B26`s klientside bygget: rækken er nu ægte konfiguration
 
-**Listen er 32 → 31.** Tier 7's øverste række er væk, og den var en af kun to i
-tieret, der var besluttet.
+**Listen er uændret 31.** `B26` er ikke lukket og skal ikke lukkes: dens udløser
+— at linket deles åbent — er ikke sprunget, og de to knapper står i Supabase.
+Det, der er sket, er at rækken er blevet SAND. Den var målt som "Lille
+(konfiguration)", og halvdelen af den var det ikke.
 
-**`B25`** gav auth-mailene en afsender, der kan levere: `noreply@leagly.app` via
-Resend, i stedet for Supabases delte udviklings-mailservice. Glemt-adgangskode
-var bygget færdig i begge ender i forvejen — det eneste, der manglede, var en
-kanal, der ikke er rate-begrænset til udvikling.
+**Bot-værnet var aldrig konfiguration alene.** Appen taler REST med GoTrue uden
+SDK, og GoTrue vil have kvitteringen i `gotrue_meta_security.captcha_token`.
+Slås Bot Protection til, mens klienten intet sender, afvises signup, login OG
+nulstilling — altså hele adgangen til appen for alle 21 eksisterende brugere,
+ikke kun oprettelsen af nye konti. Klienten sender den nu, gated af
+`VITE_TURNSTILE_SITE_KEY`, så koden kan ligge inert i produktionen, indtil
+nøglen sættes. **Rækkefølgen er ufravigelig: nøgle i Vercel først.**
 
-**Selve opsætningen ligger uden for repoet**, så leverancen her er
-[`MAIL.md`](./MAIL.md): register og runbog i én fil, efter `CRON.md`s form med en
-`Sidst verificeret`-kolonne. **Alle fire kontroller i "Bevis, at det virker" er
-bestået samme dag:** mailen kom fra `noreply@leagly.app`, headerne gav `pass` på
-alle tre signaturer, linket åbnede nulstillingsskærmen, og post udefra lander i
-`kontakt@leagly.app`. Rækken er dermed reelt lukket og ikke kun merget.
+**E-mailbekræftelsen havde sin egen skjulte opgave, og den var større.**
+`profiles`-rækken skrives af klienten med den token, signup svarer med — og med
+bekræftelse slået til svarer signup uden token. Brugernavnet, personen lige
+valgte, var dermed tabt, og appen har ingen skærm at vælge et nyt på: kontoen
+ville være en blindgyde. Navnet rejser nu med som brugermetadata og skrives af
+`sikrProfil()` ved første login. `docs/STAGING.md` beskrev præcis dette hul fra
+den anden side ("det er ikke bekvemmelighed, det er nødvendigt") og er rettet.
 
-**Tre ting, rækken ikke selv nævnte, kom med:** en linje om Resend i
-`src/lib/legal.js` (husets ufravigelige regel om nye tredjeparter — og Microsoft
-manglede i forvejen), de danske mailskabeloner som filer i `docs/mail/` med en
-vagt, der binder dem til privatlivspolitikkens kontaktadresse, og Supabases
-Site URL, som er dét, der bestemmer, hvor linket i mailen peger hen.
+**Tredje fund, som ingen af de to rækker nævnte:** `readUrlIntent()` læste kun
+`type=recovery` i adressens hash. Knappen i bekræftelses-mailen bærer en fuld
+session, og den ville være blevet ignoreret — brugeren skulle taste den kode,
+de valgte fem minutter forinden. Hash'et læses nu, og `account_created` tælles
+dér, hvor kontoen faktisk bliver brugbar.
 
-**To rækker flyttede sig:** `B26` er ikke længere gated — kun den åbne deling af
-linket mangler — og `I10` er skrumpet til sin anden halvdel: e-mailen er lukket,
-hjemmesidens domæne er ikke.
-
-*(Samme dag, tidligere: Tier 4 og Tier 2 kørt tomme med `G93`, `G91` og `G94`.
-De står i `CHANGELOG.md`.)*
+*(Forrige kørsel: 9. august 2026, `B25` leveret — appen fik sin egen
+mailafsender. Den står i `CHANGELOG.md`.)*
 
 ---
 
