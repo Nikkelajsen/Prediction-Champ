@@ -9,6 +9,14 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+10. august 2026 — `competition_matches`-testen blev rød af, at den beviste sin egen pointe (`G94`)
+**`main` blev rød uden at nogen rørte hverken testen eller migreringen.** Fejlteksten var testens egen negative kontrol: `fixturen holder ikke: nybegynderen skulle se 0/0 med den GAMLE policy, men så 1/1`. Commit'en, der udløste det, var `chore(sql): opdatér skema-eksport (schema.sql)` fra skema-eksport-workflowen.
+**Årsagen er værd at kende, fordi den gælder bredere end denne test.** `sql/tests/competition_matches_read.sql` indlæste produktionsskemaet, krævede at kunne **genskabe fejlen først** — netop for ikke at kunne bestå på en harmløs fixture — og kørte derefter migreringen. Det virkede, så længe `sql/schema.sql` bar den gamle, tautologiske policy. Men `sql/competition_matches_read.sql` (#50) blev kørt i Supabase, eksporten fangede den rettede regel, og dermed kunne den negative kontrol ikke længere se noget at rette. **Testen havde en indbygget udløbsdato, der faldt sammen med den dag, arbejdet lykkedes.**
+**Testen ejer nu sin egen før-tilstand** og installerer den gamle policy eksplicit frem for at læse den af snapshottet. Migreringen er stadig fuldt under test: den dropper og gen-opretter under samme navn, så den skal stadig erstatte det, testen har sat op.
+**Efterprøvet med tre mutationer mod en rigtig PostgreSQL 16**, alle fanget: migreringen sat til `using (true)` (fanges af påstand 2, naboligheden), testens gamle policy gjort harmløs, og opsætningen fjernet helt — den sidste gengiver præcis den CI-fejl, der startede det hele, hvilket er beviset på, at diagnosen var rigtig og ikke bare plausibel.
+**Den generelle regel står i `DOCUMENTATION.md` §13:** en test, der måler en migrering mod et øjebliksbillede af produktionen, må aldrig hente sin FØR-tilstand fra snapshottet. Snapshottet er præcis det, migreringen har til formål at ændre.
+**Sidegevinst:** rødfarvningen er dokumentationen for, at #50 nu ER kørt i produktionen. `G94`s 🔴-note i changelogen 9. august er dermed indfriet.
+
 10. august 2026 — Auth-fejl havde ingen tekst: `restError()` læste `message`, GoTrue svarer `msg`
 **Appen sagde "Noget gik galt" til to helt forskellige fejl, og begge havde et præcist svar liggende i HTTP-kroppen.** `restError()` i `src/lib/supabase.js` læste kun feltet `message` — PostgRESTs stavemåde. GoTrue bruger `msg`, og på token-endpointet OAuth-formen `error_description`. Teksten nåede derfor aldrig frem, og fallbacken `res.statusText` er **tom over HTTP/2**. Resultatet var en fejl uden besked, og `daAuthError()` viste sin sidste udvej.
 **Oversættelserne i `AUTH_FEJL` kunne pr. konstruktion aldrig ramme en auth-fejl** — heller ikke de tre, der har stået der siden `G28`. De så rigtige ud i koden og var døde i produktionen, fordi det, de matcher på, aldrig ankom.
