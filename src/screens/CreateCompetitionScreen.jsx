@@ -493,7 +493,7 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
                   nextRound={randomStart.nextRound} />
                 <span style={{ color: C.muted, fontSize: 12.5, lineHeight: 1.45 }}>
                   {randomRounds.length
-                    ? `${Math.min(8, randomRounds[0].matches.length)} tilfældige kampe fra runden ${randomRounds[0].label} — på tværs af alle turneringer.`
+                    ? `${Math.min(8, randomRounds[0].matches.length)} tilfældige kampe fra runden ${randomRounds[0].label} — fordelt jævnt på tværs af alle turneringer.`
                     : "Henter den kommende runde…"}
                 </span>
               </>

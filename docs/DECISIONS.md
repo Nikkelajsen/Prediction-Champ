@@ -15,6 +15,43 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 10. august 2026 — En tilfældig kupon fordeler jævnt på de valgte turneringer, ikke proportionalt med deres størrelse
+
+**Beslutning:** `pickRandomFromRounds` fordeler kampene **jævnt** på de valgte
+turneringer i hver runde, i samme round-robin som periodens loft
+(`drawAcrossLeagues`). Otte kampe fra Superligaen + La Liga bliver 4/4.
+
+**Hvad der var galt.** Hele rundens kampe blev blandet i én bunke, og de første
+`count` blev taget. En bunke afspejler turneringernes **størrelse**: La Liga har
+10 kampe i en runde, Superligaen 6, så otte kampe gav i snit 3/5 og i praksis
+nemt 2/6. At vælge to turneringer i chip-rækken er en udtalelse om, at begge
+skal være med — ikke en anmodning om at blive vejet efter, hvor mange hold de
+har.
+
+**Hvorfor jævnt og ikke proportionalt.** Proportionalt er præcis dét, den gamle
+adfærd var, bare uden garantien: den store turnering fylder mest. Med syv
+turneringer valgt og otte kampe ville proportional fordeling betyde, at flere
+turneringer slet ikke kom med — et valg, brugeren havde truffet, uden virkning.
+Jævnt er den eneste fordeling, hvor hver valgt turnering er repræsenteret, så
+længe den har kampe i runden.
+
+**Hvorfor round-robin og ikke en kvote.** Samme begrundelse som `pickPerRound`
+allerede havde: har en turnering færre kampe end sin andel, bliver den sprunget
+over i næste omgang, og de øvrige fylder pladsen. 1 + 10 kampe med et loft på 6
+giver 1/5 frem for 3/3 med et hul. Reglen findes nu ét sted i stedet for at være
+implementeret to gange med kun den ene dokumenteret.
+
+**Turneringernes rækkefølge blandes også.** Går kampantallet ikke op, får nogen
+den ekstra. Over Quick Leagues seks runder må det ikke være den samme hver gang;
+målt over 2000 kørsler falder den 993/1007.
+
+**Fordelingen gælder pr. runde, ikke samlet.** En konkurrence over seks runder
+balancerer hver uge for sig — ellers ville en runde uden kampe i den ene
+turnering skulle kompenseres i en anden, og reglen ville afhænge af rækkefølgen,
+runderne blev behandlet i.
+
+---
+
 ## 10. august 2026 — 0-punkts-reglen flyttes fra runde-niveau til kamp-niveau, og runde-reglen slettes
 
 **Beslutning:** en ny konkurrence materialiserer de kampe, der **stadig kan

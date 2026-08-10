@@ -58,8 +58,8 @@ function RandomFields({
       </div>
       <p style={{ ...muted, margin: 0 }}>
         {isQuickLeague
-          ? "Trækker tilfældige kampe i hver af de kommende runder — er der færre i en runde, kommer de alle med."
-          : "Trækker tilfældige kampe fra startrunden — er der færre, kommer de alle med."}
+          ? "Trækker tilfældige kampe i hver af de kommende runder, fordelt jævnt på de valgte turneringer — er der færre i en runde, kommer de alle med."
+          : "Trækker tilfældige kampe fra startrunden, fordelt jævnt på de valgte turneringer — er der færre, kommer de alle med."}
       </p>
     </>
   );

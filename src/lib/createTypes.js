@@ -104,15 +104,61 @@ function createTypeById(id) {
   return CREATE_TYPES.find((t) => t.id === id) || null;
 }
 
+// ---------- jævn fordeling på tværs af turneringer ----------
+// Round-robin: tag én kamp ad gangen fra hver turnering, indtil loftet er nået
+// eller kampene er sluppet op. Den fælles kerne under BÅDE den tilfældige
+// udvælgelse og periodens loft — de to adskiller sig kun i, hvordan køerne
+// ordnes (tilfældigt eller efter kickoff).
+//
+// Round-robin og ikke en kvote-udregning, og det er dét, der gør reglen robust:
+// har en turnering færre kampe end sin andel, bliver den bare sprunget over i
+// næste omgang, og de øvrige fylder pladsen. Med 10 kampe og tre turneringer
+// giver det 4/3/3; har den ene kun én kamp, giver det 1/5/4 frem for et hul.
+//
+// `arrange` får turneringernes lister og skal svare med de KØER, der skal
+// tømmes — i den rækkefølge, turneringerne skal betjenes. Den skal kopiere:
+// køerne tømmes med `shift`, og kalderens pulje må ikke ændre sig under den.
+function drawAcrossLeagues(matches, { cap, leagueOf, arrange }) {
+  const byLeague = new Map();
+  for (const m of matches) {
+    const lid = leagueOf(m) ?? "";
+    if (!byLeague.has(lid)) byLeague.set(lid, []);
+    byLeague.get(lid).push(m);
+  }
+  const queues = arrange([...byLeague.values()]);
+  const ids = [];
+  let taken = 0;
+  while (taken < cap && queues.some((q) => q.length)) {
+    for (const q of queues) {
+      if (taken >= cap) break;
+      if (!q.length) continue;
+      ids.push(q.shift().id);
+      taken++;
+    }
+  }
+  return ids;
+}
+
 // ---------- tilfældig udvælgelse over én eller flere runder ----------
 // Generalisering af den gamle pickRandomMatchIds (som kun kendte den nærmeste
 // runde): tag de første `rounds` runde-nøgler stigende og træk op til `count`
 // kampe PR. RUNDE — "8 kampe, 6 runder frem" betyder 8 i hver uge, klippet til
 // rundens faktiske udbud. `rounds = 1` er præcis dagens Quick Pick-adfærd.
 //
+// Kampene fordeles JÆVNT på de valgte turneringer (august 2026). Før blev hele
+// rundens kampe blandet i én bunke, og de første `count` blev taget — og en
+// bunke afspejler turneringernes STØRRELSE, ikke brugerens valg. Med Superligaen
+// (6 kampe pr. runde) og La Liga (10) gav otte kampe i snit 3/5 og i praksis
+// nemt 2/6, selv om brugeren havde valgt præcis to turneringer og dermed sagt,
+// at de begge skulle være med. Nu er det 4/4.
+//
+// Turneringernes RÆKKEFØLGE blandes også. Går kampantallet ikke op, får nogen
+// den ekstra, og over Quick Leagues seks runder skal det ikke være den samme
+// hver gang.
+//
 // `shuffle` kan injiceres, så testene er deterministiske; standarden er den
 // samme Fisher-Yates-agtige sort, den gamle funktion brugte.
-function pickRandomFromRounds(pool, { count = 6, rounds = 1, shuffle } = {}) {
+function pickRandomFromRounds(pool, { count = 6, rounds = 1, shuffle, leagueOf = (m) => m._leagueId } = {}) {
   if (!pool.length) return [];
   const byRound = {};
   for (const m of pool) (byRound[m.round_key] ||= []).push(m);
@@ -121,7 +167,12 @@ function pickRandomFromRounds(pool, { count = 6, rounds = 1, shuffle } = {}) {
   const perRound = Math.max(1, Number(count) || 6);
   const ids = [];
   for (const key of keys) {
-    for (const m of doShuffle(byRound[key]).slice(0, perRound)) ids.push(m.id);
+    ids.push(...drawAcrossLeagues(byRound[key], {
+      cap: perRound, leagueOf,
+      // `.slice()` uanset hvad: en injiceret `shuffle` kan svare med selve
+      // listen, og køerne tømmes med `shift`.
+      arrange: (lists) => doShuffle(lists.map((l) => doShuffle(l).slice())),
+    }));
   }
   return ids;
 }
@@ -161,19 +212,15 @@ function roundProgress(matches) {
 
 // ---------- loft pr. runde (custom/periode) ----------
 // Vælg højst `perRound` kampe i hver runde, fordelt JÆVNT på de valgte
-// turneringer. Ren funktion, så reglen kan efterprøves uden en skærm.
+// turneringer. Ren funktion, så reglen kan efterprøves uden en skærm. Brugeren
+// bad netop om, at et loft på ti i en runde med syv kampe bare betyder syv —
+// det følger af round-robin'en i `drawAcrossLeagues`.
 //
-// Fordelingen er en round robin og ikke en kvote-udregning, og det er dét, der
-// gør reglen robust: har en turnering færre kampe end sin andel, bliver den
-// bare sprunget over i næste omgang, og de øvrige fylder pladsen. Med 10 kampe
-// og tre turneringer giver det 4/3/3; har den ene kun én kamp, giver det 1/5/4
-// frem for et hul. Brugeren bad netop om, at et loft på ti i en runde med syv
-// kampe bare betyder syv.
-//
-// Rækkefølgen er fastlagt hele vejen ned, så to kørsler giver samme kampe:
-// turneringerne tages i rækkefølge efter deres TIDLIGSTE kickoff i runden (ved
-// ulige deling går den ekstra altså til den, der spiller først), og inden for
-// en turnering tages kampene i kickoff-rækkefølge med id'et som sidste nøgle.
+// Forskellen fra den tilfældige udvælgelse er KUN rækkefølgen, og her er den
+// fastlagt hele vejen ned, så to kørsler giver samme kampe: turneringerne tages
+// efter deres TIDLIGSTE kickoff i runden (ved ulige deling går den ekstra altså
+// til den, der spiller først), og inden for en turnering tages kampene i
+// kickoff-rækkefølge med id'et som sidste nøgle.
 function pickPerRound(pool, { perRound, leagueOf = (m) => m._leagueId } = {}) {
   const cap = Math.max(0, Number(perRound) || 0);
   if (!cap) return (pool || []).map((m) => m.id); // 0/null = "Alle"
@@ -181,29 +228,18 @@ function pickPerRound(pool, { perRound, leagueOf = (m) => m._leagueId } = {}) {
   const byRound = {};
   for (const m of pool || []) (byRound[m.round_key] ||= []).push(m);
 
+  const order = (a, b) =>
+    String(a.kickoff_at || "").localeCompare(String(b.kickoff_at || "")) ||
+    String(a.id || "").localeCompare(String(b.id || ""));
+
   const ids = [];
   for (const key of Object.keys(byRound).sort()) {
-    const byLeague = new Map();
-    for (const m of byRound[key]) {
-      const lid = leagueOf(m) ?? "";
-      if (!byLeague.has(lid)) byLeague.set(lid, []);
-      byLeague.get(lid).push(m);
-    }
-    const order = (a, b) =>
-      String(a.kickoff_at || "").localeCompare(String(b.kickoff_at || "")) ||
-      String(a.id || "").localeCompare(String(b.id || ""));
-    const queues = [...byLeague.values()].map((list) => list.slice().sort(order));
-    queues.sort((qa, qb) => order(qa[0], qb[0]));
-
-    let taken = 0;
-    while (taken < cap && queues.some((q) => q.length)) {
-      for (const q of queues) {
-        if (taken >= cap) break;
-        if (!q.length) continue;
-        ids.push(q.shift().id);
-        taken++;
-      }
-    }
+    ids.push(...drawAcrossLeagues(byRound[key], {
+      cap, leagueOf,
+      arrange: (lists) => lists
+        .map((list) => list.slice().sort(order))
+        .sort((qa, qb) => order(qa[0], qb[0])),
+    }));
   }
   return ids;
 }

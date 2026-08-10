@@ -102,7 +102,14 @@ kupon (`B6` — et foreslået navn blev bare beholdt).
 > `time_range` og materialiseres serverside. Runde-reglen dér havde sin egen
 > udgave af samme fejl og er rettet i samme ombæring — se `DOCUMENTATION.md` §3.
 >
-> Fuld beskrivelse i `DOCUMENTATION.md` §3; beslutningen i `docs/DECISIONS.md`.
+> Tredje rettelse i samme ombæring: de tilfældige typer fordelte ikke kampene på
+> de valgte turneringer. Rundens kampe blev blandet i én bunke, og en bunke
+> afspejler turneringernes STØRRELSE — Superligaen (6 kampe pr. runde) + La Liga
+> (10) gav otte kampe i snit 3/5 og nemt 2/6. `pickPerRound` (periodens loft)
+> havde reglen i forvejen; de to deler nu round-robin-kerne
+> (`drawAcrossLeagues`) og adskiller sig kun i, hvordan køerne ordnes.
+>
+> > Fuld beskrivelse i `DOCUMENTATION.md` §3; beslutningen i `docs/DECISIONS.md`.
 
 *Rettet efter levering (august 2026): liga-feltet er ikke længere blot altid
 synligt — det er **påkrævet**. "Ingen liga" er væk, og en liga kan oprettes i
