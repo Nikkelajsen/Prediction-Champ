@@ -27,8 +27,20 @@
 // `kind` er en lukket mængde: "already" · "confirm" · "notfound". Kalderen SKAL
 // dække alle tre — et manglende tilfælde er en bruger, der trykker på et link
 // og intet ser ske.
-import { db } from "../supabase.js";
-import { loadGroupByCode, joinGroup } from "./groups.js";
+//
+// ---------------------------------------------------------------------------
+// A40 (10. august 2026): opslaget er ét kald, og KODEN følger med tilbage
+//
+// De to funktioner slog før direkte op i `competitions`/`groups` og hentede
+// derefter inviterens og ligaens navn i hvert sit ekstra kald. Det kunne kun
+// lade sig gøre, fordi begge tabeller var læsbare for enhver indlogget bruger —
+// hullet, `A40` lukkede. `invite_lookup()` svarer nu på alt i ét kald.
+//
+// **`code` returneres med i `confirm`-svaret**, og det er ikke bekvemmelighed:
+// tilmeldingen kræver koden, ikke et id. Uden den ville `MainApp` skulle gemme
+// den ved siden af resultatet, og så er der to steder, der skal huske det
+// samme.
+import { inviteLookup, acceptInvite } from "./groups.js";
 
 // Hvad peger en konkurrence-invitationskode på?
 //
@@ -38,51 +50,35 @@ import { loadGroupByCode, joinGroup } from "./groups.js";
 //
 // Kaster ved netværks-/serverfejl. Kalderen skelner: en ukendt kode er brugerens
 // tastefejl, en fejl er vores.
-export async function resolveCompetitionInvite(token, userId, code) {
-  const found = await db.select(token, "competitions", `invite_code=eq.${code}&select=*`);
-  if (!found.length) return { kind: "notfound" };
-  const competition = found[0];
+export async function resolveCompetitionInvite(token, code) {
+  const svar = await inviteLookup(token, code);
+  if (svar?.kind !== "competition") return { kind: "notfound" };
+  const competition = svar.competition;
 
-  const already = await db.select(
-    token, "competition_participants",
-    `competition_id=eq.${competition.id}&user_id=eq.${userId}&select=competition_id`
-  );
-
-  if (already.length) {
-    // Allerede deltager — men sikr liga-medlemskabet først. En deltager UDEN
-    // liga-medlemskab er netop den halve tilstand, A8-hullet efterlod: med i
-    // stillingen, men usynlig på medlemslisten og uden adgang til ligaens side.
-    // At trykke på invitationslinket igen er den naturlige måde at forsøge at
-    // rette det på, så det skal faktisk rette det. joinGroup er idempotent.
-    if (competition.group_id) {
-      try { await joinGroup(token, userId, competition.group_id); }
-      catch { /* deltagelsen er intakt — bloker ikke navigationen */ }
-    }
-    return { kind: "already", competition };
+  if (svar.already) {
+    // Allerede deltager — men medlemskabet af ligaen kan mangle. Det er den
+    // halve tilstand, A8-hullet efterlod: med i stillingen, men usynlig på
+    // medlemslisten og uden adgang til ligaens side. At trykke på
+    // invitationslinket igen er den naturlige måde at forsøge at rette det på,
+    // så det skal faktisk rette det. `acceptInvite` er idempotent og retter
+    // netop dét — og den er den ENESTE, der kan: triggeren, der ellers holder
+    // invarianten, fyrer kun, når der indsættes en ny deltager-række.
+    try { await acceptInvite(token, code); }
+    catch { /* deltagelsen er intakt — bloker ikke navigationen */ }
+    return { kind: "already", competition, code };
   }
 
-  // De to navne er PYNT på bekræftelsen og må ikke kunne vælte den: fejler
-  // opslaget, vises bekræftelsen uden navnet frem for slet ikke.
-  let inviterName = "";
-  if (competition.created_by) {
-    try {
-      const prof = await db.select(token, "profiles", `id=eq.${competition.created_by}&select=display_name`);
-      inviterName = prof[0]?.display_name || "";
-    } catch { /* inviter-navn er valgfrit */ }
-  }
-
-  // Ligger konkurrencen i en liga, melder join én ind i BEGGE (A8) — ligaens
-  // navn hentes, så bekræftelsen kan sige det højt i stedet for at gøre det bag
-  // om ryggen på brugeren.
-  let groupName = "";
-  if (competition.group_id) {
-    try {
-      const g = await db.select(token, "groups", `id=eq.${competition.group_id}&select=name`);
-      groupName = g[0]?.name || "";
-    } catch { /* liga-navn er valgfrit */ }
-  }
-
-  return { kind: "confirm", competition, inviterName, groupName };
+  // De to navne er PYNT på bekræftelsen. De kom før fra to ekstra opslag, der
+  // hver især måtte fejle uden at vælte dialogen; nu kommer de med i selve
+  // svaret, og `?? ""` er den samme tolerance — et manglende navn viser
+  // bekræftelsen uden det frem for slet ikke.
+  return {
+    kind: "confirm",
+    competition,
+    inviterName: svar.inviter_name ?? "",
+    groupName: svar.group_name ?? "",
+    code,
+  };
 }
 
 // Samme tre svar for en LIGA-invitationskode (`?liga=`).
@@ -90,15 +86,12 @@ export async function resolveCompetitionInvite(token, userId, code) {
 // Enklere end konkurrence-vejen, fordi der ikke er en anden tilmelding at sikre
 // undervejs: en liga er det yderste niveau. `already` betyder her bare "du er
 // medlem" — gå til ligaens side.
-export async function resolveLeagueInvite(token, userId, code) {
-  const group = await loadGroupByCode(token, code);
-  if (!group) return { kind: "notfound" };
-
-  const already = await db.select(
-    token, "group_members",
-    `group_id=eq.${group.id}&user_id=eq.${userId}&select=user_id`
-  );
-  return already.length ? { kind: "already", group } : { kind: "confirm", group };
+export async function resolveLeagueInvite(token, code) {
+  const svar = await inviteLookup(token, code);
+  if (svar?.kind !== "group") return { kind: "notfound" };
+  return svar.already
+    ? { kind: "already", group: svar.group }
+    : { kind: "confirm", group: svar.group, code };
 }
 
 // Fjerner en invitations-parameter fra adresselinjen, så et genindlæst vindue

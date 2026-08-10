@@ -48,12 +48,13 @@ pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor
 eller en linje i "Forkastede ideer".
 
 - Modal-fokusfejlen kunne kun ses i en rigtig browser (Chromium + playwright-core, ~40 linjer) — skal den slags have en plads i CI, eller er "uden jsdom" stadig svaret?
+- `competition_participants` og `profiles` er stadig læsbare for enhver indlogget bruger — stillinger kræver det, men er en fuld brugerliste også nødvendig?
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 28 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 27 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -101,7 +102,6 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 |---|---|---|
 | `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. |
 | `A39` | Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat? | **Når `day_card_coverage` melder en blokeret dag, nogen savnede.** `match_day_complete()` er global: én kamp uden resultat i én turnering blokerer alle dagskort, også for de konkurrencer, der intet har med turneringen at gøre. Prisen er dokumenteret som bevidst — den globale kampdag er produktets ene tvær-turneringsbegreb — men den blev betalt synligt under `A38`s undersøgelse. |
-| `A40` | Skal en liga kunne læses og tilmeldes af enhver indlogget bruger? | **Før linket deles åbent — samme udløser som `B26`, og den ligger foran den.** `groups_select_all` er `using (true)`, så hver indlogget bruger kan læse hver liga inkl. `invite_code`, og `group_members_insert_self` kræver kun `user_id = auth.uid()` for at melde sig ind som medlem. I en venneflok er det uden betydning; i det sekund oprettelse er åben, kan en fremmed melde sig ind i alle ligaer. |
 | `B26` | E-mailbekræftelse + bot-værn (Turnstile) på signup | **Når linket deles åbent** (hjemmesiden publiceres eller invitationer går uden for det kontrollerede felt). **DELVIST KØRT 10. august 2026 og rullet tilbage — begynd med registeret i [`OPRETTELSE.md`](./OPRETTELSE.md), ikke forfra.** Tilstand: trin 1–3 ✅ (widget oprettet, `VITE_TURNSTILE_SITE_KEY` sat i Vercel **og udrullet**, widgeten tegnes på login-skærmen), Bot Protection **fra**, Confirm email **fra**. Tilbage: trin 4–8. Ét ubevist punkt spærrer trin 4 — at widgetens værtsnavn accepteres; en widget tegnes også på et forkert domæne og fejler først derefter. |
 | `A34` | Supabase Free → Pro? | **Når Usage-siden viser egress nær 5 GB/md, eller når fremmede udgør flertallet af de aktive** — de to falder formentlig sammen omkring 200–500 ugentligt aktive. |
 | `A33` | Er dagsmotorens variation tyndere, end regelantallet lover? | **Når vis-bare dagskort har visninger.** `G73` (5. august 2026) rettede MÅLINGEN og ikke synligheden: de 197 efterfyldte dagskort kan stadig ikke vises, de tælles bare ikke længere i nævneren. Fremadrettede dagskort skrives inde i deres egen runde og ER vis-bare, så udløseren kan nu aflæses direkte — vis-bar > 0 og vist > 0 for dagsreglerne i Analytics. `DAY_RESULT` alene er 123 af 280 historier (44 %). |
@@ -151,7 +151,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Spørgsmål | Kontekst | Afgøres |
 |---|---|---|---|
-| A40 | **Skal en liga kunne læses og tilmeldes af enhver indlogget bruger?** | Fundet ved revisionen efter `B29` (10. august 2026) og er en ANDEN fejlklasse end den, `B29` lukkede: dér kunne en kolonne skrives, som ingen policy kunne beskytte, her gør policyen præcis, hvad der står i den — spørgsmålet er, om det er den rigtige regel. `groups_select_all` er `using (true)`, altså hver liga, hvert navn og hvert `invite_code` læsbart for enhver indlogget bruger; `read all competitions` siger det samme om konkurrencerne. `group_members_insert_self` kræver derefter kun `user_id = auth.uid()` og `role = 'member'` for at melde sig ind. **Bredden er ikke tilfældig:** klienten slår ligaen op på koden med et almindeligt tabelopslag (`src/lib/data/groups.js`, `data/competitions.js`, `data/invites.js`), og opslaget sker FØR man er medlem — den brede læsning er prisen for, at join-flowet er et opslag og ikke en funktion. **Prisen i dag er nul** (21 brugere, alle inviterede) **og bliver reel i samme sekund `B26`s udløser indtræffer:** er oprettelse åben, kan en fremmed konto læse alle ligaer og melde sig ind i dem. Rettelsen er kendt og afgrænset — kodeopslaget flyttes til en `security definer`-funktion, der svarer med ÉN liga, hvorefter policyen kan smalnes til medlemmer — men den rører tre kaldsteder og selve join-flowet, og den kan ikke laves halvt: smalnes policyen uden funktionen, kan ingen længere tage imod en invitation. `sql/tests/write_surface.sql` linje 3 står som `tilladt` og skal skifte til `afvist` i samme ombæring. | **Før linket deles åbent — altså FØR `B26`, ikke efter.** Rækkefølgen er hele pointen: `B26` er det, der gør fremmede mulige, og denne række er det, de så kan gøre. |
 | A34 | **Hvornår skiftes Supabase Free ud med Pro?** | Free-planens tre lofter bider i denne rækkefølge: **egress (5 GB/md)** først — appen er REST-fetch-tung, så et sted mellem 200 og 500 ugentligt aktive nærmer forbruget sig loftet; **database (500 MB)** langt senere (tips-rækker er små; `analytics_events` var den hurtigst voksende tabel og har siden `G77`, 7. august 2026, et loft på 18 måneder, så væksten er nu bundet frem for åben); og **backup-vilkåret** er kvalitativt: 24 timers datatab (afsnit 22) er valgt til venner, og når fremmede udgør flertallet, er Pro's backups prisen værd. Aflæses på Supabase-dashboardets Usage-side — én gang om måneden, ikke oftere. Vercel Hobby er IKKE samme spørgsmål: dens tunge trafik skalerer med turneringer, ikke brugere, og skiftet dér udløses af kommercialisering (vilkårene), ikke af brugertal. | Egress nær loftet, eller fremmede i flertal blandt de aktive. |
 | A35 | **Er publiceringstærsklen på 45 den rigtige?** | Story Engine v3 udgiver dagens kort med ulæst-markering, når nyhedsværdien når 45, og som dæmpet `DAY_RESULT` under. Tallet er udledt af grundvægtene (max for `DAY_RESULT` alene er 40), ikke af data — samme slags kvalificerede gæt som v1's A4-tærskler var, og de blev kalibreret på live-data. `story_score_distribution` logger vinderregel, `news_value` og runner-up, så fordelingen kan aflæses uden ny instrumentering. | **Efter to uger med v3 i drift og mindst ti kampdage.** Målet er 40–60 % af kampdagene med ulæst-markering for en aktiv bruger. Over 70 % ⇒ tærsklen er for lav, og v3 har genskabt v2's problem i ny indpakning. Under 25 % ⇒ Hjem er stille igen, og v2's oprindelige problem er tilbage. |
 | A33 | **Er dagsmotorens variation tyndere, end regelantallet lover?** | Story Engine v2 lagde syv dagsregler til, men `DAY_RESULT` alene står for 123 af 280 historier (44 %), og de næste to (`DUEL` 35, `COLLECTIVE_MISS` 19) er tilsammen mindre end halvdelen af den. En motor, der er markedsført på bredde og leverer det samme kort hver anden gang, er en anden oplevelse end tabellen antyder. **Spørgsmålet kan ikke stilles endnu:** ingen af de 197 dagskort er nogensinde blevet vist (`G73`), så der findes ingen, der har oplevet ensformigheden. Måske er 44 % helt rigtigt — "dagens facit" er også den mest almindelige ting at fortælle om en kampdag. **Delvist håndteret af v3 (7. august 2026):** `DAY_RESULT`s 44 % var en konstruktionsfølge — laveste prioritet, udløses altid — og v3 fjerner årsagen ved at give den grundvægt 8, hvilket gør den til fald-tilbage frem for anker. Spørgsmålet om, hvorvidt de øvrige seks regler faktisk varierer, er **ikke** besvaret og skal aflæses på ny fordeling. | Når dagskort faktisk bliver set, altså efter `G73`. |
@@ -217,29 +216,29 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 10. august 2026 (tredje kørsel) — revisionen efter `B29`: fladen er ren, og den er nu en kontrol
+### 10. august 2026 (fjerde kørsel) — `A40` er bygget: koden er hemmeligheden igen
 
-**Listen er 27 → 28.** `sql/username_change.sql` er kørt i staging og
-produktion, så `profiles`-hullet er lukket. Spørgsmålet, indbakken stillede —
-`grant all` står på 29 objekter mere — er besvaret ved at måle hele skrive-fladen
-mod `sql/schema.sql`: **den er dækket.** Hvor der ingen skrive-policy er, skjuler
-RLS rækkerne; hvor der er en, er den scopet til `auth.uid()`, `created_by`,
-`is_admin` eller `is_group_admin`. Alle seks views, `authenticated` kan nå, er
-`security_invoker=on` og ikke auto-opdaterbare.
+**Listen er 28 → 27.** Rækken blev åbnet samme dag af revisionen efter `B29` og
+er lukket igen — ikke fordi den var lille, men fordi udløseren (`B26`, åben
+oprettelse) ville have gjort den dyrere at vente på end at bygge.
 
-**Revisionen er blevet til `sql/tests/write_surface.sql`** frem for til et svar
-i en changelog: fortegnelsen over skrive-policies, view-reglen, `profiles`'
-kolonneliste og tyve fjendtlige skrivninger med hvert sit forventede udfald.
-Den måler RÆKKEANTAL og ikke fravær af en fejl — RLS uden en policy skjuler bare
-rækkerne, så en fjendtlig `update` rammer nul rækker og svarer OK. Den fælde
-kostede en runde undervejs og gjorde fem værn til fem huller på skærmen.
+**Reglen er nu:** *du kan se og tilmelde dig en liga eller en konkurrence, hvis
+du allerede er med i den — eller hvis du fremviser dens invitationskode.*
+`groups_select_all` (`using (true)`) og `read all competitions` er væk, og
+`invite_lookup()` + `accept_invite()` er de eneste to steder, en kode veksles til
+adgang.
 
-**Den ene ting, revisionen fandt, er `A40` og en anden fejlklasse.** `B29`s hul
-var en kolonne, ingen policy kunne beskytte. `A40` er en policy, der gør præcis,
-hvad der står i den: `groups_select_all` er `using (true)`, så enhver indlogget
-bruger kan læse hver liga inkl. `invite_code` og melde sig ind. Den koster
-ingenting i dag og bliver reel i samme sekund `B26`s udløser indtræffer — og
-står derfor FORAN `B26` i tieret.
+**To ting fandt testen, som ingen læsning havde fundet.** Den ene: policyens
+`exists` på `groups` er selv underlagt den nye læsepolicy, så en opretter kunne
+ikke skrive sin egen admin-række — **hele oprettelsen af en liga var brudt**, ind
+til `is_group_creator()` blev lagt ind som `security definer`. Den anden: en
+kommentar påstod, at invarianten ville AFVISE en deltagelse uden medlemskab. Den
+udfylder det i stedet, og indmeldingen i `accept_invite()` er derfor kun
+nødvendig for `A8`-reparationen — nu dækket af påstand 8c.
+
+🔴 **`sql/invite_lookup.sql` (#52) skal køres SAMMEN MED frontend-mergen**, ikke
+før og ikke efter: migreringen alene lukker join-flowet, klienten alene kalder
+funktioner, der ikke findes.
 
 ---
 

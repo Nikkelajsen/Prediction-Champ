@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";
-import { joinGroup, joinCompetition, resolveCompetitionInvite, resolveLeagueInvite, stripInviteParam } from "../lib/data.js";
+import { acceptInvite, resolveCompetitionInvite, resolveLeagueInvite, stripInviteParam } from "../lib/data.js";
 import { logEvent } from "../lib/analytics.js";
 import { deriveOnboarding, loadOnboardingSignals } from "../lib/onboarding.js";
 import { readUserFlag, writeUserFlag, COMPLETE_KEY, FLOW_KEY, PWA_ONBOARDED_KEY } from "../lib/localFlags.js";
@@ -219,7 +219,7 @@ function MainApp({ session, profile, onProfileChanged, onLogout, pendingJoinCode
     (async () => {
       setJoinError("");
       try {
-        const res = await resolveCompetitionInvite(token, userId, pendingJoinCode);
+        const res = await resolveCompetitionInvite(token, pendingJoinCode);
         if (res.kind === "already") {
           await loadCompetitions();
           setTab("ligaer");
@@ -243,7 +243,7 @@ function MainApp({ session, profile, onProfileChanged, onLogout, pendingJoinCode
     (async () => {
       setJoinError("");
       try {
-        const res = await resolveLeagueInvite(token, userId, pendingLigaCode);
+        const res = await resolveLeagueInvite(token, pendingLigaCode);
         if (res.kind === "already") { setTab("ligaer"); setScreen({ type: "group", groupId: res.group.id }); }
         else if (res.kind === "confirm") setPendingGroupJoin(res);
         else setJoinError("Ingen liga fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
@@ -259,7 +259,11 @@ function MainApp({ session, profile, onProfileChanged, onLogout, pendingJoinCode
     if (!pendingGroupJoin) return;
     const g = pendingGroupJoin.group;
     try {
-      await joinGroup(token, userId, g.id);
+      // Koden og ikke id'et (A40): tilmeldingen sker i `accept_invite()`, som
+      // kræver, at man fremviser invitationen. Et liga-id er ikke længere nok —
+      // det var hullet.
+      const res = await acceptInvite(token, pendingGroupJoin.code);
+      if (res?.joined) logEvent(token, "league_joined", { groupId: g.id });
       logEvent(token, "league_invite_accepted", { groupId: g.id, metadata: { via: "link" } });
       await refreshOnboarding();
       setPendingGroupJoin(null);
@@ -276,9 +280,13 @@ function MainApp({ session, profile, onProfileChanged, onLogout, pendingJoinCode
     const comp = pendingJoin.competition;
     try {
       // A8: ligger konkurrencen i en liga, melder join én ind i BEGGE. Reglen bor
-      // i joinCompetition, så denne sti og LigaerTabs indsatte-kode-sti ikke kan
+      // siden A40 i `accept_invite()` — altså i databasen frem for i et
+      // JS-kaldssted — så denne sti og LigaerTabs indsatte-kode-sti ikke kan
       // divergere igen (det var netop, hvad der var sket — se A7).
-      await joinCompetition(token, userId, comp.id, comp.group_id);
+      const res = await acceptInvite(token, pendingJoin.code);
+      if (res?.joined) {
+        logEvent(token, "competition_joined", { competitionId: comp.id, groupId: comp.group_id });
+      }
       const comps = await loadCompetitions();
       await refreshOnboarding(comps);
       setPendingJoin(null);

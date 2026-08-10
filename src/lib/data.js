@@ -14,7 +14,7 @@ export { loadCareerProfile, loadCareerMilestones } from "./data/career.js";
 export { computeCompetitionState } from "./data/competitionState.js";
 export { loadCompetitionStatuses, EMPTY_STATUS } from "./data/competitionStatus.js";
 export { moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data/competitions.js";
-export { loadMyGroups, loadGroupDetail, loadGroupByCode, createGroup, joinGroup, leaveGroup, deleteGroup, joinCompetition, leaveCompetition, setCompetitionHidden, loadCompetitionParticipants, removeParticipant, deleteCompetition } from "./data/groups.js";
+export { loadMyGroups, loadGroupDetail, inviteLookup, acceptInvite, createGroup, leaveGroup, deleteGroup, joinCompetition, leaveCompetition, setCompetitionHidden, loadCompetitionParticipants, removeParticipant, deleteCompetition } from "./data/groups.js";
 export { computeHomeTips, computeCurrentRound, loadHomePlacements, ratingSnapshot, daFullDate, fmtCountdown, monthName } from "./data/home.js";
 export { resolveCompetitionInvite, resolveLeagueInvite, stripInviteParam } from "./data/invites.js";
 export { navneforslag, sikrProfil, changeDisplayName } from "./data/profile.js";

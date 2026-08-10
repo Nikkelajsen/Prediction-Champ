@@ -4,7 +4,7 @@
 import { db, restFetch } from "../supabase.js";
 import { filterTippable, filterFromRoundStart, currentRoundKey } from "../scoring.js";
 import { logEvent } from "../analytics.js";
-import { loadGroupByCode, joinGroup, joinCompetition } from "./groups.js";
+import { inviteLookup, acceptInvite } from "./groups.js";
 
 // ---------- oprettelse af konkurrence ----------
 
@@ -308,32 +308,31 @@ async function joinByInviteCode(token, userId, rawCode) {
   const code = inviteCodeFrom(rawCode);
   if (!code) return { kind: "none" };
 
-  const group = await loadGroupByCode(token, code);
-  if (group) {
-    await joinGroup(token, userId, group.id);
-    logEvent(token, "league_invite_accepted", { groupId: group.id, metadata: { via: "code" } });
-    return { kind: "group", group };
+  // Ét opslag svarer på begge slags koder (A40), og én tilmelding udfører
+  // begge indmeldinger. Rækkefølgen liga-før-konkurrence bor nu i
+  // `accept_invite()` frem for i dette kaldssted — det var netop dét, der lod
+  // denne sti og MainApps divergere engang (A7).
+  const svar = await inviteLookup(token, code);
+  if (svar?.kind === "none" || !svar?.kind) return { kind: "none" };
+
+  const resultat = await acceptInvite(token, code);
+
+  if (svar.kind === "group") {
+    // `joined` og ikke `already`: hændelsen skal kun logges, når medlemskabet
+    // faktisk blev skrevet. Den gamle `joinGroup` skelnede på samme måde.
+    if (resultat?.joined) logEvent(token, "league_joined", { groupId: svar.group.id });
+    logEvent(token, "league_invite_accepted", { groupId: svar.group.id, metadata: { via: "code" } });
+    return { kind: "group", group: svar.group };
   }
 
-  const found = await db.select(token, "competitions", `invite_code=eq.${code}&select=*`);
-  if (!found.length) return { kind: "none" };
-  const competition = found[0];
-
-  const already = await db.select(token, "competition_participants", `competition_id=eq.${competition.id}&user_id=eq.${userId}&select=competition_id`);
-  if (already.length) {
-    if (competition.group_id) {
-      try { await joinGroup(token, userId, competition.group_id); }
-      catch { /* deltagelsen er intakt — bloker ikke navigationen */ }
-      logEvent(token, "league_invite_accepted", { groupId: competition.group_id, competitionId: competition.id, metadata: { via: "code" } });
-    }
-    return { kind: "competition", competition, alreadyJoined: true };
+  const competition = svar.competition;
+  if (resultat?.joined) {
+    logEvent(token, "competition_joined", { competitionId: competition.id, groupId: competition.group_id });
   }
-
-  await joinCompetition(token, userId, competition.id, competition.group_id);
   if (competition.group_id) {
     logEvent(token, "league_invite_accepted", { groupId: competition.group_id, competitionId: competition.id, metadata: { via: "code" } });
   }
-  return { kind: "competition", competition, alreadyJoined: false };
+  return { kind: "competition", competition, alreadyJoined: !!svar.already };
 }
 
 // Flyt en egen liga-løs konkurrence ind i en liga (blød migrering). RPC'en gør

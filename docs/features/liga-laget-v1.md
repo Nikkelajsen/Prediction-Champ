@@ -264,3 +264,32 @@ Godkendt sammen med planen; ført i roadmappens beslutningslog:
 ---
 
 *Næste skridt: Implementér fase 1 (`sql/groups.sql` på staging) → fase 2 som feature-branch (liga-UI + terminologi-fejning) → fase 3 (adoption).*
+
+---
+
+## Invitationskoden er hemmeligheden (rettelse efter levering, 10. august 2026)
+
+Spec'en beskrev invitationen som et link med en permanent kode, og det holder —
+men den sagde ikke, hvad koden **beskyttede**, og i v1 gjorde den ingenting:
+`groups_select_all` var `using (true)`, så hver indlogget bruger kunne læse hver
+eneste liga inkl. dens `invite_code`, og `group_members_insert_self` krævede kun
+`user_id = auth.uid()` for at melde sig ind. Et liga-id var altså nok, og
+id'erne kunne enumereres.
+
+**Efter `A40` er reglen:** du kan se og tilmelde dig en liga, hvis du allerede er
+medlem — eller hvis du fremviser koden. Opslaget er `invite_lookup()` og
+tilmeldingen `accept_invite()`, begge `security definer`; policyerne er smalnet
+tilsvarende.
+
+**Det, der er værd at kende for denne spec, er hvorfor bredden var der.**
+Klienten slog ligaen op på koden med et almindeligt tabelopslag, og opslaget
+sker FØR man er medlem. Den brede læsning var altså ikke en forglemmelse, men
+prisen for, at join-flowet var et opslag frem for en funktion — og rettelsen er
+derfor en flytning, ikke en policy-linje.
+
+**Medlems-administration er stadig uden for v1**, og `A40` gør den ikke
+nærmere: der findes fortsat ingen UPDATE-policy på `group_members` og dermed
+ingen forfremmelse. Det ene, der ændrede sig, er, at opretterens admin-række nu
+er det ENESTE, en bruger må skrive direkte i tabellen — og at policyen kræver
+`role = 'admin'`, netop for at en liga ikke kan fødes uden en administrator
+(`A37`s frosne liga).

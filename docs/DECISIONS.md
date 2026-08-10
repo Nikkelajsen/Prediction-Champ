@@ -15,6 +15,57 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 10. august 2026 — `A40` bygget: invitationskoden er hemmeligheden igen
+
+**Beslutning:** en liga og en konkurrence kan kun ses og tilmeldes af den, der
+allerede er med — eller af den, der fremviser invitationskoden. `A40` blev
+åbnet og lukket samme dag.
+
+**Hvorfor den ikke ventede på sin udløser.** Rækken havde `B26` (åben
+oprettelse) som trigger og stod FORAN den. Havde vi ventet, ville rettelsen
+skulle laves i samme uge, som fremmede konti blev mulige — altså på det
+tidspunkt, hvor en fejl i join-flowet ville ramme rigtige nye brugere frem for de
+enogtyve, der allerede er inde. **Rækkefølgen var selve pointen med rækken**, og
+den peger på at bygge nu.
+
+**Rettelsen er en flytning og ikke en policy-linje.** Klienten slog ligaen op på
+koden med et almindeligt tabelopslag, FØR man var medlem, og det kunne kun lade
+sig gøre, fordi hver liga var læsbar for enhver. Opslaget (`invite_lookup()`) og
+tilmeldingen (`accept_invite()`) er nu `security definer`-funktioner. Smalnes
+policyerne uden den flytning, lukkes ikke et hul men hele join-flowet — og det
+ville blive opdaget af den næste bruger frem for af os.
+
+**Tilmeldingen er ÉN funktion og ikke to**, fordi `A8`-reglen (en konkurrence i
+en liga melder ind i begge) ellers ville skulle kendes af hvert kaldssted. Det
+var præcis dét, der lod `MainApp`s og `LigaerTab`s veje divergere engang (`A7`).
+Reglen bor nu i databasen.
+
+**To fund, som kun testen kunne give.** Begge er værd at have skrevet ned, fordi
+de begge stammer fra at have troet noget forkert om mekanikken:
+
+1. **Hele oprettelsen af en liga var brudt af rettelsen.** Insert-policyens
+   `exists (select 1 from groups …)` er selv underlagt den NYE læsepolicy, og en
+   opretter er ikke medlem i det sekund, hun skriver sin egen admin-række. Uden
+   `is_group_creator()` som `security definer` kunne ingen oprette en liga
+   overhovedet — altså en rettelse, der lukkede et hul og hele produktet på én
+   gang. Fanget af påstand 10b, som findes udelukkende for at måle, at flowet
+   stadig virker.
+2. **Invarianten afviser ikke, den udfylder.**
+   `ensure_group_membership_for_participant()` er en BEFORE INSERT-trigger med
+   `on conflict do nothing`, ikke en vagt, der siger nej. Migreringens første
+   kommentar påstod det modsatte og begrundede rækkefølgen liga-før-konkurrence
+   med en mekanik, der ikke findes. Fundet af en mutation, der fjernede
+   indmeldingen og **ikke** fik testen til at fejle. Linjen bliver stående, men
+   af den rigtige grund: triggeren fyrer kun, når der faktisk indsættes en
+   deltager-række, så `A8`s halve tilstand — allerede deltager, mangler
+   medlemskab — kun kan repareres af funktionen selv.
+
+**Det, der IKKE er smalnet, og hvorfor.** `competition_participants` og
+`profiles` er stadig læsbare for enhver indlogget bruger. Stillinger går på
+tværs af konkurrencer og skal kunne slå navne op; en smalning dér er et andet
+spørgsmål med en anden pris, og den er noteret i backloggens indbakke frem for
+foldet ind her.
+
 ## 10. august 2026 — Revisionen efter `B29`: fladen er dækket, og svaret er skrevet som en kontrol
 
 **Beslutning:** `B29`s fejlklasse — en policy afgrænser rækken, ikke kolonnen —

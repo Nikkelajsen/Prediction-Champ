@@ -220,6 +220,21 @@ jobs:
           psql -h localhost -U postgres -d fladetest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d fladetest -v ON_ERROR_STOP=1 -b -f sql/tests/write_surface.sql
 
+      # Invitationskoden er hemmeligheden igen (A40). Testen har TO halvdele, og
+      # den anden er den vigtigste: den første viser, at en fremmed hverken kan
+      # læse eller tilmelde sig en liga, hun ikke er med i — den anden, at
+      # invitationen stadig kan tages imod. Smalnes policyerne uden at opslaget
+      # flyttes, lukkes ikke et hul men hele join-flowet, og det ville blive
+      # opdaget af den næste bruger frem for af os.
+      - name: Test af invitations-opslaget og de smalnede policies
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database invitetest;'
+          psql -h localhost -U postgres -d invitetest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d invitetest -v ON_ERROR_STOP=1 -b -f sql/tests/invite_lookup.sql
+
       # Story Engine v1.2's kåringsregler (B10): kører rating_core +
       # competition_awards + story_engine i én tom database og efterprøver
       # kæden fra kåringsrække til historie-kort. Egen database, som de andre.

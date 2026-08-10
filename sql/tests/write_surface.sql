@@ -36,9 +36,9 @@
 --      kan rollen slet ikke nå.
 --   3. `profiles`' kolonne-rettighed er præcis `id` + `display_name` — `B29`s
 --      rettelse, sagt som en regel om fladen frem for om én migrering.
---   4. Atten fjendtlige skrivninger har hvert sit forventede udfald. Listen ER
---      dokumentationen for, hvad en bruger må, og den ene `tilladt`, der ikke er
---      en selvfølge, står med sin begrundelse ved siden af.
+--   4. Tyve fjendtlige skrivninger har hvert sit forventede udfald. Listen ER
+--      dokumentationen for, hvad en bruger må — og efter `A40` er der ikke
+--      længere en eneste `tilladt` blandt dem.
 --
 -- EFTERPRØVET MED MUTATION (10. august 2026). Fire ændringer af skemaet, tre
 -- fanget: en ny permissiv `update`-policy på `competitions` (påstand 1), en
@@ -78,9 +78,11 @@
 -- kun gøre kørslen langsom. Samme greb som i `sql/tests/liga_admin.sql`.
 alter table public.matches disable trigger all;
 
--- Migreringen, der smalnede `profiles`. Uden den er påstand 3 og den første
--- linje i katalogret en beskrivelse af hullet frem for af værnet.
+-- Migreringerne, der smalnede fladen. Uden dem beskriver katalogret hullerne
+-- frem for værnene. `sql/schema.sql` er endnu ældre end begge — se advarslen om
+-- påstand 3 ovenfor.
 \ir ../username_change.sql
+\ir ../invite_lookup.sql
 
 grant usage on schema auth to authenticated;
 
@@ -134,10 +136,11 @@ insert into forventning values
  ( 2, 'profiles: omdøb en anden bruger',
       $s$update public.profiles set display_name = 'Kapret'
           where id = 'bbbb0000-0000-4000-8000-000000000002'$s$, 'nul'),
- -- Den ene, der IKKE er en selvfølge. Se noten under katalogret.
+ -- Var `tilladt` indtil `A40` (10. august 2026) og er nu lukket. Se noten
+ -- under katalogret.
  ( 3, 'group_members: meld mig ind i en fremmed liga som medlem',
       $s$insert into public.group_members (group_id, user_id, role)
-         values ('1111aaaa-0000-4000-8000-000000000001', auth.uid(), 'member')$s$, 'tilladt'),
+         values ('1111aaaa-0000-4000-8000-000000000001', auth.uid(), 'member')$s$, 'afvist'),
  ( 4, 'group_members: meld mig ind som ADMIN i en fremmed liga',
       $s$insert into public.group_members (group_id, user_id, role)
          values ('1111aaaa-0000-4000-8000-000000000001', auth.uid(), 'admin')$s$, 'afvist'),
@@ -287,28 +290,23 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- NOTEN TIL LINJE 3 — den ene `tilladt`, der ikke er en selvfølge
+-- NOTEN TIL LINJE 3 — hullet, der blev lukket af `A40`
 -- ---------------------------------------------------------------------------
--- En bruger kan melde sig ind i ENHVER liga, hvis id hun kender, uden invitation:
--- `group_members_insert_self` kræver kun `user_id = auth.uid()` og `role =
--- 'member'`. Og id'et er ikke svært at få fat i — `groups_select_all` er
--- `using (true)`, så hver eneste indloggede bruger kan læse hver eneste liga,
--- INKLUSIVE `invite_code`. Det samme gælder `competitions` (`read all
--- competitions`).
+-- Linjen stod som `tilladt` fra 10. august 2026 til samme dags tredje kørsel og
+-- var revisionens eneste fund: en bruger kunne melde sig ind i ENHVER liga, hvis
+-- id hun kendte, fordi `group_members_insert_self` kun krævede `user_id =
+-- auth.uid()` og `role = 'member'`. Og id'et var ikke svært at få fat i —
+-- `groups_select_all` var `using (true)`, så hver eneste indloggede bruger kunne
+-- læse hver eneste liga, INKLUSIVE `invite_code`.
 --
--- Policyen er `true`, fordi klienten selv slår ligaen op på koden
--- (`src/lib/data/groups.js`), og opslaget sker FØR man er medlem. Den brede
--- læsning er altså prisen for, at join-flowet er et tabelopslag og ikke en
--- funktion.
+-- **Det var ikke den fejlklasse, `B29` fandt.** Dér kunne en KOLONNE skrives,
+-- som ingen policy kunne beskytte. Her gjorde policyen præcis, hvad der stod i
+-- den; spørgsmålet var, om det var den rigtige regel — og svaret blev nej.
 --
--- **Det er ikke den fejlklasse, `B29` fandt** — dér kunne en KOLONNE skrives,
--- som ingen policy kunne beskytte. Her gør policyen præcis, hvad der står i
--- den; spørgsmålet er, om det er den rigtige regel. Derfor står linjen som
--- `tilladt` og ikke som en fejl: testen beskriver fladen, som den ER, og skal
--- ikke foregribe en beslutning, der ikke er truffet.
---
--- Skal det laves om, er det join-flowet, der skal ændres (et opslag på koden i
--- en `security definer`-funktion, som svarer med ÉN liga frem for at åbne
--- tabellen) — og så skal linje 3 herover skifte til `afvist` i samme ombæring.
+-- `sql/invite_lookup.sql` flyttede opslaget og tilmeldingen ind i to
+-- `security definer`-funktioner, så koden igen er hemmeligheden, og smalnede de
+-- fire policies. Selve flowet — at en invitation stadig kan tages imod — er
+-- dækket af `sql/tests/invite_lookup.sql`, som har ti påstande om netop dét;
+-- her står kun linjen, der viser, at døren er lukket.
 
 select 'write_surface: fortegnelsen og alle 20 skrivninger er som ventet' as resultat;

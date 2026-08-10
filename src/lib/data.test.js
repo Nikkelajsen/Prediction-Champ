@@ -468,25 +468,18 @@ describe("liga-laget (grupper)", () => {
   // A8 (og A7, juli 2026): join via konkurrence-link skal melde én ind i BEGGE.
   // Reglen lå tidligere som en kopi i hver af de to join-stier, og kun den ene
   // huskede ligaen — derfor bor den nu ét sted og testes her.
-  it("joinCompetition melder ind i ligaen FØR konkurrencen, når konkurrencen har en liga", async () => {
-    const calls = [];
-    db.select.mockImplementation(async (token, table) => {
-      calls.push(`select:${table}`);
-      return table === "group_members" ? [] : []; // endnu ikke medlem
-    });
-    db.insert.mockImplementation(async (token, table) => { calls.push(`insert:${table}`); });
-
-    await joinCompetition("token", "u1", "c1", "g1");
-
-    expect(calls).toEqual(["select:group_members", "insert:group_members", "insert:competition_participants"]);
-  });
-
-  it("joinCompetition springer liga-medlemskabet over, når man allerede er medlem", async () => {
-    db.select.mockResolvedValueOnce([{ user_id: "u1" }]); // allerede medlem
+  // `joinCompetition` er efter `A40` KUN "Deltag"-knappen på ligasiden — altså
+  // en, der allerede er medlem. Den melder derfor ikke længere ind i ligaen
+  // først; RLS kræver medlemskabet, og triggeren
+  // `ensure_group_membership_for_participant` dækker resten. Invitations-vejen,
+  // som de tre gamle tests målte rækkefølgen på, går nu gennem `accept_invite()`
+  // og er dækket af `sql/tests/invite_lookup.sql` påstand 8.
+  it("joinCompetition skriver KUN deltager-rækken", async () => {
     db.insert.mockResolvedValue(undefined);
 
     await joinCompetition("token", "u1", "c1", "g1");
 
+    expect(db.select).not.toHaveBeenCalled();
     expect(db.insert).toHaveBeenCalledTimes(1);
     expect(db.insert).toHaveBeenCalledWith("token", "competition_participants", [{ competition_id: "c1", user_id: "u1" }]);
   });
@@ -1004,57 +997,63 @@ describe("joinByInviteCode", () => {
     expect(inviteCodeFrom("https://app.dk/?liga=ABC123DE")).toBe("abc123de");
   });
 
+  // `A40`: koden veksles nu i to RPC'er frem for i fire tabelopslag og to
+  // indsættelser. Testene måler derfor, at flowet stiller de RIGTIGE spørgsmål
+  // og skriver INTET selv — selve rækkefølgen liga-før-konkurrence er flyttet
+  // ind i `accept_invite()` og efterprøves i `sql/tests/invite_lookup.sql`.
   it("prøver liga-koden først og melder ind i ligaen", async () => {
-    db.select.mockImplementation(async (token, table) =>
-      (table === "groups" ? [{ id: "g1", name: "Vennerne" }] : []));
-    db.insert.mockResolvedValue(undefined);
+    restFetch.mockImplementation(async (path) =>
+      (String(path).endsWith("invite_lookup")
+        ? { kind: "group", group: { id: "g1", name: "Vennerne" }, already: false }
+        : { kind: "group", group_id: "g1", joined: true }));
 
     const res = await joinByInviteCode("token", "u1", "ABC123");
 
     expect(res).toMatchObject({ kind: "group", group: { id: "g1" } });
-    expect(db.insert).toHaveBeenCalledWith("token", "group_members", [{ group_id: "g1", user_id: "u1", role: "member" }]);
-  });
-
-  it("en ukendt kode giver kind 'none' og skriver INTET", async () => {
-    db.select.mockResolvedValue([]);
-    expect(await joinByInviteCode("token", "u1", "FORKERT")).toEqual({ kind: "none" });
+    const stier = restFetch.mock.calls.map((c) => String(c[0]));
+    expect(stier).toContain("/rest/v1/rpc/invite_lookup");
+    expect(stier).toContain("/rest/v1/rpc/accept_invite");
+    // Små bogstaver: `inviteCodeFrom()` normaliserer koden, og det er DEN
+    // værdi, der skal nå serveren — opslaget matcher på `invite_code` ordret.
+    const accept = restFetch.mock.calls.find((c) => String(c[0]).endsWith("accept_invite"));
+    expect(accept[1].body).toEqual({ p_code: "abc123" });
+    // Klienten skriver ikke selv — det er hele pointen i A40.
     expect(db.insert).not.toHaveBeenCalled();
   });
 
-  it("konkurrence-kode melder ind i ligaen FØR deltager-rækken (A8-garantien)", async () => {
-    const calls = [];
-    db.select.mockImplementation(async (token, table) => {
-      calls.push(`select:${table}`);
-      if (table === "groups") return [];                                   // ikke en liga-kode
-      if (table === "competitions") return [{ id: "c1", group_id: "g1" }];
-      return []; // group_members / competition_participants: endnu ikke med
-    });
-    db.insert.mockImplementation(async (token, table) => { calls.push(`insert:${table}`); });
+  it("en ukendt kode giver kind 'none' og skriver INTET", async () => {
+    restFetch.mockResolvedValue({ kind: "none" });
+    expect(await joinByInviteCode("token", "u1", "FORKERT")).toEqual({ kind: "none" });
+    expect(db.insert).not.toHaveBeenCalled();
+    // …og der forsøges ikke engang en tilmelding på en kode, der ikke findes.
+    expect(restFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("konkurrence-kode veksles i ét kald, og deltagelsen meldes som ny", async () => {
+    restFetch.mockImplementation(async (path) =>
+      (String(path).endsWith("invite_lookup")
+        ? { kind: "competition", competition: { id: "c1", group_id: "g1" }, already: false }
+        : { kind: "competition", competition_id: "c1", group_id: "g1", joined: true }));
 
     const res = await joinByInviteCode("token", "u1", "KODE");
 
     expect(res).toMatchObject({ kind: "competition", alreadyJoined: false });
-    expect(calls).toEqual([
-      "select:groups", "select:competitions", "select:competition_participants",
-      "select:group_members", "insert:group_members", "insert:competition_participants",
-    ]);
+    expect(db.insert).not.toHaveBeenCalled();
   });
 
-  it("er idempotent: allerede tilmeldt giver ingen dublet, men liga-medlemskabet repareres", async () => {
-    // Netop A8-halvtilstanden: deltager uden liga-medlemskab. At bruge invitationen
-    // igen er den naturlige måde at forsøge at rette den på, så det skal virke.
-    db.select.mockImplementation(async (token, table) => {
-      if (table === "groups") return [];
-      if (table === "competitions") return [{ id: "c1", group_id: "g1" }];
-      if (table === "competition_participants") return [{ competition_id: "c1" }];
-      return []; // group_members: mangler
-    });
-    db.insert.mockResolvedValue(undefined);
+  it("er idempotent: allerede tilmeldt melder ikke ind igen", async () => {
+    // Netop A8-halvtilstanden: deltager uden liga-medlemskab. At bruge
+    // invitationen igen er den naturlige måde at forsøge at rette den på, og
+    // `accept_invite()` er idempotent — men `joined: false` skal betyde, at
+    // klienten IKKE logger en ny tilmelding.
+    restFetch.mockImplementation(async (path) =>
+      (String(path).endsWith("invite_lookup")
+        ? { kind: "competition", competition: { id: "c1", group_id: "g1" }, already: true }
+        : { kind: "competition", competition_id: "c1", group_id: "g1", joined: false }));
 
     const res = await joinByInviteCode("token", "u1", "KODE");
 
     expect(res.alreadyJoined).toBe(true);
-    expect(db.insert).toHaveBeenCalledTimes(1);
-    expect(db.insert).toHaveBeenCalledWith("token", "group_members", [{ group_id: "g1", user_id: "u1", role: "member" }]);
+    expect(db.insert).not.toHaveBeenCalled();
   });
 });
