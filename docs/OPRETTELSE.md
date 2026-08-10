@@ -20,17 +20,23 @@ konfiguration uden for repoet, som kun kan udføres af ejeren.
 
 | Hvad | Værdi | Sidst verificeret |
 |---|---|---|
-| Turnstile-widget | Cloudflare → Turnstile. Navn: `Leagly` | ? |
-| Værtsnavne på widgeten | `prediction-champ.vercel.app` | ? |
+| Turnstile-widget | Cloudflare → Turnstile. Navn: `Leagly` | 10. august 2026 — oprettet |
+| Værtsnavne på widgeten | `prediction-champ.vercel.app` | ? — widgeten TEGNES på login, men det beviser ikke, at værtsnavnet accepteres |
 | Widget-tilstand | Managed | ? |
-| Site key (offentlig) | `VITE_TURNSTILE_SITE_KEY` i Vercel, **Production + Preview** | ? |
-| Secret key (hemmelig) | Kun i Supabase → Authentication → Attack Protection | ? |
-| Bot Protection | **Slået fra** indtil runbogen køres | ? |
-| Confirm email | **Slået fra** indtil runbogen køres | ? |
-| Skabelon: Confirm signup | Emne + brødtekst fra [`mail/confirm-signup.html`](./mail/confirm-signup.html) | ? — se `MAIL.md`s register |
+| Site key (offentlig) | `VITE_TURNSTILE_SITE_KEY` i Vercel | **10. august 2026 — sat OG udrullet.** Aflæst på, at widgeten tegnes på login-skærmen; komponenten returnerer `null` uden nøgle, så der er ingen mellemtilstand |
+| Site key i **Preview** | Samme variabel, Preview-miljøet | ? — ikke bekræftet sat |
+| Secret key (hemmelig) | Kun i Supabase → Authentication → Attack Protection | 10. august 2026 — indtastet, og siden rullet tilbage |
+| Bot Protection | **Slået fra** | 10. august 2026. Var slået til om formiddagen og lukkede adgangen for alle, fordi trin 3 var sprunget over — se "Første kørsel" nederst |
+| Confirm email | **Slået fra** | 10. august 2026. Var slået til 08:04–ca. 09:43 og efterlod én ubekræftet konto, som blev bekræftet i hånden |
+| Skabelon: Confirm signup | Emne + brødtekst fra [`mail/confirm-signup.html`](./mail/confirm-signup.html) | ? — indsat 10. august 2026, men aldrig aflæst på en modtaget mail |
 
 **`?` betyder "aldrig kørt"**, ikke "kørt og bestået". Udfyld datoerne, når
 beviserne nedenfor er gået igennem — forskellen er hele pointen med registeret.
+
+> **Status 10. august 2026:** trin 1–3 er kørt og trin 3 er bestået — nøglen er
+> udrullet, og widgeten tegnes. Begge knapper i Supabase står på **fra** efter
+> et rollback. Næste skridt er trin 4, som nu er den knap, den skulle have været
+> hele tiden: en, der kan trykkes tilbage.
 
 ---
 
