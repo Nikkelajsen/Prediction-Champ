@@ -8,15 +8,25 @@ fortsætte derfra.
 
 | Trin | Hvad | Tilstand |
 |---|---|---|
-| 1 | `sql/invite_lookup.sql` (#52) kørt i **staging** | ⬜ |
-| 2 | Preview afprøvet mod staging: invitation kan tages imod | ⬜ |
-| 3 | `sql/invite_policies.sql` (#53) kørt i **staging** | ⬜ |
-| 4 | Preview afprøvet igen — begge invitationstyper | ⬜ |
-| 5 | `sql/invite_lookup.sql` (#52) kørt i **produktion** | ⬜ |
+| 1 | `sql/invite_lookup.sql` (#52) kørt i **staging** | ✅ 11. august 2026 |
+| 2 | Preview afprøvet mod staging: invitation kan tages imod | ✅ |
+| 3 | `sql/invite_policies.sql` (#53) kørt i **staging** | ✅ |
+| 4 | Preview afprøvet igen — begge invitationstyper | ✅ |
+| 5 | `sql/invite_lookup.sql` (#52) kørt i **produktion** | ✅ 11. august 2026 |
 | 6 | PR merget, Vercel-deploy færdig | ⬜ |
 | 7 | Produktionen afprøvet: invitation kan tages imod | ⬜ |
 | 8 | `sql/invite_policies.sql` (#53) kørt i **produktion** | ⬜ |
 | 9 | Produktionen afprøvet igen, og hullet efterprøvet lukket | ⬜ |
+
+🔴 **Tilstand pr. 11. august 2026: produktionen står MELLEM de to trin.**
+`#52` er kørt, `#53` er ikke. Funktionerne findes, policyerne er stadig brede,
+og hullet er derfor stadig åbent — som det har været hele tiden. Det, der
+mangler, er trin 6–9, og de skal tages i den rækkefølge.
+
+**Under afprøvningen i staging dukkede en fejl op, der IKKE var `A40`:** Hjem og
+Tip kunne ikke hente kampe med "Alle konkurrencer" valgt. Årsagen var URL-længde
+(778 kamp-id'er ≈ 29 KB), ikke rettighederne — se `DOCUMENTATION.md` §13. Den er
+rettet i samme PR med `selectIn()`, så den følger med deployet i trin 6.
 
 Sæt ✅ efterhånden. Bliver du afbrudt, er registeret det eneste, der fortæller,
 hvor du var.
