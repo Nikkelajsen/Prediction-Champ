@@ -1,8 +1,11 @@
 # Udrulning af `A40` — invitationskoden bliver hemmeligheden igen
 
-Runbog for de to migreringer, der lukker `A40`. **Læs registeret først, ikke
-filen forfra:** hvis kørslen er begyndt, står tilstanden nedenfor, og du skal
-fortsætte derfra.
+✅ **AFSLUTTET 11. august 2026. Der er intet at gøre her.** Begge migreringer er
+kørt i produktion, og efterprøvningen svarede 4 / 0 / 3 / 0. Filen bliver
+stående af to grunde: den er historikken for, hvordan udrulningen faktisk gik,
+og den er **skabelonen for den næste todelte migrering** — en additiv halvdel,
+der kan køres når som helst, og en indsnævrende, der køres efter udrulningen.
+Den generelle regel står i [`DECISIONS.md`](./DECISIONS.md).
 
 ## Register — hvor står vi?
 
@@ -16,10 +19,17 @@ fortsætte derfra.
 | 6 | PR merget, Vercel-deploy færdig | ✅ 11. august 2026 |
 | 7 | Produktionen afprøvet: invitation kan tages imod | ✅ |
 | 8 | `sql/invite_policies.sql` (#53) kørt i **produktion** | ✅ 11. august 2026 |
-| 9 | Produktionen afprøvet igen, og hullet efterprøvet lukket | ⬜ |
+| 9 | Produktionen afprøvet igen, og hullet efterprøvet lukket | ✅ 11. august 2026 — begge linktyper + 4 / 0 / 3 / 0 |
 
-✅ **Tilstand pr. 11. august 2026: begge migreringer er kørt i produktion.**
-Hullet er lukket. Det, der mangler, er trin 9 — efterprøvningen.
+✅ **Tilstand pr. 11. august 2026: færdig.** Begge migreringer er kørt i
+produktion. **Begge invitationstyper er afprøvet med rigtige konti** — `?liga=`
+og `?join=`, hvor den anden er den, der melder ind i to ting på én gang — og
+forespørgslen svarede fire nye policies, nul gamle, tre funktioner og nul
+ligaer uden medlemmer.
+
+**Rækkefølgen holdt hele vejen:** ingen bruger oplevede et vindue, hvor en
+invitation ikke kunne tages imod. Det var hele formålet med at dele migreringen
+i to.
 
 **Under afprøvningen i staging dukkede en fejl op, der IKKE var `A40`:** Hjem og
 Tip kunne ikke hente kampe med "Alle konkurrencer" valgt. Årsagen var URL-længde
