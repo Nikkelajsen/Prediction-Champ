@@ -112,6 +112,11 @@ create policy competition_participants_insert_involved on public.competition_par
 -- ============================================================================
 -- Verifikation — kør efter trin 2
 -- ============================================================================
+-- ⚠️ Blokkene herunder er KOMMENTERET UD, så hele filen kan pastes i ét
+-- stykke. Skal de køres, fjernes `--` først — ellers udføres der ingenting,
+-- og editoren svarer "Success. No rows returned", hvilket ligner et svar.
+-- En kørbar udgave, der samler dem alle, står i `docs/UDRULNING-A40.md` trin 9.
+--
 -- 1) De fire nye policies står der. Forvent fire rækker.
 -- select tablename, policyname from pg_policies
 --  where schemaname = 'public'

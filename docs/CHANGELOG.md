@@ -18,6 +18,14 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+11. august 2026 — `A40` er udrullet: hullet er lukket i produktion
+**Begge migreringer er kørt, og rækkefølgen holdt.** `#52` (funktionerne) før frontend-mergen, `#53` (policyerne) efter — og ingen bruger oplevede et vindue, hvor en invitation ikke kunne tages imod. Det var hele formålet med at dele migreringen i to, og det er første gang, den form er brugt.
+**Efterprøvet i produktionen på begge måder:** en rigtig invitation af hver slags (`?liga=` og `?join=`, hvor den anden melder ind i to ting på én gang), og et opslag, der svarede **fire** nye policies, **nul** gamle, **tre** funktioner og **nul** ligaer uden medlemmer.
+**Fælden undervejs var dokumentationens egen.** Verifikationsblokkene står som kommentarer i migreringsfilerne, så en fil kan pastes i ét stykke — men runbogen sagde "efterprøv med verifikationsblok 1" uden at nævne, at `--` skal væk først. Editoren udførte da ingen sætning og svarede *"Success. No rows returned"*, hvilket ligner et foruroligende svar på et spørgsmål, der aldrig blev stillet. Trin 9 har nu forespørgslen i kørbar form, og både trin 5, symptomlisten og begge migreringsfiler nævner fælden.
+**Runbogen bliver stående som skabelon.** Den er historikken for, hvordan udrulningen gik, og formen — en additiv halvdel, der kan køres når som helst, og en indsnævrende, der køres efter udrulningen — er den, næste todelte migrering skal bruge.
+
+---
+
 11. august 2026 — Id-lister blev for lange til en URL: Hjem og Tip kunne ikke hente kampe
 **Meldt fra staging under afprøvningen af `A40`:** Hjem sagde "Kunne ikke hente din næste deadline lige nu", Tip sagde "Kunne ikke hente kampene lige nu" — men valgte man ÉN konkurrence i stedet for "Alle konkurrencer", kom kampene frem.
 **Det lignede `A40` og var det ikke.** To uafhængige beviser: (1) hele opsætningen blev genskabt lokalt mod det rigtige skema med de nye policies kørt, og alle syv opslag, de to skærme laver, svarede fuldt ud; (2) `supabase.js`, `data/home.js`, `PredictionsScreen.jsx`, `HjemTab.jsx` og `data/standings.js` er byte-identiske med `main` i den PR. Fejlen var i data, ikke i ny kode.
