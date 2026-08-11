@@ -32,6 +32,30 @@ function storyShareText(story) {
   return [story.headline, story.body].filter(Boolean).join("\n");
 }
 
+// Teksten på en invitation — liga såvel som konkurrence (I7).
+//
+// HVORFOR DEN BOR HER. De to skærme skrev hver sin udgave, og de var drevet fra
+// hinanden: `BoardScreen` kunne sige "Nikolaj har inviteret dig til …", mens
+// `GroupScreen` skrev det upersonlige "Du er inviteret til ligaen …" — samme
+// handling, to toner, og ingen kunne se forskellen uden at åbne begge filer.
+// Ét sted er derfor ikke en oprydning, men selve rettelsen.
+//
+// `målet` er hele frasen ("ligaen \"Vennerne\"", "konkurrencen \"EM-kuponen\"")
+// og ikke bare navnet: sætningen skal kunne bøjes forskelligt for de to, og en
+// helper, der selv satte artiklen på, ville skulle kende forskellen.
+//
+// `inviterName` er afsenderens EGET navn, aflæst i det øjeblik der trykkes Del.
+// Det er derfor sandt pr. konstruktion — modsat en attribution, der skulle
+// udledes på modtagersiden, hvilket først bliver muligt med `B20` (én kode pr.
+// liga i dag, altså ingen afsender at slå op). Mangler navnet, falder teksten
+// tilbage til den upersonlige form frem for at skrive "undefined har inviteret".
+function inviteShareText({ inviterName, mål, link }) {
+  const intro = inviterName
+    ? `${inviterName} har inviteret dig til ${mål} på Leagly ⚽`
+    : `Du er inviteret til ${mål} på Leagly ⚽`;
+  return `${intro}\nGæt resultater, saml point og se hvem der er bedst. Tryk her for at være med:\n${link}`;
+}
+
 // Deling som BILLEDE — rundestoryens frame 1 og 3 (Story Engine v3 §7).
 //
 // `draw` får et canvas og tegner rammen; helperen står for resten. To ting
@@ -66,4 +90,4 @@ async function shareImage(draw, { text = "", title = "Leagly", width = 1080, hei
   return "share";
 }
 
-export { shareText, shareImage, storyShareText };
+export { shareText, shareImage, storyShareText, inviteShareText };

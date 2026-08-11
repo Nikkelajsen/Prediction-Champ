@@ -16,6 +16,7 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { auth } from "../lib/supabase.js";
+import { invitationsPitch } from "../lib/data.js";
 import { turnstileAktiv } from "../lib/turnstile.js";
 import { C, btnGreen, fieldFull, muted, wrapOuter } from "../ui/theme.js";
 import { Card } from "../ui/components.jsx";
@@ -128,7 +129,18 @@ export function daAuthError(besked) {
 // `bred` bruges kun af jura-visningen: en politik i en 320 px kolonne er
 // ulæselig. Default er uændret, så de tre login-tilstande og
 // ResetPasswordScreen ser præcis ud som før.
-function AuthShell({ children, bred }) {
+//
+// `invitation` (I7) er previewet af den kode, adressen bar — hentet uden login,
+// fordi `invite_preview()` er åben for `anon`. Den ERSTATTER den generelle
+// sælgetekst, og det er hele forskellen mellem "en login-side" og "en
+// invitation": indtil august 2026 landede en helt ny bruger, der trykkede på et
+// invitationslink, på en formular uden en antydning af, hvorfor de var der.
+//
+// Udebliver previewet — ukendt kode, langsomt net, en fejl — står den generelle
+// tekst der stadig. Det er derfor `invitationsPitch` returnerer `null` frem for
+// at kaste: der er ingen fejltilstand at vise, kun to gode skærme.
+function AuthShell({ children, bred, invitation }) {
+  const pitch = invitationsPitch(invitation);
   return (
     <div style={{ ...wrapOuter, alignItems: "flex-start" }}>
       <div style={{ width: "100%", maxWidth: 430, padding: "60px 18px", display: "flex", justifyContent: "center" }}>
@@ -137,9 +149,18 @@ function AuthShell({ children, bred }) {
             <Wordmark size={16} />
           </div>
           {/* Hvad er det her? — besvaret FØR der bedes om en e-mail. */}
-          <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.45, margin: "0 0 14px" }}>
-            Gæt resultater mod dine venner. Opret en liga, tip ugens kampe, og se hvem der er bedst.
-          </p>
+          {pitch ? (
+            <div style={{ margin: "0 0 14px" }}>
+              <p style={{ color: C.text, fontSize: 14, lineHeight: 1.45, margin: "0 0 4px", fontWeight: 600 }}>
+                {pitch.overskrift}
+              </p>
+              <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.45, margin: 0 }}>{pitch.detalje}</p>
+            </div>
+          ) : (
+            <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.45, margin: "0 0 14px" }}>
+              Gæt resultater mod dine venner. Opret en liga, tip ugens kampe, og se hvem der er bedst.
+            </p>
+          )}
           {children}
         </Card>
       </div>
@@ -196,8 +217,18 @@ function ResetPasswordScreen({ accessToken, onDone }) {
   );
 }
 
-function AuthScreen({ onAuthed, booting }) {
-  const [mode, setMode] = useState("signin");
+function AuthScreen({ onAuthed, booting, invitation, harInvitation }) {
+  // Med en invitation i hånden starter skærmen på OPRET og ikke på LOG IND
+  // (I7). Den, der trykker på et invitationslink, har som regel ingen konto —
+  // og "Har du allerede en konto? Log ind" står lige under knappen.
+  //
+  // Valget hænger på `harInvitation` og IKKE på `invitation`: previewet hentes
+  // asynkront og er `null` ved den første render, mens KODEN står i adressen fra
+  // begyndelsen. Og det skal netop være en startværdi frem for en effekt, der
+  // retter tilstanden bagefter — en effekt ville kunne flytte en bruger, der
+  // allerede havde trykket "Log ind", tilbage til oprettelsen, i det sekund
+  // opslaget svarede.
+  const [mode, setMode] = useState(harInvitation ? "signup" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -271,7 +302,7 @@ function AuthScreen({ onAuthed, booting }) {
   // argumentet for et tidligt return frem for en ny værdi i `mode`.
   if (jura) {
     return (
-      <AuthShell bred>
+      <AuthShell bred invitation={invitation}>
         <LegalDocument doc={findDokument(jura)} />
         <LinkButton style={{ marginTop: 12 }} onClick={() => setJura(null)}>Tilbage</LinkButton>
       </AuthShell>
@@ -279,7 +310,7 @@ function AuthScreen({ onAuthed, booting }) {
   }
 
   return (
-    <AuthShell>
+    <AuthShell invitation={invitation}>
       <p style={muted}>{mode === "signin" ? "Log ind" : mode === "signup" ? "Opret konto" : "Nulstil adgangskode"}</p>
       <form onSubmit={submit}>
         {mode === "signup" && (

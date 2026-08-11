@@ -7,7 +7,7 @@ import { leaders } from "../lib/standings.js";
 import { computeCompetitionState, loadRatingMap, ensureCompetitionAwards, loadCompetitionAwards, monthName } from "../lib/data.js";
 import { isAborted } from "../lib/supabase.js";
 import { logEvent } from "../lib/analytics.js";
-import { shareText } from "../lib/share.js";
+import { shareText, inviteShareText } from "../lib/share.js";
 import { C, btnGhost, btnGold, font, muted, thStyle } from "../ui/theme.js";
 import { BackBar, Card, EmptyCompetitions, InviteCode, PlayerName, UserRoundPredictions } from "../ui/components.jsx";
 
@@ -124,11 +124,9 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
     // konkurrence. Ligger konkurrencen i en liga, melder ?join= modtageren ind
     // i BEGGE (A8) — det sker i MainApp.confirmJoin.
     const link = `${window.location.origin}${window.location.pathname}?join=${comp.invite_code}`;
-    const target = `konkurrencen "${comp.name}"`;
-    const intro = inviterName
-      ? `${inviterName} har inviteret dig til ${target} på Leagly ⚽`
-      : `Du er inviteret til ${target} på Leagly ⚽`;
-    const text = `${intro}\nGæt resultater, saml point og se hvem der er bedst. Tryk her for at være med:\n${link}`;
+    // Selve ordlyden bor i src/lib/share.js (I7). Den stod her indtil august
+    // 2026 og i en anden udgave i GroupScreen — to toner for den samme handling.
+    const text = inviteShareText({ inviterName, mål: `konkurrencen "${comp.name}"`, link });
     try {
       if (await shareText(text) === "clipboard") {
         setCopied(true);

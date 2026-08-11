@@ -38,7 +38,7 @@ import { selectIn } from "../lib/data/chunked.js";
 // hente dem enkeltvis ville bytte én ventetid ud med fem.
 const AdminScreen = lazy(() => import("./AdminScreen.jsx"));
 
-function MainApp({ session, profile, onProfileChanged, onLogout, pendingJoinCode, clearPendingJoinCode, pendingLigaCode, clearPendingLigaCode }) {
+function MainApp({ session, profile, onProfileChanged, onLogout, inviteFromStorage, pendingJoinCode, clearPendingJoinCode, pendingLigaCode, clearPendingLigaCode }) {
   const token = session.access_token;
   const userId = session.user.id;
   const isAdmin = !!profile?.is_admin;
@@ -211,6 +211,27 @@ function MainApp({ session, profile, onProfileChanged, onLogout, pendingJoinCode
     setShowInstall(false);
   }
 
+  // Invitationstragtens MIDTERSTE trin (I7).
+  //
+  // `league_invite_sent` og `league_invite_accepted` har altid været logget, men
+  // intet imellem — så det kunne ikke ses, om folk faldt fra på login-skærmen,
+  // på bekræftelsen, eller om linket slet ikke virkede. Hændelsen fyrer her,
+  // hvor UDFALDET af opslaget er kendt, og ikke ved login: `notfound` er lige så
+  // interessant som `confirm`.
+  //
+  // Den anonyme halvdel af trinnet kan ikke logges — `analytics_events.user_id`
+  // er `not null default auth.uid()`. Tallet er derfor et GULV: det tæller dem,
+  // der nåede frem MED en session.
+  //
+  // `efter_oprettelse` er den ene ting, hele afsnit 4 af `I7` handler om: kom
+  // koden fra localStorage, har invitationen overlevet en omvej over
+  // oprettelsen — det er dét, der gør effekten målbar.
+  function logInviteLanded(via, udfald) {
+    logEvent(token, "invite_landed", {
+      metadata: { via, udfald, efter_oprettelse: !!inviteFromStorage },
+    });
+  }
+
   // Selve opslaget bor i src/lib/data/invites.js (G1) og svarer HVAD koden peger
   // på; her oversættes svaret til navigation. Snittet er valgt, så `A23` (router)
   // kun skal røre denne halvdel — og så flowene kan unit-testes, hvilket var
@@ -221,6 +242,7 @@ function MainApp({ session, profile, onProfileChanged, onLogout, pendingJoinCode
       setJoinError("");
       try {
         const res = await resolveCompetitionInvite(token, pendingJoinCode);
+        logInviteLanded("join", res.kind);
         if (res.kind === "already") {
           await loadCompetitions();
           setTab("ligaer");
@@ -245,6 +267,7 @@ function MainApp({ session, profile, onProfileChanged, onLogout, pendingJoinCode
       setJoinError("");
       try {
         const res = await resolveLeagueInvite(token, pendingLigaCode);
+        logInviteLanded("liga", res.kind);
         if (res.kind === "already") { setTab("ligaer"); setScreen({ type: "group", groupId: res.group.id }); }
         else if (res.kind === "confirm") setPendingGroupJoin(res);
         else setJoinError("Ingen liga fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
@@ -405,7 +428,8 @@ function MainApp({ session, profile, onProfileChanged, onLogout, pendingJoinCode
   } else if (screen?.type === "group") {
     body = <GroupScreen token={token} userId={userId} groupId={screen.groupId}
       myCompetitions={competitions} onBack={() => setScreen(null)} openBoard={openBoard}
-      openCreate={openCreate} reloadGroups={async () => { await loadCompetitions(); }} openProfile={openProfile} />;
+      openCreate={openCreate} reloadGroups={async () => { await loadCompetitions(); }} openProfile={openProfile}
+      inviterName={profile?.display_name} />;
   } else if (screen?.type === "create") {
     body = <CreateCompetitionScreen token={token} userId={userId} leagues={visibleLeagues}
       initialGroupId={screen.groupId} onBack={() => setScreen(null)}

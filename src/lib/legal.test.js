@@ -7,7 +7,7 @@ import {
   LOKALE_NØGLER,
   SESSION_KEY, PING_KEY, FLOW_KEY, CARD_KEY, COMPLETE_KEY,
   PUSH_DISMISS_KEY, NUDGE_KEY, SEASON_LEAGUE_KEY, PWA_ONBOARDED_KEY, COMP_DONE_KEY,
-  STORY_SEEN_KEY,
+  STORY_SEEN_KEY, PENDING_INVITE_KEY,
 } from "./localFlags.js";
 
 const alle = [PRIVATLIV, VILKAAR];
@@ -134,6 +134,7 @@ const NØGLENS_LØFTE = {
   [PWA_ONBOARDED_KEY]: "lægge appen på din hjemmeskærm",
   [COMP_DONE_KEY]: "konkurrencer du allerede har set slutte",
   [STORY_SEEN_KEY]: "historier du allerede har set",
+  [PENDING_INVITE_KEY]: "invitation du var på vej ind ad",
 };
 
 describe("de lokale nøgler er dækket af politikken (G71)", () => {

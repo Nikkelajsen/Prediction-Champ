@@ -81,6 +81,19 @@ function EngagementSection({ token, days }) {
             <StatTile label="Liga Views" value={data.league_views_total} hint={`${data.league_views_detail} på en bestemt liga`} info={<M id="league_views" />} />
             <StatTile label="Tip Views" value={ev.opened_tip?.count ?? 0} hint={`${ev.opened_tip?.users ?? 0} brugere`} info={<M id="event_views" />} />
           </StatGroup>
+          {/* Invitationstragten (I7). Indtil august 2026 blev sendt og accepteret
+              logget, men vistes ingen steder — og trinnet imellem fandtes ikke.
+              De tre tal står side om side, fordi det er FORHOLDET mellem dem,
+              der er oplysningen: falder folk fra mellem sendt og landet, er det
+              linket; mellem landet og accepteret, er det bekræftelsen. */}
+          <StatGroup title="Invitationer">
+            <StatTile label="Invitationer sendt" value={ev.league_invite_sent?.count ?? 0}
+              hint={`${ev.league_invite_sent?.users ?? 0} afsendere`} info={<M id="invite_funnel" />} />
+            <StatTile label="Invitationer landet" value={ev.invite_landed?.count ?? 0}
+              hint={`${ev.invite_landed?.users ?? 0} modtagere med konto`} info={<M id="invite_funnel" />} />
+            <StatTile label="Invitationer accepteret" value={ev.league_invite_accepted?.count ?? 0}
+              hint={`${ev.league_invite_accepted?.users ?? 0} nye medlemmer`} info={<M id="invite_funnel" />} />
+          </StatGroup>
           <StatGroup title="Notifikationer & sessioner">
             <StatTile label="Push Notification Open Rate" value={data.push.open_rate === null ? "—" : `${data.push.open_rate} %`}
               hint={`${data.push.opened} åbnet af ${data.push.sent} sendt`} info={<M id="push_open_rate" />} />

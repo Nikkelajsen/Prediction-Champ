@@ -65,6 +65,26 @@ const COMP_DONE_KEY = "pc_comp_done_seen";
 // svar, for man har ikke set kortet dér.
 const STORY_SEEN_KEY = "pc_story_seen";
 
+// Hvilken invitation var brugeren på vej ind ad? (I7)
+//
+// ENHEDS-GLOBAL og ikke bruger-mærket — af samme grund som sessionen ovenfor:
+// der er pr. definition ingen bruger endnu. Det er hele situationen, nøglen
+// findes for.
+//
+// HVORFOR DEN FINDES. `?liga=`-koden lå indtil august 2026 kun i React-state
+// (`src/App.jsx`). Det virker, så længe brugeren bliver på siden — men den dag
+// `B26` (e-mailbekræftelse) slås til, forlader den nye bruger siden, trykker på
+// linket i mailen og kommer tilbage UDEN `?liga=`. Invitationen var da væk,
+// netop for den brugertype, invitationer findes for.
+//
+// Værdien er `"<param>:<kode>:<ms>"` — en almindelig streng som resten af
+// flagene, ikke JSON. Tidsstemplet bærer en levetid på ét døgn: en mail, der
+// kommer sent, plus en nats søvn. Længere ville betyde, at en invitation, nogen
+// aldrig tog imod, kunne dukke op uger senere som en dialog, de ikke havde bedt
+// om.
+const PENDING_INVITE_KEY = "pc_pending_invite";
+const PENDING_INVITE_TTL_MS = 24 * 60 * 60 * 1000;
+
 // Alt, appen har lagt på enheden — ikke kun sessionen.
 //
 // Bruges når en konto LUKKES (B4), ikke ved et almindeligt log ud. Forskellen
@@ -89,6 +109,7 @@ const LOKALE_NØGLER = [
   PWA_ONBOARDED_KEY,
   COMP_DONE_KEY,
   STORY_SEEN_KEY,
+  PENDING_INVITE_KEY,
 ];
 
 // ---------- de rå, enheds-globale læse/skrive ----------
@@ -177,12 +198,53 @@ const readSeenStories = (userId) => readSeenList(STORY_SEEN_KEY, userId);
 const markStorySeen = (userId, storyId) =>
   markSeen(STORY_SEEN_KEY, userId, storyId, MAX_SEEN_STORIES);
 
+// ---------- den ventende invitation (I7) ----------
+
+// `nu` gives ind frem for at blive læst her, så funktionen kan testes og så
+// kalderen — en effekt, aldrig en render — ejer aflæsningen af uret. Samme
+// regel som `lastRefreshAt` i App.jsx følger (react-hooks/purity).
+function writePendingInvite(param, code, nu = Date.now()) {
+  if (!param || !code) return;
+  writeFlag(PENDING_INVITE_KEY, `${param}:${code}:${nu}`);
+}
+
+// Returnerer `{ param, code }` — eller `null`, hvis der ingen er, hvis den er
+// udløbet, eller hvis værdien er noget andet, end vi skrev.
+//
+// En udløbet eller ulæselig værdi RYDDES undervejs. En invitation, der ikke
+// kan bruges, skal ikke blive liggende og blive prøvet igen ved hver opstart.
+function readPendingInvite(nu = Date.now()) {
+  const rå = readFlag(PENDING_INVITE_KEY);
+  if (!rå) return null;
+  // Koden kan ikke selv indeholde et kolon (den er hex), så tre dele er formen.
+  const dele = rå.split(":");
+  const [param, code, ts] = dele;
+  const tid = Number(ts);
+  const gyldig =
+    dele.length === 3 &&
+    (param === "liga" || param === "join") &&
+    !!code &&
+    Number.isFinite(tid) &&
+    nu - tid < PENDING_INVITE_TTL_MS &&
+    // Et tidsstempel FREM i tiden betyder et flyttet ur, ikke en frisk
+    // invitation — og en værdi, der aldrig udløber, er værre end ingen.
+    tid <= nu;
+  if (!gyldig) {
+    removeFlag(PENDING_INVITE_KEY);
+    return null;
+  }
+  return { param, code };
+}
+
+const clearPendingInvite = () => removeFlag(PENDING_INVITE_KEY);
+
 export {
   SESSION_KEY, PING_KEY, FLOW_KEY, CARD_KEY, COMPLETE_KEY,
   PUSH_DISMISS_KEY, NUDGE_KEY, SEASON_LEAGUE_KEY, PWA_ONBOARDED_KEY, COMP_DONE_KEY,
-  STORY_SEEN_KEY,
+  STORY_SEEN_KEY, PENDING_INVITE_KEY, PENDING_INVITE_TTL_MS,
   LOKALE_NØGLER,
   readFlag, writeFlag, removeFlag, readUserFlag, writeUserFlag,
   readSeenCompletions, markCompletionSeen,
   readSeenStories, markStorySeen,
+  readPendingInvite, writePendingInvite, clearPendingInvite,
 };

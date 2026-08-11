@@ -10,6 +10,41 @@
          gør den øverste inset nødvendig. Rettes derfor kun sammen (G29). -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Leagly</title>
+
+    <!-- Link-previewet (I7).
+         =========================================================================
+         Det her ER invitationens forside. Et delt `?liga=`-link åbnes i
+         Messenger, WhatsApp eller iMessage, og indtil august 2026 stod der kun
+         `<title>` i dette hoved — så modtageren så en nøgen URL uden billede og
+         uden en sætning om, hvad de var inviteret til.
+
+         `%OG_ORIGIN%` erstattes ved build af vite.config.js. Skriv ALDRIG en
+         adresse direkte her: `og:image` skal være absolut, og hvilket domæne
+         appen bor på er stadig et åbent spørgsmål (`I10`/`B21`).
+
+         Sætningen er den samme som login-skærmens (src/screens/Auth.jsx) og
+         hjemmesidens (site/index.html). Dubletten er med vilje — en `<meta>` kan
+         ikke importere fra `src/` — men den er noteret i backloggen.
+
+         `og:title` og `og:description` er de to eneste tags, api/invite-preview.js
+         skriver om for en crawler, der følger et invitationslink. Omdøbes de,
+         skal funktionen med. -->
+    <meta name="description" content="Gæt resultater mod dine venner. Opret en liga, tip ugens kampe, og se hvem der er bedst." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Leagly" />
+    <meta property="og:locale" content="da_DK" />
+    <meta property="og:url" content="%OG_ORIGIN%/" />
+    <meta property="og:title" content="Leagly — gæt resultater mod dine venner" />
+    <meta property="og:description" content="Gæt resultater mod dine venner. Opret en liga, tip ugens kampe, og se hvem der er bedst." />
+    <!-- 1200×630 er det format, crawlerne beskærer efter. Billedet bygges af
+         scripts/build-og-image.mjs og committes; se filens hoved for hvorfor
+         ordlyden IKKE er malet ind i det. -->
+    <meta property="og:image" content="%OG_ORIGIN%/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Leagly" />
+    <meta name="twitter:card" content="summary_large_image" />
+
     <!-- Forvarmning af de to skrifter, første maling faktisk bruger: brødteksten
          og wordmarket. @font-face-blokkene selv står i src/ui/theme.js, fordi
          designtokens kun må findes ét sted — men de findes først, når React har

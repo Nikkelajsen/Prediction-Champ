@@ -68,6 +68,18 @@ alter table public.analytics_events add constraint analytics_events_name_check
     'account_created', 'login', 'logout',
     -- Liga
     'league_created', 'league_joined', 'league_invite_sent', 'league_invite_accepted',
+    -- `invite_landed` (I7) er trinnet MELLEM de to ovenfor: linket blev åbnet, og
+    -- modtageren nåede frem til appen med en session. Det er bevidst et nyt navn
+    -- og ikke en ny `metadata.via` — en via skelner mellem KILDER til det samme
+    -- trin, og "landet" er et andet trin end "sendt" og "accepteret". Uden den
+    -- kunne tragten kun se sine to endepunkter, altså ikke hvor folk falder fra.
+    --
+    -- Den anonyme halvdel af trinnet kan IKKE logges: `user_id` er
+    -- `not null default auth.uid()`, så en besøgende uden konto har ingen række
+    -- at skrive. Hændelsen tælles derfor først, når der er en session — og
+    -- `metadata.efter_oprettelse` er dét, der viser, om invitationen overlevede
+    -- omvejen over oprettelsen.
+    'invite_landed',
     -- Konkurrence
     'competition_created', 'competition_joined', 'competition_opened',
     -- Tip

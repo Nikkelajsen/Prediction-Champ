@@ -1,0 +1,107 @@
+-- 🔴 HASTERETTELSE: ingen kunne oprette en liga (`A40`-regression).
+-- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
+--
+-- ✅ **SIKKER AT KØRE NÅR SOM HELST OG UAFHÆNGIGT AF ET DEPLOY.** Filen UDVIDER
+-- én SELECT-policy og rører intet andet. Der er ingen frontend-ændring at vente
+-- på — den retter produktionen i det sekund, den er kørt.
+--
+-- ---------------------------------------------------------------------------
+-- SYMPTOMET
+--
+-- "Opret liga" svarede
+--
+--     new row violates row-level security policy for table "groups"
+--
+-- for ALLE brugere, i både staging og produktion, fra det øjeblik `#53` blev
+-- kørt (11. august 2026).
+--
+-- ---------------------------------------------------------------------------
+-- ÅRSAGEN: EN `INSERT` MED `RETURNING` SKAL OGSÅ BESTÅ **SELECT**-POLICYEN
+--
+-- `#53` smalnede læsningen af `groups` til medlemmer:
+--
+--     using (public.is_group_member(id))
+--
+-- Og klienten skriver ligaen sådan her (`src/lib/data/groups.js`):
+--
+--     const [g] = await db.insert(token, "groups", [{ name, created_by: userId }]);
+--     await db.insert(token, "group_members", [{ group_id: g.id, user_id: userId, role: "admin" }]);
+--
+-- `db.insert` sender ALTID `Prefer: return=representation` (src/lib/supabase.js),
+-- så PostgREST kører `insert … returning *`. Og en `RETURNING`-klausul betyder,
+-- at rækken skal LÆSES tilbage — altså at SELECT-policyen anvendes på den
+-- nyindsatte række, oven i INSERT-policyen.
+--
+-- På det tidspunkt findes opretterens `group_members`-række ikke endnu: den
+-- skrives i det NÆSTE HTTP-kald. `is_group_member(id)` er derfor falsk, rækken
+-- afvises, og linje to nås aldrig.
+--
+-- **`#53`s egen kommentar bar antagelsen ordret** — *"Opretteren er altid medlem
+-- (`createGroup` skriver admin-rækken i samme ombæring), så der er ingen grund
+-- til et `or created_by`"*. "I samme ombæring" er sandt om funktionen og falsk
+-- om statementet: det er to kald, og ligaen er det første.
+--
+-- **Det er den SAMME fælde, `#52` allerede fangede — bare ét statement tidligere.**
+-- Dér var indsigten, at en opretter ikke er medlem, når hun skriver sin egen
+-- admin-række (derfor `is_group_creator()` som security definer). Den blev
+-- anvendt på `group_members`-indsættelsen og ikke på `groups`-indsættelsens
+-- RETURNING.
+--
+-- ---------------------------------------------------------------------------
+-- HVORFOR CI VAR GRØN
+--
+-- `sql/tests/invite_lookup.sql` påstand 10b tester præcis denne oprettelse — men
+-- gennem `pg_temp.skriv()`, som kører `execute p_sql` UDEN `returning`. SELECT-
+-- policyen anvendes derfor aldrig på den nye række. Testen efterlignede
+-- `createGroup`s SQL, men ikke dens PostgREST-kald.
+--
+-- Efterprøvet mod det rigtige skema med `#52` + `#53` indlæst: den bare `insert`
+-- svarer `INSERT 0 1`, mens den samme `insert … returning id` svarer med
+-- brugerens fejltekst, ord for ord. Påstand 10c dækker nu den anden halvdel.
+--
+-- ---------------------------------------------------------------------------
+-- REGLEN OG DENS PRIS
+--
+-- **Du kan se en liga, hvis du er medlem — eller hvis du selv har oprettet den.**
+--
+-- Prisen er accepteret og skal stå her, så den ikke skal genfindes: en opretter,
+-- der har FORLADT sin egen liga, kan stadig se den og dermed dens `invite_code`.
+-- Det er en smal afvigelse fra `A40` — den gælder kun ligaer, man selv har
+-- oprettet, og ikke fremmede — og en langt mindre lækage end en app, hvor ingen
+-- kan oprette en liga.
+--
+-- Alternativet, der ikke ville koste den afvigelse, er en `create_group()` som
+-- `security definer`, der skriver begge rækker i ÉN transaktion. Den ville også
+-- lukke vinduet, hvor en liga kan stå uden medlemmer. Den kræver et deploy og
+-- står i backloggen; denne fil er dét, der kan køres nu.
+
+drop policy if exists groups_select_member on public.groups;
+create policy groups_select_member on public.groups
+  for select to authenticated
+  using (public.is_group_member(id) or created_by = auth.uid());
+
+-- ⚠️ **Den samme rettelse står også i `sql/invite_policies.sql` (#53).** Det er
+-- ikke dobbeltarbejde: kører nogen `#53` igen uden den, ville oprettelsen af en
+-- liga blive brudt igen — tavst, og med en fejl, der ikke ligner sin årsag.
+-- Præcis den fælde, `sql/README.md`s "må ikke gen-køres blindt" beskriver.
+
+-- ============================================================================
+-- Verifikation — kør efter migreringen
+-- ============================================================================
+-- ⚠️ Blokkene er KOMMENTERET UD, så hele filen kan pastes i ét stykke. Skal de
+-- køres, fjernes `--` først — ellers udføres der ingenting, og editoren svarer
+-- "Success. No rows returned", hvilket ligner et svar.
+--
+-- 1) Policyen har nu begge led. Forvent ét `or` i `qual`.
+-- select policyname, qual from pg_policies
+--  where schemaname = 'public' and tablename = 'groups' and cmd = 'SELECT';
+
+-- 2) Den rigtige prøve er i APPEN, ikke her: SQL-editoren kører som en rolle
+--    uden `auth.uid()`, så en oprettelse kan ikke efterlignes meningsfuldt.
+--    Opret en liga i appen, og se at den dukker op med dig som admin.
+
+-- 3) Ingen liga står uden medlemmer efter rettelsen. Forvent NUL rækker.
+--    (Fandtes der nogen, ville det være ligaer, hvis oprettelse blev afbrudt
+--    MELLEM de to kald, mens fejlen stod på — de kan trygt slettes.)
+-- select g.id, g.name, g.created_at from public.groups g
+--  where not exists (select 1 from public.group_members m where m.group_id = g.id);

@@ -110,3 +110,52 @@ describe("daAuthError", () => {
     expect(daAuthError("")).toBe("Noget gik galt");
   });
 });
+
+// Invitationen på login-skærmen (I7).
+//
+// Skærmen var indtil august 2026 den samme formular, uanset om man kom ind ad
+// et invitationslink eller forfra — og det er formentlig det største enkelte
+// frafald i tragten: modtageren fik intet at vide om, hvad de var inviteret
+// til, før de havde oprettet en konto.
+//
+// Previewet hentes af App og gives HERIND som en prop, netop så det kan testes:
+// `renderToStaticMarkup` kører ingen effekter, så et opslag inde i skærmen
+// ville være usynligt for testene.
+describe("invitationen på login-skærmen (I7)", () => {
+  const liga = { kind: "group", name: "Vennerne", member_count: 6 };
+
+  it("skriver hvad man er inviteret til i stedet for den generelle tekst", () => {
+    const html = render({ invitation: liga, harInvitation: true });
+    expect(html).toContain("Du er inviteret til ligaen");
+    expect(html).toContain("Vennerne");
+    expect(html).toContain("6 spillere er allerede med");
+    expect(html).not.toContain("Gæt resultater mod dine venner");
+  });
+
+  // Uden preview — ukendt kode, langsomt net, en fejl — er skærmen præcis den,
+  // den var før. Der findes ingen fejltilstand at vise, kun to gode skærme.
+  it("falder tilbage til den generelle tekst uden preview", () => {
+    expect(render()).toContain("Gæt resultater mod dine venner");
+    expect(render({ invitation: null, harInvitation: true })).toContain("Gæt resultater mod dine venner");
+  });
+
+  // Den, der trykker på et invitationslink, har som regel ingen konto. Valget
+  // hænger på `harInvitation` (kendt med det samme) og ikke på previewet, som
+  // kommer asynkront — ellers ville skærmen skifte tilstand under fingrene.
+  it("åbner på Opret konto, når adressen bærer en kode", () => {
+    expect(render({ harInvitation: true })).toContain("Opret konto");
+    expect(render({ harInvitation: true })).toContain("Brugernavn");
+  });
+
+  it("åbner stadig på Log ind uden en kode", () => {
+    expect(render()).not.toContain("Brugernavn");
+  });
+
+  // Liganavne er brugerskrevet tekst. Uden escaping ville en liga ved navn
+  // `<script>` kunne skrive i den skærm, hver ny bruger møder først.
+  it("escaper et liganavn med tegn, der ligner kode", () => {
+    const html = render({ invitation: { ...liga, name: '<script>x</script>' }, harInvitation: true });
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+});

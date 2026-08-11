@@ -139,6 +139,43 @@ begin
   end;
 end $$;
 
+-- Kør en skrivning MED `returning` og svar `afvist` eller `tilladt`.
+--
+-- ⚠️ **HVORFOR DER ER TO SKRIVE-HJÆLPERE — LÆS DENNE, FØR DU BRUGER `skriv()`
+-- TIL EN PÅSTAND OM EN KLIENTHANDLING.** `skriv()` ovenfor kører `execute p_sql`
+-- uden at læse noget tilbage, og måler dermed kun INSERT-policyen. Det er ikke
+-- det, appen gør: `db.insert` sender altid `Prefer: return=representation`
+-- (src/lib/supabase.js), så PostgREST kører `insert … returning *` — og en
+-- RETURNING-klausul betyder, at rækken skal LÆSES tilbage, altså at **SELECT**-
+-- policyen også anvendes på den nyindsatte række.
+--
+-- Forskellen er ikke teoretisk. Den kostede en produktionsfejl 11. august 2026:
+-- `#53` smalnede `groups`' SELECT-policy til `is_group_member(id)`, og da
+-- `createGroup` skriver ligaen FØR sin egen medlemsrække, kunne INGEN oprette en
+-- liga. Påstand 10b nedenfor testede netop den oprettelse — med `skriv()` — og
+-- var grøn hele vejen igennem. Se `sql/groups_select_creator.sql` (#55).
+--
+-- **Tommelfingerregel: en påstand om noget, appen SKRIVER, hører til her.**
+-- `skriv()` er stadig den rigtige til påstande om, hvad en FREMMED ikke må.
+create function pg_temp.skriv_retur(p_uid uuid, p_sql text) returns text
+language plpgsql as $$
+declare v_id uuid;
+begin
+  begin
+    perform set_config('test.uid', p_uid::text, true);
+    perform set_config('request.jwt.claim.role', 'authenticated', true);
+    set local role authenticated;
+    -- `into` er hele forskellen: den kræver, at sætningen returnerer en række,
+    -- og det er dét, der udløser SELECT-policyen på den nye række.
+    execute p_sql into v_id;
+    reset role;
+    return case when v_id is null then 'nul' else 'tilladt' end;
+  exception when others then
+    if sqlstate = 'P0001' then raise; end if;
+    reset role; return 'afvist';
+  end;
+end $$;
+
 -- Kald en funktion som en bruger og få svaret som jsonb.
 create function pg_temp.kald(p_uid uuid, p_sql text) returns jsonb
 language plpgsql as $$
@@ -427,6 +464,43 @@ begin
     raise exception '10b) opretteren kunne ikke deltage i sin egen liga-løse konkurrence (%)', v_udfald;
   end if;
 
+  --     c) SAMME OPRETTELSE, MEN SOM APPEN FAKTISK GØR DEN — med `returning`.
+  --
+  --     Påstand 10b ovenfor var grøn, mens produktionen var brudt (11. august
+  --     2026), fordi `skriv()` ikke læser noget tilbage og dermed aldrig anvender
+  --     SELECT-policyen på den nye række. `db.insert` gør det ALTID
+  --     (`Prefer: return=representation` → `insert … returning *`), og den ene
+  --     forskel var nok til, at ingen kunne oprette en liga: `groups`' SELECT-
+  --     policy krævede medlemskab, og medlemsrækken skrives først i næste kald.
+  --
+  --     Rækkefølgen herunder er `createGroup`s egen (src/lib/data/groups.js):
+  --     ligaen først, medlemsrækken bagefter. Byt om på dem, og påstanden holder
+  --     op med at måle fejlen.
+  v_udfald := pg_temp.skriv_retur(FREMMED,
+    $s$insert into public.groups (id, name, created_by)
+       values ('33330000-0000-4000-8000-00000000000c', 'Fremmeds anden liga', auth.uid())
+       returning id$s$);
+  if v_udfald <> 'tilladt' then
+    raise exception '10c) kunne ikke oprette en liga MED returning (%) — det er sådan appen skriver, så oprettelsen er brudt i produktionen', v_udfald;
+  end if;
+  v_udfald := pg_temp.skriv_retur(FREMMED,
+    $s$insert into public.group_members (group_id, user_id, role)
+       values ('33330000-0000-4000-8000-00000000000c', auth.uid(), 'admin')
+       returning group_id$s$);
+  if v_udfald <> 'tilladt' then
+    raise exception '10c) opretteren kunne ikke skrive sin admin-række MED returning (%)', v_udfald;
+  end if;
+  --     Og konkurrence-oprettelsen ad samme vej: `created_by`-leddet i
+  --     `competitions_select_involved` er dét, der bærer den, så den ville have
+  --     fejlet på samme måde, hvis leddet nogensinde forsvandt.
+  v_udfald := pg_temp.skriv_retur(FREMMED,
+    $s$insert into public.competitions (id, name, mode, created_by)
+       values ('44440000-0000-4000-8000-00000000000c', 'Egen med returning', 'custom', auth.uid())
+       returning id$s$);
+  if v_udfald <> 'tilladt' then
+    raise exception '10c) kunne ikke oprette en konkurrence MED returning (%)', v_udfald;
+  end if;
+
   --     d) …men opretteren kan ikke skrive sig selv som `member`.
   --     Det er ikke pedanteri om en rolle: der findes ingen UPDATE-policy på
   --     `group_members` og dermed ingen forfremmelse, så en liga, hvis opretter
@@ -441,13 +515,13 @@ begin
     raise exception '10d) opretteren kunne skrive sig selv som member (%) — ligaen ville være frossen fra fødslen (A37)', v_udfald;
   end if;
 
-  --     c) …men stadig ikke som en ANDEN bruger
+  --     e) …men stadig ikke som en ANDEN bruger
   v_udfald := pg_temp.skriv(FREMMED,
     $s$insert into public.group_members (group_id, user_id, role)
        values ('33330000-0000-4000-8000-000000000009',
                '0ffe0000-0000-4000-8000-000000000001', 'member')$s$);
   if v_udfald <> 'afvist' then
-    raise exception '10c) en opretter kunne melde en ANDEN ind i sin liga (%)', v_udfald;
+    raise exception '10e) en opretter kunne melde en ANDEN ind i sin liga (%)', v_udfald;
   end if;
 end $$;
 
@@ -466,5 +540,10 @@ end $$;
 --      deltager-række indsættes — kun reparationen afslører linjen)
 --   · `is_group_member` fjernet fra deltager-policyen          → påstand 10a
 --   · `created_by`-leddet fjernet fra deltager-policyen        → påstand 10b
+--   · `groups_select_member` sat tilbage til `is_group_member(id)`
+--     alene (tilstanden 11. august 2026)                       → påstand 10c
+--     ⚠️ og IKKE påstand 10b, som den er nabo til: den skriver uden
+--     `returning` og anvender derfor aldrig SELECT-policyen. Netop dét var
+--     blindvinklen, der lod produktionen stå brudt med en grøn CI.
 
 select 'invite_lookup: hullet er lukket, og alle ti led i join-flowet virker' as resultat;

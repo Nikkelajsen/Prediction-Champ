@@ -126,6 +126,23 @@ async function inviteLookup(token, code) {
   });
 }
 
+// Invitationens ETIKET — uden login (I7).
+//
+// Søskende til `inviteLookup()` ovenfor, og forskellen er hele pointen:
+// `invite_lookup()` svarer med id'er og fører til en tilmelding, og kræver
+// derfor en session. `invite_preview()` svarer kun med et NAVN og et ANTAL og er
+// åben for `anon` — så modtageren af et link kan se, hvad de er inviteret til,
+// FØR de opretter en konto. Afvejningen mod `A40` står i `sql/invite_preview.sql`.
+//
+// **Ingen token**, og det er ikke en forglemmelse: kaldet sker på login-skærmen.
+// `restFetch` falder allerede tilbage til anon-nøglen som bearer, så der er
+// ingen ny kaldevej at bygge.
+async function invitePreview(code) {
+  return restFetch(`/rest/v1/rpc/invite_preview`, {
+    method: "POST", body: { p_code: String(code || "").trim() },
+  });
+}
+
 // Veksl koden til adgang (A40) — den eneste vej ind i en liga eller konkurrence,
 // man ikke i forvejen er med i.
 //
@@ -205,7 +222,7 @@ async function leaveCompetition(token, userId, compId) {
 }
 
 export {
-  loadMyGroups, loadGroupDetail, inviteLookup, acceptInvite, createGroup, leaveGroup, deleteGroup,
+  loadMyGroups, loadGroupDetail, inviteLookup, invitePreview, acceptInvite, createGroup, leaveGroup, deleteGroup,
   joinCompetition, leaveCompetition, setCompetitionHidden, loadCompetitionParticipants,
   removeParticipant, deleteCompetition,
 };
