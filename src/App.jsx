@@ -4,7 +4,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { auth, clearSession, db, loadSession, saveSession } from "./lib/supabase.js";
-import { sikrProfil, touchActivity } from "./lib/data.js";
+import { loadInvitePreview, sikrProfil, touchActivity } from "./lib/data.js";
+import { clearPendingInvite, readPendingInvite, writePendingInvite } from "./lib/localFlags.js";
 import { logEvent } from "./lib/analytics.js";
 import { disablePush } from "./lib/push.js";
 import { registerServiceWorker } from "./lib/pwa.js";
@@ -66,6 +67,14 @@ export default function App() {
   const [pendingJoinCode, setPendingJoinCode] = useState(urlIntent.join);
   const [pendingLigaCode, setPendingLigaCode] = useState(urlIntent.liga);
   const [pendingPushOpen] = useState(urlIntent.push); // { kind, roundKey } fra ?pn=/?rk=
+  // Kom invitationen fra localStorage frem for fra adressen? (I7) Det er dét,
+  // der besvarer, om en invitation overlevede omvejen over oprettelsen — og
+  // dermed hele grunden til, at den gemmes. Følger med til MainApp, som logger
+  // `invite_landed`, når koden er slået op.
+  const [inviteFromStorage, setInviteFromStorage] = useState(false);
+  // Hvad koden peger på, læst UDEN login (I7). Ren pynt på login-skærmen:
+  // udebliver den, ser skærmen ud præcis som før.
+  const [invitation, setInvitation] = useState(null);
 
   // `source` skelner mellem tre veje ind i completeAuth, som IKKE må logges
   // ens: "signup" (ny konto), "signin" (almindeligt login) og "restore" (den
@@ -133,6 +142,28 @@ export default function App() {
     if (urlIntent.recoveryToken) return;
 
     (async () => {
+      // ---- den ventende invitation (I7) ----
+      //
+      // Bærer adressen en kode, GEMMES den; gør den ikke, hentes en gemt frem.
+      // Adressen vinder altid: står man med et friskt link i hånden, er det dét,
+      // man mener — også selvom der ligger et ældre og venter.
+      //
+      // Begge dele sker HER og ikke i `readUrlIntent()`, selvom det er dér,
+      // adressen læses. `readUrlIntent` kaldes under render, og både en skrivning
+      // til localStorage og et opslag på uret er urene dér — samme regel som
+      // `lastRefreshAt` nedenfor følger. En effekt er det rigtige sted at aflæse
+      // "nu" og at røre omverdenen.
+      if (urlIntent.join || urlIntent.liga) {
+        writePendingInvite(urlIntent.join ? "join" : "liga", urlIntent.join || urlIntent.liga);
+      } else {
+        const gemt = readPendingInvite();
+        if (gemt) {
+          setInviteFromStorage(true);
+          if (gemt.param === "join") setPendingJoinCode(gemt.code);
+          else setPendingLigaCode(gemt.code);
+        }
+      }
+
       // Bekræftelses-linket (B26) går FORAN den gemte session: den, der lige
       // har trykket "Bekræft e-mail", skal ind på den konto, linket gælder —
       // ikke på en anden, enheden tilfældigvis havde liggende.
@@ -246,6 +277,26 @@ export default function App() {
     };
   }, [session?.refresh_token]); // eslint-disable-line
 
+  // Hvad er jeg inviteret til? — spurgt UDEN login (I7).
+  //
+  // Kun når der faktisk er nogen at fortælle det til: er man logget ind, viser
+  // MainApp allerede bekræftelses-dialogen med de rigtige navne, og et opslag
+  // mere ville være et kald for at pynte på en skærm, ingen ser.
+  //
+  // Svaret er rent pynt, og `loadInvitePreview` kaster aldrig — en ukendt kode,
+  // et langsomt net eller en fejl giver `null`, og login-skærmen ser da ud
+  // præcis som før `I7`.
+  useEffect(() => {
+    const kode = pendingJoinCode || pendingLigaCode;
+    if (booting || session || !kode) return;
+    let stoppet = false;
+    (async () => {
+      const svar = await loadInvitePreview(kode);
+      if (!stoppet) setInvitation(svar);
+    })();
+    return () => { stoppet = true; };
+  }, [booting, session, pendingJoinCode, pendingLigaCode]);
+
   // push_opened: virker uanset om ?pn= ankom før eller efter login (session
   // kan mangle, når linket først åbnes). Fyrer så snart en token findes, og
   // rydder query-strengen så et refresh ikke logger den samme åbning igen.
@@ -294,15 +345,26 @@ export default function App() {
     <>
       <style>{globalCss}</style>
       {!session ? (
-        <AuthScreen onAuthed={completeAuth} booting={false} />
+        // `invitation` (I7): uden den er skærmen en formular uden en grund. Med
+        // den er den en invitation. Se AuthShell i screens/Auth.jsx.
+        // `harInvitation` er kendt med det samme (koden står i adressen);
+        // `invitation` kommer, når opslaget svarer. De to er derfor adskilt:
+        // den første afgør, om skærmen åbner på Opret, den anden hvad der står.
+        <AuthScreen onAuthed={completeAuth} booting={false} invitation={invitation}
+          harInvitation={!!(pendingJoinCode || pendingLigaCode)} />
       ) : (
         // `onProfileChanged` findes af én grund (B29): navnet står også i
         // Hjems hilsen og som afsender på et invitationslink, og de læser
         // `profile` herfra. Uden linjen ville et navneskift kun kunne ses på
         // karriereprofilen indtil næste app-start.
+        // `clearPending*` rydder nu BEGGE steder (I7): en invitation, der er
+        // slået op, må ikke kunne dukke op igen ved næste opstart, uanset hvad
+        // opslaget svarede. Det er dét, der gør localStorage-kopien til en
+        // omvej-forsikring frem for en kø, der vokser.
         <MainApp session={session} profile={profile} onProfileChanged={setProfile} onLogout={handleLogout}
-          pendingJoinCode={pendingJoinCode} clearPendingJoinCode={() => setPendingJoinCode(null)}
-          pendingLigaCode={pendingLigaCode} clearPendingLigaCode={() => setPendingLigaCode(null)} />
+          inviteFromStorage={inviteFromStorage}
+          pendingJoinCode={pendingJoinCode} clearPendingJoinCode={() => { setPendingJoinCode(null); clearPendingInvite(); }}
+          pendingLigaCode={pendingLigaCode} clearPendingLigaCode={() => { setPendingLigaCode(null); clearPendingInvite(); }} />
       )}
     </>
   );

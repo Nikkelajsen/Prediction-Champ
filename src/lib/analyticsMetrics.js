@@ -102,6 +102,13 @@ const METRICS = {
     source: "analytics_events, skrevet fire-and-forget fra klienten.",
     caveat: "Hændelsesloggen er lossy by design: en blokeret eller fejlet skrivning svælges stille. Tallene er derfor et GULV. Brug dem til at sammenligne funktioner med hinanden, aldrig som et facit — og aldrig til noget, en bruger kan bestride.",
   },
+  invite_funnel: {
+    title: "Invitationstragten",
+    what: "Hvor mange invitationer der blev sendt, hvor mange der blev åbnet af en modtager med en konto, og hvor mange der endte som en tilmelding.",
+    how: "Tre hændelser i vinduet: league_invite_sent (nogen trykkede Del — begge link-typer, adskilt af metadata.via), invite_landed (koden blev slået op for en indlogget modtager, uanset udfald) og league_invite_accepted (modtageren sagde ja i bekræftelsen eller indsatte koden i hånden). Læs FORHOLDET mellem dem: frafald mellem sendt og landet peger på linket, mellem landet og accepteret på bekræftelsen.",
+    source: "analytics_events, aggregeret af admin_analytics_engagement.",
+    caveat: "De tre tal tæller IKKE de samme ting, og en rate mellem dem er derfor kun en indikation. 'Sendt' tæller DELINGER, ikke modtagere — én deling i en gruppechat kan nå ti mennesker, og ét link kan åbnes af mange, så 'landet' kan sagtens overstige 'sendt'. 'Landet' er desuden et gulv med en systematisk blind vinkel: en modtager, der åbner linket og aldrig opretter en konto, kan slet ikke tælles (analytics_events.user_id er not null default auth.uid()) — altså netop det frafald, man helst ville se. Og som alt andet her er loggen fire-and-forget og lossy by design. Serien starter forfra 11. august 2026, hvor invite_landed blev til.",
+  },
   league_views: {
     title: "Liga Views",
     what: "Åbninger af liga-fanen i alt, og hvor mange af dem der var på én bestemt liga.",

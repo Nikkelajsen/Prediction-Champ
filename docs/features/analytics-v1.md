@@ -62,7 +62,7 @@ Logges via én generisk klient-helper, `logEvent(token, name, { groupId, competi
 | Kategori | Events | Kaldested |
 |---|---|---|
 | Account | `account_created`, `login`, `logout` | `src/App.jsx` (`completeAuth` med `source`-parameter, `handleLogout`) |
-| Liga | `league_created`, `league_joined`, `league_invite_sent`, `league_invite_accepted` | `src/lib/data/groups.js` (`createGroup`, `joinGroup`) + `src/lib/data/competitions.js` (`joinByInviteCode`) — *oprindeligt `data.js`; flyttet ved `G1`*, `src/screens/GroupScreen.jsx`/`BoardScreen.jsx` (`shareInvite`), `src/screens/MainApp.jsx` (`confirmGroupJoin`) |
+| Liga | `league_created`, `league_joined`, `league_invite_sent`, `invite_landed`, `league_invite_accepted` | `src/lib/data/groups.js` (`createGroup`, `joinGroup`) + `src/lib/data/competitions.js` (`joinByInviteCode`) — *oprindeligt `data.js`; flyttet ved `G1`*, `src/screens/GroupScreen.jsx`/`BoardScreen.jsx` (`shareInvite`), `src/screens/MainApp.jsx` (`confirmGroupJoin`) |
 | Konkurrence | `competition_created`, `competition_joined`, `competition_opened` | `src/lib/data.js` (`createCompetition` — alle 3 return-veje, `joinCompetition`), `src/screens/MainApp.jsx` (`openBoard`/`openPredictions`) |
 | Tip | `prediction_started`, `prediction_saved`, `prediction_updated`, `prediction_submitted` | `src/screens/PredictionsScreen.jsx` (`save()`, efter vellykket upsert) |
 | Navigation | `opened_home`, `opened_tip`, `opened_league`, `opened_standings`, `opened_rating`, `opened_career`, `opened_story`, `opened_championship` | `src/screens/MainApp.jsx` (`goTab`/`open*`, ét sted for al navigation) |
@@ -83,6 +83,26 @@ Logges via én generisk klient-helper, `logEvent(token, name, { groupId, competi
 **`opened_story` er reserveret, men udsendes ikke i v1** — der findes endnu ingen selvstændig story-drilldown (kortet lever inline på Hjem; `story_viewed` er dens impression). Navnet står i check-constrainten, så en fremtidig detaljevisning ikke kræver en ny migrering.
 
 **Bevidst uden for kataloget** (widening ville have krævet en constraint-ændring uden en tilsvarende dashboard-gevinst): `leaveGroup`, `deleteGroup`, `leaveCompetition`, `moveCompetitionToGroup`, `openCreate`, `openHow`. Konkurrence-invite har intet eget navn — genbruger `league_invite_sent`/`league_invite_accepted` med `metadata.via` ("liga_link" / "competition_link" / "code" / "link") som diskriminator, så invite-tragten kan følges ende-til-ende for begge link-typer uden at udvide vokabularet.
+
+**`invite_landed` er undtagelsen, der bekræfter reglen (`I7`, 11. august 2026).**
+Konkurrence-invitationen fik ingen egne navne, fordi den er en anden KILDE til
+det samme trin — dét er, hvad `metadata.via` er til for. `invite_landed` er
+derimod et **nyt trin**: linket blev åbnet, og modtageren nåede frem med en
+session. Det kan ikke udtrykkes som en `via` på hverken `sent` eller `accepted`,
+og uden det kunne tragten kun se sine to endepunkter.
+
+Logges i `src/screens/MainApp.jsx`' to deep-link-effekter, hvor UDFALDET af
+opslaget er kendt — `notfound` er lige så interessant som `confirm`:
+`metadata: { via: "liga"|"join", udfald: "confirm"|"already"|"notfound",
+efter_oprettelse: <bool> }`.
+
+⚠️ **Den anonyme halvdel af trinnet kan ikke logges.** `analytics_events.user_id`
+er `not null default auth.uid()`, så en besøgende uden konto har ingen række at
+skrive — altså netop det frafald, man helst ville se. Tallet er et GULV med en
+systematisk blind vinkel, og forbeholdet står i `analyticsMetrics.js` under
+`invite_funnel`. **Dashboard-gevinsten** er gruppen "Invitationer" i Admin →
+Analytics → Engagement (sendt · landet · accepteret); den krævede ingen ny RPC,
+fordi `admin_analytics_engagement` aggregerer hændelsesnavne generisk.
 
 ---
 
@@ -527,6 +547,7 @@ Hver tilstand giver en **begrundelse med ligaens egne tal** ("Én af 4 medlemmer
 | `src/screens/PredictionsScreen.jsx` | `save()` — `prediction_started`/`saved`/`updated`/`submitted` |
 | `src/screens/HjemTab.jsx` | `StoryCard` får `token`/`groupId`-prop; `story_viewed` (once) + `story_shared` |
 | `src/screens/GroupScreen.jsx`, `BoardScreen.jsx` | `shareInvite()` → `league_invite_sent` |
+| `src/screens/MainApp.jsx` | deep-link-effekterne → `invite_landed` (efter opslaget, før navigationen) |
 | `api/send-notifications.js` | beskeder får `kind`/`roundKey`; push-URL'en bliver `/?pn=<kind>&rk=<runde>` (intet server-side event). **Rettet efter levering (`B5`, august 2026):** URL'en bygges nu med `URLSearchParams`, og `rk` udelades, når beskeden ikke har en runde — "ny konkurrence"-beskeden bærer i stedet `join=<invite_code>`, så den lander i invitations-bekræftelsen |
 | `src/ui/components.jsx` | `StatTile`/`StatGroup`/`MiniBars` flyttet fra `AdminScreen.jsx` (nu 2 forbrugere) + `PctGrid`. **30. juli 2026:** `HealthBar` fjernet, `StateChip`/`SignalRow` tilføjet; `StatTile` fik `info`-prop; `MiniBars` skelner nu `null` (ingen måling) fra 0 |
 | `src/screens/AdminScreen.jsx` | fjerde chip "Analytics", render-gren til `AnalyticsPanel` |

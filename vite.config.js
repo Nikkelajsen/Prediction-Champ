@@ -29,8 +29,41 @@ const version = (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || "dev";
 // (`G4`). Den skal vælges, ikke arves.
 const apiProxy = process.env.VITE_API_PROXY;
 
+// Appens offentlige adresse, stemplet ind i `index.html`s OG-tags (I7).
+//
+// HVORFOR DEN IKKE ER HARDKODET. `og:image` SKAL være en absolut URL — en
+// crawler har intet dokument at gøre en relativ sti relativ til. Og
+// produktionsadressen er netop et ÅBENT spørgsmål (`I10`/`B21`: appen kører på
+// prediction-champ.vercel.app, leagly.app er planlagt). En hardkodet adresse
+// ville derfor blive forkert på en dag, ingen af os kan planlægge efter, og
+// symptomet ville være et link-preview uden billede — altså det ene sted, hvor
+// ingen af os kigger, fordi vi allerede har appen installeret.
+//
+// `VERCEL_PROJECT_PRODUCTION_URL` er projektets produktionsdomæne uden skema og
+// følger med, den dag domænet skifter. Preview-deploys arver med vilje
+// produktionens adresse frem for deres egen flygtige: billedet er det samme, og
+// et preview skal ikke udgive sig selv som kanonisk.
+//
+// Vites egen `%VITE_*%`-erstatning i index.html kan ikke bruges — den ser kun
+// variabler med `VITE_`-præfiks, og dette er en systemvariabel fra Vercel. Deraf
+// de tre linjer plugin.
+const publicOrigin =
+  process.env.PUBLIC_ORIGIN ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) ||
+  "https://prediction-champ.vercel.app";
+
+const ogOrigin = {
+  name: "leagly-og-origin",
+  transformIndexHtml(html) {
+    // Skrives i byggeloggen, så spørgsmålet "hvilken adresse blev stemplet ind?"
+    // kan besvares uden at hente den byggede fil ned.
+    console.log(`[leagly] OG-adresse: ${publicOrigin}`);
+    return html.replaceAll("%OG_ORIGIN%", publicOrigin);
+  },
+};
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), ogOrigin],
   build: {
     // Source maps udgives (G42, 3. august 2026).
     //

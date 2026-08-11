@@ -82,7 +82,8 @@ describe("den lokale oprydning", () => {
     for (const n of [
       "pc_session", "pc_last_ping", "pc_onboarding_v1_flow", "pc_onboarding_v1_card",
       "pc_onboarding_v1_complete", "pc_push_dismissed", "pc_liga_nudge_dismissed",
-      "pc_season_league", "pc_pwa_onboarded", "pc_comp_done_seen",
+      "pc_season_league", "pc_pwa_onboarded", "pc_comp_done_seen", "pc_story_seen",
+      "pc_pending_invite",
     ]) {
       expect(LOKALE_NØGLER).toContain(n);
     }

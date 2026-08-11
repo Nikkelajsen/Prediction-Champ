@@ -49,7 +49,7 @@ Ordet "liga" er i dag brugt om **to forskellige ting** (fodboldligaer og private
 Fra Ligaer-fanen: "Opret liga" → navn (2–40 tegn) → færdig. Opretteren bliver liga-admin. Under ét minut, ingen andre felter i v1 (ingen ikoner/farver/beskrivelser — identitet kan komme senere).
 
 ### Invitér
-Ét delbart link pr. liga: `?liga=<kode>` (samme mønster som dagens `?join=<kode>`, ny parameter så de to kodetyper ikke blandes). *(Tilføjet efter levering, august 2026: **koden vises også i klartekst** under Invitér-knappen begge steder. Join-feltet har altid taget imod den rå kode, men koden stod ingen steder i appen — man kunne joine med en kode, man ikke kunne få fat i uden selv at klippe den ud af et link. Koden vises præcis som gemt, fordi opslaget er `eq.`; indtastede koder sænkes til små bogstaver, så iOS-tastaturets store forbogstav ikke længere ligner en forkert kode.)* Modtageren ser bekræftelses-modalen ("Du er inviteret til ligaen {liga}. Vil du være med?" — *leveret uden inviter-navn; det står i den delte tekst, ikke i modalen*) og lander efter join på liga-siden. "Join med kode"-kortet på Ligaer-fanen accepterer begge kodetyper (slår først liga-koder op, dernæst konkurrence-koder).
+Ét delbart link pr. liga: `?liga=<kode>` (samme mønster som dagens `?join=<kode>`, ny parameter så de to kodetyper ikke blandes). *(Tilføjet efter levering, august 2026: **koden vises også i klartekst** under Invitér-knappen begge steder. Join-feltet har altid taget imod den rå kode, men koden stod ingen steder i appen — man kunne joine med en kode, man ikke kunne få fat i uden selv at klippe den ud af et link. Koden vises præcis som gemt, fordi opslaget er `eq.`; indtastede koder sænkes til små bogstaver, så iOS-tastaturets store forbogstav ikke længere ligner en forkert kode.)* Modtageren ser bekræftelses-modalen ("Du er inviteret til ligaen {liga}. Vil du være med?" — *leveret uden inviter-navn; det står i den delte tekst, ikke i modalen*) *(Rettet efter levering, 11. august 2026 — `I7`: den delte tekst siger nu **også** for liga-linket "{afsender} har inviteret dig til ligaen {liga}", hvor den før var upersonlig. Begge skærme bygger teksten med `inviteShareText()`. Modalen er uændret. Og modtageren behøver ikke længere være logget ind for at se, hvad de er inviteret til: login-skærmen slår liganavn og medlemsantal op anonymt. Spec: [`invitationsflow-v1.md`](./invitationsflow-v1.md).)* og lander efter join på liga-siden. "Join med kode"-kortet på Ligaer-fanen accepterer begge kodetyper (slår først liga-koder op, dernæst konkurrence-koder).
 
 ### Liga-siden (ny drill-in-skærm)
 Klik på et liga-kort på Ligaer-fanen → liga-siden:
@@ -293,3 +293,26 @@ ingen forfremmelse. Det ene, der ændrede sig, er, at opretterens admin-række n
 er det ENESTE, en bruger må skrive direkte i tabellen — og at policyen kræver
 `role = 'admin'`, netop for at en liga ikke kan fødes uden en administrator
 (`A37`s frosne liga).
+
+
+---
+
+## Etiket vs. adgang (tilføjet efter levering, 11. august 2026 — `I7`/`A41`)
+
+`A40` ovenfor gjorde koden til hemmeligheden igen, og det står ved magt. `I7`
+tilføjede en TREDJE funktion på den samme kode, og skellet mellem de tre er
+værd at kunne udenad:
+
+| Funktion | Kræver login | Svarer med |
+|---|---|---|
+| `invite_preview()` | **nej** | navn + medlemsantal — en billedtekst |
+| `invite_lookup()` | ja | id'er, `already`, navne — det bekræftelsen skal bruge |
+| `accept_invite()` | ja, **og** koden | selve tilmeldingen |
+
+Previewet findes, fordi en modtager ellers skulle oprette en konto for at få at
+vide, hvad de var inviteret til — og fordi en crawler pr. definition ikke er
+logget ind, så et delt link ikke kunne vise andet end appens forside.
+
+`A40`s hul var, at et **id** var nok til at melde sig ind. Det er ikke dét, der
+åbnes: previewet bærer hverken id'er, `invite_code` eller adgang. Regnestykket
+bag og tilbagevejen står i `DECISIONS.md` (`A41`) og i `sql/invite_preview.sql`.

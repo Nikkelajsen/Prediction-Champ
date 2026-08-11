@@ -26,6 +26,7 @@
 | liga-laget (grupper) | §18 · `docs/features/liga-laget-v1.md` |
 | karriereprofil | §19 · `docs/features/karriereprofil-v1.md` |
 | onboarding | §20 · `docs/features/onboarding-v1.md` |
+| invitationsflowet (link-preview, invitationskontekst før login, afsendernavn) | `docs/features/invitationsflow-v1.md` · `api/invite-preview.js` · `sql/invite_preview.sql` |
 | analytics og måle-ordbogen | §21 · `docs/features/analytics-v1.md` |
 | planlagte jobs (cron) | `docs/CRON.md` |
 | mails: afsender, modtager, DNS, skabeloner | `docs/MAIL.md` · `docs/mail/` |

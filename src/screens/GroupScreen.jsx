@@ -10,13 +10,13 @@ import {
 } from "../lib/data.js";
 import { leaders } from "../lib/standings.js";
 import { logEvent } from "../lib/analytics.js";
-import { shareText } from "../lib/share.js";
+import { shareText, inviteShareText } from "../lib/share.js";
 import { C, btnGhost, btnGold, btnGreen, font, muted } from "../ui/theme.js";
 import { BackBar, Card, Collapsible, Eyebrow, InviteCode, Modal, PlayerName } from "../ui/components.jsx";
 import { readSeenCompletions, markCompletionSeen } from "../lib/localFlags.js";
 import CompetitionCard, { cardAction } from "./liga/CompetitionCard.jsx";
 
-function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard, openCreate, reloadGroups, openProfile }) {
+function GroupScreen({ token, userId, groupId, myCompetitions, inviterName, onBack, openBoard, openCreate, reloadGroups, openProfile }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -85,7 +85,16 @@ function GroupScreen({ token, userId, groupId, myCompetitions, onBack, openBoard
   async function shareInvite() {
     if (!detail) return;
     const link = `${window.location.origin}${window.location.pathname}?liga=${detail.group.invite_code}`;
-    const text = `Du er inviteret til ligaen "${detail.group.name}" på Leagly ⚽\nGæt resultater, saml point og se hvem der er bedst. Tryk her for at være med:\n${link}`;
+    // Afsenderens navn (I7). Liga-invitationen var indtil august 2026 den
+    // upersonlige "Du er inviteret til ligaen X", mens konkurrence-invitationen
+    // kunne sige "Nikolaj har inviteret dig" — samme handling, to toner, fordi
+    // de to skærme hver skrev sin egen sætning. Nu bygger begge teksten med
+    // `inviteShareText`, og `inviterName` kommer samme vej som i BoardScreen.
+    //
+    // Bemærk hvad det IKKE er: en attribution modtagersiden kan læse. Koden er
+    // én pr. liga (`B20`), så modtageren kan stadig ikke få at vide, hvem der
+    // delte linket — kun afsenderen selv skriver det, og derfor er det sandt.
+    const text = inviteShareText({ inviterName, mål: `ligaen "${detail.group.name}"`, link });
     try {
       if (await shareText(text) === "clipboard") { setCopied(true); setTimeout(() => setCopied(false), 2000); }
       logEvent(token, "league_invite_sent", { groupId: detail.group.id, metadata: { via: "liga_link" } });

@@ -15,6 +15,90 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 11. august 2026 — Invitationens ETIKET må læses uden login (`A41`)
+
+**Beslutning:** `invite_preview()` (migrering `#54`) er `security definer` og
+åben for `anon`. Den svarer med ligaens eller konkurrencens NAVN og et
+MEDLEMSANTAL — og intet andet. Ingen id'er, ingen `invite_code` retur, ingen
+medlemsliste, intet opretternavn.
+
+**Fordi modtageren ellers skal oprette en konto for at få at vide, hvad de er
+inviteret til.** `invite_lookup()` kræver `auth.uid()`, hvilket er rigtigt for et
+opslag, der fører til en tilmelding — men det betød, at en helt ny bruger, der
+trykkede på et invitationslink, landede på en generisk login-formular uden en
+antydning af hvorfor. Det samme hul har en anden ende: en crawler er pr.
+definition ikke logget ind, så et delt link kunne ikke vise andet end appens
+forside, uanset hvilken liga det pegede på.
+
+**Snittet er ETIKET vs. ADGANG,** og det er dét, der gør beslutningen forsvarlig
+en måned efter `A40`, som gjorde koden til hemmeligheden igen:
+
+- `invite_preview()` er en billedtekst til en kode, kalderen allerede har.
+- `invite_lookup()` er opslaget og kræver login.
+- `accept_invite()` er adgangen og kræver login **og** koden.
+
+`A40`s hul var, at et ID var nok til at melde sig ind. Det er ikke dét, der
+åbnes her.
+
+**Prisen er regnet ud og ikke viftet væk.** Koden er 8 hextegn (≈ 4,3 mia.
+muligheder) og kolonnen er `unique`, så et gæt er ét indeksopslag. Med nogle
+hundrede levende koder kræver ét træf i størrelsesordenen millioner af kald, og
+præmien er et liganavn. Træf og forbier ligner desuden hinanden i form og
+svartid.
+
+**Tilbagevejen er designet ind nu:** viser der sig misbrug, fjernes
+`grant ... to anon`, og begge aftagere føres gennem `api/invite-preview.js`, hvor
+en hastighedsgrænse kan bo. Det koster én linje i SQL og én funktionskrop i
+`src/lib/data/invites.js` — hvilket er præcis derfor klientens kald ligger samlet
+ét sted.
+
+**Ikke valgt: en længere invitationskode.** Koden tastes i hånden ("Har du en
+kode?"), så dens længde er et brugsvalg og ikke en sikkerhedsknap.
+
+---
+
+## 11. august 2026 — Kun crawlere får det dynamiske link-preview
+
+**Beslutning:** omskrivningen i `vercel.json` kræver BÅDE en invitationskode i
+adressen og en `user-agent`, der matcher en liste over sociale crawlere. Alle
+andre — inklusive Googlebot — får den uændrede statiske app.
+
+**Fordi alternativet gør en fejl i previewet til en fejl i invitationen.** Lod vi
+alle `?liga=`-kald gå gennem serverfunktionen, ville hver eneste rigtige bruger
+få en cold start foran appens første maling, funktionen skulle kende og levere
+hele appen, og et nedbrud dér ville ramme præcis det link, der skal give det
+bedste førstehåndsindtryk.
+
+**Med portvagten er "fejl åben" en egenskab ved opsætningen** frem for et løfte,
+koden skal holde: et menneske kan pr. konstruktion ikke ende i funktionen.
+
+**Prisen er, at en crawler, der ikke står på listen, får de statiske tags.** Det
+er en gulvbrædde og ikke et hul — det er nøjagtig dét, alle fik før `I7`.
+Googlebot udelades bevidst: en søgemaskine skal se det samme som brugeren.
+
+---
+
+## 11. august 2026 — `B20` trækkes ikke ind i `I7`
+
+**Beslutning:** `I7` rører invitationsflowet uden skemaændring. Afsenderens navn
+kommer kun i den TEKST, afsenderen selv sender.
+
+**Fordi de to attributioner ikke er den samme ting.** Afsenderens eget navn er
+kendt i delings-øjeblikket og dermed sandt pr. konstruktion. En attribution,
+MODTAGEREN kan læse — og som en milepæl kan tælle — kræver én kode pr. bruger,
+altså `invite_links` + `invited_by`, hvilket er `B20` og en anden leverance.
+
+**Fravalget koster ét sted, og det er værd at kende:** teksten i det dynamiske
+link-preview kan ikke sige "Nikolaj har inviteret dig", fordi modtagersiden ikke
+ved, hvem der delte linket. Den siger derfor "Kom med i ligaen X — 7 spillere
+gætter allerede resultater", hvilket er sandt uanset afsender. `B20` skal
+bagefter kun tilføje ét felt i svaret fra `invite_preview()`.
+
+**`B20`s egen begrundelse er uændret:** attribution kan kun registreres fremad,
+så ventetid koster.
+
+---
+
 ## 10. august 2026 — En migrering, der skal følges ad med en udrulning, deles i to
 
 **Beslutning:** `A40`s migrering er delt i `#52` (funktionerne, additiv) og

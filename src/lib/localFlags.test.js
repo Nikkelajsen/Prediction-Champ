@@ -8,7 +8,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   readFlag, writeFlag, removeFlag, readUserFlag, writeUserFlag,
-  LOKALE_NØGLER, COMPLETE_KEY, SESSION_KEY,
+  readPendingInvite, writePendingInvite, clearPendingInvite,
+  LOKALE_NØGLER, COMPLETE_KEY, SESSION_KEY, PENDING_INVITE_KEY, PENDING_INVITE_TTL_MS,
 } from "./localFlags.js";
 
 // Node-miljøet har ingen localStorage — den stubbes, så vi tester vores egen
@@ -95,5 +96,77 @@ describe("LOKALE_NØGLER", () => {
 
   it("holder sessionen enheds-global — den ER brugeren", () => {
     expect(SESSION_KEY).toBe("pc_session");
+  });
+});
+
+// Den ventende invitation (I7).
+//
+// Nøglen findes, fordi `?liga=`-koden indtil august 2026 kun lå i React-state:
+// den dag `B26` slår e-mailbekræftelse til, forlader den nye bruger siden og
+// kommer tilbage uden koden. Testene her holder på de tre ting, der gør
+// mekanismen til en forsikring frem for en kø, der vokser: den kan læses igen,
+// den udløber, og alt andet end det, vi selv skrev, kasseres.
+describe("den ventende invitation", () => {
+  const NU = 1_755_000_000_000;
+
+  it("kan læses igen — det er hele pointen", () => {
+    writePendingInvite("liga", "abc12345", NU);
+    expect(readPendingInvite(NU + 1000)).toEqual({ param: "liga", code: "abc12345" });
+  });
+
+  it("skelner de to link-typer", () => {
+    writePendingInvite("join", "deadbeef", NU);
+    expect(readPendingInvite(NU)).toEqual({ param: "join", code: "deadbeef" });
+  });
+
+  it("er der ikke, når intet er gemt", () => {
+    expect(readPendingInvite(NU)).toBeNull();
+  });
+
+  // Et døgn: en mail, der kommer sent, plus en nats søvn. Længere ville betyde,
+  // at en invitation, nogen aldrig tog imod, kunne dukke op uger senere som en
+  // dialog, de ikke havde bedt om.
+  it("udløber efter et døgn", () => {
+    writePendingInvite("liga", "abc12345", NU);
+    expect(readPendingInvite(NU + PENDING_INVITE_TTL_MS - 1)).not.toBeNull();
+    expect(readPendingInvite(NU + PENDING_INVITE_TTL_MS)).toBeNull();
+  });
+
+  // Og den RYDDER undervejs. En invitation, der ikke kan bruges, skal ikke
+  // blive liggende og blive prøvet igen ved hver eneste opstart.
+  it("rydder den udløbne værdi frem for at lade den ligge", () => {
+    writePendingInvite("liga", "abc12345", NU);
+    readPendingInvite(NU + PENDING_INVITE_TTL_MS);
+    expect(readFlag(PENDING_INVITE_KEY)).toBeNull();
+  });
+
+  // Et tidsstempel FREM i tiden er et flyttet ur, ikke en frisk invitation —
+  // og en værdi, der aldrig udløber, er værre end ingen.
+  it("kasserer et tidsstempel fra fremtiden", () => {
+    writePendingInvite("liga", "abc12345", NU + 60_000);
+    expect(readPendingInvite(NU)).toBeNull();
+  });
+
+  it.each([
+    ["vrøvl", "en værdi, vi ikke selv har skrevet"],
+    ["liga:abc12345", "et manglende tidsstempel"],
+    ["andet:abc12345:1755000000000", "en parameter, appen ikke kender"],
+    [`liga::${NU}`, "en tom kode"],
+  ])("kasserer %s (%s)", (værdi) => {
+    writeFlag(PENDING_INVITE_KEY, værdi);
+    expect(readPendingInvite(NU)).toBeNull();
+  });
+
+  it("kan ryddes, når invitationen er indløst", () => {
+    writePendingInvite("liga", "abc12345", NU);
+    clearPendingInvite();
+    expect(readPendingInvite(NU)).toBeNull();
+  });
+
+  // Enheds-global og ikke bruger-mærket: der er pr. definition ingen bruger
+  // endnu. Det er hele situationen, nøglen findes for.
+  it("er enheds-global — der er ingen konto at mærke den med endnu", () => {
+    writePendingInvite("liga", "abc12345", NU);
+    expect(readFlag(PENDING_INVITE_KEY)).not.toContain("@");
   });
 });

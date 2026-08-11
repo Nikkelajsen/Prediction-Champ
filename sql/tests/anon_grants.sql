@@ -15,8 +15,16 @@
 --      liste, så en oprydning uden dette trin ville blive rullet tilbage af den
 --      næste migrering, uden at nogen opdagede det.
 --   5. `anon` kan stadig køre en SECURITY DEFINER-funktion. Det er præcis dét,
---      oprettelsen af en konto har brug for (`username_available`), og den er
---      det eneste, appen laver i anon-rollen.
+--      oprettelsen af en konto har brug for (`username_available`).
+--
+--      ⚠️ **Her stod indtil 11. august 2026 "og den er det eneste, appen laver i
+--      anon-rollen". Det er ikke længere sandt, og det var upræcist også dengang.**
+--      `I7` lagde `invite_preview()` ved siden af — invitationens etiket, læst
+--      før login. Men vigtigere: `grant all on functions to anon` gælder HVER
+--      funktion i `public`, ikke kun dem, appen kalder. Hvad `anon` kan NÅ, og
+--      hvad appen BRUGER, er to forskellige lister, og kun den anden er kort.
+--      Det, der holder en fremmed ude af fx `invite_lookup()`, er funktionens
+--      egen `auth.uid()`-vagt — se `sql/README.md`s adgangskontrakt.
 
 \set ON_ERROR_STOP on
 \timing off

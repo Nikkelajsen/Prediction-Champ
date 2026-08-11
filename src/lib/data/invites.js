@@ -40,7 +40,16 @@
 // tilmeldingen kræver koden, ikke et id. Uden den ville `MainApp` skulle gemme
 // den ved siden af resultatet, og så er der to steder, der skal huske det
 // samme.
-import { inviteLookup, acceptInvite } from "./groups.js";
+// ---------------------------------------------------------------------------
+// I7 (august 2026): modtageren skal kunne se, hvad de er inviteret til, FØR de
+// opretter en konto
+//
+// De to funktioner ovenfor kræver begge en session, fordi de fører til en
+// tilmelding. `loadInvitePreview()` nedenfor gør ikke: den henter ETIKETTEN —
+// et navn og et antal — og er åben for `anon`. Det er den, login-skærmen bruger,
+// og den er grunden til, at en helt ny bruger ikke længere lander på en
+// generisk formular uden at vide hvorfor.
+import { inviteLookup, invitePreview, acceptInvite } from "./groups.js";
 
 // Hvad peger en konkurrence-invitationskode på?
 //
@@ -92,6 +101,61 @@ export async function resolveLeagueInvite(token, code) {
   return svar.already
     ? { kind: "already", group: svar.group }
     : { kind: "confirm", group: svar.group, code };
+}
+
+// Hvad hedder det, koden peger på? Uden login (I7).
+//
+// Kaster ALDRIG — og det er en anden kontrakt end de to ovenfor med vilje. De
+// bliver kaldt, fordi brugeren har trykket på noget, og en fejl dér skal ses.
+// Denne kaldes for at pynte på login-skærmen: en fejl, en ukendt kode eller et
+// langsomt net skal give den skærm, der stod der før, ikke en fejlbesked oven i
+// en oprettelse. `null` er derfor et fuldgyldigt svar og ikke en undtagelse.
+export async function loadInvitePreview(code) {
+  try {
+    const svar = await invitePreview(code);
+    return svar?.kind === "group" || svar?.kind === "competition" ? svar : null;
+  } catch {
+    return null;
+  }
+}
+
+// Previewet oversat til de to linjer, login-skærmen viser.
+//
+// REN FUNKTION, og det er ikke tilfældigt: testopsætningen er uden jsdom, så
+// alt, der kun kan nås gennem en render, kan ikke efterprøves. Ligger ordlyden
+// her frem for inde i JSX'en, er den dækket — og `AuthScreen` skal kun kunne
+// tegne to strenge, den får udleveret.
+//
+// Samme snit som resten af modulet: her svares HVAD der skal stå, ikke hvordan
+// det ser ud.
+export function invitationsPitch(preview) {
+  if (!preview) return null;
+
+  const antal = Number(preview.member_count) || 0;
+  // "5 spillere er allerede med" er både en oplysning og et argument. Ved nul
+  // udelades den helt frem for at skrive "0 spillere er allerede med", som ville
+  // være en grund til at lade være.
+  const medlemmer = antal > 0
+    ? `${antal} ${antal === 1 ? "spiller er" : "spillere er"} allerede med.`
+    : "";
+
+  if (preview.kind === "group" && preview.name) {
+    return {
+      overskrift: `Du er inviteret til ligaen "${preview.name}".`,
+      detalje: `${medlemmer} Opret en konto for at være med.`.trim(),
+    };
+  }
+  if (preview.kind === "competition" && preview.name) {
+    return {
+      // Ligaen nævnes, fordi man også meldes ind i DEN (`A8`) — modtageren skal
+      // kunne se begge dele, de siger ja til.
+      overskrift: preview.group_name
+        ? `Du er inviteret til konkurrencen "${preview.name}" i ligaen "${preview.group_name}".`
+        : `Du er inviteret til konkurrencen "${preview.name}".`,
+      detalje: `${medlemmer} Opret en konto for at være med.`.trim(),
+    };
+  }
+  return null;
 }
 
 // Fjerner en invitations-parameter fra adresselinjen, så et genindlæst vindue
