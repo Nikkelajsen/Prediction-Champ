@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Home, ClipboardList, Users, Trophy, TrendingUp, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";
-import { joinGroup, joinCompetition, resolveCompetitionInvite, resolveLeagueInvite, stripInviteParam } from "../lib/data.js";
+import { acceptInvite, resolveCompetitionInvite, resolveLeagueInvite, stripInviteParam } from "../lib/data.js";
 import { logEvent } from "../lib/analytics.js";
 import { deriveOnboarding, loadOnboardingSignals } from "../lib/onboarding.js";
 import { readUserFlag, writeUserFlag, COMPLETE_KEY, FLOW_KEY, PWA_ONBOARDED_KEY } from "../lib/localFlags.js";
@@ -25,6 +25,7 @@ import HowItWorksScreen from "./HowItWorksScreen.jsx";
 import LegalScreen from "./LegalScreen.jsx";
 import OnboardingFlow from "./OnboardingFlow.jsx";
 import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
+import { selectIn } from "../lib/data/chunked.js";
 
 // Admin hentes FØRST når den åbnes (G34, august 2026).
 //
@@ -37,7 +38,7 @@ import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
 // hente dem enkeltvis ville bytte én ventetid ud med fem.
 const AdminScreen = lazy(() => import("./AdminScreen.jsx"));
 
-function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoinCode, pendingLigaCode, clearPendingLigaCode }) {
+function MainApp({ session, profile, onProfileChanged, onLogout, pendingJoinCode, clearPendingJoinCode, pendingLigaCode, clearPendingLigaCode }) {
   const token = session.access_token;
   const userId = session.user.id;
   const isAdmin = !!profile?.is_admin;
@@ -99,8 +100,8 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     const myComps = await db.select(token, "competition_participants", `user_id=eq.${userId}&select=competition_id,hidden`);
     if (myComps.length) {
       const hiddenMap = Object.fromEntries(myComps.map((c) => [c.competition_id, !!c.hidden]));
-      const ids = myComps.map((c) => c.competition_id).join(",");
-      const comps = await db.select(token, "competitions", `id=in.(${ids})&select=*`);
+      const ids = myComps.map((c) => c.competition_id);
+      const comps = await selectIn(token, "competitions", "id", ids, "&select=*");
       // Arkivering (`hidden`) gælder ALLE konkurrencer, man deltager i — også dem
       // i en liga (august 2026).
       //
@@ -219,7 +220,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     (async () => {
       setJoinError("");
       try {
-        const res = await resolveCompetitionInvite(token, userId, pendingJoinCode);
+        const res = await resolveCompetitionInvite(token, pendingJoinCode);
         if (res.kind === "already") {
           await loadCompetitions();
           setTab("ligaer");
@@ -243,7 +244,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     (async () => {
       setJoinError("");
       try {
-        const res = await resolveLeagueInvite(token, userId, pendingLigaCode);
+        const res = await resolveLeagueInvite(token, pendingLigaCode);
         if (res.kind === "already") { setTab("ligaer"); setScreen({ type: "group", groupId: res.group.id }); }
         else if (res.kind === "confirm") setPendingGroupJoin(res);
         else setJoinError("Ingen liga fundet med invitationskoden — tjek linket, eller bed opretteren om et nyt.");
@@ -259,7 +260,11 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     if (!pendingGroupJoin) return;
     const g = pendingGroupJoin.group;
     try {
-      await joinGroup(token, userId, g.id);
+      // Koden og ikke id'et (A40): tilmeldingen sker i `accept_invite()`, som
+      // kræver, at man fremviser invitationen. Et liga-id er ikke længere nok —
+      // det var hullet.
+      const res = await acceptInvite(token, pendingGroupJoin.code);
+      if (res?.joined) logEvent(token, "league_joined", { groupId: g.id });
       logEvent(token, "league_invite_accepted", { groupId: g.id, metadata: { via: "link" } });
       await refreshOnboarding();
       setPendingGroupJoin(null);
@@ -276,9 +281,13 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     const comp = pendingJoin.competition;
     try {
       // A8: ligger konkurrencen i en liga, melder join én ind i BEGGE. Reglen bor
-      // i joinCompetition, så denne sti og LigaerTabs indsatte-kode-sti ikke kan
+      // siden A40 i `accept_invite()` — altså i databasen frem for i et
+      // JS-kaldssted — så denne sti og LigaerTabs indsatte-kode-sti ikke kan
       // divergere igen (det var netop, hvad der var sket — se A7).
-      await joinCompetition(token, userId, comp.id, comp.group_id);
+      const res = await acceptInvite(token, pendingJoin.code);
+      if (res?.joined) {
+        logEvent(token, "competition_joined", { competitionId: comp.id, groupId: comp.group_id });
+      }
       const comps = await loadCompetitions();
       await refreshOnboarding(comps);
       setPendingJoin(null);
@@ -415,7 +424,7 @@ function MainApp({ session, profile, onLogout, pendingJoinCode, clearPendingJoin
     );
   } else if (screen?.type === "profile") {
     body = <ProfileScreen token={token} viewerUserId={userId} profileUserId={screen.profileUserId}
-      onBack={() => setScreen(null)} openProfile={openProfile} />;
+      onBack={() => setScreen(null)} openProfile={openProfile} onProfileChanged={onProfileChanged} />;
   } else if (screen?.type === "how") {
     body = <HowItWorksScreen onBack={() => setScreen(null)} token={token} openLegal={openLegal} />;
   } else if (screen?.type === "legal") {

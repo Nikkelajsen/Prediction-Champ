@@ -262,3 +262,29 @@ Leveret samlet efter en gennemgang af karrierestatistikken. Alle fem lå inden f
 ---
 
 *Leveret. SQL blev verificeret mod `sql/schema.sql` — husk, at den fil kun er gyldig som reference, når skema-eksporten er kørt efter seneste migrering (F1).*
+
+---
+
+## 14. Skift af brugernavn bor her (rettelse efter levering, 10. august 2026)
+
+`B29` gav skærmen én knap, spec'en ikke kendte: **Skift brugernavn**, i
+hovedkortet under ratingen og kun på ens egen profil (`isOwn`).
+
+**Hvorfor netop her, i en spec om en karriere.** Navnet står ét sted i appen,
+hvor det er brugerens eget — øverst her, i store bogstaver, med "(dig)" ved siden
+af. Det er dér, man ser sit navn og dermed dér, man opdager, at det er forkert.
+De to andre kandidater var forkerte af hver sin grund: Hjem hilser med navnet,
+men er en oversigt over kampe og stillinger, og "Sådan virker det" → privatliv er
+vejen UD af produktet. Der findes bevidst ingen indstillingsskærm; bliver der en
+(adgangskode, sprog, notifikationer ét sted), er dette dens første beboer.
+
+**Det, der er værd at kende for denne spec, er prisen på rival-tælleren.** §12's
+"antal historier" pr. rival joiner `stories.payload->>'rival'` på `display_name`,
+og et navneskift nulstiller derfor tallet for den rival. Det er ikke en ny
+svaghed — spec'en har hele tiden sagt, at historier er FARVE og aldrig
+rangering, og `sql/career_profile.sql` siger det ved koden — men det er første
+gang, produktet selv kan udløse det. Rangeringen (jævnbyrdighed, dernæst antal
+møder) rører ikke tallet og er uændret.
+
+Dialogen siger prisen højt til brugeren: gamle historie-kort bliver ved med at
+nævne det navn, man havde, da de blev skrevet.

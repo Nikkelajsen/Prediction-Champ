@@ -183,6 +183,63 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database usernametest;'
           psql -h localhost -U postgres -d usernametest -v ON_ERROR_STOP=1 -b -f username_constraints.sql
 
+      # Navneskiftet (B29) — og den rettighed, det blev bygget oven på. Kører mod
+      # det RIGTIGE skema og ikke et miniskema, fordi halvdelen af påstandene er
+      # om grants og RLS: en påstand om, at noget er FORBUDT, kan ikke stilles
+      # uden alle policies (G91).
+      #
+      # Den ene påstand, det hele hænger på, er en regression og ikke en feature:
+      # `grant all on profiles to authenticated` lod enhver bruger sætte sin egen
+      # `is_admin`, og det ER admin-vagten i fem funktioner. Testen har set hullet
+      # stå åbent, før den lukker det.
+      - name: Test af navneskift og profil-rettigheder
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database unavntest;'
+          psql -h localhost -U postgres -d unavntest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d unavntest -v ON_ERROR_STOP=1 -b -f sql/tests/username_change.sql
+
+      # Hele skrive-fladen (revisionen efter `B29`, 10. august 2026). `B29`s hul
+      # var, at en policy afgrænser RÆKKEN og ikke KOLONNEN; revisionen viste, at
+      # `profiles` var det eneste sted, det gjorde en forskel — men et svar fra en
+      # bestemt dag er ikke en kontrol. Filen er revisionen skrevet som en
+      # påstand: fortegnelsen over skrive-policies, ingen skrivbar view uden
+      # `security_invoker`, og tyve fjendtlige skrivninger med hvert sit
+      # forventede udfald.
+      #
+      # Måler RÆKKEANTAL og ikke fravær af en fejl: RLS uden en policy skjuler
+      # bare rækkerne, så en fjendtlig UPDATE rammer nul rækker og svarer OK.
+      - name: Test af skrive-fladen for en indlogget bruger
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database fladetest;'
+          psql -h localhost -U postgres -d fladetest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d fladetest -v ON_ERROR_STOP=1 -b -f sql/tests/write_surface.sql
+
+      # Invitationskoden er hemmeligheden igen (A40). Testen har TO halvdele, og
+      # den anden er den vigtigste: den første viser, at en fremmed hverken kan
+      # læse eller tilmelde sig en liga, hun ikke er med i — den anden, at
+      # invitationen stadig kan tages imod. Smalnes policyerne uden at opslaget
+      # flyttes, lukkes ikke et hul men hele join-flowet, og det ville blive
+      # opdaget af den næste bruger frem for af os.
+      #
+      # Testen læser BEGGE migreringer i produktionens rækkefølge (#52 så #53) og
+      # måler MELLEMTILSTANDEN imellem dem: at trin 1 alene ikke rører en eneste
+      # policy. Det er dét, der gør den sikker at køre før udrulningen — og hele
+      # grunden til, at migreringen er delt i to.
+      - name: Test af invitations-opslaget og de smalnede policies
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database invitetest;'
+          psql -h localhost -U postgres -d invitetest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d invitetest -v ON_ERROR_STOP=1 -b -f sql/tests/invite_lookup.sql
+
       # Story Engine v1.2's kåringsregler (B10): kører rating_core +
       # competition_awards + story_engine i én tom database og efterprøver
       # kæden fra kåringsrække til historie-kort. Egen database, som de andre.

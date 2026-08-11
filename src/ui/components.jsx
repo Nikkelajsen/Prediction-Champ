@@ -140,8 +140,30 @@ const Move = ({ d }) => {
 function Modal({ title, children, onClose }) {
   const kortRef = useRef(null);
   const overskriftId = useId();
+  // `onClose` læses gennem en ref, og effekten kører ÉN gang. Begge dele er
+  // nødvendige, og grunden er en fejl, der lignede alt muligt andet:
+  //
+  // Effekten stod før med `[onClose]`, og hver eneste kaldssted sender en
+  // inline-funktion (`onClose={() => setÅben(false)}`). Den har ny identitet ved
+  // hver render, så deps ændrede sig, hver gang dialogen tegnede — og effekten
+  // gør to ting, der ikke tåler at blive gentaget: den flytter fokus til kortet
+  // og gemmer, hvad der var fokuseret FØR.
+  //
+  // Følgen ramte kun de dialoger, man skriver i, og den var til at tage og føle
+  // på: ét bogstav i feltet → state ændret → render → ny `onClose` → oprydning
+  // og ny kørsel → `kortRef.current.focus()` → markøren hoppede ud af feltet, og
+  // man skulle klikke igen for hvert bogstav. Fundet i "Skift brugernavn"
+  // (`B29`), men fejlen er ældre og har også ramt feedback-formularens tekstfelt
+  // og LUK-feltet i "Luk din konto".
+  //
+  // Med `[]` gemmes `foer` desuden det rigtige sted: det er nu det element, der
+  // havde fokus, da dialogen ÅBNEDE. Før var det, hvad der tilfældigvis var
+  // fokuseret ved sidste kørsel — altså ofte et felt inde i dialogen, som er
+  // væk, når oprydningen forsøger at give det fokus tilbage.
+  const lukRef = useRef(onClose);
+  useEffect(() => { lukRef.current = onClose; }, [onClose]);
   useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e) => { if (e.key === "Escape") lukRef.current(); };
     window.addEventListener("keydown", onKey);
     const foer = document.activeElement;
     kortRef.current?.focus();
@@ -151,7 +173,7 @@ function Modal({ title, children, onClose }) {
       // mens dialogen var åben, og et `focus()` på et fjernet element kaster.
       if (foer instanceof HTMLElement && document.contains(foer)) foer.focus();
     };
-  }, [onClose]);
+  }, []);
   return (
     <div onClick={onClose} style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 1000,

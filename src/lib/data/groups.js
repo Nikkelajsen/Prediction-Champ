@@ -1,8 +1,9 @@
 // Liga-laget: grupper, medlemskab og ind-/udmeldelse af de konkurrencer, der
 // hører til dem.
 
-import { db } from "../supabase.js";
+import { db, restFetch } from "../supabase.js";
 import { logEvent } from "../analytics.js";
+import { selectIn } from "./chunked.js";
 
 // ---------- Liga-laget: permanente fællesskaber (grupper) ----------
 // NB navngivning (docs/features/liga-laget-v1.md afsnit 2): DB-enheden `groups`
@@ -84,7 +85,7 @@ async function loadCompetitionParticipants(token, compId) {
   const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
   const matchIds = links.map((l) => l.match_id);
   const preds = matchIds.length
-    ? await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&user_id=in.(${ids.join(",")})&select=user_id`)
+    ? await selectIn(token, "predictions", "match_id", matchIds, `&user_id=in.(${ids.join(",")})&select=user_id`)
     : [];
   const tippers = new Set(preds.map((p) => p.user_id));
   return parts.map((p) => ({ userId: p.user_id, name: nameById.get(p.user_id) || "—", tipped: tippers.has(p.user_id) }));
@@ -106,10 +107,36 @@ async function deleteCompetition(token, compId) {
   return Array.isArray(res) ? res.length > 0 : true;
 }
 
-// Slå en liga op på invite-koden (uden at melde ind) — til bekræftelses-modalen.
-async function loadGroupByCode(token, code) {
-  const found = await db.select(token, "groups", `invite_code=eq.${code.trim()}&select=*`);
-  return found[0] || null;
+// Hvad peger en invitationskode på? (A40)
+//
+// Var indtil 10. august 2026 et almindeligt tabelopslag —
+// `groups?invite_code=eq.<kode>` — og det kunne kun lade sig gøre, fordi HVER
+// liga var læsbar for hver eneste indlogget bruger. Prisen var, at koderne
+// kunne høstes af enhver, og at et liga-id var nok til at melde sig ind.
+//
+// Opslaget bor nu i `invite_lookup()`, som er `security definer` og derfor kan
+// se den ene liga, koden peger på, uden at tabellen er åben. Den svarer på
+// BEGGE slags koder i ét kald og bærer ligaens og inviterens navn med, så
+// bekræftelsen ikke skal hente dem hver for sig.
+//
+// **Den skriver intet.** Tilmeldingen er `acceptInvite()` nedenfor.
+async function inviteLookup(token, code) {
+  return restFetch(`/rest/v1/rpc/invite_lookup`, {
+    method: "POST", token, body: { p_code: String(code || "").trim() },
+  });
+}
+
+// Veksl koden til adgang (A40) — den eneste vej ind i en liga eller konkurrence,
+// man ikke i forvejen er med i.
+//
+// Melder ind i BEGGE, når koden peger på en konkurrence i en liga; det er
+// `A8`-reglen, og den bor nu ét sted frem for i hvert kaldssted. Idempotent:
+// `joined` siger, om der faktisk skete noget, så en hændelse ikke logges to
+// gange, når nogen trykker på linket igen.
+async function acceptInvite(token, code) {
+  return restFetch(`/rest/v1/rpc/accept_invite`, {
+    method: "POST", token, body: { p_code: String(code || "").trim() },
+  });
 }
 
 // Opret liga: indsæt gruppen + opretteren som admin-medlem.
@@ -120,14 +147,11 @@ async function createGroup(token, userId, name) {
   return g;
 }
 
-// Meld sig selv ind i en liga (idempotent — springer over hvis allerede medlem).
-async function joinGroup(token, userId, groupId) {
-  const existing = await db.select(token, "group_members", `group_id=eq.${groupId}&user_id=eq.${userId}&select=user_id`);
-  if (!existing.length) {
-    await db.insert(token, "group_members", [{ group_id: groupId, user_id: userId, role: "member" }]);
-    logEvent(token, "league_joined", { groupId }); // ikke ved den idempotente early-return — kun ægte nye medlemskaber
-  }
-}
+// *(`joinGroup(token, userId, groupId)` stod her indtil 10. august 2026 og er
+// væk med `A40`. Den meldte ind på et liga-ID alene, og dét var præcis hullet:
+// policyen krævede kun `user_id = auth.uid()`, så ethvert id var nok. Vejen ind
+// går nu gennem `acceptInvite()`, som kræver koden — og `group_members`'
+// insert-policy tillader kun opretterens egen admin-række.)*
 
 // Forlad en liga (fjern egen medlemsrække). RLS blokerer, hvis man stadig deltager
 // i en af ligaens konkurrencer — ellers ville man stå tilbage som deltager uden
@@ -159,8 +183,16 @@ async function deleteGroup(token, groupId) {
 // Reglen bor HER, fordi de to veje ind i en konkurrence — deep-link (?join=) og
 // indsat invitationskode — havde hver sin kopi, og kun den ene huskede ligaen
 // (A7, juli 2026).
+// "Deltag"-knappen på ligasiden: et medlem melder sig til en af ligaens
+// konkurrencer. Den ENE tilmelding, der ikke går gennem en invitationskode — og
+// den er tilladt, fordi RLS kræver, at man i forvejen er medlem af ligaen
+// (eller har oprettet konkurrencen).
+//
+// Kaldet til `joinGroup` er væk med `A40`: denne sti bruges kun af en, der
+// allerede ER medlem, og for en liga-løs konkurrence sørger triggeren
+// `ensure_group_membership_for_participant` for resten. `groupId` bliver stående
+// som parameter, fordi hændelsen bæres videre med den.
 async function joinCompetition(token, userId, compId, groupId = null) {
-  if (groupId) await joinGroup(token, userId, groupId);
   await db.insert(token, "competition_participants", [{ competition_id: compId, user_id: userId }]);
   logEvent(token, "competition_joined", { competitionId: compId, groupId });
 }
@@ -173,7 +205,7 @@ async function leaveCompetition(token, userId, compId) {
 }
 
 export {
-  loadMyGroups, loadGroupDetail, loadGroupByCode, createGroup, joinGroup, leaveGroup, deleteGroup,
+  loadMyGroups, loadGroupDetail, inviteLookup, acceptInvite, createGroup, leaveGroup, deleteGroup,
   joinCompetition, leaveCompetition, setCompetitionHidden, loadCompetitionParticipants,
   removeParticipant, deleteCompetition,
 };

@@ -6,19 +6,20 @@ import { db } from "../supabase.js";
 import { APP_TZ, byKickoffThenTeams, currentRoundIndex, groupIntoRounds, lockAtOf, liveInfo, nextRoundTips, pointsFor, roundLabel } from "../scoring.js";
 import { computeCompetitionState } from "./competitionState.js";
 import { loadMonthlyBoard } from "./standings.js";
+import { selectIn } from "./chunked.js";
 
 // ---------- Hjem: næste deadline + manglende tips på tværs af brugerens konkurrencer ----------
 async function computeHomeTips(token, userId, competitions) {
   const compIds = competitions.map((c) => c.id);
   if (!compIds.length) return { hasComps: false };
-  const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=competition_id,match_id`);
+  const cms = await selectIn(token, "competition_matches", "competition_id", compIds, "&select=competition_id,match_id");
   const ids = [...new Set(cms.map((c) => c.match_id))];
   if (!ids.length) return { hasComps: true, noMatches: true };
-  const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
+  const ms = await selectIn(token, "matches", "id", ids, "&select=*&order=kickoff_at", { sortBy: "kickoff_at" });
   const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]).filter(Boolean))];
-  const teams = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
+  const teams = await selectIn(token, "teams", "id", teamIds, "&select=id,name");
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
-  const preds = await db.select(token, "predictions", `match_id=in.(${ids.join(",")})&user_id=eq.${userId}&select=match_id,pred_home,pred_away`);
+  const preds = await selectIn(token, "predictions", "match_id", ids, `&user_id=eq.${userId}&select=match_id,pred_home,pred_away`);
   const predByMatch = new Map(preds.map((p) => [p.match_id, p]));
 
   const now = Date.now();
@@ -82,24 +83,24 @@ async function computeCurrentRound(token, userId, competitions) {
   // en ekstra forespørgsel, men en kolonne, der blev hentet og smidt væk: uden
   // den kan vi kun kende brugerens GLOBALE indeværende runde, og rundestoryens
   // afløsning har brug for konkurrencens egen.
-  const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=competition_id,match_id`);
+  const cms = await selectIn(token, "competition_matches", "competition_id", compIds, "&select=competition_id,match_id");
   const ids = [...new Set(cms.map((c) => c.match_id))];
   if (!ids.length) return null;
-  const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
+  const ms = await selectIn(token, "matches", "id", ids, "&select=*&order=kickoff_at", { sortBy: "kickoff_at" });
   if (!ms.length) return null;
   const rounds = groupIntoRounds(ms);
   const round = rounds[currentRoundIndex(rounds)];
   if (!round || !round.matches.length) return null;
 
   const teamIds = [...new Set(round.matches.flatMap((m) => [m.home_team_id, m.away_team_id]).filter(Boolean))];
-  const teams = teamIds.length ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`) : [];
+  const teams = await selectIn(token, "teams", "id", teamIds, "&select=id,name");
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   // Sorteringen sker HER og ikke i groupIntoRounds ovenfor: holdnavnene slås op
   // ud fra rundens kampe, så de findes først, når runden er valgt. Uden den ville
   // en runde med ens tidsstempler ligge i vilkårlig orden på Hjem.
   round.matches.sort(byKickoffThenTeams((id) => teamName.get(id)));
   const roundMatchIds = round.matches.map((m) => m.id);
-  const preds = await db.select(token, "predictions", `match_id=in.(${roundMatchIds.join(",")})&user_id=eq.${userId}&select=match_id,pred_home,pred_away`);
+  const preds = await selectIn(token, "predictions", "match_id", roundMatchIds, `&user_id=eq.${userId}&select=match_id,pred_home,pred_away`);
   const predByMatch = new Map(preds.map((p) => [p.match_id, p]));
 
   let myPoints = 0, playedCount = 0;

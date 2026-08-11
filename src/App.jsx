@@ -296,7 +296,11 @@ export default function App() {
       {!session ? (
         <AuthScreen onAuthed={completeAuth} booting={false} />
       ) : (
-        <MainApp session={session} profile={profile} onLogout={handleLogout}
+        // `onProfileChanged` findes af én grund (B29): navnet står også i
+        // Hjems hilsen og som afsender på et invitationslink, og de læser
+        // `profile` herfra. Uden linjen ville et navneskift kun kunne ses på
+        // karriereprofilen indtil næste app-start.
+        <MainApp session={session} profile={profile} onProfileChanged={setProfile} onLogout={handleLogout}
           pendingJoinCode={pendingJoinCode} clearPendingJoinCode={() => setPendingJoinCode(null)}
           pendingLigaCode={pendingLigaCode} clearPendingLigaCode={() => setPendingLigaCode(null)} />
       )}

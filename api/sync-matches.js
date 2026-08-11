@@ -109,17 +109,61 @@ export function normalizeTeamName(s) {
 // Kontrollen ADVARER og blokerer ikke. En ægte navnelighed (to klubber i samme
 // by) er lovlig, og en sync, der nægtede at køre på den, ville være værre end
 // den tvetydighed, den advarer om.
+//
+// GODKENDTE PAR (`A26`, 10. august 2026). Præcis dét — at en ægte navnelighed er
+// lovlig — kostede kontrollen dens egen egenskab. `ambiguousTeams` var bygget på
+// *"kun til stede, når der ER noget at kigge på"*, og for Scotland Premiership
+// var feltet permanent tændt med `Dundee`/`Dundee United`, som blev afgjort som
+// en ægte navnelighed 2. august 2026. Et felt, der altid er der, holder man op
+// med at læse — og så er kontrollen reelt væk netop den dag, turnering #8
+// tilføjer et par, ingen har set før.
+//
+// Listen nedenfor er derfor de par, der ER set på og afgjort. De filtreres ud af
+// `nye`, så feltet igen kun melder det, der ikke er afgjort. Prisen er en liste,
+// der skal vedligeholdes pr. turnering — og den betales ét sted: her, med en
+// begrundelse og en dato pr. række, så en godkendelse kan efterprøves i stedet
+// for at være et navn, nogen engang skrev.
+//
+// Nøglen er de NORMALISEREDE navne og ikke de skrevne, så kasse, mellemrum og
+// tegnsætning ikke kan lade en godkendelse udløbe ved et kosmetisk skift hos
+// leverandøren. Et TILFØJET ord ("Dundee" → "Dundee FC") bortfalder derimod, og
+// det er med vilje: et hold, der skifter navn, er præcis den situation, hvor den
+// fuzzy match kan begynde at ramme forkert. Fejlen peger da mod alarmen frem for
+// mod tavshed, og listen rettes i hånden, når parret er set efter igen.
+export const GODKENDTE_HOLDPAR = [
+  {
+    teams: ["Dundee", "Dundee United"],
+    why: "to virkelige klubber i samme by, begge i Scotland Premiership",
+    godkendt: "2026-08-02",
+  },
+];
+
+const godkendtNøgle = (a, b) => [a, b].sort().join("|");
+const GODKENDTE_NØGLER = new Set(
+  GODKENDTE_HOLDPAR.map((p) => godkendtNøgle(normalizeTeamName(p.teams[0]), normalizeTeamName(p.teams[1]))),
+);
+
+// Returnerer `{ nye, kendte }` og ikke én liste, fordi de to skal læses
+// forskelligt: `nye` er alarmen, `kendte` er kvitteringen for, at filteret
+// faktisk bed. Uden den anden ville en forkert linje i listen kunne sluge et
+// ægte fund i tavshed — og en linje, hvis to klubber ikke længere er i
+// turneringen, ville blive stående for evigt uden at nogen kunne se det. Er
+// `kendte` tom for en turnering, der plejede at melde et par, er listen
+// forældet, og dét kan aflæses i Admin → Drift på samme kort.
 export function ambiguousTeamNames(teams) {
   const rows = (teams || []).map((t) => ({ name: t.name, key: normalizeTeamName(t.name) })).filter((t) => t.key);
-  const out = [];
+  const nye = [], kendte = [];
   for (let i = 0; i < rows.length; i++) {
     for (let j = i + 1; j < rows.length; j++) {
       const a = rows[i], b = rows[j];
-      if (a.key === b.key) out.push({ teams: [a.name, b.name], why: "identiske navne" });
-      else if (a.key.includes(b.key) || b.key.includes(a.key)) out.push({ teams: [a.name, b.name], why: "det ene navn ligger inde i det andet" });
+      let par = null;
+      if (a.key === b.key) par = { teams: [a.name, b.name], why: "identiske navne" };
+      else if (a.key.includes(b.key) || b.key.includes(a.key)) par = { teams: [a.name, b.name], why: "det ene navn ligger inde i det andet" };
+      if (!par) continue;
+      (GODKENDTE_NØGLER.has(godkendtNøgle(a.key, b.key)) ? kendte : nye).push(par);
     }
   }
-  return out;
+  return { nye, kendte };
 }
 
 // Én normaliseret kamp → én række i `matches`, klar til upserten.
@@ -427,7 +471,7 @@ export default async function handler(req, res) {
     // eksisterende plus dem, denne kørsel lige oprettede. Det er den liste,
     // NÆSTE kørsels findByName() vil slå op i, og dermed den, tvetydigheden
     // ville ramme. Se ambiguousTeamNames() ovenfor for hvorfor den findes.
-    const ambiguousTeams = ambiguousTeamNames([...teams, ...newTeams]);
+    const tvetydigeHold = ambiguousTeamNames([...teams, ...newTeams]);
 
     let toUpsert = [];
     const unmatched = new Set();
@@ -515,7 +559,13 @@ export default async function handler(req, res) {
       ...(providerMeta.rateLimit ? { rateLimit: providerMeta.rateLimit } : {}),
       // Kun til stede, når der ER noget at kigge på: et felt, der står tomt ved
       // hver kørsel, holder man op med at læse. Se ambiguousTeamNames().
-      ...(ambiguousTeams.length ? { ambiguousTeams } : {}),
+      // Efter `A26` gælder det igen for Scotland: de par, der ER afgjort, står i
+      // GODKENDTE_HOLDPAR og tælles i `ambiguousKnown` frem for at fylde her.
+      ...(tvetydigeHold.nye.length ? { ambiguousTeams: tvetydigeHold.nye } : {}),
+      // Kvitteringen for filteret — et TAL og ikke en liste, fordi det ikke er
+      // noget at handle på. Står det stille, virker godkendelsen; forsvinder det
+      // for en turnering, der plejede at have det, er linjen i listen forældet.
+      ...(tvetydigeHold.kendte.length ? { ambiguousKnown: tvetydigeHold.kendte.length } : {}),
       // Ikke en fejl, men skal kunne aflæses: står tallet stille hen over en
       // CL-lodtrækning, henter syncen ikke de nye kampe.
       undrawn,

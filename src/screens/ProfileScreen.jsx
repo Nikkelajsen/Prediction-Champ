@@ -38,10 +38,11 @@ import RecordsSection from "./profile/RecordsSection.jsx";
 import MilestonesSection from "./profile/MilestonesSection.jsx";
 import RivalsSection from "./profile/RivalsSection.jsx";
 import BaseFacts from "./profile/BaseFacts.jsx";
+import ChangeName from "./profile/ChangeName.jsx";
 
 const MILESTONE_PAGE = 20;
 
-function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile }) {
+function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile, onProfileChanged }) {
   const isOwn = profileUserId === viewerUserId;
   const [data, setData] = useState(null);
   const [milestones, setMilestones] = useState([]);
@@ -179,6 +180,17 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
             </span>
             <Move d={head.move || 0} />
           </div>
+        )}
+        {/* Kun på ens egen profil — og kun her i appen. Se ChangeName.jsx for,
+            hvorfor navnet skiftes dér, hvor det står, og ikke på en
+            indstillingsskærm, der ikke findes. Den skrevne række lægges tilbage
+            i `data.head`, så navnet står rigtigt uden at hente profilen igen. */}
+        {isOwn && (
+          <ChangeName token={token} userId={viewerUserId} currentName={head.display_name}
+            onChanged={(række) => {
+              setData((d) => (d ? { ...d, head: { ...d.head, display_name: række.display_name } } : d));
+              onProfileChanged?.(række);
+            }} />
         )}
       </Card>
 
