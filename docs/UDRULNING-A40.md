@@ -13,15 +13,13 @@ fortsætte derfra.
 | 3 | `sql/invite_policies.sql` (#53) kørt i **staging** | ✅ |
 | 4 | Preview afprøvet igen — begge invitationstyper | ✅ |
 | 5 | `sql/invite_lookup.sql` (#52) kørt i **produktion** | ✅ 11. august 2026 |
-| 6 | PR merget, Vercel-deploy færdig | ⬜ |
-| 7 | Produktionen afprøvet: invitation kan tages imod | ⬜ |
-| 8 | `sql/invite_policies.sql` (#53) kørt i **produktion** | ⬜ |
+| 6 | PR merget, Vercel-deploy færdig | ✅ 11. august 2026 |
+| 7 | Produktionen afprøvet: invitation kan tages imod | ✅ |
+| 8 | `sql/invite_policies.sql` (#53) kørt i **produktion** | ✅ 11. august 2026 |
 | 9 | Produktionen afprøvet igen, og hullet efterprøvet lukket | ⬜ |
 
-🔴 **Tilstand pr. 11. august 2026: produktionen står MELLEM de to trin.**
-`#52` er kørt, `#53` er ikke. Funktionerne findes, policyerne er stadig brede,
-og hullet er derfor stadig åbent — som det har været hele tiden. Det, der
-mangler, er trin 6–9, og de skal tages i den rækkefølge.
+✅ **Tilstand pr. 11. august 2026: begge migreringer er kørt i produktion.**
+Hullet er lukket. Det, der mangler, er trin 9 — efterprøvningen.
 
 **Under afprøvningen i staging dukkede en fejl op, der IKKE var `A40`:** Hjem og
 Tip kunne ikke hente kampe med "Alle konkurrencer" valgt. Årsagen var URL-længde
@@ -92,7 +90,8 @@ minutter og er den eneste måde at se join-flowet virke, før rigtige brugere g�
 5. **Kør `sql/invite_lookup.sql` i produktionens SQL-editor.** Der sker
    ingenting for brugerne: filen tilføjer tre funktioner og rører ingen policy.
    Efterprøv med verifikationsblok 1 og 2 nederst i filen — forvent tre
-   funktioner og **fire** gamle policies stadig på plads.
+   funktioner og **fire** gamle policies stadig på plads. **Husk at fjerne `--`**;
+   blokkene står som kommentarer, så filen kan pastes i ét stykke.
 6. **Merge PR'en.** Vent til Vercels deploy er færdig og produktionen kører den
    nye kode. (Tjek versionen nederst i appen, hvis du er i tvivl — den bærer
    commit-SHA'en.)
@@ -102,9 +101,42 @@ minutter og er den eneste måde at se join-flowet virke, før rigtige brugere g�
    det mindste problem.
 8. **Kør `sql/invite_policies.sql`.** Hullet er lukket i det sekund, kørslen er
    færdig.
-9. **Prøv igen — og efterprøv hullet.** Verifikationsblok 1–3 nederst i filen,
-   plus én invitation af hver slags. Blok 4 er den, der tæller: en rigtig
-   invitation, taget imod af en rigtig konto.
+9. **Prøv igen — og efterprøv hullet.** Én invitation af hver slags, og
+   forespørgslen nedenfor.
+
+   ⚠️ **Verifikationsblokkene NEDERST I MIGRERINGSFILERNE er kommenteret ud**
+   med `--`, så hele filen kan pastes i ét stykke. Kopierer du dem derfra, skal
+   `--` væk først — ellers kører der ingenting, og editoren svarer *"Success. No
+   rows returned"*, som ligner et foruroligende svar på et spørgsmål, der aldrig
+   blev stillet. Det skete 11. august 2026. Brug derfor denne, som er kørbar
+   som den er, og som samler alle fire tjek i ét svar:
+
+   ```sql
+   select 'nye policies (forvent 4)' as tjek, count(*)::text as svar
+     from pg_policies
+    where schemaname = 'public'
+      and policyname in ('groups_select_member', 'competitions_select_involved',
+                         'group_members_insert_creator', 'competition_participants_insert_involved')
+   union all
+   select 'gamle policies (forvent 0)', count(*)::text
+     from pg_policies
+    where schemaname = 'public'
+      and policyname in ('groups_select_all', 'read all competitions',
+                         'group_members_insert_self', 'join competition')
+   union all
+   select 'funktioner (forvent 3)', count(*)::text
+     from pg_proc
+    where pronamespace = 'public'::regnamespace
+      and proname in ('invite_lookup', 'accept_invite', 'is_group_creator')
+   union all
+   select 'ligaer uden medlemmer (forvent 0)', count(*)::text
+     from public.groups g
+    where not exists (select 1 from public.group_members m where m.group_id = g.id);
+   ```
+
+   **4 / 0 / 3 / 0.** Den sidste er ikke en fejl, hvis den er over nul — en liga
+   uden medlemmer er en kendt og tilladt tilstand efter en kontolukning
+   (`A36`) — men den skal ses her frem for at blive opdaget senere.
 
 ---
 
@@ -125,6 +157,12 @@ skade.
 
 **Symptom: `42883: function public.is_group_creator(uuid) does not exist`** ved
 kørsel af #53. Så er #52 ikke kørt i det projekt, du står i. Kør den først.
+
+**Symptom: en verifikation svarer "Success. No rows returned", hvor du ventede
+rækker.** Se efter, om linjerne begynder med `--`. Verifikationsblokkene i
+migreringsfilerne er kommenteret ud, så filen kan pastes hel — kopieres de
+derfra, kører der ingenting, og editoren melder succes på en tom kørsel. Brug
+den kørbare udgave i trin 9.
 
 **Symptom: en liga er "forsvundet" for et medlem.** Det skal ikke kunne ske —
 policyen er `is_group_member(id)` — men hvis det gør, så kør verifikationsblok 3

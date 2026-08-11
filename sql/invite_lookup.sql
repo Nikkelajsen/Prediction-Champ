@@ -268,6 +268,11 @@ grant execute on function public.is_group_creator(uuid) to authenticated, servic
 -- ============================================================================
 -- Verifikation — kør efter trin 1
 -- ============================================================================
+-- ⚠️ Blokkene herunder er KOMMENTERET UD, så hele filen kan pastes i ét
+-- stykke. Skal de køres, fjernes `--` først — ellers udføres der ingenting,
+-- og editoren svarer "Success. No rows returned", hvilket ligner et svar.
+-- En kørbar udgave, der samler dem alle, står i `docs/UDRULNING-A40.md` trin 9.
+--
 -- 1) De tre funktioner findes og er security definer. Forvent tre rækker, alle 't'.
 -- select proname, prosecdef from pg_proc
 --  where pronamespace = 'public'::regnamespace
