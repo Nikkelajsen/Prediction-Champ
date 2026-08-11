@@ -26,6 +26,7 @@
 
 import { db } from "../supabase.js";
 import { nextRoundTips } from "../scoring.js";
+import { selectIn } from "./chunked.js";
 
 // Tom status — formen skal være ens, uanset om vi nåede at hente noget.
 const EMPTY = {
@@ -69,10 +70,10 @@ async function loadCompetitionStatuses(token, userId, compIds, { signal } = {}) 
   // Kun de felter, `nextRoundTips` faktisk læser. Kampene deles på tværs af
   // konkurrencer (predictions er globale pr. kamp), så listen er unionen — og
   // typisk meget mindre end summen.
-  const ms = await db.select(token, "matches",
-    `id=in.(${matchIds.join(",")})&select=id,round_key,kickoff_at,kickoff_tbd,home_score,away_score`, o);
-  const preds = await db.select(token, "predictions",
-    `match_id=in.(${matchIds.join(",")})&user_id=eq.${userId}&select=match_id,pred_home,pred_away`, o);
+  const ms = await selectIn(token, "matches",
+    "id", matchIds, "&select=id,round_key,kickoff_at,kickoff_tbd,home_score,away_score", o);
+  const preds = await selectIn(token, "predictions",
+    "match_id", matchIds, `&user_id=eq.${userId}&select=match_id,pred_home,pred_away`, o);
 
   const byId = new Map(ms.map((m) => [m.id, m]));
   const predByMatch = new Map(preds.map((p) => [p.match_id, p]));

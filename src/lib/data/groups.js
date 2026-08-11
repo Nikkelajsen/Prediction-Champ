@@ -3,6 +3,7 @@
 
 import { db, restFetch } from "../supabase.js";
 import { logEvent } from "../analytics.js";
+import { selectIn } from "./chunked.js";
 
 // ---------- Liga-laget: permanente fællesskaber (grupper) ----------
 // NB navngivning (docs/features/liga-laget-v1.md afsnit 2): DB-enheden `groups`
@@ -84,7 +85,7 @@ async function loadCompetitionParticipants(token, compId) {
   const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
   const matchIds = links.map((l) => l.match_id);
   const preds = matchIds.length
-    ? await db.select(token, "predictions", `match_id=in.(${matchIds.join(",")})&user_id=in.(${ids.join(",")})&select=user_id`)
+    ? await selectIn(token, "predictions", "match_id", matchIds, `&user_id=in.(${ids.join(",")})&select=user_id`)
     : [];
   const tippers = new Set(preds.map((p) => p.user_id));
   return parts.map((p) => ({ userId: p.user_id, name: nameById.get(p.user_id) || "—", tipped: tippers.has(p.user_id) }));

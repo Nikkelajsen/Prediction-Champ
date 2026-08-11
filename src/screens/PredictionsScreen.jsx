@@ -16,6 +16,7 @@ import { groupIntoDays } from "./predictions/time.js";
 import { roundStatus } from "./predictions/roundStatus.js";
 import { RoundHeader } from "./predictions/RoundHeader.jsx";
 import { MatchRow, TeamNames, ROW_COLS, ROW_GAP } from "./predictions/MatchRow.jsx";
+import { selectIn } from "../lib/data/chunked.js";
 
 // errIds bærer BESKEDEN og ikke bare `true`: efter G24 kan en række fejle på to
 // måder, og "Kunne ikke slette" på et fejlet gem ville pege brugeren det forkerte
@@ -61,29 +62,29 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
       setLoadError("");
       setExpandedId(null);
       try {
-        const cms = await db.select(token, "competition_matches", `competition_id=in.(${compIds.join(",")})&select=competition_id,match_id`);
+        const cms = await selectIn(token, "competition_matches", "competition_id", compIds, "&select=competition_id,match_id");
         const ids = [...new Set(cms.map((c) => c.match_id))];
         if (!ids.length) { setAllMatches([]); setTeamsById({}); return; }
-        const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
+        const ms = await selectIn(token, "matches", "id", ids, "&select=*&order=kickoff_at", { sortBy: "kickoff_at" });
         setAllMatches(ms);
         // season_id -> league_id, så Tips kan filtreres på liga (matchens egen liga,
         // uafhængigt af konkurrencens league_id — virker også for custom/random-kuponer).
         const seasonIds = [...new Set(ms.map((m) => m.season_id).filter(Boolean))];
         if (seasonIds.length) {
-          const seasons = await db.select(token, "seasons", `id=in.(${seasonIds.join(",")})&select=id,league_id`);
+          const seasons = await selectIn(token, "seasons", "id", seasonIds, "&select=id,league_id");
           setSeasonLeague(Object.fromEntries(seasons.map((s) => [s.id, s.league_id])));
         } else { setSeasonLeague({}); }
         const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]))];
         if (teamIds.length) {
-          const tms = await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`);
+          const tms = await selectIn(token, "teams", "id", teamIds, "&select=id,name");
           setTeamsById(Object.fromEntries(tms.map((t) => [t.id, t.name])));
         }
-        const ap = await db.select(token, "predictions", `match_id=in.(${ids.join(",")})&select=*`);
+        const ap = await selectIn(token, "predictions", "match_id", ids, "&select=*");
         setAllPreds(ap);
         setPreds(Object.fromEntries(ap.filter((p) => p.user_id === userId).map((p) => [p.match_id, p])));
-        const parts = await db.select(token, "competition_participants", `competition_id=in.(${compIds.join(",")})&select=user_id`);
+        const parts = await selectIn(token, "competition_participants", "competition_id", compIds, "&select=user_id");
         const partIds = [...new Set(parts.map((p) => p.user_id))];
-        const profs = partIds.length ? await db.select(token, "profiles", `id=in.(${partIds.join(",")})&select=id,display_name`) : [];
+        const profs = await selectIn(token, "profiles", "id", partIds, "&select=id,display_name");
         setParticipants(profs);
         const rds = groupIntoRounds(ms);
         // Land på den ønskede runde (fra "Tip nu"/"Se tips" på Hjem), ellers den nærmeste runde.
@@ -153,7 +154,7 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
       const ids = allMatches.map((m) => m.id);
       if (!ids.length) return;
       try {
-        const ms = await db.select(token, "matches", `id=in.(${ids.join(",")})&select=*&order=kickoff_at`);
+        const ms = await selectIn(token, "matches", "id", ids, "&select=*&order=kickoff_at", { sortBy: "kickoff_at" });
         if (!cancelled) setAllMatches(ms);
       } catch { /* prøver igen om et minut */ }
     }, 60000);

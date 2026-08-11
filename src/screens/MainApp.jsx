@@ -25,6 +25,7 @@ import HowItWorksScreen from "./HowItWorksScreen.jsx";
 import LegalScreen from "./LegalScreen.jsx";
 import OnboardingFlow from "./OnboardingFlow.jsx";
 import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
+import { selectIn } from "../lib/data/chunked.js";
 
 // Admin hentes FØRST når den åbnes (G34, august 2026).
 //
@@ -99,8 +100,8 @@ function MainApp({ session, profile, onProfileChanged, onLogout, pendingJoinCode
     const myComps = await db.select(token, "competition_participants", `user_id=eq.${userId}&select=competition_id,hidden`);
     if (myComps.length) {
       const hiddenMap = Object.fromEntries(myComps.map((c) => [c.competition_id, !!c.hidden]));
-      const ids = myComps.map((c) => c.competition_id).join(",");
-      const comps = await db.select(token, "competitions", `id=in.(${ids})&select=*`);
+      const ids = myComps.map((c) => c.competition_id);
+      const comps = await selectIn(token, "competitions", "id", ids, "&select=*");
       // Arkivering (`hidden`) gælder ALLE konkurrencer, man deltager i — også dem
       // i en liga (august 2026).
       //
