@@ -316,3 +316,12 @@ logget ind, så et delt link ikke kunne vise andet end appens forside.
 `A40`s hul var, at et **id** var nok til at melde sig ind. Det er ikke dét, der
 åbnes: previewet bærer hverken id'er, `invite_code` eller adgang. Regnestykket
 bag og tilbagevejen står i `DECISIONS.md` (`A41`) og i `sql/invite_preview.sql`.
+
+
+**Rettelse 11. august 2026:** SELECT-reglen på `groups` er *"medlem **eller** opretter"*
+og ikke kun "medlem". Leddet `or created_by = auth.uid()` er ikke en opblødning for
+bekvemmelighedens skyld — uden det kunne **ingen oprette en liga**: klienten skriver med
+`Prefer: return=representation`, så indsættelsen læser rækken tilbage og dermed også skal
+bestå SELECT-policyen, og opretterens medlemsrække skrives først i næste kald. Prisen er,
+at en opretter, der har forladt sin egen liga, stadig kan se den. Se
+`sql/groups_select_creator.sql` og `DOCUMENTATION.md` §13.

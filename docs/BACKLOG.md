@@ -49,6 +49,7 @@ eller en linje i "Forkastede ideer".
 
 - Modal-fokusfejlen kunne kun ses i en rigtig browser (Chromium + playwright-core, ~40 linjer) — skal den slags have en plads i CI, eller er "uden jsdom" stadig svaret?
 - `competition_participants` og `profiles` er stadig læsbare for enhver indlogget bruger — stillinger kræver det, men er en fuld brugerliste også nødvendig?
+- `createGroup` skriver liga og admin-række i to kald, så en liga kan stå uden medlemmer, hvis det andet kald fejler — en `create_group()` som security definer ville lukke vinduet OG fjerne afhængigheden af, at SELECT-policyen accepterer en frisk række (jf. #55).
 - `anon` har EXECUTE på hver eneste funktion i `public` (Supabases default privileges) — `G50`/`G58` lukkede tabeller og sekvenser, ikke funktioner. Intet hul i dag, fordi funktionerne selv afviser en kalder uden `auth.uid()`, men den vagt er dermed bærende og ikke en dobbeltsikring.
 - QR-kode i invitations-fladen til "vi sidder sammen fysisk" — fravalgt i `I7`, fordi den koster enten en afhængighed eller ~200 linjer egen encoder.
 - OG-billede med ligaens eget navn kræver skriftgengivelse på serveren; `I7` valgte et statisk billede og lod `og:title` bære ordlyden.

@@ -45,14 +45,36 @@
 -- ---------------------------------------------------------------------------
 -- Policies: fra "alle" til "dem, der er med"
 
--- Ligaen: kun medlemmer. Opretteren er altid medlem (`createGroup` skriver
--- admin-rækken i samme ombæring), så der er ingen grund til et `or created_by`
--- — og et sådant led ville gøre en liga synlig for en opretter, der har forladt
--- den.
+-- Ligaen: medlemmer — **eller opretteren**.
+--
+-- ⚠️ **Her stod indtil 11. august 2026 kun `is_group_member(id)`, med
+-- begrundelsen: *"Opretteren er altid medlem (`createGroup` skriver admin-rækken
+-- i samme ombæring), så der er ingen grund til et `or created_by`."* Den
+-- antagelse var forkert, og den brød oprettelsen af enhver liga for enhver
+-- bruger, indtil `#55` rettede den.**
+--
+-- "I samme ombæring" er sandt om funktionen og falsk om statementet. `createGroup`
+-- laver TO kald, og ligaen er det første — så når `groups`-rækken skrives, findes
+-- opretterens medlemsrække ikke endnu.
+--
+-- Og det gør en forskel, netop fordi klienten skriver med
+-- `Prefer: return=representation`: PostgREST kører `insert … returning *`, og en
+-- RETURNING-klausul betyder, at rækken skal LÆSES tilbage. Denne policy anvendes
+-- altså på den nyindsatte række, oven i INSERT-policyen. Svaret var
+-- `new row violates row-level security policy for table "groups"`.
+--
+-- Det er den samme fælde som den, `is_group_creator()` i #52 findes for — bare
+-- ét statement tidligere. Den fulde forklaring står i `sql/groups_select_creator.sql`.
+--
+-- **Prisen ved `or created_by`, som den gamle kommentar med rette pegede på:** en
+-- opretter, der har forladt sin egen liga, kan stadig se den og dens
+-- `invite_code`. Det er accepteret — afvigelsen gælder kun ligaer, man selv har
+-- oprettet, og alternativet var en app, hvor ingen kan oprette en liga.
 drop policy if exists groups_select_all on public.groups;
+drop policy if exists groups_select_member on public.groups;
 create policy groups_select_member on public.groups
   for select to authenticated
-  using (public.is_group_member(id));
+  using (public.is_group_member(id) or created_by = auth.uid());
 
 -- Konkurrencen: deltagere, ligaens medlemmer og opretteren.
 --
