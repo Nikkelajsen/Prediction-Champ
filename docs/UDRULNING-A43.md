@@ -92,8 +92,11 @@ måler den — den gamle klients brede opslag skal stadig virke efter `#59`.
    skal sættes eksplicit; det er de tre linjer over `explain` nedenfor, og de er
    hele forskellen på en måling og et tal, der ser rigtigt ud.
 
-   Find først en liga at måle på — den med flest konkurrencer, og et medlem af
-   den:
+   **Find først de to id'er, blokken skal bruge.** Der er to veje, og de er
+   HELE forespørgsler hver for sig — kør den ene, ikke stumper af begge.
+
+   Vej A, den sikre: de fem ligaer med flest konkurrencer, uanset hvad de
+   hedder.
 
    ```sql
    select g.id as gruppe_id, g.name,
@@ -103,6 +106,28 @@ måler den — den gamle klients brede opslag skal stadig virke efter `#59`.
     order by konkurrencer desc
     limit 5;
    ```
+
+   Vej B, hvis du hellere vil pege på en bestemt liga: `invite_code` er den kode,
+   der kan kopieres i appen (8 tegn). **Den skal i anførselstegn** — uden dem
+   læser PostgreSQL den som et kolonnenavn og svarer `42703`.
+
+   ```sql
+   select g.id as gruppe_id, g.name,
+          (select count(*) from public.competitions c where c.group_id = g.id) as konkurrencer,
+          (select min(m.user_id::text) from public.group_members m where m.group_id = g.id) as et_medlem
+     from public.groups g
+    where g.invite_code = '<KODEN-FRA-APPEN>';
+   ```
+
+   ⚠️ **Koden skal komme fra STAGING-appen.** Staging har sin egen database med
+   sine egne ligaer, så en kode kopieret fra produktionen findes ikke her —
+   forespørgslen svarer bare tomt, hvilket ligner en fejl i forespørgslen frem
+   for i valget af database. Vej A kan ikke ramme den fælde, fordi den kun kan
+   give dig ligaer, der findes i den database, du står i.
+
+   Uanset vej: `gruppe_id` er en **uuid** og går ind i `<GRUPPE-ID>`; `et_medlem`
+   går ind i `<BRUGER-ID>`. Invitationskoden bruges kun til at FINDE ligaen —
+   den skal ikke ind i måleblokken.
 
    Sæt de to id'er ind og kør så denne. Den impersonerer et rigtigt medlem, og
    `rollback` gør hele blokken uden virkning:
