@@ -62,7 +62,7 @@ Støder du undervejs på noget, der burde bygges, ryddes op eller besluttes, men
 
 - `npm run dev` — udviklingsserver · `npm run build` — produktions-build
 - `npm test` — Vitest · `npm run lint` — ESLint · `npm run format` — Prettier
-- CI (`.github/workflows/ci.yml`) kører lint + test + build ved hver pull request og ved push til `main`, plus et `sql`-job med otteogtyve SQL-tests (bl.a. rating-ækvivalensen, alle fire overvågnings-kontroller i `sql/checks/` og et tjek af `docs/`' SQL-blokke) mod en rigtig PostgreSQL. **"Tjekliste før merge" i `DOCUMENTATION.md` §11 gælder stadig** — den dækker det, en maskine ikke kan se (rigtig browser, push på iOS, RLS mod produktionsdata).
+- CI (`.github/workflows/ci.yml`) kører lint + test + build ved hver pull request og ved push til `main`, plus et `sql`-job med enogtredive SQL-tests (bl.a. rating-ækvivalensen, alle fire overvågnings-kontroller i `sql/checks/` og et tjek af `docs/`' SQL-blokke) mod en rigtig PostgreSQL. **"Tjekliste før merge" i `DOCUMENTATION.md` §11 gælder stadig** — den dækker det, en maskine ikke kan se (rigtig browser, push på iOS, RLS mod produktionsdata).
 - `npm run lint` har et loft på antal advarsler, så tallet kan falde, men aldrig vokse ubemærket. Falder det, sænkes loftet i `package.json` tilsvarende.
 - **Venter du på CI, så spørg jobbet, ikke kørslen.** GitHubs check-runs-svar kan stå `in_progress` et kvarter efter et job er færdigt — brug `actions_get`/`get_workflow_job` med job-id'et, som er ajour med det samme. Hele fælden står i `DOCUMENTATION.md` §13. `verify` tager typisk under et minut, `sql` halvandet; er du ude over det, er det næsten altid svaret der er gammelt.
 
@@ -73,6 +73,8 @@ Støder du undervejs på noget, der burde bygges, ryddes op eller besluttes, men
 ## SQL
 
 Migreringerne i `sql/` køres **manuelt** i Supabase SQL-editor med "Run without RLS". De er idempotente, men to af dem ruller tavst nyere regler tilbage, hvis de gen-køres — læs filindekset og advarslen i `sql/README.md`, før du kører noget.
+
+**`#56` er en migrering, ikke en pull request.** Nummeret er kolonne 1 i filoversigten i [`sql/README.md`](./sql/README.md), hvor filnavnene er links — slå op dér, eller kør `grep -n "^| 56 " sql/README.md`. Numrene genbruges aldrig og omnummereres aldrig, så de er stabile navne. **Skriver du et nummer i chat eller i en commit-besked, så skriv filnavnet med** (`#56 anon_grants_functions.sql`): tallet alene kan kun slås op af en, der har repoet åbent.
 
 `sql/schema.sql` er et **genereret** øjebliksbillede (skema-eksport-workflowen), aldrig en fil man redigerer i hånden. Den er kun en gyldig reference, når eksporten er kørt efter seneste migrering.
 

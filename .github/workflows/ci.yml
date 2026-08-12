@@ -257,6 +257,47 @@ jobs:
           psql -h localhost -U postgres -d previewtest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d previewtest -v ON_ERROR_STOP=1 -b -f sql/tests/invite_preview.sql
 
+      # anon-grants, tredje og sidste del (G96): FUNKTIONERNE, som #34 og #43
+      # begge sagde eksplicit, at de ikke rørte.
+      #
+      # Trinnet er ikke kun en test af én migrering. Dens påstand om, at `anon`
+      # kan nøjagtig TO funktioner i hele `public`, er den eneste vagt over en
+      # regel, databasen ikke kan håndhæve selv: PostgreSQLs indbyggede default
+      # giver PUBLIC — og dermed `anon` — EXECUTE på hver ny funktion, og den
+      # kan ikke lukkes med `ALTER DEFAULT PRIVILEGES` (efterprøvet mod 16.13).
+      # Hver ny funktion i `public` skal derfor selv bære sin `revoke execute …
+      # from public`, og det er DETTE trin, der bliver rødt, hvis en glemmer den.
+      #
+      # Kører mod det rigtige skema: halvdelen af påstandene er, at
+      # `authenticated` og `service_role` har præcis den adgang bagefter, de
+      # havde før, og det kan kun måles, hvor alle funktionerne findes.
+      - name: Test af anon-grants (funktioner)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database anongrantsfunc;'
+          psql -h localhost -U postgres -d anongrantsfunc -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d anongrantsfunc -v ON_ERROR_STOP=1 -b -f sql/tests/anon_grants_functions.sql
+
+      # Oprettelsen af en liga er ÉN skrivning (G95). Den påstand, filen findes
+      # for, er den negative kontrol: den samme fejl fremkaldes ad den GAMLE vej
+      # (to statements), hvor ligaen bliver stående uden medlemmer. Uden den
+      # halvdel måler den positive ingenting — den ville også være grøn, hvis
+      # testens spærre aldrig ramte.
+      #
+      # Mod det rigtige skema, fordi funktionen er `security definer` og dermed
+      # forbigår de to insert-policies, den afløser: påstanden om, at den ikke
+      # lukker noget op, kan ikke stilles et sted, hvor policyerne ikke findes.
+      - name: Test af liga-oprettelsen
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database creategrouptest;'
+          psql -h localhost -U postgres -d creategrouptest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d creategrouptest -v ON_ERROR_STOP=1 -b -f sql/tests/create_group.sql
+
       # Story Engine v1.2's kåringsregler (B10): kører rating_core +
       # competition_awards + story_engine i én tom database og efterprøver
       # kæden fra kåringsrække til historie-kort. Egen database, som de andre.

@@ -115,7 +115,7 @@ function OnboardingFlow({ token, userId, profile, leagues, onJoined, onCreated, 
       // spærre brugeren ude. Fællesskabet er det, der består — konkurrencen kan
       // laves fra liga-siden, så snart kampene er lagt ind.
       if (!picked) {
-        const group = await createGroup(token, userId, groupName.trim());
+        const group = await createGroup(token, groupName.trim());
         await onCreated({ group, competition: null, matchCount: 0 });
         return;
       }
