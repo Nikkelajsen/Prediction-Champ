@@ -10,25 +10,36 @@ og kan køres igen.
 `public`-skemaet, som det så ud ved seneste eksport. Den redigeres aldrig i hånden;
 den regenereres med guiden nedenfor.
 
-> 🔶 **Øjebliksbilledet er ÆLDRE END PRODUKTIONEN: `#56` og `#57` er kørt
-> 12. august 2026 og står ikke i filen — kør skema-eksporten.** Indtil da
-> mangler dumpet `create_group()` og bærer `anon`s gamle funktions-grants.
-> **CI er efterprøvet fra begge sider** og er grøn både mod det nuværende dump
-> og mod et, hvor de to migreringer er kørt; det gælder alle elleve tests, der
-> indlæser filen.
+> ✅ **ØJEBLIKSBILLEDET ER FRISKT: eksporten er kørt 12. august 2026, efter
+> `#60`.** Filen bærer nu alle fem migreringer, den manglede — `#56` (`anon`s
+> funktions-grants), `#57` (`create_group()`), `#58` (`groups`' smalnede
+> policy) og `#59`/`#60` (`A43`s læseflade). Diff'en er 129 linjer og ikke
+> ~2.400, hvilket er `G5`s eget bevis: CRLF i funktionskroppene overlevede
+> eksporten, så en rigtig ændring ikke kan gemme sig i støjen.
 >
-> 🔶 **`#59` og `#60` (`A43`) er lagt til OG KØRT i staging og produktion 12. august 2026** — de er de nyeste af de fem, dumpet mangler (`#56`–`#60`). De var en TODELT migrering med et deploy imellem, og rækkefølgen holdt hele vejen; runbogen er afsluttet: [`docs/UDRULNING-A43.md`](../docs/UDRULNING-A43.md). Efterprøvet fra begge sider som de foregående — og **den efterprøvning fandt to rigtige fejl denne gang:** tre policies, der læste `profiles.is_admin` og ville have brækket Admin → Drift, og en påstand i `competition_matches_read.sql`, der ville være blevet rød ved næste eksport.
+> **Adgangskontrakten kan aflæses direkte af filen igen:** `anon` har præcis to
+> funktions-grants (`username_available`, `invite_preview`), `groups`'
+> SELECT-policy har intet `or created_by`, `authenticated` har
+> `GRANT SELECT(id)`, `SELECT(display_name)` og `SELECT(anonymized_at)` på
+> `profiles` og ingen tabel-bred SELECT, og de tre admin-policies kalder
+> `is_platform_admin()` frem for at læse `profiles`.
 >
-> 🔴 **`#58` (`G98`) er lagt til og kørt samme dag**; den er den tredje, dumpet
-> mangler, indtil eksporten kører igen. Også den er efterprøvet fra begge sider — de fjorten skema-indlæsende
-> tests er grønne både mod det nuværende dump og mod et, hvor `#58` er kørt.
-> **Den efterprøvning fandt en rigtig fejl** i `sql/tests/create_group.sql`s
-> negative kontrol, som hentede en ligas id med et opslag, den smalnede policy
-> gør tomt: kontrollen ville være blevet et tavst no-op i det sekund eksporten
-> kørte. Se §13-reglen om tests, der læser deres før-tilstand af et snapshot. Uden den efterprøvning ville `sql/tests/anon_grants_functions.sql`
-> være blevet rød af, at arbejdet lykkedes — se dens egen før-blok.
+> 🟢 **Eksporten er denne gang kørt på en ARBEJDSGREN og ikke på `main`**, så
+> dumpet kom gennem CI, før det blev merget. Historisk er den kørt direkte på
+> `main`, og tre gange har den gjort CI rød bagefter — `G94`, `G98` og
+> `anon_grants_functions.sql`. Alle femten skema-indlæsende tests er kørt mod
+> det NYE dump, før mergen, og er grønne. **Det er den billigere rækkefølge, og
+> den bør være normen.**
 >
-> ✅ **Forrige friske øjebliksbillede: 5. august 2026 (efter #0's gen-kørsel).**
+> **De fem migreringers efterprøvning fra begge sider fandt tre rigtige fejl,
+> før eksporten kunne afsløre dem** — det er hele grunden til, at §13 kræver
+> den: `create_group.sql`s negative kontrol, som ville være blevet et tavst
+> no-op (`G98`); `anon_grants_functions.sql`, som ville være blevet rød af, at
+> arbejdet lykkedes (`G96`); og under `A43` både de tre policies, der læste
+> `profiles.is_admin` og ville have brækket Admin → Drift, og nabo-påstanden i
+> `competition_matches_read.sql`.
+>
+> **Forrige friske øjebliksbillede: 5. august 2026 (efter #0's gen-kørsel).**
 > Eksporten er kørt manuelt to gange samme dag og viser alle dagens migreringer: `seasons.ends_at`
 > og `competition_status` v2 (#41), `_anonymize_account()`/`admin_anonymize_account()`
 > og de tre administrator-policies (#42), `anon`s tomme sekvens-grants (#43),
