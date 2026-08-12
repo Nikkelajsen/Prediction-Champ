@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ibExPtjIalWg9Y2N5Rs6PXJY9RtaBFECLSIt4BfDaVy1DmfUTJdoNC6zdiTdhxd
+\restrict djEgL1Y1VvSGcJf6N3x5scwtMqCpk0I8JVGBZrzVbXKc39AkOeYukLA5PEcznft
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
@@ -2932,6 +2932,43 @@ begin
   ) into result;
 
   return result;
+end;
+$$;
+
+
+--
+-- Name: create_group(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.create_group(p_name text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_uid   uuid := auth.uid();
+  v_navn  text := btrim(coalesce(p_name, ''));
+  v_group public.groups%rowtype;
+begin
+  if v_uid is null then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  -- De to skrivninger, der før var to kald. Rækkefølgen er uændret og stadig
+  -- bindende — medlemsrækken har en fremmednøgle til ligaen — men den er nu
+  -- ligegyldig for udfaldet: fejler den anden, ruller den første med.
+  insert into public.groups (name, created_by)
+  values (v_navn, v_uid)
+  returning * into v_group;
+
+  insert into public.group_members (group_id, user_id, role)
+  values (v_group.id, v_uid, 'admin');
+
+  -- Hele rækken retur, `invite_code` inklusive. Det er ikke en lækage: modtageren
+  -- er den, der lige har oprettet ligaen, og koden er dét, hun skal invitere med.
+  -- `to_jsonb` frem for en håndskrevet nøgleliste, så en ny kolonne på `groups`
+  -- følger med af sig selv — klienten fik før hele rækken fra PostgREST og skal
+  -- have præcis det samme.
+  return to_jsonb(v_group);
 end;
 $$;
 
@@ -7335,7 +7372,6 @@ GRANT ALL ON FUNCTION public._anonymize_account(p_user_id uuid) TO service_role;
 --
 
 REVOKE ALL ON FUNCTION public.accept_invite(p_code text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.accept_invite(p_code text) TO anon;
 GRANT ALL ON FUNCTION public.accept_invite(p_code text) TO authenticated;
 GRANT ALL ON FUNCTION public.accept_invite(p_code text) TO service_role;
 
@@ -7344,7 +7380,7 @@ GRANT ALL ON FUNCTION public.accept_invite(p_code text) TO service_role;
 -- Name: FUNCTION admin_analytics_engagement(p_days integer); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.admin_analytics_engagement(p_days integer) TO anon;
+REVOKE ALL ON FUNCTION public.admin_analytics_engagement(p_days integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.admin_analytics_engagement(p_days integer) TO authenticated;
 GRANT ALL ON FUNCTION public.admin_analytics_engagement(p_days integer) TO service_role;
 
@@ -7353,7 +7389,7 @@ GRANT ALL ON FUNCTION public.admin_analytics_engagement(p_days integer) TO servi
 -- Name: FUNCTION admin_analytics_funnel(p_days integer); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.admin_analytics_funnel(p_days integer) TO anon;
+REVOKE ALL ON FUNCTION public.admin_analytics_funnel(p_days integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.admin_analytics_funnel(p_days integer) TO authenticated;
 GRANT ALL ON FUNCTION public.admin_analytics_funnel(p_days integer) TO service_role;
 
@@ -7362,7 +7398,7 @@ GRANT ALL ON FUNCTION public.admin_analytics_funnel(p_days integer) TO service_r
 -- Name: FUNCTION admin_analytics_health(p_days integer); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.admin_analytics_health(p_days integer) TO anon;
+REVOKE ALL ON FUNCTION public.admin_analytics_health(p_days integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.admin_analytics_health(p_days integer) TO authenticated;
 GRANT ALL ON FUNCTION public.admin_analytics_health(p_days integer) TO service_role;
 
@@ -7371,7 +7407,7 @@ GRANT ALL ON FUNCTION public.admin_analytics_health(p_days integer) TO service_r
 -- Name: FUNCTION admin_analytics_league_health(p_days integer); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.admin_analytics_league_health(p_days integer) TO anon;
+REVOKE ALL ON FUNCTION public.admin_analytics_league_health(p_days integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.admin_analytics_league_health(p_days integer) TO authenticated;
 GRANT ALL ON FUNCTION public.admin_analytics_league_health(p_days integer) TO service_role;
 
@@ -7380,7 +7416,7 @@ GRANT ALL ON FUNCTION public.admin_analytics_league_health(p_days integer) TO se
 -- Name: FUNCTION admin_analytics_retention(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.admin_analytics_retention() TO anon;
+REVOKE ALL ON FUNCTION public.admin_analytics_retention() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.admin_analytics_retention() TO authenticated;
 GRANT ALL ON FUNCTION public.admin_analytics_retention() TO service_role;
 
@@ -7389,7 +7425,7 @@ GRANT ALL ON FUNCTION public.admin_analytics_retention() TO service_role;
 -- Name: FUNCTION admin_analytics_stories(p_days integer); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.admin_analytics_stories(p_days integer) TO anon;
+REVOKE ALL ON FUNCTION public.admin_analytics_stories(p_days integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.admin_analytics_stories(p_days integer) TO authenticated;
 GRANT ALL ON FUNCTION public.admin_analytics_stories(p_days integer) TO service_role;
 
@@ -7416,7 +7452,7 @@ GRANT ALL ON FUNCTION public.admin_client_errors(max_rows integer) TO service_ro
 -- Name: FUNCTION admin_feedback(only_open boolean, max_rows integer); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.admin_feedback(only_open boolean, max_rows integer) TO anon;
+REVOKE ALL ON FUNCTION public.admin_feedback(only_open boolean, max_rows integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.admin_feedback(only_open boolean, max_rows integer) TO authenticated;
 GRANT ALL ON FUNCTION public.admin_feedback(only_open boolean, max_rows integer) TO service_role;
 
@@ -7425,7 +7461,7 @@ GRANT ALL ON FUNCTION public.admin_feedback(only_open boolean, max_rows integer)
 -- Name: FUNCTION admin_feedback_set_handled(feedback_id uuid, handled boolean); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.admin_feedback_set_handled(feedback_id uuid, handled boolean) TO anon;
+REVOKE ALL ON FUNCTION public.admin_feedback_set_handled(feedback_id uuid, handled boolean) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.admin_feedback_set_handled(feedback_id uuid, handled boolean) TO authenticated;
 GRANT ALL ON FUNCTION public.admin_feedback_set_handled(feedback_id uuid, handled boolean) TO service_role;
 
@@ -7434,7 +7470,7 @@ GRANT ALL ON FUNCTION public.admin_feedback_set_handled(feedback_id uuid, handle
 -- Name: FUNCTION admin_job_health(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.admin_job_health() TO anon;
+REVOKE ALL ON FUNCTION public.admin_job_health() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.admin_job_health() TO authenticated;
 GRANT ALL ON FUNCTION public.admin_job_health() TO service_role;
 
@@ -7479,7 +7515,7 @@ GRANT ALL ON FUNCTION public.admin_set_season_finished(p_season_id uuid, p_finis
 -- Name: FUNCTION admin_user_stats(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.admin_user_stats() TO anon;
+REVOKE ALL ON FUNCTION public.admin_user_stats() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.admin_user_stats() TO authenticated;
 GRANT ALL ON FUNCTION public.admin_user_stats() TO service_role;
 
@@ -7488,7 +7524,7 @@ GRANT ALL ON FUNCTION public.admin_user_stats() TO service_role;
 -- Name: FUNCTION analytics_require_admin(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.analytics_require_admin() TO anon;
+REVOKE ALL ON FUNCTION public.analytics_require_admin() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.analytics_require_admin() TO authenticated;
 GRANT ALL ON FUNCTION public.analytics_require_admin() TO service_role;
 
@@ -7539,16 +7575,25 @@ GRANT ALL ON FUNCTION public.build_round_frames(p_round_key text) TO service_rol
 -- Name: FUNCTION career_profile(profile_user_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.career_profile(profile_user_id uuid) TO anon;
+REVOKE ALL ON FUNCTION public.career_profile(profile_user_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.career_profile(profile_user_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.career_profile(profile_user_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION create_group(p_name text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.create_group(p_name text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.create_group(p_name text) TO authenticated;
+GRANT ALL ON FUNCTION public.create_group(p_name text) TO service_role;
 
 
 --
 -- Name: FUNCTION ensure_group_membership_for_participant(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.ensure_group_membership_for_participant() TO anon;
+REVOKE ALL ON FUNCTION public.ensure_group_membership_for_participant() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.ensure_group_membership_for_participant() TO authenticated;
 GRANT ALL ON FUNCTION public.ensure_group_membership_for_participant() TO service_role;
 
@@ -7565,7 +7610,7 @@ GRANT ALL ON FUNCTION public.generate_daily_stories(p_day date) TO service_role;
 -- Name: FUNCTION generate_stories(p_round_key text); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.generate_stories(p_round_key text) TO anon;
+REVOKE ALL ON FUNCTION public.generate_stories(p_round_key text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.generate_stories(p_round_key text) TO authenticated;
 GRANT ALL ON FUNCTION public.generate_stories(p_round_key text) TO service_role;
 
@@ -7583,7 +7628,6 @@ GRANT ALL ON FUNCTION public.generate_stories_catchup(p_grace integer) TO servic
 --
 
 REVOKE ALL ON FUNCTION public.invite_lookup(p_code text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.invite_lookup(p_code text) TO anon;
 GRANT ALL ON FUNCTION public.invite_lookup(p_code text) TO authenticated;
 GRANT ALL ON FUNCTION public.invite_lookup(p_code text) TO service_role;
 
@@ -7593,16 +7637,16 @@ GRANT ALL ON FUNCTION public.invite_lookup(p_code text) TO service_role;
 --
 
 REVOKE ALL ON FUNCTION public.invite_preview(p_code text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.invite_preview(p_code text) TO anon;
 GRANT ALL ON FUNCTION public.invite_preview(p_code text) TO authenticated;
 GRANT ALL ON FUNCTION public.invite_preview(p_code text) TO service_role;
+GRANT ALL ON FUNCTION public.invite_preview(p_code text) TO anon;
 
 
 --
 -- Name: FUNCTION is_group_admin(gid uuid); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.is_group_admin(gid uuid) TO anon;
+REVOKE ALL ON FUNCTION public.is_group_admin(gid uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.is_group_admin(gid uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.is_group_admin(gid uuid) TO service_role;
 
@@ -7611,7 +7655,7 @@ GRANT ALL ON FUNCTION public.is_group_admin(gid uuid) TO service_role;
 -- Name: FUNCTION is_group_creator(gid uuid); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.is_group_creator(gid uuid) TO anon;
+REVOKE ALL ON FUNCTION public.is_group_creator(gid uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.is_group_creator(gid uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.is_group_creator(gid uuid) TO service_role;
 
@@ -7620,7 +7664,7 @@ GRANT ALL ON FUNCTION public.is_group_creator(gid uuid) TO service_role;
 -- Name: FUNCTION is_group_member(gid uuid); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.is_group_member(gid uuid) TO anon;
+REVOKE ALL ON FUNCTION public.is_group_member(gid uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.is_group_member(gid uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.is_group_member(gid uuid) TO service_role;
 
@@ -7629,7 +7673,7 @@ GRANT ALL ON FUNCTION public.is_group_member(gid uuid) TO service_role;
 -- Name: FUNCTION match_day(ts timestamp with time zone); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.match_day(ts timestamp with time zone) TO anon;
+REVOKE ALL ON FUNCTION public.match_day(ts timestamp with time zone) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.match_day(ts timestamp with time zone) TO authenticated;
 GRANT ALL ON FUNCTION public.match_day(ts timestamp with time zone) TO service_role;
 
@@ -7638,7 +7682,7 @@ GRANT ALL ON FUNCTION public.match_day(ts timestamp with time zone) TO service_r
 -- Name: FUNCTION match_day_complete(p_day date); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.match_day_complete(p_day date) TO anon;
+REVOKE ALL ON FUNCTION public.match_day_complete(p_day date) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.match_day_complete(p_day date) TO authenticated;
 GRANT ALL ON FUNCTION public.match_day_complete(p_day date) TO service_role;
 
@@ -7647,7 +7691,7 @@ GRANT ALL ON FUNCTION public.match_day_complete(p_day date) TO service_role;
 -- Name: FUNCTION match_lock_at(kickoff_at timestamp with time zone, kickoff_tbd boolean); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.match_lock_at(kickoff_at timestamp with time zone, kickoff_tbd boolean) TO anon;
+REVOKE ALL ON FUNCTION public.match_lock_at(kickoff_at timestamp with time zone, kickoff_tbd boolean) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.match_lock_at(kickoff_at timestamp with time zone, kickoff_tbd boolean) TO authenticated;
 GRANT ALL ON FUNCTION public.match_lock_at(kickoff_at timestamp with time zone, kickoff_tbd boolean) TO service_role;
 
@@ -7656,7 +7700,7 @@ GRANT ALL ON FUNCTION public.match_lock_at(kickoff_at timestamp with time zone, 
 -- Name: FUNCTION match_locked(kickoff_at timestamp with time zone, kickoff_tbd boolean); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.match_locked(kickoff_at timestamp with time zone, kickoff_tbd boolean) TO anon;
+REVOKE ALL ON FUNCTION public.match_locked(kickoff_at timestamp with time zone, kickoff_tbd boolean) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.match_locked(kickoff_at timestamp with time zone, kickoff_tbd boolean) TO authenticated;
 GRANT ALL ON FUNCTION public.match_locked(kickoff_at timestamp with time zone, kickoff_tbd boolean) TO service_role;
 
@@ -7665,7 +7709,7 @@ GRANT ALL ON FUNCTION public.match_locked(kickoff_at timestamp with time zone, k
 -- Name: FUNCTION move_competition_to_group(p_comp_id uuid, p_group_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.move_competition_to_group(p_comp_id uuid, p_group_id uuid) TO anon;
+REVOKE ALL ON FUNCTION public.move_competition_to_group(p_comp_id uuid, p_group_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.move_competition_to_group(p_comp_id uuid, p_group_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.move_competition_to_group(p_comp_id uuid, p_group_id uuid) TO service_role;
 
@@ -7674,7 +7718,7 @@ GRANT ALL ON FUNCTION public.move_competition_to_group(p_comp_id uuid, p_group_i
 -- Name: FUNCTION pc_points(ph integer, pa integer, hs integer, as_ integer); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.pc_points(ph integer, pa integer, hs integer, as_ integer) TO anon;
+REVOKE ALL ON FUNCTION public.pc_points(ph integer, pa integer, hs integer, as_ integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.pc_points(ph integer, pa integer, hs integer, as_ integer) TO authenticated;
 GRANT ALL ON FUNCTION public.pc_points(ph integer, pa integer, hs integer, as_ integer) TO service_role;
 
@@ -7683,7 +7727,7 @@ GRANT ALL ON FUNCTION public.pc_points(ph integer, pa integer, hs integer, as_ i
 -- Name: FUNCTION profiles_name_guard(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.profiles_name_guard() TO anon;
+REVOKE ALL ON FUNCTION public.profiles_name_guard() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.profiles_name_guard() TO authenticated;
 GRANT ALL ON FUNCTION public.profiles_name_guard() TO service_role;
 
@@ -7708,7 +7752,7 @@ GRANT ALL ON FUNCTION public.prune_client_errors(keep_days integer) TO service_r
 -- Name: FUNCTION prune_job_runs(keep_days integer); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.prune_job_runs(keep_days integer) TO anon;
+REVOKE ALL ON FUNCTION public.prune_job_runs(keep_days integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.prune_job_runs(keep_days integer) TO authenticated;
 GRANT ALL ON FUNCTION public.prune_job_runs(keep_days integer) TO service_role;
 
@@ -7733,7 +7777,7 @@ GRANT ALL ON FUNCTION public.recompute_ratings() TO service_role;
 -- Name: FUNCTION recompute_ratings_if_scores_changed(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.recompute_ratings_if_scores_changed() TO anon;
+REVOKE ALL ON FUNCTION public.recompute_ratings_if_scores_changed() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.recompute_ratings_if_scores_changed() TO authenticated;
 GRANT ALL ON FUNCTION public.recompute_ratings_if_scores_changed() TO service_role;
 
@@ -7750,7 +7794,7 @@ GRANT ALL ON FUNCTION public.refresh_kickoff_uncertain(p_season_id uuid) TO serv
 -- Name: FUNCTION remember_previous_kickoff(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.remember_previous_kickoff() TO anon;
+REVOKE ALL ON FUNCTION public.remember_previous_kickoff() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.remember_previous_kickoff() TO authenticated;
 GRANT ALL ON FUNCTION public.remember_previous_kickoff() TO service_role;
 
@@ -7759,7 +7803,7 @@ GRANT ALL ON FUNCTION public.remember_previous_kickoff() TO service_role;
 -- Name: FUNCTION round_key(ts timestamp with time zone); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.round_key(ts timestamp with time zone) TO anon;
+REVOKE ALL ON FUNCTION public.round_key(ts timestamp with time zone) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.round_key(ts timestamp with time zone) TO authenticated;
 GRANT ALL ON FUNCTION public.round_key(ts timestamp with time zone) TO service_role;
 
@@ -7768,7 +7812,7 @@ GRANT ALL ON FUNCTION public.round_key(ts timestamp with time zone) TO service_r
 -- Name: FUNCTION round_key_of_date(d date); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.round_key_of_date(d date) TO anon;
+REVOKE ALL ON FUNCTION public.round_key_of_date(d date) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.round_key_of_date(d date) TO authenticated;
 GRANT ALL ON FUNCTION public.round_key_of_date(d date) TO service_role;
 
@@ -7777,7 +7821,7 @@ GRANT ALL ON FUNCTION public.round_key_of_date(d date) TO service_role;
 -- Name: FUNCTION touch_activity(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.touch_activity() TO anon;
+REVOKE ALL ON FUNCTION public.touch_activity() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.touch_activity() TO authenticated;
 GRANT ALL ON FUNCTION public.touch_activity() TO service_role;
 
@@ -7786,7 +7830,7 @@ GRANT ALL ON FUNCTION public.touch_activity() TO service_role;
 -- Name: FUNCTION touch_prediction_updated_at(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.touch_prediction_updated_at() TO anon;
+REVOKE ALL ON FUNCTION public.touch_prediction_updated_at() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.touch_prediction_updated_at() TO authenticated;
 GRANT ALL ON FUNCTION public.touch_prediction_updated_at() TO service_role;
 
@@ -7795,9 +7839,10 @@ GRANT ALL ON FUNCTION public.touch_prediction_updated_at() TO service_role;
 -- Name: FUNCTION username_available(name text); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.username_available(name text) TO anon;
+REVOKE ALL ON FUNCTION public.username_available(name text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.username_available(name text) TO authenticated;
 GRANT ALL ON FUNCTION public.username_available(name text) TO service_role;
+GRANT ALL ON FUNCTION public.username_available(name text) TO anon;
 
 
 --
@@ -8099,7 +8144,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON S
 --
 
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO service_role;
 
@@ -8137,5 +8181,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ibExPtjIalWg9Y2N5Rs6PXJY9RtaBFECLSIt4BfDaVy1DmfUTJdoNC6zdiTdhxd
+\unrestrict djEgL1Y1VvSGcJf6N3x5scwtMqCpk0I8JVGBZrzVbXKc39AkOeYukLA5PEcznft
 
