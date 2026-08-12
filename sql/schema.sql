@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict RblYvMzhHtnwxOvEld0LvwadAtMtrytJ6vpOw1mWxXTlO5Vmr41iGuuBTxEmi22
+\restrict ibExPtjIalWg9Y2N5Rs6PXJY9RtaBFECLSIt4BfDaVy1DmfUTJdoNC6zdiTdhxd
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
@@ -220,6 +220,73 @@ begin
 
   return v_navn;
 end $$;
+
+
+--
+-- Name: accept_invite(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.accept_invite(p_code text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_uid    uuid := auth.uid();
+  v_code   text := btrim(coalesce(p_code, ''));
+  v_group  public.groups%rowtype;
+  v_comp   public.competitions%rowtype;
+  v_ny_liga boolean := false;
+  v_rk      bigint  := 0;
+begin
+  if v_uid is null then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if v_code = '' then
+    return jsonb_build_object('kind', 'none');
+  end if;
+
+  select * into v_group from public.groups where invite_code = v_code;
+  if found then
+    insert into public.group_members (group_id, user_id, role)
+    select v_group.id, v_uid, 'member'
+     where not exists (select 1 from public.group_members
+                        where group_id = v_group.id and user_id = v_uid);
+    get diagnostics v_rk = row_count;
+    v_ny_liga := v_rk > 0;
+    return jsonb_build_object('kind', 'group', 'group_id', v_group.id, 'joined', v_ny_liga);
+  end if;
+
+  select * into v_comp from public.competitions where invite_code = v_code;
+  if not found then
+    return jsonb_build_object('kind', 'none');
+  end if;
+
+  -- Liga før konkurrence — men IKKE fordi triggeren ville afvise den modsatte
+  -- rækkefølge (det gør den ikke; se filens hoved). Linjen er her for det ene
+  -- tilfælde, triggeren ikke dækker: en bruger, der allerede ER deltager, men
+  -- mangler medlemskabet. Der indsættes da ingen deltager-række, triggeren fyrer
+  -- ikke, og `A8`s halve tilstand ville blive stående, hver gang brugeren
+  -- forsøgte at rette den ved at bruge invitationen igen.
+  if v_comp.group_id is not null then
+    insert into public.group_members (group_id, user_id, role)
+    select v_comp.group_id, v_uid, 'member'
+     where not exists (select 1 from public.group_members
+                        where group_id = v_comp.group_id and user_id = v_uid);
+  end if;
+
+  insert into public.competition_participants (competition_id, user_id)
+  select v_comp.id, v_uid
+   where not exists (select 1 from public.competition_participants
+                      where competition_id = v_comp.id and user_id = v_uid);
+  get diagnostics v_rk = row_count;
+
+  return jsonb_build_object(
+    'kind', 'competition',
+    'competition_id', v_comp.id,
+    'group_id', v_comp.group_id,
+    'joined', v_rk > 0);
+end;
+$$;
 
 
 --
@@ -4370,6 +4437,114 @@ $$;
 
 
 --
+-- Name: invite_lookup(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.invite_lookup(p_code text) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_uid   uuid := auth.uid();
+  v_code  text := btrim(coalesce(p_code, ''));
+  v_group public.groups%rowtype;
+  v_comp  public.competitions%rowtype;
+begin
+  if v_uid is null then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if v_code = '' then
+    return jsonb_build_object('kind', 'none');
+  end if;
+
+  -- Ligaen først. Rækkefølgen er den samme som klientens gamle, og den er
+  -- vilkårlig men skal være fast: koderne er fra to forskellige rum, og en kode,
+  -- der tilfældigvis fandtes begge steder, skal give det samme svar hver gang.
+  select * into v_group from public.groups where invite_code = v_code;
+  if found then
+    return jsonb_build_object(
+      'kind', 'group',
+      'group', jsonb_build_object(
+        'id', v_group.id,
+        'name', v_group.name,
+        'created_by', v_group.created_by,
+        'created_at', v_group.created_at),
+      'already', exists (select 1 from public.group_members
+                          where group_id = v_group.id and user_id = v_uid));
+  end if;
+
+  select * into v_comp from public.competitions where invite_code = v_code;
+  if not found then
+    return jsonb_build_object('kind', 'none');
+  end if;
+
+  return jsonb_build_object(
+    'kind', 'competition',
+    'competition', jsonb_build_object(
+      'id', v_comp.id,
+      'name', v_comp.name,
+      'mode', v_comp.mode,
+      'group_id', v_comp.group_id,
+      'created_by', v_comp.created_by,
+      'created_at', v_comp.created_at),
+    -- De to navne er PYNT på bekræftelsen — samme rolle som i den klient, de
+    -- afløser — men de hentes HER frem for i to ekstra rundture. Ligaens navn
+    -- kunne den gamle klient kun få, fordi hver liga var læsbar for enhver.
+    'group_name', (select name from public.groups where id = v_comp.group_id),
+    'inviter_name', (select display_name from public.profiles where id = v_comp.created_by),
+    'already', exists (select 1 from public.competition_participants
+                        where competition_id = v_comp.id and user_id = v_uid));
+end;
+$$;
+
+
+--
+-- Name: invite_preview(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.invite_preview(p_code text) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_code  text := btrim(coalesce(p_code, ''));
+  v_group public.groups%rowtype;
+  v_comp  public.competitions%rowtype;
+begin
+  -- Længdegrænsen er ikke en validering af formatet, men et loft: funktionen er
+  -- åben for enhver, og en megabyte-lang parameter skal afvises før opslaget.
+  if v_code = '' or length(v_code) > 64 then
+    return jsonb_build_object('kind', 'none');
+  end if;
+
+  select * into v_group from public.groups where invite_code = v_code;
+  if found then
+    return jsonb_build_object(
+      'kind', 'group',
+      'name', v_group.name,
+      'member_count', (select count(*) from public.group_members
+                        where group_id = v_group.id));
+  end if;
+
+  select * into v_comp from public.competitions where invite_code = v_code;
+  if not found then
+    return jsonb_build_object('kind', 'none');
+  end if;
+
+  -- Ligaens navn er med, fordi en konkurrence-invitation også melder ind i
+  -- ligaen (`A8`) — modtageren skal kunne se begge dele, de siger ja til.
+  -- Er konkurrencen ligaløs, er feltet `null`, og skærmen udelader linjen.
+  return jsonb_build_object(
+    'kind', 'competition',
+    'name', v_comp.name,
+    'group_name', (select name from public.groups where id = v_comp.group_id),
+    'member_count', (select count(*) from public.competition_participants
+                      where competition_id = v_comp.id));
+end;
+$$;
+
+
+--
 -- Name: is_group_admin(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4381,6 +4556,18 @@ CREATE FUNCTION public.is_group_admin(gid uuid) RETURNS boolean
     select 1 from public.group_members
     where group_id = gid and user_id = auth.uid() and role = 'admin'
   );
+$$;
+
+
+--
+-- Name: is_group_creator(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.is_group_creator(gid uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (select 1 from public.groups where id = gid and created_by = auth.uid());
 $$;
 
 
@@ -4504,6 +4691,32 @@ CREATE FUNCTION public.pc_points(ph integer, pa integer, hs integer, as_ integer
     when ph = hs and pa = as_ then 3
     when sign(ph - pa) = sign(hs - as_) then 1
     else 0 end;
+$$;
+
+
+--
+-- Name: profiles_name_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.profiles_name_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+begin
+  new.display_name := btrim(new.display_name);
+
+  if tg_op = 'UPDATE' and new.display_name is distinct from old.display_name then
+    if old.anonymized_at is not null then
+      raise exception 'En lukket konto kan ikke skifte brugernavn.'
+        using errcode = '42501';
+    end if;
+    if new.anonymized_at is null then
+      new.display_name_changed_at := now();
+    end if;
+  end if;
+
+  return new;
+end;
 $$;
 
 
@@ -5309,7 +5522,7 @@ CREATE TABLE public.analytics_events (
     competition_id uuid,
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT analytics_events_name_check CHECK ((event_name = ANY (ARRAY['account_created'::text, 'login'::text, 'logout'::text, 'league_created'::text, 'league_joined'::text, 'league_invite_sent'::text, 'league_invite_accepted'::text, 'competition_created'::text, 'competition_joined'::text, 'competition_opened'::text, 'prediction_started'::text, 'prediction_saved'::text, 'prediction_updated'::text, 'prediction_submitted'::text, 'opened_home'::text, 'opened_tip'::text, 'opened_league'::text, 'opened_standings'::text, 'opened_rating'::text, 'opened_career'::text, 'opened_story'::text, 'opened_championship'::text, 'story_viewed'::text, 'story_shared'::text, 'story_score_distribution'::text, 'story_frame_viewed'::text, 'milestone_cta_clicked'::text, 'push_opened'::text])))
+    CONSTRAINT analytics_events_name_check CHECK ((event_name = ANY (ARRAY['account_created'::text, 'login'::text, 'logout'::text, 'league_created'::text, 'league_joined'::text, 'league_invite_sent'::text, 'league_invite_accepted'::text, 'invite_landed'::text, 'competition_created'::text, 'competition_joined'::text, 'competition_opened'::text, 'prediction_started'::text, 'prediction_saved'::text, 'prediction_updated'::text, 'prediction_submitted'::text, 'opened_home'::text, 'opened_tip'::text, 'opened_league'::text, 'opened_standings'::text, 'opened_rating'::text, 'opened_career'::text, 'opened_story'::text, 'opened_championship'::text, 'story_viewed'::text, 'story_shared'::text, 'story_score_distribution'::text, 'story_frame_viewed'::text, 'milestone_cta_clicked'::text, 'push_opened'::text])))
 );
 
 
@@ -5699,7 +5912,8 @@ CREATE TABLE public.profiles (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     is_admin boolean DEFAULT false NOT NULL,
     last_seen_at timestamp with time zone,
-    anonymized_at timestamp with time zone
+    anonymized_at timestamp with time zone,
+    display_name_changed_at timestamp with time zone
 );
 
 
@@ -6324,6 +6538,13 @@ CREATE TRIGGER predictions_touch_updated_at BEFORE UPDATE ON public.predictions 
 
 
 --
+-- Name: profiles profiles_name_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER profiles_name_guard BEFORE INSERT OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.profiles_name_guard();
+
+
+--
 -- Name: analytics_events analytics_events_competition_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6702,10 +6923,28 @@ ALTER TABLE public.competition_matches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.competition_participants ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: competition_participants competition_participants_insert_involved; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY competition_participants_insert_involved ON public.competition_participants FOR INSERT TO authenticated WITH CHECK (((user_id = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM public.competitions c
+  WHERE ((c.id = competition_participants.competition_id) AND ((c.created_by = auth.uid()) OR ((c.group_id IS NOT NULL) AND public.is_group_member(c.group_id))))))));
+
+
+--
 -- Name: competitions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.competitions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: competitions competitions_select_involved; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY competitions_select_involved ON public.competitions FOR SELECT TO authenticated USING (((created_by = auth.uid()) OR ((group_id IS NOT NULL) AND public.is_group_member(group_id)) OR (EXISTS ( SELECT 1
+   FROM public.competition_participants cp
+  WHERE ((cp.competition_id = competitions.id) AND (cp.user_id = auth.uid()))))));
+
 
 --
 -- Name: competitions create competitions; Type: POLICY; Schema: public; Owner: -
@@ -6760,12 +6999,10 @@ CREATE POLICY group_members_delete_self ON public.group_members FOR DELETE TO au
 
 
 --
--- Name: group_members group_members_insert_self; Type: POLICY; Schema: public; Owner: -
+-- Name: group_members group_members_insert_creator; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY group_members_insert_self ON public.group_members FOR INSERT TO authenticated WITH CHECK (((user_id = auth.uid()) AND ((role = 'member'::text) OR (EXISTS ( SELECT 1
-   FROM public.groups g
-  WHERE ((g.id = group_members.group_id) AND (g.created_by = auth.uid())))))));
+CREATE POLICY group_members_insert_creator ON public.group_members FOR INSERT TO authenticated WITH CHECK (((user_id = auth.uid()) AND (role = 'admin'::text) AND public.is_group_creator(group_id)));
 
 
 --
@@ -6799,10 +7036,10 @@ CREATE POLICY groups_insert_own ON public.groups FOR INSERT TO authenticated WIT
 
 
 --
--- Name: groups groups_select_all; Type: POLICY; Schema: public; Owner: -
+-- Name: groups groups_select_member; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY groups_select_all ON public.groups FOR SELECT TO authenticated USING (true);
+CREATE POLICY groups_select_member ON public.groups FOR SELECT TO authenticated USING ((public.is_group_member(id) OR (created_by = auth.uid())));
 
 
 --
@@ -6832,13 +7069,6 @@ ALTER TABLE public.job_runs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY job_runs_read_admin ON public.job_runs FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
    FROM public.profiles
   WHERE ((profiles.id = auth.uid()) AND profiles.is_admin))));
-
-
---
--- Name: competition_participants join competition; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "join competition" ON public.competition_participants FOR INSERT WITH CHECK ((user_id = auth.uid()));
 
 
 --
@@ -6982,13 +7212,6 @@ CREATE POLICY ratings_read ON public.ratings FOR SELECT TO authenticated USING (
 
 
 --
--- Name: competitions read all competitions; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "read all competitions" ON public.competitions FOR SELECT USING ((auth.role() = 'authenticated'::text));
-
-
---
 -- Name: competition_participants read all participation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -7105,6 +7328,16 @@ GRANT USAGE ON SCHEMA public TO service_role;
 
 REVOKE ALL ON FUNCTION public._anonymize_account(p_user_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public._anonymize_account(p_user_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION accept_invite(p_code text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.accept_invite(p_code text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.accept_invite(p_code text) TO anon;
+GRANT ALL ON FUNCTION public.accept_invite(p_code text) TO authenticated;
+GRANT ALL ON FUNCTION public.accept_invite(p_code text) TO service_role;
 
 
 --
@@ -7346,12 +7579,41 @@ GRANT ALL ON FUNCTION public.generate_stories_catchup(p_grace integer) TO servic
 
 
 --
+-- Name: FUNCTION invite_lookup(p_code text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.invite_lookup(p_code text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.invite_lookup(p_code text) TO anon;
+GRANT ALL ON FUNCTION public.invite_lookup(p_code text) TO authenticated;
+GRANT ALL ON FUNCTION public.invite_lookup(p_code text) TO service_role;
+
+
+--
+-- Name: FUNCTION invite_preview(p_code text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.invite_preview(p_code text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.invite_preview(p_code text) TO anon;
+GRANT ALL ON FUNCTION public.invite_preview(p_code text) TO authenticated;
+GRANT ALL ON FUNCTION public.invite_preview(p_code text) TO service_role;
+
+
+--
 -- Name: FUNCTION is_group_admin(gid uuid); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.is_group_admin(gid uuid) TO anon;
 GRANT ALL ON FUNCTION public.is_group_admin(gid uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.is_group_admin(gid uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION is_group_creator(gid uuid); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.is_group_creator(gid uuid) TO anon;
+GRANT ALL ON FUNCTION public.is_group_creator(gid uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.is_group_creator(gid uuid) TO service_role;
 
 
 --
@@ -7415,6 +7677,15 @@ GRANT ALL ON FUNCTION public.move_competition_to_group(p_comp_id uuid, p_group_i
 GRANT ALL ON FUNCTION public.pc_points(ph integer, pa integer, hs integer, as_ integer) TO anon;
 GRANT ALL ON FUNCTION public.pc_points(ph integer, pa integer, hs integer, as_ integer) TO authenticated;
 GRANT ALL ON FUNCTION public.pc_points(ph integer, pa integer, hs integer, as_ integer) TO service_role;
+
+
+--
+-- Name: FUNCTION profiles_name_guard(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.profiles_name_guard() TO anon;
+GRANT ALL ON FUNCTION public.profiles_name_guard() TO authenticated;
+GRANT ALL ON FUNCTION public.profiles_name_guard() TO service_role;
 
 
 --
@@ -7730,8 +8001,22 @@ GRANT ALL ON TABLE public.notification_log TO service_role;
 -- Name: TABLE profiles; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.profiles TO authenticated;
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.profiles TO authenticated;
 GRANT ALL ON TABLE public.profiles TO service_role;
+
+
+--
+-- Name: COLUMN profiles.id; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT UPDATE(id) ON TABLE public.profiles TO authenticated;
+
+
+--
+-- Name: COLUMN profiles.display_name; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT UPDATE(display_name) ON TABLE public.profiles TO authenticated;
 
 
 --
@@ -7852,5 +8137,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict RblYvMzhHtnwxOvEld0LvwadAtMtrytJ6vpOw1mWxXTlO5Vmr41iGuuBTxEmi22
+\unrestrict ibExPtjIalWg9Y2N5Rs6PXJY9RtaBFECLSIt4BfDaVy1DmfUTJdoNC6zdiTdhxd
 
