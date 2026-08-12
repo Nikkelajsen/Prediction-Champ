@@ -29,7 +29,9 @@ Engine-eksempler, kerneudsagn), `src/screens/Auth.jsx` (taglinen),
 
 CTA'er peger på `https://prediction-champ.vercel.app`. Invite-links bærer selv
 deres kode (`?liga=`/`?join=`), så "Har du en invitation?"-sporet linker blot
-til appen.
+til appen. **De 23 CTA'er skal peges på `https://app.leagly.app` med `B21`** —
+det er besluttet 12. august 2026 og er hele grunden til, at `B21` køres i samme
+ombæring som `I10` frem for før den.
 
 `I8` nævnte "4–6 sider: forside, hvordan virker det, features, om os, kontakt,
 download app" — kontakt er bevidst foldet ind i om-siden (en mailto bærer ikke
@@ -62,7 +64,9 @@ mappen flyttes.
   skal laves 5 steder; accepteret for et udkast, genbesøges hvis sitet får et
   build (fx sammen med `I9`).
 - **Ingen analytics, ingen tracking, nul eksterne requests** (samme princip som
-  `B4`; produktionens CSP siger `font-src 'self'`).
+  `B4`; produktionens CSP siger `font-src 'self'`). **Det er også grunden til,
+  at `I10`s beslutning ikke rører CSP'en:** sitet ligger på sin egen origin og
+  henter intet, så appens header kan blive stående uændret.
 - **Ingen formular-backend** — kontakt er en mailto (12-funktions-loftet, og
   intet er publiceret).
 - **Ingen opfundne tal** — ingen testimonials, brugertal eller logoer.
@@ -78,11 +82,13 @@ mappen flyttes.
    adresse står i `src/lib/legal.js`, og `docs/mail/templates.test.js` holder de
    to i trit. *(Punktet henviste til backloggens indbakke — den henvisning var
    forældet allerede, fordi punktet var foldet ind i `I10`.)*
-3. **Domæne og hosting-beslutning** (`I10`) — eget domæne eller en sti på
-   Vercel-projektet; afgør også, om appens CSP-headere skal justeres.
-   **Halvt afklaret 9. august 2026:** domænet ER `leagly.app`, og det bruges
-   allerede til mail. Tilbage står kun at pege selve hjemmesiden derhen, hvilket
-   er samme flytning som `B21`.
+3. ~~**Domæne og hosting-beslutning**~~ — **afgjort 12. august 2026 (`I10`).**
+   Sitet får `leagly.app`, appen får `app.leagly.app`, begge på Vercel; det
+   tredje alternativ (en sti på appens Vercel-projekt) er valgt fra, fordi appen
+   er en SPA på roden og sitet så skulle vindes tilbage med en rewrite.
+   **CSP-spørgsmålet faldt væk med samme beslutning** — to origins deler ikke
+   headere. Tilbage står udførelsen, trin for trin i
+   [`../DOMAENE.md`](../DOMAENE.md), som køres sammen med `B21`.
 4. **SEO** (`I9`) — OG-tags, sitemap, indeksering.
 
 ## Verifikation af udkastet

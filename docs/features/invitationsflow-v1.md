@@ -36,7 +36,8 @@ bruger:
 `twitter:card=summary_large_image`. Billedet er `public/og-image.png`, 1200×630.
 
 **Adressen stemples ind ved build.** `og:image` skal være absolut, og
-produktionsdomænet er et åbent spørgsmål (`I10`/`B21`). En lille
+produktionsdomænet flytter sig med `I10`/`B21` (til `app.leagly.app`, besluttet
+12. august 2026). En lille
 `transformIndexHtml`-plugin i `vite.config.js` erstatter `%OG_ORIGIN%` med
 `https://$VERCEL_PROJECT_PRODUCTION_URL` og falder tilbage til dagens adresse.
 Skift af domæne kræver derfor ingen kodeændring. Preview-deploys arver

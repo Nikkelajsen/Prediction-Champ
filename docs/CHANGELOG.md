@@ -9,6 +9,15 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+12. august 2026 — `I10` er afgjort: appen flytter med på domænet
+**Rækken havde et hul, ingen af dens to muligheder kunne dække.** `I10` spurgte "eget domæne eller en sti på Vercel-projektet", men begge svar handlede om HJEMMESIDEN — appens adresse var overladt til `B21`, som løste den ved at omdøbe Vercel-projektet, altså til endnu en `.vercel.app`. Det er den forkerte adresse at lade blive: invitationslinks bygges af `window.location.origin`, så det er appens URL og ikke hjemmesidens, brugerne deler indbyrdes.
+**Valgt: `leagly.app` til hjemmesiden, `app.leagly.app` til appen,** begge på Vercel, som to projekter. Ét projekt med en rewrite blev valgt fra af den grund, dagens anden rettelse lige havde demonstreret: appen er en SPA på roden, og en rewrite på en sti, hvor der ligger en fil, fyrer aldrig.
+**`B21` mistede sin farligste halvdel.** Vercel-projektet omdøbes ikke — med et custom domain er projektnavnet dashboard-kosmetik, og de gamle `.vercel.app`-adresser bliver i stedet stående som `permanent: true`-redirects betinget på værtsnavn. Dermed dør ingen delte `?liga=`/`?join=`-links, hvilket ellers var rækkens eneste reelle pris. Tilbage i `B21` er de 23 CTA'er, README'ens live-link og GitHub-omdøbningen.
+**Intet af det rører koden endnu.** CSP'en (`font-src 'self'`) bliver stående, fordi to origins ikke deler headere, og `og:`-adressen stempler sig selv om via `VERCEL_PROJECT_PRODUCTION_URL` — den antagelse er skrevet ind som et bevis, der skal aflæses, ikke som en sandhed.
+**Udførelsen har fået sin egen runbog:** [`DOMAENE.md`](./DOMAENE.md) — register, den rækkefølge der kan gøre skade (Site URL, Turnstile-værtsnavn, redirect uden `has`), otte trin, fem beviser og en fejlfindingstabel. `MAIL.md` og `OPRETTELSE.md` peger nu på den i stedet for på et ubesvaret `B21`.
+
+---
+
 12. august 2026 — Link-previewet virkede aldrig: en rewrite på en sti, hvor der ligger en fil, er død
 **Ejeren kunne ikke verificere det dynamiske link-preview, og årsagen var, at `api/invite-preview.js` ALDRIG blev kaldt i produktion.** Funktionen, `invite_preview()` og miljøvariablerne var alle rigtige. Det var portvagten, der ikke fandtes.
 **`rewrites` i `vercel.json` ligger EFTER filsystem-opslaget** (Vercels `afterFiles`-fase). `I7`s regel stod på `source: "/"`, og der ligger en fysisk `index.html` på præcis den sti — så filen vandt hver eneste gang, uanset `has`-betingelserne på query og User-Agent. Reglen kunne ikke fyre.

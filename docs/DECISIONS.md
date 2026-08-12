@@ -15,6 +15,53 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 12. august 2026 — Appen flytter med på domænet: `leagly.app` til hjemmesiden, `app.leagly.app` til appen (`I10`)
+
+**Beslutning:** `leagly.app` peger på hjemmesiden (`site/`), og appen får
+`app.leagly.app` som produktionsdomæne. Begge bliver liggende på Vercel.
+Vercel-projektet **omdøbes ikke** — de gamle `*.vercel.app`-adresser bliver
+stående og redirigeres permanent til det nye subdomæne.
+
+**Fordi `I10` kun stillede to muligheder, og ingen af dem satte appen på
+domænet.** Rækken spurgte "eget domæne eller en sti på Vercel-projektet", men
+begge svar handlede om HJEMMESIDEN; appens adresse var overladt til `B21`, som
+løste den ved at omdøbe Vercel-projektet — altså til endnu en `.vercel.app`.
+Nettoresultatet ville have været, at produktet hedder Leagly overalt undtagen i
+den adresse, en bruger faktisk deler: invitationslinks bygges af
+`window.location.origin` (`GroupScreen.jsx:87`, `BoardScreen.jsx:126`), så det er
+APPENS adresse og ikke hjemmesidens, der vandrer rundt i folks beskeder.
+
+**Subdomæne frem for én adresse til begge.** Appen er en SPA på roden, så
+hjemmesiden kunne kun ligge på `leagly.app/` ved at blive vundet tilbage fra
+appen med en rewrite — og hasterettelsen samme dag viste præcis, hvor skrøbelig
+den konstruktion er: en rewrite på en sti, hvor der ligger en fil, fyrer aldrig.
+To origins holder de to ting adskilt, så et deploy af `site/` pr. konstruktion
+ikke kan vælte appen. Det er samme hensyn, som allerede holder mappen uden for
+Vite-buildet.
+
+**Omdøbningen af Vercel-projektet er droppet, ikke udskudt.** Den var hele
+`B21`s risiko: Vercel frigiver det gamle projektnavn, adressen dør, og intet
+redirigerer af sig selv. Med et custom domain er projektnavnet kun synligt i
+ejerens eget dashboard, og de gamle adresser kan i stedet blive stående som
+`permanent: true`-redirects i `vercel.json` — så hvert allerede delt
+`?liga=`/`?join=`-link overlever med sin kode i behold (Vercel bevarer stien og
+query-strengen). GitHub-repoets navn er en separat og harmløs sag; GitHub
+redirigerer selv.
+
+**Prisen er kendt og er argumentet for at køre rækken NU:** en installeret PWA
+er bundet til sin origin, så de testere, der har installeret fra `.vercel.app`,
+skal installere igen og logge ind på ny. Det er billigt, mens feltet er
+vennegruppen, og dyrt efter `I8`s publicering.
+
+**Det, beslutningen IKKE ændrer:** appens CSP (`font-src 'self'`) kan blive
+stående — `site/` er selvbærende med egne fontkopier og nul eksterne requests,
+og to origins deler ikke headere. `og:`-adressen stempler sig selv om, fordi
+`vite.config.js` læser `VERCEL_PROJECT_PRODUCTION_URL`. Det, der derimod SKAL
+med i samme ombæring — Site URL, Redirect URLs, Turnstile-værtsnavnet og de 23
+links — står i [`DOMAENE.md`](./DOMAENE.md).
+
+---
+
 ## 11. august 2026 — Invitationens ETIKET må læses uden login (`A41`)
 
 **Beslutning:** `invite_preview()` (migrering `#54`) er `security definer` og
