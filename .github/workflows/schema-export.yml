@@ -7,6 +7,36 @@ name: Skema-eksport
 # session-pooler-strengen, fx:
 #   postgresql://postgres.<ref>:<password>@aws-0-eu-west-1.pooler.supabase.com:5432/postgres
 # (Settings → Secrets and variables → Actions → New repository secret.)
+#
+# ---------------------------------------------------------------------------
+# 🔴 WORKFLOWEN KAN IKKE COMMITTE TIL STANDARDGRENEN, OG DET ER MED VILJE
+#
+# Indtil 12. august 2026 committede den til den ref, den blev dispatchet på —
+# og cron-kørslen dispatches pr. definition på standardgrenen. Følgen var, at
+# `sql/schema.sql` landede i `main` **uden at have været gennem CI**.
+#
+# Det er ikke en teoretisk risiko. Dumpet er reference for femten SQL-tests, og
+# **tre gange har en eksport gjort CI rød bagefter**:
+#
+#   · `G94` — `competition_matches_read.sql` lånte sin før-tilstand af dumpet.
+#   · `G98` — `create_group.sql`s negative kontrol blev et tavst no-op.
+#   · `G96` — `anon_grants_functions.sql` blev rød af, at arbejdet lykkedes.
+#
+# Fællesnævneren er, at eksporten er det ENESTE, der flytter dumpet, og at en
+# test, der læser sin før-tilstand af det, først falder i det sekund den kører.
+# Rækkefølgen "eksportér → se CI → merge" fanger dem alle tre; rækkefølgen
+# "eksportér ind i main → opdag det bagefter" fanger ingen af dem.
+#
+# Derfor to veje ud af dette job, og valget er automatisk:
+#
+#   · **Arbejdsgren** → commit direkte på den. Dumpet kommer gennem CI som en
+#     del af den pull request, grenen alligevel skal have. Det er den vej, en
+#     migrering bør bruge: kør eksporten på din egen gren, når SQL'en er kørt.
+#   · **Standardgren** (cron, eller en manuel dispatch på `main`) → dumpet
+#     skubbes til `chore/schema-export`, og der åbnes en pull request. Det
+#     ugentlige sikkerhedsnet er dermed intakt — det melder stadig skema-drift
+#     — men det melder den som noget, der skal ses på, og ikke som et fait
+#     accompli i produktionsgrenen.
 
 on:
   workflow_dispatch: {}
@@ -15,10 +45,16 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write   # kun brugt på standardgrens-vejen (gh pr create)
 
 concurrency:
   group: schema-export-${{ github.ref }}
   cancel-in-progress: false
+
+env:
+  # Grenen, standardgrens-vejen skubber til. Stabil med vilje: en gen-kørsel
+  # opdaterer den samme pull request frem for at åbne en ny hver mandag.
+  PR_GREN: chore/schema-export
 
 jobs:
   export:
@@ -93,6 +129,10 @@ jobs:
           echo "Alle tjek bestået."
 
       - name: Commit hvis ændret
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GREN: ${{ github.ref_name }}
+          STANDARD: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -103,27 +143,98 @@ jobs:
             exit 0
           fi
 
-          # Dumpet er autoritativt: filen er netop genereret ud fra produktions-
-          # databasen. Skubber nogen til branchen imens (fx en overlappende kørsel
-          # eller en merge), afvises vores push. Så henter vi den nyeste ref, lægger
-          # vores friske dump ovenpå og prøver igen — der er intet at flette, fordi
-          # filen er genereret og ikke redigeret.
-          cp sql/schema.sql /tmp/schema.sql
-          for forsog in 1 2 3; do
-            git add sql/schema.sql
-            git commit -m "chore(sql): opdatér skema-eksport (schema.sql)" --quiet || true
-            if git push origin HEAD:${{ github.ref_name }}; then
-              echo "Committede og pushede opdateret sql/schema.sql."
-              exit 0
-            fi
-            echo "Push afvist (forsøg $forsog/3) — henter nyeste ref og lægger dumpet ovenpå."
-            git fetch origin ${{ github.ref_name }}
-            git reset --hard --quiet "origin/${{ github.ref_name }}"
-            cp /tmp/schema.sql sql/schema.sql
-            if git diff --quiet -- sql/schema.sql; then
-              echo "Nyeste ref indeholder allerede præcis dette skema — intet at gøre."
-              exit 0
-            fi
-          done
-          echo "::error::Kunne ikke pushe sql/schema.sql efter 3 forsøg."
-          exit 1
+          BESKED="chore(sql): opdatér skema-eksport (schema.sql)"
+
+          # ---------------------------------------------------------------
+          # VEJ A — arbejdsgren: commit direkte. Dumpet kommer gennem CI som
+          # en del af grenens egen pull request.
+          # ---------------------------------------------------------------
+          if [ "$GREN" != "$STANDARD" ]; then
+            echo "Kører på arbejdsgrenen '$GREN' — committer direkte."
+            # Dumpet er autoritativt: filen er netop genereret ud fra produktions-
+            # databasen. Skubber nogen til branchen imens (fx en overlappende kørsel
+            # eller en merge), afvises vores push. Så henter vi den nyeste ref, lægger
+            # vores friske dump ovenpå og prøver igen — der er intet at flette, fordi
+            # filen er genereret og ikke redigeret.
+            cp sql/schema.sql /tmp/schema.sql
+            for forsog in 1 2 3; do
+              git add sql/schema.sql
+              git commit -m "$BESKED" --quiet || true
+              if git push origin "HEAD:$GREN"; then
+                echo "Committede og pushede opdateret sql/schema.sql til $GREN."
+                exit 0
+              fi
+              echo "Push afvist (forsøg $forsog/3) — henter nyeste ref og lægger dumpet ovenpå."
+              git fetch origin "$GREN"
+              git reset --hard --quiet "origin/$GREN"
+              cp /tmp/schema.sql sql/schema.sql
+              if git diff --quiet -- sql/schema.sql; then
+                echo "Nyeste ref indeholder allerede præcis dette skema — intet at gøre."
+                exit 0
+              fi
+            done
+            echo "::error::Kunne ikke pushe sql/schema.sql efter 3 forsøg."
+            exit 1
+          fi
+
+          # ---------------------------------------------------------------
+          # VEJ B — standardgren: ALDRIG et direkte commit. Dumpet skubbes til
+          # PR_GREN, og der åbnes en pull request, så CI ser det før mergen.
+          # ---------------------------------------------------------------
+          echo "Kører på standardgrenen '$STANDARD' — committer IKKE her. Åbner en pull request i stedet."
+
+          # `--force` er det rigtige her, og kun her: PR_GREN er maskinskrevet,
+          # ejes udelukkende af dette job, og bygges hver gang oven på
+          # standardgrenens spids. Der er intet menneskearbejde at overskrive.
+          git checkout -B "$PR_GREN"
+          git add sql/schema.sql
+          git commit -m "$BESKED" --quiet
+          git push --force origin "HEAD:$PR_GREN"
+          echo "Pushede dumpet til $PR_GREN."
+
+          ANTAL=$(gh pr list --head "$PR_GREN" --state open --json number --jq 'length')
+          if [ "$ANTAL" -gt 0 ]; then
+            NR=$(gh pr list --head "$PR_GREN" --state open --json number --jq '.[0].number')
+            echo "Pull request #$NR findes i forvejen og er opdateret af pushet."
+            echo "::notice::Skema-drift: PR #$NR er opdateret med et friskt dump."
+            exit 0
+          fi
+
+          # PR-teksten skrives til en fil frem for at stå i et heredoc inde i
+          # kommandoen: et heredoc, hvis krop står i kolonne 0, afslutter YAML'ens
+          # blok-skalar og gør hele filen usyntaktisk. Den fælde koster en rød
+          # kørsel og ligner ikke sin årsag.
+          cat > /tmp/pr-body.md <<'PRBODY'
+          Den ugentlige skema-eksport fandt, at `sql/schema.sql` ikke længere svarer til
+          produktionsdatabasen, og har lagt et friskt dump her.
+
+          **Det er ikke automatisk en fejl.** En migrering er lovligt forud for eksporten
+          — de køres i hånden i Supabases SQL-editor, mens eksporten er ugentlig. Men det
+          er værd at se på, hvad diff'en indeholder, før den merges:
+
+          - Svarer den til migreringer, du kender? Så er alt, som det skal være.
+          - Er der objekter, ingen fil i `sql/` opretter? Så er der lavet noget i hånden
+            direkte i produktionen, og det bør have en migrering.
+
+          **Merge først, når CI er grøn.** Dumpet er reference for femten SQL-tests, og
+          tre gange har en eksport gjort CI rød bagefter (`G94`, `G98`, `G96`) — altid
+          fordi en test lånte sin før-tilstand af netop denne fil. Det er hele grunden
+          til, at eksporten ikke længere committer direkte til standardgrenen.
+
+          **Diff'ens størrelse er i sig selv en påstand:** er den ~2.400 linjer i stedet
+          for et par hundrede, er CRLF i funktionskroppene blevet normaliseret undervejs,
+          og en rigtig ændring kan gemme sig i støjen (`G5`). Så skal den ikke merges.
+          PRBODY
+
+          # Slår dette fejl med 403, er det næsten altid ÉN indstilling:
+          # Settings → Actions → General → Workflow permissions →
+          # "Allow GitHub Actions to create and approve pull requests".
+          if ! gh pr create \
+                --base "$STANDARD" \
+                --head "$PR_GREN" \
+                --title "chore(sql): skema-drift opdaget — friskt dump af public" \
+                --body-file /tmp/pr-body.md; then
+            echo "::error::Kunne ikke oprette pull requesten. Tjek Settings → Actions → General → Workflow permissions → 'Allow GitHub Actions to create and approve pull requests'. Dumpet ligger allerede på grenen $PR_GREN, så en PR kan også åbnes i hånden."
+            exit 1
+          fi
+          echo "::notice::Skema-drift opdaget — pull request åbnet fra $PR_GREN."

@@ -24,12 +24,12 @@ den regenereres med guiden nedenfor.
 > `profiles` og ingen tabel-bred SELECT, og de tre admin-policies kalder
 > `is_platform_admin()` frem for at læse `profiles`.
 >
-> 🟢 **Eksporten er denne gang kørt på en ARBEJDSGREN og ikke på `main`**, så
-> dumpet kom gennem CI, før det blev merget. Historisk er den kørt direkte på
-> `main`, og tre gange har den gjort CI rød bagefter — `G94`, `G98` og
-> `anon_grants_functions.sql`. Alle femten skema-indlæsende tests er kørt mod
-> det NYE dump, før mergen, og er grønne. **Det er den billigere rækkefølge, og
-> den bør være normen.**
+> 🟢 **Eksporten er kørt på en ARBEJDSGREN og ikke på `main`**, så dumpet kom
+> gennem CI, før det blev merget. Alle femten skema-indlæsende tests er kørt mod
+> det NYE dump, før mergen, og er grønne. **Det er ikke længere kun den
+> billigere rækkefølge — det er den eneste:** workflowen kan siden 12. august
+> 2026 ikke committe til standardgrenen, og en cron-kørsel åbner en pull request
+> i stedet. Se "Vej 3" nedenfor.
 >
 > **De fem migreringers efterprøvning fra begge sider fandt tre rigtige fejl,
 > før eksporten kunne afsløre dem** — det er hele grunden til, at §13 kræver
@@ -584,7 +584,30 @@ samme verifikationstjekliste som Vej 1.
 
 `.github/workflows/schema-export.yml` kører Vej 1 på en GitHub-runner (som har fri
 netadgang til port 5432, i modsætning til web-sandkassen), kører verifikations-
-tjeklisten og committer `sql/schema.sql`, hvis noget er ændret.
+tjeklisten og lægger `sql/schema.sql` frem, hvis noget er ændret.
+
+🔴 **Den kan ikke committe til standardgrenen, og valget er automatisk** (12. august
+2026). Indtil da committede den til den ref, den blev dispatchet på — og cron-kørslen
+dispatches pr. definition på `main`, så dumpet landede i produktionsgrenen **uden at
+have været gennem CI**. Det er ikke en teoretisk risiko: dumpet er reference for femten
+SQL-tests, og **tre gange har en eksport gjort CI rød bagefter** (`G94`, `G98`, `G96`)
+— hver gang fordi en test lånte sin før-tilstand af netop denne fil og først faldt i
+det sekund, den kørte.
+
+| Dispatchet på | Hvad der sker |
+|---|---|
+| **en arbejdsgren** | commit direkte på den. Dumpet kommer gennem CI som en del af den pull request, grenen alligevel skal have. **Det er den vej, en migrering bør bruge:** kør eksporten på din egen gren, når SQL'en er kørt i produktionen. |
+| **standardgrenen** (cron, eller en manuel dispatch på `main`) | dumpet skubbes til `chore/schema-export`, og der åbnes — eller opdateres — en pull request. Sikkerhedsnettet er intakt; det melder bare drift som noget, der skal ses på, frem for som et fait accompli. |
+
+**Begge veje er efterprøvet** med `git` og `gh` stubbet ud, så det er *målt* og ikke
+antaget, at standardgrens-vejen aldrig pusher til `main`, og at en anden kørsel
+opdaterer den eksisterende pull request frem for at åbne nummer to.
+
+⚠️ **Én engangsindstilling kan spærre standardgrens-vejen:** *Settings → Actions →
+General → Workflow permissions → "Allow GitHub Actions to create and approve pull
+requests"*. Er den slået fra, fejler `gh pr create` med 403 — dumpet ligger da stadig
+på `chore/schema-export`, og en pull request kan åbnes i hånden. Trinnet siger det selv
+med den fejltekst.
 
 Engangsopsætning: læg forbindelsesstrengen ind som repo-secret `SUPABASE_DB_URL`
 (*Settings → Secrets and variables → Actions → New repository secret*). Kør derefter
