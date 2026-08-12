@@ -241,6 +241,29 @@ Authentication → Email Templates → **Confirm signup**.
 
 ## Trin 7 — Slå bekræftelsen til
 
+> **Denne kontakt kan IKKE låse eksisterende brugere ude — og det er værd at
+> vide, fordi den forveksles med trin 4, som kan.** Bot Protection er en global
+> port foran tre endpoints; `Confirm email` afvises pr. bruger på deres eget
+> `email_confirmed_at`. Beviset er rollback-afsnittets asymmetri nedenfor: en
+> ubekræftet konto kommer ikke ind igen ved at slå kontakten fra, hvilket kun
+> giver mening, hvis kontakten aldrig var det, der spærrede. **Er du bekræftet i
+> dag, mærker du intet. Er du ubekræftet i dag, er du allerede låst ude.**
+>
+> **Kør alligevel denne først** — ikke fordi kontakten skader dem, men så et
+> tal, du kendte i forvejen, ikke bliver til en mistanke mod kontakten i morgen:
+>
+> ```sql
+> select email, created_at, last_sign_in_at, email_confirmed_at
+>   from auth.users
+>  where email_confirmed_at is null
+>  order by created_at;
+> ```
+>
+> **Nul rækker er det forventede.** Kommer der rækker, så ryd dem FØR du slår
+> til: `Resend confirmation` i ⋯-menuen under Authentication → Users er den
+> rigtige vej, og den manuelle `update` nederst i denne fil er nødløsningen med
+> den pris, der står beskrevet dér.
+
 Authentication → **Sign In / Providers** → fanen **Supabase Auth** → blokken
 **User Signups** ØVERST på siden → **Confirm email** → til → **Save changes**.
 
