@@ -15,6 +15,47 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 12. august 2026 — Den indsnævrende halvdel køres, og den udvidende bliver en landmine (`G98`)
+
+**Beslutning:** `#55`s `or created_by = auth.uid()` er fjernet fra `groups`'
+SELECT-policy ([`#58 groups_select_member_narrow.sql`](../sql/groups_select_member_narrow.sql)).
+Reglen er igen *"du kan se en liga, hvis du er medlem"* — punktum. Den gældende
+udgave står to steder, `#53` og `#58`, mens `#55` er markeret som en fil, der
+**ikke må gen-køres**.
+
+**Fordi prisen ikke længere købte noget.** Leddet blev hasteudrullet 11. august
+2026 og havde en kendt pris: en opretter, der havde forladt sin egen liga, kunne
+blive ved med at læse den og dens `invite_code`. Den pris var rigtig at betale
+dengang — alternativet var en app, hvor ingen kunne oprette en liga. `G95`
+(`create_group()`, `#57`) flyttede oprettelsen ind i én transaktion skrevet som
+ejer, og fra det øjeblik var leddet gratis at undvære. **En accepteret afvigelse
+skal genbesøges, når dens begrundelse forsvinder** — ellers bliver den til en
+regel, ingen kan huske at spørge om.
+
+**Udløseren var et deploy og ikke en anden migrering.** Det er samme todelte form
+som `A40` (10. august), bare med halvdelene byttet om i tid: den additive
+(`#57`) kunne køres når som helst, den indsnævrende (`#58`) først når den gamle
+klient var ude af luften. Beviset var ikke et argument, men en afprøvning —
+ejeren oprettede en liga i produktionen efter deployet.
+
+**Den udvidende halvdel er nu en landmine, og det er den eneste af de ti, hvor
+"kør den nyere bagefter" ikke altid er svaret.** `#55` gør præcis det, `#58`
+fjerner, så en gen-kørsel ruller `G98` tavst tilbage. Men skulle en gammel klient
+mod forventning være i luften igen, er `#55` netop tilbagerulningen. Derfor står
+den som en advarsel med to retninger frem for som en slettet fil.
+
+**Fundet undervejs, og det er den egentlige lære:** `sql/tests/create_group.sql`s
+negative kontrol hentede en ligas id med et opslag i `groups` som den indloggede
+bruger. Den linje ville være blevet et **tavst no-op** i samme sekund
+skema-eksporten kørte efter `#58`: opslaget giver nul rækker, `insert … select`
+skriver nul rækker, testens spærre fyrer aldrig — og kontrollen ville have været
+grøn uden at måle noget. Det er tredje gang samme fælde stilles (`G94`,
+`invite_lookup.sql`, og nu her), og reglen fra `DOCUMENTATION.md` §13 gælder
+bredere end først skrevet: **en test må ikke læse sin egen før-tilstand af et
+snapshot — heller ikke indirekte, gennem et opslag, en policy kan lukke.**
+Begge tests er derfor kørt fra begge sider af dumpet, sammen med de tolv andre
+skema-indlæsende tests.
+
 ## 12. august 2026 — `G96`s regel måles mod produktionen og ikke mod dumpet (`G100`)
 
 **Beslutning:** reglen fra `G96` — hver ny funktion i `public` skal selv bære sin

@@ -21,10 +21,14 @@
 --   4. Vagten holder: uden `auth.uid()` afvises kaldet.
 --   5. `anon` kan ikke kalde den — og det er ikke default privileges' fortjeneste,
 --      men filens egen `revoke` (`G96`).
---   6. **Den gamle vej virker stadig**, altså mellemtilstanden mellem migrering
---      og deploy. Det er dét, der gør filen sikker at køre før frontend-mergen,
---      og det er samme påstand som `invite_lookup.sql`s måling af
---      mellemtilstanden mellem `#52` og `#53`.
+--   6. **Porten mellem `#57` og `#58`, målt fra begge sider.** Med `#55`s brede
+--      policy virker BÅDE den gamle vej (`insert … returning`) og den nye —
+--      det er dét, der gør `#57` sikker at køre før frontend-mergen, og samme
+--      påstand som `invite_lookup.sql`s måling af mellemtilstanden mellem `#52`
+--      og `#53`. Efter `#58` (`G98`) er den gamle vej AFVIST, `create_group()`
+--      virker uændret, og en opretter uden medlemskab kan ikke længere læse sin
+--      egen liga. Afsnittet skriver selv sin før-tilstand og læser den ikke af
+--      skemaet — se advarslen dér.
 --   7. Navnet trimmes, og et navn, der ikke overholder tabellens check, afvises.
 --
 -- KØR LOKALT
@@ -167,15 +171,25 @@ begin
   -- 3b. NEGATIV KONTROL: den gamle vej, altså to statements. Her BLIVER ligaen
   --     stående — præcis det, `G95` beskrev. Uden denne halvdel måler 3a
   --     ingenting: den ville også være grøn, hvis testens spærre aldrig ramte.
+  --     ⚠️ **Ligaens id skrives i hånden, og medlemsrækken peger på det id og
+  --     ikke på et opslag i `groups`.** Kontrollen hentede indtil 12. august
+  --     2026 id'et med `select id from public.groups where name = …` som den
+  --     indloggede bruger, og den linje holdt op med at måle noget i samme
+  --     sekund `G98` smalnede SELECT-policyen: opslaget gav nul rækker, så
+  --     `insert … select` skrev nul rækker, testens spærre fyrede aldrig, og
+  --     udfaldet blev `ok` — altså "spærren virkede ikke", på en test, hvor alt
+  --     virkede. Det er §13-reglen igen: en test må ikke læse sin egen
+  --     før-tilstand ud af et skema, der kan flytte sig.
   v_udfald := pg_temp.forsoeg('95950000-0000-4000-8000-000000000001',
-                $s$insert into public.groups (name, created_by)
-                   values ('Bliver staaende', '95950000-0000-4000-8000-000000000001')$s$);
+                $s$insert into public.groups (id, name, created_by)
+                   values ('95950000-0000-4000-8000-00000000000b', 'Bliver staaende',
+                           '95950000-0000-4000-8000-000000000001')$s$);
   if v_udfald <> 'ok' then raise exception 'kontrollen kunne ikke skrive ligaen (%)', v_udfald; end if;
 
   v_udfald := pg_temp.forsoeg('95950000-0000-4000-8000-000000000001',
                 $s$insert into public.group_members (group_id, user_id, role)
-                   select id, '95950000-0000-4000-8000-000000000001', 'admin'
-                     from public.groups where name = 'Bliver staaende'$s$);
+                   values ('95950000-0000-4000-8000-00000000000b',
+                           '95950000-0000-4000-8000-000000000001', 'admin')$s$);
   if v_udfald = 'ok' then raise exception 'testens spærre virkede ikke i kontrollen'; end if;
 
   select count(*) into v_n from public.groups g
@@ -219,27 +233,115 @@ do $$ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 6. Mellemtilstanden: den gamle klient virker stadig
+-- 6. PORTEN MELLEM `#57` OG `#58`: mellemtilstanden, og dens afslutning
 -- ---------------------------------------------------------------------------
--- Det er dét, der gør migreringen sikker at køre før deployet. Skrivningen sker
--- MED `returning`, fordi det er dét, `db.insert` gør (`Prefer:
--- return=representation`) — og fordi netop den kombination af INSERT- og
--- SELECT-policy væltede produktionen 11. august 2026 (`#55`).
-do $$
-declare v_id uuid; v_n int;
+-- `G95` og `G98` er to migreringer med et DEPLOY imellem sig, og hele det
+-- rækkefølge-krav lever her. Afsnittet måler begge tilstande i den rækkefølge,
+-- produktionen gik igennem dem:
+--
+--   6a) Med `#55`s brede policy virker BEGGE veje. Det er dét, der gjorde `#57`
+--       sikker at køre før frontend-mergen.
+--   6b) Efter `#58` er den gamle vej lukket, og `create_group()` er den eneste
+--       tilbage. Det er dét, der gør `#58` FARLIG at køre før mergen — og
+--       ufarlig bagefter.
+--
+-- ⚠️ **Afsnittet skriver sin egen FØR-tilstand og læser den ikke af skemaet**
+-- (`G94`-reglen, `DOCUMENTATION.md` §13). Indtil 12. august 2026 gjorde det
+-- netop dét: det skrev en liga med `returning` og regnede med, at dumpet bar
+-- `#55`s brede policy. Den antagelse udløb i samme sekund `#58` blev kørt i
+-- produktion og skema-eksporten fulgte efter — testen ville være blevet rød af,
+-- at arbejdet lykkedes. Samme fælde som `competition_matches_read.sql` (`G94`)
+-- og `invite_lookup.sql` faldt i.
+--
+-- Skrivningen sker MED `returning`, fordi det er dét, `db.insert` gør
+-- (`Prefer: return=representation`) — og fordi netop den kombination af INSERT-
+-- og SELECT-policy væltede produktionen 11. august 2026 (`#55`).
+
+-- Den gamle klients oprettelse, kørt som en indlogget bruger. Svarer `ok` eller
+-- `afvist:<sqlstate>`. `into` er hele pointen: den kræver, at sætningen
+-- returnerer en række, og det er dét, der udløser SELECT-policyen på den nye.
+create function pg_temp.gammel_vej(p_uid uuid, p_navn text) returns text
+language plpgsql as $$
+declare v_id uuid;
 begin
+  begin
+    perform set_config('test.uid', p_uid::text, true);
+    perform set_config('request.jwt.claim.role', 'authenticated', true);
+    set local role authenticated;
+    execute format(
+      $q$insert into public.groups (name, created_by) values (%L, %L) returning id$q$,
+      p_navn, p_uid) into v_id;
+    insert into public.group_members (group_id, user_id, role)
+    values (v_id, p_uid, 'admin');
+    reset role;
+    return 'ok';
+  exception when others then
+    reset role;
+    return 'afvist:' || sqlstate;
+  end;
+end $$;
+
+-- 6a. FØR-tilstanden, skrevet i hånden: `#55`s policy, ordret.
+drop policy if exists groups_select_member on public.groups;
+create policy groups_select_member on public.groups
+  for select to authenticated
+  using (public.is_group_member(id) or created_by = auth.uid());
+
+do $$
+declare v_udfald text; v_n int;
+begin
+  v_udfald := pg_temp.gammel_vej('95950000-0000-4000-8000-000000000002', 'Gammel vej');
+  if v_udfald <> 'ok' then
+    raise exception '6a) den gamle vej blev brudt af migreringen (%) — så var #57 ikke sikker at køre før mergen', v_udfald;
+  end if;
+  select count(*) into v_n from public.group_members m
+    join public.groups g on g.id = m.group_id where g.name = 'Gammel vej';
+  if v_n <> 1 then raise exception '6a) den gamle vej efterlod ikke en hel liga'; end if;
+
+  -- …og den nye virker allerede i samme tilstand. Begge klienter kan altså køre
+  -- mod den, og udrulningen kan ske i ro.
+  if (pg_temp.kald('95950000-0000-4000-8000-000000000002',
+        $s$select public.create_group('Begge veje')$s$)->>'id') is null then
+    raise exception '6a) create_group() virkede ikke i mellemtilstanden';
+  end if;
+end $$;
+
+-- 6b. …og porten lukkes: `#58` (`G98`) fjerner leddet, der bar den gamle vej.
+\ir ../groups_select_member_narrow.sql
+
+do $$
+declare v_udfald text; v_n int; v_svar jsonb;
+begin
+  v_udfald := pg_temp.gammel_vej('95950000-0000-4000-8000-000000000002', 'Gammel vej efter G98');
+  if v_udfald not like 'afvist:%' then
+    raise exception '6b) den gamle klients `insert … returning` slap igennem efter #58 (%) — leddet `or created_by` er ikke væk', v_udfald;
+  end if;
+  select count(*) into v_n from public.groups where name = 'Gammel vej efter G98';
+  if v_n <> 0 then raise exception '6b) ligaen blev skrevet alligevel'; end if;
+
+  -- Den påstand er kun noget værd sammen med denne: appens egen vej skal stadig
+  -- virke, ellers har `#58` bare slukket for oprettelsen af ligaer.
+  v_svar := pg_temp.kald('95950000-0000-4000-8000-000000000002',
+              $s$select public.create_group('Efter G98')$s$);
+  if (v_svar->>'id') is null then
+    raise exception '6b) create_group() virker ikke efter #58 — så kan INGEN oprette en liga: %', v_svar;
+  end if;
+  select count(*) into v_n from public.group_members
+   where group_id = (v_svar->>'id')::uuid;
+  if v_n <> 1 then raise exception '6b) admin-rækken fulgte ikke med efter #58'; end if;
+
+  -- Og prisen, `#55` betalte, er væk: opretteren, der forlader sin egen liga,
+  -- kan ikke længere læse den. (Medlemsrækken fjernes direkte her — det er
+  -- `leaveGroup`s virkning, uden dens A8-betingelser.)
+  delete from public.group_members where group_id = (v_svar->>'id')::uuid;
   perform set_config('test.uid', '95950000-0000-4000-8000-000000000002', true);
   perform set_config('request.jwt.claim.role', 'authenticated', true);
   set local role authenticated;
-  insert into public.groups (name, created_by)
-  values ('Gammel vej', '95950000-0000-4000-8000-000000000002')
-  returning id into v_id;
-  insert into public.group_members (group_id, user_id, role)
-  values (v_id, '95950000-0000-4000-8000-000000000002', 'admin');
+  select count(*) into v_n from public.groups where id = (v_svar->>'id')::uuid;
   reset role;
-
-  select count(*) into v_n from public.group_members where group_id = v_id;
-  if v_n <> 1 then raise exception 'den gamle vej blev brudt af migreringen'; end if;
+  if v_n <> 0 then
+    raise exception '6b) en opretter uden medlemskab kan stadig læse sin liga og dens invite_code — G98 er rullet tilbage';
+  end if;
 end $$;
 
 -- ---------------------------------------------------------------------------

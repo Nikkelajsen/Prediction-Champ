@@ -57,36 +57,44 @@
 -- already exists`. Kun `groups_select_member` havde sit andet drop, og det kom
 -- til ved et tilfælde med `#55`.
 
--- Ligaen: medlemmer — **eller opretteren**.
+-- Ligaen: medlemmer. Punktum.
 --
--- ⚠️ **Her stod indtil 11. august 2026 kun `is_group_member(id)`, med
--- begrundelsen: *"Opretteren er altid medlem (`createGroup` skriver admin-rækken
--- i samme ombæring), så der er ingen grund til et `or created_by`."* Den
--- antagelse var forkert, og den brød oprettelsen af enhver liga for enhver
--- bruger, indtil `#55` rettede den.**
+-- ⚠️ **LINJEN HAR VÆRET UDE OG VENDE, OG BEGGE VENDINGER ER VÆRD AT KENDE, FØR
+-- DU RØRER DEN.** Fra 11. til 12. august 2026 stod her
+-- `or created_by = auth.uid()`, og det led var ikke pynt: uden det kunne INGEN
+-- oprette en liga.
 --
--- "I samme ombæring" er sandt om funktionen og falsk om statementet. `createGroup`
--- laver TO kald, og ligaen er det første — så når `groups`-rækken skrives, findes
--- opretterens medlemsrække ikke endnu.
+-- Den oprindelige begrundelse for det ene led var *"opretteren er altid medlem
+-- (`createGroup` skriver admin-rækken i samme ombæring), så der er ingen grund
+-- til et `or created_by`"*. Den var forkert. "I samme ombæring" er sandt om
+-- funktionen og falsk om statementet: `createGroup` lavede TO kald, og ligaen var
+-- det første — så når `groups`-rækken blev skrevet, fandtes opretterens
+-- medlemsrække ikke endnu.
 --
--- Og det gør en forskel, netop fordi klienten skriver med
+-- Og det gjorde en forskel, netop fordi klienten skriver med
 -- `Prefer: return=representation`: PostgREST kører `insert … returning *`, og en
 -- RETURNING-klausul betyder, at rækken skal LÆSES tilbage. Denne policy anvendes
 -- altså på den nyindsatte række, oven i INSERT-policyen. Svaret var
--- `new row violates row-level security policy for table "groups"`.
+-- `new row violates row-level security policy for table "groups"`. Samme fælde
+-- som den, `is_group_creator()` i #52 findes for — bare ét statement tidligere.
+-- Hele forklaringen står i `sql/groups_select_creator.sql` (#55).
 --
--- Det er den samme fælde som den, `is_group_creator()` i #52 findes for — bare
--- ét statement tidligere. Den fulde forklaring står i `sql/groups_select_creator.sql`.
+-- **Leddet er væk igen 12. august 2026 (`G98`, [#58]
+-- `sql/groups_select_member_narrow.sql`), og forudsætningen var et DEPLOY og
+-- ikke en anden migrering:** `create_group()` (#57) skriver ligaen og
+-- opretterens admin-række i ÉN transaktion som ejer, så oprettelsen ikke længere
+-- går gennem et `insert … returning`. Prisen, leddet kostede — en opretter, der
+-- har forladt sin egen liga, kunne stadig læse den og dens `invite_code` — er
+-- dermed betalt tilbage.
 --
--- **Prisen ved `or created_by`, som den gamle kommentar med rette pegede på:** en
--- opretter, der har forladt sin egen liga, kan stadig se den og dens
--- `invite_code`. Det er accepteret — afvigelsen gælder kun ligaer, man selv har
--- oprettet, og alternativet var en app, hvor ingen kan oprette en liga.
+-- 🔴 **Køres denne fil mod en produktion, hvor klienten IKKE kalder
+-- `create_group()`, brydes oprettelsen af enhver liga igen.** Det er samme
+-- rækkefølge-krav som filens eget hoved beskriver, bare på en anden linje.
 drop policy if exists groups_select_all on public.groups;
 drop policy if exists groups_select_member on public.groups;
 create policy groups_select_member on public.groups
   for select to authenticated
-  using (public.is_group_member(id) or created_by = auth.uid());
+  using (public.is_group_member(id));
 
 -- Konkurrencen: deltagere, ligaens medlemmer og opretteren.
 --

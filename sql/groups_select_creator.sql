@@ -1,6 +1,30 @@
 -- 🔴 HASTERETTELSE: ingen kunne oprette en liga (`A40`-regression).
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
 --
+-- 🛑 ===========================================================================
+-- 🛑 **OVERHALET AF `#58` (`sql/groups_select_member_narrow.sql`, `G98`,
+-- 🛑 12. august 2026) — MÅ IKKE KØRES IGEN.**
+-- 🛑
+-- 🛑 Filen tilføjer `or created_by = auth.uid()` til `groups`' SELECT-policy, og
+-- 🛑 `#58` er migreringen, der FJERNER netop det led igen. En gen-kørsel ville
+-- 🛑 derfor tavst rulle `G98` tilbage: ingen fejl, ingen advarsel — reglen ville
+-- 🛑 bare være gårsdagens, og en opretter, der har forladt sin egen liga, kunne
+-- 🛑 igen læse den og dens `invite_code`.
+-- 🛑
+-- 🛑 **Leddet var rigtigt dengang og er unødvendigt nu.** Det bar den GAMLE
+-- 🛑 klients `insert … returning`; siden `G95` (`#57`) skriver `create_group()`
+-- 🛑 ligaen og opretterens admin-række i ÉN transaktion som ejer, så ingen
+-- 🛑 SELECT-policy konsulteres under oprettelsen.
+-- 🛑
+-- 🛑 Er filen alligevel kørt, er rettelsen at køre `#58` bagefter — ikke at
+-- 🛑 gendanne noget. Filen står som forklaringen på fælden, ikke som en
+-- 🛑 migrering, der skal køres.
+-- 🛑 ===========================================================================
+--
+-- ✅ Resten af hovedet er bevaret, som det stod 11. august 2026 — det er den
+-- bedste beskrivelse af, hvorfor en `INSERT` med `RETURNING` også skal bestå
+-- SELECT-policyen, og reglen gælder uændret.
+--
 -- ✅ **SIKKER AT KØRE NÅR SOM HELST OG UAFHÆNGIGT AF ET DEPLOY.** Filen UDVIDER
 -- én SELECT-policy og rører intet andet. Der er ingen frontend-ændring at vente
 -- på — den retter produktionen i det sekund, den er kørt.
@@ -80,10 +104,13 @@ create policy groups_select_member on public.groups
   for select to authenticated
   using (public.is_group_member(id) or created_by = auth.uid());
 
--- ⚠️ **Den samme rettelse står også i `sql/invite_policies.sql` (#53).** Det er
--- ikke dobbeltarbejde: kører nogen `#53` igen uden den, ville oprettelsen af en
--- liga blive brudt igen — tavst, og med en fejl, der ikke ligner sin årsag.
--- Præcis den fælde, `sql/README.md`s "må ikke gen-køres blindt" beskriver.
+-- ⚠️ **Den samme rettelse stod indtil 12. august 2026 også i
+-- `sql/invite_policies.sql` (#53)**, så en gen-kørsel af #53 ikke tavst brød
+-- oprettelsen igen. Den er fjernet begge steder med `#58` (`G98`): #53 skriver nu
+-- igen `using (public.is_group_member(id))`, og det er den GÆLDENDE regel. De to
+-- filer er altså stadig enige — bare om det modsatte af, hvad de var enige om i
+-- ét døgn. Denne fil er den ene, der er blevet tilbage på gårsdagens side, og
+-- derfor står den i `sql/README.md`s "må ikke gen-køres blindt".
 
 -- ============================================================================
 -- Verifikation — kør efter migreringen

@@ -103,7 +103,6 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 
 | # | Hvad | Udløser |
 |---|---|---|
-| `G98` | Fjern `or created_by = auth.uid()` fra `groups`' SELECT-policy | **Når `create_group()` er udrullet og afprøvet i produktion.** Migreringen ([`#57`](../sql/create_group.sql)) er kørt 12. august 2026; tilbage står KLIENTEN, altså mergen og Vercels deploy — og en afprøvning af "Opret liga". Leddet er `#55`s hasterettelse, og det bærer den GAMLE klients `insert … returning` — fjernes det før deployet, kan ingen oprette en liga. `G95` (12. august 2026) fjernede behovet, ikke leddet. |
 | `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. |
 | `A39` | Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat? | **Når `day_card_coverage` melder en blokeret dag, nogen savnede.** `match_day_complete()` er global: én kamp uden resultat i én turnering blokerer alle dagskort, også for de konkurrencer, der intet har med turneringen at gøre. Prisen er dokumenteret som bevidst — den globale kampdag er produktets ene tvær-turneringsbegreb — men den blev betalt synligt under `A38`s undersøgelse. |
 | `B26` | E-mailbekræftelse + bot-værn (Turnstile) på signup | **Når linket deles åbent** (hjemmesiden publiceres eller invitationer går uden for det kontrollerede felt). **DELVIST KØRT 10. august 2026 og rullet tilbage — begynd med registeret i [`OPRETTELSE.md`](./OPRETTELSE.md), ikke forfra.** Tilstand: trin 1–3 ✅ (widget oprettet, `VITE_TURNSTILE_SITE_KEY` sat i Vercel **og udrullet**, widgeten tegnes på login-skærmen), Bot Protection **fra**, Confirm email **fra**. Tilbage: trin 4–8. Ét ubevist punkt spærrer trin 4 — at widgetens værtsnavn accepteres; en widget tegnes også på et forkert domæne og fejler først derefter. |
@@ -183,7 +182,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
-| G98 | **`groups`' SELECT-policy har et led, den ikke længere har brug for** — `or created_by = auth.uid()` (`#55`). | Leddet blev hasteudrullet 11. august 2026, fordi `createGroup` skrev ligaen i ét kald og sin egen medlemsrække i det næste: `db.insert` sender `Prefer: return=representation`, så PostgREST kører `insert … returning *`, og en RETURNING-klausul anvender SELECT-policyen på den nye række — hvor opretteren endnu ikke var medlem. **`G95` (12. august 2026) fjernede årsagen:** `create_group()` skriver som ejer, så ingen policy konsulteres undervejs. Prisen, leddet koster, står stadig: **en opretter, der har forladt sin egen liga, kan blive ved med at læse den og dens `invite_code`** — accepteret i `#55`s hoved og i `DOCUMENTATION.md` §13, men accepteret som en pris for noget, der nu er gratis. **Kan ikke køres sammen med `G95`:** så længe den gamle klient er i luften, er det direkte `insert … returning` den vej, en liga bliver til, og en smalning ville genskabe produktionsfejlen fra 11. august. Rækken er derfor en ventetid og ikke et stykke arbejde — den er ét `drop policy`/`create policy` og en påstand i `sql/tests/invite_lookup.sql`s 10c, som allerede måler netop den kombination. | Lille (én policy) — gated af udrulningen |
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
 
@@ -229,63 +227,31 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 12. august 2026 (tredje kørsel) — `G100`: reglen har fået en vagt mod produktionen
+### 12. august 2026 (fjerde kørsel) — `G98`: ventetiden er udløbet, og leddet er væk
 
-**Listen er 32 → 31.** Én række lukket, ingen nye åbnet — og det er værd at
-bemærke, at det er den første kørsel i tre, der ikke fandt noget nyt at skrive
-op. Fundet, den gjorde, hørte til inde i den række, den kørte.
+**Listen er 31 → 30.** Én række lukket, ingen nye åbnet. Rækken var en ventetid
+og ikke et stykke arbejde: udløseren var ejerens afprøvning af "Opret liga" i
+produktionen efter deployet, og først dér kunne den køres.
 
-**`G100` — `G96`s regel målte et dump og ikke en database.** Vagten var
-`sql/tests/anon_grants_functions.sql`s påstand om, at `anon` kan nøjagtig to
-funktioner i `public`. Den er rigtig, men den måler `sql/schema.sql`:
-migreringerne køres i hånden i SQL-editoren, og skema-eksporten er en ugentlig
-mandagskørsel, så en funktion kunne stå åben for `anon` i produktionen i op til
-en uge, uden at nogen påstand nogen steder var rød. Ny femte fil i `sql/checks/`
-— [`anon_routine_reach.sql`](../sql/checks/anon_routine_reach.sql) — stiller den
-samme regel mod den levende database, med en test og et CI-trin. **Rækken
-foreskrev en fil, en test og et CI-trin; leverancen har også et sted, der KØRER
-den:** `job-heartbeat.yml` hver halve time. Uden det trin ville rækkens egen
-problembeskrivelse stå uændret, for et CI-trin efterprøver kontrollen og ikke
-produktionen. Kontrollen logger ingen brugerdata — kun funktions- og rollenavne
-— og er dermed den ene af de fem, der kan stå i en Actions-log uden at støde
-`A32`.
+**`G98` — `groups`' SELECT-policy har ikke længere et "eller".** `#55`s
+`or created_by = auth.uid()` er fjernet med
+[`#58 groups_select_member_narrow.sql`](../sql/groups_select_member_narrow.sql),
+så reglen er `is_group_member(id)` alene: du kan se en liga, hvis du er medlem af
+den. Prisen, leddet kostede — en opretter, der havde forladt sin egen liga, kunne
+stadig læse den og dens `invite_code` — er betalt tilbage. `G95`
+(`create_group()`) fjernede årsagen 12. august; denne række fjerner leddet.
+✅ **Migreringen er kørt i staging og produktion 12. august 2026**, før mergen.
 
-**Kontrollen melder BEGGE retninger, og den anden er den, ingen ville have
-skrevet.** For meget er en rutine, en fremmed kan kalde uden login. For lidt er
-`username_available()` eller `invite_preview()` lukket for `anon` — altså
-oprettelsen af en konto eller invitationens etiket, der er død uden login. Det
-er `#56`s trin 2 og 5 byttet om, og det ville være grønt i hver eneste anden
-kontrol, vi har.
+**`#55` er blevet den tiende fil, der ikke må gen-køres** — den gør præcis det,
+`#58` fjerner — og den eneste, hvor "kør den nyere bagefter" ikke altid er
+svaret: skulle en gammel klient være i luften igen, ER den tilbagerulningen.
 
-**Fundet, rækken ikke kunne kende: `revoke … on all functions in schema public`
-dækker ikke PROCEDURER.** Hverken `from anon` eller `from public` — mens
-`alter default privileges … on functions` dækker dem begge. En procedure i
-`public` er altså åben for `anon` fra sit første sekund, og både `#56`s trin 2
-og den eksisterende tests `prokind = 'f'` er blinde for den. Efterprøvet mod
-PostgreSQL 16.13. **Der findes nul procedurer i dag, så det er ikke en fejl —
-det var et hul i vagten**, og kontrollen filtrerer derfor ikke på `prokind`: en
-kontrol, der deler migreringens blinde vinkel, kan ikke se den. Skrives den
-første procedure, siger kontrollen til, og så skal trin 2 være `all routines`.
-Det blev **ikke** en backlog-række: der er intet at bygge, før udløseren
-indtræffer, og udløseren er nu selv automatiseret. Samme afgørelse som `G99`s
-fjerde linje samme dag.
-
-**Én af tolv mutationer slap igennem testens første udgave**, og det var den
-mest lærerige: `regprocedure::text` skriver `public.` foran, når `public` ikke
-står i sessionens `search_path`, og enhver almindelig psql-session HAR den — så
-normaliseringen af signaturen kunne fjernes, uden at noget blev rødt. En session
-uden `public` i stien ville have set begge tilladte funktioner som åbne, altså
-en kontrol, der råber falsk og derfor bliver slukket. Testen har nu en påstand,
-der spørger fra en anden `search_path`. `G84`s lære, tredje gang: en test, man
-ikke har set fejle, er en formodning.
-
-**Intet skal køres i Supabase.** Kontrollen er en temporær view og installerer
-ingenting; `#56` er uændret ud over sit hoved og sin verifikationsblok, hvor
-punkt 4b nu peger på filen frem for at bære sin egen kopi af forespørgslen.
-
----
-
-*Levende dokument. Fravalgt scope for allerede leverede features står i den
-enkelte spec under "Bevidst ikke med i v1" — det er en historisk
-scope-beslutning, ikke en to-do. Bliver et af de punkter en reel kandidat, får
-det en `B`-række her.*
+**Fundet inde i rækken, og det er dens vigtigste linje:**
+`sql/tests/create_group.sql`s negative kontrol hentede en ligas id med et opslag
+i `groups` som den indloggede bruger, og det opslag bliver tomt efter `#58`. Den
+ville altså være blevet et **tavst no-op** i det sekund skema-eksporten kørte —
+grøn uden at måle noget. Tredje gang samme fælde er stillet (`G94`,
+`invite_lookup.sql`), så §13-reglen er skærpet: en test må ikke læse sin
+før-tilstand af snapshottet, heller ikke indirekte gennem et opslag, en policy
+kan lukke. Begge tests er kørt fra begge sider af dumpet sammen med de tolv andre
+skema-indlæsende — fjorten grønne i begge tilstande.
