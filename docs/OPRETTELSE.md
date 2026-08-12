@@ -4,15 +4,25 @@ Runbog for `B26`s to knapper: **Turnstile** foran login og oprettelse, og
 **e-mailbekræftelse** af nye konti. Efter [`MAIL.md`](./MAIL.md)s form —
 register, trin, beviser og en fejlfindingstabel i én fil.
 
-Klientsiden blev bygget 10. august 2026 og ligger i produktion **inert**: uden
-`VITE_TURNSTILE_SITE_KEY` findes værnet ikke, og med "Confirm email" slået fra
-opfører oprettelsen sig som altid. Denne fil er det, der mangler — og det er
-konfiguration uden for repoet, som kun kan udføres af ejeren.
+✅ **BEGGE KNAPPER ER I DRIFT SIDEN 12. AUGUST 2026.** Alle otte trin er kørt og
+alle ni beviser bestået; registeret nedenfor har ingen `?` tilbage. Runbogen
+læses derfor i dag af tre grunde: for at **rulle tilbage** (afsnittet nederst,
+én kontakt pr. halvdel), for at **stille det samme op igen** efter et rollback
+eller på et nyt domæne, og for at **slå symptomer op** i fejlfindingstabellen.
 
-> ⚠️ **`B26`s udløser er ikke sprunget.** Rækken venter på, at linket deles
-> åbent (hjemmesiden publiceres, eller invitationer går uden for vennekredsen).
-> Køres runbogen før det, er prisen et ekstra trin i onboardingen for de
-> brugere, der allerede er der. Det er et legitimt valg — men det er et valg.
+Klientsiden blev bygget 10. august 2026 og lå inert indtil da: uden
+`VITE_TURNSTILE_SITE_KEY` findes værnet ikke, og med "Confirm email" slået fra
+opfører oprettelsen sig som altid. Det er stadig sandt, og det er dét, der gør
+begge halvdele til konfiguration frem for en udrulning.
+
+> **`B26`s udløser var ikke sprunget, da runbogen blev kørt.** Rækken ventede
+> på, at linket deles åbent (hjemmesiden publiceres, eller invitationer går uden
+> for vennekredsen), og den blev kørt i forvejen efter ejerens valg 12. august
+> 2026. Prisen er et ekstra trin i onboardingen for de brugere, der allerede er
+> der. **Det, udløseren stadig hænger på, er [`A43`](./BACKLOG.md)** — et
+> bot-værn hæver prisen på en fremmed konto, men `profiles` og
+> `competition_participants` kan fortsat læses af enhver indlogget bruger, og
+> den beslutning bør tages FØR den åbne deling, ikke efter.
 
 ---
 
@@ -28,10 +38,11 @@ konfiguration uden for repoet, som kun kan udføres af ejeren.
 | Secret key (hemmelig) | Kun i Supabase → Authentication → Attack Protection | **12. august 2026 — indtastet og virksom.** Afvisningen i trin 5, punkt 4 er selve beviset: Supabase kan kun afvise, hvis den taler med Cloudflare, og nøglerne hører derfor til samme widget |
 | Bot Protection | **Slået TIL** | **12. august 2026 — alle fire kontroller i trin 5 bestået**, inklusive afvisningen af et kald uden kvittering. (Var kortvarigt slået til 10. august og lukkede adgangen for alle, fordi trin 3 var sprunget over — se "Første kørsel" nederst) |
 | Confirm email | **Slået TIL** | **12. august 2026 — bekræftet på GoTrues eget `/auth/v1/settings`:** `mailer_autoconfirm = false`. Talt op forinden: nul konti med `email_confirmed_at is null`, så ingen sad fast i forvejen. (Var kortvarigt slået til 10. august 08:04–ca. 09:43 og efterlod én ubekræftet konto, som blev bekræftet i hånden) |
-| Skabelon: Confirm signup | Emne + brødtekst fra [`mail/confirm-signup.html`](./mail/confirm-signup.html) | ? — indsat 10. august 2026, men aldrig aflæst på en modtaget mail |
+| Skabelon: Confirm signup | Emne + brødtekst fra [`mail/confirm-signup.html`](./mail/confirm-signup.html) | **12. august 2026 — aflæst på en modtaget mail** (trin 8): dansk emne, dansk brødtekst, og linket landede modtageren logget ind |
 
-**`?` betyder "aldrig kørt"**, ikke "kørt og bestået". Udfyld datoerne, når
-beviserne nedenfor er gået igennem — forskellen er hele pointen med registeret.
+**`?` betyder "aldrig kørt"**, ikke "kørt og bestået" — kolonnen har ingen `?`
+tilbage, og skulle en række nogensinde stilles op igen, er det den, der skal
+sættes til `?` frem for at arve en dato, ingen har efterprøvet.
 
 > **Status 10. august 2026:** trin 1–3 er kørt og trin 3 er bestået — nøglen er
 > udrullet, og widgeten tegnes. Begge knapper i Supabase står på **fra** efter
@@ -46,11 +57,15 @@ beviserne nedenfor er gået igennem — forskellen er hele pointen med registere
 >
 > **Og e-mailbekræftelsen er slået til samme dag.** Trin 6 og 7 er kørt,
 > `mailer_autoconfirm` står på `false`, og der blev talt nul ubekræftede konti
-> forinden. **Tilbage står alene trin 8** — de fem beviser, som kræver en rigtig
-> oprettelse mod en adresse, der kan læses. Indtil de er kørt, er `B26`
-> konfigureret, men ikke efterprøvet: den femte kontrol (brugernavnet står i
-> appen) er den eneste, der rører `sikrProfil()`, og den kan kun køres af et
-> menneske med en indbakke.
+> forinden. **Trin 8 er også kørt, og alle fem beviser bestod** — herunder det
+> femte, som er det eneste, der rører `sikrProfil()`: en rigtig konto blev
+> oprettet, bekræftet gennem mailen og landede i appen **med sit brugernavn**.
+> Det er den kontrol, hele `src/lib/data/profile.js` findes for, og den kan kun
+> køres af et menneske med en indbakke.
+>
+> **`B26` er dermed lukket.** Rækken er slettet af backloggen, og det, der
+> beskrev en verden uden de to porte, er rettet: `DOCUMENTATION.md` §12,
+> `MAIL.md`s register, og skabelonens eget hoved, der sagde "ikke i brug endnu".
 
 ---
 
@@ -257,21 +272,30 @@ Authentication → Email Templates → **Confirm signup**.
 > ubekræftet konto kommer ikke ind igen ved at slå kontakten fra, hvilket kun
 > giver mening, hvis kontakten aldrig var det, der spærrede. **Er du bekræftet i
 > dag, mærker du intet. Er du ubekræftet i dag, er du allerede låst ude.**
->
-> **Kør alligevel denne først** — ikke fordi kontakten skader dem, men så et
-> tal, du kendte i forvejen, ikke bliver til en mistanke mod kontakten i morgen:
->
-> ```sql
-> select email, created_at, last_sign_in_at, email_confirmed_at
->   from auth.users
->  where email_confirmed_at is null
->  order by created_at;
-> ```
->
-> **Nul rækker er det forventede.** Kommer der rækker, så ryd dem FØR du slår
-> til: `Resend confirmation` i ⋯-menuen under Authentication → Users er den
-> rigtige vej, og den manuelle `update` nederst i denne fil er nødløsningen med
-> den pris, der står beskrevet dér.
+
+**Tæl alligevel de ubekræftede først** — ikke fordi kontakten skader dem, men så
+et tal, du kendte i forvejen, ikke bliver til en mistanke mod kontakten i
+morgen:
+
+```sql
+select email, created_at, last_sign_in_at, email_confirmed_at
+  from auth.users
+ where email_confirmed_at is null
+ order by created_at;
+```
+
+**Nul rækker er det forventede** (aflæst 12. august 2026). Kommer der rækker, så
+ryd dem FØR du slår til: `Resend confirmation` i ⋯-menuen under Authentication →
+Users er den rigtige vej, og den manuelle `update` nederst i denne fil er
+nødløsningen med den pris, der står beskrevet dér.
+
+> 🔴 **Blokken ovenfor står med vilje UDEN for citatet.** `docs/`-mappens
+> SQL-tjek i CI kræver, at kodehegnet står ved linjestart, eventuelt med
+> almindelige mellemrum foran (`sql/tests/docs_sql.mjs`) — et `>` foran hegnet
+> falder uden for mønsteret. **En forespørgsel skrevet ind i et citat bliver
+> derfor aldrig kørt mod skemaet: den ser efterprøvet ud og er det ikke.**
+> Fundet 12. august 2026, fordi netop denne blok først blev skrevet i citatet og
+> slap igennem tjekket uden en lyd.
 
 Authentication → **Sign In / Providers** → fanen **Supabase Auth** → blokken
 **User Signups** ØVERST på siden → **Confirm email** → til → **Save changes**.

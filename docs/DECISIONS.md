@@ -15,6 +15,41 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 12. august 2026 — `B26` køres, før dens udløser springer
+
+**Beslutning:** bot-værn og e-mailbekræftelse er slået til i produktionen, selv
+om `B26`s udløser — at linket deles åbent — ikke er indtruffet. Begge halvdele
+er efterprøvet med runbogens ni beviser, og rækken er lukket.
+
+**Begrundelse.** Rækken havde ventet på udløseren siden den blev skrevet, og
+argumentet for at vente var reelt: prisen er ét ekstra trin i onboardingen, og
+den betales af de enogtyve brugere, der allerede er der, uden at nogen af dem
+får noget til gengæld. Det, der vendte afvejningen, var **10. augusts første
+kørsel**. Den viste, at rækken ikke er "to klik", men en runbog med en
+rækkefølge, der kan lukke adgangen for alle — og en runbog, der aldrig er kørt
+igennem, er ikke en plan, men en formodning. At køre den på en rolig dag med
+enogtyve kendte brugere er billigere end at køre den første gang samtidig med,
+at linket deles åbent og fremmede står i døren. **Udløseren beskyttede mod
+onboarding-friktion; den beskyttede ikke mod at stå med en uafprøvet runbog på
+det værst tænkelige tidspunkt.**
+
+**Prisen er betalt og kendt:** nye brugere skal igennem et bot-tjek og en
+bekræftelses-mail. For eksisterende brugere er der ingen ændring — bot-værnet
+kræver en kvittering, klienten allerede sender, og bekræftelsen afvises pr.
+bruger på deres eget `email_confirmed_at`, hvor nul konti stod ubekræftede.
+
+**Det, beslutningen IKKE dækker.** `A43` delte udløser med `B26` og er stadig
+åben: `profiles` og `competition_participants` kan læses af enhver indlogget
+bruger. Et bot-værn hæver prisen på en fremmed konto uden at fjerne den, så
+denne beslutning flytter ikke `A43` — den efterlader den som den sidste række,
+der venter på den åbne deling, og **den bør afgøres før, ikke efter.**
+
+**Kan revideres, hvis** onboarding-frafaldet stiger mærkbart. Begge knapper
+ruller tilbage øjeblikkeligt og uden en deploy; det ene, der ikke ruller
+tilbage, er konti oprettet i mellemtiden, som ikke nåede at bekræfte.
+
+---
+
 ## 12. august 2026 — Den indsnævrende halvdel køres, og den udvidende bliver en landmine (`G98`)
 
 **Beslutning:** `#55`s `or created_by = auth.uid()` er fjernet fra `groups`'

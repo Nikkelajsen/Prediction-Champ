@@ -131,9 +131,9 @@ ganske vist på roden, men under sin egen selector, som Microsofts to ikke hedde
 | Sender name | Leagly | 9. august 2026 |
 | Rate Limits → e-mails | `30`/time (custom SMTPs egen default; den delte service gav 2) | 9. august 2026 — aflæst |
 | Site URL | `https://prediction-champ.vercel.app` — **bestemmer linket i mailen**. Redirect URLs: `…/*` | 9. august 2026 |
-| Confirm email | **Slået fra** indtil `B26` | 9. august 2026 |
+| Confirm email | **Slået TIL** (`B26`, hele runbogen kørt) | 12. august 2026 — aflæst på GoTrues `/auth/v1/settings`: `mailer_autoconfirm = false` |
 | Skabelon: Reset Password | Emne + brødtekst fra [`mail/recovery.html`](./mail/recovery.html) | 9. august 2026 — **begge dele indsat** |
-| Skabelon: Confirm signup | Emne + brødtekst fra [`mail/confirm-signup.html`](./mail/confirm-signup.html) | ? — ikke bekræftet indsat. Den bruges først ved `B26`, så den kan ikke aflæses på en modtaget mail endnu |
+| Skabelon: Confirm signup | Emne + brødtekst fra [`mail/confirm-signup.html`](./mail/confirm-signup.html) | **12. august 2026 — begge dele aflæst på en modtaget mail** under `B26`s trin 8: dansk emne, dansk brødtekst, og linket landede modtageren logget ind |
 
 > ⚠️ **En skabelon kan være HALVT installeret, og det er ikke synligt i Supabase.**
 > Emne og brødtekst er to felter, og den første leverede mail havde kun det ene
@@ -422,11 +422,13 @@ kun kan lære af at blive fulgt.
   ret SMTP-indstillingerne, og **slet linjen om Resend i `src/lib/legal.js`** i
   samme ombæring. En databehandler, der står i politikken uden at findes, er
   samme slags fejl som en, der findes uden at stå der.
-- **Slås "Confirm email" til (`B26`):** skabelonen ligger klar, appen tager imod
-  linket og skriver brugernavnet på plads bagefter (10. august 2026), og
-  `DOCUMENTATION.md` §12's linje om, at "alle kan oprette konti uden
-  godkendelse", holder op med at være sand. **Slås Bot Protection til i samme
-  ombæring, skal `VITE_TURNSTILE_SITE_KEY` sættes i Vercel FØRST** — gøres det
-  i den omvendte rækkefølge, afviser GoTrue også login og glemt-adgangskode for
-  alle eksisterende brugere, og runbogens kontrol 3 herover holder op med at
-  kunne gennemføres.
+- ~~**Slås "Confirm email" til (`B26`)**~~ — **det er sket 12. august 2026**, og
+  begge halvdele af `B26` er i drift: bekræftelsen og Turnstile foran signup,
+  login og nulstilling. `DOCUMENTATION.md` §12's linje om, at "alle kan oprette
+  konti uden godkendelse", er dermed holdt op med at være sand og er skrevet om.
+  Punktet bliver stående som det, der nu gælder den anden vej: **slås
+  bekræftelsen nogensinde FRA igen, skal §12 rettes tilbage i samme ombæring.**
+  Rækkefølgen mellem `VITE_TURNSTILE_SITE_KEY` og Bot Protection er stadig
+  ufravigelig, hvis værnet skal slås til igen efter et rollback — den omvendte
+  afviser login og glemt-adgangskode for alle eksisterende brugere. Register og
+  beviser: [`OPRETTELSE.md`](./OPRETTELSE.md).
