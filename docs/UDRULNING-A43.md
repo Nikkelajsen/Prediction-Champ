@@ -13,10 +13,10 @@ hvor du var.
 | Trin | Hvad | Tilstand |
 |---|---|---|
 | 1 | `sql/read_scope_functions.sql` (#59) kørt i **staging** | ✅ 12. august 2026 |
-| 2 | Staging afprøvet med den GAMLE klient: intet er gået i stykker | ⬜ (sprunget over — trin 1 og 3 blev kørt i træk) |
+| 2 | Staging afprøvet med den GAMLE klient: intet er gået i stykker | ✅ 12. august 2026 |
 | 3 | `sql/read_scope_narrow.sql` (#60) kørt i **staging** | ✅ 12. august 2026 |
-| 4 | Staging afprøvet med den NYE klient — de syv skærme nedenfor | ⬜ |
-| 5 | 📈 **Prisen målt i staging:** liga-siden med rigtige tal | ⬜ |
+| 4 | Staging afprøvet med den NYE klient — de syv skærme nedenfor | ✅ 12. august 2026 |
+| 5 | 📈 **Prisen målt i staging:** liga-siden med rigtige tal | ⬜ ← **her er vi** |
 | 6 | `sql/read_scope_functions.sql` (#59) kørt i **produktion** | ⬜ |
 | 7 | PR merget, Vercel-deploy færdig | ⬜ |
 | 8 | Produktionen afprøvet: login, Rating, en konkurrence, navneskift | ⬜ |
@@ -218,9 +218,29 @@ måler den — den gamle klients brede opslag skal stadig virke efter `#59`.
    Efterprøvet mod PostgreSQL 16.13: planen inde i transaktionen er den samme
    som før migreringen, og begge policies står uændrede bagefter.
 
-   Er forskellen mærkbar på en rigtig liga, er svaret **ikke** at rulle policyen
-   tilbage, men at lade `loadGroupDetail` hente deltagerantallet ét sted fra —
-   linjen står i backloggens indbakke.
+   **Kør hver blok to-tre gange og brug den SIDSTE `Execution Time`.** Første
+   kørsel bærer plan- og katalog-opvarmning, som ikke er policyens pris — den
+   ville gøre et hvilket som helst tal for højt, og altid i den retning, der
+   ville få os til at rulle tilbage.
+
+   **Sådan læses de to tal, og det er ikke en ratio.** En tredobling af 0,4 ms
+   er ingenting; 60 ms er noget. Det, der tæller, er den TILFØJEDE tid i
+   millisekunder på en rigtig liga, holdt op mod, at ét REST-kald til Supabase i
+   forvejen koster 30–100 ms i netværk:
+
+   | Tilføjet tid | Dom | Gør |
+   |---|---|---|
+   | under ~5 ms | usynlig bag netværket | intet — skriv tallet i registeret og gå videre |
+   | ~5–50 ms | mærkbar, ikke kritisk | skriv tallet, og hæv indbakke-linjen til en `G`-række |
+   | over ~50 ms | for dyrt til den varme sti | byg deltagerantals-opslaget, FØR trin 9 |
+
+   Er forskellen for stor, er svaret **ikke** at rulle policyen tilbage, men at
+   lade `loadGroupDetail` hente deltagerantallet ét sted fra — ét
+   `select competition_id, count(*) … group by` frem for hele listen. Linjen
+   står i backloggens indbakke.
+
+   **Skriv begge tal ind i registeret øverst**, ikke bare et ✅. Et tal kan
+   efterprøves af den næste, der skal beslutte noget; et flueben kan ikke.
 
 ### Produktion (trin 6–10)
 
