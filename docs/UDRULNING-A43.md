@@ -138,16 +138,35 @@ måler den — den gamle klients brede opslag skal stadig virke efter `#59`.
      select set_config('request.jwt.claim.role', 'authenticated', true);
      set local role authenticated;
 
+     -- Kvitteringen: uden den er resten et tal, der ser rigtigt ud.
+     select current_user::text as rolle,
+            current_setting('request.jwt.claim.sub', true) as bruger;
+
      explain analyze
      select competition_id from public.competition_participants
       where competition_id in (select id from public.competitions where group_id = '<GRUPPE-ID>');
    rollback;
    ```
 
-   **Sådan ser du, at impersoneringen virkede:** planen skal indeholde linjen
-   `Filter: ((user_id = …) OR is_competition_visible(competition_id))`. Står den
-   ikke der, kørte du som `postgres`, og `Execution Time` er baseline og ikke
-   prisen. Efterprøvet mod PostgreSQL 16.13 med Supabases egen `auth.uid()`.
+   🔴 **Sådan ser du, at impersoneringen virkede:** den lille `select` skal svare
+   `authenticated` og dit bruger-id. Svarer den `postgres`, gælder RLS ikke, og
+   `Execution Time` er baseline frem for prisen.
+
+   **Kvitteringen er bevidst et `current_user`-opslag og ikke en linje i planen.**
+   Første udgave af trinnet bad om at genkende
+   `Filter: (… OR is_competition_visible(competition_id))` — men den linje findes
+   kun EFTER `#60`, så kontrollen ville have meldt "impersoneringen virkede ikke"
+   på FØR-målingen, hvor alt var i orden. Samme fejlklasse som `B26`s runbog
+   faldt i tre gange: forkert på formen, ikke på indholdet. `current_user` er
+   sandt i begge tilstande.
+
+   *(Og den må ikke skrives som `select auth.uid()`: det kræver USAGE på skemaet
+   `auth`, som Supabase giver `authenticated`, men en lokal kopi af skemaet ikke
+   nødvendigvis gør — så kvitteringen ville fejle netop dér, hvor man prøver den
+   af. `current_setting` læser den samme værdi uden at røre skemaet.)*
+
+   Efterprøvet mod PostgreSQL 16.13 med Supabases egen `auth.uid()`, i BEGGE
+   tilstande.
 
    **Den bedste sammenligning er før/efter og ikke bruger/ejer**, og staging går
    gennem begge tilstande af sig selv: kør den samme blok i **trin 2** (hvor
