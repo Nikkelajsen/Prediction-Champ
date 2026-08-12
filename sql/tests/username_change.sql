@@ -104,6 +104,29 @@ end $$;
 -- En påstand om en lukket dør er kun værd at have, hvis man har set den stå
 -- åben. Begge kontroller ruller sig selv tilbage bagefter, så fixturen er den
 -- samme, når migreringen køres.
+--
+-- ⚠️ **TESTEN EJER SIN EGEN FØR-TILSTAND (G94-reglen, DOCUMENTATION.md §13).**
+-- Rettighedshullet nedenfor hviler på `grant all on profiles to authenticated`,
+-- altså tilstanden FØR `#51` smalnede den til to kolonner. Den stod i
+-- `sql/schema.sql` — indtil migreringen blev kørt i produktion og skema-
+-- eksporten kørte bagefter (12. august 2026), hvorefter dumpet bar den
+-- SMALNEDE grant, og kontrollen fejlede med `42501`. Altså en test, der blev
+-- rød af, at arbejdet lykkedes.
+--
+-- Grant'en sættes derfor eksplicit her frem for at blive læst af skemaet.
+-- Migreringen under test smalner den igen få linjer længere nede, så påstand 8
+-- måler stadig præcis det, den altid har målt.
+grant all on public.profiles to authenticated;
+--
+-- Og trim-hullet (b) hviler på, at der IKKE er en trigger, der trimmer navnet
+-- ved skrivning. `profiles_name_guard` er `#51`s egen, og den kom med i dumpet
+-- ved samme eksport. Uden dette drop bliver "Anna " trimmet til "Anna" på vej
+-- ind og kolliderer med den eksisterende række — altså et hul, der ikke kan
+-- genskabes, fordi det allerede er lukket.
+--
+-- Migreringen under test opretter triggeren igen få linjer længere nede, så
+-- påstandene om den måler stadig det, de altid har målt.
+drop trigger if exists profiles_name_guard on public.profiles;
 
 do $$
 declare v_state text;
