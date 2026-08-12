@@ -27,11 +27,13 @@
 --      tautologien stod tilbage under et andet navn — og fordi RLS er et OR
 --      mellem permissive policies, ville den gamle så stadig gælde, uden at
 --      nogen kunne se det på den nye.
---   2. Reglen er ordret nabolagets. `competitions`,
---      `competition_participants`, `matches`, `leagues` og `seasons` har alle
---      `auth.role() = 'authenticated'`, og pointen med rettelsen var netop at
---      gøre de seks ens. Påstanden sammenligner dem derfor med hinanden frem
---      for med en streng, testen selv har skrevet.
+--   2. Reglen er ordret nabolagets. `competition_participants`, `matches`,
+--      `leagues` og `seasons` har alle `auth.role() = 'authenticated'`, og
+--      pointen med rettelsen var netop at gøre dem ens. Påstanden sammenligner
+--      dem derfor med hinanden frem for med en streng, testen selv har skrevet.
+--      *(`competitions` stod på listen indtil 12. august 2026 og er taget ud:
+--      `A40` smalnede den med vilje, så den ikke længere ER en nabo med samme
+--      regel. Se begrundelsen ved selve påstanden.)*
 --   3. **Regressionen:** en bruger UDEN en eneste deltagelse ser nu ligaens
 --      kampe og dens `competition_status`. Det var symptomet — den netop
 --      inviterede så hver konkurrence som "0 kampe" — og påstanden er skrevet
@@ -192,7 +194,16 @@ begin
     into v_afvigere
     from pg_policies
    where cmd = 'SELECT'
-     and tablename in ('competitions', 'competition_participants', 'matches', 'leagues', 'seasons')
+     -- `competitions` stod her indtil 12. august 2026 og er taget UD med vilje:
+     -- `A40` smalnede dens læsepolicy til deltagere, ligamedlemmer og opretteren
+     -- (`competitions_select_involved`), fordi `invite_code` ellers kunne høstes
+     -- af enhver indlogget bruger. Den er altså ikke længere en nabo med samme
+     -- regel — og det er et bevidst valg, ikke en afvigelse at melde.
+     --
+     -- Påstanden fandt det selv, da skema-eksporten kørte efter `A40`; indtil da
+     -- bar dumpet den gamle, ensartede regel. Fjernes en tabel herfra igen, skal
+     -- grunden stå ved siden af som her.
+     and tablename in ('competition_participants', 'matches', 'leagues', 'seasons')
      and coalesce(qual, '') is distinct from coalesce(v_regel, '');
   if v_afvigere is not null then
     raise exception '2) reglen skal være den samme som naboernes — disse afviger nu: %', v_afvigere;

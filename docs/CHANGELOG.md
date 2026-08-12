@@ -9,6 +9,16 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+12. august 2026 — Skema-eksporten kørt: to tests mere lånte deres før-tilstand af dumpet
+**Eksporten er kørt, og `sql/schema.sql` er sand igen** — den bærer nu `A40`, `I7` og hasterettelsen. Det var det sidste punkt efter `I7`.
+**Men sweepet før den var for snævert.** Jeg havde ledt efter tests, der afhang af de fire `A40`-policy-navne, og fandt kun `invite_lookup.sql`. Eksporten bragte imidlertid ALT det med, der var kørt i produktionen siden sidste eksport 10. august kl. 10:40 — også `#50` og `#51`. To tests mere faldt i den samme fælde:
+**`username_change.sql` havde TO før-tilstande, ikke én.** Rettighedshullet hviler på `grant all on profiles to authenticated` (før `#51` smalnede den til to kolonner), og trim-hullet hviler på, at der IKKE er en trigger, der trimmer navnet ved skrivning. Begge kom med i dumpet. Første rettelse satte kun grant'en tilbage, og testen fejlede så ét hul længere fremme på `duplicate key value violates unique constraint` — fordi `profiles_name_guard` trimmede "Anna " til "Anna" på vej ind. Begge sættes nu eksplicit.
+**`competition_matches_read.sql` var en anden slags:** dens påstand 2 måler, at læsepolicyen er ordret nabolagets, og `competitions` stod på nabo-listen. `A40` gjorde den med vilje anderledes, så påstanden var simpelthen forældet — ikke en fejl at rette, men en liste at opdatere, med grunden ved siden af.
+**`security_hardening.sql` fejlede i min egen afprøvning og var en blindgyde:** den bygger sit eget minischema og indlæser slet ikke dumpet. Værd at have skrevet ned, fordi symptomet lignede de to andre til forveksling — CI's egen opskrift er den eneste kilde til, hvilke tests der overhovedet kan rammes.
+**Beviset er nu ført mod det RIGTIGE dump, ikke mod en simulering:** alle tolv tests, der indlæser `sql/schema.sql`, er kørt mod den nyeksporterede udgave og er grønne. Det var i øvrigt nødvendigt at gøre i hånden — GitHub udløser ikke workflows for pushes lavet med `GITHUB_TOKEN`, så eksportens egen commit fik ingen CI-kørsel.
+
+---
+
 12. august 2026 — Skema-eksporten ville have brækket CI: to fælder med den samme rod
 **Sidste punkt efter `I7` var at køre skema-eksporten, så `sql/schema.sql` igen er sand — dumpet er stadig fra før `A40`. Det viste sig at være det, der udløste to fejl, som begge lå og ventede.**
 **1) `#53` var ikke idempotent, selvom både dens eget hoved og filindekset kaldte den det.** Mønstret `drop policy if exists <gammelt navn>; create policy <nyt navn>` virker kun FØRSTE gang: anden kørsel dropper et navn, der er væk, og opretter et, der findes. Tre af de fire policies i `sql/invite_policies.sql` havde det mønster — den fjerde slap kun, fordi `#55` i går tilfældigvis havde tilføjet dens andet drop. Efterprøvet mod produktionens tilstand: `ERROR: policy "competitions_select_involved" for table "competitions" already exists`. Ejeren kunne altså ikke gen-køre migreringen, selvom registeret sagde, hun kunne.
