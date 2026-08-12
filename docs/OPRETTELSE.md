@@ -21,7 +21,7 @@ konfiguration uden for repoet, som kun kan udføres af ejeren.
 | Hvad | Værdi | Sidst verificeret |
 |---|---|---|
 | Turnstile-widget | Cloudflare → Turnstile. Navn: `Leagly` | 10. august 2026 — oprettet |
-| Værtsnavne på widgeten | `prediction-champ.vercel.app` | ? — widgeten TEGNES på login, men det beviser ikke, at værtsnavnet accepteres. **Aflæses på trin 3, punkt 4:** forsvinder "Bekræfter, at du ikke er en robot …", er kvitteringen udstedt |
+| Værtsnavne på widgeten | `prediction-champ.vercel.app` | **12. august 2026 — BEVIST.** Widgeten viser "Succes!" på produktionens login-skærm, og `window.turnstile.getResponse()` returnerede en token. Værtsnavnet accepteres altså, og ikke bare "widgeten tegnes" |
 | Widget-tilstand | Managed | ? |
 | Site key (offentlig) | `VITE_TURNSTILE_SITE_KEY` i Vercel | **10. august 2026 — sat OG udrullet.** Aflæst på, at widgeten tegnes på login-skærmen; komponenten returnerer `null` uden nøgle, så der er ingen mellemtilstand |
 | Site key i **Preview** | **Bevidst ikke sat** — preview kører mod staging (`B18`), som ikke har Bot Protection | 10. august 2026 |
@@ -38,10 +38,11 @@ beviserne nedenfor er gået igennem — forskellen er hele pointen med registere
 > et rollback. Næste skridt er trin 4, som nu er den knap, den skulle have været
 > hele tiden: en, der kan trykkes tilbage.
 >
-> *(12. august 2026: trin 3 har fået et punkt 4 — kontrollen af, at værtsnavnet
-> accepteres. Den var det ene ubeviste punkt foran trin 4, og den kan aflæses på
-> login-skærmen uden at røre Supabase. **Kør trin 3 om med det punkt, før du
-> trykker på trin 4** — de fire, der blev kørt 10. august, indeholdt den ikke.)*
+> **Status 12. august 2026:** trin 3 har fået et punkt 4 — kontrollen af, at
+> værtsnavnet accepteres — og **den er kørt og bestået.** `getResponse()` gav en
+> token på produktionens login-skærm. Det var det ene ubeviste punkt foran trin
+> 4, og **trin 4 er hermed ikke længere spærret af noget ukendt.** Alt fra trin 4
+> og frem er stadig ejerens klik i Supabase; intet af det kan køres fra repoet.
 
 ---
 
@@ -122,24 +123,31 @@ GoTrue ignorerer kvitteringen — intet kan gå i stykker endnu.
 2. Åbn `https://prediction-champ.vercel.app` og log **ud**.
 3. **Se widgeten stå på login-skærmen.** Gør den ikke det, er nøglen ikke med i
    buildet — gå ikke videre.
-4. **Se sætningen "Bekræfter, at du ikke er en robot …" FORSVINDE** under
-   widgeten, et sekund eller to efter den er tegnet. **Dette er kontrollen af
-   værtsnavnet, og den er den eneste af de fem, der efterprøver, at Cloudflare
-   rent faktisk udsteder en kvittering.** En widget tegnes nemlig også på et
-   domæne, der ikke står på listen — den fejler først bagefter, og punkt 3
-   alene beviser derfor kun, at nøglen er i buildet.
+4. **Se widgeten sige "Succes!", og bekræft med én linje i konsollen.** Dette er
+   kontrollen af VÆRTSNAVNET, og den er den eneste af de fem, der efterprøver,
+   at Cloudflare rent faktisk udsteder en kvittering. En widget tegnes nemlig
+   også på et domæne, der ikke står på listen — den fejler først bagefter, og
+   punkt 3 alene beviser derfor kun, at nøglen er i buildet.
 
-   Sætningen står i `TurnstileVenter` og vises, så længe `captchaToken` er tom
-   (`src/screens/Auth.jsx`, `vises={turnstileAktiv() && !captchaToken}`). Løses
-   udfordringen, kommer kvitteringen ind gennem `callback`, og linjen går væk.
-   Afvises værtsnavnet, rammer `error-callback` i stedet, tokenen sættes til
-   `""`, og **linjen bliver stående** — samme udfald som et blokeret script, så
-   en linje, der bliver, siger "ingen kvittering" uden at sige hvorfor. Kig i
-   browserkonsollen efter Cloudflares kode: `110200` er "domain not allowed".
+   ```js
+   window.turnstile.getResponse()
+   ```
 
-   Bliver linjen væk, er værtsnavnet accepteret. Det er den ene forudsætning,
-   trin 4 mangler — og den kan afprøves gratis her, med Bot Protection stadig
-   slået fra.
+   | Svar | Betyder |
+   |---|---|
+   | En lang streng (`0.hNrjF7RVn7DRsDo7kMtS6G…`) | Kvitteringen er udstedt, værtsnavnet er accepteret |
+   | `""` eller `undefined` | Ingen kvittering. Kig efter Cloudflares kode i konsollen — `110200` er "domain not allowed" (trin 1, punkt 3); ellers er scriptet blokeret af en annonceblokering |
+
+   > **Widgeten forsvinder IKKE, når den er løst** — den bliver stående med et
+   > grønt "Succes!", og det er den readable kvittering. Det, der forsvinder, er
+   > den grå linje "Bekræfter, at du ikke er en robot …" UNDER widgeten
+   > (`TurnstileVenter`, vist så længe `captchaToken` er tom). I Managed-tilstand
+   > løses udfordringen på ca. et sekund, så linjen når sjældent at blive set —
+   > **dens fravær er derfor et dårligt bevis, og `getResponse()` et godt et.**
+   >
+   > *(Rettet 12. august 2026. Punktet bad oprindeligt om at "se sætningen
+   > forsvinde", og første læser aflæste det på widget-boksen, der blev stående,
+   > og konkluderede at kontrollen fejlede — mens tokenen var udstedt.)*
 5. **Log ind igen. Det skal virke.** Gør det ikke, er noget galt med selve
    udrulningen, og du har stadig ingen låst dør.
 
