@@ -9,6 +9,18 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+12. august 2026 — Link-previewet virkede aldrig: en rewrite på en sti, hvor der ligger en fil, er død
+**Ejeren kunne ikke verificere det dynamiske link-preview, og årsagen var, at `api/invite-preview.js` ALDRIG blev kaldt i produktion.** Funktionen, `invite_preview()` og miljøvariablerne var alle rigtige. Det var portvagten, der ikke fandtes.
+**`rewrites` i `vercel.json` ligger EFTER filsystem-opslaget** (Vercels `afterFiles`-fase). `I7`s regel stod på `source: "/"`, og der ligger en fysisk `index.html` på præcis den sti — så filen vandt hver eneste gang, uanset `has`-betingelserne på query og User-Agent. Reglen kunne ikke fyre.
+**Det er også grunden til, at et SPA's sædvanlige `"/(.*)" → /index.html` virker fint:** dér findes filen netop ikke, så rewriten er den første, der kan svare. Den asymmetri er hele fælden.
+**Symptomet var tavshed.** Ingen fejl, ingen log, intet 404 — bare den almindelige side. Konfigurationen var syntaktisk gyldig, så deployet sagde intet; CI kører ikke Vercels router, så den sagde heller intet. Fejlen kunne kun findes ved at sammenligne curl-svarets INDHOLD med kildekoden. Min egen advarsel i spec'en pegede det forkerte sted hen: jeg havde noteret, at `has.value` er en Rust-regex og skulle afprøves — men reglen blev aldrig nået, så regexen var ligegyldig.
+**Logikken bor nu i Routing Middleware** (`middleware.js` i roden), som kører før filsystemet og derfor kan overtage `/`. **Reglerne er ordret de samme** — der skal stadig både være en invitationskode og en crawler-agent, Googlebot står stadig ikke på listen, og `api/invite-preview.js` er urørt. Kun stedet er flyttet.
+**Tre ting kom til ud over selve flytningen.** `try/catch` med `return next()`, fordi middlewaren kører på appens FORSIDE: en undtagelse dér ville give 500 til alle, også dem uden en invitationskode, og gøre et manglende preview til et nedbrud af indgangen. En eslint-blok, fordi en rod-`middleware.js` ellers falder tilbage på recommended uden globals og stopper CI på `no-undef`. Og `middleware.test.js`, fordi porten nu er JavaScript og dermed kan efterprøves — den påstand, `I7` hviler på ("et menneske kan pr. konstruktion ikke ende i funktionen"), var indtil nu konfiguration og kunne ikke testes. Efterprøvet med en mutation: fjernes crawler-betingelsen, fejler tre påstande.
+**Prisen er én edge-invokation pr. forside-visning.** `matcher: "/"` er så smalt, det kan blive — assets og `/api/*` rammes ikke — men matcheren kan hverken se query eller User-Agent, og det er netop dét, der kræver kode. Alternativet, at flytte invitationen til en sti uden en fil (`/i?liga=`), ville have holdt `/` statisk, men ændret selve linket og efterladt hvert allerede delt `?liga=`-link uden preview for altid.
+**Den generelle regel står i `DOCUMENTATION.md` §13:** en omskrivning, der afhænger af noget, kun kode kan se — en header, en cookie, en query-kombination — hører ikke hjemme i konfigurationen. Og en konfiguration, der fejler ved at TIE, skal efterprøves med et rigtigt kald mod et preview-deploy, ikke ved at blive læst.
+
+---
+
 12. august 2026 — Skema-eksporten kørt: to tests mere lånte deres før-tilstand af dumpet
 **Eksporten er kørt, og `sql/schema.sql` er sand igen** — den bærer nu `A40`, `I7` og hasterettelsen. Det var det sidste punkt efter `I7`.
 **Men sweepet før den var for snævert.** Jeg havde ledt efter tests, der afhang af de fire `A40`-policy-navne, og fandt kun `invite_lookup.sql`. Eksporten bragte imidlertid ALT det med, der var kørt i produktionen siden sidste eksport 10. august kl. 10:40 — også `#50` og `#51`. To tests mere faldt i den samme fælde:

@@ -59,8 +59,11 @@ kode?"), så dens længde er et brugsvalg og ikke en sikkerhedsknap.
 
 ## 11. august 2026 — Kun crawlere får det dynamiske link-preview
 
-**Beslutning:** omskrivningen i `vercel.json` kræver BÅDE en invitationskode i
-adressen og en `user-agent`, der matcher en liste over sociale crawlere. Alle
+**Beslutning:** omskrivningen kræver BÅDE en invitationskode i adressen og en
+`user-agent`, der matcher en liste over sociale crawlere. *(Rettelse 12. august
+2026: den lå først i `vercel.json`s `rewrites` og virkede aldrig — de ligger
+efter filsystem-opslaget, og `/` er en fil. Den bor nu i `middleware.js`, som
+kører før. Selve beslutningen — at kun crawlere omskrives — står uændret.)* Alle
 andre — inklusive Googlebot — får den uændrede statiske app.
 
 **Fordi alternativet gør en fejl i previewet til en fejl i invitationen.** Lod vi

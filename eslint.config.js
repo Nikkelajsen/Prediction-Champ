@@ -68,6 +68,30 @@ export default [
     },
   },
 
+  // Routing Middleware (`I7`) kører på Vercels EDGE-runtime, som hverken er
+  // browseren eller Node: der er ingen `window` og intet `process`, men de
+  // web-standarder, en fetch-handler har — `URL`, `Request`, `Response`,
+  // `Headers`. Uden denne blok falder filen tilbage på recommended UDEN
+  // globals, og `no-undef` stopper CI på `URL`.
+  //
+  // Ligger i roden og ikke i en mappe, fordi det er dér — og kun dér — Vercel
+  // leder efter den.
+  {
+    files: ["middleware.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: {
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        Request: "readonly",
+        Response: "readonly",
+        Headers: "readonly",
+        fetch: "readonly",
+      },
+    },
+  },
+
   // Service workeren har hverken window eller Node — sit eget globale miljø.
   {
     files: ["public/sw.js"],
@@ -82,7 +106,10 @@ export default [
   // som CI kører med `node` uden om både Vite og npm — og værktøjerne i
   // `scripts/`, der køres i hånden (fx OG-billedet, I7). Alle er Node.
   {
-    files: ["*.config.js", "sql/tests/*.mjs", "scripts/*.mjs"],
+    // `middleware.test.js` hører til her og ikke i edge-blokken nedenfor:
+    // selve middlewaren kører på edge, men TESTEN af den kører i Node under
+    // Vitest — den mocker `@vercel/functions` væk og rører aldrig en runtime.
+    files: ["*.config.js", "sql/tests/*.mjs", "scripts/*.mjs", "middleware.test.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
