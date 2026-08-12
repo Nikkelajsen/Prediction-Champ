@@ -467,3 +467,98 @@ jobs:
             exit 1
           fi
           echo "Ratingen passer til de data, den er udledt af."
+
+      # ---- 5. Kan `anon` nå noget i public, den ikke skal? (G100) ----
+      #
+      # Den femte kontrol, og den eneste, der spørger om en RETTIGHED frem for
+      # om data. `G96` (12. august 2026) lukkede `anon` ude af alle funktioner i
+      # `public` og efterlod en regel, databasen ikke kan håndhæve selv: PUBLIC
+      # får EXECUTE på hver ny funktion fra PostgreSQLs indbyggede default, og
+      # den kan ikke fjernes ved kilden. Hver ny funktion skal derfor selv bære
+      # sin `revoke execute … from public`.
+      #
+      # VAGTEN OVER DEN REGEL LÅ INDTIL NU KUN I CI — og CI måler
+      # sql/schema.sql, altså et øjebliksbillede. Migreringerne køres i hånden i
+      # SQL-editoren, og eksporten er en ugentlig mandagskørsel plus en manuel
+      # knap, så en funktion kunne stå åben for `anon` i produktionen i op til en
+      # uge, uden at nogen påstand nogen steder var rød. Det er hele `G100`, og
+      # det er DETTE trin, der lukker det: reglen stilles mod den levende
+      # database hver halve time i stedet for mod et dump en gang om ugen.
+      #
+      # DEN LOGGER INGEN BRUGERDATA. Udlæsningen er funktionsnavne og rollenavne
+      # — ingen rækker fra en eneste tabel, intet pseudonym, ingen liga. Det er
+      # den egenskab, der gør netop denne kontrol egnet til en Actions-log, hvor
+      # league_admin_coverage (som skriver liganavne) hører til hos ejeren.
+      #
+      # Forespørgslen bor i sql/checks/ og ikke i en heredoc, af samme grund som
+      # de to ovenfor: CI kører præcis den samme regel mod en tom database
+      # (sql/tests/anon_routine_reach.sql), så reglen kun findes ét sted.
+      #
+      # Trinnet ligger sidst efter samme regel som de andre: et fejlende trin
+      # springer resten af jobbet over, og et tavst job er den dyrere fejl.
+      - name: Tjek at anon kun kan nå de to tilladte funktioner
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::error::Secret SUPABASE_DB_URL mangler. Tilføj den under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+          # `-q`, så `CREATE VIEW` ikke havner i rapporten. `-f` og `-c` deler
+          # session, så den temporære view findes, når der læses fra den — og
+          # forsvinder, når psql lukker. Der installeres intet i produktionen.
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -q -At -F'|' \
+            -f sql/checks/anon_routine_reach.sql \
+            -c "select rutine, slags, egen_grant, via_public, tilstand
+                  from anon_routine_reach
+                 order by (tilstand <> 'ok') desc, rutine" > anon.txt
+
+          # Viewet kan ALDRIG svare tomt: de to tilladte rutiner giver hver sin
+          # række, uanset om de findes, er åbne eller er lukkede. Nul rækker
+          # betyder derfor, at kontrollen selv er i stykker — og en kontrol, der
+          # er i stykker, må ikke se ud som en, der ikke fandt noget.
+          if [ ! -s anon.txt ]; then
+            echo "::error::Kontrollen svarede tomt. Det kan den ikke gøre, når den virker — se sql/checks/anon_routine_reach.sql."
+            exit 1
+          fi
+
+          echo "Rutine | Slags | Egen grant | Via PUBLIC | Tilstand"
+          echo "--------------------------------------------------"
+          fail=0
+          while IFS='|' read -r rutine slags egen via tilstand; do
+            [ -z "$rutine" ] && continue
+            printf '%-34s %-16s %-12s %-12s %s\n' "$rutine" "$slags" "$egen" "$via" "$tilstand"
+            case "$tilstand" in
+              ok) ;;
+              # For meget. De to forklaringskolonner peger på hver sin rettelse.
+              "AABEN FOR ANON")
+                if [ "$via" = "t" ]; then
+                  echo "::error::$rutine ($slags) er åben for anon gennem PUBLIC — dens migrering glemte sin 'revoke execute on $slags … from public'. Skriv linjen, og kør migreringen igen."
+                else
+                  echo "::error::$rutine ($slags) har sin EGEN anon-grant. Enten er der skrevet et 'grant … to anon', eller #56s trin 3 er rullet tilbage. Se sql/anon_grants_functions.sql."
+                fi
+                fail=1
+                ;;
+              # For lidt — og det rammer appen med det samme.
+              "LUKKET FOR ANON")
+                echo "::error::$rutine er LUKKET for anon. Det er oprettelsen af en konto eller invitationens etiket, der ikke virker uden login. Kør trin 5 i sql/anon_grants_functions.sql."
+                fail=1
+                ;;
+              "FINDES IKKE")
+                echo "::error::$rutine findes slet ikke i public. En migrering er sprunget over — se #3 (username_available) og #54 (invite_preview) i sql/README.md."
+                fail=1
+                ;;
+              *)
+                echo "::error::$rutine: ukendt tilstand '$tilstand'."
+                fail=1
+                ;;
+            esac
+          done < anon.txt
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::anons rækkevidde i public er ikke de to tilladte funktioner — se sql/checks/anon_routine_reach.sql."
+            exit 1
+          fi
+          echo "anon kan nøjagtig de to tilladte funktioner."

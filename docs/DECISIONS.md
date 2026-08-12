@@ -15,6 +15,57 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 12. august 2026 — `G96`s regel måles mod produktionen og ikke mod dumpet (`G100`)
+
+**Beslutning:** reglen fra `G96` — hver ny funktion i `public` skal selv bære sin
+`revoke execute … from public` — får en kontrol i `sql/checks/`
+([`anon_routine_reach.sql`](../sql/checks/anon_routine_reach.sql)) med en test og
+et CI-trin, **og den køres af `job-heartbeat.yml` mod produktion hver halve
+time.**
+
+**Fordi en vagt, der måler et øjebliksbillede, ikke vogter en levende
+database.** `sql/tests/anon_grants_functions.sql` er rigtig og bliver rød ved den
+første funktion, der glemmer sin revoke — men den måler `sql/schema.sql`.
+Migreringerne køres i hånden i SQL-editoren, og skema-eksporten er en ugentlig
+mandagskørsel plus en manuel knap, så afstanden mellem "funktionen findes i
+produktionen" og "en påstand kan se den" var op til en uge. Reglen er menneskelig
+af nødvendighed (PostgreSQLs PUBLIC-default kan ikke lukkes ved kilden), og en
+menneskelig regel med en uges detektionsforsinkelse er i praksis ikke håndhævet.
+
+**Heartbeat-trinnet er en del af beslutningen og ikke en tilføjelse.** Rækken
+foreskrev "en fil, en test og et CI-trin", men et CI-trin efterprøver KONTROLLEN
+og ikke produktionen — havde leverancen stoppet der, ville rækkens egen
+problembeskrivelse have stået uændret. **Det er samtidig den ene kontrol, der kan
+stå i en Actions-log uden at støde `A32`:** udlæsningen er funktions- og
+rollenavne, ikke en eneste tabelrække. `league_admin_coverage` skriver liganavne
+og hører derfor stadig hjemme hos ejeren.
+
+**Kontrollen melder BEGGE retninger, og den anden var ikke i rækken.** For meget
+er en rutine, en fremmed kan kalde uden login. For lidt er `username_available()`
+eller `invite_preview()` lukket for `anon`, altså oprettelsen af en konto eller
+invitationens etiket, der er død uden login — det er `#56`s trin 2 og 5 byttet
+om, og det ville være grønt i hver eneste anden kontrol, vi har. En kontrol, der
+kun kan melde "for meget", vogter kun den halve regel.
+
+**Kontrollen er BREDERE end migreringen, og det er et valg.** Den filtrerer ikke
+på `prokind`, fordi `revoke … on all functions in schema public` **ikke dækker
+procedurer** — hverken `from anon` eller `from public`, mens
+`alter default privileges … on functions` dækker dem. Efterprøvet mod PostgreSQL
+16.13. En procedure i `public` ville altså være åben for `anon` fra sit første
+sekund, og `#56`s trin 2 kan ikke lukke den. **En kontrol, der deler
+migreringens blinde vinkel, kan ikke se den** — det er den generelle regel, og
+den er grunden til, at kontrollen ikke bare er testens påstand flyttet.
+
+**Og `#56` blev IKKE lavet om i samme ombæring.** Der findes nul procedurer i
+`public` i dag, så filen er ikke forkert; den er smallere, end dens ordlyd lyder,
+og det står nu i dens hoved. Skrives den første procedure, bliver kontrollen rød,
+og dét er tidspunktet at gøre trin 2 til `all routines`. At ændre en allerede
+kørt migrering for et tilfælde, der ikke findes, ville koste en kørsel i
+produktion for at lukke ingenting — og udløseren er nu selv automatiseret, hvilket
+er præcis den betingelse, Tier 6 stiller.
+
+---
+
 ## 12. august 2026 — Hver ny funktion i `public` skal selv lukke PUBLIC ude (`G96`)
 
 **Beslutning:** en migrering, der opretter en funktion i `public`, skal skrive
