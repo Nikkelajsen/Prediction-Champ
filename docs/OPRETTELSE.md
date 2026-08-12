@@ -22,11 +22,11 @@ konfiguration uden for repoet, som kun kan udføres af ejeren.
 |---|---|---|
 | Turnstile-widget | Cloudflare → Turnstile. Navn: `Leagly` | 10. august 2026 — oprettet |
 | Værtsnavne på widgeten | `prediction-champ.vercel.app` | **12. august 2026 — BEVIST.** Widgeten viser "Succes!" på produktionens login-skærm, og `window.turnstile.getResponse()` returnerede en token. Værtsnavnet accepteres altså, og ikke bare "widgeten tegnes" |
-| Widget-tilstand | Managed | ? |
+| Widget-tilstand | Managed | 12. august 2026 — bekræftet på skærmen: udfordringen løses af sig selv på ca. et sekund og ender i et grønt "Succes!" uden et klik |
 | Site key (offentlig) | `VITE_TURNSTILE_SITE_KEY` i Vercel | **10. august 2026 — sat OG udrullet.** Aflæst på, at widgeten tegnes på login-skærmen; komponenten returnerer `null` uden nøgle, så der er ingen mellemtilstand |
 | Site key i **Preview** | **Bevidst ikke sat** — preview kører mod staging (`B18`), som ikke har Bot Protection | 10. august 2026 |
-| Secret key (hemmelig) | Kun i Supabase → Authentication → Attack Protection | 10. august 2026 — indtastet, og siden rullet tilbage |
-| Bot Protection | **Slået fra** | 10. august 2026. Var slået til om formiddagen og lukkede adgangen for alle, fordi trin 3 var sprunget over — se "Første kørsel" nederst |
+| Secret key (hemmelig) | Kun i Supabase → Authentication → Attack Protection | **12. august 2026 — indtastet og virksom.** Afvisningen i trin 5, punkt 4 er selve beviset: Supabase kan kun afvise, hvis den taler med Cloudflare, og nøglerne hører derfor til samme widget |
+| Bot Protection | **Slået TIL** | **12. august 2026 — alle fire kontroller i trin 5 bestået**, inklusive afvisningen af et kald uden kvittering. (Var kortvarigt slået til 10. august og lukkede adgangen for alle, fordi trin 3 var sprunget over — se "Første kørsel" nederst) |
 | Confirm email | **Slået fra** | 10. august 2026. Var slået til 08:04–ca. 09:43 og efterlod én ubekræftet konto, som blev bekræftet i hånden |
 | Skabelon: Confirm signup | Emne + brødtekst fra [`mail/confirm-signup.html`](./mail/confirm-signup.html) | ? — indsat 10. august 2026, men aldrig aflæst på en modtaget mail |
 
@@ -38,11 +38,16 @@ beviserne nedenfor er gået igennem — forskellen er hele pointen med registere
 > et rollback. Næste skridt er trin 4, som nu er den knap, den skulle have været
 > hele tiden: en, der kan trykkes tilbage.
 >
-> **Status 12. august 2026:** trin 3 har fået et punkt 4 — kontrollen af, at
-> værtsnavnet accepteres — og **den er kørt og bestået.** `getResponse()` gav en
-> token på produktionens login-skærm. Det var det ene ubeviste punkt foran trin
-> 4, og **trin 4 er hermed ikke længere spærret af noget ukendt.** Alt fra trin 4
-> og frem er stadig ejerens klik i Supabase; intet af det kan køres fra repoet.
+> **Status 12. august 2026: BOT-VÆRNET ER I DRIFT.** Trin 3 fik et punkt 4 —
+> kontrollen af, at værtsnavnet accepteres — og den bestod: `getResponse()` gav
+> en token på produktionens login-skærm. Det var det ene ubeviste punkt foran
+> trin 4, og med det af vejen blev **trin 4 og hele trin 5 kørt samme dag**,
+> inklusive den fjerde kontrol, der ikke kan snydes.
+>
+> **Tilbage står trin 6–8 — e-mailbekræftelsen, som er den anden halvdel af
+> `B26` og en helt anden knap.** `Confirm email` er stadig slået **fra**, og
+> rækkefølgen dér er lige så ufravigelig: skabelonen i trin 6 FØR kontakten i
+> trin 7, ellers går den første mail ud med engelsk emne.
 
 ---
 
@@ -203,9 +208,19 @@ Fire kontroller. **Den fjerde er den eneste, der ikke kan snydes.**
    >    JSON-legeme når frem som `{email:...}` — ugyldig JSON, og svaret bliver
    >    en parsefejl i stedet for det captcha-svar, kontrollen leder efter.
 
-   **Forventet:** en fejl, der nævner captcha (`captcha protection: request
-   disallowed`). Får du i stedet en oprettet bruger, er værnet slået til i
-   panelet uden at være aktivt — og så er trin 4 ikke gennemført.
+   **Forventet:** en fejl, der nævner captcha. Det svar, kontrollen gav 12.
+   august 2026, var ordret:
+
+   ```json
+   {"code":400,"error_code":"captcha_failed","msg":"captcha protection: request disallowed (no captcha_token found)"}
+   ```
+
+   Parentesen varierer — advarslen om rækkefølgen ovenfor citerer
+   `(not-provided)`, som er den samme afvisning set fra login-endpointet. Det er
+   `error_code: captcha_failed`, der er beviset, ikke den præcise sætning.
+
+   Får du i stedet en oprettet bruger, er værnet slået til i panelet uden at
+   være aktivt — og så er trin 4 ikke gennemført.
 
 Udfyld registeret, når de fire er gået igennem.
 
