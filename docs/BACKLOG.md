@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A44` · `B30` · `G101` · `I22`.**
+**Næste ledige: `A45` · `B30` · `G101` · `I22`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -49,8 +49,10 @@ eller en linje i "Forkastede ideer".
 
 Blev `recovery.html`s kommentarhoved pastet med ind i Supabase 9. august? Interne noter i mailens kilde hos hver modtager — tjek "vis original" på en nulstillingsmail, og skriv i så fald i `MAIL.md`, at hovedet skal skæres fra.
 
+Liga-sidens deltagerantal henter hele deltagerlisten for hver konkurrence i ligaen for at tælle den — ét deltagerantal-opslag ville gøre `A43`s policy-pris ligegyldig.
+
 *(Ryddet to gange 12. august 2026. Første gang blev syv linjer til `A42`,
-`A43`, `G95`–`G97`, `I20` og `I21`; de tre `G`-rækker er leveret samme dag.
+`A43`, `G95`–`G97`, `I20` og `I21`; de tre `G`-rækker og `A43` er leveret samme dag.
 Anden gang blev tre fund fra den leverance til `G99` og `G100` — begge leveret
 samme dag. Se [Log](#log--seneste-kørsel).)*
 
@@ -58,7 +60,7 @@ samme dag. Se [Log](#log--seneste-kørsel).)*
 
 ## Prioriteret rækkefølge
 
-Alle 30 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 29 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -107,7 +109,7 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 |---|---|---|
 | `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. |
 | `A39` | Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat? | **Når `day_card_coverage` melder en blokeret dag, nogen savnede.** `match_day_complete()` er global: én kamp uden resultat i én turnering blokerer alle dagskort, også for de konkurrencer, der intet har med turneringen at gøre. Prisen er dokumenteret som bevidst — den globale kampdag er produktets ene tvær-turneringsbegreb — men den blev betalt synligt under `A38`s undersøgelse. |
-| `A43` | Skal `profiles` og `competition_participants` stadig være læsbare for enhver indlogget bruger? | **Når linket deles åbent** (hjemmesiden publiceres, eller invitationer går uden for det kontrollerede felt) — af samme grund som `A40`. Begge tabeller har en SELECT-policy på `auth.role() = 'authenticated'` alene, altså hele brugerlisten til enhver, der er logget ind. I det kontrollerede felt er det harmløst; i det øjeblik fremmede kan oprette konti, er det en brugerliste, der kan hentes med ét kald. **`B26` bar samme udløser og blev kørt i forvejen 12. august 2026** — men bot-værn og e-mailbekræftelse gør fremmede konti dyrere at oprette, ikke umulige, og læsepolicyen er uændret. Denne række er dermed den sidste, der venter på udløseren, og den eneste, hvor rækkefølgen ikke kan gøres om. |
+| `A44` | Skal den globale rating vise fulde visningsnavne til brugere, man ikke deler noget med? | **Udløseren er sprunget** (`B26`, 12. august 2026), men i modsætning til `A43` kan visningen ændres bagefter — prisen ved at vente er kun, at flere navne allerede er hentet. Faldt ud af `A43`: uanset hvor stram policyen på `profiles` bliver, publicerer Rating-fanen og Championship (`scope='ALL'`) hver bruger til enhver indlogget. Det er en produktbeslutning, ikke en adgangsregel — og den skal derfor stilles for sig. |
 | `A34` | Supabase Free → Pro? | **Når Usage-siden viser egress nær 5 GB/md, eller når fremmede udgør flertallet af de aktive** — de to falder formentlig sammen omkring 200–500 ugentligt aktive. |
 | `A33` | Er dagsmotorens variation tyndere, end regelantallet lover? | **Når vis-bare dagskort har visninger.** `G73` (5. august 2026) rettede MÅLINGEN og ikke synligheden: de 197 efterfyldte dagskort kan stadig ikke vises, de tælles bare ikke længere i nævneren. Fremadrettede dagskort skrives inde i deres egen runde og ER vis-bare, så udløseren kan nu aflæses direkte — vis-bar > 0 og vist > 0 for dagsreglerne i Analytics. `DAY_RESULT` alene er 123 af 280 historier (44 %). |
 | `A35` | Er Story Engine v3's publiceringstærskel på 45 den rigtige? | **To uger med v3 i drift og mindst ti kampdage.** Bygget 7. august 2026, så uret er startet. Måles på `stories.news_value`, som gemmes på alle rækker — også de dæmpede — netop for at kunne svare bagudrettet. Mål: 40–60 % af kampdagene med ulæst-markering. |
@@ -164,7 +166,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | A35 | **Er publiceringstærsklen på 45 den rigtige?** | Story Engine v3 udgiver dagens kort med ulæst-markering, når nyhedsværdien når 45, og som dæmpet `DAY_RESULT` under. Tallet er udledt af grundvægtene (max for `DAY_RESULT` alene er 40), ikke af data — samme slags kvalificerede gæt som v1's A4-tærskler var, og de blev kalibreret på live-data. `story_score_distribution` logger vinderregel, `news_value` og runner-up, så fordelingen kan aflæses uden ny instrumentering. | **Efter to uger med v3 i drift og mindst ti kampdage.** Målet er 40–60 % af kampdagene med ulæst-markering for en aktiv bruger. Over 70 % ⇒ tærsklen er for lav, og v3 har genskabt v2's problem i ny indpakning. Under 25 % ⇒ Hjem er stille igen, og v2's oprindelige problem er tilbage. |
 | A33 | **Er dagsmotorens variation tyndere, end regelantallet lover?** | Story Engine v2 lagde syv dagsregler til, men `DAY_RESULT` alene står for 123 af 280 historier (44 %), og de næste to (`DUEL` 35, `COLLECTIVE_MISS` 19) er tilsammen mindre end halvdelen af den. En motor, der er markedsført på bredde og leverer det samme kort hver anden gang, er en anden oplevelse end tabellen antyder. **Spørgsmålet kan ikke stilles endnu:** ingen af de 197 dagskort er nogensinde blevet vist (`G73`), så der findes ingen, der har oplevet ensformigheden. Måske er 44 % helt rigtigt — "dagens facit" er også den mest almindelige ting at fortælle om en kampdag. **Delvist håndteret af v3 (7. august 2026):** `DAY_RESULT`s 44 % var en konstruktionsfølge — laveste prioritet, udløses altid — og v3 fjerner årsagen ved at give den grundvægt 8, hvilket gør den til fald-tilbage frem for anker. Spørgsmålet om, hvorvidt de øvrige seks regler faktisk varierer, er **ikke** besvaret og skal aflæses på ny fordeling. | Når dagskort faktisk bliver set, altså efter `G73`. |
 | A42 | **Skal en rigtig browser have en plads i CI?** | Testopsætningen er **bevidst uden jsdom** — komponenter renderes med `renderToStaticMarkup`, og logikken lever i rene moduler, der kan efterprøves uden DOM. Valget er begrundet flere steder (`DECISIONS.md` 30. juli 2026, `features/onboarding-v1.md`) og har holdt: det er dét, der har drevet udskillelsen af `data/invites.js`, `data/createSources.js` og `onboarding.js`. **`Modal`-fokusfejlen (11. august 2026) er den første, det ikke rakte til.** Fejlen ramte hvert tekstfelt i hver dialog — man kunne skrive ét tegn, hvorefter fokus sprang til `dialog` — og den kan pr. definition ikke ses uden en browser, fordi den er en fokusflytning og ikke en returværdi. Den blev efterprøvet i en engangs-Chromium (playwright-core, ~40 linjer), som **ikke ligger i repoet**; beviset findes derfor kun i `CHANGELOG.md`, og en regression ville ikke blive fanget. **Prisen ved at sige ja** er en tung devDependency, en browser-download i CI og en ny slags test, som er langsommere og mere flaksende end resten — mod en kodebase med én forfatter og 500+ hurtige tests. **Prisen ved at sige nej** er, at fokus-, scroll- og layoutfejl kun opdages af brugere. Et mellemsvar findes: en enkelt smoke-test bag et separat script, som ikke kører ved hver PR. | **Næste gang en fejl kun kan ses i en rigtig browser.** Én forekomst er et tilfælde; to er en fejlklasse, og først da kan spørgsmålet besvares med data frem for med en formodning. |
-| A43 | **Skal `profiles` og `competition_participants` stadig kunne læses af enhver indlogget bruger?** | Begge tabellers SELECT-policy er `auth.role() = 'authenticated'` og intet andet (`read profiles`, `read all participation`) — altså hele brugerlisten og hele deltagerlisten til enhver, der er logget ind. **Det er ikke en forglemmelse:** stillinger, ligaoversigter og Story Engine-kortene slår alle navne op på tværs af den liga, læseren selv er med i, og `A40`s indsnævring af `groups` gik netop uden om disse to, fordi en for smal læsepolicy her ville tømme hver eneste stilling. **Men det er den samme fejlklasse, `A40` lukkede:** policyen gør præcis, hvad der står i den, og spørgsmålet er, om det er den rigtige regel. I det kontrollerede felt (enogtyve kendte brugere) er svaret harmløst; i det øjeblik oprettelsen deles åbent, er det en komplet brugerliste med visningsnavne, der kan hentes med ét REST-kald af enhver, der laver en konto. **Vejen er kendt fra `A40`:** afgræns til de brugere, læseren deler en liga eller konkurrence med, og flyt det, der så mangler, til en `security definer`-funktion — men prisen skal måles først, fordi opslagene er hyppige og ligger i den varme sti. | **Når linket deles åbent.** Bør afgøres FØR det sker, ikke efter — det er den ene rækkefølge, der ikke kan gøres om. **`B26` delte udløser med denne række og blev kørt i forvejen 12. august 2026** uden at ændre policyen: et bot-værn hæver prisen på en fremmed konto, det fjerner den ikke. Rækken står derfor alene tilbage om at bære udløseren, og det er værd at vide, fordi den tidligere lænede sig op ad `B26`s tekst for sin begrundelse. |
+| A44 | **Skal den globale rating vise fulde visningsnavne til brugere, man ikke deler noget med?** | **Faldt ud af `A43` 12. august 2026 og er dens ærlige rest.** Rating-fanen og Championship læser `monthly_standings`/`round_standings`/`season_standings` med `scope='ALL'` og viser dermed hver bruger til enhver indlogget. Følgen er, at listen af visningsnavne er offentlig for enhver med en konto **uanset hvor stram policyen på `profiles` bliver** — en RLS-stramning kan ikke ændre det og bør ikke forsøge, fordi den så ville modsige UI'et. Spørgsmålet er derfor ikke, om navnene kan hentes, men om de skal VISES: i det kontrollerede felt er en global tavle med enogtyve kendte navne hele pointen; når fremmede kan oprette konti, er den samme tavle en komplet brugerliste, som ét skærmbillede leverer. **Tre veje:** behold (den globale titel — Månedens Champ, sæsonchampionshippet — giver kun mening, hvis den er global); vis top-N plus egen placering og navngiv resten som `#42` (afgrænser mængden uden at fjerne titlen); eller lad brugeren stå under et navn, der kun gælder uden for egne ligaer (koster en kolonne og en filtrering i hver eneste stilling). **Navnene er selvvalgte og case-insensitivt unikke** (`username_available`), altså allerede pseudonymer — hvilket er argumentet for at lade dem stå. | **Udløseren er sprunget** — `B26` blev kørt 12. august 2026, så oprettelsen er åben for fremmede. Men i modsætning til `A43`, som delte den udløser og blev afgjort samme dag, er denne ikke uigenkaldelig: visningen kan ændres bagefter, og prisen ved at vente er kun, at flere navne allerede er hentet. |
 | A14 | **Skal hele kodebasen gennemformateres med Prettier?** | `npm run format` findes, men `format:check` er bevidst ikke et CI-trin. En fuld gennemformatering ville omskrive ~6.700 linjer ved `printWidth: 140` (~14.000 ved standard 80) på tværs af ~126 filer (86 uden testfiler; genmålt august 2026). Prisen er hele repoets `git blame`; gevinsten er konsistens i en kodebase med én forfatter og en i forvejen ensartet håndstil. Beslutningen er **udskudt, ikke truffet** — se [`DECISIONS.md`](./DECISIONS.md), 30. juli 2026. | Næste gang der alligevel røres bredt i frontenden — ellers aldrig. |
 | A23 | **Skal appen have en router?** | Navigation er i dag to `useState` i `MainApp.jsx` (`tab` + `screen`), og deep links læses ved boot og strippes straks via `history.replaceState` (`App.jsx:104`, `MainApp.jsx:215,239`). Følgen er ingen tilbage-knap, ingen browser-historik og ingen delbare URL'er til interne skærme — mærkbart for en PWA, hvor telefonens tilbage-gestus forventes at virke. Men det er et arkitekturvalg, ikke en fejl: afhængighedsfattigheden er bevidst (fire runtime-deps, ingen router, `docs/reviews/2026-08-app-review.md` §7), og en router omskriver hele navigations-tilstandsmaskinen inkl. begge deep-link-join-flows, som ingen test dækker. | Når tilbage-knappen enten koster brugere (kan aflæses i analytics) eller en feature kræver ægte delbare interne URL'er — `I12`s offentlige ligaside er den første, der ville. |
 | A39 | **Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat?** | `match_day_complete()` er global: den kræver, at ALLE kampe på dagen har resultat, uanset turnering og uanset konkurrence. Én udsat eller uindberettet kamp i én turnering blokerer derfor dagskortet for hver eneste bruger, også dem, hvis konkurrencer slet ikke rører den turnering. **Prisen er bevidst og dokumenteret** — den globale kampdag er produktets ene tvær-turneringsbegreb, og et kort pr. konkurrence ville skulle vælge, hvilken dag der er *dagen* — men den blev betalt synligt under `A38`s undersøgelse, hvor det tog tid at afgøre, om stilheden var en fejl eller en ventende kamp. **To veje:** afgrænse fuldførtheden til de kampe, modtagerens egne konkurrencer dækker (kortet bliver personligt og kan skrives på forskellige tidspunkter for forskellige brugere), eller beholde den globale dag og gøre blokeringen aflæselig, så stilheden kan skelnes fra en fejl. Den første koster determinismen i acceptkriterie 7; den anden koster ingenting og løser heller ikke noget. | **Når `sql/checks/day_card_coverage.sql` melder en blokeret dag, nogen faktisk savnede.** Kontrollen findes siden `A38` og er dermed selve udløseren — indtil den melder noget, er problemet teoretisk. |
@@ -227,39 +229,53 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 12. august 2026 (femte kørsel) — `B26` er kørt helt igennem
+### 12. august 2026 (syvende kørsel) — `A43` er kørt
 
-**Listen er 31 → 30.** Én række lukket, ingen nye åbnet. Rækken var ikke et
-stykke arbejde, men otte trin uden for repoet: klientsiden blev bygget 10.
-august, og **ingen kode er rørt i dag.**
+**Listen er 30 → 29.** Én række lukket, ingen nye åbnet. Rækken blev læst
+igennem og delt i to i sjette kørsel; her er den afgjort og bygget.
 
-**`B26` — e-mailbekræftelse og bot-værn er begge i drift.** Alle otte trin i
-[`OPRETTELSE.md`](./OPRETTELSE.md) er kørt og alle ni beviser bestået, inklusive
-de to, der ikke kan snydes: et signup-kald uden kvittering afvises med
-`captcha_failed`, og en rigtig konto er oprettet, bekræftet og landet i appen
-**med sit brugernavn** — den ene kontrol, der rører `sikrProfil()`. Registeret i
-runbogen har ikke flere `?`.
+**Svaret er to forskellige svar.** `profiles` smalnes på KOLONNER — nøjagtig
+`id`, `display_name` og `anonymized_at` — mens `read profiles` er urørt, fordi
+Rating, Månedsligaen og Championship publicerer hvert visningsnavn med vilje.
+`competition_participants` får derimod en ægte rækkepolicy. To migreringer med
+et deploy imellem, `#59` og `#60`, i `A40`s form.
 
-**Det, der spærrede, kunne afprøves gratis.** Registeret sagde "widgeten TEGNES
-på login, men det beviser ikke, at værtsnavnet accepteres". Beviset blev
-`window.turnstile.getResponse()` i konsollen — en token betyder, at Cloudflare
-har udstedt en kvittering — og det kan køres, mens Bot Protection stadig er
-slået fra. Det er hele forskellen på 10. augusts hændelse og en knap, der kan
-trykkes tilbage.
+🔴 **Rækken pegede på ét kaldested, der skulle rettes først. Der var fire.**
+`select=*` i `competitionState.js` var det, gennemlæsningen fandt; de tre andre
+kom frem, da migreringen blev skrevet — `App.jsx` og `sikrProfil()` læser ens
+EGEN række bredt (og admin-fanen står på `profile.is_admin`), og Admin → Brugere
+læser præcis de fire kolonner, der lukkes. **Læren er, at en gennemlæsning
+finder de kaldesteder, den søger efter, og ikke dem, den ikke tænkte på:**
+`grep "select=\*"` fandt ét, mens `is_admin` og `order=created_at` var to andre
+former for den samme afhængighed.
 
-🔴 **Runbogen fejlede tre gange på formen og ikke på indholdet**, og det er
-rækkens lære. (1) Kontrollen bad om at se en grå linje FORSVINDE; i
-Managed-tilstand løses udfordringen på ca. et sekund, så linjen nås aldrig at
-ses, og den første læser aflæste i stedet widget-boksen, der bliver stående med
-"Succes!", og meldte kontrollen fejlet — mens tokenen var udstedt. **Et fravær
-er et dårligt bevis, når det indtræffer hurtigere end øjet.** (2) Begge
-`curl`-kald var bash-only og fejler i PowerShell på tre måder, der alle ligner
-et svar fra Supabase. (3) "Indsæt indholdet af filen" tog skabelonens
-kommentarhoved med — interne noter i mailens kilde hos hver modtager. Alle tre
-er rettet i runbogen.
+🔴 **Den dyreste linje er ikke en policy, men en RETURNING-klausul.**
+`Prefer: return=representation` returnerer alle kolonner uden et `select=`, og
+`returning` kræver LÆSE-privilegiet på hver af dem. Samme mekanik som `#55`
+11. august, bare på privilegier frem for på policies — altså et sted, ingen
+policy-revision ville have fundet den.
 
-**`A43` står nu alene med udløseren.** Den lænede sig op ad `B26`s tekst for sin
-begrundelse, og begge rækker ventede på, at linket deles åbent. `B26` blev kørt
-i forvejen, uden at læsepolicyen ændrede sig: et bot-værn hæver prisen på en
-fremmed konto, det fjerner den ikke. Begge `A43`-felter er skrevet om, så de
-ikke peger på en række, der er slettet.
+🔴 **Og det, ingen gennemlæsning kunne have fundet: tre POLICIES læste
+`profiles.is_admin`.** Et RLS-udtryk evalueres med den kaldende rolles
+privilegier, så `job_runs_read_admin` og de to på `matches` ville FEJLE med
+`42501` frem for at filtrere — **Admin → Drift brækket for alle, også for en
+administrator.** Reglen bor nu i `is_platform_admin()`. Den kom frem af §13's
+efterprøvning fra begge sider af dumpet og ikke af nogen læsning: de tre
+steder er policies og ikke kaldesteder. Samme sweep rettede
+`competition_matches_read.sql` FØR eksporten frem for en uge efter.
+
+**To ting i leverancen er no-ops ved konstruktion, og de er skrevet ned frem for
+skjult:** `user_id = auth.uid()`-leddet i deltagerpolicyen redder ingen skrivning
+(INSERT-policyen kræver i forvejen et af de andre led), og omskrivningen af
+`competitions_select_involved` ændrer intet. Otte af ti mutationer blev fanget;
+de to sidste er netop dem, og testens hoved siger det.
+
+🔴 **Intet er kørt i Supabase.** Runbog med register, ti trin og en
+fejlfindingstabel: [`UDRULNING-A43.md`](./UDRULNING-A43.md). 📈 Trin 5 er en
+MÅLING — liga-sidens deltagerantal koster nu ét funktionskald pr. række — og den
+måling har efterladt en linje i indbakken.
+
+**`A44` står tilbage** som rækkens ærlige rest: den globale rating publicerer
+hvert navn uanset policyen, og det er en produktbeslutning om, hvad tavlen skal
+VISE. Sjette kørsels log er arkiveret i `DECISIONS.md` og `CHANGELOG.md` efter
+denne fils regel om kun at bære den seneste.

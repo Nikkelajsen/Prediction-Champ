@@ -324,6 +324,31 @@ jobs:
           psql -h localhost -U postgres -d creategrouptest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d creategrouptest -v ON_ERROR_STOP=1 -b -f sql/tests/create_group.sql
 
+      # Læsefladen (A43): kolonne-grants på `profiles` og deltagerpolicyen.
+      #
+      # Mod det rigtige skema, fordi hele rækken er samspillet mellem
+      # privilegier og policies: #51's UPDATE-kolonner, #53's
+      # `competitions_select_involved`, `read profiles` og deltagertabellens tre
+      # skrive-policies findes kun dér.
+      #
+      # Testen kører BEGGE migreringer og måler mellemtilstanden imellem dem —
+      # #59 må ikke bryde den gamle klient, for ellers er den ikke sikker at
+      # køre før frontend-mergen. Og den bærer tre påstande, der hver især er en
+      # fejl, ingen gennemlæsning ville have fundet: en upsert med `returning *`
+      # skal afvises (RETURNING er også en læsning), de to naive policies skal
+      # udløse `42P17` på BÅDE deltagerlisten og `competitions`, og INGEN policy
+      # må slå direkte op i `profiles` — et RLS-udtryk evalueres med den
+      # kaldende rolles privilegier, så en policy, der læser `is_admin`, holder
+      # op med at filtrere og begynder at fejle, når kolonnen lukkes.
+      - name: Test af læsefladen
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database readscope;'
+          psql -h localhost -U postgres -d readscope -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d readscope -v ON_ERROR_STOP=1 -b -f sql/tests/read_scope.sql
+
       # Story Engine v1.2's kåringsregler (B10): kører rating_core +
       # competition_awards + story_engine i én tom database og efterprøver
       # kæden fra kåringsrække til historie-kort. Egen database, som de andre.

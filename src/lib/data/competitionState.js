@@ -20,7 +20,11 @@ async function computeCompetitionState(token, competitionId, { signal } = {}) {
   const o = { signal };
   const participants = await db.select(token, "competition_participants", `competition_id=eq.${competitionId}&select=user_id`, o);
   const userIds = participants.map((p) => p.user_id);
-  const profiles = await selectIn(token, "profiles", "id", userIds, "&select=*", o);
+  // `id,display_name` og ikke `*` (A43). Stillingen bruger præcis de to felter,
+  // og siden kolonne-grants'ene (#60) er `select=*` på `profiles` et `42501`.
+  // Læsningen var den bredeste i appen — hele profilrækken om hver deltager i
+  // hver konkurrence, man åbnede — og den eneste, der ikke havde en grund.
+  const profiles = await selectIn(token, "profiles", "id", userIds, "&select=id,display_name", o);
   const cms = await db.select(token, "competition_matches", `competition_id=eq.${competitionId}&select=match_id`, o);
   const matchIds = cms.map((c) => c.match_id);
   const ms = await selectIn(token, "matches", "id", matchIds, "&select=*", o);
