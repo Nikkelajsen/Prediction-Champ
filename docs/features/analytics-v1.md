@@ -62,7 +62,7 @@ Logges via én generisk klient-helper, `logEvent(token, name, { groupId, competi
 | Kategori | Events | Kaldested |
 |---|---|---|
 | Account | `account_created`, `login`, `logout` | `src/App.jsx` (`completeAuth` med `source`-parameter, `handleLogout`) |
-| Liga | `league_created`, `league_joined`, `league_invite_sent`, `invite_landed`, `league_invite_accepted` | `src/lib/data/groups.js` (`createGroup`, `joinGroup`) + `src/lib/data/competitions.js` (`joinByInviteCode`) — *oprindeligt `data.js`; flyttet ved `G1`*, `src/screens/GroupScreen.jsx`/`BoardScreen.jsx` (`shareInvite`), `src/screens/MainApp.jsx` (`confirmGroupJoin`) |
+| Liga | `league_created`, `league_joined`, `league_invite_sent`, `invite_landed`, `league_invite_accepted` | `src/lib/data/groups.js` (`createGroup`) + `src/lib/data/competitions.js` (`joinByInviteCode`) — *oprindeligt `data.js`; flyttet ved `G1`*, `src/screens/GroupScreen.jsx`/`BoardScreen.jsx` (`shareInvite`), `src/screens/MainApp.jsx` (`confirmGroupJoin`). **Rettet 12. august 2026 (`G99`):** `joinGroup` stod her og findes ikke længere — `A40` erstattede den med `accept_invite()`, og `league_joined` logges nu de to steder, der læser dens svar (`joinByInviteCode` og `confirmGroupJoin`), på `joined`-flaget, så en gentagen tilmelding ikke tælles to gange |
 | Konkurrence | `competition_created`, `competition_joined`, `competition_opened` | `src/lib/data.js` (`createCompetition` — alle 3 return-veje, `joinCompetition`), `src/screens/MainApp.jsx` (`openBoard`/`openPredictions`) |
 | Tip | `prediction_started`, `prediction_saved`, `prediction_updated`, `prediction_submitted` | `src/screens/PredictionsScreen.jsx` (`save()`, efter vellykket upsert) |
 | Navigation | `opened_home`, `opened_tip`, `opened_league`, `opened_standings`, `opened_rating`, `opened_career`, `opened_story`, `opened_championship` | `src/screens/MainApp.jsx` (`goTab`/`open*`, ét sted for al navigation) |
@@ -542,7 +542,7 @@ Hver tilstand giver en **begrundelse med ligaens egne tal** ("Én af 4 medlemmer
 | `src/lib/analytics.js` (ny) | `logEvent`, `logEventOnce` + 4 dashboard-read-helpers. **30. juli 2026:** `healthTone` fjernet, `diagnoseLeague`/`diagnoseLeagues`/`summarizeDiagnoses`/`LEAGUE_THRESHOLDS`/`LEAGUE_STATES` tilføjet |
 | `src/App.jsx` | `completeAuth` får en `source`-parameter ("signup"/"signin"/"restore"); `handleLogout` logger `logout`; ny boot-effekt for `?pn=`/`?rk=` → `push_opened` |
 | `src/screens/Auth.jsx` | sender `source` til `onAuthed` ved signup/signin |
-| `src/lib/data.js` | `createGroup`, `joinGroup`, `joinCompetition`, `createCompetition` (alle 3 veje), `joinByInviteCode` |
+| `src/lib/data.js` | `createGroup`, `joinCompetition`, `createCompetition` (alle 3 veje), `joinByInviteCode`. *(Udkastets `joinGroup` er væk med `A40`; rettet 12. august 2026, `G99`.)* |
 | `src/screens/MainApp.jsx` | `goTab`/`open*` (ét sted for al navigation), `confirmGroupJoin` |
 | `src/screens/PredictionsScreen.jsx` | `save()` — `prediction_started`/`saved`/`updated`/`submitted` |
 | `src/screens/HjemTab.jsx` | `StoryCard` får `token`/`groupId`-prop; `story_viewed` (once) + `story_shared` |
