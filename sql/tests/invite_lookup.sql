@@ -190,6 +190,57 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- TESTEN EJER SIN EGEN FØR-TILSTAND (G94-reglen, DOCUMENTATION.md §13)
+-- ---------------------------------------------------------------------------
+-- ⚠️ **Læs denne, før du fjerner blokken, fordi "den står jo allerede i
+-- skemaet".** Det gjorde den — og præcis dét var fejlen.
+--
+-- Testen måler en migrering mod `sql/schema.sql`, som er et ØJEBLIKSBILLEDE af
+-- produktionen. Indtil 12. august 2026 hentede den sin FØR-tilstand derfra: de
+-- fire gamle policies stod i dumpet, så en fremmed kunne læse ligaen, og
+-- mellemtilstand a) kunne tælle dem. Det holdt kun, så længe migreringen ikke
+-- var kørt i produktion. I det øjeblik `A40` blev udrullet og skema-eksporten
+-- kørte bagefter, ville dumpet bære de NYE policies — og testen ville blive rød
+-- af, at arbejdet lykkedes, uden at nogen havde rørt hverken den eller
+-- migreringen.
+--
+-- Det er anden gang, den fælde er stillet: `sql/tests/competition_matches_read.sql`
+-- (`G94`) faldt i den 10. august 2026 og blev rettet på nøjagtig denne måde.
+-- Reglen står i §13: **en test, der måler en migrering mod et øjebliksbillede,
+-- må aldrig hente sin FØR-tilstand fra snapshottet.**
+--
+-- Definitionerne herunder er ordret dem fra `sql/invite_policies.sql`s
+-- tilbagerulnings-blok, altså som de stod i `schema.sql` før `#53`. De nye
+-- droppes først, så tilstanden er den samme, uanset hvilken side dumpet står på.
+--
+-- **BEGGE navne droppes, ikke kun det nye** — af nøjagtig samme grund som i
+-- migreringen selv: står dumpet på den GAMLE side, findes `groups_select_all`
+-- allerede, og `create policy` fejler med `42710`. Blokken skal virke fra begge
+-- sider, ellers har den bare flyttet udløbsdatoen.
+drop policy if exists groups_select_member on public.groups;
+drop policy if exists groups_select_all on public.groups;
+create policy groups_select_all on public.groups
+  for select to authenticated using (true);
+
+drop policy if exists competitions_select_involved on public.competitions;
+drop policy if exists "read all competitions" on public.competitions;
+create policy "read all competitions" on public.competitions
+  for select using (auth.role() = 'authenticated'::text);
+
+drop policy if exists group_members_insert_creator on public.group_members;
+drop policy if exists group_members_insert_self on public.group_members;
+create policy group_members_insert_self on public.group_members
+  for insert to authenticated
+  with check (((user_id = auth.uid()) and ((role = 'member'::text) or (exists (
+    select 1 from public.groups g
+     where ((g.id = group_members.group_id) and (g.created_by = auth.uid())))))));
+
+drop policy if exists competition_participants_insert_involved on public.competition_participants;
+drop policy if exists "join competition" on public.competition_participants;
+create policy "join competition" on public.competition_participants
+  for insert with check ((user_id = auth.uid()));
+
+-- ---------------------------------------------------------------------------
 -- FØR migreringen: hullet SKAL kunne genskabes
 -- ---------------------------------------------------------------------------
 -- Uden dette afsnit kunne påstand 1 og 2 bestå, fordi fixturen tilfældigvis var
