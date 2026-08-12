@@ -91,6 +91,22 @@
 -- funktion for at genskabe den (kun `#19`, som fjerner en for altid) — men
 -- gør en det en dag, skal `revoke`-linjen med i samme ombæring.
 --
+-- ⚠️ **REGLEN GÆLDER OGSÅ PROCEDURER — OG DENNE FILS `all functions` GØR IKKE**
+-- *(tilføjet 12. august 2026 under `G100`, efterprøvet mod PostgreSQL 16.13)*.
+-- `revoke … on all functions in schema public` dækker funktioner og aggregater,
+-- men **springer procedurer over** — både `from anon` og `from public`. En
+-- procedure i `public` er derfor åben for `anon` fra sit første sekund, og
+-- hverken trin 2 nedenfor eller `sql/tests/anon_grants_functions.sql`s
+-- `prokind = 'f'` kan se den. Trin 3 dækker den til gengæld: `alter default
+-- privileges … on functions` gælder alle tre slags, så `anon`s EGEN grant
+-- lukkes også for en ny procedure. Det er kun PUBLIC-halvdelen, der slipper
+-- igennem — altså præcis den halvdel, der ikke kan lukkes ved kilden.
+--
+-- **Der findes nul procedurer i `public` i dag**, så filen er ikke forkert; den
+-- er smallere, end dens ordlyd lyder. Skrives den første procedure, skal
+-- sætningerne i trin 2 være `all routines` — og det er `sql/checks/`-kontrollen
+-- nedenfor, der siger til, fordi den ikke filtrerer på `prokind`.
+--
 -- Konventionen findes allerede i de fleste migreringer (`#31`, `#36`, `#42`,
 -- `#46`, `#52`, `#54` m.fl. skriver netop de to linjer i den rækkefølge); det,
 -- der manglede, var, at den var et krav frem for en vane. **Vagten er
@@ -98,6 +114,12 @@
 -- kunne nøjagtig to funktioner — som bliver rød ved den første nye funktion,
 -- der glemmer sin revoke. Den påstand er dermed ikke pynt ved siden af
 -- migreringen, men den halvdel af leverancen, databasen ikke kan bære selv.
+--
+-- 🟢 **Og den påstand måler siden `G100` (12. august 2026) også PRODUKTIONEN.**
+-- Testen ovenfor kører mod `sql/schema.sql`, altså et øjebliksbillede, der er
+-- op til en uge gammelt. `sql/checks/anon_routine_reach.sql` stiller den samme
+-- regel mod den levende database og køres af `job-heartbeat.yml` hver halve
+-- time. Se verifikation 4b nedenfor.
 --
 -- ---------------------------------------------------------------------------
 -- HVORFOR TRIN 1 FINDES: PUBLIC MÅ IKKE LUKKES I BLINDE
@@ -266,16 +288,20 @@ grant execute on function public.invite_preview(text) to anon;
 --   join pg_namespace n on n.oid = d.defaclnamespace
 --  where n.nspname = 'public' and d.defaclobjtype = 'f';
 
--- 4b) **Den kontrol, der skal køres efter HVER ny funktion i `public`.** Den er
---     forespørgsel 1 vendt om og er den eneste, der fanger en funktion, hvis
---     migrering glemte sin `revoke execute … from public`. Forvent 0 rækker.
--- select p.oid::regprocedure as aaben_for_anon
---   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
---  where n.nspname = 'public' and p.prokind = 'f'
---    and has_function_privilege('anon', p.oid, 'EXECUTE')
---    and p.oid::regprocedure::text not in
---        ('username_available(text)', 'invite_preview(text)',
---         'public.username_available(text)', 'public.invite_preview(text)');
+-- 4b) **Den kontrol, der skal køres efter HVER ny funktion i `public`, har fået
+--     sin egen fil:** [`sql/checks/anon_routine_reach.sql`](./checks/anon_routine_reach.sql)
+--     (`G100`, 12. august 2026). Forespørgslen stod her som en udkommenteret
+--     blok, indtil den fik en fil, en test og et CI-trin — og et sted, der
+--     kører den. Indsæt filen i SQL-editoren efterfulgt af
+--
+--       select * from anon_routine_reach order by (tilstand <> 'ok') desc, rutine;
+--
+--     og forvent præcis to rækker, begge `ok`. `job-heartbeat.yml` kører den
+--     samme fil mod produktion hver halve time, så en glemt `revoke` melder sig
+--     selv inden for en halv time frem for ved næste skema-eksport.
+--
+--     Den nye fil er BREDERE end blokken, der stod her: den filtrerer ikke på
+--     `prokind` — se den røde blok ovenfor om procedurer.
 
 -- 5) Oprettelsen af en konto virker stadig.
 -- set role anon; select public.username_available('et-eller-andet-navn'); reset role;

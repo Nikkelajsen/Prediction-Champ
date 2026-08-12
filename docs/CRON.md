@@ -249,7 +249,9 @@ i workflowen, så CI kan køre præcis den samme regel mod en tom database.
 Trinnet ligger **sidst** med vilje: et fejlende trin springer resten af jobbet
 over, og et tavst job er den dyrere af de to fejl. *(Rettet 7. august 2026: der
 er nu ét trin efter det — se punkt 4. De to deler egenskaben, at de dømmer DATA
-og ikke kørsler, og de ligger begge efter helbredstjekket af samme grund.)*
+og ikke kørsler, og de ligger begge efter helbredstjekket af samme grund.
+Rettet igen 12. august 2026: der er nu to — punkt 5 dømmer hverken data eller
+kørsler, men en RETTIGHED, og ligger af samme grund sidst af alle.)*
 
 **4. `rating_freshness` — om det, INGEN skrev, er blevet forkert** (`G83`,
 7. august 2026). De tre lag ovenfor kan alle stå grønne, mens ratingen er
@@ -280,6 +282,36 @@ historier, kåringer, milepæle og milepæls-kort om i den bindende rækkefølge
 Genberegningen er bevidst **ikke** sat på et skema: den er dyr (hele
 `rating_history` bygges fra runde nul) og hører til efter en hændelse. Det er
 kontrollen, der kører hvert kvarter, ikke arbejdet.
+
+**5. `anon_routine_reach` — om `anon` kan nå noget, den ikke skal** (`G100`,
+12. august 2026). Den femte og sidste kontrol, og den eneste, der dømmer en
+RETTIGHED frem for data. `G96` lukkede `anon` ude af alle funktioner i `public`
+og efterlod en regel, databasen ikke kan håndhæve selv: PostgreSQLs indbyggede
+default giver PUBLIC — og dermed `anon` — EXECUTE på hver ny funktion, og den
+post kan ikke fjernes med `ALTER DEFAULT PRIVILEGES`. Hver ny funktion skal
+derfor selv bære sin `revoke execute … from public`.
+
+Vagten over den regel lå indtil da kun i CI, og **CI måler `sql/schema.sql`,
+ikke databasen**. Migreringerne køres i hånden i SQL-editoren, og skema-
+eksporten er en ugentlig mandagskørsel plus en manuel knap, så en funktion kunne
+stå åben for `anon` i produktionen i op til en uge, uden at nogen påstand nogen
+steder var rød. Det er præcis den afstand, dette trin lukker: samme regel, samme
+fil, men stillet mod den levende database hver halve time.
+
+Kontrollen melder begge retninger. **For meget** er en rutine, en fremmed kan
+kalde uden login, og kolonnerne `egen_grant`/`via_public` siger hvilken af de to
+veje ind der er brugt — de har hver sin rettelse. **For lidt** er
+`username_available()` eller `invite_preview()` lukket for `anon`, altså
+oprettelsen af en konto eller invitationens etiket, der ikke virker uden login;
+det er `#56`s trin 2 og 5 byttet om, og det ville være grønt i enhver anden
+kontrol vi har. Forespørgslen bor i
+[`sql/checks/anon_routine_reach.sql`](../sql/checks/anon_routine_reach.sql), så
+CI kan køre præcis den samme regel mod en tom database.
+
+**Trinnet logger ingen brugerdata** — udlæsningen er funktionsnavne og
+rollenavne, ikke en eneste tabelrække. Det er den egenskab, der gør netop denne
+kontrol egnet til en Actions-log, hvor `league_admin_coverage` (som skriver
+liganavne) hører til hos ejeren (`A32`).
 
 **Job 4 og 11 overvåges af ingen af de to lag** — de skriver ikke i `job_runs`
 og optræder derfor ikke i Admin → Drift. De er selv GitHub Actions, så en fejlet

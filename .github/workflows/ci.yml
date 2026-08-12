@@ -280,6 +280,32 @@ jobs:
           psql -h localhost -U postgres -d anongrantsfunc -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d anongrantsfunc -v ON_ERROR_STOP=1 -b -f sql/tests/anon_grants_functions.sql
 
+      # Kontrollen af, hvad `anon` kan nå (G100). Jobbets FEMTE overvågning, og
+      # den findes, fordi trinnet ovenfor måler `sql/schema.sql` og ikke
+      # databasen: dumpet er først sandt efter en eksport, migreringerne køres i
+      # hånden, og eksporten er en ugentlig mandagskørsel — så en funktion kunne
+      # stå åben for `anon` i produktionen i op til en uge, uden at nogen
+      # påstand nogen steder var rød. Kontrollen i sql/checks/ køres derfor af
+      # job-heartbeat.yml mod PRODUKTION hver halve time, og af denne test mod
+      # en tom engangsdatabase — samme fil begge steder.
+      #
+      # Tom database og ikke produktionsskemaet, modsat trinnet ovenfor: det,
+      # der efterprøves her, er KONTROLLEN, og tre af dens fire tilstande findes
+      # pr. konstruktion ikke i et skema, hvor #56 er kørt.
+      #
+      # Testen fandt undervejs, at `revoke … on all functions … from public`
+      # ikke dækker PROCEDURER (efterprøvet mod 16.13). Der findes ingen i dag,
+      # men kontrollen tæller dem med — en kontrol, der deler migreringens
+      # blinde vinkel, kan ikke se den.
+      - name: Test af kontrollen for anons rækkevidde
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database anonreach;'
+          psql -h localhost -U postgres -d anonreach -v ON_ERROR_STOP=1 -b -f anon_routine_reach.sql
+
       # Oprettelsen af en liga er ÉN skrivning (G95). Den påstand, filen findes
       # for, er den negative kontrol: den samme fejl fremkaldes ad den GAMLE vej
       # (to statements), hvor ligaen bliver stående uden medlemmer. Uden den
