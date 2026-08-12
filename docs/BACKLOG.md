@@ -270,10 +270,14 @@ skjult:** `user_id = auth.uid()`-leddet i deltagerpolicyen redder ingen skrivnin
 `competitions_select_involved` ændrer intet. Otte af ti mutationer blev fanget;
 de to sidste er netop dem, og testens hoved siger det.
 
-🔴 **Intet er kørt i Supabase.** Runbog med register, ti trin og en
-fejlfindingstabel: [`UDRULNING-A43.md`](./UDRULNING-A43.md). 📈 Trin 5 er en
-MÅLING — liga-sidens deltagerantal koster nu ét funktionskald pr. række — og den
-måling har efterladt en linje i indbakken.
+✅ **Begge migreringer er kørt i staging og produktion samme dag, og alle ti
+trin i [`UDRULNING-A43.md`](./UDRULNING-A43.md) er igennem.** Rækkefølgen holdt:
+ingen bruger oplevede et vindue, hvor appen ikke kunne logge ind. 📈 Trin 5 var
+en MÅLING og ikke et flueben, og svaret er **2,2 ms i alt** for en liga med otte
+konkurrencer — en øvre grænse for policyens pris, altså under tærsklen, og
+liga-sidens deltagerantal skal ikke bygges om. Målingen efterlod alligevel en
+linje i indbakken, fordi opslaget er unødigt bredt uanset prisen. 🔶 Tilbage
+står skema-eksporten.
 
 **`A44` står tilbage** som rækkens ærlige rest: den globale rating publicerer
 hvert navn uanset policyen, og det er en produktbeslutning om, hvad tavlen skal

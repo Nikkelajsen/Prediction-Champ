@@ -1,9 +1,19 @@
 # Udrulning af `A43` — læsefladen smalnes
 
-🔴 **IKKE KØRT ENDNU.** Koden er merget; de to migreringer skal køres i hånden i
-Supabase, og de har et **deploy imellem sig**. Samme form som
-[`UDRULNING-A40.md`](./UDRULNING-A40.md), som er skabelonen: en additiv halvdel,
-der kan køres når som helst, og en indsnævrende, der køres efter udrulningen.
+✅ **AFSLUTTET 12. august 2026. Der er intet at gøre her.** Begge migreringer er
+kørt i staging og i produktion, alle ti trin er igennem, og de syv skærme er
+afprøvet i begge miljøer. Filen bliver stående af to grunde: den er historikken
+for, hvordan udrulningen faktisk gik, og den er — sammen med
+[`UDRULNING-A40.md`](./UDRULNING-A40.md) — **anden forekomst af den todelte
+form**, altså ikke længere en engangsopfindelse men et mønster: en additiv
+halvdel, der kan køres når som helst, og en indsnævrende, der køres efter
+udrulningen.
+
+**Rækkefølgen holdt hele vejen.** Ingen bruger oplevede et vindue, hvor appen
+ikke kunne logge ind — det var hele formålet med at dele migreringen i to.
+
+🔶 **Det ene, der udestår, står ikke her:** skema-eksporten. `sql/schema.sql`
+mangler `#56`–`#60`, og den er reference for femten SQL-tests.
 
 ## Register — hvor står vi?
 
@@ -19,9 +29,9 @@ hvor du var.
 | 5 | 📈 **Prisen målt i staging:** liga-siden med rigtige tal | ✅ 12. august 2026 — **2,2 ms i alt** for 8 konkurrencer, altså en ØVRE grænse for policyens pris, og under tærsklen |
 | 6 | `sql/read_scope_functions.sql` (#59) kørt i **produktion** | ✅ 12. august 2026 |
 | 7 | PR merget, Vercel-deploy færdig | ✅ 12. august 2026 ([#191](https://github.com/Nikkelajsen/Prediction-Champ/pull/191), CI grøn) |
-| 8 | Produktionen afprøvet: login, Rating, en konkurrence, navneskift | ⬜ ← **her er vi** |
-| 9 | `sql/read_scope_narrow.sql` (#60) kørt i **produktion** | ⬜ |
-| 10 | Produktionen afprøvet igen, og fladen efterprøvet smal | ⬜ |
+| 8 | Produktionen afprøvet: login, Rating, en konkurrence, navneskift | ✅ 12. august 2026 — alle syv skærme |
+| 9 | `sql/read_scope_narrow.sql` (#60) kørt i **produktion** | ✅ 12. august 2026 |
+| 10 | Produktionen afprøvet igen, og fladen efterprøvet smal | ✅ 12. august 2026 — efterprøvningen bestået |
 
 ---
 
