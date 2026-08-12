@@ -12,9 +12,9 @@ hvor du var.
 
 | Trin | Hvad | Tilstand |
 |---|---|---|
-| 1 | `sql/read_scope_functions.sql` (#59) kørt i **staging** | ⬜ |
-| 2 | Staging afprøvet med den GAMLE klient: intet er gået i stykker | ⬜ |
-| 3 | `sql/read_scope_narrow.sql` (#60) kørt i **staging** | ⬜ |
+| 1 | `sql/read_scope_functions.sql` (#59) kørt i **staging** | ✅ 12. august 2026 |
+| 2 | Staging afprøvet med den GAMLE klient: intet er gået i stykker | ⬜ (sprunget over — trin 1 og 3 blev kørt i træk) |
+| 3 | `sql/read_scope_narrow.sql` (#60) kørt i **staging** | ✅ 12. august 2026 |
 | 4 | Staging afprøvet med den NYE klient — de syv skærme nedenfor | ⬜ |
 | 5 | 📈 **Prisen målt i staging:** liga-siden med rigtige tal | ⬜ |
 | 6 | `sql/read_scope_functions.sql` (#59) kørt i **produktion** | ⬜ |
@@ -61,7 +61,10 @@ måler den — den gamle klients brede opslag skal stadig virke efter `#59`.
    merges): log ind, åbn en konkurrence, åbn Admin → Brugere. Alt skal virke
    uændret — det er dét, der gør trin 6 sikkert at køre før mergen.
    📈 **Kør samtidig måleblokken fra trin 5 her**, mens den gamle policy stadig
-   står. Det er FØR-tallet, og det kan ikke hentes bagefter.
+   står. Det er FØR-tallet, og det er billigst at tage her — men det er **ikke**
+   tabt, hvis trinnet springes over: policies er DDL, og DDL er transaktionel i
+   PostgreSQL, så FØR-tilstanden kan genskabes inde i en transaktion, der rulles
+   tilbage. Blokken står i trin 5.
 3. **Kør `sql/read_scope_narrow.sql`.** Nu er fladen smal.
 4. **Afprøv med den NYE klient** (preview-deployet af PR'en). Seks skærme, og de
    er valgt, fordi de hver rammer en gren, der kunne fejle (den syvende kom
@@ -173,6 +176,47 @@ måler den — den gamle klients brede opslag skal stadig virke efter `#59`.
    `read all participation` stadig er `auth.role() = 'authenticated'`) og igen
    her. Forskellen mellem de to `Execution Time` ER policyens pris på rigtige
    tal.
+
+   **Er trin 2 sprunget over, er FØR-tallet ikke tabt.** Policies er DDL, og DDL
+   er transaktionel i PostgreSQL: den gamle tilstand kan sættes op inde i en
+   transaktion, måles, og rulles tilbage. Begge policies skal med — ellers måler
+   du en blandingstilstand:
+
+   ```sql uddrag
+   begin;
+     -- FØR-tilstanden, ordret som den stod før #60
+     drop policy competition_participants_select_visible on public.competition_participants;
+     create policy "read all participation" on public.competition_participants
+       for select using (auth.role() = 'authenticated');
+
+     drop policy competitions_select_involved on public.competitions;
+     create policy competitions_select_involved on public.competitions
+       for select to authenticated
+       using (created_by = auth.uid()
+              or (group_id is not null and public.is_group_member(group_id))
+              or exists (select 1 from public.competition_participants cp
+                          where cp.competition_id = competitions.id and cp.user_id = auth.uid()));
+
+     select set_config('request.jwt.claim.sub',  '<BRUGER-ID>', true);
+     select set_config('request.jwt.claim.role', 'authenticated', true);
+     set local role authenticated;
+     select current_user::text as rolle;
+
+     explain analyze
+     select competition_id from public.competition_participants
+      where competition_id in (select id from public.competitions where group_id = '<GRUPPE-ID>');
+   rollback;   -- ← BEGGE policies er tilbage som #60 skrev dem
+   ```
+
+   ⚠️ **`rollback` er ikke valgfri.** Slutter blokken uden den, står staging med
+   den gamle, brede policy — altså med hullet åbent og uden at nogen kan se det.
+   Kør efterprøvningen fra trin 10 bagefter, hvis du er i tvivl: `nye policies`
+   skal svare 2. Og `drop policy` tager en ACCESS EXCLUSIVE-lås på tabellen, så
+   længe transaktionen kører — uskadeligt i staging, men blokken hører ikke
+   hjemme i produktionen.
+
+   Efterprøvet mod PostgreSQL 16.13: planen inde i transaktionen er den samme
+   som før migreringen, og begge policies står uændrede bagefter.
 
    Er forskellen mærkbar på en rigtig liga, er svaret **ikke** at rulle policyen
    tilbage, men at lade `loadGroupDetail` hente deltagerantallet ét sted fra —
