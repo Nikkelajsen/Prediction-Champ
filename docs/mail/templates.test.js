@@ -65,9 +65,11 @@ describe("mailskabelonerne i docs/mail/", () => {
   // Skabelonen bar kun det halve af teksten — og den halvdel, den ikke bar, er
   // den, brugeren ser først i sin indbakke.
   //
-  // Påstanden er billig og fanger den samme fejl på `confirm-signup`, som endnu
-  // ikke er i brug: den tages i brug den dag `B26` slår bekræftelse til, og dér
-  // ville ingen opdage et engelsk emne, før en fremmed havde fået det.
+  // Påstanden er billig og fangede den samme fejl på `confirm-signup`, mens den
+  // endnu ikke var i brug. **Den er i brug fra 12. august 2026**, hvor `B26`
+  // slog bekræftelsen til, og emnet er aflæst dansk på en modtaget mail — men
+  // påstanden bliver netop derfor stående: nu ville et engelsk emne ramme en
+  // fremmed direkte, i stedet for at vente på nogen.
   it.each(skabeloner)("%s deklarerer sit emne", (f) => {
     const emne = læs(f).match(/^\s*EMNE:\s*(.+)$/m);
     expect(emne, "skabelonen mangler en EMNE-linje i hovedet").not.toBeNull();

@@ -4,15 +4,25 @@ Runbog for `B26`s to knapper: **Turnstile** foran login og oprettelse, og
 **e-mailbekræftelse** af nye konti. Efter [`MAIL.md`](./MAIL.md)s form —
 register, trin, beviser og en fejlfindingstabel i én fil.
 
-Klientsiden blev bygget 10. august 2026 og ligger i produktion **inert**: uden
-`VITE_TURNSTILE_SITE_KEY` findes værnet ikke, og med "Confirm email" slået fra
-opfører oprettelsen sig som altid. Denne fil er det, der mangler — og det er
-konfiguration uden for repoet, som kun kan udføres af ejeren.
+✅ **BEGGE KNAPPER ER I DRIFT SIDEN 12. AUGUST 2026.** Alle otte trin er kørt og
+alle ni beviser bestået; registeret nedenfor har ingen `?` tilbage. Runbogen
+læses derfor i dag af tre grunde: for at **rulle tilbage** (afsnittet nederst,
+én kontakt pr. halvdel), for at **stille det samme op igen** efter et rollback
+eller på et nyt domæne, og for at **slå symptomer op** i fejlfindingstabellen.
 
-> ⚠️ **`B26`s udløser er ikke sprunget.** Rækken venter på, at linket deles
-> åbent (hjemmesiden publiceres, eller invitationer går uden for vennekredsen).
-> Køres runbogen før det, er prisen et ekstra trin i onboardingen for de
-> brugere, der allerede er der. Det er et legitimt valg — men det er et valg.
+Klientsiden blev bygget 10. august 2026 og lå inert indtil da: uden
+`VITE_TURNSTILE_SITE_KEY` findes værnet ikke, og med "Confirm email" slået fra
+opfører oprettelsen sig som altid. Det er stadig sandt, og det er dét, der gør
+begge halvdele til konfiguration frem for en udrulning.
+
+> **`B26`s udløser var ikke sprunget, da runbogen blev kørt.** Rækken ventede
+> på, at linket deles åbent (hjemmesiden publiceres, eller invitationer går uden
+> for vennekredsen), og den blev kørt i forvejen efter ejerens valg 12. august
+> 2026. Prisen er et ekstra trin i onboardingen for de brugere, der allerede er
+> der. **Det, udløseren stadig hænger på, er [`A43`](./BACKLOG.md)** — et
+> bot-værn hæver prisen på en fremmed konto, men `profiles` og
+> `competition_participants` kan fortsat læses af enhver indlogget bruger, og
+> den beslutning bør tages FØR den åbne deling, ikke efter.
 
 ---
 
@@ -21,22 +31,41 @@ konfiguration uden for repoet, som kun kan udføres af ejeren.
 | Hvad | Værdi | Sidst verificeret |
 |---|---|---|
 | Turnstile-widget | Cloudflare → Turnstile. Navn: `Leagly` | 10. august 2026 — oprettet |
-| Værtsnavne på widgeten | `prediction-champ.vercel.app` | ? — widgeten TEGNES på login, men det beviser ikke, at værtsnavnet accepteres |
-| Widget-tilstand | Managed | ? |
+| Værtsnavne på widgeten | `prediction-champ.vercel.app` | **12. august 2026 — BEVIST.** Widgeten viser "Succes!" på produktionens login-skærm, og `window.turnstile.getResponse()` returnerede en token. Værtsnavnet accepteres altså, og ikke bare "widgeten tegnes" |
+| Widget-tilstand | Managed | 12. august 2026 — bekræftet på skærmen: udfordringen løses af sig selv på ca. et sekund og ender i et grønt "Succes!" uden et klik |
 | Site key (offentlig) | `VITE_TURNSTILE_SITE_KEY` i Vercel | **10. august 2026 — sat OG udrullet.** Aflæst på, at widgeten tegnes på login-skærmen; komponenten returnerer `null` uden nøgle, så der er ingen mellemtilstand |
 | Site key i **Preview** | **Bevidst ikke sat** — preview kører mod staging (`B18`), som ikke har Bot Protection | 10. august 2026 |
-| Secret key (hemmelig) | Kun i Supabase → Authentication → Attack Protection | 10. august 2026 — indtastet, og siden rullet tilbage |
-| Bot Protection | **Slået fra** | 10. august 2026. Var slået til om formiddagen og lukkede adgangen for alle, fordi trin 3 var sprunget over — se "Første kørsel" nederst |
-| Confirm email | **Slået fra** | 10. august 2026. Var slået til 08:04–ca. 09:43 og efterlod én ubekræftet konto, som blev bekræftet i hånden |
-| Skabelon: Confirm signup | Emne + brødtekst fra [`mail/confirm-signup.html`](./mail/confirm-signup.html) | ? — indsat 10. august 2026, men aldrig aflæst på en modtaget mail |
+| Secret key (hemmelig) | Kun i Supabase → Authentication → Attack Protection | **12. august 2026 — indtastet og virksom.** Afvisningen i trin 5, punkt 4 er selve beviset: Supabase kan kun afvise, hvis den taler med Cloudflare, og nøglerne hører derfor til samme widget |
+| Bot Protection | **Slået TIL** | **12. august 2026 — alle fire kontroller i trin 5 bestået**, inklusive afvisningen af et kald uden kvittering. (Var kortvarigt slået til 10. august og lukkede adgangen for alle, fordi trin 3 var sprunget over — se "Første kørsel" nederst) |
+| Confirm email | **Slået TIL** | **12. august 2026 — bekræftet på GoTrues eget `/auth/v1/settings`:** `mailer_autoconfirm = false`. Talt op forinden: nul konti med `email_confirmed_at is null`, så ingen sad fast i forvejen. (Var kortvarigt slået til 10. august 08:04–ca. 09:43 og efterlod én ubekræftet konto, som blev bekræftet i hånden) |
+| Skabelon: Confirm signup | Emne + brødtekst fra [`mail/confirm-signup.html`](./mail/confirm-signup.html) | **12. august 2026 — aflæst på en modtaget mail** (trin 8): dansk emne, dansk brødtekst, og linket landede modtageren logget ind |
 
-**`?` betyder "aldrig kørt"**, ikke "kørt og bestået". Udfyld datoerne, når
-beviserne nedenfor er gået igennem — forskellen er hele pointen med registeret.
+**`?` betyder "aldrig kørt"**, ikke "kørt og bestået" — kolonnen har ingen `?`
+tilbage, og skulle en række nogensinde stilles op igen, er det den, der skal
+sættes til `?` frem for at arve en dato, ingen har efterprøvet.
 
 > **Status 10. august 2026:** trin 1–3 er kørt og trin 3 er bestået — nøglen er
 > udrullet, og widgeten tegnes. Begge knapper i Supabase står på **fra** efter
 > et rollback. Næste skridt er trin 4, som nu er den knap, den skulle have været
 > hele tiden: en, der kan trykkes tilbage.
+>
+> **Status 12. august 2026: BOT-VÆRNET ER I DRIFT.** Trin 3 fik et punkt 4 —
+> kontrollen af, at værtsnavnet accepteres — og den bestod: `getResponse()` gav
+> en token på produktionens login-skærm. Det var det ene ubeviste punkt foran
+> trin 4, og med det af vejen blev **trin 4 og hele trin 5 kørt samme dag**,
+> inklusive den fjerde kontrol, der ikke kan snydes.
+>
+> **Og e-mailbekræftelsen er slået til samme dag.** Trin 6 og 7 er kørt,
+> `mailer_autoconfirm` står på `false`, og der blev talt nul ubekræftede konti
+> forinden. **Trin 8 er også kørt, og alle fem beviser bestod** — herunder det
+> femte, som er det eneste, der rører `sikrProfil()`: en rigtig konto blev
+> oprettet, bekræftet gennem mailen og landede i appen **med sit brugernavn**.
+> Det er den kontrol, hele `src/lib/data/profile.js` findes for, og den kan kun
+> køres af et menneske med en indbakke.
+>
+> **`B26` er dermed lukket.** Rækken er slettet af backloggen, og det, der
+> beskrev en verden uden de to porte, er rettet: `DOCUMENTATION.md` §12,
+> `MAIL.md`s register, og skabelonens eget hoved, der sagde "ikke i brug endnu".
 
 ---
 
@@ -117,10 +146,35 @@ GoTrue ignorerer kvitteringen — intet kan gå i stykker endnu.
 2. Åbn `https://prediction-champ.vercel.app` og log **ud**.
 3. **Se widgeten stå på login-skærmen.** Gør den ikke det, er nøglen ikke med i
    buildet — gå ikke videre.
-4. **Log ind igen. Det skal virke.** Gør det ikke, er noget galt med selve
+4. **Se widgeten sige "Succes!", og bekræft med én linje i konsollen.** Dette er
+   kontrollen af VÆRTSNAVNET, og den er den eneste af de fem, der efterprøver,
+   at Cloudflare rent faktisk udsteder en kvittering. En widget tegnes nemlig
+   også på et domæne, der ikke står på listen — den fejler først bagefter, og
+   punkt 3 alene beviser derfor kun, at nøglen er i buildet.
+
+   ```js
+   window.turnstile.getResponse()
+   ```
+
+   | Svar | Betyder |
+   |---|---|
+   | En lang streng (`0.hNrjF7RVn7DRsDo7kMtS6G…`) | Kvitteringen er udstedt, værtsnavnet er accepteret |
+   | `""` eller `undefined` | Ingen kvittering. Kig efter Cloudflares kode i konsollen — `110200` er "domain not allowed" (trin 1, punkt 3); ellers er scriptet blokeret af en annonceblokering |
+
+   > **Widgeten forsvinder IKKE, når den er løst** — den bliver stående med et
+   > grønt "Succes!", og det er den readable kvittering. Det, der forsvinder, er
+   > den grå linje "Bekræfter, at du ikke er en robot …" UNDER widgeten
+   > (`TurnstileVenter`, vist så længe `captchaToken` er tom). I Managed-tilstand
+   > løses udfordringen på ca. et sekund, så linjen når sjældent at blive set —
+   > **dens fravær er derfor et dårligt bevis, og `getResponse()` et godt et.**
+   >
+   > *(Rettet 12. august 2026. Punktet bad oprindeligt om at "se sætningen
+   > forsvinde", og første læser aflæste det på widget-boksen, der blev stående,
+   > og konkluderede at kontrollen fejlede — mens tokenen var udstedt.)*
+5. **Log ind igen. Det skal virke.** Gør det ikke, er noget galt med selve
    udrulningen, og du har stadig ingen låst dør.
 
-Består alle fire, er trin 4 en knap, du kan trykke tilbage.
+Består alle fem, er trin 4 en knap, du kan trykke tilbage.
 
 ## Trin 4 — Supabase: slå bot-værnet til
 
@@ -153,9 +207,38 @@ Fire kontroller. **Den fjerde er den eneste, der ikke kan snydes.**
      -d '{"email":"bot-test@example.com","password":"hemmelig123"}'
    ```
 
-   **Forventet:** en fejl, der nævner captcha (`captcha protection: request
-   disallowed`). Får du i stedet en oprettet bruger, er værnet slået til i
-   panelet uden at være aktivt — og så er trin 4 ikke gennemført.
+   **I PowerShell er det den her i stedet** — på ÉN linje:
+
+   ```powershell
+   curl.exe -s -X POST "https://qfcjbpvttburccdyfnkx.supabase.co/auth/v1/signup" -H "apikey: sb_publishable_Et9Dahm8LOhZk6cS1XRqhA_9RuNmnvC" -H "Content-Type: application/json" -d '{\"email\":\"bot-test@example.com\",\"password\":\"hemmelig123\"}'
+   ```
+
+   > **Tre ting adskiller dem, og alle tre fejler tavst.**
+   > 1. **`curl.exe`, ikke `curl`.** I Windows PowerShell 5.1 er `curl` et alias
+   >    for `Invoke-WebRequest`, som ikke forstår `-H` og `-d` — den tolker `-d`
+   >    som forkortelse for noget helt andet og svarer med en parameterfejl, der
+   >    intet har med Supabase at gøre.
+   > 2. **Ingen `\` til linjeskift.** Backslash er ikke fortsættelsestegn i
+   >    PowerShell (det er backtick `` ` ``), så kommandoen bliver klippet over
+   >    ved første linjeskift og sendt af sted halv.
+   > 3. **De indre `"` skal escapes som `\"`.** PowerShell fjerner anførselstegn,
+   >    når argumenter gives videre til et rigtigt program, så et ikke-escapet
+   >    JSON-legeme når frem som `{email:...}` — ugyldig JSON, og svaret bliver
+   >    en parsefejl i stedet for det captcha-svar, kontrollen leder efter.
+
+   **Forventet:** en fejl, der nævner captcha. Det svar, kontrollen gav 12.
+   august 2026, var ordret:
+
+   ```json
+   {"code":400,"error_code":"captcha_failed","msg":"captcha protection: request disallowed (no captcha_token found)"}
+   ```
+
+   Parentesen varierer — advarslen om rækkefølgen ovenfor citerer
+   `(not-provided)`, som er den samme afvisning set fra login-endpointet. Det er
+   `error_code: captcha_failed`, der er beviset, ikke den præcise sætning.
+
+   Får du i stedet en oprettet bruger, er værnet slået til i panelet uden at
+   være aktivt — og så er trin 4 ikke gennemført.
 
 Udfyld registeret, når de fire er gået igennem.
 
@@ -166,7 +249,13 @@ Authentication → Email Templates → **Confirm signup**.
 | Felt | Værdi |
 |---|---|
 | Subject | `Bekræft din e-mail` |
-| Body | Indholdet af [`mail/confirm-signup.html`](./mail/confirm-signup.html) |
+| Body | [`mail/confirm-signup.html`](./mail/confirm-signup.html) **fra `<table role="presentation"` og ned** |
+
+> **Tag ikke kommentarhovedet med.** Filens første 31 linjer er interne noter —
+> de nævner backlog-rækker, kodestier og hændelsen 10. august — og en HTML-
+> kommentar forsvinder ikke, fordi den ikke vises: den rejser med i mailens
+> kilde og kan læses af enhver modtager, der åbner "vis original". Den gør
+> ingen skade, men den hører ikke til i en mail til en fremmed.
 
 > 🛑 **Denne rækkefølge er ikke kosmetisk.** Slås bekræftelsen til før
 > skabelonen er indsat, går den første mail ud med Supabases engelske standard
@@ -175,6 +264,38 @@ Authentication → Email Templates → **Confirm signup**.
 > bliver stående på engelsk, hvis kun brødteksten indsættes.
 
 ## Trin 7 — Slå bekræftelsen til
+
+> **Denne kontakt kan IKKE låse eksisterende brugere ude — og det er værd at
+> vide, fordi den forveksles med trin 4, som kan.** Bot Protection er en global
+> port foran tre endpoints; `Confirm email` afvises pr. bruger på deres eget
+> `email_confirmed_at`. Beviset er rollback-afsnittets asymmetri nedenfor: en
+> ubekræftet konto kommer ikke ind igen ved at slå kontakten fra, hvilket kun
+> giver mening, hvis kontakten aldrig var det, der spærrede. **Er du bekræftet i
+> dag, mærker du intet. Er du ubekræftet i dag, er du allerede låst ude.**
+
+**Tæl alligevel de ubekræftede først** — ikke fordi kontakten skader dem, men så
+et tal, du kendte i forvejen, ikke bliver til en mistanke mod kontakten i
+morgen:
+
+```sql
+select email, created_at, last_sign_in_at, email_confirmed_at
+  from auth.users
+ where email_confirmed_at is null
+ order by created_at;
+```
+
+**Nul rækker er det forventede** (aflæst 12. august 2026). Kommer der rækker, så
+ryd dem FØR du slår til: `Resend confirmation` i ⋯-menuen under Authentication →
+Users er den rigtige vej, og den manuelle `update` nederst i denne fil er
+nødløsningen med den pris, der står beskrevet dér.
+
+> 🔴 **Blokken ovenfor står med vilje UDEN for citatet.** `docs/`-mappens
+> SQL-tjek i CI kræver, at kodehegnet står ved linjestart, eventuelt med
+> almindelige mellemrum foran (`sql/tests/docs_sql.mjs`) — et `>` foran hegnet
+> falder uden for mønsteret. **En forespørgsel skrevet ind i et citat bliver
+> derfor aldrig kørt mod skemaet: den ser efterprøvet ud og er det ikke.**
+> Fundet 12. august 2026, fordi netop denne blok først blev skrevet i citatet og
+> slap igennem tjekket uden en lyd.
 
 Authentication → **Sign In / Providers** → fanen **Supabase Auth** → blokken
 **User Signups** ØVERST på siden → **Confirm email** → til → **Save changes**.
@@ -209,6 +330,13 @@ kontakten i denne uge:
 ```bash
 curl -s 'https://qfcjbpvttburccdyfnkx.supabase.co/auth/v1/settings' \
   -H 'apikey: sb_publishable_Et9Dahm8LOhZk6cS1XRqhA_9RuNmnvC'
+```
+
+I PowerShell — her er der ingen JSON at escape, så den kan bruge det indbyggede
+og læse feltet direkte frem for at lede i et helt svar:
+
+```powershell
+(Invoke-RestMethod 'https://qfcjbpvttburccdyfnkx.supabase.co/auth/v1/settings' -Headers @{ apikey = 'sb_publishable_Et9Dahm8LOhZk6cS1XRqhA_9RuNmnvC' }).mailer_autoconfirm
 ```
 
 | `mailer_autoconfirm` | Betyder |

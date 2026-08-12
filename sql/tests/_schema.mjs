@@ -71,13 +71,18 @@ create or replace function auth.role() returns text language sql stable as
 -- ikke fordi dokumentationen var forkert, men fordi attrappen var smallere end
 -- virkeligheden. Mangler en kolonne igen, er det symptomet at kende.
 --
+-- last_sign_in_at kom til 12. august 2026 af nøjagtig samme grund: runbogens
+-- trin 7 tæller ubekræftede konti, før bekræftelsen slås til, og kolonnen er
+-- dét, der skiller "oprettet og aldrig brugt" fra en aktiv bruger, der er
+-- endt ubekræftet. Anden gang samme fælde, og forudsigelsen ovenfor holdt.
+--
 -- BEMÆRK: ingen backticks i denne blok. PRELUDE er et JS-template-literal, så
 -- en backtick i en SQL-kommentar afslutter strengen og giver en SyntaxError i
 -- Node, længe før PostgreSQL ser noget.
 create table if not exists auth.users (
   id uuid primary key, email text, encrypted_password text,
   raw_user_meta_data jsonb, created_at timestamptz,
-  email_confirmed_at timestamptz
+  email_confirmed_at timestamptz, last_sign_in_at timestamptz
 );
 
 -- Dumpet indeholder selv \`create schema public\`.
