@@ -18,32 +18,6 @@
     }
   },
   "regions": ["dub1"],
-  "rewrites": [
-    {
-      "source": "/",
-      "has": [
-        { "type": "query", "key": "liga" },
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": "(?i).*(facebookexternalhit|facebot|whatsapp|twitterbot|slackbot|discordbot|telegrambot|linkedinbot|redditbot|pinterest|skypeuripreview|applebot).*"
-        }
-      ],
-      "destination": "/api/invite-preview"
-    },
-    {
-      "source": "/",
-      "has": [
-        { "type": "query", "key": "join" },
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": "(?i).*(facebookexternalhit|facebot|whatsapp|twitterbot|slackbot|discordbot|telegrambot|linkedinbot|redditbot|pinterest|skypeuripreview|applebot).*"
-        }
-      ],
-      "destination": "/api/invite-preview"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",

@@ -2,8 +2,13 @@
 // LINK-PREVIEW PR. INVITATION (`I7`): den HTML, en crawler får at se, når nogen
 // deler et `?liga=`- eller `?join=`-link i Messenger, WhatsApp eller iMessage.
 //
-// Kald med: GET /?liga=<kode> — men kun via omskrivningen i vercel.json, som
-// kræver BÅDE parameteren og en crawler-agent. Et menneske rammer aldrig hertil.
+// Kald med: GET /?liga=<kode> — men kun via omskrivningen i `middleware.js`,
+// som kræver BÅDE parameteren og en crawler-agent. Et menneske rammer aldrig
+// hertil.
+//
+// ⚠️ Portvagten lå oprindeligt i `vercel.json`s `rewrites` og virkede ALDRIG:
+// de ligger efter filsystem-opslaget, og der findes en `index.html` på `/`.
+// Se `middleware.js` og `DOCUMENTATION.md` §13.
 //
 // ---------------------------------------------------------------------------
 // HVORFOR KUN CRAWLERE OMSKRIVES
@@ -17,7 +22,7 @@
 //      sig i sync med byggeriet.
 //   3. Og vigtigst: et nedbrud her ville blive et nedbrud i selve invitationen.
 //
-// Med portvagten i vercel.json kan et menneske pr. KONSTRUKTION ikke ende her,
+// Med portvagten i `middleware.js` kan et menneske pr. KONSTRUKTION ikke ende her,
 // og "fejl åben" er dermed en egenskab ved opsætningen frem for et løfte, denne
 // fil skal holde. Prisen er, at en crawler, der ikke står på listen, får
 // `index.html`s statiske tags — hvilket er nøjagtig det, alle fik før `I7`, og

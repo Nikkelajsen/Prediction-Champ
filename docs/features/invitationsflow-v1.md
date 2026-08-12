@@ -58,8 +58,14 @@ skiftes.
 > Et designet billede med tagline er en designopgave og står i backloggen.
 
 **Dynamisk (kun crawlere):** `api/invite-preview.js` svarer med ligaens eget
-navn og antallet af spillere. `vercel.json` omskriver kun, når **både**
+navn og antallet af spillere. `middleware.js` omskriver kun, når **både**
 `?liga=`/`?join=` og en crawler-agent er til stede.
+
+> **Rettelse 12. august 2026 — portvagten lå først i `vercel.json` og virkede aldrig.**
+> `rewrites` ligger efter filsystem-opslaget, og der findes en fysisk `index.html`
+> på `/`, så reglen kunne ikke fyre: `api/invite-preview.js` blev ALDRIG kaldt i
+> produktion. Logikken bor nu i Routing Middleware, som kører før filsystemet.
+> **Reglerne er ordret de samme** — kun stedet er flyttet. Se `DOCUMENTATION.md` §13.
 
 - Et menneske kan pr. konstruktion ikke ende i funktionen. "Fejl åben" er
   dermed en egenskab ved opsætningen, ikke et løfte koden skal holde.
@@ -70,10 +76,11 @@ navn og antallet af spillere. `vercel.json` omskriver kun, når **både**
 - Alle navne HTML-escapes — et liganavn er brugerskrevet tekst.
 - Googlebot står bevidst ikke på listen.
 
-⚠️ `has.value` i `vercel.json` er en Rust-regex og ikke JavaScripts. Ændres
-udtrykket, skal det afprøves på et preview-deploy med
-`curl -A "WhatsApp/2.23" "$URL/?liga=<kode>"` — en afvist regex fejler ved
-deploy, ikke ved kaldet.
+⚠️ Udtrykket er nu en almindelig JavaScript-regex i `middleware.js` og dækket af
+`middleware.test.js`. **Men afprøv det stadig på et preview-deploy** med
+`curl -A "WhatsApp/2.23" "$URL/?liga=<kode>"`: en test kan bevise, at porten
+vælger rigtigt, men ikke at Vercel overhovedet kalder den — og det var præcis
+dét, der gik galt første gang.
 
 ---
 
