@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict djEgL1Y1VvSGcJf6N3x5scwtMqCpk0I8JVGBZrzVbXKc39AkOeYukLA5PEcznft
+\restrict LXhAMsCd9dh8cgamv6d45LsYgg0KJ4e4cIPXVScVhvhCwcGKEnWLBzKOC51ReHN
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
@@ -1346,6 +1346,27 @@ begin
   from seneste s
   left join seneste_ok o on o.job = s.job
   order by s.job;
+end;
+$$;
+
+
+--
+-- Name: admin_profiles(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admin_profiles() RETURNS TABLE(id uuid, display_name text, created_at timestamp with time zone, last_seen_at timestamp with time zone, is_admin boolean, anonymized_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if not exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  return query
+    select p.id, p.display_name, p.created_at, p.last_seen_at, p.is_admin, p.anonymized_at
+      from public.profiles p
+     order by p.created_at desc;
 end;
 $$;
 
@@ -4582,6 +4603,28 @@ $$;
 
 
 --
+-- Name: is_competition_visible(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.is_competition_visible(cid uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (
+    select 1
+      from public.competitions c
+     where c.id = cid
+       and (
+         c.created_by = auth.uid()
+         or (c.group_id is not null and public.is_group_member(c.group_id))
+         or exists (select 1 from public.competition_participants cp
+                     where cp.competition_id = c.id and cp.user_id = auth.uid())
+       )
+  );
+$$;
+
+
+--
 -- Name: is_group_admin(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4619,6 +4662,20 @@ CREATE FUNCTION public.is_group_member(gid uuid) RETURNS boolean
   select exists (
     select 1 from public.group_members
     where group_id = gid and user_id = auth.uid()
+  );
+$$;
+
+
+--
+-- Name: is_platform_admin(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.is_platform_admin() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (
+    select 1 from public.profiles p where p.id = auth.uid() and p.is_admin
   );
 $$;
 
@@ -4713,6 +4770,18 @@ begin
   where cp.competition_id = p_comp_id
   on conflict (group_id, user_id) do nothing;
 end;
+$$;
+
+
+--
+-- Name: my_profile(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_profile() RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select to_jsonb(p) from public.profiles p where p.id = auth.uid();
 $$;
 
 
@@ -6969,6 +7038,13 @@ CREATE POLICY competition_participants_insert_involved ON public.competition_par
 
 
 --
+-- Name: competition_participants competition_participants_select_visible; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY competition_participants_select_visible ON public.competition_participants FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR public.is_competition_visible(competition_id)));
+
+
+--
 -- Name: competitions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -6978,9 +7054,7 @@ ALTER TABLE public.competitions ENABLE ROW LEVEL SECURITY;
 -- Name: competitions competitions_select_involved; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY competitions_select_involved ON public.competitions FOR SELECT TO authenticated USING (((created_by = auth.uid()) OR ((group_id IS NOT NULL) AND public.is_group_member(group_id)) OR (EXISTS ( SELECT 1
-   FROM public.competition_participants cp
-  WHERE ((cp.competition_id = competitions.id) AND (cp.user_id = auth.uid()))))));
+CREATE POLICY competitions_select_involved ON public.competitions FOR SELECT TO authenticated USING (public.is_competition_visible(id));
 
 
 --
@@ -7076,7 +7150,7 @@ CREATE POLICY groups_insert_own ON public.groups FOR INSERT TO authenticated WIT
 -- Name: groups groups_select_member; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY groups_select_member ON public.groups FOR SELECT TO authenticated USING ((public.is_group_member(id) OR (created_by = auth.uid())));
+CREATE POLICY groups_select_member ON public.groups FOR SELECT TO authenticated USING (public.is_group_member(id));
 
 
 --
@@ -7103,9 +7177,7 @@ ALTER TABLE public.job_runs ENABLE ROW LEVEL SECURITY;
 -- Name: job_runs job_runs_read_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY job_runs_read_admin ON public.job_runs FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
-   FROM public.profiles
-  WHERE ((profiles.id = auth.uid()) AND profiles.is_admin))));
+CREATE POLICY job_runs_read_admin ON public.job_runs FOR SELECT TO authenticated USING (public.is_platform_admin());
 
 
 --
@@ -7124,20 +7196,14 @@ ALTER TABLE public.matches ENABLE ROW LEVEL SECURITY;
 -- Name: matches matches_insert_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY matches_insert_admin ON public.matches FOR INSERT TO authenticated WITH CHECK ((EXISTS ( SELECT 1
-   FROM public.profiles p
-  WHERE ((p.id = auth.uid()) AND p.is_admin))));
+CREATE POLICY matches_insert_admin ON public.matches FOR INSERT TO authenticated WITH CHECK (public.is_platform_admin());
 
 
 --
 -- Name: matches matches_update_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY matches_update_admin ON public.matches FOR UPDATE TO authenticated USING ((EXISTS ( SELECT 1
-   FROM public.profiles p
-  WHERE ((p.id = auth.uid()) AND p.is_admin)))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM public.profiles p
-  WHERE ((p.id = auth.uid()) AND p.is_admin))));
+CREATE POLICY matches_update_admin ON public.matches FOR UPDATE TO authenticated USING (public.is_platform_admin()) WITH CHECK (public.is_platform_admin());
 
 
 --
@@ -7246,13 +7312,6 @@ ALTER TABLE public.ratings ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY ratings_read ON public.ratings FOR SELECT TO authenticated USING (true);
-
-
---
--- Name: competition_participants read all participation; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "read all participation" ON public.competition_participants FOR SELECT USING ((auth.role() = 'authenticated'::text));
 
 
 --
@@ -7476,6 +7535,15 @@ GRANT ALL ON FUNCTION public.admin_job_health() TO service_role;
 
 
 --
+-- Name: FUNCTION admin_profiles(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.admin_profiles() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.admin_profiles() TO authenticated;
+GRANT ALL ON FUNCTION public.admin_profiles() TO service_role;
+
+
+--
 -- Name: FUNCTION admin_recompute_derived(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -7643,6 +7711,15 @@ GRANT ALL ON FUNCTION public.invite_preview(p_code text) TO anon;
 
 
 --
+-- Name: FUNCTION is_competition_visible(cid uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.is_competition_visible(cid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.is_competition_visible(cid uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.is_competition_visible(cid uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION is_group_admin(gid uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -7667,6 +7744,15 @@ GRANT ALL ON FUNCTION public.is_group_creator(gid uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.is_group_member(gid uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.is_group_member(gid uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.is_group_member(gid uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION is_platform_admin(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.is_platform_admin() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.is_platform_admin() TO authenticated;
+GRANT ALL ON FUNCTION public.is_platform_admin() TO service_role;
 
 
 --
@@ -7712,6 +7798,15 @@ GRANT ALL ON FUNCTION public.match_locked(kickoff_at timestamp with time zone, k
 REVOKE ALL ON FUNCTION public.move_competition_to_group(p_comp_id uuid, p_group_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.move_competition_to_group(p_comp_id uuid, p_group_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.move_competition_to_group(p_comp_id uuid, p_group_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION my_profile(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_profile() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_profile() TO authenticated;
+GRANT ALL ON FUNCTION public.my_profile() TO service_role;
 
 
 --
@@ -8046,7 +8141,7 @@ GRANT ALL ON TABLE public.notification_log TO service_role;
 -- Name: TABLE profiles; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.profiles TO authenticated;
+GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.profiles TO authenticated;
 GRANT ALL ON TABLE public.profiles TO service_role;
 
 
@@ -8054,14 +8149,21 @@ GRANT ALL ON TABLE public.profiles TO service_role;
 -- Name: COLUMN profiles.id; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT UPDATE(id) ON TABLE public.profiles TO authenticated;
+GRANT SELECT(id),UPDATE(id) ON TABLE public.profiles TO authenticated;
 
 
 --
 -- Name: COLUMN profiles.display_name; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT UPDATE(display_name) ON TABLE public.profiles TO authenticated;
+GRANT SELECT(display_name),UPDATE(display_name) ON TABLE public.profiles TO authenticated;
+
+
+--
+-- Name: COLUMN profiles.anonymized_at; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(anonymized_at) ON TABLE public.profiles TO authenticated;
 
 
 --
@@ -8181,5 +8283,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict djEgL1Y1VvSGcJf6N3x5scwtMqCpk0I8JVGBZrzVbXKc39AkOeYukLA5PEcznft
+\unrestrict LXhAMsCd9dh8cgamv6d45LsYgg0KJ4e4cIPXVScVhvhCwcGKEnWLBzKOC51ReHN
 
