@@ -18,8 +18,8 @@ hvor du var.
 | 4 | Staging afprøvet med den NYE klient — de syv skærme nedenfor | ✅ 12. august 2026 |
 | 5 | 📈 **Prisen målt i staging:** liga-siden med rigtige tal | ✅ 12. august 2026 — **2,2 ms i alt** for 8 konkurrencer, altså en ØVRE grænse for policyens pris, og under tærsklen |
 | 6 | `sql/read_scope_functions.sql` (#59) kørt i **produktion** | ✅ 12. august 2026 |
-| 7 | PR merget, Vercel-deploy færdig | ⬜ ← **her er vi** ([#191](https://github.com/Nikkelajsen/Prediction-Champ/pull/191), CI grøn) |
-| 8 | Produktionen afprøvet: login, Rating, en konkurrence, navneskift | ⬜ |
+| 7 | PR merget, Vercel-deploy færdig | ✅ 12. august 2026 ([#191](https://github.com/Nikkelajsen/Prediction-Champ/pull/191), CI grøn) |
+| 8 | Produktionen afprøvet: login, Rating, en konkurrence, navneskift | ⬜ ← **her er vi** |
 | 9 | `sql/read_scope_narrow.sql` (#60) kørt i **produktion** | ⬜ |
 | 10 | Produktionen afprøvet igen, og fladen efterprøvet smal | ⬜ |
 
