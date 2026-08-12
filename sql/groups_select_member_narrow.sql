@@ -1,0 +1,124 @@
+-- `groups`' SELECT-policy mister det led, den ikke længere har brug for (G98).
+-- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
+--
+-- 📍 `#N` er en migrering: nummeret står i kolonne 1 i filoversigten i
+--    `sql/README.md`, hvor filnavnene er links. `#53` = `invite_policies.sql`,
+--    `#55` = `groups_select_creator.sql`, `#57` = `create_group.sql`, denne fil
+--    er `#58`.
+--
+-- 🔴 **DEN HAR EN FORUDSÆTNING, OG DEN ER ET DEPLOY — IKKE EN ANDEN MIGRERING.**
+-- Filen fjerner `or created_by = auth.uid()` fra `groups_select_member`. Det led
+-- er dét, der bærer den GAMLE klients `insert … returning`, altså den vej, en
+-- liga blev til indtil `G95`. Køres denne fil, mens en klient uden
+-- `create_group()` er i luften, kan INGEN oprette en liga — nøjagtig den
+-- produktionsfejl, `#55` blev skrevet for at rette.
+--
+--   ✅ Forudsætningen er indfriet 12. august 2026: `#57` er kørt i staging og
+--      produktion, den nye klient er udrullet, og "Opret liga" er afprøvet i
+--      produktionen af ejeren. Rækkefølgen er altså efterlevet, ikke antaget.
+--
+-- **Er du i tvivl, om deployet er ude, så prøv "Opret liga" i appen FØR du kører
+-- filen.** Virker den, kalder klienten `create_group()`, og filen er sikker.
+-- Tilbagerulningen er ét statement og står nederst.
+--
+-- ---------------------------------------------------------------------------
+-- HVORFOR LEDDET FANDTES
+--
+-- `#53` (`A40`) smalnede læsningen af `groups` til medlemmer:
+--
+--     using (public.is_group_member(id))
+--
+-- og brød dermed oprettelsen af enhver liga for enhver bruger. Årsagen er den
+-- regel, der siden er skrevet ind i `DOCUMENTATION.md` §13: `db.insert` sender
+-- altid `Prefer: return=representation`, så PostgREST kører
+-- `insert … returning *` — og en RETURNING-klausul betyder, at rækken skal
+-- LÆSES tilbage, altså at **SELECT**-policyen anvendes på den nyindsatte række.
+-- Den gamle `createGroup` skrev ligaen i ét kald og sin egen medlemsrække i det
+-- NÆSTE, så `is_group_member(id)` var falsk i det sekund, ligaen blev skrevet.
+--
+-- `#55` gav derfor policyen et led, der var sandt allerede ved skrivningen:
+--
+--     using (public.is_group_member(id) or created_by = auth.uid())
+--
+-- ---------------------------------------------------------------------------
+-- HVORFOR DET KAN FJERNES NU
+--
+-- `G95` (`#57`) flyttede oprettelsen ind i `create_group()`, som er
+-- `security definer` og skriver BEGGE rækker som ejer i ÉN transaktion. Ingen
+-- policy konsulteres undervejs, og klienten får ligaen retur som funktionens
+-- svar frem for som en RETURNING-klausul. Behovet for leddet forsvandt dermed
+-- 12. august 2026 — men leddet selv kunne ikke følge med i samme ombæring,
+-- fordi den gamle klient stadig var i luften. Denne fil er den anden halvdel af
+-- den udrulning.
+--
+-- ---------------------------------------------------------------------------
+-- HVAD DER FAKTISK LUKKES — OG HVOR STORT DET ER
+--
+-- Prisen ved leddet stod skrevet i `#55`s hoved, i `#53`s og i
+-- `DOCUMENTATION.md` §13, og den var accepteret: **en opretter, der har FORLADT
+-- sin egen liga, kunne blive ved med at læse den — og dermed dens
+-- `invite_code`.** Efter denne fil gælder `A40`s regel uden undtagelse:
+--
+--     Du kan se en liga, hvis du er medlem af den. Punktum.
+--
+-- Det er en lille lækage, der lukkes, og den var accepteret som en pris for
+-- noget, der siden blev gratis. Det er hele begrundelsen: ikke at hullet var
+-- farligt, men at det ikke længere købte noget.
+--
+-- ⚠️ **Én synlig følge, som er tilsigtet:** en liga UDEN medlemmer bliver
+-- usynlig for alle — også for den, der har oprettet den. Sådan en liga kan kun
+-- opstå ad den gamle vej (afbrudt mellem to kald), og der er nul af dem i
+-- produktionen (talt ved `A40`s udrulning og igen ved `#57`s). Verifikation 3
+-- nedenfor tæller efter, FØR du kører filen — findes der pludselig en, skal den
+-- ryddes først, ellers står den uden for enhver skærm.
+
+drop policy if exists groups_select_member on public.groups;
+create policy groups_select_member on public.groups
+  for select to authenticated
+  using (public.is_group_member(id));
+
+-- ⚠️ **Den samme smalning står nu også i `#53` selv** (`sql/invite_policies.sql`),
+-- som fik leddet 11. august 2026 og har mistet det igen. Det er ikke
+-- dobbeltarbejde, men den samme regel som dengang, bare den anden vej: kører
+-- nogen `#53` igen, skal den efterlade den GÆLDENDE policy og ikke gårsdagens.
+--
+-- 🛑 **`#55` (`sql/groups_select_creator.sql`) må derimod ikke køres igen.** Den
+-- indeholder præcis den udvidelse, denne fil fjerner, og en gen-kørsel ville
+-- tavst rulle `G98` tilbage. Filen er markeret i `sql/README.md`s liste over
+-- migreringer, der ikke må gen-køres blindt.
+
+-- ============================================================================
+-- Verifikation — kør efter migreringen
+-- ============================================================================
+-- ⚠️ Blokkene er KOMMENTERET UD, så hele filen kan pastes i ét stykke. Skal de
+-- køres, fjernes `--` først — ellers udføres der ingenting, og editoren svarer
+-- "Success. No rows returned", hvilket ligner et svar.
+--
+-- 1) Policyen har nu ÉT led. Forvent `qual` uden `or` og uden `created_by`.
+-- select policyname, qual from pg_policies
+--  where schemaname = 'public' and tablename = 'groups' and cmd = 'SELECT';
+
+-- 2) Den rigtige prøve er i APPEN, ikke her: SQL-editoren kører som en rolle
+--    uden `auth.uid()`, så hverken en oprettelse eller en læsning kan
+--    efterlignes meningsfuldt. **Opret en liga i appen efter kørslen** — den
+--    skal stadig kunne lade sig gøre, fordi klienten kalder `create_group()`.
+--    Går den i stykker, er deployet ikke ude; kør tilbagerulningen nedenfor.
+
+-- 3) KØR DENNE FØR MIGRERINGEN. Ingen liga må stå uden medlemmer — en sådan
+--    liga bliver usynlig for alle, når leddet forsvinder. Forvent NUL rækker.
+--    (Samme forespørgsel som `sql/checks/league_admin_coverage.sql` stiller
+--    bredere, og som `#57` bad om at få talt.)
+-- select g.id, g.name, g.created_at from public.groups g
+--  where not exists (select 1 from public.group_members m where m.group_id = g.id);
+
+-- ============================================================================
+-- Tilbagerulning
+-- ============================================================================
+-- Ét statement, og det er `#55`s policy ordret. Brug den, hvis oprettelsen af en
+-- liga viser sig at gå gennem `insert … returning` alligevel — altså hvis en
+-- gammel klient stadig kører hos nogen.
+--
+-- drop policy if exists groups_select_member on public.groups;
+-- create policy groups_select_member on public.groups
+--   for select to authenticated
+--   using (public.is_group_member(id) or created_by = auth.uid());

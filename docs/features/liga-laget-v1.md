@@ -103,7 +103,7 @@ alter table competitions add column if not exists group_id uuid references group
 
 | Objekt | Regel |
 |---|---|
-| `groups` SELECT | `authenticated` (åben læsning — nødvendig for join-med-kode-opslag; samme bevidste valg som for `competitions` i dag, jf. fejlfindingsloggen "Kunne ikke joine med kode") |
+| `groups` SELECT | ~~`authenticated` (åben læsning — nødvendig for join-med-kode-opslag)~~ **Rettet efter levering:** `is_group_member(id)` alene siden `A40` (`#53`) og `G98` (`#58`). Den åbne læsning var netop hullet, `A40` lukkede — opslaget på en kode bor nu i `invite_lookup()`. Se afsnittet "Rettelse 11. august 2026" nedenfor for det ene døgn, hvor reglen havde et led mere |
 | `groups` INSERT | `created_by = auth.uid()` |
 | `groups` UPDATE/DELETE | kun liga-admin (via hjælpefunktion, se nedenfor); DELETE kræver desuden, at ligaen er **tom** (ingen konkurrencer — jf. afsnit 8 og `DOCUMENTATION.md` §18). DELETE kaskaderer til `group_members`; konkurrencer får `group_id = null` (bliver liga-løse, slettes IKKE) |
 | `group_members` SELECT | egne rækker + rækker i ligaer, man selv er medlem af — **via `security definer`-hjælpefunktionen `is_group_member(gid uuid)`**, aldrig ved at policy'en slår op i `group_members` direkte (kendt "infinite recursion"-fælde, jf. fejlfindingsloggen) |
@@ -111,7 +111,7 @@ alter table competitions add column if not exists group_id uuid references group
 | `group_members` DELETE | `user_id = auth.uid()` **og** man deltager ikke i nogen af ligaens konkurrencer (`sql/group_membership_invariant.sql`, A8). Admin-fjernelse af andre er bevidst udskudt (afsnit 8) |
 | `competition_participants` DELETE | **ny policy**: egen række, og **enten** har alle konkurrencens kampe resultat (forløbet er forbi), **eller** brugeren har ingen forudsigelser på allerede låste kampe (samme lås-udtryk som `predictions`-policyerne — runde-baseret indtil `A21`, per kamp siden 1. august 2026, hvor udtrykket blev opdateret i `sql/predictions_match_lock.sql`) — så framelding ikke kan bruges til at slette en dårlig, synlig historik midt i et forløb. Første gren kom til i `sql/group_membership_invariant.sql`, fordi den oprindelige regel var permanent og ikke "midt i et forløb" |
 
-Opretteren indsættes som `role='admin'` i samme flow som liga-oprettelsen (frontend laver to inserts; rækkefølgen er ufarlig, da INSERT-policyen kun kræver eget `user_id`).
+Opretteren indsættes som `role='admin'` i samme flow som liga-oprettelsen. ~~(frontend laver to inserts; rækkefølgen er ufarlig, da INSERT-policyen kun kræver eget `user_id`)~~ **Rettet efter levering:** rækkefølgen var IKKE ufarlig — de to inserts var to transaktioner, og fejlede den anden, stod ligaen tilbage uden medlemmer. Siden `G95` (12. august 2026) skriver `create_group()` begge rækker i ét statement, og siden `G98` er det den eneste vej.
 
 **Ingen ændringer** i `predictions`, `matches`, `ratings`, standings-views eller triggere. `ratings.scope` holder allerede døren åben for per-liga-rating senere — liga-laget er forudsætningen, ikke en del af v1.
 
@@ -318,10 +318,18 @@ logget ind, så et delt link ikke kunne vise andet end appens forside.
 bag og tilbagevejen står i `DECISIONS.md` (`A41`) og i `sql/invite_preview.sql`.
 
 
-**Rettelse 11. august 2026:** SELECT-reglen på `groups` er *"medlem **eller** opretter"*
-og ikke kun "medlem". Leddet `or created_by = auth.uid()` er ikke en opblødning for
-bekvemmelighedens skyld — uden det kunne **ingen oprette en liga**: klienten skriver med
-`Prefer: return=representation`, så indsættelsen læser rækken tilbage og dermed også skal
-bestå SELECT-policyen, og opretterens medlemsrække skrives først i næste kald. Prisen er,
-at en opretter, der har forladt sin egen liga, stadig kan se den. Se
-`sql/groups_select_creator.sql` og `DOCUMENTATION.md` §13.
+**Rettelse 11. august 2026 — og rettelsen af rettelsen 12. august 2026:** SELECT-reglen på
+`groups` var i ét døgn *"medlem **eller** opretter"*. Leddet `or created_by = auth.uid()`
+var ikke en opblødning for bekvemmelighedens skyld — uden det kunne **ingen oprette en
+liga**: klienten skrev med `Prefer: return=representation`, så indsættelsen læste rækken
+tilbage og dermed også skulle bestå SELECT-policyen, og opretterens medlemsrække blev
+skrevet først i næste kald (`sql/groups_select_creator.sql`, `#55`, og `DOCUMENTATION.md`
+§13).
+
+**Reglen er nu igen "medlem". Punktum** (`G98`, [`#58 groups_select_member_narrow.sql`](../../sql/groups_select_member_narrow.sql)).
+`create_group()` (`G95`, `#57`) skriver ligaen og opretterens admin-række i ÉN transaktion
+som ejer, så oprettelsen ikke længere går gennem et `insert … returning` — og dermed
+forsvandt både behovet for leddet og dets pris: en opretter, der har forladt sin egen liga,
+kan ikke længere se den og dens `invite_code`. **Rækkefølgen var bindende og gik gennem et
+deploy:** så længe en klient uden `create_group()` var i luften, ville smalningen have
+brudt oprettelsen igen. Følgen at kende: en liga uden medlemmer er usynlig for alle.

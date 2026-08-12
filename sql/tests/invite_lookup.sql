@@ -43,7 +43,11 @@
 --    10. Et ligamedlem kan stadig tilmelde sig ligaens konkurrencer direkte
 --        ("Deltag"-knappen), og en opretter kan stadig oprette sin egen liga og
 --        skrive sig selv som admin og deltager — men hverken som `member`
---        (`A37`s frosne liga) eller på en andens vegne.
+--        (`A37`s frosne liga) eller på en andens vegne. **Siden `G98`
+--        (12. august 2026) gælder det gennem `create_group()` og KUN dér:**
+--        10c1 måler, at den gamle klients `insert … returning` er lukket, 10c2
+--        at den nye vej virker, og 10f at prisen for det gamle led er væk — en
+--        opretter, der har forladt sin egen liga, kan ikke længere læse den.
 --
 -- EFTERPRØVET MED MUTATION (10. august 2026). Se listen nederst i filen.
 --
@@ -311,6 +315,17 @@ end $$;
 
 \ir ../invite_policies.sql
 
+-- `create_group()` (#57, `G95`) læses med, og det er ikke pynt: siden `G98`
+-- (12. august 2026) er `groups`' SELECT-policy smalnet til `is_group_member(id)`
+-- alene, og dermed er funktionen den ENESTE vej, en liga bliver til. En test,
+-- der kun målte, at den gamle vej er lukket, ville være grøn i en app, hvor
+-- ingen kan oprette en liga — det var netop den fejl, 11. august 2026 kostede.
+-- Påstand 10c måler begge halvdele: den gamle vej afvist, den nye vej i orden.
+--
+-- Filen er `create or replace` + grants og rører ingen policy, så den kan
+-- indlæses her uden at flytte det, resten af testen måler.
+\ir ../create_group.sql
+
 -- ---------------------------------------------------------------------------
 -- Påstandene
 -- ---------------------------------------------------------------------------
@@ -515,7 +530,8 @@ begin
     raise exception '10b) opretteren kunne ikke deltage i sin egen liga-løse konkurrence (%)', v_udfald;
   end if;
 
-  --     c) SAMME OPRETTELSE, MEN SOM APPEN FAKTISK GØR DEN — med `returning`.
+  --     c) OPRETTELSEN, SOM APPEN FAKTISK GØR DEN — og den vej, den IKKE
+  --     længere går.
   --
   --     Påstand 10b ovenfor var grøn, mens produktionen var brudt (11. august
   --     2026), fordi `skriv()` ikke læser noget tilbage og dermed aldrig anvender
@@ -524,32 +540,57 @@ begin
   --     forskel var nok til, at ingen kunne oprette en liga: `groups`' SELECT-
   --     policy krævede medlemskab, og medlemsrækken skrives først i næste kald.
   --
-  --     Rækkefølgen herunder er `createGroup`s egen (src/lib/data/groups.js):
-  --     ligaen først, medlemsrækken bagefter. Byt om på dem, og påstanden holder
-  --     op med at måle fejlen.
+  --     Siden `G98` (12. august 2026, `#58`) er den policy smalnet TILBAGE til
+  --     `is_group_member(id)` alene, og de to påstande herunder er de to sider
+  --     af netop den beslutning. **Den ene uden den anden måler ingenting:**
+  --     c1 alene ville også være grøn i en app, hvor ingen kan oprette en liga,
+  --     og c2 alene ville ikke opdage, at det gamle hul stod åbent.
+  --
+  --     c1) Den gamle klients vej — `insert … returning` på `groups` — er nu
+  --         LUKKET. Det er hele G98's indhold: leddet `or created_by`, der bar
+  --         den, er væk, fordi `create_group()` har overtaget skrivningen.
   v_udfald := pg_temp.skriv_retur(FREMMED,
     $s$insert into public.groups (id, name, created_by)
        values ('33330000-0000-4000-8000-00000000000c', 'Fremmeds anden liga', auth.uid())
        returning id$s$);
-  if v_udfald <> 'tilladt' then
-    raise exception '10c) kunne ikke oprette en liga MED returning (%) — det er sådan appen skriver, så oprettelsen er brudt i produktionen', v_udfald;
+  if v_udfald <> 'afvist' then
+    raise exception '10c1) den gamle klients `insert … returning` på groups blev ikke afvist (%) — `or created_by = auth.uid()` er tilbage i SELECT-policyen, og G98 er rullet tilbage', v_udfald;
   end if;
-  v_udfald := pg_temp.skriv_retur(FREMMED,
-    $s$insert into public.group_members (group_id, user_id, role)
-       values ('33330000-0000-4000-8000-00000000000c', auth.uid(), 'admin')
-       returning group_id$s$);
-  if v_udfald <> 'tilladt' then
-    raise exception '10c) opretteren kunne ikke skrive sin admin-række MED returning (%)', v_udfald;
+  select count(*) into v_n from public.groups
+   where id = '33330000-0000-4000-8000-00000000000c';
+  if v_n <> 0 then
+    raise exception '10c1) ligaen blev skrevet alligevel — afvisningen kom efter rækken';
   end if;
-  --     Og konkurrence-oprettelsen ad samme vej: `created_by`-leddet i
-  --     `competitions_select_involved` er dét, der bærer den, så den ville have
-  --     fejlet på samme måde, hvis leddet nogensinde forsvandt.
+
+  --     c2) …og den vej, appen GÅR, virker: `create_group()` skriver ligaen og
+  --         opretterens admin-række som ejer i ÉN transaktion, så ingen
+  --         SELECT-policy konsulteres undervejs. Bagefter kan hun læse ligaen —
+  --         nu som medlem, altså af den ene grund, der er tilbage.
+  v_svar := pg_temp.kald(FREMMED, $s$select public.create_group('Fremmeds anden liga')$s$);
+  if coalesce(v_svar->>'invite_code', '') = '' then
+    raise exception '10c2) create_group() svarede uden invite_code: % — oprettelsen er brudt, og det er den ENESTE vej tilbage', v_svar;
+  end if;
+  v_n := pg_temp.tael(FREMMED,
+    format($s$select count(*) from public.groups where id = %L$s$, v_svar->>'id'));
+  if v_n <> 1 then
+    raise exception '10c2) opretteren kan ikke læse den liga, hun lige har oprettet';
+  end if;
+
+  --     c3) Og konkurrence-oprettelsen med `returning`, som appen STADIG gør
+  --         (`createCompetition` er et almindeligt `db.insert`): `created_by`-
+  --         leddet i `competitions_select_involved` er dét, der bærer den, så
+  --         den ville fejle på samme måde, hvis leddet nogensinde forsvandt.
+  --
+  --     Der står ingen tilsvarende påstand om `group_members` længere: klienten
+  --     skriver ikke selv i den tabel efter `A40` (`accept_invite()` gør det),
+  --     og opretterens egen admin-række skrives nu inde i `create_group()`.
+  --     Insert-policyen på tabellen måles stadig af 10b, 10d og 10e.
   v_udfald := pg_temp.skriv_retur(FREMMED,
     $s$insert into public.competitions (id, name, mode, created_by)
        values ('44440000-0000-4000-8000-00000000000c', 'Egen med returning', 'custom', auth.uid())
        returning id$s$);
   if v_udfald <> 'tilladt' then
-    raise exception '10c) kunne ikke oprette en konkurrence MED returning (%)', v_udfald;
+    raise exception '10c3) kunne ikke oprette en konkurrence MED returning (%)', v_udfald;
   end if;
 
   --     d) …men opretteren kan ikke skrive sig selv som `member`.
@@ -574,6 +615,23 @@ begin
   if v_udfald <> 'afvist' then
     raise exception '10e) en opretter kunne melde en ANDEN ind i sin liga (%)', v_udfald;
   end if;
+
+  --     f) PRISEN, `#55` BETALTE, ER BETALT TILBAGE (`G98`).
+  --     Liga `…009` er FREMMEDs egen — hun står som `created_by` — men 10d
+  --     fjernede hendes medlemsrække, så hun har i praksis forladt den. Så
+  --     længe `or created_by = auth.uid()` stod i policyen, kunne hun blive ved
+  --     med at læse den og dermed dens `invite_code`; det var accepteret som
+  --     prisen for, at nogen overhovedet kunne oprette en liga.
+  --
+  --     Denne påstand er hele G98's udbytte og falder, i samme sekund leddet
+  --     kommer tilbage. Den er nabo til 10c1 med vilje: den ene måler, at
+  --     SKRIVNINGEN er lukket, den anden at LÆSNINGEN er det.
+  v_n := pg_temp.tael(FREMMED,
+    $s$select count(*) from public.groups
+        where id = '33330000-0000-4000-8000-000000000009'$s$);
+  if v_n <> 0 then
+    raise exception '10f) en opretter, der har forladt sin egen liga, kan stadig læse den og dens invite_code — `or created_by = auth.uid()` er tilbage i SELECT-policyen';
+  end if;
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -591,10 +649,13 @@ end $$;
 --      deltager-række indsættes — kun reparationen afslører linjen)
 --   · `is_group_member` fjernet fra deltager-policyen          → påstand 10a
 --   · `created_by`-leddet fjernet fra deltager-policyen        → påstand 10b
---   · `groups_select_member` sat tilbage til `is_group_member(id)`
---     alene (tilstanden 11. august 2026)                       → påstand 10c
---     ⚠️ og IKKE påstand 10b, som den er nabo til: den skriver uden
+--   · `groups_select_member` givet `or created_by = auth.uid()` tilbage
+--     (tilstanden 11.–12. august 2026, `#55`)          → påstand 10c1 og 10f
+--     ⚠️ og IKKE påstand 10b, som 10c1 er nabo til: den skriver uden
 --     `returning` og anvender derfor aldrig SELECT-policyen. Netop dét var
 --     blindvinklen, der lod produktionen stå brudt med en grøn CI.
+--   · `create_group()` fjernet igen (`G95` rullet tilbage)     → påstand 10c2
+--     — den halvdel, der forhindrer, at 10c1 bliver grøn i en app, hvor ingen
+--     kan oprette en liga.
 
 select 'invite_lookup: hullet er lukket, og alle ti led i join-flowet virker' as resultat;
