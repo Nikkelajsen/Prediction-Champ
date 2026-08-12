@@ -77,6 +77,16 @@
 --   public;` FØR sin `grant execute … to <roller>;` — ellers er den åben for
 --   `anon` fra sit første sekund, uanset denne migrering.
 --
+-- ✅ **En gen-kørsel af en migrering er derimod ufarlig.** `create or replace
+-- function` BEVARER funktionens ACL, så de mange filer, der gen-køres
+-- rutinemæssigt (`story_engine.sql`, `career_profile.sql`,
+-- `analytics_dashboard.sql`), ikke åbner noget igen. **Det gør `drop function` +
+-- `create function` til gengæld:** en droppet og genskabt funktion får den
+-- indbyggede default tilbage og er åben for `anon` fra det sekund. Begge dele
+-- efterprøvet mod PostgreSQL 16.13. Ingen af vores migreringer dropper en
+-- funktion for at genskabe den (kun `#19`, som fjerner en for altid) — men
+-- gør en det en dag, skal `revoke`-linjen med i samme ombæring.
+--
 -- Konventionen findes allerede i de fleste migreringer (`#31`, `#36`, `#42`,
 -- `#46`, `#52`, `#54` m.fl. skriver netop de to linjer i den rækkefølge); det,
 -- der manglede, var, at den var et krav frem for en vane. **Vagten er

@@ -43,7 +43,11 @@ den regenereres med guiden nedenfor.
 > > from public;` FØR sin `grant execute … to <roller>;`.**
 >
 > Konventionen findes allerede i de fleste migreringer (`#31`, `#36`, `#42`,
-> `#46`, `#52`, `#54`, `#57`), men den er nu et krav og ikke en vane. Vagten er
+> `#46`, `#52`, `#54`, `#57`), men den er nu et krav og ikke en vane. **En
+> gen-kørsel er ufarlig** — `create or replace function` bevarer ACL'en, så de
+> filer, der gen-køres rutinemæssigt, ikke åbner noget igen — men **`drop
+> function` + `create function` nulstiller den** og giver den indbyggede default
+> tilbage. Begge dele efterprøvet mod PostgreSQL 16.13. Vagten er
 > `sql/tests/anon_grants_functions.sql`, som måler HELE skemaet — `anon` skal
 > kunne nøjagtig to funktioner — og bliver rød ved den første, der glemmer
 > linjen. Det er den halvdel af `#56`, databasen ikke kan bære selv.
