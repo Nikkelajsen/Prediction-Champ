@@ -44,6 +44,18 @@
 
 -- ---------------------------------------------------------------------------
 -- Policies: fra "alle" til "dem, der er med"
+--
+-- ⚠️ **HVER policy droppes TO gange, og begge linjer skal blive stående.**
+-- Den første dropper det GAMLE navn, fordi filen afløser det. Den anden dropper
+-- filens EGET navn, fordi `create policy` fejler med `42710`, hvis navnet
+-- allerede findes — og det gør det, så snart filen er kørt én gang.
+--
+-- Det stod der ikke oprindeligt, og filen var derfor ikke idempotent, selvom
+-- både dens eget hoved og `sql/README.md` påstod det. Fundet 12. august 2026,
+-- da skema-eksporten skulle køres efter `A40`: en gen-kørsel mod produktionen
+-- stoppede på `policy "competitions_select_involved" for table "competitions"
+-- already exists`. Kun `groups_select_member` havde sit andet drop, og det kom
+-- til ved et tilfælde med `#55`.
 
 -- Ligaen: medlemmer — **eller opretteren**.
 --
@@ -88,6 +100,7 @@ create policy groups_select_member on public.groups
 -- Underforespørgslen på `competition_participants` er ufarlig for rekursion:
 -- dens egen læsepolicy (`read all participation`) peger ikke tilbage hertil.
 drop policy if exists "read all competitions" on public.competitions;
+drop policy if exists competitions_select_involved on public.competitions;
 create policy competitions_select_involved on public.competitions
   for select to authenticated
   using (
@@ -105,6 +118,7 @@ create policy competitions_select_involved on public.competitions
 -- admin-række — præcis det ene tilfælde, hvor der endnu ikke findes en
 -- invitation at fremvise, fordi ligaen lige er opstået.
 drop policy if exists group_members_insert_self on public.group_members;
+drop policy if exists group_members_insert_creator on public.group_members;
 create policy group_members_insert_creator on public.group_members
   for insert to authenticated
   with check (
@@ -121,6 +135,7 @@ create policy group_members_insert_creator on public.group_members
 -- efter konkurrencen (`createCompetition`), og for en liga-løs konkurrence er
 -- der intet medlemskab at hvile på.
 drop policy if exists "join competition" on public.competition_participants;
+drop policy if exists competition_participants_insert_involved on public.competition_participants;
 create policy competition_participants_insert_involved on public.competition_participants
   for insert to authenticated
   with check (
