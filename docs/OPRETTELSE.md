@@ -184,6 +184,25 @@ Fire kontroller. **Den fjerde er den eneste, der ikke kan snydes.**
      -d '{"email":"bot-test@example.com","password":"hemmelig123"}'
    ```
 
+   **I PowerShell er det den her i stedet** — på ÉN linje:
+
+   ```powershell
+   curl.exe -s -X POST "https://qfcjbpvttburccdyfnkx.supabase.co/auth/v1/signup" -H "apikey: sb_publishable_Et9Dahm8LOhZk6cS1XRqhA_9RuNmnvC" -H "Content-Type: application/json" -d '{\"email\":\"bot-test@example.com\",\"password\":\"hemmelig123\"}'
+   ```
+
+   > **Tre ting adskiller dem, og alle tre fejler tavst.**
+   > 1. **`curl.exe`, ikke `curl`.** I Windows PowerShell 5.1 er `curl` et alias
+   >    for `Invoke-WebRequest`, som ikke forstår `-H` og `-d` — den tolker `-d`
+   >    som forkortelse for noget helt andet og svarer med en parameterfejl, der
+   >    intet har med Supabase at gøre.
+   > 2. **Ingen `\` til linjeskift.** Backslash er ikke fortsættelsestegn i
+   >    PowerShell (det er backtick `` ` ``), så kommandoen bliver klippet over
+   >    ved første linjeskift og sendt af sted halv.
+   > 3. **De indre `"` skal escapes som `\"`.** PowerShell fjerner anførselstegn,
+   >    når argumenter gives videre til et rigtigt program, så et ikke-escapet
+   >    JSON-legeme når frem som `{email:...}` — ugyldig JSON, og svaret bliver
+   >    en parsefejl i stedet for det captcha-svar, kontrollen leder efter.
+
    **Forventet:** en fejl, der nævner captcha (`captcha protection: request
    disallowed`). Får du i stedet en oprettet bruger, er værnet slået til i
    panelet uden at være aktivt — og så er trin 4 ikke gennemført.
@@ -240,6 +259,13 @@ kontakten i denne uge:
 ```bash
 curl -s 'https://qfcjbpvttburccdyfnkx.supabase.co/auth/v1/settings' \
   -H 'apikey: sb_publishable_Et9Dahm8LOhZk6cS1XRqhA_9RuNmnvC'
+```
+
+I PowerShell — her er der ingen JSON at escape, så den kan bruge det indbyggede
+og læse feltet direkte frem for at lede i et helt svar:
+
+```powershell
+(Invoke-RestMethod 'https://qfcjbpvttburccdyfnkx.supabase.co/auth/v1/settings' -Headers @{ apikey = 'sb_publishable_Et9Dahm8LOhZk6cS1XRqhA_9RuNmnvC' }).mailer_autoconfirm
 ```
 
 | `mailer_autoconfirm` | Betyder |
