@@ -66,6 +66,33 @@ describe("CSP nægter skrifter fra andre domæner", () => {
   });
 });
 
+// iOS Safari zoomer siden ind på et tekstfelt under 16px og zoomer ikke ud
+// igen. Det er ikke en smagssag, men en tærskel i browseren — og den slags
+// glider tilbage, fordi 14px ser rigtigere ud i en designgennemgang på et
+// skrivebord, hvor fejlen ikke KAN ses. Derfor to påstande: reglen findes, og
+// den ene kontrol, der styrer sin egen skrift uden om den, er over grænsen.
+describe("telefonen zoomer ikke ind, når et felt får fokus", () => {
+  it("løfter tekstfelter til 16px på berøringsskærme", () => {
+    const blok = globalCss.match(/@media \(pointer: coarse\) \{([^}]*\})/);
+    expect(blok).toBeTruthy();
+    expect(blok[1]).toMatch(/font-size:\s*16px/);
+    // Både `input` og `textarea`: feedback-formularen er en textarea, og den
+    // ville zoome præcis som login gjorde.
+    expect(blok[1]).toContain("input");
+    expect(blok[1]).toContain("textarea");
+  });
+
+  // ScoreInput sætter sin skrift inline, og en inline-style slår CSS-reglen
+  // ovenfor. Den er 16px i forvejen — hvilket er hele grunden til, at tip-
+  // skærmen aldrig zoomede — men intet holder den der uden en påstand.
+  it("holder ScoreInput på mindst 16px, som reglen ikke kan nå", () => {
+    const kilde = readFileSync(new URL("./components.jsx", import.meta.url), "utf8");
+    const blok = kilde.slice(kilde.indexOf("function ScoreInput"));
+    const størrelse = Number(blok.match(/fontSize:\s*(\d+)/)?.[1]);
+    expect(størrelse).toBeGreaterThanOrEqual(16);
+  });
+});
+
 describe("font-kæden lover kun skrifter, vi leverer", () => {
   // 'Inter' stod her uden nogensinde at blive hentet. En fallback, der ikke
   // findes, er ikke en fallback — den er en påstand om et design, ingen ser.

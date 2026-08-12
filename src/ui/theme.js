@@ -187,6 +187,30 @@ const globalCss = `
   table { border-collapse: collapse; width: 100%; }
   th, td { padding: 8px 8px; text-align: left; }
   .field { background: ${C.surface2}; border: 1px solid ${C.line}; color: ${C.text}; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+  /* iOS Safari ZOOMER SIDEN IND, når et tekstfelt med skrift under 16px får
+     fokus — og zoomer aldrig ud igen af sig selv. Brugeren skal knibe den ud i
+     hånden, og indtil da står hele appen i forstørrelse.
+
+     Det ramte hver eneste telefonbruger på den første skærm, de møder:
+     login-felterne er .field med sine 14px, så appen var zoomet ind fra det
+     sekund, e-mailfeltet blev rørt, og blev ved med at være det bagefter.
+
+     16px er iOS' egen grænse og ikke et designvalg — ét pixel under, og zoomet
+     er tilbage. Reglen står derfor som en tærskel og ikke som en skriftstørrelse:
+     rører nogen .field's 14px, skal DENNE regel blive stående.
+
+     Kun tekstfelter og kun berøringsskærme (pointer: coarse):
+       * select er udeladt, fordi den åbner en vælger uden tastatur og derfor
+         ikke udløser zoomet — og fordi filtrene i Tip og Championship er
+         chip-formede, hvor 16px ville sprænge rækken;
+       * afkrydsning og radio har ingen skrift at zoome efter;
+       * på en mus-skærm er der intet at rette, og 14px er det, designet er
+         tegnet efter.
+     Feltet bliver altså en anelse større på telefonen end på skrivebordet. Det
+     er med vilje: alternativet er en app, der står forstørret. */
+  @media (pointer: coarse) {
+    input:not([type="checkbox"]):not([type="radio"]), textarea { font-size: 16px; }
+  }
   .rowline { border-bottom: 1px solid ${C.line}; }
   .spin { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
