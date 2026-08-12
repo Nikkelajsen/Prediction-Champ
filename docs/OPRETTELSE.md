@@ -231,7 +231,13 @@ Authentication → Email Templates → **Confirm signup**.
 | Felt | Værdi |
 |---|---|
 | Subject | `Bekræft din e-mail` |
-| Body | Indholdet af [`mail/confirm-signup.html`](./mail/confirm-signup.html) |
+| Body | [`mail/confirm-signup.html`](./mail/confirm-signup.html) **fra `<table role="presentation"` og ned** |
+
+> **Tag ikke kommentarhovedet med.** Filens første 31 linjer er interne noter —
+> de nævner backlog-rækker, kodestier og hændelsen 10. august — og en HTML-
+> kommentar forsvinder ikke, fordi den ikke vises: den rejser med i mailens
+> kilde og kan læses af enhver modtager, der åbner "vis original". Den gør
+> ingen skade, men den hører ikke til i en mail til en fremmed.
 
 > 🛑 **Denne rækkefølge er ikke kosmetisk.** Slås bekræftelsen til før
 > skabelonen er indsat, går den første mail ud med Supabases engelske standard

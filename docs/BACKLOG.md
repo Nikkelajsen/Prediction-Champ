@@ -47,7 +47,9 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(Tom — ryddet to gange 12. august 2026. Første gang blev syv linjer til `A42`,
+Blev `recovery.html`s kommentarhoved pastet med ind i Supabase 9. august? Interne noter i mailens kilde hos hver modtager — tjek "vis original" på en nulstillingsmail, og skriv i så fald i `MAIL.md`, at hovedet skal skæres fra.
+
+*(Ryddet to gange 12. august 2026. Første gang blev syv linjer til `A42`,
 `A43`, `G95`–`G97`, `I20` og `I21`; de tre `G`-rækker er leveret samme dag.
 Anden gang blev tre fund fra den leverance til `G99` og `G100` — begge leveret
 samme dag. Se [Log](#log--seneste-kørsel).)*
