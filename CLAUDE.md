@@ -31,6 +31,7 @@
 | planlagte jobs (cron) | `docs/CRON.md` |
 | mails: afsender, modtager, DNS, skabeloner | `docs/MAIL.md` · `docs/mail/` |
 | bot-værn og e-mailbekræftelse ved oprettelse | `docs/OPRETTELSE.md` · `src/lib/turnstile.js` · `src/lib/data/profile.js` |
+| domæner: hvilken adresse hører til hvad, og hvad der skal flyttes med | `docs/DOMAENE.md` · `vercel.json` |
 | en todelt migrering, der skal følges ad med en udrulning | `docs/UDRULNING-A40.md` (afsluttet — står som skabelon) · `sql/invite_lookup.sql` · `sql/invite_policies.sql` |
 | backup, gendannelse efter tabt data | `docs/RESTORE.md` · §22 · `.github/workflows/data-backup.yml` |
 | feedback fra brugerne | §23 · `sql/feedback.sql` · `src/screens/FeedbackCard.jsx` |

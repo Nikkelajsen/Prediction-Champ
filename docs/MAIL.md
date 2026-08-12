@@ -299,9 +299,11 @@ Derefter:
    > brugeren får en fejl, og Supabase svarer `429: Email rate limit exceeded`.
 2. Kontrollér **Site URL**. Den bestemmer, hvor linket i mailen peger hen, og
    der findes ingen `emailRedirectTo` i koden til at overstyre den.
-   > ⚠️ **`B21` flytter appens adresse.** Sker det, skal **både Site URL og
-   > Redirect URLs** med i samme ombæring — ellers peger hver nulstillingsmail på
-   > en adresse, der ikke svarer, mens alt andet ser rigtigt ud.
+   > ⚠️ **`I10`/`B21` flytter appens adresse til `https://app.leagly.app`.**
+   > Sker det, skal **både Site URL og Redirect URLs** med i samme ombæring —
+   > ellers peger hver nulstillingsmail på en adresse, der ikke svarer, mens alt
+   > andet ser rigtigt ud. Trinnet står i [`DOMAENE.md`](./DOMAENE.md) og er dér
+   > placeret FØR domænet gøres kendt for brugerne.
    >
    > Allow-listen bruges i praksis næsten ikke: der findes ingen
    > `emailRedirectTo` i koden, så Supabase falder altid tilbage på Site URL. Det
@@ -357,7 +359,7 @@ appen har hverken invitationsmails, magic links eller e-mailskift.
 >
 > Kontrollerne bliver stående som **instruktion** og ikke som historik: de skal
 > køres igen, hver gang afsenderen, domænet eller Site URL flytter sig — og
-> `B21` kommer til at flytte den sidste.
+> `I10`/`B21` kommer til at flytte den sidste (til `https://app.leagly.app`).
 
 Fire kontroller. **Den tredje er den eneste, der ikke kan snydes.**
 
@@ -411,9 +413,10 @@ kun kan lære af at blive fulgt.
 
 ## Når noget ændrer sig
 
-- **Skifter appens adresse (`B21`):** Site URL i Supabase skal med. Skabelonerne
-  skal *ikke* røres — de indeholder ingen adresse, og
-  `docs/mail/templates.test.js` håndhæver det.
+- **Skifter appens adresse (`I10`/`B21` → `app.leagly.app`):** Site URL i
+  Supabase skal med, og Redirect URLs med den. Skabelonerne skal *ikke* røres —
+  de indeholder ingen adresse, og `docs/mail/templates.test.js` håndhæver det.
+  Hele rækkefølgen står i [`DOMAENE.md`](./DOMAENE.md).
 - **Skifter afsender væk fra Resend:** fjern posterne under `send.leagly.app` og
   DKIM-posten `resend._domainkey` på roden,
   ret SMTP-indstillingerne, og **slet linjen om Resend i `src/lib/legal.js`** i

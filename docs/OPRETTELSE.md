@@ -293,10 +293,12 @@ confirmation** fra samme menu.
 
 ## Når noget ændrer sig
 
-- **Skifter appens adresse (`B21`/`I10`):** værtsnavnet på Turnstile-widgeten
-  skal med i samme ombæring som Site URL og Redirect URLs. Glemmes widgeten,
-  fejler bot-tjekket på den nye adresse, mens alt andet ser rigtigt ud — og
-  symptomet er, at ingen kan logge ind på det nye domæne.
+- **Skifter appens adresse (`I10`/`B21` → `app.leagly.app`):** værtsnavnet på
+  Turnstile-widgeten skal med i samme ombæring som Site URL og Redirect URLs.
+  Glemmes widgeten, fejler bot-tjekket på den nye adresse, mens alt andet ser
+  rigtigt ud — og symptomet er, at ingen kan logge ind på det nye domæne.
+  **Tilføj det nye værtsnavn FØR det gamle fjernes,** så begge adresser virker,
+  mens redirectet står. Trinnet er nummer 5 i [`DOMAENE.md`](./DOMAENE.md).
 - **Skal værnet afprøves uden risiko:** slå det til i **staging** først (`B18`,
   leveret 6. august 2026). Preview peger derind, og projektet har sine egne
   Attack Protection-indstillinger, så en fejl koster ingen rigtige brugere
