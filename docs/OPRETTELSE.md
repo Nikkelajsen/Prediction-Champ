@@ -27,7 +27,7 @@ konfiguration uden for repoet, som kun kan udføres af ejeren.
 | Site key i **Preview** | **Bevidst ikke sat** — preview kører mod staging (`B18`), som ikke har Bot Protection | 10. august 2026 |
 | Secret key (hemmelig) | Kun i Supabase → Authentication → Attack Protection | **12. august 2026 — indtastet og virksom.** Afvisningen i trin 5, punkt 4 er selve beviset: Supabase kan kun afvise, hvis den taler med Cloudflare, og nøglerne hører derfor til samme widget |
 | Bot Protection | **Slået TIL** | **12. august 2026 — alle fire kontroller i trin 5 bestået**, inklusive afvisningen af et kald uden kvittering. (Var kortvarigt slået til 10. august og lukkede adgangen for alle, fordi trin 3 var sprunget over — se "Første kørsel" nederst) |
-| Confirm email | **Slået fra** | 10. august 2026. Var slået til 08:04–ca. 09:43 og efterlod én ubekræftet konto, som blev bekræftet i hånden |
+| Confirm email | **Slået TIL** | **12. august 2026 — bekræftet på GoTrues eget `/auth/v1/settings`:** `mailer_autoconfirm = false`. Talt op forinden: nul konti med `email_confirmed_at is null`, så ingen sad fast i forvejen. (Var kortvarigt slået til 10. august 08:04–ca. 09:43 og efterlod én ubekræftet konto, som blev bekræftet i hånden) |
 | Skabelon: Confirm signup | Emne + brødtekst fra [`mail/confirm-signup.html`](./mail/confirm-signup.html) | ? — indsat 10. august 2026, men aldrig aflæst på en modtaget mail |
 
 **`?` betyder "aldrig kørt"**, ikke "kørt og bestået". Udfyld datoerne, når
@@ -44,10 +44,13 @@ beviserne nedenfor er gået igennem — forskellen er hele pointen med registere
 > trin 4, og med det af vejen blev **trin 4 og hele trin 5 kørt samme dag**,
 > inklusive den fjerde kontrol, der ikke kan snydes.
 >
-> **Tilbage står trin 6–8 — e-mailbekræftelsen, som er den anden halvdel af
-> `B26` og en helt anden knap.** `Confirm email` er stadig slået **fra**, og
-> rækkefølgen dér er lige så ufravigelig: skabelonen i trin 6 FØR kontakten i
-> trin 7, ellers går den første mail ud med engelsk emne.
+> **Og e-mailbekræftelsen er slået til samme dag.** Trin 6 og 7 er kørt,
+> `mailer_autoconfirm` står på `false`, og der blev talt nul ubekræftede konti
+> forinden. **Tilbage står alene trin 8** — de fem beviser, som kræver en rigtig
+> oprettelse mod en adresse, der kan læses. Indtil de er kørt, er `B26`
+> konfigureret, men ikke efterprøvet: den femte kontrol (brugernavnet står i
+> appen) er den eneste, der rører `sikrProfil()`, og den kan kun køres af et
+> menneske med en indbakke.
 
 ---
 
