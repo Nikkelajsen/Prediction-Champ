@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A44` · `B30` · `G98` · `I22`.**
+**Næste ledige: `A44` · `B30` · `G99` · `I22`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -47,13 +47,15 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(Tom — ryddet 12. august 2026. Se [Log](#log--seneste-kørsel).)*
+*(Tom — ryddet 12. august 2026, hvor de syv linjer blev til `A42`, `A43`,
+`G95`–`G97`, `I20` og `I21`. De tre `G`-rækker er siden leveret samme dag; se
+[Log](#log--seneste-kørsel).)*
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 33 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -90,15 +92,7 @@ Tomt.
 
 ### Tier 5 — Robusthed og vedligehold
 
-Tre punkter, alle fra indbakkens rydning 12. august 2026. Fællesnævneren er, at
-**ingen af dem er en fejl i dag** — de er tre steder, hvor det, der holder,
-holder af én grund og ikke af to.
-
-| # | Hvad | Hvorfor den står her |
-|---|---|---|
-| `G95` | `createGroup` skriver ligaen og admin-rækken i to kald | Den eneste af de tre med et vindue, hvor DATA kan blive forkert: fejler kald nummer to, står ligaen uden medlemmer. Efterprøvet nul gange i produktion (`A40`s udrulning talte nul), så prisen er lav — men den falder ikke af sig selv. |
-| `G96` | `anon` har EXECUTE på hver funktion i `public` | Dobbeltsikringen mangler, ikke sikringen. Funktionerne afviser selv en kalder uden `auth.uid()`, og dét gør netop den vagt bærende. |
-| `G97` | Sælgesætningen står tre steder | Ren vedligehold: dubletten er bevidst og kan ikke fjernes, men den kan drive uset. |
+Tomt. Alle tre punkter er leveret 12. august 2026 — se [Log](#log--seneste-kørsel).
 
 ### Tier 6 — Venter på en udløser
 
@@ -107,6 +101,7 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 
 | # | Hvad | Udløser |
 |---|---|---|
+| `G98` | Fjern `or created_by = auth.uid()` fra `groups`' SELECT-policy | **Når `create_group()` er udrullet og afprøvet i produktion.** Leddet er `#55`s hasterettelse, og det bærer den GAMLE klients `insert … returning` — fjernes det før deployet, kan ingen oprette en liga. `G95` (12. august 2026) fjernede behovet, ikke leddet. |
 | `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. |
 | `A39` | Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat? | **Når `day_card_coverage` melder en blokeret dag, nogen savnede.** `match_day_complete()` er global: én kamp uden resultat i én turnering blokerer alle dagskort, også for de konkurrencer, der intet har med turneringen at gøre. Prisen er dokumenteret som bevidst — den globale kampdag er produktets ene tvær-turneringsbegreb — men den blev betalt synligt under `A38`s undersøgelse. |
 | `B26` | E-mailbekræftelse + bot-værn (Turnstile) på signup | **Når linket deles åbent** (hjemmesiden publiceres eller invitationer går uden for det kontrollerede felt). **DELVIST KØRT 10. august 2026 og rullet tilbage — begynd med registeret i [`OPRETTELSE.md`](./OPRETTELSE.md), ikke forfra.** Tilstand: trin 1–3 ✅ (widget oprettet, `VITE_TURNSTILE_SITE_KEY` sat i Vercel **og udrullet**, widgeten tegnes på login-skærmen), Bot Protection **fra**, Confirm email **fra**. Tilbage: trin 4–8. Ét ubevist punkt spærrer trin 4 — at widgetens værtsnavn accepteres; en widget tegnes også på et forkert domæne og fejler først derefter. |
@@ -186,9 +181,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
-| G95 | **`createGroup` skriver ligaen og opretterens admin-række i to kald** (`src/lib/data/groups.js:161-162`), så en liga kan stå uden medlemmer, hvis det andet kald fejler. | Der er ingen transaktion om de to `db.insert`, og rækkefølgen er bindende: ligaen skal findes, før medlemsrækken kan pege på den. Fejler kald nummer to — netværk, RLS, hvad som helst — er resultatet en **forældreløs liga**: den har en `created_by`, men ingen medlemmer, så den vises ikke i nogens oversigt og kan ikke forlades eller slettes gennem UI'et. `sql/checks/league_admin_coverage.sql` ville melde den, men først når nogen kigger. **Nul forekomster i produktion** (talt ved `A40`s udrulning 11. august 2026), så gælden er vinduets eksistens og ikke en oprydning. **En `create_group()` som `security definer` lukker det** — og fjerner samtidig den anden afhængighed, `#55` afdækkede: i dag skal `groups`' SELECT-policy acceptere en helt frisk række, fordi `db.insert` sender `Prefer: return=representation` og dermed kører `insert … returning *`. Det led (`or created_by = auth.uid()`) er en accepteret pris med en dokumenteret bivirkning — en opretter, der har forladt sin liga, kan stadig se den — som ville falde væk sammen med vinduet. | Lille (én funktion, én migrering) |
-| G96 | **`anon` har EXECUTE på hver eneste funktion i `public`** via Supabases default privileges. | Fundet under `I7` (11. august 2026). `G50`/`G58` lukkede tabeller og sekvenser, men default privileges dækker også funktioner, og de blev ikke rørt. **Der er intet hul i dag** — funktionerne afviser selv en kalder uden `auth.uid()`, og undtagelsen (`invite_preview()`, åben for `anon` med vilje) er besluttet og afgrænset i `A41`. **Det er netop dét, der gør rækken værd at skrive ned:** vagten inde i hver funktion er dermed bærende og ikke en dobbeltsikring, så en ny funktion, der glemmer sin `auth.uid()`-kontrol, er eksponeret for `anon` fra det sekund, den oprettes. Testen måler i dag vagten som adfærd, hvilket fanger de funktioner, der findes — ikke den næste. En `revoke execute … from anon` som default plus en eksplicit `grant` til de få, der skal være åbne, gør det omvendt: en ny funktion er lukket, indtil nogen aktivt åbner den. | Lille (en migrering + en påstand i testen) |
-| G97 | **Sælgesætningen står tre steder** — `index.html`, `AuthShell` og `site/index.html` — og de tre kopier kan drive fra hinanden uden at nogen opdager det. | Dubletten er **bevidst og kan ikke fjernes med en import**: `index.html`s `<meta name="description">` og `og:description` er statisk HTML, der læses af crawlere før nogen JavaScript kører, så den kan pr. konstruktion ikke hente sin tekst fra `src/`; og `site/` ligger med vilje uden for Vite-buildet (`features/hjemmeside-v1.md`), så den kan ikke dele modul med appen overhovedet. **Prisen er derfor ikke dubletten, men at intet holder de tre i trit.** Navneskiftet 4. august 2026 og `I7`s OG-tags rørte begge nogle af dem, og en fremtidig omformulering vil ramme den, forfatteren tilfældigvis har åben. **Mønsteret findes allerede i repoet:** `docs/mail/templates.test.js` holder mailskabelonerne og `src/lib/legal.js` i trit uden at flytte teksten — en test, der læser begge filer og sammenligner strengen, er samme svar her og koster hverken et build-trin eller en afhængighed. | Lille (én test) |
+| G98 | **`groups`' SELECT-policy har et led, den ikke længere har brug for** — `or created_by = auth.uid()` (`#55`). | Leddet blev hasteudrullet 11. august 2026, fordi `createGroup` skrev ligaen i ét kald og sin egen medlemsrække i det næste: `db.insert` sender `Prefer: return=representation`, så PostgREST kører `insert … returning *`, og en RETURNING-klausul anvender SELECT-policyen på den nye række — hvor opretteren endnu ikke var medlem. **`G95` (12. august 2026) fjernede årsagen:** `create_group()` skriver som ejer, så ingen policy konsulteres undervejs. Prisen, leddet koster, står stadig: **en opretter, der har forladt sin egen liga, kan blive ved med at læse den og dens `invite_code`** — accepteret i `#55`s hoved og i `DOCUMENTATION.md` §13, men accepteret som en pris for noget, der nu er gratis. **Kan ikke køres sammen med `G95`:** så længe den gamle klient er i luften, er det direkte `insert … returning` den vej, en liga bliver til, og en smalning ville genskabe produktionsfejlen fra 11. august. Rækken er derfor en ventetid og ikke et stykke arbejde — den er ét `drop policy`/`create policy` og en påstand i `sql/tests/invite_lookup.sql`s 10c, som allerede måler netop den kombination. | Lille (én policy) — gated af udrulningen |
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
 
@@ -234,34 +227,42 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 12. august 2026 — `I10` er afgjort, og indbakken er ryddet
+### 12. august 2026 — Tier 5 er kørt: `G95`, `G96` og `G97`
 
-**Listen er 26 → 33, og det er ikke en tilbagegang.** Ingen række er åbnet af nyt
-arbejde: syv linjer, der lå i indbakken som rå sætninger, har fået et ID og en
-udløser, og `I10` er gået fra åbent spørgsmål til besluttet form. Det, tallet
-måler, er, at det ubyggede nu er skrevet ned, ikke at der er kommet mere af det.
+**Listen er 33 → 31.** Tre rækker lukket, én åbnet (`G98`), og indbakken var tom
+i forvejen. Alle tre havde samme egenskab — **ingen af dem var en fejl i dag** —
+og det er stadig den rigtige grund til at tage dem: det, der holder, holdt af én
+grund og ikke af to.
 
-**`I10` er afgjort:** `leagly.app` til hjemmesiden, `app.leagly.app` til appen,
-begge på Vercel som to projekter, og **Vercel-projektet omdøbes ikke**.
-Begrundelsen står i [`DECISIONS.md`](./DECISIONS.md) — kort: invitationslinks
-bygges af `window.location.origin`, så det er APPENS adresse, brugerne deler, og
-rækkens to oprindelige muligheder handlede begge om hjemmesiden.
-**`B21` mistede sin farligste halvdel** med samme beslutning: uden omdøbning dør
-ingen delte `?liga=`/`?join=`-links, og tilbage er de 23 CTA'er, README'ens
-live-link og GitHub-omdøbningen. **Udførelsen har sin egen runbog,
-[`DOMAENE.md`](./DOMAENE.md)**, og intet af det er kørt endnu.
+**`G95` — ligaen og dens første medlem er én skrivning.** `createGroup` lavede to
+`db.insert` efter hinanden, altså to transaktioner; fejlede den anden, stod
+ligaen tilbage uden medlemmer og kunne hverken ses, forlades eller slettes.
+`create_group()` (`#57`) skriver begge rækker som ejer i ét statement. Klienten
+har mistet sin `userId`-parameter — hvem opretteren er, afgør `auth.uid()` — og
+`sql/tests/create_group.sql` beviser lukningen med en **negativ kontrol**, der
+fremkalder den forældreløse liga ad den gamle vej. **Den efterlader `G98`:**
+`#55`s policy-led kan først fjernes, når klienten er udrullet.
 
-**Indbakkens syv linjer blev til fem rækker og to ideer.** To åbne beslutninger,
-`A42` (skal en rigtig browser have en plads i CI?) og `A43` (skal `profiles` og
-`competition_participants` stadig kunne læses af enhver indlogget bruger?) —
-begge med en udløser frem for en dato, og `A43`s er `B26`s, fordi den skal
-afgøres FØR oprettelsen åbnes og ikke efter. Tre stykker teknisk gæld, `G95`
-(`createGroup`s to kald), `G96` (`anon`s EXECUTE) og `G97` (sælgesætningen tre
-steder), som **fylder det hidtil tomme Tier 5** og deler den samme egenskab:
-ingen af dem er en fejl i dag, alle tre er et sted, hvor det, der holder, holder
-af én grund og ikke af to. Og to ideer, `I20` (QR-kode) og `I21` (OG-billede pr.
-liga), begge fravalgt i `I7` **på pris og ikke på princip** — derfor rækker og
-ikke linjer i "Forkastede ideer".
+**`G96` — `anon` kan nøjagtig to funktioner nu.** `#56` lukker det, `#34` og
+`#43` begge sagde, at de ikke rørte. **Rækken beskrev kun den ene halvdel af
+problemet:** `anon` kommer ind ad to veje, sin egen grant OG PUBLIC, og et
+`revoke … from anon` alene ville have set ud til at virke uden at gøre noget. Og
+**den anden halvdel kan ikke lukkes ved kilden**: PostgreSQLs indbyggede default
+giver PUBLIC EXECUTE på hver ny funktion, og `ALTER DEFAULT PRIVILEGES` kan ikke
+fjerne den (efterprøvet mod 16.13). Følgen er en regel, der skal skrives i hånden
+— `revoke execute … from public` i hver ny funktions migrering — og en vagt, der
+måler hele skemaet. Det er dét, der er leveret, og det står i `DECISIONS.md`.
+
+**`G97` — sælgesætningen holdes i trit af en test.** Den stod ikke tre steder,
+men **fem** (`index.html` ×2, `AuthShell`, `site/index.html` ×2,
+`api/invite-preview.js`, `README.md`). Dubletten er stadig bevidst og kan stadig
+ikke fjernes; `saelgesaetning.test.js` måler dem mod `index.html` som anker og
+skriver ikke selv en sjette kopi, så en omformulering kun skal laves ét sted pr.
+fil. Efterprøvet med seks mutationer.
+
+🔴 **To migreringer venter hos ejeren** — `#56` og `#57`, begge additive og
+uafhængige af et deploy. `#57` bør køres FØR frontend-mergen; ellers fejler
+"Opret liga", indtil den er kørt.
 
 ---
 

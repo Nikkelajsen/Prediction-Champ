@@ -147,7 +147,7 @@ async function loadStarterTournaments(token, leagues) {
 // sin admin), mens en oprydning kunne slette noget, brugeren allerede har set.
 // Kalderen får ligaen med i fejlen og kan sende brugeren derhen.
 async function createStarterLeague(token, userId, { groupName, competitionName, leagueId }) {
-  const group = await createGroup(token, userId, groupName);
+  const group = await createGroup(token, groupName);
   try {
     const seasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=id&order=start_date.desc&limit=1`);
     const season = seasons[0];

@@ -68,7 +68,7 @@ Tilstanden **udledes af rigtige data** (`src/lib/onboarding.js`, `deriveOnboardi
 To RLS-forudsætninger, verificeret før implementering:
 
 - **`predictions`-SELECT-policyen er `user_id = auth.uid() or (…locked…)`** — en bruger kan altid læse sine egne tips, også ulåste. `hasPrediction`-proben (`limit=1`) er derfor sikker.
-- **A8-triggeren indsætter med `on conflict (group_id, user_id) do nothing`** (`sql/group_membership_invariant.sql`) — opretterens `admin`-række overlever deltager-insertet. Rækkefølgen `createGroup` → deltager-insert er dermed bindende; omvendt ville triggeren nå at lave en `member`-række først.
+- **A8-triggeren indsætter med `on conflict (group_id, user_id) do nothing`** (`sql/group_membership_invariant.sql`) — opretterens `admin`-række overlever deltager-insertet. Rækkefølgen `createGroup` → deltager-insert er dermed bindende; omvendt ville triggeren nå at lave en `member`-række først. **Rettet efter levering (12. august 2026, `G95`):** admin-rækken skrives nu inde i `create_group()` sammen med ligaen, så dens plads i rækkefølgen er ligaens. Reglen er uændret — men konsekvensen af at bryde den er blevet mildere: kollisionen sker nu inde i én transaktion, så hele oprettelsen ruller tilbage frem for at efterlade en halv tilstand.
 
 Trinnene: `liga` · `konkurrence` · `tip` · `invitér`. Notifikationer og PWA-installation er **ekstra** rækker på kortet og tæller ikke med i "X af Y" — ellers ville tælleren hoppe mellem enheder. **Rettet efter levering:** kortet fik kun **push-rækken** som ekstra række — PWA-installationen (`InstallGuide`) blev ikke en række på kortet. Begrundelsen (tæller ikke med i "X af Y") gælder uændret for push.
 

@@ -156,10 +156,27 @@ async function acceptInvite(token, code) {
   });
 }
 
-// Opret liga: indsæt gruppen + opretteren som admin-medlem.
-async function createGroup(token, userId, name) {
-  const [g] = await db.insert(token, "groups", [{ name: name.trim(), created_by: userId }]);
-  await db.insert(token, "group_members", [{ group_id: g.id, user_id: userId, role: "admin" }]);
+// Opret liga: gruppen + opretteren som admin-medlem — i ÉT kald (G95).
+//
+// Stod indtil 12. august 2026 som to `db.insert` efter hinanden, og to
+// PostgREST-kald er to transaktioner. Fejlede det andet — netværk, RLS, en
+// lukket fane — stod ligaen tilbage UDEN medlemmer: usynlig i enhver oversigt
+// (`loadMyGroups` læser `group_members`), umulig at forlade og umulig at slette
+// gennem UI'et. Nul forekomster i produktion, men vinduet lukkede ikke af sig
+// selv.
+//
+// `create_group()` er `security definer` og skriver begge rækker i samme
+// statement, så en fejl undervejs ruller dem begge tilbage. Den tager ÉT
+// argument: hvem opretteren er, afgør databasen med `auth.uid()`, og det er
+// derfor `userId` ikke længere er en parameter — samme bevægelse som
+// `acceptInvite()` gjorde med `A40`.
+//
+// Svaret er hele `groups`-rækken, `invite_code` inklusive, altså præcis det
+// klienten fik af PostgREST før.
+async function createGroup(token, name) {
+  const g = await restFetch(`/rest/v1/rpc/create_group`, {
+    method: "POST", token, body: { p_name: String(name || "").trim() },
+  });
   logEvent(token, "league_created", { groupId: g.id });
   return g;
 }

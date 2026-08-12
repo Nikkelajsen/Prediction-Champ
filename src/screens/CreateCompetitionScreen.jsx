@@ -106,7 +106,7 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     if (problem) { setGroupErr(problem); return; }
     setCreatingGroup(true); setGroupErr("");
     try {
-      const g = await createGroup(token, userId, newGroupName);
+      const g = await createGroup(token, newGroupName);
       setGroups((prev) => [...(prev || []), g]);
       setGroupId(g.id);
       setMakingGroup(false);

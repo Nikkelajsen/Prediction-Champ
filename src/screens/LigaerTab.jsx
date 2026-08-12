@@ -133,7 +133,7 @@ function LigaerTab({ token, userId, competitions, openBoard, openCreate, openGro
     if (problem) { setJoinErr(problem); return; }
     setCreating(true); setJoinErr("");
     try {
-      const g = await createGroup(token, userId, newName);
+      const g = await createGroup(token, newName);
       setNewName("");
       await reloadGroups();
       openGroup(g.id);

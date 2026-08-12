@@ -15,6 +15,47 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 12. august 2026 — Hver ny funktion i `public` skal selv lukke PUBLIC ude (`G96`)
+
+**Beslutning:** en migrering, der opretter en funktion i `public`, skal skrive
+`revoke execute on function … from public;` FØR sin `grant execute … to
+<roller>;`. Reglen håndhæves af `sql/tests/anon_grants_functions.sql`, som måler
+hele skemaet og kræver, at `anon` kan kalde nøjagtig to funktioner:
+`username_available()` og `invite_preview()`.
+
+**Fordi den ellers ikke KAN håndhæves.** `G50` og `G58` lukkede `anon` ude af
+tabeller og sekvenser ved at fjerne Supabases default privileges — kilden var én
+regel, og den kunne slukkes ét sted. Funktioner opfører sig anderledes:
+PostgreSQL giver som **indbygget** default EXECUTE til PUBLIC på hver ny
+funktion (`acldefault('f', ejer)` = `{=X/ejer,ejer=X/ejer}`), og PUBLIC er enhver
+rolle, også `anon`. Den post kan ikke fjernes med `ALTER DEFAULT PRIVILEGES`:
+`pg_default_acl` gemmer kun TILLÆGGET til den indbyggede default, de to flettes
+ved oprettelsen, og fletningen kan kun lægge til. En revoke af PUBLIC efterlader
+en tom post, rækken slettes, og den indbyggede default gælder igen.
+**Efterprøvet mod PostgreSQL 16.13** — først som en linje i migreringen, der så
+ud til at virke og ikke gjorde noget, derefter isoleret i fire forsøg.
+
+**Alternativet blev valgt fra på pris og på risiko.** En event trigger på
+`ddl_command_end` ville kunne lukke hver ny funktion automatisk, men den kræver
+superbruger (som `postgres` ikke er i Supabase), den ville køre ved HVER DDL i
+databasen, og en fejl i den ville stoppe migreringer frem for at stoppe et hul.
+For en række, hvis hele indhold er "der er ingen fejl i dag, men vagten er
+enkeltlags", er det den forkerte vægtskål.
+
+**Prisen ved den valgte vej er, at reglen er menneskelig og ikke maskinel** — og
+det er derfor vagten er en påstand om HELE skemaet frem for om den enkelte
+migrering. Den kan ikke forhindre, at linjen glemmes; den kan kun sikre, at det
+opdages i den næste CI-kørsel frem for af en fremmed. Konventionen fandtes i
+forvejen i de fleste migreringer (`#31`, `#36`, `#42`, `#46`, `#52`, `#54`); det,
+der manglede, var, at den var et krav.
+
+**Det, beslutningen IKKE ændrer:** vagten `if auth.uid() is null then raise
+'forbidden'` bliver stående i hver funktion, og `sql/tests/invite_preview.sql`
+bliver ved med at måle den som adfærd. Pointen med `G96` var netop at gøre den
+til en dobbeltsikring — ikke at erstatte den med en anden enkeltsikring.
+
+---
+
 ## 12. august 2026 — Appen flytter med på domænet: `leagly.app` til hjemmesiden, `app.leagly.app` til appen (`I10`)
 
 **Beslutning:** `leagly.app` peger på hjemmesiden (`site/`), og appen får
