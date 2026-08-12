@@ -108,7 +108,7 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 
 | # | Hvad | Udløser |
 |---|---|---|
-| `G98` | Fjern `or created_by = auth.uid()` fra `groups`' SELECT-policy | **Når `create_group()` er udrullet og afprøvet i produktion.** Leddet er `#55`s hasterettelse, og det bærer den GAMLE klients `insert … returning` — fjernes det før deployet, kan ingen oprette en liga. `G95` (12. august 2026) fjernede behovet, ikke leddet. |
+| `G98` | Fjern `or created_by = auth.uid()` fra `groups`' SELECT-policy | **Når `create_group()` er udrullet og afprøvet i produktion.** Migreringen ([`#57`](../sql/create_group.sql)) er kørt 12. august 2026; tilbage står KLIENTEN, altså mergen og Vercels deploy — og en afprøvning af "Opret liga". Leddet er `#55`s hasterettelse, og det bærer den GAMLE klients `insert … returning` — fjernes det før deployet, kan ingen oprette en liga. `G95` (12. august 2026) fjernede behovet, ikke leddet. |
 | `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. |
 | `A39` | Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat? | **Når `day_card_coverage` melder en blokeret dag, nogen savnede.** `match_day_complete()` er global: én kamp uden resultat i én turnering blokerer alle dagskort, også for de konkurrencer, der intet har med turneringen at gøre. Prisen er dokumenteret som bevidst — den globale kampdag er produktets ene tvær-turneringsbegreb — men den blev betalt synligt under `A38`s undersøgelse. |
 | `B26` | E-mailbekræftelse + bot-værn (Turnstile) på signup | **Når linket deles åbent** (hjemmesiden publiceres eller invitationer går uden for det kontrollerede felt). **DELVIST KØRT 10. august 2026 og rullet tilbage — begynd med registeret i [`OPRETTELSE.md`](./OPRETTELSE.md), ikke forfra.** Tilstand: trin 1–3 ✅ (widget oprettet, `VITE_TURNSTILE_SITE_KEY` sat i Vercel **og udrullet**, widgeten tegnes på login-skærmen), Bot Protection **fra**, Confirm email **fra**. Tilbage: trin 4–8. Ét ubevist punkt spærrer trin 4 — at widgetens værtsnavn accepteres; en widget tegnes også på et forkert domæne og fejler først derefter. |
@@ -288,9 +288,10 @@ produktion (lukket af `G63`), og to steder i `analytics-v1.md`. **Ingen kode
 rørt, ingen migrering** — men de fire første beskriver ADGANGSREGLER, altså
 netop dét, man slår op for at være sikker.
 
-🔴 **To migreringer venter hos ejeren** — [`#56`](../sql/anon_grants_functions.sql) og [`#57`](../sql/create_group.sql), begge additive og
-uafhængige af et deploy. [`#57`](../sql/create_group.sql) bør køres FØR frontend-mergen; ellers fejler
-"Opret liga", indtil den er kørt.
+✅ **Begge migreringer er kørt i staging og produktion 12. august 2026**, før
+mergen. 🔶 **Tilbage står skema-eksporten**, så `sql/schema.sql` igen er sand;
+CI er efterprøvet fra begge sider og er grøn både mod det nuværende dump og mod
+et, hvor de to er kørt.
 
 ---
 

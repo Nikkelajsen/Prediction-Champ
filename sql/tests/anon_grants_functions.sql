@@ -106,6 +106,39 @@ create table pg_temp.foer (rolle text primary key, sigs text[]);
 alter default privileges for role postgres in schema public grant all on functions to anon;
 grant execute on all functions in schema public to anon;
 
+-- …og PUBLIC's halvdel, som er den, der bliver glemt.
+--
+-- ⚠️ **Denne blok er lige så vigtig som de to linjer ovenfor, og den blev
+-- opdaget ved at køre testen mod et SIMULERET post-migrerings-dump** — altså
+-- præcis den prøve, `DOCUMENTATION.md` §13 foreskriver efter 12. august 2026.
+-- Uden den ejer testen kun den ene halvdel af sin før-tilstand: i det øjeblik
+-- `#56` er kørt i produktion og skema-eksporten har hentet resultatet hjem,
+-- bærer dumpet nul PUBLIC-grants, og påstand 1b ville melde *"fixturen holder
+-- ikke: PUBLIC har ingen EXECUTE at miste"*. **Testen ville altså blive rød af,
+-- at arbejdet lykkedes** — tredje forekomst af den fejlklasse i dette repo
+-- (`invite_lookup.sql` og `competition_matches_read.sql` var de to første).
+--
+-- **PUBLIC gives KUN tilbage, hvor `authenticated` har sin egen grant.** Det er
+-- ikke et forsigtighedshensyn, men det, der gør før-tilstanden ægte: en
+-- migrering, der lukkede en funktion for klienterne (`recompute_ratings()`,
+-- `_anonymize_account()`), skrev `revoke … from public, anon, authenticated` og
+-- tog dermed PUBLIC med. Gav vi PUBLIC tilbage til dem alle, ville trin 1 i
+-- migreringen materialisere adgangen til `authenticated` — og påstanden om, at
+-- `_anonymize_account()` forbliver lukket, ville måle en verden, testen selv
+-- havde opfundet.
+do $$
+declare r record;
+begin
+  for r in
+    select p.oid::regprocedure as sig
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.prokind = 'f'
+       and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+  loop
+    execute format('grant execute on function %s to public', r.sig);
+  end loop;
+end $$;
+
 insert into pg_temp.foer
 select r, pg_temp.kan(r) from unnest(array['authenticated', 'service_role']) r;
 
