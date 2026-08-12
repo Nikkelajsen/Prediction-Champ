@@ -21,7 +21,7 @@ konfiguration uden for repoet, som kun kan udføres af ejeren.
 | Hvad | Værdi | Sidst verificeret |
 |---|---|---|
 | Turnstile-widget | Cloudflare → Turnstile. Navn: `Leagly` | 10. august 2026 — oprettet |
-| Værtsnavne på widgeten | `prediction-champ.vercel.app` | ? — widgeten TEGNES på login, men det beviser ikke, at værtsnavnet accepteres |
+| Værtsnavne på widgeten | `prediction-champ.vercel.app` | ? — widgeten TEGNES på login, men det beviser ikke, at værtsnavnet accepteres. **Aflæses på trin 3, punkt 4:** forsvinder "Bekræfter, at du ikke er en robot …", er kvitteringen udstedt |
 | Widget-tilstand | Managed | ? |
 | Site key (offentlig) | `VITE_TURNSTILE_SITE_KEY` i Vercel | **10. august 2026 — sat OG udrullet.** Aflæst på, at widgeten tegnes på login-skærmen; komponenten returnerer `null` uden nøgle, så der er ingen mellemtilstand |
 | Site key i **Preview** | **Bevidst ikke sat** — preview kører mod staging (`B18`), som ikke har Bot Protection | 10. august 2026 |
@@ -37,6 +37,11 @@ beviserne nedenfor er gået igennem — forskellen er hele pointen med registere
 > udrullet, og widgeten tegnes. Begge knapper i Supabase står på **fra** efter
 > et rollback. Næste skridt er trin 4, som nu er den knap, den skulle have været
 > hele tiden: en, der kan trykkes tilbage.
+>
+> *(12. august 2026: trin 3 har fået et punkt 4 — kontrollen af, at værtsnavnet
+> accepteres. Den var det ene ubeviste punkt foran trin 4, og den kan aflæses på
+> login-skærmen uden at røre Supabase. **Kør trin 3 om med det punkt, før du
+> trykker på trin 4** — de fire, der blev kørt 10. august, indeholdt den ikke.)*
 
 ---
 
@@ -117,10 +122,28 @@ GoTrue ignorerer kvitteringen — intet kan gå i stykker endnu.
 2. Åbn `https://prediction-champ.vercel.app` og log **ud**.
 3. **Se widgeten stå på login-skærmen.** Gør den ikke det, er nøglen ikke med i
    buildet — gå ikke videre.
-4. **Log ind igen. Det skal virke.** Gør det ikke, er noget galt med selve
+4. **Se sætningen "Bekræfter, at du ikke er en robot …" FORSVINDE** under
+   widgeten, et sekund eller to efter den er tegnet. **Dette er kontrollen af
+   værtsnavnet, og den er den eneste af de fem, der efterprøver, at Cloudflare
+   rent faktisk udsteder en kvittering.** En widget tegnes nemlig også på et
+   domæne, der ikke står på listen — den fejler først bagefter, og punkt 3
+   alene beviser derfor kun, at nøglen er i buildet.
+
+   Sætningen står i `TurnstileVenter` og vises, så længe `captchaToken` er tom
+   (`src/screens/Auth.jsx`, `vises={turnstileAktiv() && !captchaToken}`). Løses
+   udfordringen, kommer kvitteringen ind gennem `callback`, og linjen går væk.
+   Afvises værtsnavnet, rammer `error-callback` i stedet, tokenen sættes til
+   `""`, og **linjen bliver stående** — samme udfald som et blokeret script, så
+   en linje, der bliver, siger "ingen kvittering" uden at sige hvorfor. Kig i
+   browserkonsollen efter Cloudflares kode: `110200` er "domain not allowed".
+
+   Bliver linjen væk, er værtsnavnet accepteret. Det er den ene forudsætning,
+   trin 4 mangler — og den kan afprøves gratis her, med Bot Protection stadig
+   slået fra.
+5. **Log ind igen. Det skal virke.** Gør det ikke, er noget galt med selve
    udrulningen, og du har stadig ingen låst dør.
 
-Består alle fire, er trin 4 en knap, du kan trykke tilbage.
+Består alle fem, er trin 4 en knap, du kan trykke tilbage.
 
 ## Trin 4 — Supabase: slå bot-værnet til
 
