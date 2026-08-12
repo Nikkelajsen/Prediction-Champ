@@ -15,6 +15,73 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 12. august 2026 — `A43`: `profiles` smalnes på KOLONNER, deltagerlisten på RÆKKER
+
+**Beslutning:** `authenticated` mister tabel-bred SELECT på `public.profiles` og
+får den igen på nøjagtig `id`, `display_name` og `anonymized_at`. `read
+profiles`-policyen er **urørt**. `competition_participants` får derimod en ægte
+rækkepolicy — din egen række, eller en række i en konkurrence, du kan se — og
+reglen for det sidste bor i `is_competition_visible(cid)`, som
+`competitions_select_involved` nu også kalder. To migreringer med et deploy
+imellem: `#59 read_scope_functions.sql` (additiv) og `#60 read_scope_narrow.sql`
+(indsnævrende).
+
+**Begrundelse:** rækken foreslog `A40`s vej for begge tabeller — afgræns til de
+brugere, læseren deler en liga med. For den ene er det rigtigt, for den anden er
+det forkert, og forskellen er ikke en smagssag:
+
+- **`profiles` publicerer sit ene interessante felt med vilje.** Rating-fanen,
+  Månedsligaen og Championship (`scope='ALL'`) viser hver eneste brugers
+  visningsnavn til enhver indlogget. En rækkepolicy ville tømme
+  `loadMonthlyBoard`/`loadRoundBoard`/`loadSeasonBoard` OG skjule netop det felt.
+  Det, der ikke er publiceret, er resten af rækken — `is_admin`, `last_seen_at`,
+  `created_at`, `display_name_changed_at` — og dét kan kun lukkes med
+  kolonne-privilegier, fordi **en policy afgrænser rækken og ikke kolonnen**.
+  Værktøjet fandtes allerede i repoet i modsat retning (`#51`, `B29`).
+- **`competition_participants` publicerer ingenting.** Man ser kun deltagerne i
+  konkurrencer, man selv er med i — men kunne hente hele det sociale netværk med
+  ét kald. Klienten opfører sig allerede, som om policyen var stram: hvert
+  læsekald er filtreret på `competition_id`/`user_id`, og `compIds` kommer fra
+  brugerens egne medlemskaber og ligaer. Derfor kostede rækkepolicyen ingen
+  klientændring.
+
+**Hvorfor reglen flyttes ind i en funktion, og ikke skrives to gange:** en
+deltagerpolicy, der slår op i `competitions`, peger tilbage på en
+konkurrence-policy, der slår op i `competition_participants`. PostgreSQL svarer
+`42P17 infinite recursion` — og fejlen rammer **også `select * from
+competitions`**, så den slukker for hele konkurrencelaget og ligner ikke sin
+årsag. Én `security definer`-funktion bryder cyklussen; at BEGGE policies kalder
+den, gør reglen til ét sted frem for to. Efterprøvet mod PostgreSQL 16.13 og
+målt som negativ kontrol i `sql/tests/read_scope.sql`.
+
+**Den følge, beslutningen ikke forudså, og som er værd at kende næste gang:**
+en RLS-policy, der LÆSER en kolonne, holder op med at filtrere og begynder at
+fejle, når kolonnen lukkes. Tre policies slog op i `profiles.is_admin`, og
+`select count(*) from job_runs` som en ADMINISTRATOR svarede `42501` — Admin →
+Drift brækket for alle. Reglen bor nu i `is_platform_admin()`. Den generelle
+form: **kolonne-privilegier rammer også policies, ikke kun kaldesteder**, og
+kaldesteder er det eneste, en gennemlæsning af klienten kan finde. Det var
+efterprøvningen fra begge sider af skema-dumpet (§13), der fandt den.
+
+**Prisen, sagt højt:** `loadGroupDetail` henter deltagere for alle konkurrencer i
+alle brugerens ligaer, altså ét funktionskald pr. række i den varme sti. Den
+skal aflæses i staging, før policyen låses — det er trin 5 i
+[`UDRULNING-A43.md`](./UDRULNING-A43.md), og det er en måling og ikke et
+flueben. Bliver den mærkbar, er svaret at hente deltagerantallet ét sted fra, og
+ikke at rulle policyen tilbage.
+
+**Udløseren var sprunget, ikke ventende.** Rækken delte udløser med `B26` — "når
+linket deles åbent" — og `B26` blev kørt tidligere samme dag. Et bot-værn hæver
+prisen på en fremmed konto; det fjerner den ikke. `A43` skulle afgøres FØR
+åbningen, og blev det ikke, hvilket er værd at skrive ned: to rækker med samme
+udløser skal enten køres sammen eller have hver sin.
+
+**Hvad beslutningen IKKE dækker:** listen af visningsnavne er stadig offentlig
+for enhver med en konto, fordi den globale rating publicerer den. Det er `A44` i
+backloggen — en produktbeslutning om, hvad tavlen skal VISE, ikke en adgangsregel.
+
+---
+
 ## 12. august 2026 — `B26` køres, før dens udløser springer
 
 **Beslutning:** bot-værn og e-mailbekræftelse er slået til i produktionen, selv

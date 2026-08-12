@@ -4,7 +4,7 @@
 // uigenkaldelig, og bekræftelsesmodalen er hele værnet.
 import { useState, useEffect } from "react";
 import { Loader2, UserX } from "lucide-react";
-import { db } from "../../lib/supabase.js";
+import { hentAlleProfiler } from "../../lib/data/profile.js";
 import { closeUserAccount } from "../../lib/data/account.js";
 import { C, btnGhost, muted } from "../../ui/theme.js";
 import { Card, Modal } from "../../ui/components.jsx";
@@ -19,7 +19,12 @@ function UsersPanel({ token }) {
   async function load() {
     setErr("");
     try {
-      setRows(await db.select(token, "profiles", "select=id,display_name,created_at,last_seen_at,is_admin,anonymized_at&order=created_at.desc"));
+      // `admin_profiles()` og ikke et tabelopslag (A43): `created_at`,
+      // `last_seen_at` og `is_admin` om ANDRE er lukket for `authenticated`
+      // siden kolonne-grants'ene (#60), og også sorteringen — ORDER BY på en
+      // kolonne uden læse-privilegium afvises. Vagten er `is_admin` i
+      // databasen; skærmen kan kun spørge, præcis som `closeUserAccount`.
+      setRows(await hentAlleProfiler(token));
     } catch (e) { setErr(e.message || "Kunne ikke hente brugerne"); setRows([]); }
   }
   useEffect(() => { load(); }, [token]); // eslint-disable-line

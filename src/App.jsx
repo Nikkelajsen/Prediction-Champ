@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { auth, clearSession, db, loadSession, saveSession } from "./lib/supabase.js";
-import { loadInvitePreview, sikrProfil, touchActivity } from "./lib/data.js";
+import { hentEgenProfil, loadInvitePreview, sikrProfil, touchActivity } from "./lib/data.js";
 import { clearPendingInvite, readPendingInvite, writePendingInvite } from "./lib/localFlags.js";
 import { logEvent } from "./lib/analytics.js";
 import { disablePush } from "./lib/push.js";
@@ -83,8 +83,12 @@ export default function App() {
   async function completeAuth({ access_token, refresh_token, user }, chosenUsername, source = "restore") {
     try {
       if (chosenUsername) {
-        const rows = await db.upsert(access_token, "profiles", [{ id: user.id, display_name: chosenUsername }], "id");
-        setProfile(rows[0]);
+        // `select=id`: `return=representation` er en `returning`-klausul, og den
+        // kræver læse-privilegiet på hver kolonne, den giver tilbage (A43).
+        // Profilen hentes derfor bagefter gennem `my_profile()`, som er den
+        // eneste vej til `is_admin` — det felt, admin-fanen står på.
+        await db.upsert(access_token, "profiles", [{ id: user.id, display_name: chosenUsername }], "id", "id");
+        setProfile(await hentEgenProfil(access_token));
       } else {
         // `sikrProfil` og ikke et bart opslag (B26): mangler rækken, skrives
         // den af det brugernavn, oprettelsen gemte som metadata. Det er den
@@ -94,8 +98,11 @@ export default function App() {
         setProfile(await sikrProfil(access_token, user));
       }
     } catch {
-      const rows = await db.select(access_token, "profiles", `id=eq.${user.id}&select=*`);
-      setProfile(rows[0] || null);
+      // Stod som `profiles?select=*` indtil `A43`. Kolonne-grants (#60) gør det
+      // opslag til et `42501`, og fald-tilbagen ville dermed være den eneste
+      // gren, der ALTID fejlede — netop på den vej, der bruges, når noget
+      // andet allerede er gået galt.
+      setProfile((await hentEgenProfil(access_token)) || null);
     }
     setSession({ access_token, refresh_token, user });
     saveSession({ refresh_token, user });
@@ -357,11 +364,15 @@ export default function App() {
         // Hjems hilsen og som afsender på et invitationslink, og de læser
         // `profile` herfra. Uden linjen ville et navneskift kun kunne ses på
         // karriereprofilen indtil næste app-start.
+        // 🔴 Den FLETTER og erstatter ikke (A43). `changeDisplayName()` svarer
+        // siden kolonne-grants'ene (#60) med `id` og `display_name` alene, så
+        // en erstatning ville tømme `is_admin` — og administratoren ville miste
+        // sin fane ved at skifte navn.
         // `clearPending*` rydder nu BEGGE steder (I7): en invitation, der er
         // slået op, må ikke kunne dukke op igen ved næste opstart, uanset hvad
         // opslaget svarede. Det er dét, der gør localStorage-kopien til en
         // omvej-forsikring frem for en kø, der vokser.
-        <MainApp session={session} profile={profile} onProfileChanged={setProfile} onLogout={handleLogout}
+        <MainApp session={session} profile={profile} onProfileChanged={(række) => setProfile((p) => ({ ...p, ...række }))} onLogout={handleLogout}
           inviteFromStorage={inviteFromStorage}
           pendingJoinCode={pendingJoinCode} clearPendingJoinCode={() => { setPendingJoinCode(null); clearPendingInvite(); }}
           pendingLigaCode={pendingLigaCode} clearPendingLigaCode={() => { setPendingLigaCode(null); clearPendingInvite(); }} />

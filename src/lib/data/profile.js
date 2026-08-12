@@ -11,7 +11,34 @@
 // appen har ingen skærm, hvor et brugernavn kan vælges bagefter — kontoen ville
 // være en blindgyde. Derfor gemmes ønsket som brugermetadata ved signup, og
 // rækken skrives her ved første login, der faktisk har en token.
-import { db, auth } from "../supabase.js";
+import { db, auth, restFetch } from "../supabase.js";
+
+// ---------- to opslag, der ikke længere kan være tabelopslag (A43) ----------
+//
+// `authenticated` må siden `#60` læse NØJAGTIG tre kolonner i `profiles`:
+// `id`, `display_name` og `anonymized_at`. Det er de tre, produktet publicerer
+// i hver stilling; resten (`is_admin`, `last_seen_at`, `created_at`,
+// `display_name_changed_at`) fulgte indtil da med i ethvert REST-kald, selvom
+// ingen skærm viser dem om ANDRE.
+//
+// To skærme viser dem alligevel — om sig selv og om alle — og de går derfor
+// gennem hver sin `security definer`-funktion i stedet:
+//
+//   · `hentEgenProfil()`   → hele ens EGEN række. `MainApp.jsx` afgør
+//     admin-fanen på `profile.is_admin`, så et smalt `select=` ville slukke
+//     fanen for administratoren selv. Ens egen `is_admin` er ikke det, rækken
+//     beskytter — det er andres.
+//   · `hentAlleProfiler()` → Admin → Brugere. Vagten er `is_admin` i databasen
+//     (`admin_profiles()`, sql/read_scope_functions.sql), ikke her: klienten
+//     kan kun spørge. Sorteringen ligger også dér, fordi `order=created_at`
+//     efter `#60` er et `42501` — ORDER BY kræver læse-privilegiet.
+async function hentEgenProfil(token) {
+  return restFetch(`/rest/v1/rpc/my_profile`, { method: "POST", token, body: {} });
+}
+
+async function hentAlleProfiler(token) {
+  return restFetch(`/rest/v1/rpc/admin_profiles`, { method: "POST", token, body: {} });
+}
 
 // Databasen håndhæver 2–20 tegn (`profiles_display_name_len`) og unikhed på
 // små bogstaver (`profiles_display_name_lower_idx`). Begge dele gælder også
@@ -43,13 +70,17 @@ function navneforslag(ønsket, antal = 5) {
 // må ikke kunne overskrive et navn, og metadataen fra oprettelsen bliver
 // liggende på auth-brugeren for evigt.
 async function sikrProfil(token, user) {
-  const rows = await db.select(token, "profiles", `id=eq.${user.id}&select=*`);
-  if (rows[0]) return rows[0];
+  const egen = await hentEgenProfil(token);
+  if (egen) return egen;
 
   for (const navn of navneforslag(user?.user_metadata?.display_name)) {
     try {
-      const skrevet = await db.upsert(token, "profiles", [{ id: user.id, display_name: navn }], "id");
-      if (skrevet[0]) return skrevet[0];
+      // `select=id` og ikke hele rækken: `return=representation` er en
+      // `returning`-klausul, og den kræver læse-privilegiet på hver kolonne,
+      // den giver tilbage (A43). Rækken hentes bagefter gennem funktionen, som
+      // er den eneste vej til `is_admin`.
+      const skrevet = await db.upsert(token, "profiles", [{ id: user.id, display_name: navn }], "id", "id");
+      if (skrevet[0]) return await hentEgenProfil(token);
     } catch {
       // Navnet blev taget, mens mailen lå ulæst — prøv det næste forslag.
       // Alt andet end en navnekonflikt (offline, RLS) fejler også her, og
@@ -85,6 +116,18 @@ async function sikrProfil(token, user) {
 // `sql/username_change.sql` har `authenticated` udelukkende UPDATE på `id` og
 // `display_name`, og en PATCH med et felt mere ville blive afvist af
 // databasen — hvilket er hele meningen med den rettighed.
+//
+// **Og svaret beder kun om de to samme kolonner** (A43). `db.update` sender
+// `return=representation`, altså en `returning`-klausul, og den kræver
+// LÆSE-privilegiet på hver kolonne, den giver tilbage — som siden `#60` er de
+// tre, `authenticated` har. Uden `select=` ville et navneskift fejle med
+// `permission denied for table profiles`, selvom skrivningen var lovlig.
+//
+// Følgen er, at funktionen svarer med en DELVIS række og ikke med hele
+// profilen. Det er `App.jsx`, der skal kende den forskel: den fletter svaret
+// ind i den profil, den allerede har, frem for at erstatte den — ellers ville
+// en administrator, der skifter navn, miste sin admin-fane, til appen blev
+// genstartet.
 async function changeDisplayName(token, userId, ønsket) {
   const navn = String(ønsket || "").trim();
   if (navn.length < 2 || navn.length > NAVN_MAX) {
@@ -96,7 +139,7 @@ async function changeDisplayName(token, userId, ønsket) {
   }
 
   try {
-    const rows = await db.update(token, "profiles", `id=eq.${userId}`, { display_name: navn });
+    const rows = await db.update(token, "profiles", `id=eq.${userId}&select=id,display_name`, { display_name: navn });
     // Nul rækker tilbage betyder, at RLS ikke fandt rækken at skrive — ikke at
     // skrivningen lykkedes tomt. Uden dette led ville en fejl i policyen se ud
     // som en succes, og navnet ville "skifte" i brugerfladen og ikke i basen.
@@ -114,4 +157,4 @@ async function changeDisplayName(token, userId, ønsket) {
   }
 }
 
-export { navneforslag, sikrProfil, changeDisplayName };
+export { navneforslag, sikrProfil, changeDisplayName, hentEgenProfil, hentAlleProfiler };

@@ -139,10 +139,17 @@ const db = {
   count: (token, table, query = "", opts = {}) => restCount(`/rest/v1/${table}?${query}${query ? "&" : ""}limit=0`, { token, ...opts }),
   insert: (token, table, rows) =>
     restFetch(`/rest/v1/${table}`, { method: "POST", token, body: rows, prefer: "return=representation" }),
-  upsert: (token, table, rows, onConflict) =>
-    restFetch(`/rest/v1/${table}${onConflict ? `?on_conflict=${onConflict}` : ""}`, {
+  // `select` er valgfrit og afgør, HVILKE kolonner svaret bærer. Uden det
+  // returnerer PostgREST alle — og `return=representation` betyder `returning`,
+  // som kræver LÆSE-privilegiet på hver af dem (A43). På en tabel med
+  // kolonne-grants (`profiles` siden #60) er en upsert uden `select` derfor et
+  // `42501`, selvom skriverettigheden er i orden.
+  upsert: (token, table, rows, onConflict, select) => {
+    const q = [onConflict && `on_conflict=${onConflict}`, select && `select=${select}`].filter(Boolean).join("&");
+    return restFetch(`/rest/v1/${table}${q ? `?${q}` : ""}`, {
       method: "POST", token, body: rows, prefer: "resolution=merge-duplicates,return=representation",
-    }),
+    });
+  },
   update: (token, table, query, patch) =>
     restFetch(`/rest/v1/${table}?${query}`, { method: "PATCH", token, body: patch, prefer: "return=representation" }),
   del: (token, table, query) =>

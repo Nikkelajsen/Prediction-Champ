@@ -203,7 +203,20 @@ begin
      -- Påstanden fandt det selv, da skema-eksporten kørte efter `A40`; indtil da
      -- bar dumpet den gamle, ensartede regel. Fjernes en tabel herfra igen, skal
      -- grunden stå ved siden af som her.
-     and tablename in ('competition_participants', 'matches', 'leagues', 'seasons')
+     --
+     -- `competition_participants` er taget ud 12. august 2026 af nøjagtig samme
+     -- grund, én række senere: `A43` gav den `competition_participants_select_visible`
+     -- (`user_id = auth.uid() or is_competition_visible(competition_id)`), fordi hele
+     -- appens sociale netværk ellers kunne hentes med ét kald. Den er dermed heller
+     -- ikke længere en nabo med samme regel. **Denne gang fandt påstanden det FØR
+     -- eksporten** — leverancen kørte alle skema-indlæsende tests mod et dump, hvor
+     -- `#59` og `#60` allerede var kørt, som §13 foreskriver — så linjen er rettet
+     -- i samme ombæring som policyen frem for en uge senere.
+     --
+     -- Tilbage står `matches`, `leagues` og `seasons`: de tre er ægte fælles data,
+     -- som enhver indlogget må læse. Bliver listen tom en dag, er påstanden holdt op
+     -- med at måle noget, og så skal den skrives om frem for at skrumpe videre.
+     and tablename in ('matches', 'leagues', 'seasons')
      and coalesce(qual, '') is distinct from coalesce(v_regel, '');
   if v_afvigere is not null then
     raise exception '2) reglen skal være den samme som naboernes — disse afviger nu: %', v_afvigere;

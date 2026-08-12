@@ -33,7 +33,10 @@ function stub(...svar) {
     return {
       ok: true, status: 200, statusText: "OK",
       headers: { get: () => null },
-      text: async () => JSON.stringify(næste?.rows ?? []),
+      // `?? []` og ikke `?? null`: en tabel-læsning svarer med en liste. En
+      // `returns jsonb`-funktion svarer med sin værdi, og `null` er et gyldigt
+      // svar dér — derfor sendes `rows: null` uændret igennem.
+      text: async () => JSON.stringify(næste?.rows === undefined ? [] : næste.rows),
     };
   });
   return kald;
@@ -73,27 +76,50 @@ describe("navneforslag", () => {
 });
 
 describe("sikrProfil", () => {
+  // 🔴 **Opslaget er ikke længere et tabelopslag** (A43). `authenticated` må
+  // siden `#60` læse tre kolonner i `profiles`, og `is_admin` er ikke en af
+  // dem — så egen række hentes gennem `my_profile()`, som er `security
+  // definer`. Stubben svarer derfor med et OBJEKT og ikke med en liste; det er
+  // formen, PostgREST giver en `returns jsonb`-funktion.
+  const egen = (row) => ({ rows: row });
+
   // Det almindelige tilfælde efter denne ændring: hver eneste app-opstart.
   // Findes rækken, må funktionen ikke skrive — et login må aldrig kunne
   // overskrive et navn med den metadata, oprettelsen efterlod for et år siden.
   it("rører ikke en profil, der allerede findes", async () => {
-    const kald = stub({ rows: [{ id: "u1", display_name: "Anna" }] });
+    const kald = stub(egen({ id: "u1", display_name: "Anna", is_admin: true }));
     expect(await sikrProfil("tok", bruger("Noget Andet"))).toMatchObject({ display_name: "Anna" });
     expect(kald).toHaveLength(1);
-    expect(kald[0].url).toContain("/rest/v1/profiles?id=eq.u1");
+    expect(kald[0].url).toContain("/rest/v1/rpc/my_profile");
+  });
+
+  // `is_admin` følger med, og det er hele grunden til, at funktionen findes:
+  // `MainApp.jsx` afgør admin-fanen på feltet, og et smalt `select=` ville
+  // slukke fanen for administratoren selv.
+  it("giver hele ens egen række tilbage, is_admin inklusive", async () => {
+    stub(egen({ id: "u1", display_name: "Anna", is_admin: true }));
+    expect(await sikrProfil("tok", bruger(null))).toMatchObject({ is_admin: true });
   });
 
   // Selve `B26`-tilfældet: kontoen blev oprettet, mailen bekræftet, og først
   // NU findes der en token, rækken kan skrives med.
+  //
+  // Tre kald og ikke to (A43): opslag, skrivning, og et opslag mere. Det
+  // sidste er ikke spild — skrivningens eget svar må kun bede om `id`, fordi
+  // `return=representation` er en `returning`-klausul, og den kræver
+  // læse-privilegiet på hver kolonne, den giver tilbage.
   it("skriver rækken af det navn, oprettelsen gemte som metadata", async () => {
-    const kald = stub({ rows: [] }, { rows: [{ id: "u1", display_name: "Anna" }] });
+    const kald = stub(egen(null), { rows: [{ id: "u1" }] }, egen({ id: "u1", display_name: "Anna" }));
     expect(await sikrProfil("tok", bruger("Anna"))).toMatchObject({ display_name: "Anna" });
-    expect(kald).toHaveLength(2);
+    expect(kald).toHaveLength(3);
     expect(kald[1].body).toEqual([{ id: "u1", display_name: "Anna" }]);
+    // Præcis den linje, der ellers ville fejle med 42501 i produktionen.
+    expect(kald[1].url).toContain("select=id");
+    expect(kald[2].url).toContain("/rest/v1/rpc/my_profile");
   });
 
   it("prøver det næste forslag, når navnet blev taget imens", async () => {
-    const kald = stub({ rows: [] }, { konflikt: true }, { rows: [{ id: "u1", display_name: "Anna2" }] });
+    const kald = stub(egen(null), { konflikt: true }, { rows: [{ id: "u1" }] }, egen({ id: "u1", display_name: "Anna2" }));
     expect(await sikrProfil("tok", bruger("Anna"))).toMatchObject({ display_name: "Anna2" });
     expect(kald[1].body).toEqual([{ id: "u1", display_name: "Anna" }]);
     expect(kald[2].body).toEqual([{ id: "u1", display_name: "Anna2" }]);
@@ -103,7 +129,7 @@ describe("sikrProfil", () => {
   // gættet navn, og den må slet ikke vælte opstarten — den skal bare svare
   // null, præcis som opslaget gjorde før.
   it("gætter ikke et navn, når oprettelsen ikke gemte et", async () => {
-    const kald = stub({ rows: [] });
+    const kald = stub(egen(null));
     expect(await sikrProfil("tok", bruger(null))).toBeNull();
     expect(kald).toHaveLength(1);
   });
@@ -112,7 +138,7 @@ describe("sikrProfil", () => {
   // ville en vedvarende fejl (offline, RLS) blive til en uendelig løkke inde i
   // app-opstarten.
   it("giver op efter fem forsøg frem for at prøve i det uendelige", async () => {
-    const kald = stub({ rows: [] }, ...Array.from({ length: 5 }, () => ({ konflikt: true })));
+    const kald = stub(egen(null), ...Array.from({ length: 5 }, () => ({ konflikt: true })));
     expect(await sikrProfil("tok", bruger("Anna"))).toBeNull();
     expect(kald).toHaveLength(6); // ét opslag + fem forsøg
   });
