@@ -240,7 +240,7 @@ så reglen er `is_group_member(id)` alene: du kan se en liga, hvis du er medlem 
 den. Prisen, leddet kostede — en opretter, der havde forladt sin egen liga, kunne
 stadig læse den og dens `invite_code` — er betalt tilbage. `G95`
 (`create_group()`) fjernede årsagen 12. august; denne række fjerner leddet.
-🔴 **Migreringen skal køres i staging og produktion.**
+✅ **Migreringen er kørt i staging og produktion 12. august 2026**, før mergen.
 
 **`#55` er blevet den tiende fil, der ikke må gen-køres** — den gør præcis det,
 `#58` fjerner — og den eneste, hvor "kør den nyere bagefter" ikke altid er
