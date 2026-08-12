@@ -60,6 +60,8 @@ måler den — den gamle klients brede opslag skal stadig virke efter `#59`.
 2. **Afprøv med den GAMLE klient** (staging peger på `main` indtil PR'en
    merges): log ind, åbn en konkurrence, åbn Admin → Brugere. Alt skal virke
    uændret — det er dét, der gør trin 6 sikkert at køre før mergen.
+   📈 **Kør samtidig måleblokken fra trin 5 her**, mens den gamle policy stadig
+   står. Det er FØR-tallet, og det kan ikke hentes bagefter.
 3. **Kør `sql/read_scope_narrow.sql`.** Nu er fladen smal.
 4. **Afprøv med den NYE klient** (preview-deployet af PR'en). Seks skærme, og de
    er valgt, fordi de hver rammer en gren, der kunne fejle (den syvende kom
@@ -77,21 +79,60 @@ måler den — den gamle klients brede opslag skal stadig virke efter `#59`.
 
 5. 📈 **Mål prisen — det er rækkens ene åbne omkostningsspørgsmål.**
    `loadGroupDetail` henter deltagere for ALLE konkurrencer i en liga, og hver
-   række koster nu et `is_competition_visible()`-kald. Åbn en liga med rigtige
-   tal og aflæs, om siden føles anderledes. Vil du have et tal frem for en
-   fornemmelse, så kør forespørgslen nedenfor i staging med et rigtigt
-   `group_id`:
+   række koster nu et `is_competition_visible()`-kald.
 
-   ```sql uddrag
-   explain analyze
-   select competition_id from public.competition_participants
-    where competition_id in (select id from public.competitions where group_id = '<GRUPPE-ID>');
+   **Hvor:** i **staging-projektets SQL-editor** (Supabase → SQL Editor), ikke i
+   produktionen og ikke i en terminal. `explain analyze` UDFØRER forespørgslen,
+   men den er ren læsning og står desuden i en transaktion, der rulles tilbage.
+   **Sæt IKKE "Run without RLS"** — RLS er præcis det, der skal måles.
+
+   🔴 **Editoren forbinder altid som `postgres`, og `postgres` er tabellernes
+   ejer, så RLS gælder den ikke.** Kører du forespørgslen bare, måler du derfor
+   en verden uden policies — altså baseline, ikke prisen. Rollen og brugeren
+   skal sættes eksplicit; det er de tre linjer over `explain` nedenfor, og de er
+   hele forskellen på en måling og et tal, der ser rigtigt ud.
+
+   Find først en liga at måle på — den med flest konkurrencer, og et medlem af
+   den:
+
+   ```sql
+   select g.id as gruppe_id, g.name,
+          (select count(*) from public.competitions c where c.group_id = g.id) as konkurrencer,
+          (select min(m.user_id::text) from public.group_members m where m.group_id = g.id) as et_medlem
+     from public.groups g
+    order by konkurrencer desc
+    limit 5;
    ```
 
-   Kør den som `postgres` FØR og som en almindelig bruger EFTER, og
-   sammenlign. Er forskellen mærkbar på en rigtig liga, er svaret **ikke** at
-   rulle policyen tilbage, men at lade `loadGroupDetail` hente deltagerantallet
-   ét sted fra — se `docs/BACKLOG.md`.
+   Sæt de to id'er ind og kør så denne. Den impersonerer et rigtigt medlem, og
+   `rollback` gør hele blokken uden virkning:
+
+   ```sql uddrag
+   begin;
+     select set_config('request.jwt.claim.sub',  '<BRUGER-ID>', true);
+     select set_config('request.jwt.claim.role', 'authenticated', true);
+     set local role authenticated;
+
+     explain analyze
+     select competition_id from public.competition_participants
+      where competition_id in (select id from public.competitions where group_id = '<GRUPPE-ID>');
+   rollback;
+   ```
+
+   **Sådan ser du, at impersoneringen virkede:** planen skal indeholde linjen
+   `Filter: ((user_id = …) OR is_competition_visible(competition_id))`. Står den
+   ikke der, kørte du som `postgres`, og `Execution Time` er baseline og ikke
+   prisen. Efterprøvet mod PostgreSQL 16.13 med Supabases egen `auth.uid()`.
+
+   **Den bedste sammenligning er før/efter og ikke bruger/ejer**, og staging går
+   gennem begge tilstande af sig selv: kør den samme blok i **trin 2** (hvor
+   `read all participation` stadig er `auth.role() = 'authenticated'`) og igen
+   her. Forskellen mellem de to `Execution Time` ER policyens pris på rigtige
+   tal.
+
+   Er forskellen mærkbar på en rigtig liga, er svaret **ikke** at rulle policyen
+   tilbage, men at lade `loadGroupDetail` hente deltagerantallet ét sted fra —
+   linjen står i backloggens indbakke.
 
 ### Produktion (trin 6–10)
 
