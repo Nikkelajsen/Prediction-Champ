@@ -74,6 +74,8 @@ Støder du undervejs på noget, der burde bygges, ryddes op eller besluttes, men
 
 Migreringerne i `sql/` køres **manuelt** i Supabase SQL-editor med "Run without RLS". De er idempotente, men to af dem ruller tavst nyere regler tilbage, hvis de gen-køres — læs filindekset og advarslen i `sql/README.md`, før du kører noget.
 
+**`#56` er en migrering, ikke en pull request.** Nummeret er kolonne 1 i filoversigten i [`sql/README.md`](./sql/README.md), hvor filnavnene er links — slå op dér, eller kør `grep -n "^| 56 " sql/README.md`. Numrene genbruges aldrig og omnummereres aldrig, så de er stabile navne. **Skriver du et nummer i chat eller i en commit-besked, så skriv filnavnet med** (`#56 anon_grants_functions.sql`): tallet alene kan kun slås op af en, der har repoet åbent.
+
 `sql/schema.sql` er et **genereret** øjebliksbillede (skema-eksport-workflowen), aldrig en fil man redigerer i hånden. Den er kun en gyldig reference, når eksporten er kørt efter seneste migrering.
 
 Ændrer du ratingberegningen, fanger `sql/tests/rating_equivalence.sql` i CI, om tallene flytter sig. Skal de flytte sig med vilje, er det den frosne reference i samme mappe, der skal opdateres — og den opdatering er så selve beslutningen.

@@ -1,6 +1,10 @@
 -- Ligaen og dens første medlem bliver ÉN skrivning (G95).
 -- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
 --
+-- 📍 `#N` er en migrering: nummeret står i kolonne 1 i filoversigten i
+--    `sql/README.md`, hvor filnavnene er links. `#52` = `invite_lookup.sql`,
+--    `#55` = `groups_select_creator.sql`, denne fil er `#57`.
+--
 -- ✅ **REN TILFØJELSE — SIKKER AT KØRE NÅR SOM HELST, OGSÅ FØR FRONTEND-MERGEN.**
 -- Filen tilføjer én funktion og dens grants. Ingen policy røres, ingen rettighed
 -- smalnes, ingen række ændres. Den nuværende klient kalder ikke funktionen og

@@ -2,6 +2,10 @@
 -- lukkes (G96).
 -- Idempotent — kan køres igen når som helst (kør med "Run without RLS").
 --
+-- 📍 `#N` er en migrering: nummeret står i kolonne 1 i filoversigten i
+--    `sql/README.md`, hvor filnavnene er links. `#34` = `anon_grants.sql`,
+--    `#43` = `anon_grants_finish.sql`, denne fil er `#56`.
+--
 -- Tredje og sidste del af oprydningen efter `G50`: #34 tog tabellerne, #43 tog
 -- sekvenserne, og denne tager det, begge sagde eksplicit, at de ikke rørte.
 --
