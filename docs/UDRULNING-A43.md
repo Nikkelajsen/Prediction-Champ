@@ -16,8 +16,8 @@ hvor du var.
 | 2 | Staging afprøvet med den GAMLE klient: intet er gået i stykker | ✅ 12. august 2026 |
 | 3 | `sql/read_scope_narrow.sql` (#60) kørt i **staging** | ✅ 12. august 2026 |
 | 4 | Staging afprøvet med den NYE klient — de syv skærme nedenfor | ✅ 12. august 2026 |
-| 5 | 📈 **Prisen målt i staging:** liga-siden med rigtige tal | ⬜ ← **her er vi** |
-| 6 | `sql/read_scope_functions.sql` (#59) kørt i **produktion** | ⬜ |
+| 5 | 📈 **Prisen målt i staging:** liga-siden med rigtige tal | ✅ 12. august 2026 — **2,2 ms i alt** for 8 konkurrencer, altså en ØVRE grænse for policyens pris, og under tærsklen |
+| 6 | `sql/read_scope_functions.sql` (#59) kørt i **produktion** | ⬜ ← **her er vi** |
 | 7 | PR merget, Vercel-deploy færdig | ⬜ |
 | 8 | Produktionen afprøvet: login, Rating, en konkurrence, navneskift | ⬜ |
 | 9 | `sql/read_scope_narrow.sql` (#60) kørt i **produktion** | ⬜ |
@@ -177,13 +177,33 @@ måler den — den gamle klients brede opslag skal stadig virke efter `#59`.
    her. Forskellen mellem de to `Execution Time` ER policyens pris på rigtige
    tal.
 
+   🟢 **SPØRG FØRST, OM DU OVERHOVEDET BEHØVER FØR-TALLET.** `Execution Time` i
+   EFTER-målingen er en **øvre grænse** for prisen: policyen kan ikke have kostet
+   mere end hele forespørgslen tog. Er EFTER-tallet allerede under tærsklen i
+   tabellen nedenfor, er spørgsmålet besvaret, og FØR-målingen er en risiko uden
+   en gevinst. Den er kun nødvendig, hvis EFTER-tallet lander i eller over
+   5–50 ms-båndet og du skal vide, hvor meget af det der er policyens.
+
    **Er trin 2 sprunget over, er FØR-tallet ikke tabt.** Policies er DDL, og DDL
    er transaktionel i PostgreSQL: den gamle tilstand kan sættes op inde i en
    transaktion, måles, og rulles tilbage. Begge policies skal med — ellers måler
-   du en blandingstilstand:
+   du en blandingstilstand.
+
+   🔴 **BLOKKEN SKAL PASTES HEL, OG `rollback` ER EN DEL AF DEN.** `drop policy`
+   tager en ACCESS EXCLUSIVE-lås på tabellen, og den holdes, så længe
+   transaktionen er åben. Paster du kun de øverste linjer — fx fordi de fylder
+   ét skærmbillede — står editoren og kører, og **hver eneste læsning og
+   skrivning mod `competition_participants` og `competitions` er blokeret
+   imens**, altså hele appen. `lock_timeout` og `statement_timeout` nedenfor er
+   derfor ikke pynt: de gør blokken selvafsluttende, så den værst tænkelige
+   udgang er en fejlmeddelelse frem for en app, der står stille.
 
    ```sql uddrag
    begin;
+     -- Selvafsluttende: kan ikke stå og vente på en lås, og kan ikke køre længe.
+     set local lock_timeout = '3s';
+     set local statement_timeout = '30s';
+
      -- FØR-tilstanden, ordret som den stod før #60
      drop policy competition_participants_select_visible on public.competition_participants;
      create policy "read all participation" on public.competition_participants
@@ -211,9 +231,23 @@ måler den — den gamle klients brede opslag skal stadig virke efter `#59`.
    ⚠️ **`rollback` er ikke valgfri.** Slutter blokken uden den, står staging med
    den gamle, brede policy — altså med hullet åbent og uden at nogen kan se det.
    Kør efterprøvningen fra trin 10 bagefter, hvis du er i tvivl: `nye policies`
-   skal svare 2. Og `drop policy` tager en ACCESS EXCLUSIVE-lås på tabellen, så
-   længe transaktionen kører — uskadeligt i staging, men blokken hører ikke
-   hjemme i produktionen.
+   skal svare 2. **Blokken hører ikke hjemme i produktionen** uanset hvad.
+
+   **Står editoren og kører (`Running…`), er transaktionen åben og låsen holdt.**
+   Sådan kommer du ud, fra en NY query-fane:
+
+   ```sql
+   select pid, state, wait_event_type, left(query, 60) as forespoergsel, xact_start
+     from pg_stat_activity
+    where datname = current_database() and pid <> pg_backend_pid()
+      and state <> 'idle'
+    order by xact_start;
+   ```
+
+   Find den med den ældste `xact_start`, og afbryd den med
+   `select pg_cancel_backend(<pid>);` — eller `pg_terminate_backend(<pid>)`, hvis
+   den ikke slipper. En afbrudt transaktion rulles tilbage af sig selv, så
+   policyerne står, som `#60` skrev dem; efterprøv med trin 10.
 
    Efterprøvet mod PostgreSQL 16.13: planen inde i transaktionen er den samme
    som før migreringen, og begge policies står uændrede bagefter.
