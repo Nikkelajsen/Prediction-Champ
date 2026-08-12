@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A45` · `B30` · `G101` · `I22`.**
+**Næste ledige: `A46` · `B30` · `G102` · `I22`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -47,20 +47,17 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-Blev `recovery.html`s kommentarhoved pastet med ind i Supabase 9. august? Interne noter i mailens kilde hos hver modtager — tjek "vis original" på en nulstillingsmail, og skriv i så fald i `MAIL.md`, at hovedet skal skæres fra.
-
-Liga-sidens deltagerantal henter hele deltagerlisten for hver konkurrence i ligaen for at tælle den — ét deltagerantal-opslag ville gøre `A43`s policy-pris ligegyldig.
-
-*(Ryddet to gange 12. august 2026. Første gang blev syv linjer til `A42`,
+*(Ryddet tre gange 12. august 2026. Første gang blev syv linjer til `A42`,
 `A43`, `G95`–`G97`, `I20` og `I21`; de tre `G`-rækker og `A43` er leveret samme dag.
 Anden gang blev tre fund fra den leverance til `G99` og `G100` — begge leveret
-samme dag. Se [Log](#log--seneste-kørsel).)*
+samme dag. Tredje gang blev to linjer til `A45` og `G101` — ingen leveret endnu.
+Se [Log](#log--seneste-kørsel).)*
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 29 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -77,11 +74,13 @@ Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
 ### Tier 1 — Produktionsadgang: svaret ligger uden for repoet
 
-Tomt. Fællesnævneren er, at adgangen ikke findes i den maskine, arbejdet laves i
-— Supabase eller cron-job.org, ikke repoet. **Tieret har én betjening, og det er
-afgjort** (`A32`, 10. august 2026): aflæsninger i produktion er ejerens arbejde,
-og der bygges ingen vej udenom. Det, der kan gøres billigere, er bestillingen —
-`sql/checks/` installerer intet og kan køres på et minut.
+Fællesnævneren er, at adgangen ikke findes i den maskine, arbejdet laves i —
+Supabase, en modtaget mail eller cron-job.org, ikke repoet. **Tieret har én
+betjening, og det er afgjort** (`A32`, 10. august 2026): aflæsninger i
+produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
+gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
+køres på et minut. `A45` venter på netop den slags aflæsning: åbn "vis
+original" på en modtaget nulstillingsmail.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
@@ -97,8 +96,8 @@ Tomt.
 
 ### Tier 5 — Robusthed og vedligehold
 
-Tomt. `G95`, `G96`, `G97` og `G100` er leveret 12. august 2026 — se
-[Log](#log--seneste-kørsel).
+`G95`, `G96`, `G97` og `G100` er leveret 12. august 2026 — se
+[Log](#log--seneste-kørsel). Tilbage: `G101`.
 
 ### Tier 6 — Venter på en udløser
 
@@ -170,6 +169,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | A14 | **Skal hele kodebasen gennemformateres med Prettier?** | `npm run format` findes, men `format:check` er bevidst ikke et CI-trin. En fuld gennemformatering ville omskrive ~6.700 linjer ved `printWidth: 140` (~14.000 ved standard 80) på tværs af ~126 filer (86 uden testfiler; genmålt august 2026). Prisen er hele repoets `git blame`; gevinsten er konsistens i en kodebase med én forfatter og en i forvejen ensartet håndstil. Beslutningen er **udskudt, ikke truffet** — se [`DECISIONS.md`](./DECISIONS.md), 30. juli 2026. | Næste gang der alligevel røres bredt i frontenden — ellers aldrig. |
 | A23 | **Skal appen have en router?** | Navigation er i dag to `useState` i `MainApp.jsx` (`tab` + `screen`), og deep links læses ved boot og strippes straks via `history.replaceState` (`App.jsx:104`, `MainApp.jsx:215,239`). Følgen er ingen tilbage-knap, ingen browser-historik og ingen delbare URL'er til interne skærme — mærkbart for en PWA, hvor telefonens tilbage-gestus forventes at virke. Men det er et arkitekturvalg, ikke en fejl: afhængighedsfattigheden er bevidst (fire runtime-deps, ingen router, `docs/reviews/2026-08-app-review.md` §7), og en router omskriver hele navigations-tilstandsmaskinen inkl. begge deep-link-join-flows, som ingen test dækker. | Når tilbage-knappen enten koster brugere (kan aflæses i analytics) eller en feature kræver ægte delbare interne URL'er — `I12`s offentlige ligaside er den første, der ville. |
 | A39 | **Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat?** | `match_day_complete()` er global: den kræver, at ALLE kampe på dagen har resultat, uanset turnering og uanset konkurrence. Én udsat eller uindberettet kamp i én turnering blokerer derfor dagskortet for hver eneste bruger, også dem, hvis konkurrencer slet ikke rører den turnering. **Prisen er bevidst og dokumenteret** — den globale kampdag er produktets ene tvær-turneringsbegreb, og et kort pr. konkurrence ville skulle vælge, hvilken dag der er *dagen* — men den blev betalt synligt under `A38`s undersøgelse, hvor det tog tid at afgøre, om stilheden var en fejl eller en ventende kamp. **To veje:** afgrænse fuldførtheden til de kampe, modtagerens egne konkurrencer dækker (kortet bliver personligt og kan skrives på forskellige tidspunkter for forskellige brugere), eller beholde den globale dag og gøre blokeringen aflæselig, så stilheden kan skelnes fra en fejl. Den første koster determinismen i acceptkriterie 7; den anden koster ingenting og løser heller ikke noget. | **Når `sql/checks/day_card_coverage.sql` melder en blokeret dag, nogen faktisk savnede.** Kontrollen findes siden `A38` og er dermed selve udløseren — indtil den melder noget, er problemet teoretisk. |
+| A45 | **Blev `recovery.html`s interne kommentarhoved pastet ind i Supabase 9. august 2026?** | `mail/recovery.html` bærer siden trin 4 blev skrevet et HTML-kommentarhoved (linje 1–26) med interne implementeringsnoter — advarsler om `{{ .ConfirmationURL }}`, `templates.test.js` og hvordan `B21` vil ramme filen. `docs/MAIL.md`s trin 4 siger kun "indsæt indholdet af [filen]" og skelner ikke mellem kommentaren og selve brødteksten. En HTML-kommentar renderes ikke synligt i en mailklient, men står i kildekoden — synlig for enhver modtager, der vælger "vis original". Er hovedet pastet med, har hver nulstillingsmail sendt siden 9. august 2026 båret interne noter om produktets arkitektur ud til modtageren. | **Ejerens aflæsning** (`A32`, Tier 1): åbn "vis original" på en modtaget nulstillingsmail. Er kommentaren med, tilføjes en linje i `MAIL.md`s trin 4 om, at hovedet skal skæres fra før indsættelse — og rækken lukkes med den rettelse. Er den ikke, lukkes rækken uden ændring. |
 
 ## Ubygget
 
@@ -186,6 +186,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 |---|---|---|---|
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
+| G101 | **Liga-siden henter hele deltagerlisten for hver konkurrence i ligaen, bare for at tælle den.** | `loadGroupDetail()` i `src/lib/data/groups.js:52` henter én `competition_participants`-række pr. deltager på tværs af ALLE ligaens konkurrencer (`competition_id=in.(...)&select=competition_id`) og tæller dem op i klienten (linje 53–54) for at vise `${c.participantCount} deltager` på hvert konkurrence-kort. Et `count`-opslag ville give samme tal uden at hente én række pr. deltager. | `A43`s måling (12. august 2026, [`UDRULNING-A43.md`](./UDRULNING-A43.md) trin 5) viste prisen lav — **2,2 ms i alt** for en liga med otte konkurrencer, under tærsklen for policyens pris — så ombygningen løser ikke et akut problem. Værd at rette alligevel: opslaget er unødigt bredt af konstruktion, uanset prisen, og et fremtidigt policy-arbejde på `competition_participants` ville ellers skulle regne den samme pris om igen. | Lille |
 
 ## Ideer
 
@@ -229,57 +230,25 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 12. august 2026 (syvende kørsel) — `A43` er kørt
+### 12. august 2026 (ottende kørsel) — indbakken tømt (tredje gang samme dag)
 
-**Listen er 30 → 29.** Én række lukket, ingen nye åbnet. Rækken blev læst
-igennem og delt i to i sjette kørsel; her er den afgjort og bygget.
+**Listen er 29 → 31.** To linjer fik hver et ID og en række; ingen lukket.
 
-**Svaret er to forskellige svar.** `profiles` smalnes på KOLONNER — nøjagtig
-`id`, `display_name` og `anonymized_at` — mens `read profiles` er urørt, fordi
-Rating, Månedsligaen og Championship publicerer hvert visningsnavn med vilje.
-`competition_participants` får derimod en ægte rækkepolicy. To migreringer med
-et deploy imellem, `#59` og `#60`, i `A40`s form.
+**`A45`** — `mail/recovery.html`s interne kommentarhoved (linje 1–26) kan være
+pastet med ind i Supabases mailskabelon 9. august 2026, fordi `MAIL.md`s trin 4
+dengang kun sagde "indsæt indholdet af filen" uden at skelne kommentar fra
+brødtekst. En HTML-kommentar renderes ikke i en mailklient, men står i
+kilden — synlig for enhver modtager, der vælger "vis original". Går til
+Tier 1: svaret kræver en modtaget mail, ikke repoet, og er derfor ejerens
+aflæsning (`A32`).
 
-🔴 **Rækken pegede på ét kaldested, der skulle rettes først. Der var fire.**
-`select=*` i `competitionState.js` var det, gennemlæsningen fandt; de tre andre
-kom frem, da migreringen blev skrevet — `App.jsx` og `sikrProfil()` læser ens
-EGEN række bredt (og admin-fanen står på `profile.is_admin`), og Admin → Brugere
-læser præcis de fire kolonner, der lukkes. **Læren er, at en gennemlæsning
-finder de kaldesteder, den søger efter, og ikke dem, den ikke tænkte på:**
-`grep "select=\*"` fandt ét, mens `is_admin` og `order=created_at` var to andre
-former for den samme afhængighed.
+**`G101`** — `loadGroupDetail()` i `src/lib/data/groups.js:52` henter én
+`competition_participants`-række pr. deltager på tværs af ALLE en ligas
+konkurrencer, kun for at tælle dem i klienten. `A43`s måling (12. august 2026,
+trin 5) viste prisen lav — 2,2 ms for otte konkurrencer — men opslaget er
+unødigt bredt uanset prisen, hvilket var netop den observation, målingen
+efterlod i indbakken. Går til Tier 5: ingen presserende værdi, ingen udløser.
 
-🔴 **Den dyreste linje er ikke en policy, men en RETURNING-klausul.**
-`Prefer: return=representation` returnerer alle kolonner uden et `select=`, og
-`returning` kræver LÆSE-privilegiet på hver af dem. Samme mekanik som `#55`
-11. august, bare på privilegier frem for på policies — altså et sted, ingen
-policy-revision ville have fundet den.
-
-🔴 **Og det, ingen gennemlæsning kunne have fundet: tre POLICIES læste
-`profiles.is_admin`.** Et RLS-udtryk evalueres med den kaldende rolles
-privilegier, så `job_runs_read_admin` og de to på `matches` ville FEJLE med
-`42501` frem for at filtrere — **Admin → Drift brækket for alle, også for en
-administrator.** Reglen bor nu i `is_platform_admin()`. Den kom frem af §13's
-efterprøvning fra begge sider af dumpet og ikke af nogen læsning: de tre
-steder er policies og ikke kaldesteder. Samme sweep rettede
-`competition_matches_read.sql` FØR eksporten frem for en uge efter.
-
-**To ting i leverancen er no-ops ved konstruktion, og de er skrevet ned frem for
-skjult:** `user_id = auth.uid()`-leddet i deltagerpolicyen redder ingen skrivning
-(INSERT-policyen kræver i forvejen et af de andre led), og omskrivningen af
-`competitions_select_involved` ændrer intet. Otte af ti mutationer blev fanget;
-de to sidste er netop dem, og testens hoved siger det.
-
-✅ **Begge migreringer er kørt i staging og produktion samme dag, og alle ti
-trin i [`UDRULNING-A43.md`](./UDRULNING-A43.md) er igennem.** Rækkefølgen holdt:
-ingen bruger oplevede et vindue, hvor appen ikke kunne logge ind. 📈 Trin 5 var
-en MÅLING og ikke et flueben, og svaret er **2,2 ms i alt** for en liga med otte
-konkurrencer — en øvre grænse for policyens pris, altså under tærsklen, og
-liga-sidens deltagerantal skal ikke bygges om. Målingen efterlod alligevel en
-linje i indbakken, fordi opslaget er unødigt bredt uanset prisen. 🔶 Tilbage
-står skema-eksporten.
-
-**`A44` står tilbage** som rækkens ærlige rest: den globale rating publicerer
-hvert navn uanset policyen, og det er en produktbeslutning om, hvad tavlen skal
-VISE. Sjette kørsels log er arkiveret i `DECISIONS.md` og `CHANGELOG.md` efter
-denne fils regel om kun at bære den seneste.
+Syvende kørsels log (`A43` afgjort og bygget, `A40`s todelte udrulningsform
+gentaget) er arkiveret i `DECISIONS.md` og `CHANGELOG.md` efter denne fils
+regel om kun at bære den seneste.
