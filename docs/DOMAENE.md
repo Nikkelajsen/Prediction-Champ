@@ -23,7 +23,8 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 > halvdel (trin 6 + 7) kunne udrulles.
 >
 > **Trin 6 og 7 er udrullet samme dag, og bevis 1 + 3b er bestået** — redirectet
-> svarer 308 mod `app.leagly.app`, og `/api/` gør ikke. **Tilbage: resten af
+> svarer 308 mod `app.leagly.app`, og `/api/` gør ikke. **Bevis 4 er bestået
+> 13. august 2026** på en modtaget nulstillingsmail. **Tilbage: resten af
 > trin 8 og `B21`s GitHub-omdøbning.** De beviser er ikke en formalitet: de fire
 > dashboard-trin er meldt udført, og ingen af dem er efterprøvet af andet end
 > den, der udførte dem. **Trin 2 og dermed `leagly.app` er stadig gated af
@@ -43,7 +44,7 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 | Cron-jobbenes værtsnavn | Den gamle adresse (`docs/CRON.md` skriver `<app>`) | ? — men **spørgsmålet er flyttet ind i appen 13. august 2026 (`A46`)**: hver kørsel skriver nu sit værtsnavn i `job_runs.detail`, så de ni værdier aflæses i Admin → Drift frem for i cron-job.org. Svaret findes, når hvert job har kørt én gang efter udrulningen — langsomste skema er hver 12. time. Undtagelsen, der beskytter jobbene imens, er bevist samme dag: `/api/sync-live` på den gamle adresse svarer 401 og ikke 308 (bevis 3b), så de rammer funktionen uanset hvilken adresse de er sat op med |
 | Vercel-projektnavn | **Uændret** (bevidst — se `DECISIONS.md`) | 12. august 2026 |
 | GitHub-repo | `Nikkelajsen/Prediction-Champ` | ? — omdøbes med `B21` |
-| Supabase Site URL | `https://app.leagly.app` — se [`MAIL.md`](./MAIL.md) trin 3.2 | **13. august 2026 — flyttet og testet af ejeren** (trin 4) |
+| Supabase Site URL | `https://app.leagly.app` — se [`MAIL.md`](./MAIL.md) trin 3.2 | **13. august 2026 — flyttet, testet OG bevist** (trin 4 + bevis 4). Ikke længere kun meldt: `redirect_to=https://app.leagly.app/` er aflæst i kilden på en modtaget nulstillingsmail, og det felt bygger Supabase af Site URL |
 | Turnstile-værtsnavne | Se [`OPRETTELSE.md`](./OPRETTELSE.md)s register | **13. august 2026 — `app.leagly.app` tilføjet, meldt af ejeren** (trin 5). Det gamle værtsnavn står stadig, som trinnet foreskriver. Bevis 3 (et rigtigt login på den nye adresse) er det, der afgør det |
 
 **`?` betyder "aldrig kørt"**, ikke "kørt og bestået". **"Meldt af ejeren"
@@ -232,7 +233,13 @@ link og ikke en konfiguration, der ser rigtig ud.
    `vercel.json`. Kaldet nåede dermed helt frem til funktionen; havde det været
    afvist af routingen undervejs, ville headeren mangle. Et 401 alene beviser
    kun "ikke redirigeret" — headeren beviser "ramte det rigtige".
-4. **En nulstillingsmail peger på `app.leagly.app`.** Beviser Site URL.
+4. ✅ **En nulstillingsmail peger på `app.leagly.app`.** Beviser Site URL.
+   **Bestået 13. august 2026**, aflæst i kilden på en modtaget mail ("vis
+   original"): `…/auth/v1/verify?token=…&type=recovery&redirect_to=https://app.leagly.app/`.
+   Beviset er stærkere end sin egen ordlyd: `redirect_to` er dét, Supabase
+   bygger af Site URL, så linjen måler indstillingen direkte og ikke en
+   omdirigering, der tilfældigvis ender rigtigt. Samme aflæsning bekræftede, at
+   afsenderen går gennem Resend (`AmazonSES` i headeren, `B25`).
 5. **`og:url` i kildekoden på `app.leagly.app` siger `app.leagly.app`.**
    Adressen stemples ind ved build fra `VERCEL_PROJECT_PRODUCTION_URL`
    (`vite.config.js`), så den bør følge med af sig selv — **men det er en

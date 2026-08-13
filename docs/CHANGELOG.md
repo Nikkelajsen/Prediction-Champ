@@ -45,8 +45,23 @@ nu, trin 4 siger det, og `templates.test.js` kræver den af **enhver** skabelon
 plus at brødteksten faktisk begynder ved `<table role="presentation">`, som
 advarslen henviser til. **Selve rækkens spørgsmål — kom hovedet med i Supabase
 9. august? — er droppet med vilje:** begge udfald fører til samme handling
-(indsæt brødteksten igen), så diagnosen koster mere end kuren. Handlingen står
-nu som et engangstrin i `MAIL.md`.
+(indsæt brødteksten igen), så diagnosen koster mere end kuren.
+✅ **Kuren er kørt samme dag og efterprøvet:** ejeren indsatte brødteksten på ny
+i Supabase, og i "vis original" på en modtaget nulstillingsmail begynder
+`text/html`-delen direkte på `<table role="presentation">` — ingen `<!--`.
+**Rækkefølgen afgør, hvad det beviser:** mailen blev sendt EFTER indsættelsen,
+så den måler den nuværende skabelon, mens 9.–13. august forbliver ubesvaret.
+Det er ikke en mangel, men beslutningens egen konsekvens — og værd at holde fast
+i, fordi en grøn aflæsning efter en rettelse er let at læse som om fejlen aldrig
+fandtes.
+
+**Samme mail bestod `I10`s bevis 4, som ingen var gået efter.**
+`redirect_to=https://app.leagly.app/` står i linkets query, og det felt bygger
+Supabase af Site URL — så trin 4 er nu **bevist** og ikke kun meldt af den, der
+udførte det. Registeret i [`DOMAENE.md`](./DOMAENE.md) er rettet, og af trin 8
+mangler kun det gamle `?liga=`-link hele vejen, et login på den nye adresse og
+`og:url`. Afsenderen bekræftede samtidig `B25`s kæde (`AmazonSES` i headeren,
+altså Resend).
 
 **`A47` — afgjort frem for aflæst.** Listen af gamle `.vercel.app`-aliasser er
 ikke slået op i Vercel → Domains; de to, redirectet dækker, er accepteret som

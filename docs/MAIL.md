@@ -341,12 +341,18 @@ Under Auth → Email Templates. Indsæt indholdet af:
 > den nu, og `templates.test.js` kræver den af enhver skabelon, så en ny arver
 > advarslen frem for asymmetrien.
 >
-> ⚠️ **Gør dette én gang: indsæt `recovery.html`s brødtekst igen.** Skabelonen
-> blev pastet ind 9. august 2026 fra en fil uden advarsel, og om hovedet kom med
-> kan kun ses på en modtaget mail. **Spørgsmålet er droppet med vilje** (`A45`,
-> 13. august 2026): svaret ændrer ikke, hvad der skal gøres. Er hovedet med,
-> fjerner en frisk indsættelse det; er det ikke, er indsættelsen en tom
-> handling. Diagnosen koster mere end kuren.
+> ✅ **Engangsopgaven er udført 13. august 2026 — og efterprøvet.** Skabelonen
+> blev pastet ind 9. august 2026 fra en fil uden advarsel, så den blev indsat
+> igen fra en fil, der har den. **Spørgsmålet om, hvorvidt hovedet var kommet
+> med den første gang, blev droppet med vilje** (`A45`): svaret ville ikke ændre
+> handlingen, og diagnosen kostede mere end kuren.
+>
+> **Beviset er en modtaget mail:** i "vis original" begynder `text/html`-delen
+> direkte på `<table role="presentation">` — ingen `<!--` og dermed ingen
+> interne noter i mailens kilde. **Det siger noget om nu og ikke om dengang:**
+> mailen blev sendt EFTER indsættelsen, så den måler den skabelon, der står i
+> Supabase i dag. Hvad de mails, der blev sendt 9.–13. august 2026, bar med sig,
+> er stadig ubesvaret — og det forbliver det.
 
 De øvrige fire — Invite user, Magic Link, Change Email Address,
 Reauthentication — beholder Supabases standard. Ingen af flowene er i brug:

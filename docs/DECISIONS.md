@@ -113,6 +113,25 @@ kilde. Der er ingen vej til at kalde en sendt mail tilbage, og modtagerne er
 appens egne brugere. Prisen er betalt; det, der kan gøres, er at stoppe den
 fremadrettet, og det gør en frisk indsættelse.
 
+> ✅ **Efterskrift samme dag: kuren er kørt, og den er efterprøvet.** Ejeren
+> indsatte brødteksten på ny i Supabase og sendte derefter en nulstillingsmail
+> til sig selv. I "vis original" begynder `text/html`-delen direkte på
+> `<table role="presentation">` — ingen `<!--`, altså ingen interne noter i
+> kilden.
+>
+> **Beslutningen står ved magt, og rækkefølgen er grunden.** Mailen blev sendt
+> EFTER indsættelsen, så den måler den nuværende skabelon og ikke den, der stod
+> der 9.–13. august 2026. Det bagudrettede spørgsmål er derfor stadig ubesvaret
+> — nøjagtig som beslutningen lagde op til, og det er ikke en mangel: havde
+> aflæsningen ligget først, ville den have kostet et ekstra led uden at ændre
+> handlingen. **Det er værd at holde fast i, fordi det er let at læse forkert
+> bagefter:** en grøn aflæsning efter en rettelse beviser rettelsen, ikke
+> fraværet af fejlen før den.
+>
+> **Samme aflæsning bestod et bevis, den ikke var sendt ud efter:**
+> `redirect_to=https://app.leagly.app/` i linkets query er `I10`s bevis 4
+> ([`DOMAENE.md`](./DOMAENE.md)), som indtil da stod som udestående i trin 8.
+
 ## 13. august 2026 — `B30`: sælgesætningen siger nu "fodboldkampe", og turneringsnavnene holdes UDEN for den
 
 **Beslutning:** sælgesætningen er omformuleret fra *"Gæt resultater mod dine
