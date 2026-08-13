@@ -15,6 +15,66 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 13. august 2026 — `B30`: sælgesætningen siger nu "fodboldkampe", og turneringsnavnene holdes UDEN for den
+
+**Beslutning:** sælgesætningen er omformuleret fra *"Gæt resultater mod dine
+venner. Opret en liga, tip ugens kampe, og se hvem der er bedst."* til:
+
+> Gæt resultaterne af ugens fodboldkampe mod dine venner. Opret en liga, tip
+> kampene, og se hvem der er bedst.
+
+De konkrete turneringsnavne — "Superligaen, Premier League og fem andre
+turneringer" — står **ikke** i den, men i hjemmesidens hero-underlinje og i
+forsidens turnerings-sektion.
+
+**Begrundelse.** Det gamle udkast til hjemmesiden ville skrive turneringsnavnene
+ind i selve `description`, og det er dér, valget ligger. Tre grunde til at lade
+være:
+
+1. **Sætningen står fem steder, og de fem har ikke samme levetid.** Ordlyden
+   skal kunne stå på login-skærmen, i et link-preview og i README'en — steder,
+   hvor en liste over turneringer enten er forkert i morgen (Champions League er
+   endnu ikke oprettet hos leverandøren, `B28`/`B32`) eller bare irrelevant.
+   `leagues`-tabellen er sandheden om, hvilke turneringer der findes; en
+   marketingsætning, der gentager den, er en kopi mere at holde i trit.
+2. **Længden.** `site/index.html`s `description` er ankeret plus *", Gratis,
+   uden odds og uden betting."* og lander på 144 tegn — under de ~155, en
+   søgemaskine viser. Med turneringsnavnene i ville den blive klippet midt i
+   det, der skulle sælge.
+3. **Fodbold-eksplicitheden, som var hele formålet, opnås af ét ord.**
+   "fodboldkampe" gør, hvad "resultater" ikke gjorde: siger hvad produktet
+   handler om, uden at binde sætningen til et bestemt udvalg af ligaer.
+
+**Det, der ikke blev ændret:** `og:title` (*"Leagly — gæt resultater mod dine
+venner"*) er stadig ikke fodbold-eksplicit. Den er en **anden** dublet med sin
+egen påstand i vagten og sine egne to aftagere, og den blev holdt uden for
+rækken frem for at blive taget med i forbifarten. Noteret i backloggens
+indbakke.
+
+## 13. august 2026 — `G97`: vagten over sælgesætningen tæller nu fem filer, ikke syv
+
+**Beslutning:** hverken `src/screens/Auth.test.jsx` eller
+`saelgesaetning.test.js`' eget kommentarhoved må bære en kopi af ordlyden.
+Testen læser den fra ankeret (`index.html`s `<meta name="description">`);
+kommentaren beskriver sætningen i stedet for at citere den.
+
+**Begrundelse.** `B30` var den første omformulering, siden vagten blev bygget
+(`G97`, 12. august 2026), og den afslørede to kopier, vagten ikke selv talte:
+
+- **`Auth.test.jsx` påstod tre gange, at skærmen indeholder `"Gæt resultater mod
+  dine venner"`** — en hårdkodet delstreng, som gik rødt i samme øjeblik
+  sætningen blev omformuleret. Den fejl er *ufarlig* (en rød test er en fejl,
+  der råber), men den er også præcis det sjette sted, vagtens eget hoved
+  advarede mod. Den læser nu ankeret og påstår det, testen faktisk handler om:
+  **hvilken** af skærmens to tekster der vises — ikke hvad der står i dem.
+- **Vagtens kommentarhoved citerede ordlyden ordret** for at forklare, hvorfor
+  dubletten ikke kan fjernes. En kommentar, der citerer teksten, er lige så
+  meget en kopi som en kodelinje — den bliver bare forkert, uden at nogen test
+  kan opdage det, og den ville have været forkert fra denne leverance og frem.
+
+**Følgen er, at fem er det rigtige tal igen**, og at en fremtidig omformulering
+kun skal ramme de fem filer, vagten navngiver.
+
 ## 13. august 2026 — `I10`: redirectet af de gamle adresser undtager `/api/`
 
 **Beslutning:** `vercel.json`s redirect fra de to gamle `.vercel.app`-værtsnavne

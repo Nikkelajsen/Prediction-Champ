@@ -9,6 +9,52 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+13. august 2026 — `B30` + `I8`: hjemmesiden er opdateret, og sælgesætningen siger nu "fodboldkampe"
+
+**Hjemmesidens andet udkast er merget, og `B30` var betingelsen.** Udkastet lå
+uden for repoet, fordi det ville have gjort CI rødt: `saelgesaetning.test.js`
+(`G97`) kræver, at `site/index.html`s `description` **begynder** med samme
+sætning som `index.html`s, og udkastets nye ordlyd gjorde det ikke. Rækkefølgen
+var derfor bindende — omformulér og synkronisér først, merge bagefter.
+**Den nye sælgesætning** er *"Gæt resultaterne af ugens fodboldkampe mod dine
+venner. Opret en liga, tip kampene, og se hvem der er bedst."* og står i alle
+fem filer, vagten navngiver: `index.html` (begge tags), `src/screens/Auth.jsx`,
+`site/index.html` (`description` + hero), `api/invite-preview.js` og
+`README.md`. **Turneringsnavnene blev holdt UDE af den** og står i stedet i
+hero-underlinjen og forsidens turnerings-sektion — begrundelsen (levetid,
+længde, og at ét ord løser opgaven) står i [`DECISIONS.md`](./DECISIONS.md).
+**Vagten talte fem filer og fandt to mere, den ikke selv talte.**
+`src/screens/Auth.test.jsx` påstod tre gange, at skærmen indeholder en
+hårdkodet delstreng af sætningen, og vagtens **eget kommentarhoved** citerede
+ordlyden ordret. Begge er nu væk: testen læser ankeret fra `index.html`, og
+kommentaren beskriver sætningen frem for at citere den. Det var den første
+omformulering siden vagten blev bygget (`G97`, 12. august 2026), altså første
+gang den blev afprøvet på det, den findes til — og fem er det rigtige tal igen.
+**Hjemmesiden selv:** fodbold-eksplicit forside- og meta-tekst, en ny sektion
+("Syv turneringer fra start") med live-mærkat på Superligaen og den skotske
+Premiership, ugerytmen skrevet om fra syv dagskort til tre kort (runden åbner,
+der spilles, runden gøres op — sandere, fordi kampene kan ligge alle ugens
+dage), og story-eksemplerne er nu Story Engine v3's **ægte** formuleringer
+(⚔️/🔥/🧠) i stedet for opdigtede citater.
+**SEO-metadata er med og lukker `I17`:** `canonical`, `theme-color`, favicon,
+apple-touch-icon, `og:`/`twitter:`-tags på alle fem sider og et `og:image` på
+1200×630 — plus to nye filer, `site/robots.txt` og `site/sitemap.xml`.
+Hjemmesiden havde før dette **ingen** `og:`-tags overhovedet, så et delt link
+viste en nøgen URL.
+**Verificeret:** 1286 tests grønne (heraf vagtens syv), lint uændret på loftet
+(7 advarsler, 0 fejl), grønt build. `site/`s to principper holder: **nul
+eksterne requests** (kun `leagly.app`-adresser, og de er metadata og links, ikke
+hentninger) og **ingen JS**. De 23 CTA'er (4+5+6+4+4) peger fortsat på
+`app.leagly.app`, og `og-image.png` er målt til 1200×630.
+**Sitet er stadig ikke publiceret** — `site/` ligger uden for Vite-buildet og
+når aldrig et deploy. Det, der udestår, står i backloggen: `A50` (serveres
+`robots.txt`/`sitemap.xml` fra roden?), `A49` ("La Liga" vs. `leagues.name` =
+"Primera División"), `B32` (Champions Leagues forbehold), `B33`
+(`.html`-endelser ved clean URLs), `I22` (mobilnavigationen) og `G103`
+(story-eksemplerne har ingen vagt mod `story_engine_v3.sql`).
+
+---
+
 13. august 2026 — `I10` + `B21`: repoets halvdel af domæneflytningen er skrevet — og må ikke udrulles endnu
 
 🛑 **Denne leverance var den eneste i loggen, der var farlig at merge på det forkerte tidspunkt** — og spærringen er ophævet samme dag: `app.leagly.app` fandtes ikke, da koden blev skrevet, og redirectet nedenfor sender hver eneste bruger fra `prediction-champ.vercel.app` derhen. **Ejeren har siden kørt trin 1, 3 og 5** (domænet oprettet og svarer, Turnstile-værtsnavnet **udvidet** — ikke skiftet), så betingelsen er opfyldt. **Næste trin er 4 (Supabase Site URL), og det bør køres før udrulningen:** står Site URL på den gamle adresse bagefter, skal hvert nulstillingslink reddes af redirectet. Det virker — en 308 uden fragment i `Location` bevarer browserens eget `#access_token=…` — men det er et ekstra led på netop den rejse, hvor brugeren i forvejen er låst ude. **Registrene i `DOMAENE.md` og `OPRETTELSE.md` skelner "meldt af ejeren" fra "bevist"**, fordi de tre trin er meldt udført, mens beviserne i trin 8 udestår; udgående HTTPS var spærret i arbejdsmiljøet, så ingen af adresserne er blevet spurgt af en maskine.

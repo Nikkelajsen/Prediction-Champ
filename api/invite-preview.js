@@ -62,7 +62,7 @@ import { fetchWithTimeout } from "./_shared.js";
 // ned for at læse to tags ville være et netværkskald for at undgå to strenge.
 const GENEREL_TITEL = "Leagly — gæt resultater mod dine venner";
 const GENEREL_TEKST =
-  "Gæt resultater mod dine venner. Opret en liga, tip ugens kampe, og se hvem der er bedst.";
+  "Gæt resultaterne af ugens fodboldkampe mod dine venner. Opret en liga, tip kampene, og se hvem der er bedst.";
 
 // Liganavne er brugerskrevet tekst og står i et attributværdi. Uden dette ville
 // en liga ved navn `" />` kunne skrive sine egne tags i vores dokument.
