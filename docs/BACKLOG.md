@@ -66,6 +66,24 @@ Alle 38 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikk
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
+**Hvert punkt står som en RÆKKE i en tabel — også i Tier 1–5.** Et tier har
+præcis to lovlige tilstande: ordet `Tomt.` eller en tabel. Prosaen under en
+tier-overskrift er tierets egen **definition** og aldrig en liste over, hvad der
+ligger i det. **Når indbakken tømmes, får hvert punkt en række under sit tier**,
+ikke en omtale i en sætning — et punkt, der er flettet ind i prosa, kan hverken
+tælles, skimmes eller flyttes til et andet tier, uden at nogen skal omskrive et
+afsnit. Tredje kolonne bærer dét, tieret drejer sig om: `Udløser` i Tier 6,
+`Bemærkning` i Tier 7, `Note` i resten.
+
+> **Reglen er truffet før og drev væk igen.** Den blev skrevet 8. august 2026
+> (*"Tier 1–5 viser nu deres rækker i stedet for referater af, hvad der engang
+> stod i dem"*, [`DECISIONS.md`](./DECISIONS.md)), og 13. august bar Tier 2 og
+> Tier 5 begge et referat, mens Tier 5's to åbne punkter stod inde i en sætning.
+> Den har derfor en vagt nu: `docs/backlog.test.js` kræver, at hvert tier enten
+> er `Tomt.` eller har en tabel, og at tallet i linjen ovenfor er lig antallet
+> af tabelrækker. **Tallet og formatet vogtes af samme påstand**, fordi et punkt
+> i prosa netop viser sig som et tal, der ikke stemmer.
+
 Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 
 1. **Et svar, vi allerede har, er gratis** — et opslag, der lukker eller
@@ -86,12 +104,11 @@ produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
 gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
 køres på et minut.
 
-**Tomt.** `A45`, `A46` og `A47` er lukket 13. august 2026 — se
-[Log](#log--seneste-kørsel).
+Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-Tomt. `G99` er leveret 12. august 2026 — se [Log](#log--seneste-kørsel).
+Tomt.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -103,11 +120,10 @@ Tomt.
 
 ### Tier 5 — Robusthed og vedligehold
 
-`G95`, `G96`, `G97` og `G100` er leveret 12. august 2026 — se
-[Log](#log--seneste-kørsel). Tilbage: `G101` og `G103`. **`G103` flyttede hertil
-fra Tier 6 den 13. august 2026:** dens udløser var, at site-opdateringen blev
-merget, og det er den nu — koblingen mellem sitets story-eksempler og
-`story_engine_v3.sql` er ikke længere hypotetisk.
+| # | Hvad | Note |
+|---|---|---|
+| `G101` | Liga-siden henter hele deltagerlisten for hver konkurrence i ligaen, bare for at tælle den | `A43`s måling (12. august 2026) viste prisen lav — **2,2 ms** for en liga med otte konkurrencer — så ombygningen løser intet akut. Værd at rette alligevel: opslaget er unødigt bredt af konstruktion, og et fremtidigt policy-arbejde på `competition_participants` ville skulle regne den samme pris om igen. Et `count`-opslag giver samme tal uden én række pr. deltager. |
+| `G103` | Sitets story-eksempler ER `story_engine_v3.sql`s ægte formuleringer — en kobling, ingen vagt holder øje med | **Flyttet hertil fra Tier 6 den 13. august 2026**, da udløseren indtraf: site-opdateringen blev merget, så koblingen er ikke længere hypotetisk. Enten en vagt efter samme mønster som `saelgesaetning.test.js` (`G97`) eller en note i [`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md) om, at eksemplerne er kopier og skal tjekkes i hånden. |
 
 ### Tier 6 — Venter på en udløser
 

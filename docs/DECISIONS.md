@@ -15,6 +15,43 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 13. august 2026 — Backloggens tiers bærer rækker i tabeller, og reglen har fået en vagt
+
+**Beslutning (produktejeren):** hvert punkt i `BACKLOG.md`s prioriterede
+rækkefølge står som en **række i en tabel** under sit tier — også i Tier 1–5,
+som hidtil kun var prosa. Et tier har præcis to lovlige tilstande: ordet `Tomt.`
+eller en tabel. **Når indbakken tømmes, får hvert punkt en række**, ikke en
+omtale i en sætning.
+
+**Det er ikke en ny regel, og dét er hele pointen.** Den blev truffet
+8. august 2026 med ordene *"Tier 1–5 viser nu deres rækker i stedet for referater
+af, hvad der engang stod i dem"*. Fem dage senere bar **Tier 2 og Tier 5 begge et
+referat** (*"Tomt. `G99` er leveret 12. august 2026 — se Log"*), og Tier 5's to
+åbne punkter — `G101` og `G103` — stod inde i en sætning frem for som rækker.
+Ingen af overtrædelserne så forkerte ud; de så ud som hjælpsomme noter. Det er
+netop derfor, de overlevede hver eneste gennemlæsning.
+
+**Hvorfor formen betyder noget.** Et punkt i prosa kan hverken tælles, skimmes
+eller flyttes til et andet tier, uden at nogen omskriver et afsnit — og
+backloggens ene løfte er, at den kan skimmes på et halvt minut. Referatet er
+værre endnu: det er historik under en overskrift, der skal bære **tilstand**, og
+historikken har allerede ét sted (filens Log, plus `DECISIONS.md` og
+`CHANGELOG.md`, som er de to filer, der har lov at vokse).
+
+**Vagten er `docs/backlog.test.js`, og den måler to ting med én påstand.**
+Antallet i *"Alle N åbne punkter"* skal være lig antallet af tabelrækker i
+tiers. Det er ikke en pedantisk optælling, men **den måde en formatfejl bliver
+synlig på**: et punkt skrevet som prosa forsvinder fra tællingen og får tallet
+til at stemme forkert. Dertil to billigere påstande — et tier er `Tomt.` eller
+en tabel, og et tomt tier bærer ingen ID'er efter ordet `Tomt.` (præcis den
+form, der blev fanget). **Alle tre er set fejle på de mutationer, de findes
+for**, før de blev grønne.
+
+**Det, vagten IKKE måler**, er sagt højt i dens hoved: om prioriteringen er
+rigtig, om en række hører til i sit tier, og om teksten er god. Det kan kun et
+menneske. Samme snit som `saelgesaetning.test.js` (`G97`), der vogter, at fem
+filer siger det samme — ikke at sætningen er en god sætning.
+
 ## 13. august 2026 — `A47` lukkes: de to kendte `.vercel.app`-adresser ER listen
 
 **Beslutning (produktejeren):** redirectet i `vercel.json` bliver stående med de

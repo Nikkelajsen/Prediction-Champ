@@ -9,6 +9,33 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+13. august 2026 — Backloggens tiers bærer rækker igen, og formen har fået en vagt
+
+**Reglen fandtes allerede og var drevet væk.** `BACKLOG.md`s tiers skal vise
+deres punkter som **rækker i en tabel** — besluttet 8. august 2026 med ordene
+*"Tier 1–5 viser nu deres rækker i stedet for referater af, hvad der engang stod
+i dem"*. Fem dage senere bar **Tier 2 og Tier 5 begge et referat**, og Tier 5's
+to åbne punkter (`G101`, `G103`) stod flettet ind i en sætning i stedet for som
+rækker. Tier 1 havde netop fået samme behandling af dagens egen leverance.
+
+**Rettet:** Tier 1–4 siger nu kun `Tomt.`, Tier 5 har en tabel med sine to
+rækker, og reglen står i filens indledning frem for kun i beslutningsloggen —
+med tredje kolonne navngivet efter, hvad tieret drejer sig om (`Udløser` i
+Tier 6, `Bemærkning` i Tier 7, `Note` i resten).
+
+**Ny vagt: `docs/backlog.test.js` (23 påstande).** Den måler to ting med én
+påstand — antallet i *"Alle N åbne punkter"* skal være lig antallet af
+tabelrækker i tiers — og det er ikke en optælling for optællingens skyld:
+**et punkt skrevet som prosa forsvinder fra tællingen**, så formatfejlen viser
+sig som et tal, der ikke stemmer. Dertil to billigere påstande: et tier er
+`Tomt.` eller en tabel, og et tomt tier bærer ingen ID'er efter ordet `Tomt.`
+**Alle tre er set fejle på de tre mutationer, de findes for** (referatet under
+et tomt tier, et åbent punkt flettet ind i prosa, et forældet tal), før de blev
+grønne. Vagten måler bevidst ikke, om prioriteringen er rigtig — samme snit som
+`saelgesaetning.test.js` (`G97`).
+
+---
+
 13. august 2026 — Tier 1 er tømt: `A45`, `A46` og `A47` lukket uden en eneste ny produktionsaflæsning
 
 **Backloggens Tier 1 er tomt, og ingen af de tre rækker blev besvaret på den
