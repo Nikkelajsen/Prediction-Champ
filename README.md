@@ -6,7 +6,7 @@ er bedst.
 En mobil-først PWA i React + Vite oven på Supabase, med serverless-funktioner på
 Vercel til kampsynkronisering og push-notifikationer. Ingen SDK'er — kun `fetch`.
 
-**Live:** <https://prediction-champ.vercel.app>
+**Live:** <https://app.leagly.app>
 
 ---
 

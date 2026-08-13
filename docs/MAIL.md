@@ -130,7 +130,7 @@ ganske vist på roden, men under sin egen selector, som Microsofts to ikke hedde
 | Sender email | `noreply@leagly.app` | 9. august 2026 — vist som `Leagly <noreply@leagly.app>` i indbakken |
 | Sender name | Leagly | 9. august 2026 |
 | Rate Limits → e-mails | `30`/time (custom SMTPs egen default; den delte service gav 2) | 9. august 2026 — aflæst |
-| Site URL | `https://prediction-champ.vercel.app` — **bestemmer linket i mailen**. Redirect URLs: `…/*` | 9. august 2026 |
+| Site URL | `https://app.leagly.app` — **bestemmer linket i mailen**. Redirect URLs: `…/*` | **13. august 2026 — flyttet og testet** (`I10` trin 4). Stod på `https://prediction-champ.vercel.app` indtil da; rækkefølgen var bindende, fordi en Site URL, der peger på en adresse, som ikke svarer, giver et dødt nulstillingslink uden at noget andet ser forkert ud |
 | Confirm email | **Slået TIL** (`B26`, hele runbogen kørt) | 12. august 2026 — aflæst på GoTrues `/auth/v1/settings`: `mailer_autoconfirm = false` |
 | Skabelon: Reset Password | Emne + brødtekst fra [`mail/recovery.html`](./mail/recovery.html) | 9. august 2026 — **begge dele indsat** |
 | Skabelon: Confirm signup | Emne + brødtekst fra [`mail/confirm-signup.html`](./mail/confirm-signup.html) | **12. august 2026 — begge dele aflæst på en modtaget mail** under `B26`s trin 8: dansk emne, dansk brødtekst, og linket landede modtageren logget ind |

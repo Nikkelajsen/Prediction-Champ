@@ -139,7 +139,7 @@ export default async function handler(req, res) {
   // på hvert kald, så previewet virker på både produktions- og preview-domænet
   // uden en miljøvariabel mere at glemme.
   const vært = String(req.headers["x-forwarded-host"] || req.headers.host || "");
-  const origin = vært ? `https://${vært}` : "https://prediction-champ.vercel.app";
+  const origin = vært ? `https://${vært}` : "https://app.leagly.app";
 
   const svarMed = ({ titel, tekst }) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");

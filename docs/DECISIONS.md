@@ -15,6 +15,49 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 13. august 2026 — `I10`: redirectet af de gamle adresser undtager `/api/`
+
+**Beslutning:** `vercel.json`s redirect fra de to gamle `.vercel.app`-værtsnavne
+til `app.leagly.app` står som `/:sti((?!api/).*)` og ikke som runbogens
+oprindelige `/(.*)`. `/api/` bliver ved med at svare på de gamle adresser, indtil
+nogen aktivt flytter det.
+
+**Begrundelse.** Redirectet findes for MENNESKER, der åbner et delt
+`?liga=`/`?join=`-link. `/api/` har to aftagere, som ingen af dem er det:
+
+- **De ni cron-jobs** kalder `https://<app>/api/…` med `x-sync-secret`
+  ([`CRON.md`](./CRON.md)). At de overlever et 308 til et nyt værtsnavn kræver,
+  at cron-job.org både følger redirectet **og** gensender headeren. Ingen af de
+  to antagelser er efterprøvet, og symptomet, hvis en af dem er forkert, er, at
+  live-resultater bare holder op med at komme — en tavs fejl på det ene job, der
+  kører hvert minut.
+- **Allerede installerede PWA'er** på den gamle origin ville få deres
+  `/api/`-kald flyttet fra samme origin til på tværs af origins, altså CORS på
+  kald, der aldrig har haft brug for det.
+
+**Alternativet var at flytte cron-jobbene samtidig**, og det er præcis den slags
+"to ting på én gang", `I10`s egen rækkefølgeadvarsel handler om: hvert af de ni
+jobs skal rettes i et dashboard uden for repoet, og en fejl i et af dem opdages
+først ved en manglende synkronisering. Undtagelsen gør flytningen **valgfri**
+frem for samtidig, og prisen er lav: `/api/` er ingens delte link, så der er
+ingen kanonikalitet at flytte med.
+
+**Det, der IKKE blev valgt, og hvorfor det er værd at vide:** undtagelsen er
+ikke gratis for altid. Så længe den står, svarer appen på to origins for
+`/api/`. Det er acceptabelt, fordi de begge er den samme funktion i det samme
+Vercel-projekt — det er ét deploy, ikke to kopier. Fjernes den, skal alle ni
+jobs være flyttet først, og [`DOMAENE.md`](./DOMAENE.md)s "Når noget ændrer sig"
+bærer rækkefølgen.
+
+**Reglen kan ikke efterprøves før produktion.** `has` er betinget af
+produktionsværtsnavnet, så den fyrer pr. konstruktion aldrig på et
+preview-deploy, og CI kører ikke Vercels router (`DOCUMENTATION.md` §13). Derfor
+har runbogen fået et bevis mere (3b: `/api/sync-live` på den gamle adresse må
+**ikke** svare 308), som skal køres i samme åndedrag som bevis 1 — de to fejler
+hver sin vej, og den ene kan se rigtig ud, mens den anden er gået galt.
+
+---
+
 ## 12. august 2026 — `A43`: `profiles` smalnes på KOLONNER, deltagerlisten på RÆKKER
 
 **Beslutning:** `authenticated` mister tabel-bred SELECT på `public.profiles` og

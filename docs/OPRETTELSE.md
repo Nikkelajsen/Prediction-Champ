@@ -31,7 +31,7 @@ begge halvdele til konfiguration frem for en udrulning.
 | Hvad | Værdi | Sidst verificeret |
 |---|---|---|
 | Turnstile-widget | Cloudflare → Turnstile. Navn: `Leagly` | 10. august 2026 — oprettet |
-| Værtsnavne på widgeten | `prediction-champ.vercel.app` | **12. august 2026 — BEVIST.** Widgeten viser "Succes!" på produktionens login-skærm, og `window.turnstile.getResponse()` returnerede en token. Værtsnavnet accepteres altså, og ikke bare "widgeten tegnes" |
+| Værtsnavne på widgeten | `prediction-champ.vercel.app` **+ `app.leagly.app`** | `prediction-champ.vercel.app`: **12. august 2026 — BEVIST.** Widgeten viser "Succes!" på produktionens login-skærm, og `window.turnstile.getResponse()` returnerede en token. Værtsnavnet accepteres altså, og ikke bare "widgeten tegnes". `app.leagly.app`: **13. august 2026 — TILFØJET, ikke bevist** (`I10` trin 5, meldt af ejeren). Beviset er et rigtigt login på den nye adresse — [`DOMAENE.md`](./DOMAENE.md) bevis 3. **Det gamle værtsnavn bliver stående**, indtil redirectet har stået i noget tid: et skifte frem for en udvidelse er præcis den fejl, hvis symptom er, at ingen kan logge ind |
 | Widget-tilstand | Managed | 12. august 2026 — bekræftet på skærmen: udfordringen løses af sig selv på ca. et sekund og ender i et grønt "Succes!" uden et klik |
 | Site key (offentlig) | `VITE_TURNSTILE_SITE_KEY` i Vercel | **10. august 2026 — sat OG udrullet.** Aflæst på, at widgeten tegnes på login-skærmen; komponenten returnerer `null` uden nøgle, så der er ingen mellemtilstand |
 | Site key i **Preview** | **Bevidst ikke sat** — preview kører mod staging (`B18`), som ikke har Bot Protection | 10. august 2026 |
@@ -93,7 +93,8 @@ Produktsiden på `cloudflare.com` fører kun til en Enterprise-salgsformular —
 
 1. `dash.cloudflare.com` → **Turnstile** i venstremenuen → **Add widget**.
 2. **Navn:** `Leagly`.
-3. **Hostnames:** `prediction-champ.vercel.app`.
+3. **Hostnames:** `app.leagly.app` — og `prediction-champ.vercel.app`, så længe
+   `I10`s redirect stadig fører nogen ind ad den gamle dør.
 4. **Widget mode:** `Managed`. Cloudflare afgør selv, om der skal vises noget;
    de fleste brugere ser en boks, der kvitterer af sig selv på et sekund.
 5. Gem. Du får to nøgler: **Site Key** (offentlig, hører i frontenden) og

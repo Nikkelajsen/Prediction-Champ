@@ -36,11 +36,14 @@ describe("mailskabelonerne i docs/mail/", () => {
     expect(læs(f)).toContain("{{ .ConfirmationURL }}");
   });
 
-  // DEN VIGTIGSTE PÅSTAND. Appens adresse er `prediction-champ.vercel.app`
-  // indtil `B21` flytter den, og Vercels gamle URL redirigerer ikke af sig selv
-  // (docs/BACKLOG.md, B21). En hardkodet adresse i en skabelon ville derfor dø
-  // ved flytningen — og dø TAVST, for skabelonen ligger uden for både build og
-  // testflade. Linket skal komme fra Supabases Site URL, altså fra variablen.
+  // DEN VIGTIGSTE PÅSTAND. Appens adresse flytter fra
+  // `prediction-champ.vercel.app` til `app.leagly.app` (`I10`, runbog i
+  // docs/DOMAENE.md), og Vercels gamle URL redirigerer ikke af sig selv — det
+  // redirect, `vercel.json` har fået, er skrevet i hånden netop derfor. En
+  // hardkodet adresse i en skabelon ville dø ved flytningen — og dø TAVST, for
+  // skabelonen ligger uden for både build og testflade. Linket skal komme fra
+  // Supabases Site URL, altså fra variablen. Derfor forbyder påstanden nedenfor
+  // BEGGE adresser: den nye er lige så forkert at hardkode som den gamle.
   it.each(skabeloner)("%s hardkoder ingen app-adresse", (f) => {
     const html = læs(f);
     expect(html).not.toMatch(/vercel\.app/);

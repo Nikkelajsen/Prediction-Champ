@@ -16,6 +16,17 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 > brugertallet: **en installeret PWA er bundet til sin origin**, så alle, der har
 > installeret fra `.vercel.app`, skal installere igen og logge ind på ny.
 
+> ✅ **Appens halvdel er kørt 13. august 2026: trin 1, 3, 4 og 5.**
+> `app.leagly.app` er oprettet og svarer, Supabases Site URL er flyttet og
+> testet, og Turnstiles værtsnavne er **udvidet** — ikke skiftet. Alle tre
+> rækkefølgefejl nedenfor er dermed passeret på den rigtige side, og repoets
+> halvdel (trin 6 + 7) kunne udrulles.
+>
+> **Tilbage: trin 8 (beviserne) og `B21`s GitHub-omdøbning.** Beviserne er ikke
+> en formalitet her — de fire trin ovenfor er alle meldt udført, og ingen af dem
+> er efterprøvet af andet end den, der udførte dem. **Trin 2 og dermed
+> `leagly.app` er stadig gated af `I8`.**
+
 ---
 
 ## Register
@@ -25,14 +36,18 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 | Domæne | `leagly.app` | 9. august 2026 — i brug til mail (`B25`) |
 | Registrar | ? | ? |
 | Hjemmesiden (`site/`) | `leagly.app` + `www.leagly.app` → apex | ? — ikke oprettet |
-| Appen | `app.leagly.app` | ? — ikke oprettet |
-| Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | ? — svarer i dag, skal redirigeres |
+| Appen | `app.leagly.app` | **13. august 2026 — oprettet og svarer, meldt af ejeren** (trin 1 + 3). Ikke aflæst herfra: udgående HTTPS er spærret i arbejdsmiljøet, så adressen er aldrig blevet spurgt af en maskine. Beviserne nedenfor er stadig det, der afgør det |
+| Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | ? — svarer i dag. Redirect **skrevet** 13. august 2026, **ikke udrullet endnu**. **Listen er aldrig aflæst i Vercel → Domains** og er dermed runbogens svageste påstand: dækker den ikke alle projektets aliasser, dør links delt fra det oversete |
+| Cron-jobbenes værtsnavn | Den gamle adresse (`docs/CRON.md` skriver `<app>`) | ? — **ikke aflæst på cron-job.org.** `/api/` er med vilje undtaget fra redirectet, så jobbene overlever flytningen uden at blive rørt |
 | Vercel-projektnavn | **Uændret** (bevidst — se `DECISIONS.md`) | 12. august 2026 |
 | GitHub-repo | `Nikkelajsen/Prediction-Champ` | ? — omdøbes med `B21` |
-| Supabase Site URL | Se [`MAIL.md`](./MAIL.md) trin 3.2 | ? — skal flyttes |
-| Turnstile-værtsnavne | Se [`OPRETTELSE.md`](./OPRETTELSE.md)s register | ? — skal udvides |
+| Supabase Site URL | `https://app.leagly.app` — se [`MAIL.md`](./MAIL.md) trin 3.2 | **13. august 2026 — flyttet og testet af ejeren** (trin 4) |
+| Turnstile-værtsnavne | Se [`OPRETTELSE.md`](./OPRETTELSE.md)s register | **13. august 2026 — `app.leagly.app` tilføjet, meldt af ejeren** (trin 5). Det gamle værtsnavn står stadig, som trinnet foreskriver. Bevis 3 (et rigtigt login på den nye adresse) er det, der afgør det |
 
-**`?` betyder "aldrig kørt"**, ikke "kørt og bestået".
+**`?` betyder "aldrig kørt"**, ikke "kørt og bestået". **"Meldt af ejeren"
+betyder heller ikke "bestået"** — det betyder, at handlingen er udført, mens
+beviset for, at den virkede, stadig udestår. De to falder først sammen i
+trin 8.
 
 ---
 
@@ -54,7 +69,7 @@ er alle den samme fejl — at flytte en henvisning før destinationen findes:
 
 ## Trin
 
-### Trin 1 — appen får `app.leagly.app`
+### Trin 1 — appen får `app.leagly.app` ✅ *13. august 2026*
 
 Vercel → app-projektet → Settings → Domains → tilføj `app.leagly.app`. Hos
 registraren: `CNAME app → cname.vercel-dns.com`. Vent på, at Vercel viser
@@ -77,49 +92,84 @@ Apex-domæner kan ikke bruge CNAME; brug den A-record, Vercel oplyser i panelet.
 > To projekter betyder også, at et deploy af sitet pr. konstruktion ikke kan
 > vælte appen.
 
-### Trin 3 — verificér, at begge adresser svarer
+### Trin 3 — verificér, at begge adresser svarer 🔶 *appens halvdel 13. august 2026*
 
 Åbn `https://app.leagly.app` og `https://leagly.app` i en privat fane. **Først
 her må resten køres.**
 
-### Trin 4 — Supabase: Site URL og Redirect URLs
+`app.leagly.app` svarer (meldt af ejeren 13. august 2026). `leagly.app`s halvdel
+kan pr. konstruktion ikke være kørt, fordi trin 2 stadig er gated af `I8` — og
+det er i orden: de to halvdele gater hver sin resten. Appens halvdel er den, der
+frigiver trin 4, 5 og 6.
+
+### Trin 4 — Supabase: Site URL og Redirect URLs ✅ *13. august 2026*
 
 [`MAIL.md`](./MAIL.md) trin 3.2. Site URL → `https://app.leagly.app`.
 Allow-listen skal have samme adresse. Skabelonerne røres **ikke** — de bærer
 ingen adresse, og `docs/mail/templates.test.js` håndhæver det.
 
-### Trin 5 — Turnstile: tilføj værtsnavnet
+### Trin 5 — Turnstile: tilføj værtsnavnet ✅ *13. august 2026*
 
 Cloudflare → Turnstile → widgeten `Leagly` → **tilføj** `app.leagly.app` til
 værtsnavnene. Behold `prediction-champ.vercel.app`, indtil redirectet i trin 6
 har stået i noget tid. Opdatér registeret i [`OPRETTELSE.md`](./OPRETTELSE.md).
 
-### Trin 6 — redirigér de gamle adresser
+### Trin 6 — redirigér de gamle adresser 🔶 *skrevet 13. august 2026, afventer merge*
 
-Tilføj i `vercel.json` (app-projektet), én regel pr. gammelt værtsnavn:
+Står i `vercel.json` (app-projektet), én regel pr. gammelt værtsnavn:
 
 ```json
-"redirects": [
-  {
-    "source": "/(.*)",
-    "has": [{ "type": "host", "value": "prediction-champ.vercel.app" }],
-    "destination": "https://app.leagly.app/$1",
-    "permanent": true
-  }
-]
+{
+  "source": "/:sti((?!api/).*)",
+  "has": [{ "type": "host", "value": "prediction-champ.vercel.app" }],
+  "destination": "https://app.leagly.app/:sti",
+  "permanent": true
+}
 ```
 
 `permanent: true` giver 308, så søgemaskiner flytter kanonikaliteten med.
-**Sti og query bevares** — det er dét, der holder allerede delte
+**Sti og query bevares** — Vercel videregiver query automatisk, når destinationen
+ikke selv har en, og det er dét, der holder allerede delte
 `?liga=`/`?join=`-links i live. Tjek i Vercel → Settings → Domains, hvilke
-`.vercel.app`-aliasser projektet faktisk har, og dæk dem alle.
+`.vercel.app`-aliasser projektet faktisk har, og dæk dem alle; filen dækker i dag
+de to, registeret ovenfor kender.
 
-### Trin 7 — `B21`s tekstdel
+> **`(?!api/)` er en bevidst afvigelse fra rækkens oprindelige `/(.*)`.**
+> Redirectet er tænkt til MENNESKER, der følger et delt link. Ramte det også
+> `/api/`, ville flytningen tage to ting med sig, som ingen leder efter:
+>
+> - **De ni cron-jobs** kalder `https://<app>/api/…` med `x-sync-secret`
+>   ([`CRON.md`](./CRON.md)). Et 308 til et nyt værtsnavn kræver, at
+>   cron-job.org både følger redirectet og gensender headeren — to antagelser,
+>   der ikke er efterprøvet, og hvis symptom er, at live-resultater bare holder
+>   op med at komme.
+> - **Allerede installerede PWA'er** på den gamle origin ville få deres
+>   `/api/`-kald sendt på tværs af origins, hvor de før var samme origin, altså
+>   CORS på kald, der aldrig har haft brug for det.
+>
+> Prisen er, at `/api/` bliver ved med at svare på den gamle adresse. Det er
+> tilsigtet: det er dét, der gør flytningen valgfri for cron-jobbene i stedet for
+> samtidig med.
 
-23 CTA'er i `site/` (4+5+6+4+4) + README'ens live-link peges på
-`https://app.leagly.app`. Omdøb GitHub-repoet til `Leagly` (GitHub redirigerer
-selv gamle links og remotes). **`docs/RESTORE.md` rettes IKKE** — den navngiver
-backup-filer, der faktisk hedder det gamle.
+> ⚠️ **Denne regel kan ikke efterprøves på et preview-deploy.** `has` er betinget
+> af produktionsværtsnavnet, og et preview har sit eget — så reglen fyrer pr.
+> konstruktion først i produktion. CI kører ikke Vercels router
+> ([`DOCUMENTATION.md`](../DOCUMENTATION.md) §13). **Bevis 1 nedenfor skal derfor
+> køres umiddelbart efter udrulningen**, ikke ved lejlighed. Til gengæld fejler
+> den ikke tavst: enten svarer den gamle adresse 308, eller også gør den ikke.
+
+### Trin 7 — `B21`s tekstdel 🔶 *repoets del skrevet 13. august 2026, ikke udrullet*
+
+23 CTA'er i `site/` (4+5+6+4+4) + README'ens live-link peger nu på
+`https://app.leagly.app`. **Tilbage i trinnet:** omdøb GitHub-repoet til
+`Leagly` (GitHub redirigerer selv gamle links og remotes).
+**`docs/RESTORE.md` rettes IKKE** — den navngiver backup-filer, der faktisk
+hedder det gamle.
+
+De 23 CTA'er kunne rettes uden risiko før flytningen, fordi `site/` ligger uden
+for Vite-buildet og aldrig når et deploy (trin 2 er stadig gated af `I8`).
+README'ens link er den eneste af de 24, der er offentligt synlig i mellemtiden —
+og den er død, indtil trin 1 er kørt.
 
 ### Trin 8 — kør de eksisterende beviser igen
 
@@ -141,6 +191,11 @@ link og ikke en konfiguration, der ser rigtig ud.
    stadig tegnes.
 3. **Login virker på den nye adresse.** Beviser, at Turnstile-værtsnavnet blev
    tilføjet, og ikke bare at widgeten tegnes.
+3b. **`/api/` redirigerer IKKE.** `curl -I https://prediction-champ.vercel.app/api/sync-live`
+   → **ikke** 308 (401/405 er det rigtige svar uden hemmeligheden). Beviser
+   `(?!api/)` i trin 6, altså at de ni cron-jobs stadig rammer noget. Kør den i
+   samme åndedrag som bevis 1: de to fejler hver sin vej, og den ene kan se
+   rigtig ud, mens den anden er gået galt.
 4. **En nulstillingsmail peger på `app.leagly.app`.** Beviser Site URL.
 5. **`og:url` i kildekoden på `app.leagly.app` siger `app.leagly.app`.**
    Adressen stemples ind ved build fra `VERCEL_PROJECT_PRODUCTION_URL`
@@ -157,6 +212,7 @@ link og ikke en konfiguration, der ser rigtig ud.
 | SSL står "pending" i over en time | CAA-record blokerer, eller en proxy (Cloudflare orange cloud) står foran | Slå proxy fra, så posten er ren DNS; kontrollér CAA |
 | Uendeligt redirect på det nye domæne | Redirectet i trin 6 mangler sin `has`-betingelse og matcher også sig selv | Betinget på den GAMLE host — se trin 6 |
 | Ingen kan logge ind på det nye domæne | Turnstile-værtsnavnet blev skiftet i stedet for udvidet | `OPRETTELSE.md`, "Når noget ændrer sig" |
+| Live-resultater og kampprogram holder op med at opdatere efter flytningen | Redirectet ramte også `/api/`, og cron-jobbene taber enten redirectet eller `x-sync-secret` undervejs | Bevis 3b. Enten `(?!api/)` tilbage i trin 6, eller jobbenes URL flyttet på cron-job.org — ikke begge halvt |
 | Nulstillingslink lander på en død adresse | Site URL flyttet, før domænet svarede — eller slet ikke flyttet | `MAIL.md` trin 3.2 |
 | Testerens installerede app viser stadig det gamle | En PWA er bundet til sin origin | Afinstallér og installér igen fra `app.leagly.app`; login skal laves om |
 | Link-preview viser den gamle adresse | Buildet er ældre end domæneskiftet | Nyt deploy — `VERCEL_PROJECT_PRODUCTION_URL` læses ved build, ikke ved request |
@@ -170,6 +226,11 @@ link og ikke en konfiguration, der ser rigtig ud.
 - **Fjernes en gammel `.vercel.app`-adresse fra redirectet:** hvert link delt
   før flytningen dør i samme øjeblik. Der er ingen udløbsdato, hvor det bliver
   sikkert — kun et punkt, hvor prisen bliver lille nok.
+- **Flyttes cron-jobbene til `app.leagly.app`:** gør det på cron-job.org, ét job
+  ad gangen, og aflæs kørslen i Admin → Drift bagefter. Undtagelsen `(?!api/)` i
+  trin 6 må først fjernes, når alle ni er flyttet — og den er billig at lade
+  stå, for `/api/` er ingens delte link. Opdatér [`CRON.md`](./CRON.md)s
+  register i samme ombæring.
 - **Får sitet et build-step (fx med `I9`):** trin 2's "intet build" skal med
   samme ombæring, og `I17`s `og:`-adresse skal skrives i hånden, fordi sitet
   ikke har appens stempling.
