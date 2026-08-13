@@ -27,11 +27,17 @@ Engine-eksempler, kerneudsagn), `src/screens/Auth.jsx` (taglinen),
 | `om.html` | Troværdighed: missionen, "hvad vi ikke er", kerneudsagnene — plus kontakt (mailto). |
 | `hent-appen.html` | Sidste tekniske friktion: webapp/PWA, "Føj til hjemmeskærm" pr. platform. |
 
-CTA'er peger på `https://prediction-champ.vercel.app`. Invite-links bærer selv
-deres kode (`?liga=`/`?join=`), så "Har du en invitation?"-sporet linker blot
-til appen. **De 23 CTA'er skal peges på `https://app.leagly.app` med `B21`** —
-det er besluttet 12. august 2026 og er hele grunden til, at `B21` køres i samme
-ombæring som `I10` frem for før den.
+CTA'er peger på `https://app.leagly.app`. Invite-links bærer selv deres kode
+(`?liga=`/`?join=`), så "Har du en invitation?"-sporet linker blot til appen.
+
+> **Rettet efter levering, 13. august 2026.** Udkastet skrev
+> `https://prediction-champ.vercel.app` og noterede, at de 23 CTA'er skulle
+> peges på `https://app.leagly.app` med `B21`. Det er nu gjort — som `I10`s
+> trin 7, i samme ombæring som redirectet, præcis for ikke at skifte de samme
+> 23 links to gange. **Adressen svarer først, når `I10`s trin 1 er kørt**
+> ([`DOMAENE.md`](../DOMAENE.md)); indtil da peger sitet — som stadig ikke er
+> publiceret — på en adresse, der ikke findes endnu. Det er tilsigtet og
+> billigt netop fordi `site/` ikke deployes.
 
 `I8` nævnte "4–6 sider: forside, hvordan virker det, features, om os, kontakt,
 download app" — kontakt er bevidst foldet ind i om-siden (en mailto bærer ikke

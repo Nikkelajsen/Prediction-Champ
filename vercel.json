@@ -18,6 +18,20 @@
     }
   },
   "regions": ["dub1"],
+  "redirects": [
+    {
+      "source": "/:sti((?!api/).*)",
+      "has": [{ "type": "host", "value": "prediction-champ.vercel.app" }],
+      "destination": "https://app.leagly.app/:sti",
+      "permanent": true
+    },
+    {
+      "source": "/:sti((?!api/).*)",
+      "has": [{ "type": "host", "value": "prediction-champ-predictor-champ.vercel.app" }],
+      "destination": "https://app.leagly.app/:sti",
+      "permanent": true
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

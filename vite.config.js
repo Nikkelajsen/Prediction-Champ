@@ -33,16 +33,22 @@ const apiProxy = process.env.VITE_API_PROXY;
 //
 // HVORFOR DEN IKKE ER HARDKODET. `og:image` SKAL være en absolut URL — en
 // crawler har intet dokument at gøre en relativ sti relativ til. Og
-// produktionsadressen er netop et ÅBENT spørgsmål (`I10`/`B21`: appen kører på
-// prediction-champ.vercel.app, leagly.app er planlagt). En hardkodet adresse
-// ville derfor blive forkert på en dag, ingen af os kan planlægge efter, og
-// symptomet ville være et link-preview uden billede — altså det ene sted, hvor
-// ingen af os kigger, fordi vi allerede har appen installeret.
+// produktionsadressen har flyttet sig én gang (`I10`, 13. august 2026:
+// prediction-champ.vercel.app → app.leagly.app) og kan flytte sig igen. En
+// hardkodet adresse ville derfor blive forkert på en dag, ingen af os kan
+// planlægge efter, og symptomet ville være et link-preview uden billede — altså
+// det ene sted, hvor ingen af os kigger, fordi vi allerede har appen
+// installeret.
 //
 // `VERCEL_PROJECT_PRODUCTION_URL` er projektets produktionsdomæne uden skema og
-// følger med, den dag domænet skifter. Preview-deploys arver med vilje
-// produktionens adresse frem for deres egen flygtige: billedet er det samme, og
-// et preview skal ikke udgive sig selv som kanonisk.
+// følger med, den dag domænet skifter — den peger på det custom domain, når
+// projektet har et. Preview-deploys arver med vilje produktionens adresse frem
+// for deres egen flygtige: billedet er det samme, og et preview skal ikke
+// udgive sig selv som kanonisk.
+//
+// Faldbacken nedenfor rammes kun uden for Vercel (lokalt build), altså aldrig i
+// produktion. Den er stadig værd at holde ajour: står der en død adresse, ligner
+// et lokalt build en fejl, der ikke findes.
 //
 // Vites egen `%VITE_*%`-erstatning i index.html kan ikke bruges — den ser kun
 // variabler med `VITE_`-præfiks, og dette er en systemvariabel fra Vercel. Deraf
@@ -50,7 +56,7 @@ const apiProxy = process.env.VITE_API_PROXY;
 const publicOrigin =
   process.env.PUBLIC_ORIGIN ||
   (process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) ||
-  "https://prediction-champ.vercel.app";
+  "https://app.leagly.app";
 
 const ogOrigin = {
   name: "leagly-og-origin",
