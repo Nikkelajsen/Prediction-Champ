@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A51` · `B34` · `G104` · `I23`.**
+**Næste ledige: `A52` · `B34` · `G104` · `I23`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -55,15 +55,14 @@ Ryddet en fjerde gang 13. august 2026: to linjer blev til `A46` og `A47` —
 ingen leveret endnu. Ryddet en femte gang 13. august 2026: ni linjer fra
 gennemgangen af hjemmesidens opdateringsudkast blev til `A48`–`A50`,
 `B30`–`B33`, `G103` og `I22`; `B30` og `B31` er leveret samme dag sammen med
-udkastet selv. Se [Log](#log--seneste-kørsel).)*
-
-- `og:title` i `index.html` ("Leagly — gæt resultater mod dine venner") er ikke fodbold-eksplicit som sælgesætningen — skal den følge med, rammer den også `GENEREL_TITEL` i `api/invite-preview.js`
+udkastet selv. Ryddet en sjette gang 13. august 2026: én linje blev til `A51` —
+ikke leveret. Se [Log](#log--seneste-kørsel).)*
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 39 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 40 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -138,6 +137,7 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 | `A48` | Hvad skal opfyldes, før "Beta" fjernes fra hjemmesidens header/forside? | Ejerens beslutning — **og først et svar på, om mærkatet overhovedet skal findes:** det står ikke i `site/` i dag. |
 | `A49` | "La Liga" (site) vs. "Primera División" (`leagues.name`) — hvilket navn vinder? | Ejerens beslutning, eller næste gang `leagues`-navnet alligevel røres. |
 | `A50` | Serveres `site/robots.txt`/`sitemap.xml` faktisk fra roden i det udrullede projekt? | Når sitet publiceres (`I8`s resterende trin). |
+| `A51` | Skal `og:title` følge sælgesætningen og blive fodbold-eksplicit? | Ejerens beslutning, eller næste gang `og:`-tagsene alligevel røres. **Rammer to filer**, fordi vagten binder dem sammen. |
 | `B32` | Fjern CL's "Fra ligafasen"-forbehold på hjemmesidens turneringsliste | Samme udløser som `B28`: CL's ligafase lodtrækkes hos football-data.org. |
 | `B33` | Ret hjemmesidens `.html`-endelser (canonical, sitemap, interne links), hvis clean URLs slås til | Site-Vercel-projektet får clean URLs slået til. |
 | `I22` | Burger-menu eller færre navigationspunkter på hjemmesiden under 880px | Ingen skarp udløser — hentes frem, hvis nogen tester bredt på en smal skærm, eller ved publicering. |
@@ -192,6 +192,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | A48 | **Hvad skal være opfyldt, før "Beta" fjernes fra hjemmesidens header og forside?** | Fundet under gennemgangen af hjemmesidens opdateringsudkast (13. august 2026). **Mærkatet findes ikke i `site/` — heller ikke efter at udkastet er merget**, hverken i header eller forside; spørgsmålet forudsætter altså en tilføjelse, der aldrig er sket. Første spørgsmål er derfor, om mærkatet overhovedet skal findes. Under alle omstændigheder mangler et eksplicit exit-kriterium: hvornår er sitet "færdigt nok" til at miste mærkatet? Kandidater: ejer-godkendelse af copy (`I8`s punkt 1 i [`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md)), et vist antal dage uden en fundet fejl, eller en beslutning om aldrig at bruge mærkatet. | **Ejerens beslutning** — ingen ekstern udløser. |
 | A49 | **"La Liga" (hjemmesiden) eller "Primera División" (`leagues.name` i databasen) — hvilket navn vinder?** | Hjemmesidens turnerings-sektion (`site/index.html`, merget 13. august 2026) og `saadan-virker-det.html` skriver "La Liga", mens appens `leagues.name` for samme turnering er "Primera División". To veje: omdøb visningsnavnet i databasen til "La Liga" (det navn de fleste brugere kender turneringen som), eller ret sitet til "Primera División" (det officielle navn, appen allerede bruger konsekvent). Uanset hvad skal de to sige det samme — i dag gør de ikke. | **Ejerens beslutning**, eller næste gang `leagues`-navnet alligevel røres. |
 | A50 | **Serveres `site/robots.txt` og `site/sitemap.xml` faktisk fra sitets ROD i det udrullede projekt?** | De to filer kom ind med udkastet 13. august 2026 og forudsætter, at Vercel-projektet for `leagly.app` serverer `site/`s indhold fra roden (`/robots.txt`, ikke `/site/robots.txt`) — en antagelse, der først kan efterprøves, når projektet er oprettet og sitet publiceret. | **Ejerens aflæsning, efter sitet er publiceret** (`I8`s resterende trin): åbn `https://leagly.app/robots.txt` og `https://leagly.app/sitemap.xml` direkte. |
+| A51 | **Skal `og:title` følge sælgesætningen og blive fodbold-eksplicit?** | `B30` gjorde sælgesætningen fodbold-eksplicit 13. august 2026, men lod OVERSKRIFTEN stå: `index.html`s `og:title` er fortsat *"Leagly — gæt resultater mod dine venner"*. Den blev holdt uden for rækken med vilje frem for taget med i forbifarten — den er en **anden** dublet med sine egne to aftagere (`og:title` i `index.html` og `GENEREL_TITEL` i `api/invite-preview.js`), bundet sammen af vagtens syvende påstand. **Argumentet for at ændre den:** i et delt link er titlen den største tekst, og den siger nu noget mindre præcist end beskrivelsen lige under. **Argumentet imod:** titlen står ALDRIG alene — den vises sammen med `og:description`, som siger "fodboldkampe" to linjer nede, og med `og:image`. En titel, der gentager ordet, bruger sin korte plads på noget, læseren allerede får. Titlen bærer i dag produktnavnet plus én ting produktet gør, hvilket er den opgave, en titel har. **Prisen ved at ændre er to linjer**; prisen ved at lade være er en asymmetri, der kun ses, hvis man læser de to tags efter hinanden. **Hjemmesidens egen `<title>`** (*"Slå dine venner. Uge efter uge."*) er bevidst en tredje ordlyd og måles ikke af vagten — den skal ikke trækkes ind. | **Ejerens beslutning**, eller næste gang `og:`-tagsene alligevel røres. Ingen ekstern udløser. |
 
 ## Ubygget
 
@@ -255,33 +256,22 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 13. august 2026 (ellevte kørsel) — `B30` + `B31` leveret, hjemmesiden merget
+### 13. august 2026 (tolvte kørsel) — indbakken tømt
 
-**Listen er 42 → 39.** Tre rækker lukket og slettet; ingen åbnet.
+**Listen er 39 → 40.** Én linje fik et ID og en række; ingen lukket.
 
-**`B30` er leveret** — sælgesætningen er omformuleret fodbold-eksplicit og
-synkroniseret i alle fem filer, vagten navngiver. Ordlyden og begrundelsen for
-at holde turneringsnavnene UDEN for den står i
-[`DECISIONS.md`](./DECISIONS.md); leverancen i
-[`CHANGELOG.md`](./CHANGELOG.md).
+**`A51`** — `B30` gjorde sælgesætningen fodbold-eksplicit samme dag, men lod
+OVERSKRIFTEN stå: `og:title` er fortsat "Leagly — gæt resultater mod dine
+venner". Den blev holdt uden for `B30` med vilje, fordi den er en **anden**
+dublet med sine egne to aftagere, og linjen i indbakken var den kvittering.
 
-**`B31` er leveret sammen med den** — hjemmesidens andet udkast er merget, og
-`I17` er dermed lukket og slettet (`og:image` 1200×630, `og:`/`twitter:`-tags
-på alle fem sider). **`I9` er skrumpet** til det, der kræver en publiceret
-side: indeksering, Search Console og `A50`s aflæsning.
+Rækken er skrevet som en åben beslutning og ikke som en opgave, fordi det
+uafklarede er, **om** titlen skal ændres — ikke hvordan. Arbejdet er to linjer;
+spørgsmålet er, om en titel, der vises sammen med en beskrivelse, der allerede
+siger "fodboldkampe", skal bruge sin korte plads på at gentage ordet. Begge
+argumenter står i rækken, så beslutningen kan tages uden at grave dem frem
+igen.
 
-**`G103` flyttede fra Tier 6 til Tier 5.** Dens udløser var, at udkastet blev
-merget — koblingen mellem sitets story-eksempler og `story_engine_v3.sql` er
-ikke længere hypotetisk, og rækken venter derfor ikke længere på noget.
-
-**`A48` er skærpet frem for lukket.** Beta-mærkatet findes ikke i `site/` —
-heller ikke efter mergen — så rækken spørger nu først, om mærkatet
-overhovedet skal findes, og dernæst hvad der skulle fjerne det.
-
-**To fund fra leverancen står i indbakken frem for i en række:** `og:title` er
-stadig ikke fodbold-eksplicit. Den er en anden dublet med sine egne to
-aftagere, og den blev holdt uden for `B30` frem for taget med i forbifarten.
-
-Tiende kørsels log (`A48`–`A50`, `B30`–`B33`, `G103`, `I22` tilføjet) er ikke
-bevaret her — de seks, der stadig er åbne, står i deres tabeller, og de tre
-lukkede er arkiveret i `DECISIONS.md` og `CHANGELOG.md`.
+Ellevte kørsels log (`B30`, `B31` og `I17` lukket, hjemmesiden merget) er ikke
+bevaret her — den er arkiveret i [`DECISIONS.md`](./DECISIONS.md) og
+[`CHANGELOG.md`](./CHANGELOG.md), som er de to filer, der har lov at vokse.
