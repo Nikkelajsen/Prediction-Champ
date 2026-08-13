@@ -9,6 +9,50 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+13. august 2026 — Hjemmesiden er udrulningsklar: burger uden JS, Beta-mærkat og en CSP
+
+**`I8`s resterende arbejde i repoet er gjort, og fire backlog-rækker er lukket
+med det** — `A48`, `A49`, `B33` og `I22`. Sitet er stadig **ikke publiceret**:
+det, der er tilbage, er ejer-godkendelse af copy og trin 2 i
+[`DOMAENE.md`](./DOMAENE.md) (et nyt Vercel-projekt med root directory `site`),
+og ingen af de to kan skrives i en fil.
+
+**Navigationen foldes bag en burger under 700px (`I22`) — uden en linje
+JavaScript.** En skjult checkbox og en `<label>` gør arbejdet
+(`.nav-check:checked ~ .site-nav`), så sitets fravalg *"ingen JS overhovedet"*
+står uændret. Rækken antog, at en burger ville koste den afhængighed; det gjorde
+den ikke. Målt i Chromium: headeren var **159px høj på en 390px-skærm** og er nu
+69px, mens de fem punkter stadig står på én linje helt ned til 701px.
+
+**Beta-mærkat i headeren (`A48`)** på alle fem sider — rækken spurgte, hvornår
+det måtte fjernes, men det havde aldrig eksisteret. Det fjernes igen efter en
+måned publiceret uden fundne fejl.
+
+**`site/vercel.json` er ny.** Den bærer `Content-Security-Policy`,
+`X-Content-Type-Options`, `Referrer-Policy` og cache-headere til `fonts/` og
+`img/` — plus `"cleanUrls": false`, som er `B33` afgjort til nej frem for
+efterladt som en betinget række. **CSP'en håndhæver sitets egen regel:**
+`script-src 'none'` gør "ingen JS" til en header i stedet for en sætning i en
+spec. Verificeret mod alle fem sider i Chromium med headeren sat: ingen
+overtrædelser, fontene loader, de inline `style=`-attributter overlever
+(`style-src` har derfor `'unsafe-inline'`).
+
+**Vandret scroll under 340px er rettet.** `.phone` havde `width: 300px`, og en
+fast bredde gør grid-sporets min-content 300px, så containeren blev skubbet 4px
+ud på fire af de fem sider. Nu `width: min(300px, 100%)`. Fejlen lå mellem de to
+bredder, udkastets verifikation målte (1280px og 390px).
+
+**"La Liga" bliver stående (`A49`).** Sitet og appen siger bevidst hver sit —
+sitet det navn, folk søger på, appen det officielle fra leverandøren.
+Begrundelsen i [`DECISIONS.md`](./DECISIONS.md).
+
+Verificeret i Chromium (Playwright) mod alle fem sider: 1280, 1000, 880, 820,
+760, 701, 700, 560, 390, 320 og 280px — ingen konsolfejl, nul eksterne requests,
+ingen vandret scroll, burgeren åbner og lukker på tastatur og klik.
+`npm run lint` (7 advarsler, uændret) og `npm test` (1321 tests) er grønne.
+
+---
+
 13. august 2026 — Backloggens tiers bærer rækker igen, og formen har fået en vagt
 
 **Reglen fandtes allerede og var drevet væk.** `BACKLOG.md`s tiers skal vise
