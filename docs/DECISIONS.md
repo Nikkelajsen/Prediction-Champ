@@ -15,6 +15,104 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 13. august 2026 — `A47` lukkes: de to kendte `.vercel.app`-adresser ER listen
+
+**Beslutning (produktejeren):** redirectet i `vercel.json` bliver stående med de
+to regler, det har. Listen af aliasser aflæses **ikke** i Vercel → Domains, og
+rækken lukkes uden den aflæsning.
+
+**Hvorfor spørgsmålet kunne afgøres frem for aflæses.** Tre ting peger samme vej:
+
+- **De to er Vercels standardsæt.** `prediction-champ.vercel.app` og
+  `prediction-champ-predictor-champ.vercel.app` er præcis de to aliasser, et
+  team-projekt får tildelt af sig selv — projektnavnet og projektnavnet plus
+  team-slug. En tredje ville skulle være tilføjet i hånden.
+- **Projektet er aldrig omdøbt.** Et navneskifte er den anden måde, et gammelt
+  alias opstår på, og `B21` droppede netop Vercel-omdøbningen 12. august 2026
+  (`I10`) — begrundelsen var, at den ville knække hvert link til den gamle
+  adresse. Beslutningen om ikke at omdøbe er dermed også grunden til, at listen
+  ikke kan være vokset bag om nogen.
+- **Rækkens egen risiko var sat for højt.** Den skrev, at et link til en overset
+  alias "ville knække". Det ville det ikke: en `.vercel.app`-adresse serverer
+  **samme deployment** — det er hele grunden til, at redirectet i trin 6 skulle
+  skrives i hånden, jf. `docs/mail/templates.test.js`' kommentar om, at Vercels
+  gamle URL ikke redirigerer af sig selv. Prisen ved en overset alias er derfor,
+  at brugeren bliver stående på en ikke-kanonisk origin — mærkbart for en
+  installeret PWA og for kanonikaliteten, men ikke et brud.
+
+**Prisen er kendt og accepteret.** Skulle der findes en tredje adresse, som nogen
+faktisk deler links fra, viser den sig ved, at en bruger bliver på den gamle
+origin — og rettelsen er da én regel mere i `vercel.json`, altså samme arbejde
+som i dag, bare senere. Det er billigere end at holde et tier åbent på en
+aflæsning, hvis mest sandsynlige svar er "de to, du allerede kender".
+
+**Det, der IKKE blev valgt, og hvorfor.** Et JS-bagstop i appen — redirigér fra
+ethvert `.vercel.app`-værtsnavn ved boot — ville dække også de ukendte. Det blev
+fravalgt, fordi det lægger et andet mekanisme-lag ved siden af edge-redirectet
+uden en vagt, der holder de to i takt, og fordi det skulle gates på et
+produktions-build for ikke at ramme previews (og dermed staging). To mekanismer
+for ét problem er dyrere end den tredje regel, der måske aldrig skal skrives.
+
+## 13. august 2026 — `A46`: cron-registerets `<app>` udfyldes fra jobbenes egne kørsler, ikke fra cron-job.org
+
+**Beslutning:** værtsnavnet, hvert cron-job kalder ind på, skrives i
+`job_runs.detail` og aflæses i Admin → Drift. `docs/CRON.md`s pladsholder
+`<app>` udfyldes derfra — **ikke** ved at åbne de ni jobs i cron-job.org.
+
+**Begrundelse — det er `A11`s fejlklasse en gang til.** Rækken var skrevet som en
+aflæsning uden for repoet, og det var den samme fejlslutning, `CRON.md` allerede
+har skrevet ned om kolonnen "Hemmelighed sendes som": *"kolonnen stod med `?` i
+en måned, fordi svaret lå i en brugerflade uden for repoet. Det gjorde det aldrig
+— det lå i jobbenes egne kørsler, som bare ikke gemte det."* `req.headers` har
+altid båret værtsnavnet; det blev kasseret, præcis som `isAuthorized()`s `via`
+blev det før 1. august.
+
+**Hvorfor spørgsmålet blev aktuelt nu.** Domæneflytningen (`I10`) gjorde `<app>`
+tvetydig: den kan være den gamle `.vercel.app`-adresse eller `app.leagly.app`.
+`/api/` er **med vilje** undtaget fra redirectet (`DOMAENE.md` trin 6), så et job
+på den gamle adresse svarer fortsat 200 — forskellen kan altså ikke ses udefra,
+og det er dét, der gør den værd at gemme frem for at gætte.
+
+**Det er ikke en vej uden om `A32`.** Beslutningen fra 10. august står ved magt:
+aflæsninger i produktion er ejerens arbejde. Det, der er ændret, er
+**bestillingen** — fra "åbn ni jobs i en tredjeparts brugerflade og skriv ni
+URL'er af" til "kig på Seneste resumé i Admin → Drift", altså ét skærmbillede i
+appen, ejeren i forvejen har. Det er nøjagtig den disciplin, `A32` udpegede som
+det, der arbejdes på i stedet.
+
+**Prisen er ventetid, ikke arbejde.** Svaret findes først, når hvert af de ni
+jobs har kørt én gang efter udrulningen; langsomste skema er hver 12. time.
+Rækken er derfor flyttet til Tier 6 med den kørsel som udløser.
+
+## 13. august 2026 — `A45` lukkes: diagnosen droppes, fordi kuren er billigere end svaret
+
+**Beslutning:** det efterprøves **ikke**, om `recovery.html`s kommentarhoved blev
+pastet ind i Supabase 9. august 2026. I stedet indsættes skabelonens brødtekst
+én gang mere, og spørgsmålet lukkes.
+
+**Begrundelse — svaret ville ikke ændre handlingen.** Rækken bad om en aflæsning
+("vis original" på en modtaget nulstillingsmail) og beskrev to udfald: er
+hovedet med, tilføjes en linje i `MAIL.md`s trin 4; er det ikke, lukkes rækken
+uændret. Men linjen i trin 4 er rigtig **uanset** udfaldet — trinnet skal sige
+det, `OPRETTELSE.md`s trin 6 allerede sagde — og den ene handling, der faktisk
+retter noget, er den samme begge veje: paste brødteksten igen. En diagnose, hvis
+to udfald fører til samme arbejde, er ikke en beslutning; den er et spørgsmål,
+nogen fandt interessant.
+
+**Det, der var en rigtig fejl, er rettet.** `confirm-signup.html` fik advarslen
+*"INDSÆT IKKE DETTE KOMMENTARHOVED I SUPABASE"* den 12. august 2026 sammen med
+`OPRETTELSE.md`s trin 6, mens `recovery.html` og `MAIL.md`s trin 4 ikke fik den
+— to skabeloner med samme risiko og kun den ene med en advarsel. Asymmetrien er
+væk, og `docs/mail/templates.test.js` kræver nu advarslen af **enhver** skabelon
+plus at brødteksten faktisk begynder ved `<table role="presentation">`, som
+advarslen henviser til. En ny skabelon arver dermed advarslen frem for hullet.
+
+**Det, der ikke kan repareres, er accepteret.** Er hovedet sendt med siden
+9. august, har de nulstillingsmails, der er sendt, båret interne noter i deres
+kilde. Der er ingen vej til at kalde en sendt mail tilbage, og modtagerne er
+appens egne brugere. Prisen er betalt; det, der kan gøres, er at stoppe den
+fremadrettet, og det gør en frisk indsættelse.
+
 ## 13. august 2026 — `B30`: sælgesætningen siger nu "fodboldkampe", og turneringsnavnene holdes UDEN for den
 
 **Beslutning:** sælgesætningen er omformuleret fra *"Gæt resultater mod dine

@@ -56,13 +56,13 @@ ingen leveret endnu. Ryddet en femte gang 13. august 2026: ni linjer fra
 gennemgangen af hjemmesidens opdateringsudkast blev til `A48`–`A50`,
 `B30`–`B33`, `G103` og `I22`; `B30` og `B31` er leveret samme dag sammen med
 udkastet selv. Ryddet en sjette gang 13. august 2026: én linje blev til `A51` —
-ikke leveret. Se [Log](#log--seneste-kørsel).)*
+ikke leveret.)*
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 40 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 38 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -84,11 +84,10 @@ Supabase, en modtaget mail, cron-job.org eller Vercel, ikke repoet. **Tieret
 har én betjening, og det er afgjort** (`A32`, 10. august 2026): aflæsninger i
 produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
 gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
-køres på et minut. `A45` venter på netop den slags aflæsning: åbn "vis
-original" på en modtaget nulstillingsmail. `A46` og `A47` er domænemigreringens
-(`I10`) rest af samme slags: hvad de ni cron-job.org-jobs faktisk peger på, og
-hvilke gamle `.vercel.app`-aliasser der findes, kan kun ses i de to
-dashboards.
+køres på et minut.
+
+**Tomt.** `A45`, `A46` og `A47` er lukket 13. august 2026 — se
+[Log](#log--seneste-kørsel).
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
@@ -117,6 +116,7 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 
 | # | Hvad | Udløser |
 |---|---|---|
+| `A46` | Udfyld `<app>` i `CRON.md`s ni kald med det faktiske værtsnavn | **Når hvert af de ni jobs har kørt én gang efter 13. august 2026** — langsomste skema er hver 12. time. Værtsnavnet skrives nu i `job_runs.detail` (`A46`, samme fremgangsmåde som `A11`), så aflæsningen er "Seneste resumé" på hvert jobkort i Admin → Drift og ikke ni jobs i cron-job.org. Opslaget står i [`CRON.md`](./CRON.md). |
 | `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. |
 | `A39` | Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat? | **Når `day_card_coverage` melder en blokeret dag, nogen savnede.** `match_day_complete()` er global: én kamp uden resultat i én turnering blokerer alle dagskort, også for de konkurrencer, der intet har med turneringen at gøre. Prisen er dokumenteret som bevidst — den globale kampdag er produktets ene tvær-turneringsbegreb — men den blev betalt synligt under `A38`s undersøgelse. |
 | `A44` | Skal den globale rating vise fulde visningsnavne til brugere, man ikke deler noget med? | **Udløseren er sprunget** (`B26`, 12. august 2026), men i modsætning til `A43` kan visningen ændres bagefter — prisen ved at vente er kun, at flere navne allerede er hentet. Faldt ud af `A43`: uanset hvor stram policyen på `profiles` bliver, publicerer Rating-fanen og Championship (`scope='ALL'`) hver bruger til enhver indlogget. Det er en produktbeslutning, ikke en adgangsregel — og den skal derfor stilles for sig. |
@@ -186,9 +186,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | A14 | **Skal hele kodebasen gennemformateres med Prettier?** | `npm run format` findes, men `format:check` er bevidst ikke et CI-trin. En fuld gennemformatering ville omskrive ~6.700 linjer ved `printWidth: 140` (~14.000 ved standard 80) på tværs af ~126 filer (86 uden testfiler; genmålt august 2026). Prisen er hele repoets `git blame`; gevinsten er konsistens i en kodebase med én forfatter og en i forvejen ensartet håndstil. Beslutningen er **udskudt, ikke truffet** — se [`DECISIONS.md`](./DECISIONS.md), 30. juli 2026. | Næste gang der alligevel røres bredt i frontenden — ellers aldrig. |
 | A23 | **Skal appen have en router?** | Navigation er i dag to `useState` i `MainApp.jsx` (`tab` + `screen`), og deep links læses ved boot og strippes straks via `history.replaceState` (`App.jsx:104`, `MainApp.jsx:215,239`). Følgen er ingen tilbage-knap, ingen browser-historik og ingen delbare URL'er til interne skærme — mærkbart for en PWA, hvor telefonens tilbage-gestus forventes at virke. Men det er et arkitekturvalg, ikke en fejl: afhængighedsfattigheden er bevidst (fire runtime-deps, ingen router, `docs/reviews/2026-08-app-review.md` §7), og en router omskriver hele navigations-tilstandsmaskinen inkl. begge deep-link-join-flows, som ingen test dækker. | Når tilbage-knappen enten koster brugere (kan aflæses i analytics) eller en feature kræver ægte delbare interne URL'er — `I12`s offentlige ligaside er den første, der ville. |
 | A39 | **Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat?** | `match_day_complete()` er global: den kræver, at ALLE kampe på dagen har resultat, uanset turnering og uanset konkurrence. Én udsat eller uindberettet kamp i én turnering blokerer derfor dagskortet for hver eneste bruger, også dem, hvis konkurrencer slet ikke rører den turnering. **Prisen er bevidst og dokumenteret** — den globale kampdag er produktets ene tvær-turneringsbegreb, og et kort pr. konkurrence ville skulle vælge, hvilken dag der er *dagen* — men den blev betalt synligt under `A38`s undersøgelse, hvor det tog tid at afgøre, om stilheden var en fejl eller en ventende kamp. **To veje:** afgrænse fuldførtheden til de kampe, modtagerens egne konkurrencer dækker (kortet bliver personligt og kan skrives på forskellige tidspunkter for forskellige brugere), eller beholde den globale dag og gøre blokeringen aflæselig, så stilheden kan skelnes fra en fejl. Den første koster determinismen i acceptkriterie 7; den anden koster ingenting og løser heller ikke noget. | **Når `sql/checks/day_card_coverage.sql` melder en blokeret dag, nogen faktisk savnede.** Kontrollen findes siden `A38` og er dermed selve udløseren — indtil den melder noget, er problemet teoretisk. |
-| A45 | **Blev `recovery.html`s interne kommentarhoved pastet ind i Supabase 9. august 2026?** | `mail/recovery.html` bærer siden trin 4 blev skrevet et HTML-kommentarhoved (linje 1–26) med interne implementeringsnoter — advarsler om `{{ .ConfirmationURL }}`, `templates.test.js` og hvordan `B21` vil ramme filen. `docs/MAIL.md`s trin 4 siger kun "indsæt indholdet af [filen]" og skelner ikke mellem kommentaren og selve brødteksten. En HTML-kommentar renderes ikke synligt i en mailklient, men står i kildekoden — synlig for enhver modtager, der vælger "vis original". Er hovedet pastet med, har hver nulstillingsmail sendt siden 9. august 2026 båret interne noter om produktets arkitektur ud til modtageren. | **Ejerens aflæsning** (`A32`, Tier 1): åbn "vis original" på en modtaget nulstillingsmail. Er kommentaren med, tilføjes en linje i `MAIL.md`s trin 4 om, at hovedet skal skæres fra før indsættelse — og rækken lukkes med den rettelse. Er den ikke, lukkes rækken uden ændring. |
-| A46 | **Hvad er `<app>` i `CRON.md`s ni cron-job.org-URL'er faktisk sat til?** | `docs/CRON.md`s jobtabel skriver hvert kald som `https://<app>/api/…` — en pladsholder, hvis faktiske værdi kun står i selve cron-job.org-kontoen, ikke i repoet. Domænemigreringen (`I10`, 12.–13. august 2026) gør spørgsmålet aktuelt: `<app>` kan i dag være enten den gamle `.vercel.app`-adresse eller `app.leagly.app`. `vercel.json`s redirect dækker begge, men `/api/` er med vilje undtaget fra det (se `DOMAENE.md`), så et job, der stadig kalder den gamle adresse, ville fortsat svare 200 — bare uden den nye adresses egen CSP, og uden at registret siger det. | **Ejerens aflæsning** (`A32`, Tier 1): åbn hvert af de ni jobs i cron-job.org, og skriv den faktiske URL i `CRON.md`s tabel i stedet for pladsholderen. |
-| A47 | **Hvilke gamle `.vercel.app`-aliasser findes projektet under, og dækker redirectet dem alle?** | `vercel.json`s redirect (skrevet 13. august 2026 som `I10`s trin 6) omdirigerer permanent de to `.vercel.app`-adresser, der er kendt ved navn. Den fulde liste af aliasser, Vercel-projektet historisk har fået tildelt — fra tidligere deploys, omdøbninger eller preview-branches — er aldrig aflæst i Vercel → Domains. Findes der flere end de to kendte, dækker redirectet dem ikke, og et link til en af dem ville knække uden at nogen har set det. | **Ejerens aflæsning** (`A32`, Tier 1): åbn Vercel → Domains, notér samtlige `.vercel.app`-aliasser, og udvid redirectet i `vercel.json`, hvis listen er længere end de to kendte. |
+| A46 | **Hvad er `<app>` i `CRON.md`s ni cron-job.org-URL'er faktisk sat til?** | `docs/CRON.md`s jobtabel skriver hvert kald som `https://<app>/api/…` — en pladsholder, hvis faktiske værdi kun står i selve cron-job.org-kontoen, ikke i repoet. Domænemigreringen (`I10`, 12.–13. august 2026) gør spørgsmålet aktuelt: `<app>` kan i dag være enten den gamle `.vercel.app`-adresse eller `app.leagly.app`. `vercel.json`s redirect dækker begge, men `/api/` er med vilje undtaget fra det (se `DOMAENE.md`), så et job, der stadig kalder den gamle adresse, ville fortsat svare 200 — bare uden den nye adresses egen CSP, og uden at registret siger det. | **Ikke længere en aflæsning uden for repoet** (13. august 2026): hver kørsel skriver nu sit værtsnavn i `job_runs.detail`, så de ni værdier står i "Seneste resumé" på hvert jobkort i Admin → Drift — opslaget og den fulde begrundelse i [`CRON.md`](./CRON.md). **Udløser: når hvert af de ni jobs har kørt én gang efter 13. august 2026**; langsomste skema er hver 12. time. Rækken er dermed i Tier 6 og ikke Tier 1. |
 | A48 | **Hvad skal være opfyldt, før "Beta" fjernes fra hjemmesidens header og forside?** | Fundet under gennemgangen af hjemmesidens opdateringsudkast (13. august 2026). **Mærkatet findes ikke i `site/` — heller ikke efter at udkastet er merget**, hverken i header eller forside; spørgsmålet forudsætter altså en tilføjelse, der aldrig er sket. Første spørgsmål er derfor, om mærkatet overhovedet skal findes. Under alle omstændigheder mangler et eksplicit exit-kriterium: hvornår er sitet "færdigt nok" til at miste mærkatet? Kandidater: ejer-godkendelse af copy (`I8`s punkt 1 i [`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md)), et vist antal dage uden en fundet fejl, eller en beslutning om aldrig at bruge mærkatet. | **Ejerens beslutning** — ingen ekstern udløser. |
 | A49 | **"La Liga" (hjemmesiden) eller "Primera División" (`leagues.name` i databasen) — hvilket navn vinder?** | Hjemmesidens turnerings-sektion (`site/index.html`, merget 13. august 2026) og `saadan-virker-det.html` skriver "La Liga", mens appens `leagues.name` for samme turnering er "Primera División". To veje: omdøb visningsnavnet i databasen til "La Liga" (det navn de fleste brugere kender turneringen som), eller ret sitet til "Primera División" (det officielle navn, appen allerede bruger konsekvent). Uanset hvad skal de to sige det samme — i dag gør de ikke. | **Ejerens beslutning**, eller næste gang `leagues`-navnet alligevel røres. |
 | A50 | **Serveres `site/robots.txt` og `site/sitemap.xml` faktisk fra sitets ROD i det udrullede projekt?** | De to filer kom ind med udkastet 13. august 2026 og forudsætter, at Vercel-projektet for `leagly.app` serverer `site/`s indhold fra roden (`/robots.txt`, ikke `/site/robots.txt`) — en antagelse, der først kan efterprøves, når projektet er oprettet og sitet publiceret. | **Ejerens aflæsning, efter sitet er publiceret** (`I8`s resterende trin): åbn `https://leagly.app/robots.txt` og `https://leagly.app/sitemap.xml` direkte. |
@@ -256,21 +254,41 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 13. august 2026 (tolvte kørsel) — indbakken tømt
+### 13. august 2026 (trettende kørsel) — Tier 1 tømt
 
-**Listen er 39 → 40.** Én linje fik et ID og en række; ingen lukket.
+**Listen er 40 → 38.** `A45` og `A47` er slettet, `A46` er flyttet til Tier 6.
+**Ingen af de tre blev besvaret på den måde, rækken selv foreskrev** — og det er
+kørslens egentlige resultat: alle tre var skrevet som aflæsninger, og ingen af
+aflæsningerne blev nødvendige.
 
-**`A51`** — `B30` gjorde sælgesætningen fodbold-eksplicit samme dag, men lod
-OVERSKRIFTEN stå: `og:title` er fortsat "Leagly — gæt resultater mod dine
-venner". Den blev holdt uden for `B30` med vilje, fordi den er en **anden**
-dublet med sine egne to aftagere, og linjen i indbakken var den kvittering.
+**`A46` — spørgsmålet flyttet ind i appen.** `CRON.md`s `<app>` skulle efter
+rækkens ordlyd slås op ved at åbne ni jobs i cron-job.org. Men `req.headers` har
+hele tiden båret værtsnavnet, så `createRunLogger()` har fået `setHost()` ved
+siden af `setAuth()`, og hver kørsel skriver nu `host` i `job_runs.detail`.
+Aflæsningen er dermed "Seneste resumé" på hvert jobkort i Admin → Drift.
+**Det er `A11`s fremgangsmåde en gang til**, og `CRON.md` havde allerede skrevet
+læren ned med rene ord: svaret lå aldrig i en brugerflade uden for repoet, det
+lå i jobbenes egne kørsler, som bare ikke gemte det. Rækken er i Tier 6, fordi
+de ni jobs skal have kørt én gang efter udrulningen — ikke fordi nogen venter.
 
-Rækken er skrevet som en åben beslutning og ikke som en opgave, fordi det
-uafklarede er, **om** titlen skal ændres — ikke hvordan. Arbejdet er to linjer;
-spørgsmålet er, om en titel, der vises sammen med en beskrivelse, der allerede
-siger "fodboldkampe", skal bruge sin korte plads på at gentage ordet. Begge
-argumenter står i rækken, så beslutningen kan tages uden at grave dem frem
-igen.
+**`A45` — diagnosen droppet, kuren udført.** Rækken spurgte, om `recovery.html`s
+kommentarhoved kom med i Supabase 9. august. Begge udfald førte til samme
+handling (indsæt brødteksten igen), så spørgsmålet var ikke en beslutning.
+**Det, der VAR en fejl, er rettet:** `confirm-signup.html` havde advarslen mod
+at paste sit eget hoved ind, `recovery.html` og `MAIL.md`s trin 4 havde den
+ikke — to skabeloner med samme risiko og én advarsel. `templates.test.js`
+kræver den nu af enhver skabelon.
+
+**`A47` — afgjort frem for aflæst** (ejerens valg). De to `.vercel.app`-adresser
+i redirectet er accepteret som hele listen: de er Vercels standardsæt for et
+team-projekt, og projektet er aldrig omdøbt. **Rækkens egen risiko var sat for
+højt** — en overset alias ville ikke "knække", den serverer samme deployment og
+redirigerer bare ikke.
+
+**Mønsteret er værd at tage med til næste tier:** en række, der beder om en
+aflæsning, skal først spørges, om svaret ændrer handlingen (`A45`), om det kan
+gemmes i stedet for hentes (`A46`), eller om det kan afgøres (`A47`). Tieret er
+tømt syv gange nu, og det er første gang uden en eneste ny produktionsaflæsning.
 
 Ellevte kørsels log (`B30`, `B31` og `I17` lukket, hjemmesiden merget) er ikke
 bevaret her — den er arkiveret i [`DECISIONS.md`](./DECISIONS.md) og

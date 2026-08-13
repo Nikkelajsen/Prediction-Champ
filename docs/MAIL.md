@@ -329,6 +329,25 @@ Under Auth → Email Templates. Indsæt indholdet af:
 > `docs/mail/templates.test.js` kræver, at linjen findes. Det fanger den samme
 > fejl på `confirm-signup`, som først tages i brug ved `B26`.
 
+> 🛑 **Indsæt IKKE filens kommentarhoved. Kopiér fra `<table role="presentation">`
+> og ned.** En HTML-kommentar vises ikke i mailklienten, men den rejser med i
+> mailens kilde og kan læses af enhver modtager under "vis original" — og
+> hovederne nævner backlog-rækker, kodestier og hændelser.
+>
+> **Trinnet her sagde det ikke før 13. august 2026.** Advarslen blev skrevet ind
+> i [`OPRETTELSE.md`](./OPRETTELSE.md)s trin 6 og i `confirm-signup.html` den
+> 12. august 2026, men dette trin — nulstillingsmailen — sagde stadig kun
+> "indsæt indholdet af", og `recovery.html` bar ingen advarsel. Begge filer har
+> den nu, og `templates.test.js` kræver den af enhver skabelon, så en ny arver
+> advarslen frem for asymmetrien.
+>
+> ⚠️ **Gør dette én gang: indsæt `recovery.html`s brødtekst igen.** Skabelonen
+> blev pastet ind 9. august 2026 fra en fil uden advarsel, og om hovedet kom med
+> kan kun ses på en modtaget mail. **Spørgsmålet er droppet med vilje** (`A45`,
+> 13. august 2026): svaret ændrer ikke, hvad der skal gøres. Er hovedet med,
+> fjerner en frisk indsættelse det; er det ikke, er indsættelsen en tom
+> handling. Diagnosen koster mere end kuren.
+
 De øvrige fire — Invite user, Magic Link, Change Email Address,
 Reauthentication — beholder Supabases standard. Ingen af flowene er i brug:
 appen har hverken invitationsmails, magic links eller e-mailskift.

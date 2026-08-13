@@ -127,6 +127,33 @@ export async function sbAll(sb, path, { order, pageSize = 1000, maxPages = 100 }
 // Syv tegn, samme længde som frontendens stempel og som `git log --oneline`.
 const APP_VERSION = (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || null;
 
+// Hvilket VÆRTSNAVN kaldte jobbet ind på? (A46)
+//
+// `docs/CRON.md` skriver hvert af de ni cron-jobs som `https://<app>/api/…` —
+// en pladsholder, hvis faktiske værdi kun stod i cron-job.org-kontoen. Efter
+// domæneflytningen (`I10`) kan `<app>` være enten den gamle `.vercel.app`-adresse
+// eller `app.leagly.app`, og `/api/` er MED VILJE undtaget fra redirectet
+// (docs/DOMAENE.md trin 6), så et job på den gamle adresse svarer stadig 200 —
+// altså uden at forskellen kan ses noget sted.
+//
+// Det er nøjagtig `A11`s fejlklasse en gang til: svaret lå aldrig i en
+// brugerflade uden for repoet, det lå i jobbenes egne kald, som bare ikke gemte
+// det. Med værtsnavnet i `job_runs.detail` er registerets pladsholder et
+// ALMINDELIGT OPSLAG — hvert jobkort i Admin → Drift viser sin egen "Seneste
+// resumé", så de ni værdier står ét skærmbillede væk med 30 dages historik
+// (`prune_job_runs`).
+//
+// `x-forwarded-host` før `host`: bag en proxy bærer den første det værtsnavn,
+// kalderen faktisk skrev, mens `host` kan være rewrittet undervejs. Det er
+// kalderens eget valg, spørgsmålet handler om.
+export function requestHost(req) {
+  const rå = req?.headers?.["x-forwarded-host"] || req?.headers?.host || null;
+  if (!rå) return null;
+  // En proxykæde kan lægge flere værdier i feltet, kommasepareret. Den første er
+  // den, klienten skrev; resten er tilføjet undervejs.
+  return String(rå).split(",")[0].trim() || null;
+}
+
 // Skriver én række i job_runs pr. kørsel (sql/job_runs.sql).
 //
 // KONTRAKT: må ALDRIG kaste og aldrig ændre jobbets svar. Overvågning, der kan
@@ -174,11 +201,17 @@ export function createRunLogger(sb, job, { skip = false } = {}) {
   // Hvordan kørslen autoriserede sig. Sættes af handleren og lægges i
   // `job_runs.detail` — se setAuth() nedenfor for hvorfor.
   let authVia = null;
+  // Hvilket værtsnavn kørslen kom ind på. Sættes af handleren — se setHost().
+  let host = null;
   // Detaljen er jobbets eget svar PLUS det, kørslen ved om sig selv. De to
   // holdes adskilt, fordi svaret er til kalderen (et cron-job, en maskine),
   // mens detaljen er til den, der læser driftsloggen bagefter.
   const withMeta = (body) => {
-    const ekstra = { ...(authVia ? { authVia } : {}), ...(APP_VERSION ? { version: APP_VERSION } : {}) };
+    const ekstra = {
+      ...(authVia ? { authVia } : {}),
+      ...(host ? { host } : {}),
+      ...(APP_VERSION ? { version: APP_VERSION } : {}),
+    };
     // Er der intet at tilføje, sendes svaret videre UÆNDRET — også når det er
     // null. `{...null}` ville blive til `{}`, altså et tomt resumé, hvor der
     // før stod "ingenting", og de to ser ens ud i driftsloggen uden at være det.
@@ -215,6 +248,15 @@ export function createRunLogger(sb, job, { skip = false } = {}) {
     // står i docs/CRON.md.
     setAuth(via) {
       authVia = via || null;
+    },
+    // Skriver HVILKET VÆRTSNAVN kørslen kom ind på (A46) — se requestHost().
+    //
+    // Tager `req` og ikke en færdig streng, så det ene sted, der ved hvordan
+    // værtsnavnet udledes, er `requestHost()`. Kaldes ved siden af setAuth() i
+    // alle tre handlere, umiddelbart efter autorisationen: kørslen kender sit
+    // værtsnavn fra første øjeblik, men loggeren findes først dér.
+    setHost(req) {
+      host = requestHost(req);
     },
     async ok(res, body) {
       if (!skip) await recordRun(sb, name, { ok: true, startedAt, detail: withMeta(body) });

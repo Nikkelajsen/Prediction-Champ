@@ -82,6 +82,8 @@ export default async function handler(req, res) {
     run = createRunLogger(sb, "sync-live", { skip: dryRun });
     // A11: hvilken vej autorisationen kom ind, ned i driftsloggen — se setAuth().
     run.setAuth(auth.via);
+    // A46: hvilket værtsnavn jobbet kaldte ind på — se setHost().
+    run.setHost(req);
 
     // ---- 1) hvilke kampe kan være i gang lige nu? ----
     // (a) kampe uden endeligt resultat, hvis kickoff ligger i tidsvinduet, ELLER

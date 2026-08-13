@@ -505,6 +505,8 @@ export default async function handler(req, res) {
     run = createRunLogger(sb, "send-notifications", { skip: dryRun });
     // A11: hvilken vej autorisationen kom ind, ned i driftsloggen — se setAuth().
     run.setAuth(auth.via);
+    // A46: hvilket værtsnavn jobbet kaldte ind på — se setHost().
+    run.setHost(req);
 
     // ---- Sendevindue (A24): ingen push om natten ----
     // Kørslen stopper HER, før der er læst en eneste besked og længe før

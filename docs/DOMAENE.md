@@ -39,8 +39,8 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 | Registrar | ? | ? |
 | Hjemmesiden (`site/`) | `leagly.app` + `www.leagly.app` → apex | ? — ikke oprettet |
 | Appen | `app.leagly.app` | **13. august 2026 — oprettet og svarer, meldt af ejeren** (trin 1 + 3). Ikke aflæst herfra: udgående HTTPS er spærret i arbejdsmiljøet, så adressen er aldrig blevet spurgt af en maskine. Beviserne nedenfor er stadig det, der afgør det |
-| Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | **13. august 2026 — redirect udrullet og BEVIST** for den første: 308 med `Location: https://app.leagly.app/` (bevis 1). Den anden er ikke spurgt. **Listen er stadig aldrig aflæst i Vercel → Domains** og er dermed runbogens svageste påstand: dækker de to regler ikke alle projektets aliasser, dør links delt fra det oversete |
-| Cron-jobbenes værtsnavn | Den gamle adresse (`docs/CRON.md` skriver `<app>`) | ? — **stadig ikke aflæst på cron-job.org.** Men undtagelsen, der beskytter dem, er bevist 13. august 2026: `/api/sync-live` på den gamle adresse svarer 401 og ikke 308 (bevis 3b), så jobbene rammer stadig funktionen, uanset hvilken af de to adresser de er sat op med |
+| Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | **13. august 2026 — redirect udrullet og BEVIST** for den første: 308 med `Location: https://app.leagly.app/` (bevis 1). Den anden er ikke spurgt. **Listen er ikke aflæst i Vercel → Domains, og det bliver den ikke** (`A47`, afgjort 13. august 2026): de to ER Vercels standardsæt for et team-projekt, og projektet er aldrig omdøbt. Findes der mod forventning en tredje, dør intet — adressen serverer samme deployment og redirigerer bare ikke; rettelsen er da én regel mere her |
+| Cron-jobbenes værtsnavn | Den gamle adresse (`docs/CRON.md` skriver `<app>`) | ? — men **spørgsmålet er flyttet ind i appen 13. august 2026 (`A46`)**: hver kørsel skriver nu sit værtsnavn i `job_runs.detail`, så de ni værdier aflæses i Admin → Drift frem for i cron-job.org. Svaret findes, når hvert job har kørt én gang efter udrulningen — langsomste skema er hver 12. time. Undtagelsen, der beskytter jobbene imens, er bevist samme dag: `/api/sync-live` på den gamle adresse svarer 401 og ikke 308 (bevis 3b), så de rammer funktionen uanset hvilken adresse de er sat op med |
 | Vercel-projektnavn | **Uændret** (bevidst — se `DECISIONS.md`) | 12. august 2026 |
 | GitHub-repo | `Nikkelajsen/Prediction-Champ` | ? — omdøbes med `B21` |
 | Supabase Site URL | `https://app.leagly.app` — se [`MAIL.md`](./MAIL.md) trin 3.2 | **13. august 2026 — flyttet og testet af ejeren** (trin 4) |
@@ -132,9 +132,19 @@ Står i `vercel.json` (app-projektet), én regel pr. gammelt værtsnavn:
 `permanent: true` giver 308, så søgemaskiner flytter kanonikaliteten med.
 **Sti og query bevares** — Vercel videregiver query automatisk, når destinationen
 ikke selv har en, og det er dét, der holder allerede delte
-`?liga=`/`?join=`-links i live. Tjek i Vercel → Settings → Domains, hvilke
-`.vercel.app`-aliasser projektet faktisk har, og dæk dem alle; filen dækker i dag
-de to, registeret ovenfor kender.
+`?liga=`/`?join=`-links i live. Filen dækker de to værtsnavne, registeret
+ovenfor kender.
+
+> **De to er hele listen — afgjort, ikke aflæst** (`A47`, 13. august 2026).
+> Her stod indtil da "tjek i Vercel → Settings → Domains, hvilke aliasser
+> projektet faktisk har, og dæk dem alle". Den aflæsning er droppet: de to er
+> præcis det sæt, et team-projekt får tildelt af sig selv (projektnavnet, og
+> projektnavnet plus team-slug), og et tredje ville kræve enten en håndtilføjet
+> alias eller en omdøbning — og omdøbningen er netop dét, `B21` fravalgte.
+> **Prisen ved at tage fejl er lav og synlig:** en overset alias serverer stadig
+> samme deployment, så et link dertil virker; det redirigerer bare ikke, og
+> brugeren bliver på en ikke-kanonisk origin. Rettelsen er da én regel mere her.
+> Begrundelsen står i [`DECISIONS.md`](./DECISIONS.md).
 
 > **`(?!api/)` er en bevidst afvigelse fra rækkens oprindelige `/(.*)`.**
 > Redirectet er tænkt til MENNESKER, der følger et delt link. Ramte det også

@@ -9,6 +9,59 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+13. august 2026 — Tier 1 er tømt: `A45`, `A46` og `A47` lukket uden en eneste ny produktionsaflæsning
+
+**Backloggens Tier 1 er tomt, og ingen af de tre rækker blev besvaret på den
+måde, de selv foreskrev.** Tieret rummer det, hvis svar ligger uden for repoet —
+Supabase, en modtaget mail, cron-job.org, Vercel — og `A32` (10. august 2026)
+har afgjort, at de aflæsninger er ejerens arbejde. Det, der var tilbage at gøre
+billigere, var **bestillingen**, og kørslen her viste tre måder at gøre det på:
+flyt spørgsmålet ind i appen, drop diagnosen når kuren er billigere, eller afgør
+det, der lignede en aflæsning.
+
+**`A46` — værtsnavnet er nu en kolonne i driftsloggen.** `docs/CRON.md` skrev
+hvert af de ni cron-jobs som `https://<app>/api/…`, og pladsholderen kunne kun
+slås op i cron-job.org-kontoen. Efter domæneflytningen (`I10`) blev den
+tvetydig: `<app>` kan være den gamle `.vercel.app`-adresse eller
+`app.leagly.app`, og fordi `/api/` **med vilje** er undtaget fra redirectet
+(`DOMAENE.md` trin 6), svarer begge 200 — forskellen kan ikke ses udefra.
+`createRunLogger()` har fået `setHost(req)` ved siden af `setAuth()`, så hver
+kørsel skriver `host` i `job_runs.detail`; Admin → Drift viser feltet uden
+UI-ændring, fordi jobkortets "Seneste resumé" i forvejen dumper detaljen som
+JSON. Ny `requestHost()` læser `x-forwarded-host` før `host` og tager den første
+værdi i en proxykæde — det er den, kalderen selv skrev. Wiret i alle tre
+handlere (`sync-live`, `sync-matches`, `send-notifications`), tolv nye tests.
+**Det er `A11`s fremgangsmåde brugt igen**, og `CRON.md` havde allerede skrevet
+læren ned: svaret lå aldrig i en brugerflade uden for repoet, det lå i jobbenes
+egne kørsler, som bare ikke gemte det. Rækken er flyttet til Tier 6 — ikke fordi
+den venter på nogen, men fordi de ni jobs skal have kørt én gang efter
+udrulningen, og det langsomste skema er hver 12. time.
+
+**`A45` — en asymmetri rettet, et spørgsmål droppet.** `confirm-signup.html` bar
+siden 12. august advarslen *"INDSÆT IKKE DETTE KOMMENTARHOVED I SUPABASE"*,
+mens `recovery.html` ikke gjorde, og `MAIL.md`s trin 4 sagde stadig kun "indsæt
+indholdet af filen" — to skabeloner med samme risiko, én advarsel. Begge har den
+nu, trin 4 siger det, og `templates.test.js` kræver den af **enhver** skabelon
+plus at brødteksten faktisk begynder ved `<table role="presentation">`, som
+advarslen henviser til. **Selve rækkens spørgsmål — kom hovedet med i Supabase
+9. august? — er droppet med vilje:** begge udfald fører til samme handling
+(indsæt brødteksten igen), så diagnosen koster mere end kuren. Handlingen står
+nu som et engangstrin i `MAIL.md`.
+
+**`A47` — afgjort frem for aflæst.** Listen af gamle `.vercel.app`-aliasser er
+ikke slået op i Vercel → Domains; de to, redirectet dækker, er accepteret som
+hele listen. De er præcis Vercels standardsæt for et team-projekt, projektet er
+aldrig omdøbt (`B21` droppede netop Vercel-omdøbningen), og **rækkens egen
+risiko var sat for højt**: et link til en overset alias ville ikke "knække" —
+adressen serverer samme deployment, den redirigerer bare ikke. Prisen er en
+ikke-kanonisk origin, ikke et brud. Begrundelserne for alle tre står i
+[`DECISIONS.md`](./DECISIONS.md).
+
+**Ingen SQL, ingen migrering, ingen skemaændring.** `job_runs.detail` er
+`jsonb`, så det nye felt kræver intet i databasen. 1.298 tests grønne.
+
+---
+
 13. august 2026 — `B30` + `I8`: hjemmesiden er opdateret, og sælgesætningen siger nu "fodboldkampe"
 
 **Hjemmesidens andet udkast er merget, og `B30` var betingelsen.** Udkastet lå
