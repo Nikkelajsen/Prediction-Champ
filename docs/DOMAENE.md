@@ -16,13 +16,19 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 > brugertallet: **en installeret PWA er bundet til sin origin**, så alle, der har
 > installeret fra `.vercel.app`, skal installere igen og logge ind på ny.
 
-> 🛑 **Repoets halvdel er skrevet 13. august 2026 og må ikke udrulles endnu.**
-> Trin 6 (redirectet i `vercel.json`) og trin 7 (de 23 CTA'er + README) ligger
-> som kode. **Udrulles de, før `app.leagly.app` svarer, sendes hver eneste
-> bruger til en adresse, der ikke findes** — det er den værste af de tre
-> rækkefølgefejl nedenfor, og den eneste, der rammer alle på én gang.
-> **Rækkefølgen er derfor: trin 1 → trin 3 → merge.** Intet andet i denne
-> runbog er blokeret af det.
+> ✅ **Spærringen er ophævet 13. august 2026.** Repoets halvdel — trin 6
+> (redirectet i `vercel.json`) og trin 7 (de 23 CTA'er + README) — måtte ikke
+> udrulles, før `app.leagly.app` svarede, fordi den ellers ville sende hver
+> eneste bruger til en adresse, der ikke fandtes. **Ejeren har kørt trin 1, 3
+> og 5**, så betingelsen er opfyldt og koden kan merges.
+>
+> **Trin 4 (Supabase Site URL) er nu det, der bør køres først.** Det var
+> tidligere den farlige rækkefølge (nr. 1 nedenfor); med domænet på plads er
+> det omvendt: står Site URL stadig på den gamle adresse efter udrulningen,
+> lander hvert nulstillingslink på det gamle værtsnavn og skal reddes af
+> redirectet. Det VIRKER — en 308 uden fragment i `Location` bevarer browserens
+> eget `#access_token=…` — men det er et ekstra led at være afhængig af på
+> netop den rejse, hvor brugeren i forvejen er låst ude.
 
 ---
 
@@ -33,15 +39,18 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 | Domæne | `leagly.app` | 9. august 2026 — i brug til mail (`B25`) |
 | Registrar | ? | ? |
 | Hjemmesiden (`site/`) | `leagly.app` + `www.leagly.app` → apex | ? — ikke oprettet |
-| Appen | `app.leagly.app` | ? — ikke oprettet |
-| Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | ? — svarer i dag. Redirect **skrevet** 13. august 2026, ikke udrullet. **Listen er aldrig aflæst i Vercel → Domains** og er dermed runbogens svageste påstand: dækker den ikke alle projektets aliasser, dør links delt fra det oversete |
+| Appen | `app.leagly.app` | **13. august 2026 — oprettet og svarer, meldt af ejeren** (trin 1 + 3). Ikke aflæst herfra: udgående HTTPS er spærret i arbejdsmiljøet, så adressen er aldrig blevet spurgt af en maskine. Beviserne nedenfor er stadig det, der afgør det |
+| Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | ? — svarer i dag. Redirect **skrevet** 13. august 2026, **ikke udrullet endnu**. **Listen er aldrig aflæst i Vercel → Domains** og er dermed runbogens svageste påstand: dækker den ikke alle projektets aliasser, dør links delt fra det oversete |
 | Cron-jobbenes værtsnavn | Den gamle adresse (`docs/CRON.md` skriver `<app>`) | ? — **ikke aflæst på cron-job.org.** `/api/` er med vilje undtaget fra redirectet, så jobbene overlever flytningen uden at blive rørt |
 | Vercel-projektnavn | **Uændret** (bevidst — se `DECISIONS.md`) | 12. august 2026 |
 | GitHub-repo | `Nikkelajsen/Prediction-Champ` | ? — omdøbes med `B21` |
-| Supabase Site URL | Se [`MAIL.md`](./MAIL.md) trin 3.2 | ? — skal flyttes |
-| Turnstile-værtsnavne | Se [`OPRETTELSE.md`](./OPRETTELSE.md)s register | ? — skal udvides |
+| Supabase Site URL | Se [`MAIL.md`](./MAIL.md) trin 3.2 | ? — **skal flyttes, og er nu det næste trin** (trin 4) |
+| Turnstile-værtsnavne | Se [`OPRETTELSE.md`](./OPRETTELSE.md)s register | **13. august 2026 — `app.leagly.app` tilføjet, meldt af ejeren** (trin 5). Det gamle værtsnavn står stadig, som trinnet foreskriver. Bevis 3 (et rigtigt login på den nye adresse) er det, der afgør det |
 
-**`?` betyder "aldrig kørt"**, ikke "kørt og bestået".
+**`?` betyder "aldrig kørt"**, ikke "kørt og bestået". **"Meldt af ejeren"
+betyder heller ikke "bestået"** — det betyder, at handlingen er udført, mens
+beviset for, at den virkede, stadig udestår. De to falder først sammen i
+trin 8.
 
 ---
 
@@ -63,7 +72,7 @@ er alle den samme fejl — at flytte en henvisning før destinationen findes:
 
 ## Trin
 
-### Trin 1 — appen får `app.leagly.app`
+### Trin 1 — appen får `app.leagly.app` ✅ *13. august 2026*
 
 Vercel → app-projektet → Settings → Domains → tilføj `app.leagly.app`. Hos
 registraren: `CNAME app → cname.vercel-dns.com`. Vent på, at Vercel viser
@@ -86,24 +95,29 @@ Apex-domæner kan ikke bruge CNAME; brug den A-record, Vercel oplyser i panelet.
 > To projekter betyder også, at et deploy af sitet pr. konstruktion ikke kan
 > vælte appen.
 
-### Trin 3 — verificér, at begge adresser svarer
+### Trin 3 — verificér, at begge adresser svarer 🔶 *appens halvdel 13. august 2026*
 
 Åbn `https://app.leagly.app` og `https://leagly.app` i en privat fane. **Først
 her må resten køres.**
 
-### Trin 4 — Supabase: Site URL og Redirect URLs
+`app.leagly.app` svarer (meldt af ejeren 13. august 2026). `leagly.app`s halvdel
+kan pr. konstruktion ikke være kørt, fordi trin 2 stadig er gated af `I8` — og
+det er i orden: de to halvdele gater hver sin resten. Appens halvdel er den, der
+frigiver trin 4, 5 og 6.
+
+### Trin 4 — Supabase: Site URL og Redirect URLs 👈 *næste*
 
 [`MAIL.md`](./MAIL.md) trin 3.2. Site URL → `https://app.leagly.app`.
 Allow-listen skal have samme adresse. Skabelonerne røres **ikke** — de bærer
 ingen adresse, og `docs/mail/templates.test.js` håndhæver det.
 
-### Trin 5 — Turnstile: tilføj værtsnavnet
+### Trin 5 — Turnstile: tilføj værtsnavnet ✅ *13. august 2026*
 
 Cloudflare → Turnstile → widgeten `Leagly` → **tilføj** `app.leagly.app` til
 værtsnavnene. Behold `prediction-champ.vercel.app`, indtil redirectet i trin 6
 har stået i noget tid. Opdatér registeret i [`OPRETTELSE.md`](./OPRETTELSE.md).
 
-### Trin 6 — redirigér de gamle adresser ✅ *skrevet 13. august 2026, ikke udrullet*
+### Trin 6 — redirigér de gamle adresser 🔶 *skrevet 13. august 2026, afventer merge*
 
 Står i `vercel.json` (app-projektet), én regel pr. gammelt værtsnavn:
 
