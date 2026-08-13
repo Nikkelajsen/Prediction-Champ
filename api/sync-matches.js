@@ -292,6 +292,8 @@ export default async function handler(req, res) {
     run = createRunLogger(sb, "sync-matches", { skip: dryRun });
     // A11: hvilken vej autorisationen kom ind, ned i driftsloggen — se setAuth().
     run.setAuth(auth.via);
+    // A46: hvilket værtsnavn jobbet kaldte ind på — se setHost().
+    run.setHost(req);
     // Et job uden leagueId er et forkert opsat cron-job, ikke en tilfældig fejl —
     // derfor tælles det som en fejlet kørsel, så det dukker op i fejlserien.
     if (!leagueId) return run.fail(res, 400, { error: "Mangler leagueId query-parameter" }, "Mangler leagueId query-parameter");

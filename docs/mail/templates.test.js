@@ -79,6 +79,32 @@ describe("mailskabelonerne i docs/mail/", () => {
     expect(emne[1].trim().length).toBeGreaterThan(0);
   });
 
+  // HOVEDET REJSER MED, HVIS NOGEN PASTER HELE FILEN. En HTML-kommentar vises
+  // ikke i en mailklient, men den står i kilden og kan læses af enhver modtager
+  // under "vis original" — og hovederne her nævner backlog-rækker, kodestier og
+  // hændelser. Runbogens trin 4 sagde længe kun "indsæt indholdet af filen" og
+  // skelnede ikke mellem kommentaren og brødteksten.
+  //
+  // `confirm-signup.html` fik advarslen 12. august 2026, `recovery.html` først
+  // 13. august 2026 (`A45`) — altså tre dage, hvor den ene af to skabeloner
+  // manglede den, uden at noget kunne se det. Det er dét, påstanden lukker: en
+  // NY skabelon arver nu advarslen eller fejler, i stedet for at arve
+  // asymmetrien.
+  it.each(skabeloner)("%s advarer mod at paste sit eget kommentarhoved ind", (f) => {
+    expect(læs(f)).toContain("INDSÆT IKKE DETTE KOMMENTARHOVED I SUPABASE");
+  });
+
+  // Advarslen er kun sand, så længe brødteksten faktisk begynder dér, den
+  // henviser til. Flyttes `<table role="presentation">` — eller pakkes den ind i
+  // noget andet — peger instruktionen et sted hen, der ikke findes, og så er
+  // hovedet tilbage i mailen uden at nogen har ændret advarslen.
+  it.each(skabeloner)("%s har sin brødtekst startende ved <table role=\"presentation\">", (f) => {
+    const html = læs(f);
+    const hoved = html.indexOf("-->");
+    expect(hoved, "skabelonen mangler sit kommentarhoved").toBeGreaterThan(-1);
+    expect(html.slice(hoved + 3).trimStart()).toMatch(/^<table role="presentation"/);
+  });
+
   // Kontaktadressen står to steder — her og i privatlivspolitikken — og de skal
   // være den samme. Skifter den ene, skal den anden med; ellers henviser en mail
   // til en adresse, ingen læser. Påstanden er også vagten mod, at skabelonen

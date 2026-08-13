@@ -15,6 +15,160 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 13. august 2026 — Backloggens tiers bærer rækker i tabeller, og reglen har fået en vagt
+
+**Beslutning (produktejeren):** hvert punkt i `BACKLOG.md`s prioriterede
+rækkefølge står som en **række i en tabel** under sit tier — også i Tier 1–5,
+som hidtil kun var prosa. Et tier har præcis to lovlige tilstande: ordet `Tomt.`
+eller en tabel. **Når indbakken tømmes, får hvert punkt en række**, ikke en
+omtale i en sætning.
+
+**Det er ikke en ny regel, og dét er hele pointen.** Den blev truffet
+8. august 2026 med ordene *"Tier 1–5 viser nu deres rækker i stedet for referater
+af, hvad der engang stod i dem"*. Fem dage senere bar **Tier 2 og Tier 5 begge et
+referat** (*"Tomt. `G99` er leveret 12. august 2026 — se Log"*), og Tier 5's to
+åbne punkter — `G101` og `G103` — stod inde i en sætning frem for som rækker.
+Ingen af overtrædelserne så forkerte ud; de så ud som hjælpsomme noter. Det er
+netop derfor, de overlevede hver eneste gennemlæsning.
+
+**Hvorfor formen betyder noget.** Et punkt i prosa kan hverken tælles, skimmes
+eller flyttes til et andet tier, uden at nogen omskriver et afsnit — og
+backloggens ene løfte er, at den kan skimmes på et halvt minut. Referatet er
+værre endnu: det er historik under en overskrift, der skal bære **tilstand**, og
+historikken har allerede ét sted (filens Log, plus `DECISIONS.md` og
+`CHANGELOG.md`, som er de to filer, der har lov at vokse).
+
+**Vagten er `docs/backlog.test.js`, og den måler to ting med én påstand.**
+Antallet i *"Alle N åbne punkter"* skal være lig antallet af tabelrækker i
+tiers. Det er ikke en pedantisk optælling, men **den måde en formatfejl bliver
+synlig på**: et punkt skrevet som prosa forsvinder fra tællingen og får tallet
+til at stemme forkert. Dertil to billigere påstande — et tier er `Tomt.` eller
+en tabel, og et tomt tier bærer ingen ID'er efter ordet `Tomt.` (præcis den
+form, der blev fanget). **Alle tre er set fejle på de mutationer, de findes
+for**, før de blev grønne.
+
+**Det, vagten IKKE måler**, er sagt højt i dens hoved: om prioriteringen er
+rigtig, om en række hører til i sit tier, og om teksten er god. Det kan kun et
+menneske. Samme snit som `saelgesaetning.test.js` (`G97`), der vogter, at fem
+filer siger det samme — ikke at sætningen er en god sætning.
+
+## 13. august 2026 — `A47` lukkes: de to kendte `.vercel.app`-adresser ER listen
+
+**Beslutning (produktejeren):** redirectet i `vercel.json` bliver stående med de
+to regler, det har. Listen af aliasser aflæses **ikke** i Vercel → Domains, og
+rækken lukkes uden den aflæsning.
+
+**Hvorfor spørgsmålet kunne afgøres frem for aflæses.** Tre ting peger samme vej:
+
+- **De to er Vercels standardsæt.** `prediction-champ.vercel.app` og
+  `prediction-champ-predictor-champ.vercel.app` er præcis de to aliasser, et
+  team-projekt får tildelt af sig selv — projektnavnet og projektnavnet plus
+  team-slug. En tredje ville skulle være tilføjet i hånden.
+- **Projektet er aldrig omdøbt.** Et navneskifte er den anden måde, et gammelt
+  alias opstår på, og `B21` droppede netop Vercel-omdøbningen 12. august 2026
+  (`I10`) — begrundelsen var, at den ville knække hvert link til den gamle
+  adresse. Beslutningen om ikke at omdøbe er dermed også grunden til, at listen
+  ikke kan være vokset bag om nogen.
+- **Rækkens egen risiko var sat for højt.** Den skrev, at et link til en overset
+  alias "ville knække". Det ville det ikke: en `.vercel.app`-adresse serverer
+  **samme deployment** — det er hele grunden til, at redirectet i trin 6 skulle
+  skrives i hånden, jf. `docs/mail/templates.test.js`' kommentar om, at Vercels
+  gamle URL ikke redirigerer af sig selv. Prisen ved en overset alias er derfor,
+  at brugeren bliver stående på en ikke-kanonisk origin — mærkbart for en
+  installeret PWA og for kanonikaliteten, men ikke et brud.
+
+**Prisen er kendt og accepteret.** Skulle der findes en tredje adresse, som nogen
+faktisk deler links fra, viser den sig ved, at en bruger bliver på den gamle
+origin — og rettelsen er da én regel mere i `vercel.json`, altså samme arbejde
+som i dag, bare senere. Det er billigere end at holde et tier åbent på en
+aflæsning, hvis mest sandsynlige svar er "de to, du allerede kender".
+
+**Det, der IKKE blev valgt, og hvorfor.** Et JS-bagstop i appen — redirigér fra
+ethvert `.vercel.app`-værtsnavn ved boot — ville dække også de ukendte. Det blev
+fravalgt, fordi det lægger et andet mekanisme-lag ved siden af edge-redirectet
+uden en vagt, der holder de to i takt, og fordi det skulle gates på et
+produktions-build for ikke at ramme previews (og dermed staging). To mekanismer
+for ét problem er dyrere end den tredje regel, der måske aldrig skal skrives.
+
+## 13. august 2026 — `A46`: cron-registerets `<app>` udfyldes fra jobbenes egne kørsler, ikke fra cron-job.org
+
+**Beslutning:** værtsnavnet, hvert cron-job kalder ind på, skrives i
+`job_runs.detail` og aflæses i Admin → Drift. `docs/CRON.md`s pladsholder
+`<app>` udfyldes derfra — **ikke** ved at åbne de ni jobs i cron-job.org.
+
+**Begrundelse — det er `A11`s fejlklasse en gang til.** Rækken var skrevet som en
+aflæsning uden for repoet, og det var den samme fejlslutning, `CRON.md` allerede
+har skrevet ned om kolonnen "Hemmelighed sendes som": *"kolonnen stod med `?` i
+en måned, fordi svaret lå i en brugerflade uden for repoet. Det gjorde det aldrig
+— det lå i jobbenes egne kørsler, som bare ikke gemte det."* `req.headers` har
+altid båret værtsnavnet; det blev kasseret, præcis som `isAuthorized()`s `via`
+blev det før 1. august.
+
+**Hvorfor spørgsmålet blev aktuelt nu.** Domæneflytningen (`I10`) gjorde `<app>`
+tvetydig: den kan være den gamle `.vercel.app`-adresse eller `app.leagly.app`.
+`/api/` er **med vilje** undtaget fra redirectet (`DOMAENE.md` trin 6), så et job
+på den gamle adresse svarer fortsat 200 — forskellen kan altså ikke ses udefra,
+og det er dét, der gør den værd at gemme frem for at gætte.
+
+**Det er ikke en vej uden om `A32`.** Beslutningen fra 10. august står ved magt:
+aflæsninger i produktion er ejerens arbejde. Det, der er ændret, er
+**bestillingen** — fra "åbn ni jobs i en tredjeparts brugerflade og skriv ni
+URL'er af" til "kig på Seneste resumé i Admin → Drift", altså ét skærmbillede i
+appen, ejeren i forvejen har. Det er nøjagtig den disciplin, `A32` udpegede som
+det, der arbejdes på i stedet.
+
+**Prisen er ventetid, ikke arbejde.** Svaret findes først, når hvert af de ni
+jobs har kørt én gang efter udrulningen; langsomste skema er hver 12. time.
+Rækken er derfor flyttet til Tier 6 med den kørsel som udløser.
+
+## 13. august 2026 — `A45` lukkes: diagnosen droppes, fordi kuren er billigere end svaret
+
+**Beslutning:** det efterprøves **ikke**, om `recovery.html`s kommentarhoved blev
+pastet ind i Supabase 9. august 2026. I stedet indsættes skabelonens brødtekst
+én gang mere, og spørgsmålet lukkes.
+
+**Begrundelse — svaret ville ikke ændre handlingen.** Rækken bad om en aflæsning
+("vis original" på en modtaget nulstillingsmail) og beskrev to udfald: er
+hovedet med, tilføjes en linje i `MAIL.md`s trin 4; er det ikke, lukkes rækken
+uændret. Men linjen i trin 4 er rigtig **uanset** udfaldet — trinnet skal sige
+det, `OPRETTELSE.md`s trin 6 allerede sagde — og den ene handling, der faktisk
+retter noget, er den samme begge veje: paste brødteksten igen. En diagnose, hvis
+to udfald fører til samme arbejde, er ikke en beslutning; den er et spørgsmål,
+nogen fandt interessant.
+
+**Det, der var en rigtig fejl, er rettet.** `confirm-signup.html` fik advarslen
+*"INDSÆT IKKE DETTE KOMMENTARHOVED I SUPABASE"* den 12. august 2026 sammen med
+`OPRETTELSE.md`s trin 6, mens `recovery.html` og `MAIL.md`s trin 4 ikke fik den
+— to skabeloner med samme risiko og kun den ene med en advarsel. Asymmetrien er
+væk, og `docs/mail/templates.test.js` kræver nu advarslen af **enhver** skabelon
+plus at brødteksten faktisk begynder ved `<table role="presentation">`, som
+advarslen henviser til. En ny skabelon arver dermed advarslen frem for hullet.
+
+**Det, der ikke kan repareres, er accepteret.** Er hovedet sendt med siden
+9. august, har de nulstillingsmails, der er sendt, båret interne noter i deres
+kilde. Der er ingen vej til at kalde en sendt mail tilbage, og modtagerne er
+appens egne brugere. Prisen er betalt; det, der kan gøres, er at stoppe den
+fremadrettet, og det gør en frisk indsættelse.
+
+> ✅ **Efterskrift samme dag: kuren er kørt, og den er efterprøvet.** Ejeren
+> indsatte brødteksten på ny i Supabase og sendte derefter en nulstillingsmail
+> til sig selv. I "vis original" begynder `text/html`-delen direkte på
+> `<table role="presentation">` — ingen `<!--`, altså ingen interne noter i
+> kilden.
+>
+> **Beslutningen står ved magt, og rækkefølgen er grunden.** Mailen blev sendt
+> EFTER indsættelsen, så den måler den nuværende skabelon og ikke den, der stod
+> der 9.–13. august 2026. Det bagudrettede spørgsmål er derfor stadig ubesvaret
+> — nøjagtig som beslutningen lagde op til, og det er ikke en mangel: havde
+> aflæsningen ligget først, ville den have kostet et ekstra led uden at ændre
+> handlingen. **Det er værd at holde fast i, fordi det er let at læse forkert
+> bagefter:** en grøn aflæsning efter en rettelse beviser rettelsen, ikke
+> fraværet af fejlen før den.
+>
+> **Samme aflæsning bestod et bevis, den ikke var sendt ud efter:**
+> `redirect_to=https://app.leagly.app/` i linkets query er `I10`s bevis 4
+> ([`DOMAENE.md`](./DOMAENE.md)), som indtil da stod som udestående i trin 8.
+
 ## 13. august 2026 — `B30`: sælgesætningen siger nu "fodboldkampe", og turneringsnavnene holdes UDEN for den
 
 **Beslutning:** sælgesætningen er omformuleret fra *"Gæt resultater mod dine

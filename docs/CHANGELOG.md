@@ -9,6 +9,101 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+13. august 2026 — Backloggens tiers bærer rækker igen, og formen har fået en vagt
+
+**Reglen fandtes allerede og var drevet væk.** `BACKLOG.md`s tiers skal vise
+deres punkter som **rækker i en tabel** — besluttet 8. august 2026 med ordene
+*"Tier 1–5 viser nu deres rækker i stedet for referater af, hvad der engang stod
+i dem"*. Fem dage senere bar **Tier 2 og Tier 5 begge et referat**, og Tier 5's
+to åbne punkter (`G101`, `G103`) stod flettet ind i en sætning i stedet for som
+rækker. Tier 1 havde netop fået samme behandling af dagens egen leverance.
+
+**Rettet:** Tier 1–4 siger nu kun `Tomt.`, Tier 5 har en tabel med sine to
+rækker, og reglen står i filens indledning frem for kun i beslutningsloggen —
+med tredje kolonne navngivet efter, hvad tieret drejer sig om (`Udløser` i
+Tier 6, `Bemærkning` i Tier 7, `Note` i resten).
+
+**Ny vagt: `docs/backlog.test.js` (23 påstande).** Den måler to ting med én
+påstand — antallet i *"Alle N åbne punkter"* skal være lig antallet af
+tabelrækker i tiers — og det er ikke en optælling for optællingens skyld:
+**et punkt skrevet som prosa forsvinder fra tællingen**, så formatfejlen viser
+sig som et tal, der ikke stemmer. Dertil to billigere påstande: et tier er
+`Tomt.` eller en tabel, og et tomt tier bærer ingen ID'er efter ordet `Tomt.`
+**Alle tre er set fejle på de tre mutationer, de findes for** (referatet under
+et tomt tier, et åbent punkt flettet ind i prosa, et forældet tal), før de blev
+grønne. Vagten måler bevidst ikke, om prioriteringen er rigtig — samme snit som
+`saelgesaetning.test.js` (`G97`).
+
+---
+
+13. august 2026 — Tier 1 er tømt: `A45`, `A46` og `A47` lukket uden en eneste ny produktionsaflæsning
+
+**Backloggens Tier 1 er tomt, og ingen af de tre rækker blev besvaret på den
+måde, de selv foreskrev.** Tieret rummer det, hvis svar ligger uden for repoet —
+Supabase, en modtaget mail, cron-job.org, Vercel — og `A32` (10. august 2026)
+har afgjort, at de aflæsninger er ejerens arbejde. Det, der var tilbage at gøre
+billigere, var **bestillingen**, og kørslen her viste tre måder at gøre det på:
+flyt spørgsmålet ind i appen, drop diagnosen når kuren er billigere, eller afgør
+det, der lignede en aflæsning.
+
+**`A46` — værtsnavnet er nu en kolonne i driftsloggen.** `docs/CRON.md` skrev
+hvert af de ni cron-jobs som `https://<app>/api/…`, og pladsholderen kunne kun
+slås op i cron-job.org-kontoen. Efter domæneflytningen (`I10`) blev den
+tvetydig: `<app>` kan være den gamle `.vercel.app`-adresse eller
+`app.leagly.app`, og fordi `/api/` **med vilje** er undtaget fra redirectet
+(`DOMAENE.md` trin 6), svarer begge 200 — forskellen kan ikke ses udefra.
+`createRunLogger()` har fået `setHost(req)` ved siden af `setAuth()`, så hver
+kørsel skriver `host` i `job_runs.detail`; Admin → Drift viser feltet uden
+UI-ændring, fordi jobkortets "Seneste resumé" i forvejen dumper detaljen som
+JSON. Ny `requestHost()` læser `x-forwarded-host` før `host` og tager den første
+værdi i en proxykæde — det er den, kalderen selv skrev. Wiret i alle tre
+handlere (`sync-live`, `sync-matches`, `send-notifications`), tolv nye tests.
+**Det er `A11`s fremgangsmåde brugt igen**, og `CRON.md` havde allerede skrevet
+læren ned: svaret lå aldrig i en brugerflade uden for repoet, det lå i jobbenes
+egne kørsler, som bare ikke gemte det. Rækken er flyttet til Tier 6 — ikke fordi
+den venter på nogen, men fordi de ni jobs skal have kørt én gang efter
+udrulningen, og det langsomste skema er hver 12. time.
+
+**`A45` — en asymmetri rettet, et spørgsmål droppet.** `confirm-signup.html` bar
+siden 12. august advarslen *"INDSÆT IKKE DETTE KOMMENTARHOVED I SUPABASE"*,
+mens `recovery.html` ikke gjorde, og `MAIL.md`s trin 4 sagde stadig kun "indsæt
+indholdet af filen" — to skabeloner med samme risiko, én advarsel. Begge har den
+nu, trin 4 siger det, og `templates.test.js` kræver den af **enhver** skabelon
+plus at brødteksten faktisk begynder ved `<table role="presentation">`, som
+advarslen henviser til. **Selve rækkens spørgsmål — kom hovedet med i Supabase
+9. august? — er droppet med vilje:** begge udfald fører til samme handling
+(indsæt brødteksten igen), så diagnosen koster mere end kuren.
+✅ **Kuren er kørt samme dag og efterprøvet:** ejeren indsatte brødteksten på ny
+i Supabase, og i "vis original" på en modtaget nulstillingsmail begynder
+`text/html`-delen direkte på `<table role="presentation">` — ingen `<!--`.
+**Rækkefølgen afgør, hvad det beviser:** mailen blev sendt EFTER indsættelsen,
+så den måler den nuværende skabelon, mens 9.–13. august forbliver ubesvaret.
+Det er ikke en mangel, men beslutningens egen konsekvens — og værd at holde fast
+i, fordi en grøn aflæsning efter en rettelse er let at læse som om fejlen aldrig
+fandtes.
+
+**Samme mail bestod `I10`s bevis 4, som ingen var gået efter.**
+`redirect_to=https://app.leagly.app/` står i linkets query, og det felt bygger
+Supabase af Site URL — så trin 4 er nu **bevist** og ikke kun meldt af den, der
+udførte det. Registeret i [`DOMAENE.md`](./DOMAENE.md) er rettet, og af trin 8
+mangler kun det gamle `?liga=`-link hele vejen, et login på den nye adresse og
+`og:url`. Afsenderen bekræftede samtidig `B25`s kæde (`AmazonSES` i headeren,
+altså Resend).
+
+**`A47` — afgjort frem for aflæst.** Listen af gamle `.vercel.app`-aliasser er
+ikke slået op i Vercel → Domains; de to, redirectet dækker, er accepteret som
+hele listen. De er præcis Vercels standardsæt for et team-projekt, projektet er
+aldrig omdøbt (`B21` droppede netop Vercel-omdøbningen), og **rækkens egen
+risiko var sat for højt**: et link til en overset alias ville ikke "knække" —
+adressen serverer samme deployment, den redirigerer bare ikke. Prisen er en
+ikke-kanonisk origin, ikke et brud. Begrundelserne for alle tre står i
+[`DECISIONS.md`](./DECISIONS.md).
+
+**Ingen SQL, ingen migrering, ingen skemaændring.** `job_runs.detail` er
+`jsonb`, så det nye felt kræver intet i databasen. 1.298 tests grønne.
+
+---
+
 13. august 2026 — `B30` + `I8`: hjemmesiden er opdateret, og sælgesætningen siger nu "fodboldkampe"
 
 **Hjemmesidens andet udkast er merget, og `B30` var betingelsen.** Udkastet lå

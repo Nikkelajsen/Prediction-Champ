@@ -37,6 +37,13 @@ de minutter, der allerede er taget.
 Bemærk at job 6–10 ikke sender `&smSeason=`: `api_season_id` er sat direkte i
 `sql/tournament_footballdata.sql`, så navne-opslaget aldrig bliver nødvendigt.
 
+**`<app>` i kaldkolonnen er en pladsholder, der nu kan slås op.** Efter
+domæneflytningen (`I10`) kan den være enten den gamle `.vercel.app`-adresse
+eller `app.leagly.app`, og `/api/` er med vilje undtaget fra redirectet, så
+begge svarer 200. Fra 13. august 2026 skriver hver kørsel sit værtsnavn i
+`job_runs.detail` — se [`<app>` i tabellen](#app-i-tabellen-samme-fremgangsmåde-brugt-igen-a46)
+nedenfor for opslaget og for, hvordan kolonnen udfyldes.
+
 **Kampprogram-jobbene hedder ikke længere det samme i driftsloggen.** Hver
 kørsel af `sync-matches` skriver `sync-matches:<liga-uuid>` i `job_runs` (G44,
 august 2026) frem for det fælles `sync-matches`. Indtil da delte alle syv jobs
@@ -153,6 +160,50 @@ allerede havde i hånden.
 
 Vejen står også i **Admin → Drift** under "Seneste resumé" på hvert jobkort, hvis
 man kun vil have et hurtigt kig.
+
+### `<app>` i tabellen: samme fremgangsmåde, brugt igen (`A46`)
+
+**Kaldkolonnen ovenfor skriver `https://<app>/api/…`, og pladsholderen har
+aldrig haft en værdi i repoet.** Den blev aktuel med domæneflytningen (`I10`,
+12.–13. august 2026): `<app>` kan i dag være enten den gamle
+`.vercel.app`-adresse eller `app.leagly.app`, og de to kan ikke skelnes udefra,
+fordi **`/api/` med vilje er undtaget fra redirectet**
+([`DOMAENE.md`](./DOMAENE.md) trin 6). Et job på den gamle adresse svarer altså
+fortsat 200 — bare uden den nye adresses egen CSP, og uden at registeret siger
+det.
+
+Spørgsmålet lignede endnu en aflæsning i cron-job.org: åbn ni jobs, skriv ni
+URL'er af. **Men det er præcis `A11`s fejlklasse igen** — svaret lå i kaldet, det
+blev bare kasseret. `req.headers` har altid båret værtsnavnet. Fra
+13. august 2026 skriver `createRunLogger().setHost()` det i `job_runs.detail`
+ved siden af `authVia`, og registeret udfyldes dermed **fra jobbenes egne
+kørsler** i stedet for fra kontoen:
+
+```sql
+-- Hvilket værtsnavn kalder hvert job faktisk ind på?
+select job,
+       coalesce(detail->>'host', '(ukendt)') as vaertsnavn,
+       count(*) as koersler,
+       max(started_at) as senest
+  from job_runs
+ where started_at > now() - interval '14 days'
+ group by 1, 2
+ order by 1, 2;
+```
+
+> **`(ukendt)` betyder her "kørsel fra før 13. august 2026"** og ikke en tredje
+> adresse — nøjagtig som `authVia`s `(ukendt)` gjorde det 5. august. Feltet er
+> null, når rækken er skrevet af kode uden `setHost()`. Læs derfor `senest`:
+> ligger den efter udrulningen, er der noget galt; ligger den før, er rækken
+> historik. Samme vindue på 14 dage og samme begrundelse som ovenfor.
+
+**Uden SQL:** hvert jobkort i **Admin → Drift** viser sin egen "Seneste resumé",
+og `host` står nu i den. De ni værdier er dermed ét skærmbillede væk.
+
+**Udfyld tabellens kaldkolonne, når svaret er læst** — erstat `<app>` med den
+faktiske adresse, job for job. Er et job stadig på den gamle adresse, er det
+ikke en fejl, der skal hastes: undtagelsen `(?!api/)` beskytter det, og
+[`DOMAENE.md`](./DOMAENE.md) siger, at flytningen tages ét job ad gangen.
 
 ### Kørselstallene pegede på et skema, der allerede var rettet
 

@@ -12,6 +12,7 @@ import {
   secretsMatch,
   isAuthorized,
   recordRun,
+  requestHost,
   createRunLogger,
   syncMatchesJob,
   fetchWithTimeout,
@@ -575,6 +576,102 @@ describe("createRunLogger.setAuth", () => {
     const sb = vi.fn(async () => null);
     const res = mkRes();
     await createRunLogger(sb, "sync-live").ok(res, { written: 1 });
+    expect(JSON.parse(sb.mock.calls[0][1].body).detail).toEqual({ written: 1 });
+  });
+});
+
+// A46: hvilket værtsnavn kaldte jobbet ind på? `docs/CRON.md` skrev `<app>` som
+// pladsholder, fordi svaret lå i cron-job.org-kontoen — og efter domæneflytningen
+// kan det være enten den gamle `.vercel.app`-adresse eller `app.leagly.app`,
+// uden at forskellen kan ses noget sted (`/api/` er undtaget fra redirectet).
+// Samme fejlklasse som A11: svaret stod i kaldet, det blev bare kasseret.
+describe("requestHost", () => {
+  it("læser x-forwarded-host før host", () => {
+    expect(requestHost({ headers: { "x-forwarded-host": "app.leagly.app", host: "internt" } })).toBe(
+      "app.leagly.app"
+    );
+  });
+
+  it("falder tilbage på host", () => {
+    expect(requestHost({ headers: { host: "prediction-champ.vercel.app" } })).toBe(
+      "prediction-champ.vercel.app"
+    );
+  });
+
+  // En proxykæde kan lægge flere værdier i feltet. Den første er den, kalderen
+  // selv skrev — resten er tilføjet undervejs og svarer på et andet spørgsmål.
+  it("tager den FØRSTE værdi, når feltet er en kæde", () => {
+    expect(requestHost({ headers: { "x-forwarded-host": "app.leagly.app, proxy.intern" } })).toBe(
+      "app.leagly.app"
+    );
+  });
+
+  // Må aldrig kaste: den kaldes fra logningen, som per kontrakt ikke må kunne
+  // vælte det job, den overvåger.
+  it("svarer null frem for at kaste, når der intet værtsnavn er", () => {
+    expect(requestHost({ headers: {} })).toBeNull();
+    expect(requestHost({})).toBeNull();
+    expect(requestHost(undefined)).toBeNull();
+    expect(requestHost({ headers: { host: "" } })).toBeNull();
+  });
+});
+
+describe("createRunLogger.setHost", () => {
+  const mkRes = () => {
+    const res = { statusCode: null, body: null,
+      status(c) { res.statusCode = c; return res; },
+      json(b) { res.body = b; return res; } };
+    return res;
+  };
+
+  it("lægger værtsnavnet i detaljen ved siden af autorisationsvejen", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    const run = createRunLogger(sb, "sync-live");
+    run.setAuth("header");
+    run.setHost({ headers: { host: "prediction-champ.vercel.app" } });
+    await run.ok(res, { written: 2 });
+
+    expect(JSON.parse(sb.mock.calls[0][1].body).detail).toEqual({
+      written: 2,
+      authVia: "header",
+      host: "prediction-champ.vercel.app",
+    });
+  });
+
+  // Samme skel som A11: detaljen er til driftsloggen, svaret er til kalderen.
+  // Cron-jobbet ved i forvejen, hvilken adresse det selv skrev.
+  it("ændrer ikke det, kalderen får at se", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    const run = createRunLogger(sb, "sync-live");
+    run.setHost({ headers: { host: "app.leagly.app" } });
+    await run.ok(res, { written: 2 });
+    expect(res.body).toEqual({ written: 2 });
+  });
+
+  // Et job, der kalder den gamle adresse OG fejler, skal kunne ses på samme
+  // række — ellers skal to opslag holdes op mod hinanden for at se sammenhængen.
+  it("gælder også fejlede kørsler", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    const run = createRunLogger(sb, "sync-matches");
+    run.setHost({ headers: { host: "prediction-champ-predictor-champ.vercel.app" } });
+    await run.fail(res, 500, { error: "kort" }, "lang");
+    const row = JSON.parse(sb.mock.calls[0][1].body);
+    expect(row.detail).toEqual({
+      error: "kort",
+      host: "prediction-champ-predictor-champ.vercel.app",
+    });
+    expect(row.ok).toBe(false);
+  });
+
+  it("skriver intet felt, når værtsnavnet er ukendt", async () => {
+    const sb = vi.fn(async () => null);
+    const res = mkRes();
+    const run = createRunLogger(sb, "sync-live");
+    run.setHost({ headers: {} });
+    await run.ok(res, { written: 1 });
     expect(JSON.parse(sb.mock.calls[0][1].body).detail).toEqual({ written: 1 });
   });
 });
