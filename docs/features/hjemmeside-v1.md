@@ -80,6 +80,29 @@ mappen flyttes.
 - **Ingen SEO ud over `lang`/`title`/`meta description`** — det er `I9`, gated
   på beslutningerne herunder.
 
+## Opdateringsudkast til gennemgang (13. august 2026 — IKKE merget)
+
+Et andet udkast af `site/` er til gennemgang: fodbold-eksplicit forside- og
+meta-tekst, en ny "Syv turneringer fra start"-sektion på forsiden, ægte
+Story Engine v3-formuleringer i story-kortene (⚔️/🔥/🧠) i stedet for
+opdigtede citater, og en stribe SEO-metadata i `<head>` — `canonical`,
+`theme-color`, favicon, apple-touch-icon, `og:image` (1200×630) +
+`twitter:card`, samt to nye filer, `site/robots.txt` og `site/sitemap.xml`.
+Det leverer dermed reelt backloggens `I17` og dele af `I9`.
+
+**Udkastet kan ikke merges uændret:** dets nye `site/index.html`-description
+begynder ikke længere med sælgesætningen fra `index.html`, så
+`saelgesaetning.test.js` (`G97`) går rødt. Se [`BACKLOG.md`](../BACKLOG.md)
+`B30` (rettelsen, der skal ske før merge) og `B31` (oprydningen i denne fils
+"Udestår"-liste og i `I17`/`I9`, når det er merget). Gennemgangen fandt
+desuden en håndfuld mindre uafklarede punkter, som nu står i backloggen:
+Beta-mærkatets exit-kriterium (`A48`), "La Liga" vs. `leagues.name` =
+"Primera División" (`A49`), om `robots.txt`/`sitemap.xml` rent faktisk
+serveres fra roden efter publicering (`A50`), CL's "Fra ligafasen"-forbehold
+(`B32`), `.html`-endelser hvis sitet får clean URLs (`B33`), mobilnavigationen
+under 880px (`I22`) og risikoen for, at story-eksemplerne og
+`sql/story_engine_v3.sql` driver fra hinanden uden en vagt (`G103`).
+
 ## Udestår før publicering
 
 1. **Ejer-godkendelse af copy og udtryk** — dette er et førsteudkast.
@@ -95,7 +118,7 @@ mappen flyttes.
    **CSP-spørgsmålet faldt væk med samme beslutning** — to origins deler ikke
    headere. Tilbage står udførelsen, trin for trin i
    [`../DOMAENE.md`](../DOMAENE.md), som køres sammen med `B21`.
-4. **SEO** (`I9`) — OG-tags, sitemap, indeksering.
+4. **SEO** (`I9`) — OG-tags, sitemap, indeksering. **Dele af det ligger klar i det ventende opdateringsudkast** (se ovenfor) — canonical, favicon, apple-touch-icon, theme-color, `robots.txt`, `sitemap.xml`, `og:image` — men er ikke i repoet, før `B30`/`B31` er kørt.
 
 ## Verifikation af udkastet
 
