@@ -1,7 +1,7 @@
 # Hjemmeside v1 — første udkast (`I8`)
 
 **Status: første udkast 3. august 2026, andet udkast merget 13. august 2026,
-udrulningsklar 13. august 2026 — IKKE publiceret.** Siderne ligger i
+udrulningsklar og copy GODKENDT 13. august 2026 — IKKE publiceret.** Siderne ligger i
 `site/` i repoets rod, uden for Vite-buildet og uden for ethvert deploy: `vite
 build` bruger kun rodens `index.html` + `public/`, så `site/` når aldrig `dist/`
 og dermed aldrig Vercel. Udkastet ses ved at åbne `site/index.html` direkte i en
@@ -164,14 +164,14 @@ containeren blev skubbet 4px ud på fire af de fem sider. Nu `width: min(300px,
 
 ## Udestår før publicering
 
-1. **Ejer-godkendelse af copy og udtryk** — nu af andet udkast (13. august
-   2026), som ændrede forsidens tekst, ugerytmen og story-eksemplerne.
-   **Dette er det ene af to punkter, der stadig er åbne**, og det eneste, der
-   ikke kan gøres af en maskine: det kræver, at ejeren læser de fem sider.
+1. ~~**Ejer-godkendelse af copy og udtryk**~~ — **givet 13. august 2026** af
+   ejeren, på et klikbart preview af alle fem sider (andet udkast plus dagens
+   burger og Beta-mærkat). Ingen rettelser bestilt.
 5. **Trin 2 i [`../DOMAENE.md`](../DOMAENE.md)** — nyt Vercel-projekt, root
    directory `site`, intet build command, `leagly.app` + `www.leagly.app`.
    **Repoets halvdel af trinnet er gjort** (`site/vercel.json`); tilbage er
-   dashboardet og DNS. Det er det andet af de to åbne punkter.
+   dashboardet og DNS. **Det er nu `I8`s eneste åbne punkt**, og det ligger
+   uden for repoet.
 2. ~~**Kontakt-mail**~~ — **lukket 9. august 2026 med `B25`.** `om.html` bruger
    nu `kontakt@leagly.app`, som er en rigtig Microsoft 365-postkasse; den samme
    adresse står i `src/lib/legal.js`, og `docs/mail/templates.test.js` holder de

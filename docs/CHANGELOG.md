@@ -12,10 +12,11 @@ dokumentation skal kunne læses uden at læse historikken med.
 13. august 2026 — Hjemmesiden er udrulningsklar: burger uden JS, Beta-mærkat og en CSP
 
 **`I8`s resterende arbejde i repoet er gjort, og fire backlog-rækker er lukket
-med det** — `A48`, `A49`, `B33` og `I22`. Sitet er stadig **ikke publiceret**:
-det, der er tilbage, er ejer-godkendelse af copy og trin 2 i
-[`DOMAENE.md`](./DOMAENE.md) (et nyt Vercel-projekt med root directory `site`),
-og ingen af de to kan skrives i en fil.
+med det** — `A48`, `A49`, `B33` og `I22`. Sitet er stadig **ikke publiceret**, men
+**copy er godkendt af ejeren samme dag** på et klikbart preview af alle fem
+sider — uden rettelser. Tilbage er ét punkt, og det kan ikke skrives i en fil:
+trin 2 i [`DOMAENE.md`](./DOMAENE.md), et nyt Vercel-projekt med root directory
+`site`.
 
 **Navigationen foldes bag en burger under 700px (`I22`) — uden en linje
 JavaScript.** En skjult checkbox og en `<label>` gør arbejdet

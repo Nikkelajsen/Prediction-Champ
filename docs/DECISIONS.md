@@ -77,8 +77,12 @@ wrapper, æder 159px af en 390px-skærm**; med burgeren er den 69px.
    af en række — udkastets egen verifikation målte 1280px og 390px, og fejlen
    lå imellem 320px og 340px.
 
-**Hvad der IKKE blev besluttet:** om copy'en er god nok til at publicere. Det er
-`I8`s punkt 1 og kan kun afgøres af ejeren, foran siderne.
+**Copy'en er godkendt senere samme dag.** Afsnittet sluttede oprindeligt med, at
+det ene, der ikke blev besluttet, var om copy'en var god nok at publicere — `I8`s
+punkt 1, som kun ejeren kunne afgøre, foran siderne. Det skete: ejeren gennemgik
+alle fem sider i et klikbart preview og godkendte uden rettelser. **`I8` har
+dermed ét åbent punkt tilbage, og det ligger uden for repoet:** trin 2 i
+[`DOMAENE.md`](./DOMAENE.md) — Vercel-projektet og DNS.
 
 ## 13. august 2026 — Backloggens tiers bærer rækker i tabeller, og reglen har fået en vagt
 
