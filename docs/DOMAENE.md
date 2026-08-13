@@ -22,10 +22,12 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 > rækkefølgefejl nedenfor er dermed passeret på den rigtige side, og repoets
 > halvdel (trin 6 + 7) kunne udrulles.
 >
-> **Tilbage: trin 8 (beviserne) og `B21`s GitHub-omdøbning.** Beviserne er ikke
-> en formalitet her — de fire trin ovenfor er alle meldt udført, og ingen af dem
-> er efterprøvet af andet end den, der udførte dem. **Trin 2 og dermed
-> `leagly.app` er stadig gated af `I8`.**
+> **Trin 6 og 7 er udrullet samme dag, og bevis 1 + 3b er bestået** — redirectet
+> svarer 308 mod `app.leagly.app`, og `/api/` gør ikke. **Tilbage: resten af
+> trin 8 og `B21`s GitHub-omdøbning.** De beviser er ikke en formalitet: de fire
+> dashboard-trin er meldt udført, og ingen af dem er efterprøvet af andet end
+> den, der udførte dem. **Trin 2 og dermed `leagly.app` er stadig gated af
+> `I8`.**
 
 ---
 
@@ -37,8 +39,8 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 | Registrar | ? | ? |
 | Hjemmesiden (`site/`) | `leagly.app` + `www.leagly.app` → apex | ? — ikke oprettet |
 | Appen | `app.leagly.app` | **13. august 2026 — oprettet og svarer, meldt af ejeren** (trin 1 + 3). Ikke aflæst herfra: udgående HTTPS er spærret i arbejdsmiljøet, så adressen er aldrig blevet spurgt af en maskine. Beviserne nedenfor er stadig det, der afgør det |
-| Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | ? — svarer i dag. Redirect **skrevet** 13. august 2026, **ikke udrullet endnu**. **Listen er aldrig aflæst i Vercel → Domains** og er dermed runbogens svageste påstand: dækker den ikke alle projektets aliasser, dør links delt fra det oversete |
-| Cron-jobbenes værtsnavn | Den gamle adresse (`docs/CRON.md` skriver `<app>`) | ? — **ikke aflæst på cron-job.org.** `/api/` er med vilje undtaget fra redirectet, så jobbene overlever flytningen uden at blive rørt |
+| Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | **13. august 2026 — redirect udrullet og BEVIST** for den første: 308 med `Location: https://app.leagly.app/` (bevis 1). Den anden er ikke spurgt. **Listen er stadig aldrig aflæst i Vercel → Domains** og er dermed runbogens svageste påstand: dækker de to regler ikke alle projektets aliasser, dør links delt fra det oversete |
+| Cron-jobbenes værtsnavn | Den gamle adresse (`docs/CRON.md` skriver `<app>`) | ? — **stadig ikke aflæst på cron-job.org.** Men undtagelsen, der beskytter dem, er bevist 13. august 2026: `/api/sync-live` på den gamle adresse svarer 401 og ikke 308 (bevis 3b), så jobbene rammer stadig funktionen, uanset hvilken af de to adresser de er sat op med |
 | Vercel-projektnavn | **Uændret** (bevidst — se `DECISIONS.md`) | 12. august 2026 |
 | GitHub-repo | `Nikkelajsen/Prediction-Champ` | ? — omdøbes med `B21` |
 | Supabase Site URL | `https://app.leagly.app` — se [`MAIL.md`](./MAIL.md) trin 3.2 | **13. august 2026 — flyttet og testet af ejeren** (trin 4) |
@@ -114,7 +116,7 @@ Cloudflare → Turnstile → widgeten `Leagly` → **tilføj** `app.leagly.app` 
 værtsnavnene. Behold `prediction-champ.vercel.app`, indtil redirectet i trin 6
 har stået i noget tid. Opdatér registeret i [`OPRETTELSE.md`](./OPRETTELSE.md).
 
-### Trin 6 — redirigér de gamle adresser 🔶 *skrevet 13. august 2026, afventer merge*
+### Trin 6 — redirigér de gamle adresser ✅ *udrullet og bevist 13. august 2026*
 
 Står i `vercel.json` (app-projektet), én regel pr. gammelt værtsnavn:
 
@@ -158,7 +160,7 @@ de to, registeret ovenfor kender.
 > køres umiddelbart efter udrulningen**, ikke ved lejlighed. Til gengæld fejler
 > den ikke tavst: enten svarer den gamle adresse 308, eller også gør den ikke.
 
-### Trin 7 — `B21`s tekstdel 🔶 *repoets del skrevet 13. august 2026, ikke udrullet*
+### Trin 7 — `B21`s tekstdel 🔶 *repoets del udrullet 13. august 2026*
 
 23 CTA'er i `site/` (4+5+6+4+4) + README'ens live-link peger nu på
 `https://app.leagly.app`. **Tilbage i trinnet:** omdøb GitHub-repoet til
@@ -168,8 +170,6 @@ hedder det gamle.
 
 De 23 CTA'er kunne rettes uden risiko før flytningen, fordi `site/` ligger uden
 for Vite-buildet og aldrig når et deploy (trin 2 er stadig gated af `I8`).
-README'ens link er den eneste af de 24, der er offentligt synlig i mellemtiden —
-og den er død, indtil trin 1 er kørt.
 
 ### Trin 8 — kør de eksisterende beviser igen
 
@@ -183,19 +183,45 @@ beviser er skrevet som instruktion netop til denne situation. Kør dem.
 **Den anden er den eneste, der ikke kan snydes** — den måler et rigtigt delt
 link og ikke en konfiguration, der ser rigtig ud.
 
-1. **Redirectet svarer 308.** `curl -I https://prediction-champ.vercel.app/`
+> 🪟 **Kører du dem fra PowerShell, så skriv `curl.exe` med endelsen.** I Windows
+> PowerShell 5.1 er `curl` et **alias for `Invoke-WebRequest`**, og `-I` fejler
+> som et ukendt parameternavn. I PowerShell 7 er aliaset fjernet, så `curl`
+> rammer den rigtige `curl.exe` (følger med Windows 10 1803+) — men `.exe`
+> virker i begge, og det er dét, der gør linjen uafhængig af, hvilken shell den
+> bliver klistret ind i.
+>
+> ⚠️ **Rettelsen, der ligger lige for, snyder beviset.** Skriver man i stedet
+> `Invoke-WebRequest -Method Head`, **følger den redirectet af sig selv** og
+> svarer `200` fra `app.leagly.app`. Bevis 1 ser dermed grønt ud uden at have
+> målt den 308, det handler om — og bevis 3b ville vise det modsatte af sit
+> formål. `curl.exe` følger som standard ikke redirects, og det er præcis
+> derfor, den er værktøjet her.
+>
+> **Sæt anførselstegn om enhver URL med `?` eller `&`.** `&` er en reserveret
+> operator i PowerShell og giver en parsefejl uden dem — det rammer især
+> bevis 2, hvor `?liga=` er hele pointen.
+
+1. ✅ **Redirectet svarer 308.** `curl -I https://prediction-champ.vercel.app/`
    → `location: https://app.leagly.app/`.
+   **Bestået 13. august 2026, 14:57 UTC:** `HTTP/1.1 308 Permanent Redirect`,
+   `Location: https://app.leagly.app/`, `Server: Vercel`.
 2. **Et gammelt invitationslink virker stadig.** Åbn
    `https://prediction-champ.vercel.app/?liga=<kode>` og se, at du lander på
    `app.leagly.app/?liga=<kode>` **med koden i behold** — og at previewet
    stadig tegnes.
 3. **Login virker på den nye adresse.** Beviser, at Turnstile-værtsnavnet blev
    tilføjet, og ikke bare at widgeten tegnes.
-3b. **`/api/` redirigerer IKKE.** `curl -I https://prediction-champ.vercel.app/api/sync-live`
+3b. ✅ **`/api/` redirigerer IKKE.** `curl -I https://prediction-champ.vercel.app/api/sync-live`
    → **ikke** 308 (401/405 er det rigtige svar uden hemmeligheden). Beviser
    `(?!api/)` i trin 6, altså at de ni cron-jobs stadig rammer noget. Kør den i
    samme åndedrag som bevis 1: de to fejler hver sin vej, og den ene kan se
    rigtig ud, mens den anden er gået galt.
+   **Bestået 13. august 2026, 14:57 UTC — og med et led mere, end beviset bad
+   om:** svaret var `HTTP/1.1 401 Unauthorized` og bar
+   `Content-Security-Policy: font-src 'self'`, altså appens EGEN header fra
+   `vercel.json`. Kaldet nåede dermed helt frem til funktionen; havde det været
+   afvist af routingen undervejs, ville headeren mangle. Et 401 alene beviser
+   kun "ikke redirigeret" — headeren beviser "ramte det rigtige".
 4. **En nulstillingsmail peger på `app.leagly.app`.** Beviser Site URL.
 5. **`og:url` i kildekoden på `app.leagly.app` siger `app.leagly.app`.**
    Adressen stemples ind ved build fra `VERCEL_PROJECT_PRODUCTION_URL`
