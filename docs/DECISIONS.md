@@ -15,6 +15,75 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 13. august 2026 — Hjemmesiden gøres udrulningsklar: fire spørgsmål lukket på én gang
+
+**Beslutning (produktejeren):** `I8`s resterende arbejde **i repoet** er udført,
+og fire åbne rækker om hjemmesiden er afgjort samlet — `A48`, `A49`, `B33` og
+`I22`. Ingen af dem ventede på en udløser uden for repoet; de ventede på et
+valg. Tilbage af `I8` står to ting, som ikke kan skrives i en fil:
+ejer-godkendelse af copy og trin 2 i [`DOMAENE.md`](./DOMAENE.md).
+
+**`A48` — sitet bærer et "Beta"-mærkat, i headeren.** Rækken spurgte, hvornår
+mærkatet måtte *fjernes* — men det fandtes ikke i `site/`, så spørgsmålet
+forudsatte en tilføjelse, der aldrig var sket. Mærkatet står nu ved siden af
+ordmærket på alle fem sider. **Exit-kriteriet er en del af beslutningen og ikke
+en ny række:** det fjernes, når sitet har stået publiceret i en måned uden en
+fundet fejl i copy eller flow. Prisen ved at have det er, at en besøgende får
+sin forventning sat lavere, end produktet fortjener; prisen ved at undvære det
+er, at en fejl på et nyt site læses som sjusk frem for som beta.
+
+**`A49` — sitet beholder "La Liga", appen beholder "Primera División".** Rækken
+skrev, at *"uanset hvad skal de to sige det samme"*. **Det er den forudsætning,
+der falder** — ikke navnet. Sitet er marketing og skal møde folk på det ord, de
+kender og søger på; appen viser turneringens officielle navn, som det står hos
+leverandøren, og et navn i `leagues.name` er data, ikke tekst. En migrering for
+at få dem til at rime ville røre rigtige rækker for at rette en forskel, ingen
+bruger oplever som en fejl.
+
+**`B33` — clean URLs slås IKKE til.** Rækken var betinget (*"hvis
+site-Vercel-projektet får clean URLs slået til"*), og en betinget række uden
+nogen, der har tænkt sig at trykke på betingelsen, står i Tier 6 for evigt.
+Betingelsen er derfor afgjort til nej og skrevet ind som `"cleanUrls": false` i
+`site/vercel.json`, så indstillingen er en linje i repoet frem for en klikbar
+switch i et dashboard. **Begrundelsen er udkastets egen arbejdsform:** sitet har
+intet build-step, og det læses korrektur på ved at åbne `site/index.html` i en
+browser (`file://`). Clean URLs ville gøre hvert internt link til enten en
+redirect eller et link, der kun virker i produktion — og canonical, `sitemap.xml`
+og 20+ interne links skulle skiftes for at vinde en kosmetisk URL.
+
+**`I22` — burgeren koster ingen JavaScript.** Rækken oplyste selv sin pris:
+*"en burger-menu (koster den ene JS-afhængighed, `I8` har bevidst fravalgt)"*.
+**Den pris var forkert.** En skjult checkbox plus en `<label>` gør præcis det
+samme i ren CSS (`.nav-check:checked ~ .site-nav`), og fravalget "ingen JS
+overhovedet" er dermed intakt. Det, rækken beskrev som en afvejning mellem to
+onder, var et valg uden pris. Navigationen foldes bag burgeren under 700px —
+ikke 880px, som rækken gættede på: målt i Chromium står de fem punkter på én
+linje helt ned til 701px, og først derunder wrapper de. **En sticky header, der
+wrapper, æder 159px af en 390px-skærm**; med burgeren er den 69px.
+
+**Dertil to ting, ingen række bad om, men som udrulningen kræver:**
+
+1. **`site/vercel.json`** med `Content-Security-Policy`, `X-Content-Type-Options`
+   og `Referrer-Policy`, plus cache-headere til `fonts/` og `img/`. CSP'en er
+   `script-src 'none'` — den **håndhæver** sitets egen regel om ingen JS, i
+   stedet for at lade den være en sætning i en spec. `style-src` må have
+   `'unsafe-inline'`, fordi siderne bærer 29 `style=`-attributter; med
+   `script-src 'none'` er den tilladelse nær-harmløs. **Appens `vercel.json`
+   røres ikke** — to origins deler ikke headere, hvilket er hele grunden til, at
+   `I10`s beslutning ikke rørte CSP'en.
+2. **Den vandrette scroll under 340px er væk.** `.phone` havde `width: 300px`,
+   og en fast bredde gør grid-sporets min-content 300px, så containeren blev
+   skubbet 4px ud. `width: min(300px, 100%)`. Fundet ved verifikationen, ikke
+   af en række — udkastets egen verifikation målte 1280px og 390px, og fejlen
+   lå imellem 320px og 340px.
+
+**Copy'en er godkendt senere samme dag.** Afsnittet sluttede oprindeligt med, at
+det ene, der ikke blev besluttet, var om copy'en var god nok at publicere — `I8`s
+punkt 1, som kun ejeren kunne afgøre, foran siderne. Det skete: ejeren gennemgik
+alle fem sider i et klikbart preview og godkendte uden rettelser. **`I8` har
+dermed ét åbent punkt tilbage, og det ligger uden for repoet:** trin 2 i
+[`DOMAENE.md`](./DOMAENE.md) — Vercel-projektet og DNS.
+
 ## 13. august 2026 — Backloggens tiers bærer rækker i tabeller, og reglen har fået en vagt
 
 **Beslutning (produktejeren):** hvert punkt i `BACKLOG.md`s prioriterede

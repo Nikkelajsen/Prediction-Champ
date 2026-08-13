@@ -1,7 +1,7 @@
 # Hjemmeside v1 — første udkast (`I8`)
 
-**Status: første udkast 3. august 2026, andet udkast merget 13. august 2026 —
-IKKE publiceret.** Siderne ligger i
+**Status: første udkast 3. august 2026, andet udkast merget 13. august 2026,
+udrulningsklar og copy GODKENDT 13. august 2026 — IKKE publiceret.** Siderne ligger i
 `site/` i repoets rod, uden for Vite-buildet og uden for ethvert deploy: `vite
 build` bruger kun rodens `index.html` + `public/`, så `site/` når aldrig `dist/`
 og dermed aldrig Vercel. Udkastet ses ved at åbne `site/index.html` direkte i en
@@ -65,8 +65,10 @@ mappen flyttes.
 
 ## Bevidste fravalg (v1)
 
-- **Ingen JS overhovedet** — heller ingen hamburger-menu; nav-links wrapper på
-  mobil.
+- **Ingen JS overhovedet.** *(Rettet 13. august 2026 med `I22`: der ER en
+  burger-menu nu under 700px, og den koster stadig ingen JS — en skjult
+  checkbox og en `<label>` gør arbejdet i ren CSS. Halvsætningen "heller ingen
+  hamburger-menu; nav-links wrapper på mobil" gælder dermed ikke længere.)*
 - **Header/footer er duplikeret i alle 5 sider** — intet build-step. En ændring
   skal laves 5 steder; accepteret for et udkast, genbesøges hvis sitet får et
   build (fx sammen med `I9`).
@@ -122,10 +124,54 @@ CTA'er peger fortsat på `app.leagly.app`.
 fra roden?), `B32`, `B33` (`.html`-endelser ved clean URLs), `I22`
 (mobilnavigationen under 880px) og `G103`.
 
+## Udrulningsklar — 13. august 2026
+
+> **Rettet efter levering.** Dette afsnit ændrer to ting i afsnittene ovenfor:
+> fravalget af en hamburger-menu (se "Bevidste fravalg") og sætningen om, at
+> `site/` kun indeholder HTML og CSS.
+
+Fire backlog-rækker om sitet er lukket samlet, og de to ting, udrulningen
+kræver af repoet, er skrevet. Begrundelserne i sin fulde længde står i
+[`DECISIONS.md`](../DECISIONS.md).
+
+| Hvad | Hvor |
+|---|---|
+| **`site/vercel.json`** — CSP, `X-Content-Type-Options`, `Referrer-Policy`, cache-headere til `fonts/`+`img/`, og `"cleanUrls": false` | ny fil, læses af sitets eget Vercel-projekt (root directory `site`) |
+| **Beta-mærkat i headeren** (`A48`) | `.beta-tag` ved siden af ordmærket i alle fem sider |
+| **Burger-menu under 700px** (`I22`) | `.nav-check` + `.nav-toggle` i alle fem headere, `@media (max-width: 700px)` i `site.css` |
+| **`.html` bliver stående** (`B33`) | `"cleanUrls": false` — canonical, `sitemap.xml` og de interne links røres ikke |
+| **"La Liga" bliver stående** (`A49`) | ingen ændring i `site/` — appen beholder "Primera División" |
+
+**Burgeren er JS-fri, og det er ikke en detalje.** `I22` skrev, at en
+burger-menu ville koste fravalget af JavaScript. Det gør den ikke: en skjult
+checkbox, en `<label>` og `.nav-check:checked ~ .site-nav` gør præcis det samme.
+Checkboxen skal stå **før** `.site-nav` i DOM'en — `~`-selektoren afhænger af
+det, og en ombytning knækker menuen tavst. Breakpointet er 700px og ikke 880px:
+de fem punkter står på én linje helt ned til 701px, og først derunder wrapper de.
+En sticky header, der wrapper, fyldte 159px af en 390px-skærm; nu 69px.
+
+**CSP'en håndhæver "ingen JS".** `script-src 'none'` gør princippet til en
+header i stedet for en sætning i denne fil. `style-src` må have `'unsafe-inline'`,
+fordi siderne bærer 29 `style=`-attributter; med `script-src 'none'` er den
+tilladelse nær-harmløs. **Appens `vercel.json` er ikke rørt** — to origins deler
+ikke headere.
+
+**Én fejl fundet af verifikationen og ikke af en række:** `.phone` havde
+`width: 300px`, og en fast bredde gør grid-sporets min-content 300px, så
+containeren blev skubbet 4px ud på fire af de fem sider. Nu `width: min(300px,
+100%)`. **Fejlen lå mellem de to bredder, første udkasts verifikation målte**
+(1280px og 390px) — den viser sig først under 340px.
+
 ## Udestår før publicering
 
-1. **Ejer-godkendelse af copy og udtryk** — nu af andet udkast (13. august
-   2026), som ændrede forsidens tekst, ugerytmen og story-eksemplerne.
+1. ~~**Ejer-godkendelse af copy og udtryk**~~ — **givet 13. august 2026** af
+   ejeren, på et klikbart preview af alle fem sider (andet udkast plus dagens
+   burger og Beta-mærkat). Ingen rettelser bestilt.
+5. **Trin 2 i [`../DOMAENE.md`](../DOMAENE.md)** — nyt Vercel-projekt, root
+   directory `site`, intet build command, `leagly.app` + `www.leagly.app`.
+   **Repoets halvdel af trinnet er gjort** (`site/vercel.json`); tilbage er
+   dashboardet og DNS. **Det er nu `I8`s eneste åbne punkt**, og det ligger
+   uden for repoet.
 2. ~~**Kontakt-mail**~~ — **lukket 9. august 2026 med `B25`.** `om.html` bruger
    nu `kontakt@leagly.app`, som er en rigtig Microsoft 365-postkasse; den samme
    adresse står i `src/lib/legal.js`, og `docs/mail/templates.test.js` holder de
@@ -149,4 +195,21 @@ fra roden?), `B32`, `B33` (`.html`-endelser ved clean URLs), `I22`
 Kørt 3. august 2026 med Chromium (Playwright) mod `file://`: alle 5 sider i
 1280 px og 390 px — fonte loader fra `site/fonts/`, nul eksterne requests,
 ingen vandret scroll, ingen konsolfejl. `npm run lint` og `npm test` uændrede
-(`site/` indeholder kun HTML/CSS og ligger uden for begge).
+(`site/` indeholder kun HTML, CSS og — siden 13. august 2026 — `vercel.json`,
+og mappen ligger uden for begge).
+
+**Kørt igen 13. august 2026** med Chromium (Playwright) mod en lokal server,
+fordi to af kontrollerne ikke kan laves over `file://`:
+
+- **Ti bredder** — 1280, 1000, 880, 820, 760, 701, 700, 560, 390, 320 og 280 px:
+  ingen vandret scroll nogen steder (den nye nedre grænse er 280 px), ingen
+  konsolfejl, nul requests uden for `localhost`. Burgeren åbner og lukker på
+  klik; checkboxen er tabbar, så den virker også på tastatur.
+- **CSP'en fra `site/vercel.json` sat som rigtig header** på alle fem sider:
+  ingen overtrædelser, fontene loader, `.beta-tag` og de inline
+  `style=`-attributter beholder deres farve. **Det er kontrollen, der afgør, om
+  CSP'en kan udrulles** — en for stram CSP viser sig først, når headeren er
+  der, og `file://` har ingen.
+
+`npm run lint` (7 advarsler, uændret) og `npm test` (1321 tests, 57 filer) er
+grønne.

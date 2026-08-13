@@ -10,8 +10,10 @@ appens adresse, brugerne deler** — invitationslinks bygges af
 `window.location.origin` (`GroupScreen.jsx:87`, `BoardScreen.jsx:126`), ikke af
 hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 
-> ⚠️ **Udløseren er `I8`.** Der er ingen grund til at pege et domæne på en
-> hjemmeside, ejeren ikke har godkendt. Appens halvdel (trin 1, 4, 5, 6) kan
+> ✅ **`I8` gater ikke længere trin 2** (13. august 2026): copy er godkendt af
+> ejeren, og resten af `site/` er udrulningsklart. Reglen bag udløseren står
+> stadig — der er ingen grund til at pege et domæne på en hjemmeside, ejeren
+> ikke har godkendt — men betingelsen er opfyldt. **Trin 2 kan køres.** Appens halvdel (trin 1, 4, 5, 6) kan
 > derimod køres for sig — og bør køres tidligt, fordi prisen stiger med
 > brugertallet: **en installeret PWA er bundet til sin origin**, så alle, der har
 > installeret fra `.vercel.app`, skal installere igen og logge ind på ny.
@@ -27,8 +29,8 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 > 13. august 2026** på en modtaget nulstillingsmail. **Tilbage: resten af
 > trin 8 og `B21`s GitHub-omdøbning.** De beviser er ikke en formalitet: de fire
 > dashboard-trin er meldt udført, og ingen af dem er efterprøvet af andet end
-> den, der udførte dem. **Trin 2 og dermed `leagly.app` er stadig gated af
-> `I8`.**
+> den, der udførte dem. **Trin 2 og dermed `leagly.app` er ikke længere gated:
+> `I8`s copy er godkendt 13. august 2026, og trinnet kan køres.**
 
 ---
 
@@ -38,7 +40,7 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 |---|---|---|
 | Domæne | `leagly.app` | 9. august 2026 — i brug til mail (`B25`) |
 | Registrar | ? | ? |
-| Hjemmesiden (`site/`) | `leagly.app` + `www.leagly.app` → apex | ? — ikke oprettet |
+| Hjemmesiden (`site/`) | `leagly.app` + `www.leagly.app` → apex | ? — ikke oprettet. **Repoets halvdel er klar 13. august 2026** (`site/vercel.json`, root directory `site`); tilbage er dashboardet, DNS og ejerens godkendelse af copy |
 | Appen | `app.leagly.app` | **13. august 2026 — oprettet og svarer, meldt af ejeren** (trin 1 + 3). Ikke aflæst herfra: udgående HTTPS er spærret i arbejdsmiljøet, så adressen er aldrig blevet spurgt af en maskine. Beviserne nedenfor er stadig det, der afgør det |
 | Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | **13. august 2026 — redirect udrullet og BEVIST** for den første: 308 med `Location: https://app.leagly.app/` (bevis 1). Den anden er ikke spurgt. **Listen er ikke aflæst i Vercel → Domains, og det bliver den ikke** (`A47`, afgjort 13. august 2026): de to ER Vercels standardsæt for et team-projekt, og projektet er aldrig omdøbt. Findes der mod forventning en tredje, dør intet — adressen serverer samme deployment og redirigerer bare ikke; rettelsen er da én regel mere her |
 | Cron-jobbenes værtsnavn | Den gamle adresse (`docs/CRON.md` skriver `<app>`) | ? — men **spørgsmålet er flyttet ind i appen 13. august 2026 (`A46`)**: hver kørsel skriver nu sit værtsnavn i `job_runs.detail`, så de ni værdier aflæses i Admin → Drift frem for i cron-job.org. Svaret findes, når hvert job har kørt én gang efter udrulningen — langsomste skema er hver 12. time. Undtagelsen, der beskytter jobbene imens, er bevist samme dag: `/api/sync-live` på den gamle adresse svarer 401 og ikke 308 (bevis 3b), så de rammer funktionen uanset hvilken adresse de er sat op med |
@@ -81,13 +83,38 @@ hængelås (SSL udstedes typisk inden for en halv time).
 **Projektnavnet røres ikke.** `.vercel.app`-adresserne bliver ved med at svare —
 det er tilsigtet og håndteres i trin 6.
 
-### Trin 2 — hjemmesiden får `leagly.app` *(gated af `I8`)*
+### Trin 2 — hjemmesiden får `leagly.app` *(klar til at køre)*
 
-Nyt Vercel-projekt med **root directory `site`** og intet build-step (mappen er
-ren HTML/CSS og ligger med vilje uden for Vite-buildet). Tilføj `leagly.app` og
-`www.leagly.app`, og lad den ene redirigere til den anden.
+Nyt Vercel-projekt med **root directory `site`** og **intet build command**
+(mappen er ren HTML/CSS og ligger med vilje uden for Vite-buildet — vælg
+framework preset "Other"). Tilføj `leagly.app` og `www.leagly.app`, og lad den
+ene redirigere til den anden.
 
 Apex-domæner kan ikke bruge CNAME; brug den A-record, Vercel oplyser i panelet.
+
+> ✅ **Repoets halvdel af trinnet er gjort 13. august 2026.** `site/vercel.json`
+> bærer projektets headere (CSP med `script-src 'none'`, `X-Content-Type-Options`,
+> `Referrer-Policy`, cache på `fonts/` og `img/`) og `"cleanUrls": false`, som
+> er `B33` afgjort til nej. **Filen ligger i `site/`, altså i projektets rod —
+> det er dét, root directory `site` betyder, og det er også hvorfor `A50`s
+> `/robots.txt` og `/sitemap.xml` rammer rigtigt.** Appens `vercel.json` i
+> repoets rod er urørt og læses kun af app-projektet; de to filer kan ikke se
+> hinanden.
+>
+> **`I8` gater ikke længere trinnet:** copy er godkendt 13. august 2026, og
+> `site/` er udrulningsklart
+> ([`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md)). Trinnet mangler
+> kun at blive udført.
+>
+> **Begge projekter bygger på hvert push til `main`.** Det er harmløst — et
+> statisk site uden build command deployer på sekunder — men generer støjen,
+> sættes en Ignored Build Step på site-projektet
+> (`git diff --quiet HEAD^ HEAD -- .`; exit 0 = spring over). Den står med vilje
+> ikke i `vercel.json`, fordi den ikke kan efterprøves herfra.
+
+**Efter trin 2, kør `A50`s aflæsning med det samme:** åbn
+`https://leagly.app/robots.txt` og `https://leagly.app/sitemap.xml`. De skal
+svare 200 med indholdet fra `site/` — ikke 404 og ikke hjemmesidens forside.
 
 > **Hvorfor et selvstændigt projekt frem for en sti i appens?** Appen er en SPA
 > på roden, så sitet skulle vindes tilbage med en rewrite — og en rewrite på en
@@ -101,7 +128,7 @@ Apex-domæner kan ikke bruge CNAME; brug den A-record, Vercel oplyser i panelet.
 her må resten køres.**
 
 `app.leagly.app` svarer (meldt af ejeren 13. august 2026). `leagly.app`s halvdel
-kan pr. konstruktion ikke være kørt, fordi trin 2 stadig er gated af `I8` — og
+kan pr. konstruktion ikke være kørt, fordi trin 2 ikke er udført endnu — og
 det er i orden: de to halvdele gater hver sin resten. Appens halvdel er den, der
 frigiver trin 4, 5 og 6.
 
@@ -180,7 +207,7 @@ ovenfor kender.
 hedder det gamle.
 
 De 23 CTA'er kunne rettes uden risiko før flytningen, fordi `site/` ligger uden
-for Vite-buildet og aldrig når et deploy (trin 2 er stadig gated af `I8`).
+for Vite-buildet og aldrig når et deploy (trin 2 er ikke udført endnu).
 
 ### Trin 8 — kør de eksisterende beviser igen
 
