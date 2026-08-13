@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A46` · `B30` · `G103` · `I22`.**
+**Næste ledige: `A48` · `B30` · `G103` · `I22`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -51,16 +51,14 @@ eller en linje i "Forkastede ideer".
 `A43`, `G95`–`G97`, `I20` og `I21`; de tre `G`-rækker og `A43` er leveret samme dag.
 Anden gang blev tre fund fra den leverance til `G99` og `G100` — begge leveret
 samme dag. Tredje gang blev to linjer til `A45` og `G101` — ingen leveret endnu.
-Se [Log](#log--seneste-kørsel).)*
-
-- CRON.md skriver `https://<app>/api/…` men siger ingen steder, hvad `<app>` faktisk er sat til på cron-job.org — ni jobs, hvis værtsnavn kun findes i et dashboard
-- listen over projektets gamle `.vercel.app`-aliasser er aldrig aflæst i Vercel → Domains; redirectet i vercel.json dækker de to, vi kender ved navn
+Ryddet en fjerde gang 13. august 2026: to linjer blev til `A46` og `A47` —
+ingen leveret endnu. Se [Log](#log--seneste-kørsel).)*
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 33 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -78,12 +76,15 @@ Rækkefølgen følger fire regler, i den rækkefølge de slår hinanden:
 ### Tier 1 — Produktionsadgang: svaret ligger uden for repoet
 
 Fællesnævneren er, at adgangen ikke findes i den maskine, arbejdet laves i —
-Supabase, en modtaget mail eller cron-job.org, ikke repoet. **Tieret har én
-betjening, og det er afgjort** (`A32`, 10. august 2026): aflæsninger i
+Supabase, en modtaget mail, cron-job.org eller Vercel, ikke repoet. **Tieret
+har én betjening, og det er afgjort** (`A32`, 10. august 2026): aflæsninger i
 produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
 gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
 køres på et minut. `A45` venter på netop den slags aflæsning: åbn "vis
-original" på en modtaget nulstillingsmail.
+original" på en modtaget nulstillingsmail. `A46` og `A47` er domænemigreringens
+(`I10`) rest af samme slags: hvad de ni cron-job.org-jobs faktisk peger på, og
+hvilke gamle `.vercel.app`-aliasser der findes, kan kun ses i de to
+dashboards.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
@@ -173,6 +174,8 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | A23 | **Skal appen have en router?** | Navigation er i dag to `useState` i `MainApp.jsx` (`tab` + `screen`), og deep links læses ved boot og strippes straks via `history.replaceState` (`App.jsx:104`, `MainApp.jsx:215,239`). Følgen er ingen tilbage-knap, ingen browser-historik og ingen delbare URL'er til interne skærme — mærkbart for en PWA, hvor telefonens tilbage-gestus forventes at virke. Men det er et arkitekturvalg, ikke en fejl: afhængighedsfattigheden er bevidst (fire runtime-deps, ingen router, `docs/reviews/2026-08-app-review.md` §7), og en router omskriver hele navigations-tilstandsmaskinen inkl. begge deep-link-join-flows, som ingen test dækker. | Når tilbage-knappen enten koster brugere (kan aflæses i analytics) eller en feature kræver ægte delbare interne URL'er — `I12`s offentlige ligaside er den første, der ville. |
 | A39 | **Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat?** | `match_day_complete()` er global: den kræver, at ALLE kampe på dagen har resultat, uanset turnering og uanset konkurrence. Én udsat eller uindberettet kamp i én turnering blokerer derfor dagskortet for hver eneste bruger, også dem, hvis konkurrencer slet ikke rører den turnering. **Prisen er bevidst og dokumenteret** — den globale kampdag er produktets ene tvær-turneringsbegreb, og et kort pr. konkurrence ville skulle vælge, hvilken dag der er *dagen* — men den blev betalt synligt under `A38`s undersøgelse, hvor det tog tid at afgøre, om stilheden var en fejl eller en ventende kamp. **To veje:** afgrænse fuldførtheden til de kampe, modtagerens egne konkurrencer dækker (kortet bliver personligt og kan skrives på forskellige tidspunkter for forskellige brugere), eller beholde den globale dag og gøre blokeringen aflæselig, så stilheden kan skelnes fra en fejl. Den første koster determinismen i acceptkriterie 7; den anden koster ingenting og løser heller ikke noget. | **Når `sql/checks/day_card_coverage.sql` melder en blokeret dag, nogen faktisk savnede.** Kontrollen findes siden `A38` og er dermed selve udløseren — indtil den melder noget, er problemet teoretisk. |
 | A45 | **Blev `recovery.html`s interne kommentarhoved pastet ind i Supabase 9. august 2026?** | `mail/recovery.html` bærer siden trin 4 blev skrevet et HTML-kommentarhoved (linje 1–26) med interne implementeringsnoter — advarsler om `{{ .ConfirmationURL }}`, `templates.test.js` og hvordan `B21` vil ramme filen. `docs/MAIL.md`s trin 4 siger kun "indsæt indholdet af [filen]" og skelner ikke mellem kommentaren og selve brødteksten. En HTML-kommentar renderes ikke synligt i en mailklient, men står i kildekoden — synlig for enhver modtager, der vælger "vis original". Er hovedet pastet med, har hver nulstillingsmail sendt siden 9. august 2026 båret interne noter om produktets arkitektur ud til modtageren. | **Ejerens aflæsning** (`A32`, Tier 1): åbn "vis original" på en modtaget nulstillingsmail. Er kommentaren med, tilføjes en linje i `MAIL.md`s trin 4 om, at hovedet skal skæres fra før indsættelse — og rækken lukkes med den rettelse. Er den ikke, lukkes rækken uden ændring. |
+| A46 | **Hvad er `<app>` i `CRON.md`s ni cron-job.org-URL'er faktisk sat til?** | `docs/CRON.md`s jobtabel skriver hvert kald som `https://<app>/api/…` — en pladsholder, hvis faktiske værdi kun står i selve cron-job.org-kontoen, ikke i repoet. Domænemigreringen (`I10`, 12.–13. august 2026) gør spørgsmålet aktuelt: `<app>` kan i dag være enten den gamle `.vercel.app`-adresse eller `app.leagly.app`. `vercel.json`s redirect dækker begge, men `/api/` er med vilje undtaget fra det (se `DOMAENE.md`), så et job, der stadig kalder den gamle adresse, ville fortsat svare 200 — bare uden den nye adresses egen CSP, og uden at registret siger det. | **Ejerens aflæsning** (`A32`, Tier 1): åbn hvert af de ni jobs i cron-job.org, og skriv den faktiske URL i `CRON.md`s tabel i stedet for pladsholderen. |
+| A47 | **Hvilke gamle `.vercel.app`-aliasser findes projektet under, og dækker redirectet dem alle?** | `vercel.json`s redirect (skrevet 13. august 2026 som `I10`s trin 6) omdirigerer permanent de to `.vercel.app`-adresser, der er kendt ved navn. Den fulde liste af aliasser, Vercel-projektet historisk har fået tildelt — fra tidligere deploys, omdøbninger eller preview-branches — er aldrig aflæst i Vercel → Domains. Findes der flere end de to kendte, dækker redirectet dem ikke, og et link til en af dem ville knække uden at nogen har set det. | **Ejerens aflæsning** (`A32`, Tier 1): åbn Vercel → Domains, notér samtlige `.vercel.app`-aliasser, og udvid redirectet i `vercel.json`, hvis listen er længere end de to kendte. |
 
 ## Ubygget
 
@@ -233,25 +236,28 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 12. august 2026 (ottende kørsel) — indbakken tømt (tredje gang samme dag)
+### 13. august 2026 (niende kørsel) — indbakken tømt
 
-**Listen er 29 → 31.** To linjer fik hver et ID og en række; ingen lukket.
+**Listen er 31 → 33.** To linjer fik hver et ID og en række; ingen lukket.
 
-**`A45`** — `mail/recovery.html`s interne kommentarhoved (linje 1–26) kan være
-pastet med ind i Supabases mailskabelon 9. august 2026, fordi `MAIL.md`s trin 4
-dengang kun sagde "indsæt indholdet af filen" uden at skelne kommentar fra
-brødtekst. En HTML-kommentar renderes ikke i en mailklient, men står i
-kilden — synlig for enhver modtager, der vælger "vis original". Går til
-Tier 1: svaret kræver en modtaget mail, ikke repoet, og er derfor ejerens
+**`A46`** — `CRON.md`s jobtabel skriver hvert kald som `https://<app>/api/…`,
+og `<app>` er en pladsholder, hvis faktiske værdi kun findes i cron-job.orgs
+egen brugerflade. Domænemigreringen (`I10`) gør spørgsmålet konkret: er de ni
+jobs flyttet til `app.leagly.app`, eller kalder de stadig den gamle
+`.vercel.app`-adresse (som `/api/` med vilje ikke er redirectet fra)? Går til
+Tier 1: svaret ligger i cron-job.org, ikke i repoet, og er derfor ejerens
 aflæsning (`A32`).
 
-**`G101`** — `loadGroupDetail()` i `src/lib/data/groups.js:52` henter én
-`competition_participants`-række pr. deltager på tværs af ALLE en ligas
-konkurrencer, kun for at tælle dem i klienten. `A43`s måling (12. august 2026,
-trin 5) viste prisen lav — 2,2 ms for otte konkurrencer — men opslaget er
-unødigt bredt uanset prisen, hvilket var netop den observation, målingen
-efterlod i indbakken. Går til Tier 5: ingen presserende værdi, ingen udløser.
+**`G101` er ikke berørt** — den blev tilføjet i forrige kørsel og er allerede
+i Tier 5.
 
-Syvende kørsels log (`A43` afgjort og bygget, `A40`s todelte udrulningsform
-gentaget) er arkiveret i `DECISIONS.md` og `CHANGELOG.md` efter denne fils
-regel om kun at bære den seneste.
+**`A47`** — den fulde liste af `.vercel.app`-aliasser, Vercel-projektet har
+fået tildelt gennem tidligere deploys og omdøbninger, er aldrig aflæst i
+Vercel → Domains; `vercel.json`s redirect dækker kun de to, der er kendt ved
+navn. Går til Tier 1 af samme grund som `A46`: adgangen er et dashboard, ikke
+repoet.
+
+Ottende kørsels log (`A45` og `G101` tilføjet, ingen afgjort) er ikke
+bevaret her — begge står stadig i deres tabeller (`A45` i Tier 1 og Åbne
+beslutninger, `G101` i Tier 5), så intet går tabt ved, at denne fil kun bærer
+den seneste kørsel.
