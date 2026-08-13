@@ -460,3 +460,53 @@ p { margin: 0 0 16px; }
   .site-nav { margin-left: 0; gap: 16px; }
   .cta-band { padding: 64px 0; }
 }
+
+/* ---------- Turneringer ---------- */
+.tournaments-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 28px;
+}
+.tournament {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-weight: 600;
+}
+.badge-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--red);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+.badge-soon {
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+
+/* Nav-knappen: .site-nav a's farve og padding må ikke overtrumfe .btn-primary */
+.site-nav a.btn-primary,
+.site-nav a.btn-primary:hover {
+  color: var(--cta-text);
+  padding: 9px 16px;
+  border-bottom: none;
+}

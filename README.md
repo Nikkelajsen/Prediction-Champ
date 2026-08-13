@@ -1,7 +1,7 @@
 # Leagly
 
-Gæt resultater mod dine venner. Opret en liga, tip ugens kampe, og se hvem der
-er bedst.
+Gæt resultaterne af ugens fodboldkampe mod dine venner. Opret en liga, tip
+kampene, og se hvem der er bedst.
 
 En mobil-først PWA i React + Vite oven på Supabase, med serverless-funktioner på
 Vercel til kampsynkronisering og push-notifikationer. Ingen SDK'er — kun `fetch`.

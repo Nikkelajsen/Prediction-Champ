@@ -1,6 +1,7 @@
 # Hjemmeside v1 — første udkast (`I8`)
 
-**Status: udkast leveret 3. august 2026 — IKKE publiceret.** Siderne ligger i
+**Status: første udkast 3. august 2026, andet udkast merget 13. august 2026 —
+IKKE publiceret.** Siderne ligger i
 `site/` i repoets rod, uden for Vite-buildet og uden for ethvert deploy: `vite
 build` bruger kun rodens `index.html` + `public/`, så `site/` når aldrig `dist/`
 og dermed aldrig Vercel. Udkastet ses ved at åbne `site/index.html` direkte i en
@@ -80,32 +81,51 @@ mappen flyttes.
 - **Ingen SEO ud over `lang`/`title`/`meta description`** — det er `I9`, gated
   på beslutningerne herunder.
 
-## Opdateringsudkast til gennemgang (13. august 2026 — IKKE merget)
+## Andet udkast — merget 13. august 2026
 
-Et andet udkast af `site/` er til gennemgang: fodbold-eksplicit forside- og
-meta-tekst, en ny "Syv turneringer fra start"-sektion på forsiden, ægte
-Story Engine v3-formuleringer i story-kortene (⚔️/🔥/🧠) i stedet for
-opdigtede citater, og en stribe SEO-metadata i `<head>` — `canonical`,
-`theme-color`, favicon, apple-touch-icon, `og:image` (1200×630) +
-`twitter:card`, samt to nye filer, `site/robots.txt` og `site/sitemap.xml`.
-Det leverer dermed reelt backloggens `I17` og dele af `I9`.
+> **Rettet efter levering.** Afsnittene ovenfor beskriver **første** udkast
+> (3. august 2026). Fem ting nedenfor afviger fra dem, og de er markeret frem
+> for skrevet ind, så det fremgår, at noget blev ændret undervejs.
 
-**Udkastet kan ikke merges uændret:** dets nye `site/index.html`-description
-begynder ikke længere med sælgesætningen fra `index.html`, så
-`saelgesaetning.test.js` (`G97`) går rødt. Se [`BACKLOG.md`](../BACKLOG.md)
-`B30` (rettelsen, der skal ske før merge) og `B31` (oprydningen i denne fils
-"Udestår"-liste og i `I17`/`I9`, når det er merget). Gennemgangen fandt
-desuden en håndfuld mindre uafklarede punkter, som nu står i backloggen:
-Beta-mærkatets exit-kriterium (`A48`), "La Liga" vs. `leagues.name` =
-"Primera División" (`A49`), om `robots.txt`/`sitemap.xml` rent faktisk
-serveres fra roden efter publicering (`A50`), CL's "Fra ligafasen"-forbehold
-(`B32`), `.html`-endelser hvis sitet får clean URLs (`B33`), mobilnavigationen
-under 880px (`I22`) og risikoen for, at story-eksemplerne og
-`sql/story_engine_v3.sql` driver fra hinanden uden en vagt (`G103`).
+**Hvad der kom med:**
+
+1. **Fodbold-eksplicit forside- og meta-tekst.** Sælgesætningen er omformuleret
+   (`B30`) til *"Gæt resultaterne af ugens fodboldkampe mod dine venner. Opret
+   en liga, tip kampene, og se hvem der er bedst."* og synkroniseret i alle fem
+   filer, `saelgesaetning.test.js` vogter. **Turneringsnavnene står bevidst
+   UDEN for sætningen** — begrundelsen i [`DECISIONS.md`](../DECISIONS.md).
+2. **Ny sektion: "Syv turneringer fra start"** med live-mærkat på Superligaen
+   og den skotske Premiership og et "Fra ligafasen"-forbehold på Champions
+   League (`B32` fjerner det, når ligafasen er lodtrukket).
+3. **Ugerytmen er skrevet om** fra syv dagskort (tirsdag–mandag) til tre kort:
+   runden åbner, der spilles, runden gøres op. **Det retter en unøjagtighed i
+   første udkast** — kampene kan ligge alle ugens dage, så et kort pr. ugedag
+   lovede en rytme, produktet ikke har. Sidekortet ovenfor siger stadig
+   "ugerytmen (tirsdag–mandag)"; det er den gamle form.
+4. **Story-eksemplerne er nu motorens ægte formuleringer** (⚔️/🔥/🧠) i stedet
+   for opdigtede citater. Det er sandere — og det er en **ny kobling** til
+   `sql/story_engine_v3.sql`, som ingen vagt holder øje med: se `G103`.
+5. **SEO-metadata, som lukker `I17`:** `canonical`, `theme-color`, favicon,
+   apple-touch-icon, `og:`/`twitter:`-tags på alle fem sider og et `og:image`
+   på 1200×630 — plus `site/robots.txt` og `site/sitemap.xml`. **Fravalget
+   "Ingen SEO ud over `lang`/`title`/`meta description`" ovenfor gælder dermed
+   ikke længere.** Resten af `I9` kræver en publiceret side.
+
+**De to principper holder stadig:** ingen JS, og nul eksterne requests (kun
+`leagly.app`-adresser, og de er metadata og links — ikke hentninger). De 23
+CTA'er peger fortsat på `app.leagly.app`.
+
+**Stadig ikke publiceret.** Det, der udestår, står i
+[`BACKLOG.md`](../BACKLOG.md): `A48` (Beta-mærkatet, som **ikke** findes i
+`site/` — spørgsmålet er først, om det skal), `A49` ("La Liga" vs.
+`leagues.name` = "Primera División"), `A50` (serveres `robots.txt`/`sitemap.xml`
+fra roden?), `B32`, `B33` (`.html`-endelser ved clean URLs), `I22`
+(mobilnavigationen under 880px) og `G103`.
 
 ## Udestår før publicering
 
-1. **Ejer-godkendelse af copy og udtryk** — dette er et førsteudkast.
+1. **Ejer-godkendelse af copy og udtryk** — nu af andet udkast (13. august
+   2026), som ændrede forsidens tekst, ugerytmen og story-eksemplerne.
 2. ~~**Kontakt-mail**~~ — **lukket 9. august 2026 med `B25`.** `om.html` bruger
    nu `kontakt@leagly.app`, som er en rigtig Microsoft 365-postkasse; den samme
    adresse står i `src/lib/legal.js`, og `docs/mail/templates.test.js` holder de
@@ -118,7 +138,11 @@ under 880px (`I22`) og risikoen for, at story-eksemplerne og
    **CSP-spørgsmålet faldt væk med samme beslutning** — to origins deler ikke
    headere. Tilbage står udførelsen, trin for trin i
    [`../DOMAENE.md`](../DOMAENE.md), som køres sammen med `B21`.
-4. **SEO** (`I9`) — OG-tags, sitemap, indeksering. **Dele af det ligger klar i det ventende opdateringsudkast** (se ovenfor) — canonical, favicon, apple-touch-icon, theme-color, `robots.txt`, `sitemap.xml`, `og:image` — men er ikke i repoet, før `B30`/`B31` er kørt.
+4. ~~**SEO** (`I9`) — OG-tags, sitemap, indeksering~~ — **halvt lukket
+   13. august 2026 med andet udkast.** Metadataen er skrevet (se ovenfor), og
+   `I17` er dermed leveret. Tilbage er det, der kræver en publiceret side:
+   indeksering, Search Console og `A50`s aflæsning af, om `robots.txt` og
+   `sitemap.xml` faktisk serveres fra roden.
 
 ## Verifikation af udkastet
 

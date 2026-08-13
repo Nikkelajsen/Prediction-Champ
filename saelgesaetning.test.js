@@ -8,9 +8,14 @@ import { fileURLToPath } from "node:url";
 // ---------------------------------------------------------------------------
 // HVORFOR DUBLETTEN IKKE KAN FJERNES
 //
-// Den ene sætning — "Gæt resultater mod dine venner. Opret en liga, tip ugens
-// kampe, og se hvem der er bedst." — står i FEM filer, og ingen af dem kan
-// hente den fra de andre:
+// Den ene sætning — sælgesætningen, hvis anker er `index.html`s
+// `<meta name="description">` — står i FEM filer, og ingen af dem kan hente
+// den fra de andre:
+//
+// (Ordlyden stod skrevet her indtil 13. august 2026. Den blev fjernet samme
+// dag, den blev omformuleret: en kommentar, der citerer teksten, er lige så
+// meget en sjette kopi som en kodelinje, der gør det — den bliver bare forkert
+// uden at nogen test kan opdage det. Se afsnittet nedenfor.)
 //
 //   · `index.html` er statisk HTML. `<meta name="description">` og
 //     `og:description` læses af crawlere, FØR noget JavaScript kører, så de kan

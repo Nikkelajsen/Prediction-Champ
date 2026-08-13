@@ -10,7 +10,18 @@
 // røres intet netværk.
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
 import { AuthScreen, ResetPasswordScreen, daAuthError } from "./Auth.jsx";
+
+// Sælgesætningen læses fra ankeret i `index.html` frem for at stå skrevet her.
+// Grunden er `saelgesaetning.test.js`' egen: den vagt tæller fem filer, der
+// bærer ordlyden, og skriver med vilje ingen sjette kopi. Gjorde denne fil det,
+// ville den BLIVE den sjette — og en omformulering ville skulle rettes her
+// også, i en fil, der intet har med marketing at gøre. Testen nedenfor handler
+// om, HVILKEN af de to tekster skærmen viser, ikke om hvad der står i dem.
+const SÆLGESÆTNING = readFileSync(new URL("../../index.html", import.meta.url), "utf8").match(
+  /<meta name="description" content="([^"]*)"/,
+)[1];
 
 const render = (over = {}) =>
   renderToStaticMarkup(<AuthScreen onAuthed={() => {}} booting={false} {...over} />);
@@ -129,14 +140,14 @@ describe("invitationen på login-skærmen (I7)", () => {
     expect(html).toContain("Du er inviteret til ligaen");
     expect(html).toContain("Vennerne");
     expect(html).toContain("6 spillere er allerede med");
-    expect(html).not.toContain("Gæt resultater mod dine venner");
+    expect(html).not.toContain(SÆLGESÆTNING);
   });
 
   // Uden preview — ukendt kode, langsomt net, en fejl — er skærmen præcis den,
   // den var før. Der findes ingen fejltilstand at vise, kun to gode skærme.
   it("falder tilbage til den generelle tekst uden preview", () => {
-    expect(render()).toContain("Gæt resultater mod dine venner");
-    expect(render({ invitation: null, harInvitation: true })).toContain("Gæt resultater mod dine venner");
+    expect(render()).toContain(SÆLGESÆTNING);
+    expect(render({ invitation: null, harInvitation: true })).toContain(SÆLGESÆTNING);
   });
 
   // Den, der trykker på et invitationslink, har som regel ingen konto. Valget
