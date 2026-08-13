@@ -16,19 +16,16 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 > brugertallet: **en installeret PWA er bundet til sin origin**, så alle, der har
 > installeret fra `.vercel.app`, skal installere igen og logge ind på ny.
 
-> ✅ **Spærringen er ophævet 13. august 2026.** Repoets halvdel — trin 6
-> (redirectet i `vercel.json`) og trin 7 (de 23 CTA'er + README) — måtte ikke
-> udrulles, før `app.leagly.app` svarede, fordi den ellers ville sende hver
-> eneste bruger til en adresse, der ikke fandtes. **Ejeren har kørt trin 1, 3
-> og 5**, så betingelsen er opfyldt og koden kan merges.
+> ✅ **Appens halvdel er kørt 13. august 2026: trin 1, 3, 4 og 5.**
+> `app.leagly.app` er oprettet og svarer, Supabases Site URL er flyttet og
+> testet, og Turnstiles værtsnavne er **udvidet** — ikke skiftet. Alle tre
+> rækkefølgefejl nedenfor er dermed passeret på den rigtige side, og repoets
+> halvdel (trin 6 + 7) kunne udrulles.
 >
-> **Trin 4 (Supabase Site URL) er nu det, der bør køres først.** Det var
-> tidligere den farlige rækkefølge (nr. 1 nedenfor); med domænet på plads er
-> det omvendt: står Site URL stadig på den gamle adresse efter udrulningen,
-> lander hvert nulstillingslink på det gamle værtsnavn og skal reddes af
-> redirectet. Det VIRKER — en 308 uden fragment i `Location` bevarer browserens
-> eget `#access_token=…` — men det er et ekstra led at være afhængig af på
-> netop den rejse, hvor brugeren i forvejen er låst ude.
+> **Tilbage: trin 8 (beviserne) og `B21`s GitHub-omdøbning.** Beviserne er ikke
+> en formalitet her — de fire trin ovenfor er alle meldt udført, og ingen af dem
+> er efterprøvet af andet end den, der udførte dem. **Trin 2 og dermed
+> `leagly.app` er stadig gated af `I8`.**
 
 ---
 
@@ -44,7 +41,7 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 | Cron-jobbenes værtsnavn | Den gamle adresse (`docs/CRON.md` skriver `<app>`) | ? — **ikke aflæst på cron-job.org.** `/api/` er med vilje undtaget fra redirectet, så jobbene overlever flytningen uden at blive rørt |
 | Vercel-projektnavn | **Uændret** (bevidst — se `DECISIONS.md`) | 12. august 2026 |
 | GitHub-repo | `Nikkelajsen/Prediction-Champ` | ? — omdøbes med `B21` |
-| Supabase Site URL | Se [`MAIL.md`](./MAIL.md) trin 3.2 | ? — **skal flyttes, og er nu det næste trin** (trin 4) |
+| Supabase Site URL | `https://app.leagly.app` — se [`MAIL.md`](./MAIL.md) trin 3.2 | **13. august 2026 — flyttet og testet af ejeren** (trin 4) |
 | Turnstile-værtsnavne | Se [`OPRETTELSE.md`](./OPRETTELSE.md)s register | **13. august 2026 — `app.leagly.app` tilføjet, meldt af ejeren** (trin 5). Det gamle værtsnavn står stadig, som trinnet foreskriver. Bevis 3 (et rigtigt login på den nye adresse) er det, der afgør det |
 
 **`?` betyder "aldrig kørt"**, ikke "kørt og bestået". **"Meldt af ejeren"
@@ -105,7 +102,7 @@ kan pr. konstruktion ikke være kørt, fordi trin 2 stadig er gated af `I8` — 
 det er i orden: de to halvdele gater hver sin resten. Appens halvdel er den, der
 frigiver trin 4, 5 og 6.
 
-### Trin 4 — Supabase: Site URL og Redirect URLs 👈 *næste*
+### Trin 4 — Supabase: Site URL og Redirect URLs ✅ *13. august 2026*
 
 [`MAIL.md`](./MAIL.md) trin 3.2. Site URL → `https://app.leagly.app`.
 Allow-listen skal have samme adresse. Skabelonerne røres **ikke** — de bærer
