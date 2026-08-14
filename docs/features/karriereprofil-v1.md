@@ -9,6 +9,8 @@
 > ⚠️ **Rettelse (omfang, 30. juli 2026 — anden runde):** skærmen sagde ikke, hvilke konkurrencer dens tal gælder. Rekorder, Titler og basistal er **globale** (Championship + global rating), Milepæle er **konkurrence-nære**. Se afsnit 10.
 >
 > ⚠️ **Rettelse (30. juli 2026 — tredje runde, delvis tilbagerulning af afsnit 10):** de **synlige** scope-linjer er fjernet igen efter brugerfeedback ("det skal ikke stå på forsiden"). Omfanget forklares nu i en `InfoDot` pr. sektion — og hver sektion med tal har fået sin egen. Se afsnit 13. Testcase 23 er erstattet af 45–48.
+>
+> ⚠️ **Rettelse efter levering (`G107`, 14. august 2026):** både H2H og Rivaler bærer nu **deltagerens nulpunkt** (`A53`). Et møde tæller kun, hvis kampen låste, EFTER begge meldte sig til den delte konkurrence — en runde, den ene ikke var med i, var ikke et møde, og opgøret kunne ellers svare noget andet end den stilling, begge kan se i appen. Afsnit 10's H2H-række og testcase 41 er opdateret; **de to blokke skal altid rettes sammen**, fordi testcase 41 netop er invarianten mellem dem. Reglen er ikke i modstrid med afsnit 8's dedup: nulpunktet måles **før** dedup'en, så en kamp tæller, hvis den kvalificerer i mindst én delt konkurrence. Vagt: `sql/tests/career_profile.sql` (funktionens første SQL-test).
 
 *Brugerens karriere som fortælling — milepæle, titler og rivaliseringer. Ikke en statistikside. Bygget på data, der allerede findes i databasen.*
 
@@ -153,7 +155,9 @@ Oppefra og ned på profilsiden:
 38. Profilens ejer deler **to** konkurrencer med samme modstander, og begge dækker de samme kampe → 4 møder, ikke 8 (samme dedup-regel som H2H, testcase 13).
 39. Modstander med kun **ét** møde → udelades helt (`v_rival_min_meetings` = 2). Ét møde gør ingen til en rival.
 40. To spillere har tippet **præcis de samme kampe**, men i en konkurrence profilens ejer ikke deltager i → de optræder **ikke** som rivaler. Samme afgrænsningslektion som Story Engine-bugfixen (juli 2026); sikret strukturelt, ved at beregningen starter i `competition_participants`.
-41. `rivals`-posten om person X og `h2h`-linjen på X's profil svarer **det samme** på samme spørgsmål (samme mødetal, spejlvendt stilling). Invariant — to steder i produktet må ikke svare forskelligt.
+41. `rivals`-posten om person X og `h2h`-linjen på X's profil svarer **det samme** på samme spørgsmål (samme mødetal, spejlvendt stilling). Invariant — to steder i produktet må ikke svare forskelligt. **[Udvidet (`G107`, 14. august 2026)]:** invarianten skal også holde EFTER nulpunktet, og det er den, der gør de to blokke uadskillelige — rettes kun den ene, svarer produktet to ting om samme forhold. Målt i `sql/tests/career_profile.sql` påstand 3.
+41b. En delt konkurrence, hvor den ene meldte sig til **efter** en kamps lås → den runde er **ikke** et møde, hverken i `h2h` eller i `rivals` (`G107`). Grænsen ligger ved **låsen** (en time før kickoff), måles mod den **seneste** af de to tilmeldinger, og er skarp: tilmeldt i låsesekundet er for sent.
+41c. Samme kamp gættet i en konkurrence, den anden **ikke** er med i → mødet tæller stadig, hvis begge havde adgang til kampen i en delt konkurrence. Nulpunktet afgrænser **adgangen**, ikke gættets oprindelse (`predictions` er én række pr. bruger pr. kamp).
 42. Fremmed profil → `rivals` er tom (uændret privathed, testcase 4/5).
 43. Rivalnavnet er en tryk-flade, der åbner personens karriere (`user_id` følger nu med posten).
 44. To modstandere ægte lige på både `abs(sejre − nederlag)` og antal møder → rækkefølgen er **deterministisk** (`rival_id` som sidste nøgle), så to kald ikke bytter om på dem.
@@ -177,7 +181,7 @@ Skærmen viser **to forskellige omfang**, og indtil nu sagde den ikke hvilket er
 | Rekorder | **Globalt** — global rating + Championships rundechampionship | `rating_history` (`scope='ALL'`), `round_standings` |
 | Basistal | **Globalt/karriere-bredt** — alle tippede kampe, uanset konkurrence (et tip er globalt pr. kamp) | `predictions` × `matches` |
 | Milepæle | **Konkurrence-nært** — konkrete øjeblikke, de fleste i en navngiven konkurrence (`stories.competition_id` er kun `null` for de globale regler: rating og måned) | `stories` |
-| H2H | **Kun delte konkurrencer** — og deduplikeret pr. runde | `competition_participants` + `predictions` |
+| H2H | **Kun delte konkurrencer, og kun fra begge tilmeldinger** — deduplikeret pr. runde. Nulpunktet (`G107`) betyder, at en runde, den ene endnu ikke var med i, ikke er et møde | `competition_participants` (`joined_at`) + `predictions` |
 
 **Hvorfor det ikke var nok at sætte en `InfoDot` på "Rekorder".** Den første rettelse gjorde netop det, men fejlede på to måder på én gang. Den var **skjult bag et klik**, hvor problemet er en forkert *førstelæsning* — en tvivl, brugeren ikke ved, de har, læser ikke en hjælpetekst. Og den var **upræcis**: teksten lød "på tværs af alle dine konkurrencer og ligaer", hvilket læses som en opgørelse *pr. brugerens egne konkurrencer*, mens `best_round_rank` faktisk er rangen mod **samtlige brugere** med point i den runde. Brugerens egen formulering ("jeg går ud fra at det er de globale konkurrencer og rating") ramte rigtigt — men at have ret ved gætværk er stadig en fejl i visningen.
 

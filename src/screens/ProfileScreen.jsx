@@ -203,6 +203,7 @@ function ProfileScreen({ token, viewerUserId, profileUserId, onBack, openProfile
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <div>Tallene dækker <b>kun</b> kampe fra konkurrencer, I begge er med i — ikke hele Championship, og ikke alt hvad I hver især har tippet.</div>
                 <div>Et <b>møde</b> er én runde. Deler I flere konkurrencer, der dækker de samme kampe, tæller runden stadig kun én gang.</div>
+                <div>Runder, hvor den ene af jer <b>endnu ikke var meldt til</b>, tæller ikke med — I mødtes jo ikke dér.</div>
                 <div>Kun du kan se denne linje.</div>
               </div>
             </InfoDot>

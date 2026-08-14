@@ -15,6 +15,143 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — `G106`: et view, ikke en fan-out — kur efter om antallet af kald er bundet
+
+**Beslutning:** Ligaer-fanens medlems- og konkurrencetal tælles i databasen af
+viewet `group_counts` ([`#62`](../sql/group_counts.sql)), ikke af `db.count()`
+pr. liga og ikke af et synligt loft.
+
+**Rækken var åbnet dagen før med de tre veje skrevet ned**, netop fordi `G101`s
+kur ikke kunne kopieres: dér tælles deltagere i ÉN ligas konkurrencer, så
+fan-out'en er bundet. Her er nævneren brugerens ligaer **gange to** — ti ligaer
+bliver tyve rundture, hvor der i dag er to.
+
+**Hvorfor ikke et synligt loft (`G35`s mønster).** Det var den billigste vej og
+den, der lignede husets egen mest. Men `G35` findes til en **liste**, brugeren
+kan handle på — *"skal du bruge en kamp længere ude i fremtiden, så opret
+konkurrencen som en hel sæson"*. En afkortet **optælling** har ingen handling,
+kun en undskyldning på et tal. Mønsteret passede altså ikke, selvom det stod
+lige ved siden af.
+
+**Viewet fjerner nævneren frem for at håndtere den.** Aggregeringen sker i
+databasen, svaret er én række pr. liga, og det loft, der er tilbage, er antallet
+af ligaer — nøjagtig det, `groups`-opslaget ved siden af allerede er bundet af,
+og dermed ikke et nyt. Prisen er en migrering, der **skal køres før
+frontend-mergen**: et opslag mod et view, der ikke findes, svarer 404, altså en
+tom Ligaer-fane. Det er en ægte afhængighed den ene vej, modsat `#57`/`#59`.
+
+**`security_invoker` er bærende og ikke pynt.** Et view kører som standard med
+sin ejers rettigheder og ville da svare uden om RLS — altså en offentlig
+optælling af enhver ligas størrelse. Med `security_invoker` arver tallene
+kalderens egne policies på alle tre tabeller, og følgen er, at migreringen
+**ikke ændrer ét tal på skærmen**: samme rækkemængde, bare talt ét sted. Testens
+negative kontrol måler netop dét — en fremmed må ikke få en forkert række, hun
+må slet ikke få en.
+
+🔴 **Beslutningen fandt en skriveflade, ingen havde bedt om.** Supabases
+`alter default privileges` giver `authenticated` ALLE privilegier på hver ny
+relation i `public`. For basens øvrige views er det inert, fordi ingen af dem er
+auto-opdaterbare — men `group_counts` **er** det, og uden et eksplicit
+`revoke … from authenticated` kunne man skrive i `groups` gennem et view, der
+findes for at tælle. Det er ikke en eskalering (`security_invoker` lader
+`groups_update_admin` gælde), men det er den klasse, `write_surface.sql` findes
+for. **Den generelle regel: en default, der har været harmløs i hvert tidligere
+tilfælde, er ikke harmløs — den er bare ikke blevet ramt endnu.** Aflæst på
+`information_schema.views.is_updatable` og nu en påstand i testen.
+
+**Reglen, der er værd at tage med** (nu i `DOCUMENTATION.md` §13): vælg kur efter,
+om antallet af kald er **bundet**. Er det, er `db.count()` billigst; vokser det
+med noget, brugeren selv kan forøge, skal aggregeringen ind i databasen.
+
+---
+
+## 14. august 2026 — `G107`: et møde er en runde, begge kunne være med i
+
+**Beslutning:** karriereprofilens indbyrdes opgør bærer deltagerens nulpunkt. En
+kamp tæller kun i `h2h` og i `rivals`, hvis den låste **efter begge** meldte sig
+til den delte konkurrence — `match_lock_at(…) > greatest(joined_at, joined_at)`,
+ordret samme udtryk som `A53`s [`#61`](../sql/competition_join_baseline.sql).
+Begge blokke i `sql/career_profile.sql` ændres, og de kan ikke ændres hver for
+sig.
+
+**Spørgsmålet var ikke en fejl, men en BETYDNING** — det er derfor rækken stod
+som "afklar først, hvad tallet skal betyde" og ikke som en rettelse. Opgøret er
+med vilje et andet spørgsmål end konkurrencens stilling: *"hvem af os to har
+tippet bedst på det, vi begge har haft adgang til"*, dedupliceret pr. runde på
+tværs af delte konkurrencer. Man kunne derfor have svaret, at bredden var
+tilsigtet, og lukket rækken med én sætning i spec'en.
+
+**Det blev den ikke, og grunden er ordet "adgang".** Uden nulpunktet spurgte
+opgøret slet ikke om adgang — det talte hver kamp, en delt konkurrence dækker,
+også dem, der var spillet og låst, længe før den ene overhovedet var med.
+`predictions` er én række pr. `(bruger, kamp)` og deles på tværs af
+konkurrencer, så tallet kunne hvile på gæt, den ene havde afgivet et **helt
+andet sted**. Sætningen på skærmen — *"I jeres fælles konkurrencer har I mødt
+hinanden N gange"* — var altså ikke bred, den var **usand**: der var ikke noget
+møde. Og følgen var den samme, `A53` blev skrevet af: to steder i produktet med
+hvert sit svar på det samme.
+
+**Rækkevidden, og hvad der bevidst IKKE ændres.** Nulpunktet afgrænser
+**adgangen**, ikke gættets oprindelse: en kamp, begge kunne tippe i en delt
+konkurrence, tæller, uanset hvilken af deres konkurrencer gættet blev afgivet i.
+Dedup'en er uændret, og leddet ligger **før** den, så en kamp tæller, hvis den
+kvalificerer i mindst én delt konkurrence — den mildeste korrekte form. Titler,
+rekorder og basistal røres ikke: de er turnerings-scopede og har slet ingen
+konkurrence-dimension at melde sig til (samme afgrænsning som `#61` selv skrev).
+
+**De to blokke er ét stykke arbejde**, og det er den vigtigste sætning her:
+spec'ens testcase 41 kræver, at `rivals`-posten om en person og `h2h`-linjen på
+den persons profil svarer det samme. Rettes kun den ene, siger produktet to ting
+om samme forhold — altså præcis den fejl, rækken skulle lukke. Invarianten er nu
+en påstand i `sql/tests/career_profile.sql`, som er funktionens **første**
+SQL-test overhovedet.
+
+---
+
+## 14. august 2026 — `G108`: nulpunktet huskes, frem for at framelding spærres
+
+**Beslutning:** en deltagers nulpunkt følger hende. Forlader hun en konkurrence
+og melder sig til igen, arves `joined_at` fra første tilmelding
+([`#63`](../sql/competition_participant_baseline.sql): en intern hukommelses-tabel
+og to triggere). En HELT ny deltager har ingen historik og starter fortsat på 0.
+
+**Det, der skulle afgøres, var ikke om fejlen var reel, men hvilken af to kure
+der er billigst i det lange løb.** `A53` nulstiller korrekt for en ny deltager —
+men `competition_participants` har ingen historik, rækken slettes ved framelding,
+og `joined_at` har `default now()`. Da `comp_participants_delete_own_unlocked`s
+gren (a) netop tillader framelding fra en konkurrence, hvor **alle** kampe har
+resultat, er alle kampe låst i det øjeblik, man kommer tilbage — og hele sæsonen
+tømmes i en stilling, der er endelig.
+
+**Hvorfor ikke bare spærre for framelding.** Det var den anden vej, backloggen
+navngav, og den er farligere end den ser ud. Gren (a) findes, for at man kan
+forlade en konkurrence, man **har** spillet; og fordi liga-medlemskab og
+konkurrencedeltagelse hænger sammen (`ensure_group_membership_for_participant()`),
+ville en spærre i praksis låse folk inde i deres egen liga. Den ville altså bytte
+en sjælden, grim fejl ud med en hverdagsagtig, grimmere. **En regel, der
+forhindrer en almindelig handling for at beskytte en sjælden, er sjældent den
+rigtige** — det er samme afvejning som `groups_delete_admin_empty`, bare med
+fortegnet vendt.
+
+**Rækkevidden er snæver med vilje, og prisen står nævnt:** reglen bliver "dit
+nulpunkt er FØRSTE gang, du meldte dig til denne konkurrence". Det er præcis det,
+`#61`s egen tekst allerede siger, den vil beskytte, så `A53` udvides ikke — den
+får bare den hukommelse, den forudsatte. **Bagud omskrives intet:** hvem der
+allerede har forladt og genindtrådt, efterlod ingen række at huske ud fra.
+Verifikation 3 i filen tæller, om der findes nogen; er svaret ikke 0, skal de
+sættes i hånden.
+
+🔴 **Beslutningen fandt en fælde, der ikke var en del af rækken.** En
+`on delete cascade` er selv en AFTER DELETE-trigger på den refererede tabel, så
+forældrerækken er **væk**, når barnets triggere fyrer. En hukommelse, der skriver
+en fremmednøgle til forælderen, ville derfor have brækket to af produktets mest
+uigenkaldelige handlinger — slet en konkurrence, luk en konto — med `23503`, og
+fejlteksten ville have peget på en tabel, ingen havde bedt om noget. Guarden er
+samtidig den rigtige semantik: er konkurrencen eller brugeren væk, findes der
+ikke noget at komme tilbage til. Fælden står nu i `DOCUMENTATION.md` §13.
+
+---
+
 ## 14. august 2026 — `A53`: en deltager starter på 0 i den konkurrence, hun melder sig til
 
 **Beslutning:** et gæt tæller i en konkurrence, hvis kampen **låste efter

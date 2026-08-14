@@ -10,23 +10,38 @@ import { selectIn } from "./chunked.js";
 // hedder en "liga" i UI; `leagues` (fodbold) hedder en "turnering".
 
 // Mine ligaer + medlemstal + antal konkurrencer i hver (til Ligaer-fanens kort).
+//
+// BEGGE TAL TÆLLES I DATABASEN, IKKE I BROWSEREN (G106, 14. august 2026).
+//
+// Her stod to opslag, der hentede én række pr. medlem og én pr. konkurrence på
+// tværs af ALLE brugerens ligaer, kun for at tælle listerne op. PostgREST
+// leverer højst 1000 rækker pr. svar og siger ikke, at den klipper, så en
+// bruger, hvis ligaer tilsammen nåede loftet, ville have set for lave tal uden
+// en fejl noget sted — samme tavse afkortning som "· 0 kampe" i Opret → Sæson
+// (DOCUMENTATION.md §13) og som `G101` nedenfor.
+//
+// `G101`s kur — `db.count()` pr. konkurrence — kunne ikke kopieres hertil:
+// nævneren er brugerens ligaer GANGE TO, så ti ligaer ville blive tyve
+// rundture, hvor der her er to. Svaret er derfor viewet `group_counts`
+// (`#62 group_counts.sql`), som aggregerer i databasen og svarer én række pr.
+// liga. `security_invoker` gør, at RLS'en på `groups`, `group_members` og
+// `competitions` er kalderens egen — tallene er dermed ORDRET de samme rækker,
+// klienten selv talte før, og det loft, der er tilbage, er antallet af ligaer:
+// nøjagtig det, `groups`-opslaget ved siden af allerede er bundet af.
 async function loadMyGroups(token, userId) {
   const mem = await db.select(token, "group_members", `user_id=eq.${userId}&select=group_id,role`);
   if (!mem.length) return [];
   const ids = mem.map((m) => m.group_id);
   const roleById = new Map(mem.map((m) => [m.group_id, m.role]));
-  const groups = await db.select(token, "groups", `id=in.(${ids.join(",")})&select=*&order=created_at`);
-  // medlemstal pr. liga (RLS: is_group_member giver læseadgang til co-medlemmer)
-  const members = await db.select(token, "group_members", `group_id=in.(${ids.join(",")})&select=group_id`);
-  const memberCount = {};
-  members.forEach((m) => { memberCount[m.group_id] = (memberCount[m.group_id] || 0) + 1; });
-  // antal konkurrencer pr. liga
-  const comps = await db.select(token, "competitions", `group_id=in.(${ids.join(",")})&select=id,group_id`);
-  const compCount = {};
-  comps.forEach((c) => { compCount[c.group_id] = (compCount[c.group_id] || 0) + 1; });
+  const [groups, counts] = await Promise.all([
+    db.select(token, "groups", `id=in.(${ids.join(",")})&select=*&order=created_at`),
+    db.select(token, "group_counts", `group_id=in.(${ids.join(",")})&select=group_id,member_count,competition_count`),
+  ]);
+  const countById = new Map(counts.map((c) => [c.group_id, c]));
   return groups.map((g) => ({
     ...g, role: roleById.get(g.id),
-    memberCount: memberCount[g.id] || 0, compCount: compCount[g.id] || 0,
+    memberCount: countById.get(g.id)?.member_count || 0,
+    compCount: countById.get(g.id)?.competition_count || 0,
   }));
 }
 
@@ -66,10 +81,11 @@ async function loadGroupDetail(token, userId, groupId) {
   // lader databasen tælle, ét opslag pr. konkurrence, kørt samtidig — samme form
   // som `countMatchesPerLeague()` i `data/createSources.js`.
   //
-  // `loadMyGroups()` ovenfor tæller stadig i browseren, og det er ikke en
-  // forglemmelse: dér er nævneren brugerens ligaer GANGE TO (medlemmer og
-  // konkurrencer), så den samme fan-out ville blive tyve kald for ti ligaer.
-  // Den står som `G106` med de tre veje skrevet ned.
+  // `loadMyGroups()` ovenfor tæller også i databasen siden `G106` (14. august
+  // 2026), men ad en anden vej: dér er nævneren brugerens ligaer GANGE TO, så
+  // den samme fan-out ville blive tyve kald for ti ligaer, og svaret blev
+  // viewet `group_counts`. Fælden er den samme, kuren er det ikke — og hvilken
+  // af de to der passer, afgøres af, om antallet af kald er bundet.
   const [myParts, partEntries] = await Promise.all([
     compIds.length ? db.select(token, "competition_participants", `user_id=eq.${userId}&competition_id=in.(${compIds.join(",")})&select=competition_id,hidden`) : [],
     Promise.all(compIds.map(async (id) => [id, await db.count(token, "competition_participants", `competition_id=eq.${id}`)])),

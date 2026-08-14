@@ -675,6 +675,47 @@ jobs:
           psql -h localhost -U postgres -d joinbaseline -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d joinbaseline -v ON_ERROR_STOP=1 -b -f sql/tests/competition_join_baseline.sql
 
+      # Ligaens to tal (G106). Måler dét, der gør et view til svaret frem for
+      # en fan-out: `security_invoker`. Den vigtigste påstand er den negative —
+      # en fremmed må ikke få en RÆKKE, ikke bare et forkert tal — og den ville
+      # fejle ved et enkelt glemt `with (security_invoker = on)`.
+      - name: Test af ligaens optælling
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database groupcounts;'
+          psql -h localhost -U postgres -d groupcounts -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d groupcounts -v ON_ERROR_STOP=1 -b -f sql/tests/group_counts.sql
+
+      # Karriereprofilens indbyrdes opgør (G107). Funktionen havde ingen
+      # SQL-test overhovedet indtil 14. august 2026. Den bærende påstand er
+      # invarianten fra spec'ens testcase 41: `rivals`-posten om en person og
+      # `h2h`-linjen på den persons profil er den samme påstand set fra hver sin
+      # side, så de to blokke kan ikke rettes hver for sig.
+      - name: Test af karriereprofilens opgør
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database careerprofile;'
+          psql -h localhost -U postgres -d careerprofile -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d careerprofile -v ON_ERROR_STOP=1 -b -f sql/tests/career_profile.sql
+
+      # Nulpunktets hukommelse (G108). Kører BEGGE nulpunkts-migreringer, fordi
+      # `#63` er meningsløs uden `#61`. To påstande bærer filen: at en HELT ny
+      # deltager stadig får nul (ellers er `A53` sat ud af kraft), og at en
+      # RI-cascade stadig går igennem — uden guarden ville en slettet
+      # konkurrence eller en lukket konto fejle med 23503.
+      - name: Test af nulpunktets hukommelse
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database participantbaseline;'
+          psql -h localhost -U postgres -d participantbaseline -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d participantbaseline -v ON_ERROR_STOP=1 -b -f sql/tests/competition_participant_baseline.sql
+
       # SQL-blokkene i docs/ (G74). Det eneste trin i jobbet, der ikke tester en
       # migrering, men DOKUMENTATIONEN: hver ```sql-blok bygges om til et
       # `prepare` mod hele sql/schema.sql, så PostgreSQL selv siger, om

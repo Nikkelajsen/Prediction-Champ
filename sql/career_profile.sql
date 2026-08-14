@@ -46,7 +46,7 @@
 --   matches(id, kickoff_at, round_key, home_score, away_score, season_id),
 --   predictions(user_id, match_id, pred_home, pred_away),
 --   competition_matches(competition_id, match_id),
---   competition_participants(competition_id, user_id, hidden),
+--   competition_participants(competition_id, user_id, hidden, joined_at),
 --   group_members(group_id, user_id),
 --   seasons(id, league_id, name, start_date),
 --   view monthly_standings(month, scope, user_id, total_points, matches, exact_count),
@@ -57,7 +57,19 @@
 --   leagues(id, name, created_at, is_official).
 --   view season_standings(season_id, user_id, total_points, exact_count, outcome_count, round_wins, avg_goal_error),
 --   pc_points(ph, pa, hs, as_) — kanonisk pointfunktion (F2),
+--   match_lock_at(kickoff_at, kickoff_tbd) — kampens låsetidspunkt (A21/A53),
 --   stories(user_id, rule, payload).
+--
+-- 🔴 GEN-KØR FILEN EFTER `G107` (14. august 2026). Både `rival`-blokken og
+-- `h2h`-blokken bærer nu deltagerens nulpunkt fra `A53`: en kamp tæller kun i
+-- et indbyrdes opgør, hvis den låste EFTER begge meldte sig til den delte
+-- konkurrence (`match_lock_at(…) > greatest(joined_at, joined_at)`, ordret
+-- `#61`s form). Kun funktionen ændres — der er ingen tabel og intet view at
+-- migrere, og filen kan køres uafhængigt af et deploy. Virkningen er, at et
+-- møde, hvor den ene endnu ikke var tilmeldt, forsvinder fra tallet; det kan
+-- altså blive MINDRE efter kørslen, og det er hele pointen. Frosne artefakter
+-- (udsendte historier, milepæle, faldne kåringer) står stille — opgøret
+-- beregnes live ved hvert opslag.
 
 create or replace function public.career_profile(profile_user_id uuid)
 returns jsonb
@@ -122,6 +134,19 @@ begin
       -- deltager. `distinct`: samme kamp kan ligge i flere delte konkurrencer,
       -- og et møde må kun tælle én gang — samme dedup-regel som h2h
       -- (K4-rettelsen 30. juli 2026), her blot pr. modstander.
+      --
+      -- DELTAGERENS NULPUNKT GÆLDER OGSÅ HER (G107, 14. august 2026): kampen
+      -- tæller kun, hvis den låste, EFTER BEGGE havde meldt sig til den delte
+      -- konkurrence. `predictions` er én række pr. (bruger, kamp) og deles på
+      -- tværs af konkurrencer, så uden leddet kunne opgøret hvile på gæt, den
+      -- ene afgav i en HELT anden konkurrence, længe før den anden kunne nå at
+      -- være med — og så ville "I har mødt hinanden N gange" tælle runder, der
+      -- aldrig var et møde. Leddet ligger FØR `distinct`, så en kamp tæller,
+      -- hvis den kvalificerer i mindst én delt konkurrence; dedup'en er
+      -- uændret. Reglen er ordret `#61`s (`A53`) og står ét sted i JS
+      -- (`wasTippableAt`) og ét sted i SQL: `match_lock_at(…) > joined_at`,
+      -- `coalesce(…, true)` fordi en kamp uden fastsat kickoff ikke har en
+      -- låsetid at måle mod.
       select distinct theirs.user_id as rival_id, cm.match_id,
              m.round_key, m.home_score, m.away_score
       from public.competition_participants mine
@@ -132,6 +157,8 @@ begin
       join public.matches m on m.id = cm.match_id
       where mine.user_id = profile_user_id
         and m.home_score is not null and m.away_score is not null
+        and coalesce(public.match_lock_at(m.kickoff_at, m.kickoff_tbd)
+                       > greatest(mine.joined_at, theirs.joined_at), true)
     ),
     pair_round as (
       -- Point pr. (modstander, runde, spiller). Hver side tæller de kampe, DEN
@@ -227,9 +254,20 @@ begin
   -- dækker samme kamp/runde (fx en rundebaseret + en full-season-konkurrence,
   -- der begge følger Superligaen), må rundens møde kun tælle ÉN gang — ellers
   -- viser "I har mødt hinanden 2 gange" efter kun én spillet runde.
+  --
+  -- OG BEGGE SIDERS NULPUNKT TÆLLER MED (G107, 14. august 2026): runden er kun
+  -- et møde, hvis kampen låste, EFTER begge havde meldt sig til den delte
+  -- konkurrence. Uden leddet kunne sætningen tælle runder, hvor den ene slet
+  -- ikke var med endnu — og svare noget andet end den stilling, begge kan se i
+  -- appen. Samme led og samme begrundelse som i `rival`-blokken ovenfor, og de
+  -- to SKAL rettes sammen: `rivals`-posten om en person og H2H-linjen på den
+  -- persons profil er den samme påstand set fra hver sin side (spec'ens
+  -- testcase 41, invariant).
   if not v_own then
     with shared_comp as (
-      select cp1.competition_id
+      -- Begge tilmeldingstidspunkter bæres med ud: `cp1` er beskueren,
+      -- `cp2` er profilens ejer.
+      select cp1.competition_id, cp1.joined_at as my_joined_at, cp2.joined_at as their_joined_at
       from public.competition_participants cp1
       join public.competition_participants cp2
         on cp2.competition_id = cp1.competition_id and cp2.user_id = profile_user_id
@@ -237,11 +275,15 @@ begin
     ),
     shared_matches as (
       -- distinct på match_id: samme kamp kan ligge i flere delte konkurrencer.
+      -- Nulpunktet måles FØR dedup'en, så en kamp tæller, hvis den kvalificerer
+      -- i mindst én af dem.
       select distinct cm.match_id, m.round_key, m.home_score, m.away_score
       from public.competition_matches cm
       join shared_comp sc on sc.competition_id = cm.competition_id
       join public.matches m on m.id = cm.match_id
       where m.home_score is not null and m.away_score is not null
+        and coalesce(public.match_lock_at(m.kickoff_at, m.kickoff_tbd)
+                       > greatest(sc.my_joined_at, sc.their_joined_at), true)
     ),
     rp as (
       select sm.round_key, pr.user_id,

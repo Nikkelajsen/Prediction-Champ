@@ -22,6 +22,12 @@ function safeRoundLabel(key) {
 // dækker KUN kampe fra konkurrencer, begge er deltager i — ikke hele
 // Championship, og ikke alt hvad de hver især har tippet. Uden den indledning
 // læses "I har mødt hinanden 12 gange" som en global opgørelse.
+//
+// Siden G107 (14. august 2026) er tallet desuden afgrænset af BEGGE parters
+// tilmelding: en runde, hvor den ene endnu ikke var med, er ikke et møde. Den
+// afgrænsning står ikke i sætningen — den ville gøre en linje, der skal kunne
+// læses i ét blik, til to — men i InfoDot'en ved siden af. Reglen selv bor i
+// sql/career_profile.sql, ikke her; denne funktion formulerer kun svaret.
 export function h2hSentence(h2h, name) {
   const { meetings, wins, losses, draws } = h2h;
   const drawNote = draws > 0 ? ` (${draws} uafgjort)` : "";
