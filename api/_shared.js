@@ -27,7 +27,30 @@ import { createHash, timingSafeEqual } from "node:crypto";
 // tage fire gange så lang tid som én side, men ingen enkelt side må hænge. Det
 // samlede loft er funktionens `maxDuration` (vercel.json), og de to tal hænger
 // sammen — et kald-loft, der er større end funktionens budget, er ingen grænse.
+//
+// Tallet er STANDARDEN og ikke loven: `ms` kan sættes pr. kald, og
+// live-opslaget hos Sportmonks gør det (`LIVE_TIMEOUT_MS` i
+// `api/_providers/sportmonks.js`, `G109`). Grunden er, at de 10 sekunder blev
+// valgt for at afskaffe kald, der HÆNGER — ikke for at afvise kald, der er
+// langsomme. En leverandør, hvis svartid vandrer omkring grænsen, gør den
+// forskel meget synlig: så er det ikke leverandøren, der fejler, det er vores
+// eget loft, der kalder den fejlet.
 export const FETCH_TIMEOUT_MS = 10_000;
+
+// Var det en tidsgrænse, der stoppede kaldet — eller noget andet?
+//
+// Findes fordi de to udfald skal håndteres forskelligt (`G109`): en timeout er
+// pr. definition en påstand om, at vi ikke ved, hvad der skete, og den ene ting
+// der giver mening at gøre ved den, er at prøve igen. En 403 eller en
+// ECONNREFUSED er derimod et svar, og et gen-forsøg på et svar er bare et kald
+// mere.
+//
+// Begge grene er nødvendige. `timeout`-mærkatet sættes af `fetchWithTimeout`
+// nedenfor og er den, produktionsstien rammer; navnetjekket fanger et
+// `fetchImpl`, der er injiceret i en test og kaster en rå AbortError.
+export function isTimeoutError(e) {
+  return e?.timeout === true || e?.name === "TimeoutError" || e?.name === "AbortError";
+}
 
 // `AbortSignal.timeout()` frem for en håndrullet AbortController: den findes i
 // Node 18+ (Vercel kører 22), rydder sin egen timer op og kan ikke lække en
@@ -44,7 +67,11 @@ export async function fetchWithTimeout(url, opts = {}, ms = FETCH_TIMEOUT_MS) {
       // Query-strengen klippes af med vilje: Sportmonks sender sin API-nøgle
       // som `?api_token=`, og fejlteksten ender i `job_runs.error`.
       const kort = String(url).split("?")[0];
-      throw new Error(`Tidsgrænse: intet svar fra ${kort} inden for ${ms} ms`, { cause: e });
+      const err = new Error(`Tidsgrænse: intet svar fra ${kort} inden for ${ms} ms`, { cause: e });
+      // Mærkatet er det, `isTimeoutError()` læser. Det står på fejlen selv og
+      // ikke på teksten, fordi en fejltekst er til mennesker og må omskrives.
+      err.timeout = true;
+      throw err;
     }
     throw e;
   }

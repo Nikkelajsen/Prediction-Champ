@@ -16,6 +16,7 @@ import {
   createRunLogger,
   syncMatchesJob,
   fetchWithTimeout,
+  isTimeoutError,
   isUuid,
   failJob,
 } from "./_shared.js";
@@ -520,6 +521,28 @@ describe("fetchWithTimeout", () => {
   it("lader andre fejl passere uændret", async () => {
     globalThis.fetch = async () => { throw new Error("ECONNREFUSED"); };
     await expect(fetchWithTimeout("https://x.test/a", {}, 50)).rejects.toThrow("ECONNREFUSED");
+  });
+
+  // G109: en kalder skal kunne SE, at det var tidsgrænsen, der stoppede kaldet,
+  // uden at læse fejlteksten. En timeout er en påstand om, at vi ikke ved, hvad
+  // der skete, og den ene ting, der giver mening at gøre ved den, er at prøve
+  // igen — mens et gen-forsøg på en 403 eller en ECONNREFUSED bare er et kald
+  // mere. Mærkatet står på fejlen og ikke i teksten, fordi tekster er til
+  // mennesker og må omskrives.
+  it("mærker tidsgrænse-fejlen, så den kan kendes fra alle andre", async () => {
+    globalThis.fetch = (url, opts) =>
+      new Promise((_, reject) => {
+        opts.signal.addEventListener("abort", () => reject(opts.signal.reason));
+      });
+    const fejl = await fetchWithTimeout("https://x.test/a", {}, 20).catch((e) => e);
+    expect(isTimeoutError(fejl)).toBe(true);
+
+    expect(isTimeoutError(new Error("ECONNREFUSED"))).toBe(false);
+    expect(isTimeoutError(undefined)).toBe(false);
+    // En rå AbortError fra et fetchImpl, der er injiceret i en test, tæller med
+    // — ellers ville testen af gen-forsøget bevise noget andet end koden gør.
+    expect(isTimeoutError(Object.assign(new Error("aborted"), { name: "AbortError" }))).toBe(true);
+    expect(isTimeoutError(Object.assign(new Error("timed out"), { name: "TimeoutError" }))).toBe(true);
   });
 });
 

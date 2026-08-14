@@ -53,6 +53,8 @@ Alternativet — at skrive live i `home_score` og filtrere det fra alle steder �
 
 Uændrede skrivninger springes over, så databasen ikke bankes på hvert minut uden grund.
 
+*(Tilføjet efter levering, `G109`, 14. august 2026: trin 3 har sin **egen** tidsgrænse på 20 sekunder pr. kald — ikke de 10, `G19` gav alle andre udgående kald — plus ét gen-forsøg, hvis svaret helt udebliver, og et samlet budget på 40 sekunder for hele opslaget. Baggrunden er en aften, hvor Sportmonks svarede på 7-13 sekunder og dermed fejlede i to ud af tre minutter uden nogensinde at sende en fejl. Begrundelsen for hvert af de tre tal står i `api/_providers/sportmonks.js` og i `DOCUMENTATION.md` §8.)*
+
 **Sidegevinst:** funktionen færdigmelder også kampe. Før ventede en færdigspillet kamp på næste `sync-matches`-kørsel (dengang hvert 10.-15. minut, i dag hver 12. time); nu opdaterer stillinger og rating inden for et minut efter slutfløjt. `sync-matches` bevares uændret (ét job pr. liga; kadencen er siden skruet ned til hver 12. time) og passer kampprogram, flyttede kampe og nye hold.
 
 ## 5. Brugerfladen
@@ -158,6 +160,8 @@ Uanset tallet er pointen den samme: på Sportmonks' gratis-plan (**3.000 kald i 
 | `500 {"error":"Serveren er ikke sat rigtigt op."}` | `SUPABASE_URL` eller `SUPABASE_SERVICE_ROLE_KEY` mangler i Vercel (svaret navngiver bevidst ikke variabler, `G38`; detaljen står i Vercels log). En manglende API-nøgle er IKKE denne fejl — den tjekkes pr. leverandør og dukker op i `providerErrors` | Sæt dem, og redeploy |
 | `500 Supabase …: 42703 column "live_state" does not exist` | `sql/live_scores.sql` er ikke kørt | Kør scriptet ("Run without RLS") |
 | `500 Sportmonks (live): 429` | Rate limit ramt **to gange i træk** — siden `G48` gen-forsøges et 429 én gang efter `Retry-After`, før fejlen kan nå hertil | Aflæs `rateLimit` i seneste kørsler (grænsen er 3.000/time pr. entitet); sker det stadig, så find ud af, hvad der kalder for ofte |
+| `500 … Tidsgrænse: intet svar fra …/fixtures/multi/<id> inden for 20000 ms` | Leverandøren er **langsom**, ikke nede: kaldet nåede frem, men svaret kom ikke. Siden `G109` prøves der én gang mere, før fejlen kan nå hertil, så to på hinanden følgende svar er udeblevet | Se på de kørsler, der **lykkedes**: tager de 15-20 sekunder, er det leverandørens svartid og ikke vores kode — tjek [status.sportmonks.com](https://status.sportmonks.com/) og afvent. Fejlen er ufarlig for data (kampene springes over, ingen live-markering ryddes), men live-stillingen står stille imens |
+| `500 Sportmonks (live): tidsbudgettet på 40000 ms er brugt efter N af M kampe` | Så mange kampe i vinduet, at klumperne à 40 tilsammen ikke kan hentes inden for kørslens budget — eller en leverandør, der er blevet så langsom, at én klump æder det hele | Ikke set i drift (Superligaen har højst en håndfuld samtidige kampe). Sker det, er svaret at hæve `LIVE_BUDGET_MS` **og** `maxDuration` i `vercel.json` sammen — de to tal hænger sammen |
 | `404` fra Vercel | Funktionen er ikke deployet | Merge branchen til `main`, eller peg jobbet på preview-URL'en |
 | `200`, men `checked` er altid `0` under en kamp | Kampen mangler `api_fixture_id`, eller `kickoff_at` er forkert | Kør `sync-matches` for ligaen og tjek kampen i Admin |
 | Kampen vises live uden minuttal | `periods`-include er ikke i dit abonnement — funktionen prøver automatisk igen uden | Ingen handling; stillingen er korrekt, kun minuttet mangler |
