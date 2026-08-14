@@ -19,6 +19,27 @@
 --      fejl — samme regel som fejlserien allerede bruger.
 --   5. Et job uden kørsler i vinduet får 0 og ikke null: tavshed er
 --      `last_run_at`s opgave, ikke ratens.
+--   6. **`anon` kan IKKE kalde funktionen bagefter.** Tilføjet 14. august 2026,
+--      efter at filens første udgave åbnede den — se nedenfor.
+--
+-- ⚠️ **HVORFOR PÅSTAND 6 FINDES.** Første udgave af `job_health_rate.sql`
+-- gentog `grant execute … to authenticated` efter sit `drop function` (og
+-- påstand 1 beviste, at det virkede) men ikke `revoke execute … from public`,
+-- som forsvandt i nøjagtig samme sætning: rettigheder følger funktionen i
+-- graven, og den nye fødes med PostgreSQLs default-ACL, hvor PUBLIC har
+-- EXECUTE. `anon` kunne dermed nå `admin_job_health()` — imod `#56`s regel.
+--
+-- Fejlen blev fanget i PRODUKTIONEN af `job-heartbeat.yml`s femte kontrol
+-- (`sql/checks/anon_routine_reach.sql`), ikke her, og det var ikke tilfældigt:
+-- CI's vagt over den regel (`sql/tests/anon_grants_functions.sql`) måler
+-- `sql/schema.sql`, altså et ØJEBLIKSBILLEDE, der eksporteres om mandagen. En
+-- migrering, der åbner en funktion, er derfor usynlig for CI, indtil eksporten
+-- er kørt. Påstanden hører hjemme HER, hos den migrering, der kan bryde reglen,
+-- fordi det er det eneste sted, den kan være rød i en pull request.
+--
+-- Reglen gælder enhver fremtidig migrering, der `drop`per og gen-opretter en
+-- funktion i `public`: den skal gentage BEGGE sætninger, og dens test skal
+-- efterprøve begge retninger.
 
 \set ON_ERROR_STOP on
 \timing off
@@ -30,6 +51,10 @@ create table if not exists auth.users (id uuid primary key);
 do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
+  -- `anon` findes kun for påstand 6. Den får ingen grants — kan den alligevel
+  -- nå funktionen, er det gennem PUBLIC, og det er præcis den vej, påstanden
+  -- måler.
+  if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
 end $$;
 grant usage on schema public to authenticated;
 
@@ -176,5 +201,29 @@ begin
 end $$;
 
 reset role;
+
+-- ---------- 6) `drop function` tog også revoke'en med sig ----------
+--
+-- ⚠️ **PÅSTANDEN SPØRGER `has_function_privilege` OG IKKE EN GRANT-TABEL** —
+-- samme fælde som i `sql/checks/anon_routine_reach.sql` og
+-- `sql/tests/anon_grants_functions.sql`: PUBLIC giver adgang uden at nævne
+-- `anon` nogen steder, så et opslag i `information_schema.role_routine_grants`
+-- ville melde "lukket" om en funktion, enhver kan kalde.
+--
+-- Begge retninger måles. At `anon` er lukket ude, er intet værd, hvis
+-- `authenticated` blev det samtidig — det er den anden halvdel af `#56`s
+-- lærestreg (trin 2 tager de tilladte med, trin 5 giver dem tilbage), og en
+-- for bred revoke ville lukke driftskortet for ejeren selv.
+do $$
+begin
+  if has_function_privilege('anon', 'public.admin_job_health()', 'EXECUTE') then
+    raise exception
+      'anon kan kalde admin_job_health() — migreringens `drop function` nulstillede ACL''en, og `revoke execute … from public` blev ikke gentaget (se #56 og sql/checks/anon_routine_reach.sql)';
+  end if;
+
+  if not has_function_privilege('authenticated', 'public.admin_job_health()', 'EXECUTE') then
+    raise exception 'revoke ramte for bredt: authenticated kan ikke længere kalde admin_job_health(), og Admin → Drift er dermed lukket for ejeren';
+  end if;
+end $$;
 
 \echo 'OK: job_health_rate.sql — fejlraten kan aflæses, også når fejlserien er nul'

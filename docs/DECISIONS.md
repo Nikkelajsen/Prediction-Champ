@@ -15,6 +15,22 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — `G119`: en migrerings usynlige halvdel skal være en påstand, ikke en note
+
+**Beslutning:** enhver migrering, der `drop`per og gen-opretter en funktion i `public`, skal gentage **både** `grant execute … to <roller>` og `revoke execute … from public` — og den skal have en test, der efterprøver begge retninger, hos migreringen selv.
+
+**Begrundelse.** `#65` gentog kun den ene af de to. Ikke af sjusk, men fordi fælden er asymmetrisk: en glemt `grant` lukker driftskortet for ejeren i samme sekund og bliver rød i den allerførste påstand, mens en glemt `revoke` ikke ændrer noget, nogen kan se. Filen havde endda en kommentar om, at grant'en "ikke er pynt" — opmærksomheden var dér, den bare ikke rakte til den halvdel, der ikke gør ondt.
+
+**Hvorfor en påstand og ikke en skærpet note.** Reglen fandtes allerede, ordret, i `DOCUMENTATION.md` §13 — skrevet 12. august under `G100`, overtrådt 14. august. Det er dokumentationens grænse, og den er værd at skrive ned som en beslutning: **en regel, der kun findes i prosa, bliver overtrådt af den, der skrev den.** Havde svaret været "skriv det tydeligere", ville rækken her være den anden af tre.
+
+**Hvorfor påstanden bor i `sql/tests/job_health_rate.sql` og ikke i den generelle vagt.** CI har i forvejen en vagt over samme regel, `sql/tests/anon_grants_functions.sql`, men den måler `sql/schema.sql` — et øjebliksbillede, der eksporteres om mandagen. Den kan altså ikke se en migrering, der er skrevet i dag. Påstanden skal ligge dér, hvor den kan være rød i en **pull request**, og det er hos den fil, der kan bryde reglen.
+
+**Overvågningen erstatter ikke testen, og testen erstatter ikke overvågningen.** `job-heartbeat.yml`s femte kontrol fandt fejlen i produktionen efter tyve minutter, og det er ikke et nederlag — det er `G100`s formål. Men den finder den EFTER kørslen, og prisen er en rød alarm en aften plus en gen-kørsel. De to lag måler samme regel på hver sin side af udrulningen, og begge skal findes.
+
+**Hvad der bevidst IKKE blev bygget:** en generisk kontrol, der læser alle migreringsfiler og kræver et `revoke` efter hvert `drop function`. Der findes to `drop function` i hele `sql/`, og den anden gen-opretter ingenting. En tekstlæsende vagt over to forekomster ville koste mere at vedligeholde, end den kan fange — og den kan pr. konstruktion kun se filer, ikke databasen, hvilket er præcis den svaghed, `G100` fandtes for at rette. Noteret i backloggens indbakke, hvis en tredje forekomst gør den til et mønster.
+
+---
+
 ## 14. august 2026 — `G118`: tips-status bor ét sted, og det er ikke i historien
 
 **Beslutning:** dagskortets fod (næste kamp / manglende tips) fjernes. `DayCard` slutter på mini-stillingen, og tips-status bor alene i sit eget kort på Hjem — deadline-kortet, det grønne "alt ok" eller "intet at tippe lige nu".
