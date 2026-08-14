@@ -1,8 +1,11 @@
 {
+  "id": "/",
   "name": "Leagly",
   "short_name": "Leagly",
   "description": "Gæt resultaterne af ugens fodboldkampe mod dine venner. Opret en liga, tip kampene, og se hvem der er bedst.",
+  "lang": "da",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0C1622",
   "theme_color": "#0C1622",
@@ -10,5 +13,11 @@
     { "src": "/leagly-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/leagly-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/leagly-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "/screenshots/hjem.png", "sizes": "860x1864", "type": "image/png", "form_factor": "narrow", "label": "Dagens overblik: rundens historie, deadline og dine placeringer" },
+    { "src": "/screenshots/tip.png", "sizes": "860x1864", "type": "image/png", "form_factor": "narrow", "label": "Tip rundens kampe — og følg facit, mens de spilles" },
+    { "src": "/screenshots/stilling.png", "sizes": "860x1864", "type": "image/png", "form_factor": "narrow", "label": "Stillingen i din konkurrence, runde for runde" },
+    { "src": "/screenshots/championship.png", "sizes": "860x1864", "type": "image/png", "form_factor": "narrow", "label": "Championship: rundens og månedens champion på tværs af alle" }
   ]
 }

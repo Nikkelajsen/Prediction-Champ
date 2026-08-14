@@ -9,6 +9,26 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — `I23`: manifestet fik `id`, `scope`, `lang` og fire skærmbilleder — taget af appen selv
+
+**Chrome viser den rige installationsprompt, når manifestet bærer skærmbilleder.** Uden dem er prompten en nøgen ikon-dialog, og installationen er hele distributionsvejen for en app, der ikke ligger i nogen butik. `public/manifest.json` har nu `id: "/"`, `scope: "/"`, `lang: "da"` og fire `screenshots` i `form_factor: "narrow"`.
+
+**`id` er den vigtigste af de tre små.** Den var hidtil udledt af `start_url`, og det er dét, der er problemet: flytter `start_url` sig en dag, ville browseren opfatte det som en **ny** app, og en installeret genvej ville pege på noget, der ikke opdateres længere. `"/"` er præcis den værdi, browseren allerede har udledt, så ingen eksisterende installation flytter sig — den er frosset frem for ændret.
+
+**Skærmbillederne er taget af den RIGTIGE app, ikke tegnet.** `node scripts/screenshots/capture.mjs` starter Vites udviklingsserver, åbner appen i Chromium med en attrap i stedet for en database, trykker sig frem til fanen og beskærer billedet til appens egen ramme (860×1864 = 430×932 CSS-pixels ved dobbelt tæthed). Alternativet — fire mockups i HTML — ville være hurtigere at lave og forkert dagen efter: en attrap af en skærm driver fra skærmen, uden at nogen kan se det. Her kan scriptet kun producere det, appen faktisk kan tegne; går en loader i stykker, kommer billedet tomt ud.
+
+**Attrappen griber `fetch` og ikke datalaget.** Alt, appen henter, går gennem ét `fetch` i `src/lib/supabase.js`, og det er det dybeste snit: hver linje ovenover — loaderne, skærmene, komponenterne, CSS'en — er den kode, der ligger i produktionen. Prisen er et lille stykke PostgREST (seks operatorer, `select`, `order`, `limit`), og en forespørgsel, der bruger noget andet, kaster frem for at svare tomt. Demo-datasættet regner point, stillinger og rundesejre med appens egen `pointsFor()`, så tabellen på ét skærmbillede ikke kan modsige resultaterne på det næste; kun ratingtallene er grove, fordi motoren bor i SQL.
+
+**To ting skulle stå stille, før to kørsler gav det samme billede.** Uret er frosset på lørdag 15. august 2026 kl. 18.35 — ellers ville låse, live-mærker og nedtællinger flytte sig med kalenderen. Og browseren køres med `--force-prefers-reduced-motion`: live-prikken pulser i 1,4 sekunders takt, så to kørsler ramte hver sit sted i takten og gav to forskellige PNG'er af samme skærm. Flaget er appens egen vej ud af det (`G22` slukker alle fire animationer ved den indstilling) frem for et lag indsprøjtet CSS, som ville gøre skærmbilledet til noget, ingen bruger kan få vist.
+
+**Tre ting kom med, som ikke var bestilt, men som opgaven forudsatte.** PNG-codec'en fra `build-og-image.mjs` er flyttet til `scripts/png.mjs` og deles nu (beskæringen havde ellers krævet en kopi af en codec — den slags kode driver fra hinanden uden at fejle); `og-image.png` er gen-genereret som bevis og er byte-identisk. ESLint har fået to nye blokke, så harnessen lintes som browser-kode og `scripts/**/*.mjs` som Node. Og `manifest.test.js` er ny: JSON kan ikke bære en kommentar, så begrundelserne for `id` og `scope` står i testen, som samtidig håndhæver, at skærmbilledernes filer findes, at `sizes` passer på PNG'ernes egne mål, og at Chromes tre krav (320–3840 px, højst 2,3 i forhold, ens forhold pr. form factor) er opfyldt.
+
+**Det, ingen test kan fange, står i tjeklisten (`DOCUMENTATION.md` §11):** en PNG, der viser en forældet skærm, er en gyldig PNG. Ændrer Hjem, Tip, stillingen eller Championship udseende, skal billederne tages om — det er den halvdel af `I23`, der ikke var gratis, og den var udpeget som sådan i backloggen, før arbejdet gik i gang.
+
+**Verificeret:** 1384 tests (12 nye), lint uændret på loftet (7 advarsler), build grønt — og `dist/screenshots/` indeholder de fire filer. **Intet skal køres i Supabase for denne række.**
+
+---
+
 14. august 2026 — `G117`: den yderste tidsgrænse stod uden for repoet og var den strammeste
 
 **`G116` reparerede et gen-forsøg. Denne række fjerner det igen, og begge dele er rigtige.** Da gen-forsøget begyndte at virke, blev en fejlende kørsel ~42 sekunder lang i stedet for 21,7. Og cron-job.org afbryder kaldet efter **30 sekunder** — et tal, der er maksimum på planen; feltet afviser 60. Rettelsen ville altså have flyttet hver eneste fejlende kørsel fra "inden for kalderens vindue" til "klippet af kalderen", og vores egen fejltekst ville aldrig være nået frem til det log, auto-deaktiveringen tæller på.

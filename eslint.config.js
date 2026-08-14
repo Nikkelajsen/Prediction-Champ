@@ -109,11 +109,25 @@ export default [
     // `middleware.test.js` hører til her og ikke i edge-blokken nedenfor:
     // selve middlewaren kører på edge, men TESTEN af den kører i Node under
     // Vitest — den mocker `@vercel/functions` væk og rører aldrig en runtime.
-    files: ["*.config.js", "sql/tests/*.mjs", "scripts/*.mjs", "middleware.test.js"],
+    files: ["*.config.js", "sql/tests/*.mjs", "scripts/**/*.mjs", "middleware.test.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
       globals: globals.node,
+    },
+  },
+
+  // Skærmbilled-harnessen (I23) er det ene sted uden for `src/`, hvor koden
+  // kører i en BROWSER: den starter appen med en attrap i stedet for en
+  // database og trykker sig frem til den fane, der skal fotograferes. `.js` og
+  // ikke `.mjs` netop derfor — filerne serveres af Vite som moduler til en
+  // side, ikke af Node.
+  {
+    files: ["scripts/screenshots/*.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: globals.browser,
     },
   },
 

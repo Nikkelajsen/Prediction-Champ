@@ -13,6 +13,7 @@
 | kampsynkronisering, live-resultater | §8 · `api/sync-matches.js`, `api/sync-live.js` · `docs/features/live-resultater-v1.md` |
 | datakilder (Sportmonks / football-data.org), API-nøgler, kaldbudget | §8 · `api/_providers/` · `docs/features/flere-datakilder-v1.md` |
 | miljøvariabler, deploy, tjekliste før merge | §9, §11 |
+| billederne i `public/` (installationsprompten, link-previewet) | §11 · `scripts/screenshots/` · `scripts/build-og-image.mjs` · `manifest.test.js` — **ændrer du Hjem, Tip, stillingen eller Championship, skal skærmbillederne tages om** |
 | staging-database (opret, peg preview på den, vedligehold) | `docs/STAGING.md` · §9 |
 | testdata: en hel sæson med tips og resultater i staging | `docs/STAGING.md` trin 6b · `sql/dev/simulate_season.sql` |
 | ny turnering | §10 · `docs/features/turnering-2.md` |

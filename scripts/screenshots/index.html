@@ -1,0 +1,23 @@
+<!doctype html>
+<!-- Harness-siden bag skærmbillederne i `manifest.json` (I23).
+     Serveres kun af `capture.mjs` (Vites udviklingsserver) og kommer aldrig med
+     i et build: Vite bygger fra `index.html` i roden, og denne fil ligger under
+     `scripts/`, som `vite build` slet ikke ser på.
+
+     Hovedet er en kopi af `index.html`s i det, der betyder noget for UDSEENDET
+     — viewporten og forvarmningen af de to skrifter. OG-tags, manifest og
+     ikoner er udeladt: intet af det kan ses på et skærmbillede, og en kopi af
+     dem ville være endnu et sted, sælgesætningen kunne drive fra (G97). -->
+<html lang="da">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Leagly — skærmbilleder</title>
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/barlow-400-latin.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/barlow-condensed-700-latin.woff2" />
+  </head>
+  <body style="margin:0; background:#060B12;">
+    <div id="root"></div>
+    <script type="module" src="./boot.js"></script>
+  </body>
+</html>
