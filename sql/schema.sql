@@ -2,10 +2,10 @@
 -- PostgreSQL database dump
 --
 
-\restrict LXhAMsCd9dh8cgamv6d45LsYgg0KJ4e4cIPXVScVhvhCwcGKEnWLBzKOC51ReHN
+\restrict CUKDHzJ7fvt7V08YnCHbMmTKA46MMMEc8NhS8r6nud8Z1XEqBfSLDjpkvrgAdFc
 
 -- Dumped from database version 17.6
--- Dumped by pg_dump version 17.10 (Ubuntu 17.10-1.pgdg24.04+1)
+-- Dumped by pg_dump version 17.11 (Ubuntu 17.11-1.pgdg24.04+2)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -1668,7 +1668,8 @@ begin
 
   -- ---------- Ugens bedste (pr. færdigspillet runde) ----------
   with comp_matches as (
-    select m.id, m.round_key, m.home_score, m.away_score
+    select m.id, m.round_key, m.home_score, m.away_score,
+           m.kickoff_at, m.kickoff_tbd
     from competition_matches cm
     join matches m on m.id = cm.match_id
     where cm.competition_id = p_comp_id
@@ -1689,6 +1690,7 @@ begin
     join competition_participants cp
       on cp.competition_id = p_comp_id and cp.user_id = pr.user_id
     where pr.pred_home is not null and pr.pred_away is not null
+      and coalesce(match_lock_at(m.kickoff_at, m.kickoff_tbd) > cp.joined_at, true)  -- A53
   ),
   totals as (
     select round_key, user_id,
@@ -1727,7 +1729,8 @@ begin
   with comp_matches as (
     select m.id,
            to_char(m.kickoff_at at time zone 'Europe/Copenhagen', 'YYYY-MM') as month_key,
-           m.home_score, m.away_score
+           m.home_score, m.away_score,
+           m.kickoff_at, m.kickoff_tbd
     from competition_matches cm
     join matches m on m.id = cm.match_id
     where cm.competition_id = p_comp_id
@@ -1751,6 +1754,7 @@ begin
     join competition_participants cp
       on cp.competition_id = p_comp_id and cp.user_id = pr.user_id
     where pr.pred_home is not null and pr.pred_away is not null
+      and coalesce(match_lock_at(m.kickoff_at, m.kickoff_tbd) > cp.joined_at, true)  -- A53
   ),
   totals as (
     select month_key, user_id,
@@ -2470,6 +2474,19 @@ begin
       -- deltager. `distinct`: samme kamp kan ligge i flere delte konkurrencer,
       -- og et møde må kun tælle én gang — samme dedup-regel som h2h
       -- (K4-rettelsen 30. juli 2026), her blot pr. modstander.
+      --
+      -- DELTAGERENS NULPUNKT GÆLDER OGSÅ HER (G107, 14. august 2026): kampen
+      -- tæller kun, hvis den låste, EFTER BEGGE havde meldt sig til den delte
+      -- konkurrence. `predictions` er én række pr. (bruger, kamp) og deles på
+      -- tværs af konkurrencer, så uden leddet kunne opgøret hvile på gæt, den
+      -- ene afgav i en HELT anden konkurrence, længe før den anden kunne nå at
+      -- være med — og så ville "I har mødt hinanden N gange" tælle runder, der
+      -- aldrig var et møde. Leddet ligger FØR `distinct`, så en kamp tæller,
+      -- hvis den kvalificerer i mindst én delt konkurrence; dedup'en er
+      -- uændret. Reglen er ordret `#61`s (`A53`) og står ét sted i JS
+      -- (`wasTippableAt`) og ét sted i SQL: `match_lock_at(…) > joined_at`,
+      -- `coalesce(…, true)` fordi en kamp uden fastsat kickoff ikke har en
+      -- låsetid at måle mod.
       select distinct theirs.user_id as rival_id, cm.match_id,
              m.round_key, m.home_score, m.away_score
       from public.competition_participants mine
@@ -2480,6 +2497,8 @@ begin
       join public.matches m on m.id = cm.match_id
       where mine.user_id = profile_user_id
         and m.home_score is not null and m.away_score is not null
+        and coalesce(public.match_lock_at(m.kickoff_at, m.kickoff_tbd)
+                       > greatest(mine.joined_at, theirs.joined_at), true)
     ),
     pair_round as (
       -- Point pr. (modstander, runde, spiller). Hver side tæller de kampe, DEN
@@ -2575,9 +2594,20 @@ begin
   -- dækker samme kamp/runde (fx en rundebaseret + en full-season-konkurrence,
   -- der begge følger Superligaen), må rundens møde kun tælle ÉN gang — ellers
   -- viser "I har mødt hinanden 2 gange" efter kun én spillet runde.
+  --
+  -- OG BEGGE SIDERS NULPUNKT TÆLLER MED (G107, 14. august 2026): runden er kun
+  -- et møde, hvis kampen låste, EFTER begge havde meldt sig til den delte
+  -- konkurrence. Uden leddet kunne sætningen tælle runder, hvor den ene slet
+  -- ikke var med endnu — og svare noget andet end den stilling, begge kan se i
+  -- appen. Samme led og samme begrundelse som i `rival`-blokken ovenfor, og de
+  -- to SKAL rettes sammen: `rivals`-posten om en person og H2H-linjen på den
+  -- persons profil er den samme påstand set fra hver sin side (spec'ens
+  -- testcase 41, invariant).
   if not v_own then
     with shared_comp as (
-      select cp1.competition_id
+      -- Begge tilmeldingstidspunkter bæres med ud: `cp1` er beskueren,
+      -- `cp2` er profilens ejer.
+      select cp1.competition_id, cp1.joined_at as my_joined_at, cp2.joined_at as their_joined_at
       from public.competition_participants cp1
       join public.competition_participants cp2
         on cp2.competition_id = cp1.competition_id and cp2.user_id = profile_user_id
@@ -2585,11 +2615,15 @@ begin
     ),
     shared_matches as (
       -- distinct på match_id: samme kamp kan ligge i flere delte konkurrencer.
+      -- Nulpunktet måles FØR dedup'en, så en kamp tæller, hvis den kvalificerer
+      -- i mindst én af dem.
       select distinct cm.match_id, m.round_key, m.home_score, m.away_score
       from public.competition_matches cm
       join shared_comp sc on sc.competition_id = cm.competition_id
       join public.matches m on m.id = cm.match_id
       where m.home_score is not null and m.away_score is not null
+        and coalesce(public.match_lock_at(m.kickoff_at, m.kickoff_tbd)
+                       > greatest(sc.my_joined_at, sc.their_joined_at), true)
     ),
     rp as (
       select sm.round_key, pr.user_id,
@@ -5326,6 +5360,43 @@ $$;
 
 
 --
+-- Name: remember_participant_baseline(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.remember_participant_baseline() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if not exists (select 1 from public.competitions where id = old.competition_id)
+     or not exists (select 1 from public.profiles where id = old.user_id) then
+    return old;
+  end if;
+
+  insert into public.competition_participant_history (competition_id, user_id, first_joined_at)
+  values (old.competition_id, old.user_id, old.joined_at)
+  on conflict (competition_id, user_id) do nothing;
+
+  -- `do nothing` + en betinget `update` frem for `do update set least(…)`, og
+  -- det er ikke en omskrivning for smagens skyld: vagt 2 i
+  -- `sql/migration_syntax.test.js` afviser enhver `update … set` uden `where`,
+  -- og en `on conflict do update set` ligner præcis dét for en grep. Vagten er
+  -- bevidst grov (`G86`), og filens eget svar på en falsk positiv er at
+  -- omskrive sætningen frem for at svække vagten. Formen her er desuden den
+  -- ærligste: `where first_joined_at > old.joined_at` SIGER, at nulpunktet kun
+  -- flytter sig bagud, hvor `least()` skulle læses for at afsløre det.
+  update public.competition_participant_history
+     set first_joined_at = old.joined_at
+   where competition_id = old.competition_id
+     and user_id = old.user_id
+     and first_joined_at > old.joined_at;
+
+  return old;
+end;
+$$;
+
+
+--
 -- Name: remember_previous_kickoff(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5334,6 +5405,31 @@ CREATE FUNCTION public.remember_previous_kickoff() RETURNS trigger
     AS $$
 begin
   new.kickoff_prev_at := old.kickoff_at;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: restore_participant_baseline(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.restore_participant_baseline() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_first timestamptz;
+begin
+  select h.first_joined_at into v_first
+    from public.competition_participant_history h
+   where h.competition_id = new.competition_id
+     and h.user_id = new.user_id;
+
+  if v_first is not null then
+    new.joined_at := least(new.joined_at, v_first);
+  end if;
+
   return new;
 end;
 $$;
@@ -5705,7 +5801,18 @@ CREATE VIEW public.competition_match_points WITH (security_invoker='on') AS
      JOIN public.matches m ON ((m.id = cm.match_id)))
      JOIN public.predictions pr ON ((pr.match_id = m.id)))
      JOIN public.competition_participants cp ON (((cp.competition_id = cm.competition_id) AND (cp.user_id = pr.user_id))))
-  WHERE ((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL) AND (pr.pred_home IS NOT NULL) AND (pr.pred_away IS NOT NULL));
+  WHERE ((m.home_score IS NOT NULL) AND (m.away_score IS NOT NULL) AND (pr.pred_home IS NOT NULL) AND (pr.pred_away IS NOT NULL) AND COALESCE((public.match_lock_at(m.kickoff_at, m.kickoff_tbd) > cp.joined_at), true));
+
+
+--
+-- Name: competition_participant_history; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.competition_participant_history (
+    competition_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    first_joined_at timestamp with time zone NOT NULL
+);
 
 
 --
@@ -5827,6 +5934,21 @@ CREATE TABLE public.groups (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT groups_name_check CHECK (((char_length(name) >= 2) AND (char_length(name) <= 40)))
 );
+
+
+--
+-- Name: group_counts; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.group_counts WITH (security_invoker='on') AS
+ SELECT id AS group_id,
+    (( SELECT count(*) AS count
+           FROM public.group_members m
+          WHERE (m.group_id = g.id)))::integer AS member_count,
+    (( SELECT count(*) AS count
+           FROM public.competitions c
+          WHERE (c.group_id = g.id)))::integer AS competition_count
+   FROM public.groups g;
 
 
 --
@@ -6198,6 +6320,14 @@ ALTER TABLE ONLY public.competition_awards
 
 ALTER TABLE ONLY public.competition_matches
     ADD CONSTRAINT competition_matches_pkey PRIMARY KEY (competition_id, match_id);
+
+
+--
+-- Name: competition_participant_history competition_participant_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.competition_participant_history
+    ADD CONSTRAINT competition_participant_history_pkey PRIMARY KEY (competition_id, user_id);
 
 
 --
@@ -6609,6 +6739,20 @@ CREATE TRIGGER competition_participants_ensure_group BEFORE INSERT ON public.com
 
 
 --
+-- Name: competition_participants competition_participants_remember_baseline; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER competition_participants_remember_baseline AFTER DELETE ON public.competition_participants FOR EACH ROW EXECUTE FUNCTION public.remember_participant_baseline();
+
+
+--
+-- Name: competition_participants competition_participants_restore_baseline; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER competition_participants_restore_baseline BEFORE INSERT ON public.competition_participants FOR EACH ROW EXECUTE FUNCTION public.restore_participant_baseline();
+
+
+--
 -- Name: matches matches_recompute_ratings_del; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -6712,6 +6856,22 @@ ALTER TABLE ONLY public.competition_matches
 
 ALTER TABLE ONLY public.competition_matches
     ADD CONSTRAINT competition_matches_match_id_fkey FOREIGN KEY (match_id) REFERENCES public.matches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: competition_participant_history competition_participant_history_competition_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.competition_participant_history
+    ADD CONSTRAINT competition_participant_history_competition_id_fkey FOREIGN KEY (competition_id) REFERENCES public.competitions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: competition_participant_history competition_participant_history_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.competition_participant_history
+    ADD CONSTRAINT competition_participant_history_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -7021,6 +7181,12 @@ ALTER TABLE public.competition_awards ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.competition_matches ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: competition_participant_history; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.competition_participant_history ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: competition_participants; Type: ROW SECURITY; Schema: public; Owner: -
@@ -7886,12 +8052,30 @@ GRANT ALL ON FUNCTION public.refresh_kickoff_uncertain(p_season_id uuid) TO serv
 
 
 --
+-- Name: FUNCTION remember_participant_baseline(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.remember_participant_baseline() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.remember_participant_baseline() TO authenticated;
+GRANT ALL ON FUNCTION public.remember_participant_baseline() TO service_role;
+
+
+--
 -- Name: FUNCTION remember_previous_kickoff(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.remember_previous_kickoff() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.remember_previous_kickoff() TO authenticated;
 GRANT ALL ON FUNCTION public.remember_previous_kickoff() TO service_role;
+
+
+--
+-- Name: FUNCTION restore_participant_baseline(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.restore_participant_baseline() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.restore_participant_baseline() TO authenticated;
+GRANT ALL ON FUNCTION public.restore_participant_baseline() TO service_role;
 
 
 --
@@ -8034,6 +8218,13 @@ GRANT ALL ON TABLE public.competition_match_points TO service_role;
 
 
 --
+-- Name: TABLE competition_participant_history; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.competition_participant_history TO service_role;
+
+
+--
 -- Name: TABLE seasons; Type: ACL; Schema: public; Owner: -
 --
 
@@ -8071,6 +8262,14 @@ GRANT ALL ON TABLE public.group_members TO service_role;
 
 GRANT ALL ON TABLE public.groups TO authenticated;
 GRANT ALL ON TABLE public.groups TO service_role;
+
+
+--
+-- Name: TABLE group_counts; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.group_counts TO service_role;
+GRANT SELECT ON TABLE public.group_counts TO authenticated;
 
 
 --
@@ -8283,5 +8482,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict LXhAMsCd9dh8cgamv6d45LsYgg0KJ4e4cIPXVScVhvhCwcGKEnWLBzKOC51ReHN
+\unrestrict CUKDHzJ7fvt7V08YnCHbMmTKA46MMMEc8NhS8r6nud8Z1XEqBfSLDjpkvrgAdFc
 
