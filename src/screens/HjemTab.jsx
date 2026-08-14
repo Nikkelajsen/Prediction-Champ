@@ -236,8 +236,7 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
           onDismiss={onDismissRound} openProfile={openProfile} userId={userId} />
       ) : (
         <DayCard story={dayCard} token={token} competitions={competitions}
-          tips={tips} seen={seenStories.has(dayCard?.id)} onSeen={onSeen}
-          openPredictions={openPredictions} />
+          seen={seenStories.has(dayCard?.id)} onSeen={onSeen} />
       )}
 
       {/* "Kom godt i gang": erstatter de tidligere dashed tom-tilstande. De sagde

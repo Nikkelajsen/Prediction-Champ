@@ -12,6 +12,25 @@
 //     der er intet at rydde. Spec §8: "Ingen friktion, intet at åbne, intet at
 //     rydde."
 //   · Ingen tap-through. Hverdagen er ét blik.
+//   · **Ingen tips-status.** Kortet bar frem til 14. august 2026 en fod med
+//     enten "N kampe mangler tips" eller "Næste kamp: …". Den var en DUBLET i
+//     alle tre tilstande — deadline-kortet, det grønne "alt ok" og "intet at
+//     tippe lige nu" står hver især umiddelbart under kortet og siger det
+//     samme, med nedtælling, rundenavn og kampnavne oveni. Betingelserne var
+//     ordret de samme udtryk (`tips.allTipped === false`), så foden kunne pr.
+//     konstruktion aldrig være en faldback for noget, skærmen ikke allerede
+//     sagde bedre 40 px længere nede.
+//
+//     Prisen var kortets pointe: et kort, der er VALGT af en nyhedsværdi-score
+//     til at bære dagens ene øjeblik, sluttede på en administrativ opgave frem
+//     for på sin mini-stilling. Rundestoryen — det større format — har aldrig
+//     haft en sådan fod, og asymmetrien var utilsigtet.
+//
+//     Spec §8 opregner "næste kamp og evt. manglende tips" som en del af
+//     kortets indhold, og filen her skrev *"står PÅ kortet og ikke i et kort
+//     mere"*: planen var, at kortet skulle ERSTATTE deadline-kortet. Det skete
+//     aldrig — deadline-kortet er Hjems signatur — så de stod side om side.
+//     Spec'en er rettet frem for at koden er.
 //
 // TRE UDGAVER, styret af regel og prioritet:
 //   milestone · guld. En bedrift, man har opnået én gang og altid har opnået —
@@ -22,11 +41,9 @@
 //               kapitel 6 beder forsiden om at turde sige "status quo"; det er
 //               dette kort.
 import { useEffect } from "react";
-import { ChevronRight } from "lucide-react";
 import { logEventOnce } from "../../lib/analytics.js";
 import { isDailyQuiet, isNewsworthy } from "../../lib/stories.js";
-import { formatKickoff } from "../../lib/scoring.js";
-import { C, btnGreen, font } from "../../ui/theme.js";
+import { C, font } from "../../ui/theme.js";
 import { Card, Eyebrow } from "../../ui/components.jsx";
 import { cardTight } from "./shared.js";
 
@@ -71,7 +88,7 @@ function MiniStanding({ rows, day }) {
   );
 }
 
-function DayCard({ story, token, competitions, tips, seen, onSeen, openPredictions }) {
+function DayCard({ story, token, competitions, seen, onSeen }) {
   const groupId = competitions?.find((c) => c.id === story?.competition_id)?.group_id || null;
 
   // story_viewed logges, når kortet BLIVER synligt — reglen er uændret fra v2,
@@ -107,7 +124,6 @@ function DayCard({ story, token, competitions, tips, seen, onSeen, openPredictio
   const milestone = story.rule === "MILESTONE";
   const gold = milestone;
   const unread = !seen && isNewsworthy(story);
-  const noTips = story.payload?.variant === "no_tips";
 
   return (
     <Card style={{
@@ -139,22 +155,9 @@ function DayCard({ story, token, competitions, tips, seen, onSeen, openPredictio
       </div>
       <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.45, marginTop: 6 }}>{story.body}</div>
 
+      {/* Mini-stillingen er kortets AFSLUTNING og ikke dets næstsidste afsnit.
+          Se filhovedet: her stod tips-status, og den tog den plads. */}
       <MiniStanding rows={story.payload?.mini} day={story.payload?.day} />
-
-      {/* Næste kamp og manglende tips står PÅ kortet og ikke i et kort mere.
-          Dataene er dem, Hjem allerede har hentet (computeHomeTips) — kortet
-          henter intet selv. Rækkefølgen er bevidst: mangler der tips, er det
-          det eneste, der skal stå; ellers er næste kamp den rolige besked. */}
-      {tips?.allTipped === false && tips.missingCount > 0 ? (
-        <button style={{ ...btnGreen, marginTop: 12 }}
-          onClick={() => openPredictions?.("all", tips.roundKey)}>
-          {tips.missingCount === 1 ? "1 kamp mangler tips" : `${tips.missingCount} kampe mangler tips`}
-        </button>
-      ) : tips?.nextOpen && !noTips ? (
-        <div style={{ color: C.muted, fontSize: 13, marginTop: 10, display: "flex", alignItems: "center", gap: 4 }}>
-          <ChevronRight size={13} /> Næste kamp: {formatKickoff(tips.nextOpen, tips.nextOpenTbd)}
-        </div>
-      ) : null}
     </Card>
   );
 }

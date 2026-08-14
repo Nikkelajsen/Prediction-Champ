@@ -144,7 +144,26 @@ Frame 1 og 3 skal kunne stå alene som delbart billede uden kontekst — det er 
 
 ## 8. Frontend
 
-**Hverdag: ét kort på Hjem, ingen tap-through.** Kortet sidder øverst på Hjem, over Aktive konkurrencer. Ingen friktion, intet at åbne, intet at rydde. Indholdet er overskrift + brødtekst + mini-stilling med brugerens række fremhævet + næste kamp og evt. manglende tips.
+**Hverdag: ét kort på Hjem, ingen tap-through.** Kortet sidder øverst på Hjem, over Aktive konkurrencer. Ingen friktion, intet at åbne, intet at rydde. Indholdet er overskrift + brødtekst + mini-stilling med brugerens række fremhævet + ~~næste kamp og evt. manglende tips~~.
+
+> ⚠️ **TIPS-STATUS ER FJERNET FRA KORTET IGEN 14. august 2026.** Den blev bygget
+> som beskrevet ovenfor og viste sig at være en **dublet i alle tre tilstande**:
+> deadline-kortet, det grønne "alt ok" og "intet at tippe lige nu" står hver især
+> umiddelbart under dagskortet og siger det samme — med nedtælling, rundenavn og
+> de manglende kampes navne oveni. Betingelserne var ordret de samme udtryk
+> (`tips.allTipped === false`), så kortets fod kunne pr. konstruktion aldrig være
+> en faldback for noget, skærmen ikke allerede sagde bedre 40 px længere nede.
+>
+> **Sætningen ovenfor var skrevet ud fra en forudsætning, der ikke blev til
+> noget:** at dagskortet skulle ERSTATTE deadline-kortet ("står PÅ kortet og
+> ikke i et kort mere", `DayCard.jsx`). Deadline-kortet er Hjems signatur og blev
+> stående, og så stod de to side om side og gentog hinanden.
+>
+> **Prisen var kortets egen pointe.** Et kort, der er valgt af en
+> nyhedsværdi-score til at bære dagens ene øjeblik, sluttede på en administrativ
+> opgave frem for på sin mini-stilling — og rundestoryen, det *større* format,
+> har aldrig haft en sådan fod. `DayCard` slutter nu på mini-stillingen, og
+> tips-status bor kun i sit eget kort.
 
 > ⚠️ **MINI-STILLINGEN BLEV FØRST BYGGET 8. august 2026 (`G88`)** — tre uger
 > efter resten af kortet. `DayCard.jsx` renderede `payload.mini` fra dag ét, og

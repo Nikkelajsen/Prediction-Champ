@@ -15,6 +15,42 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — `G118`: tips-status bor ét sted, og det er ikke i historien
+
+**Beslutning:** dagskortets fod (næste kamp / manglende tips) fjernes. `DayCard` slutter på mini-stillingen, og tips-status bor alene i sit eget kort på Hjem — deadline-kortet, det grønne "alt ok" eller "intet at tippe lige nu".
+
+**Begrundelse.** De to kort hang på ordret de samme udtryk, så foden var ikke en gentagelse, der *kunne* opstå — den var en gentagelse, der ALTID opstod, i alle tre tilstande. Og den var altid den fattigste af de to: nedtællingen, rundenavnet og de manglende kampes navne står kun på kortet nedenunder.
+
+**Hvorfor det er kortets fod og ikke kortet nedenunder, der forsvinder.** Det oplagte alternativ var at lade dagskortet bære handlingen og skjule tips-kortet, når kortet allerede sagde det — det var trods alt spec'ens oprindelige intention. Det ville koste nedtællingen, rundenavnet og kampnavnene på netop de dage, hvor der ER et dagskort, altså kampdagene. Hjem ville miste sit signaturkort, præcis når det betyder mest.
+
+**Den generelle regel, rækken efterlader:** *et kort, der er valgt for at bære ét øjeblik, må ikke slutte på en opgave.* Dagskortets ene job er dagens historie; opgaven har sit eget kort, og skærmen er ikke i tvivl om, hvor man trykker. Rundestoryen havde aldrig foden, og asymmetrien var det første tegn.
+
+**Spec'en er rettet frem for koden.** `story-engine-v3.md` §8 opregnede foden som en del af kortets indhold, men sætningen hvilede på en forudsætning, der aldrig blev til noget: at dagskortet skulle ERSTATTE deadline-kortet (`DayCard.jsx`: *"står PÅ kortet og ikke i et kort mere"*). Når spec'ens forudsætning ikke holder, er det spec'en, der er forældet — linjen er streget over og begrundelsen skrevet frem, så det fremgår, at noget blev ændret undervejs.
+
+---
+
+## 14. august 2026 — `I23`: manifestets skærmbilleder tages af appen selv, og `id` fryses frem for at sættes
+
+**Beslutning:** `public/manifest.json` får `id: "/"`, `scope: "/"`, `lang: "da"` og fire skærmbilleder. Billederne genereres af `scripts/screenshots/capture.mjs`, som kører den rigtige app mod en attrap-database i en headless Chromium; de committes sammen med koden og tages om i hånden, når skærmene ændrer sig.
+
+**`id` sættes til den værdi, den allerede har.** En PWA's identitet er `id`, og er feltet tomt, udleder browseren den af `start_url`. Det gør `start_url` til en identitet, den ikke burde være: flyttes appen en dag til fx `/app`, ville en installeret genvej høre til en app, der ikke findes mere — uden fejl og uden opdateringer. `"/"` ændrer derfor ingenting i dag og er præcis pointen: den fastholder identiteten, så `start_url` kan flytte sig senere uden at tage identiteten med. **Feltet må aldrig ændres bagefter**, og fordi JSON ikke kan bære en kommentar, står den regel i `manifest.test.js` — som en påstand og ikke som en note.
+
+**`lang: "da"` og ikke `"da-DK"`,** fordi `index.html` siger `<html lang="da">`, og to steder, der siger næsten det samme, er den slags forskel, ingen opdager. Testen måler manifestet MOD html'en frem for mod en konstant, så de kun kan skifte sammen.
+
+**Skærmbillederne tages af appen, ikke af en tegner.** Det oplagte var fire mockups i HTML: hurtigere at lave, og fuldstændig frikoblet fra produktet fem minutter efter. En attrap af en skærm kan vise hvad som helst — også noget, appen ikke kan — og fejlen ville stå på et markedsføringsmateriale uden at kunne fanges af nogen test. Harnessen kan pr. konstruktion kun vise det, appen tegner.
+
+**Snittet ligger på `fetch` og ikke på `src/lib/data.js`.** Byttede vi datalaget, ville skærmbillederne vise en app, hvis datalag ikke findes i produktionen. Alt går gennem ét `fetch` i `src/lib/supabase.js`, så en attrap dér efterlader hver eneste linje ovenover urørt. Prisen er, at attrappen skal kunne det stykke PostgREST, appen bruger — seks operatorer, talt op i koden frem for gættet — og en forespørgsel med noget andet KASTER frem for at svare tomt: et tomt svar bliver til en tom skærm, og en tom skærm i en PNG ser ud som et designvalg.
+
+**Demo-dataene regnes med appens egen `pointsFor()`.** En håndskrevet stilling kunne modsige kampresultaterne på nabobilledet. Undtagelsen er ratingtallene, som er grove med vilje: motoren bor i `sql/rating_core.sql` og kan ikke køre i en browser, og et gæt, der ser ud som en beregning, er værre end et gæt, der er mærket som et.
+
+**Gentagelighed er et krav og ikke en bekvemmelighed:** skal ét billede tages om, må de tre andre ikke skifte med. Derfor fryses uret, og derfor køres browseren med `--force-prefers-reduced-motion` — live-prikkens puls gjorde ellers billedet afhængigt af, hvornår den virtuelle tid løb ud. Valget af netop det flag frem for indsprøjtet CSS er det samme princip som ovenfor: det er en tilstand, appen selv har (`G22`), og som en rigtig bruger kan se.
+
+**Chromium køres på sin egen kommandolinje frem for gennem Playwright.** Fire runtime-afhængigheder er et bevidst valg i dette repo, og et browser-bibliotek for fire PNG'er er ikke en god handel. Prisen er, at maskinen skal have en Chrome — scriptet leder de sædvanlige steder og siger tydeligt fra med `CHROME=<sti>` som udvej. **Vinduets mål aflæses frem for at skrives:** `--window-size` er ikke viewporten, og forskellen er ikke den samme fra browser til browser, så scriptet spørger browseren først og beskærer bagefter til appens egen ramme.
+
+**Den halvdel, der ikke er gratis, er accepteret som en manuel opgave.** Skærmbillederne kan ikke holde sig selv ajour, og ingen test kan se, at et billede viser en forældet skærm. Alternativet — at bygge dem i CI ved hvert deploy — ville betyde en browser i byggeprocessen og et billede, der ændrer sig, uden at nogen har set det. Valget er i stedet en linje i tjeklisten før merge, samme form som `build-og-image.mjs` har haft siden `I7`.
+
+---
+
 ## 14. august 2026 — `G117`: live-opslaget får ét udgående kald pr. kørsel, fordi kalderen bestemmer
 
 **Beslutning:** gen-forsøget ved timeout fjernes fra live-opslaget. `LIVE_BUDGET_MS` sænkes fra 40 til 25 sekunder, og `smFetch()` kaldes med `retries: false` fra live-stien. De to sæson-opslag er uændrede og beholder `G48`s 429-gen-forsøg.

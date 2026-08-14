@@ -37,7 +37,9 @@
 // ---------------------------------------------------------------------------
 // HVAD DER SKER
 //
-// PNG ind → PNG ud, kun med `node:zlib`. Kilden er 1200×435 RGBA (en navy
+// PNG ind → PNG ud. Selve codec'en bor i `png.mjs` siden `I23`, hvor
+// skærmbilled-scriptet fik brug for den samme — kun `node:zlib`, ingen
+// afhængighed. Kilden er 1200×435 RGBA (en navy
 // "pill" med det gule wordmark), målet er 1200×630 — det format, crawlere
 // forventer (1,91:1). Wordmarket nedskaleres til 72 % og centreres på en flade i
 // samme navy som pillen, så pillens runde hjørner smelter sammen med baggrunden
@@ -46,10 +48,10 @@
 // Kilden har ALFA (de runde hjørner), målet har ikke: resultatet er
 // uigennemsigtigt, og en gennemsigtig PNG er i forvejen noget, flere crawlere
 // gengiver på sort. Derfor læses RGBA og skrives RGB.
-import { readFileSync, writeFileSync } from "node:fs";
-import { deflateSync, inflateSync } from "node:zlib";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { læsPng, skrivPng } from "./png.mjs";
 
 const ROD = join(dirname(fileURLToPath(import.meta.url)), "..");
 const KILDE = join(ROD, "public", "leagly-wordmark-navy.png");
@@ -63,94 +65,6 @@ const BAGGRUND = [0x0c, 0x16, 0x22];
 // 72 %: nok luft til at wordmarket ikke rører kanten, og stort nok til at kunne
 // læses i en miniature. Ændres tallet, flytter centreringen nedenfor med.
 const SKALA = 0.72;
-
-const PNG_SIGNATUR = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-
-// ---------------------------------------------------------------------------
-// CRC32 — PNG'ens egen, samme polynomium som zlib's. Tabellen bygges én gang.
-const CRC_TABEL = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-
-function crc32(buf) {
-  let c = 0xffffffff;
-  for (let i = 0; i < buf.length; i++) c = CRC_TABEL[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
-// ---------------------------------------------------------------------------
-// Læsning: chunks ud, IDAT samlet, scanlines af-filtreret.
-//
-// De fem filtertyper er PNG-formatets egne (0 None, 1 Sub, 2 Up, 3 Average,
-// 4 Paeth). Alle fem SKAL kunne læses — hvilken der er brugt, afgør encoderen
-// pr. række, og kilden er lavet af et værktøj, vi ikke selv styrer.
-function paeth(a, b, c) {
-  const p = a + b - c;
-  const pa = Math.abs(p - a);
-  const pb = Math.abs(p - b);
-  const pc = Math.abs(p - c);
-  if (pa <= pb && pa <= pc) return a;
-  return pb <= pc ? b : c;
-}
-
-function læsPng(sti) {
-  const fil = readFileSync(sti);
-  if (!fil.subarray(0, 8).equals(PNG_SIGNATUR)) throw new Error(`${sti} er ikke en PNG`);
-
-  const idat = [];
-  let bredde = 0;
-  let højde = 0;
-  let i = 8;
-  while (i < fil.length) {
-    const længde = fil.readUInt32BE(i);
-    const type = fil.toString("ascii", i + 4, i + 8);
-    if (type === "IHDR") {
-      bredde = fil.readUInt32BE(i + 8);
-      højde = fil.readUInt32BE(i + 12);
-      const bitdybde = fil[i + 16];
-      const farvetype = fil[i + 17];
-      const interlace = fil[i + 20];
-      // Scriptet kan ét format, og det er det, kilden har. Et andet skal fejle
-      // højlydt frem for at give et billede, ingen kigger efter bagefter.
-      if (bitdybde !== 8 || farvetype !== 6 || interlace !== 0) {
-        throw new Error(`${sti}: forventede 8-bit RGBA uden interlace, fik bitdybde=${bitdybde} farvetype=${farvetype} interlace=${interlace}`);
-      }
-    } else if (type === "IDAT") {
-      idat.push(fil.subarray(i + 8, i + 8 + længde));
-    }
-    i += 12 + længde;
-    if (type === "IEND") break;
-  }
-
-  const bpp = 4;
-  const stride = bredde * bpp;
-  const rå = inflateSync(Buffer.concat(idat));
-  const px = Buffer.alloc(højde * stride);
-  for (let y = 0; y < højde; y++) {
-    const filter = rå[y * (stride + 1)];
-    const kilde = rå.subarray(y * (stride + 1) + 1, y * (stride + 1) + 1 + stride);
-    const nu = px.subarray(y * stride, (y + 1) * stride);
-    const før = y > 0 ? px.subarray((y - 1) * stride, y * stride) : null;
-    for (let x = 0; x < stride; x++) {
-      const a = x >= bpp ? nu[x - bpp] : 0;
-      const b = før ? før[x] : 0;
-      const c = x >= bpp && før ? før[x - bpp] : 0;
-      let v = kilde[x];
-      if (filter === 1) v += a;
-      else if (filter === 2) v += b;
-      else if (filter === 3) v += (a + b) >> 1;
-      else if (filter === 4) v += paeth(a, b, c);
-      nu[x] = v & 0xff;
-    }
-  }
-  return { bredde, højde, px };
-}
 
 // ---------------------------------------------------------------------------
 // Nedskalering med boks-filter (arealgennemsnit).
@@ -195,51 +109,11 @@ function nedskalér(kilde, nyBredde, nyHøjde) {
 }
 
 // ---------------------------------------------------------------------------
-// Skrivning: RGB, filter Up på alle rækker undtagen den første.
-//
-// Up frem for None er ikke pynt: fladen er ensfarvet navy over det meste af
-// billedet, så en række, der er magen til den forrige, bliver til lutter
-// nuller — og deflate pakker nuller til ingenting. Første række har ingen
-// forgænger og bruger None.
-function skrivPng(sti, bredde, højde, rgb) {
-  const stride = bredde * 3;
-  const rå = Buffer.alloc(højde * (stride + 1));
-  for (let y = 0; y < højde; y++) {
-    const ud = y * (stride + 1);
-    rå[ud] = y === 0 ? 0 : 2;
-    for (let x = 0; x < stride; x++) {
-      const nu = rgb[y * stride + x];
-      const før = y > 0 ? rgb[(y - 1) * stride + x] : 0;
-      rå[ud + 1 + x] = (nu - (y === 0 ? 0 : før)) & 0xff;
-    }
-  }
-
-  const chunk = (type, data) => {
-    const ud = Buffer.alloc(12 + data.length);
-    ud.writeUInt32BE(data.length, 0);
-    ud.write(type, 4, "ascii");
-    data.copy(ud, 8);
-    ud.writeUInt32BE(crc32(ud.subarray(4, 8 + data.length)), 8 + data.length);
-    return ud;
-  };
-
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(bredde, 0);
-  ihdr.writeUInt32BE(højde, 4);
-  ihdr[8] = 8; // bitdybde
-  ihdr[9] = 2; // farvetype 2 = RGB uden alfa
-  // 10-12: komprimering, filter, interlace — alle 0, som PNG kun tillader.
-
-  writeFileSync(sti, Buffer.concat([
-    PNG_SIGNATUR,
-    chunk("IHDR", ihdr),
-    chunk("IDAT", deflateSync(rå, { level: 9 })),
-    chunk("IEND", Buffer.alloc(0)),
-  ]));
-}
-
-// ---------------------------------------------------------------------------
 const kilde = læsPng(KILDE);
+// `nedskalér` regner med alfa i hver fjerde byte. En kilde uden alfa ville give
+// et billede, hvor hver fjerde farvekanal blev læst som gennemsigtighed — altså
+// noget, der ligner en fejl i logoet frem for en fejl i koden.
+if (kilde.kanaler !== 4) throw new Error(`${KILDE}: forventede RGBA, fik ${kilde.kanaler} kanaler`);
 const skaleret = nedskalér(kilde, Math.round(kilde.bredde * SKALA), Math.round(kilde.højde * SKALA));
 
 const lærred = Buffer.alloc(BREDDE * HØJDE * 3);
@@ -263,5 +137,5 @@ for (let y = 0; y < skaleret.højde; y++) {
   }
 }
 
-skrivPng(MÅL, BREDDE, HØJDE, lærred);
+skrivPng(MÅL, { bredde: BREDDE, højde: HØJDE, kanaler: 3, px: lærred });
 console.log(`${MÅL}: ${BREDDE}×${HØJDE}, ${(readFileSync(MÅL).length / 1024).toFixed(1)} kB`);

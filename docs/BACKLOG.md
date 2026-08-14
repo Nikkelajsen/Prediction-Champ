@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A57` · `B36` · `G118` · `I24`.**
+**Næste ledige: `A57` · `B36` · `G119` · `I24`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -51,12 +51,13 @@ eller en linje i "Forkastede ideer".
 - Sportmonks svarede 503 upstream connect error i halvdelen af de fejlende live-kald 14. august — hverken tidsgrænse eller gen-forsøg hjælper på leverandørens eget nedbrud, og der er ingen aflæsning af, hvor ofte det sker.
 - G113 (footballdata mangler G109s tre værn) er delvist forældet: gen-forsøget ved timeout kan ikke være der under cron-job.orgs 30 sekunder, så rækken handler nu kun om kald-grænsen og budgettet.
 - sync-matches er hver 12. time, så live-syncen er den eneste vej til et endeligt resultat inden for rimelig tid — der er intet sikkerhedsnet, hvis den er nede en halv time efter en kamp.
+- skærmbilled-harnessen (I23) kører hele appen mod en attrap i stedet for en database — det er en måde at se og klikke appen igennem uden Supabase, men den findes i dag kun som et led i et script, der tager PNG'er.
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 38 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 37 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -108,9 +109,7 @@ Tomt.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
-| # | Hvad | Note |
-|---|---|---|
-| `I23` | Giv `manifest.json` `id`, `scope`, `lang` og `screenshots` | Chrome viser den **rige** installationsprompt, når felterne er der — med skærmbilleder frem for en bar ikon-dialog. Manifestet findes og vedligeholdes allerede (`G97`-vagten måler dets beskrivelse), så det er felter i en fil, der er i drift, og ikke et nyt lag. |
+Tomt.
 
 ### Tier 4 — Datarisiko med en lunte
 
@@ -243,7 +242,6 @@ idé bliver til en `B`- eller `A`-række, når den er værd at tage stilling til
 | I18 | **i18n-lag: al brugertekst ud af komponenterne** | Flersprogethed er den valgte vej til marked #2 (august 2026: dansk-først er bevidst, flere sprog HVIS dansk lykkes) — men appen har i dag intet tekstlag, så det bliver en ombygning og ikke en oversættelse. Noteret nu af én grund: prisen betales løbende. Hver ny skærm, der hårdkoder sine tekster, gør ombygningen dyrere, og en stille disciplin (nye tekster samles ét sted, når der alligevel røres ved en skærm) er gratis fra i dag. | Betinget af dansk succes |
 | I19 | **"Historik" på karriereprofilen: gamle dagskort** | Karrusellen var utilsigtet også et arkiv — man kunne rulle tilbage i ugens kort. v3 fjerner det, og spørgsmålet er, om nogen savner det. Modargumentet er stærkt: en historikliste over dagskort er præcis den rundelog, `milepaele-v1.md` skilte karriereprofilen af med, og rækkerne bliver i tabellen uanset hvad (de filtreres allerede fra på prioritetsbåndet). | **Vent til nogen spørger.** Bygges den præventivt, er den bygget af samme grund som karrusellens loft på 10 — fordi det kunne lade sig gøre. |
 | I20 | **QR-kode i invitations-fladen** | Til den ene situation, et link er dårligere end et billede: "vi sidder sammen fysisk". **Fravalgt i `I7` (11. august 2026) på pris, ikke på princip** — den koster enten en ny afhængighed eller ~200 linjer egen encoder, og repoets afhængighedsfattigdom er et bevidst valg (fire runtime-deps). Delearket dækker situationen i dag, bare dårligere: man skal finde modtageren i en kontaktliste frem for at pege et kamera. Står i spec'ens "Bevidst ikke med i v1" med samme begrundelse. | Fravalgt i `I7` — hentes frem, hvis nogen savner den |
-| I23 | **`manifest.json` mangler `id`, `scope`, `lang` og `screenshots`** | Chrome viser den **rige** installationsprompt — med skærmbilleder og beskrivelse frem for en bar ikon-dialog — når felterne er der, og appen er en PWA, hvor installationen er hele distributionsvejen. `id` er desuden det, der gør, at en senere ændring af `start_url` ikke opfattes som en **ny** app. Manifestet er i drift og har allerede en vagt på sin beskrivelse (`G97`, sjette målte fil siden 14. august 2026), så det er felter i en fil, der vedligeholdes, og ikke et nyt lag. Prisen ved `screenshots` er, at billederne skal laves og holdes ajour — det er den ene halvdel, der ikke er gratis. | Ny |
 | I21 | **OG-billede med ligaens eget navn** | `I7` gav invitationslinket et udseende, men billedet er statisk (`public/og-image.png`, 1200×630) og **`og:title` bærer hele ordlyden** — "Kom med i ligaen X" står som tekst under et generisk billede. Et billede med ligaens navn *i* sig ville være det, der faktisk fylder i en gruppechat. **Prisen er skriftgengivelse på serveren:** en font skal indlejres og et billede tegnes pr. kald, hvilket er en anden slags afhængighed end resten af `api/`, og det skal ske inden for edge-funktionens budget. Hører efter `I17`, som er den billige halvdel af samme idé. | Fravalgt i `I7` — hører til `I17`s runde |
 
 ## Forkastede ideer
