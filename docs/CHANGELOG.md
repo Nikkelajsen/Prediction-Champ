@@ -101,10 +101,12 @@ det er nu en påstand i testen.
 (7 advarsler), grønt build. Tre nye SQL-tests med 17 påstande er kørt mod en
 rigtig PostgreSQL 16.13 og efterprøvet med i alt **fjorten mutationer — alle
 fanget**. Begrundelserne står i [`DECISIONS.md`](./DECISIONS.md).
-🔶 **Tre migreringer skal køres i Supabase:** `#62` **før** frontend-mergen
-(klienten læser viewet, og et 404 giver en tom Ligaer-fane), `#63` og en
-gen-kørsel af `career_profile.sql` (`#10`) i fri rækkefølge. Skema-eksporten
-halter herefter tre migreringer, hvilket er noteret i `sql/README.md`.
+✅ **Alle tre migreringer er kørt i Supabase 14. august 2026** — `#62` før
+frontend-mergen, som dens ene rækkefølge-regel kræver, plus `#63` og en
+gen-kørsel af `career_profile.sql` (`#10`). 🔶 **Skema-eksporten halter herefter
+tre migreringer** (`#61`, `#62`, `#63`), hvilket er noteret i `sql/README.md`;
+det er ufarligt for CI, fordi hver af de tre tests anvender sin egen migrering
+oven på dumpet.
 
 ---
 
