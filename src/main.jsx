@@ -1,6 +1,5 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Analytics } from "@vercel/analytics/react";
 import App from "./App.jsx";
 import ErrorBoundary from "./ui/ErrorBoundary.jsx";
 import { registerServiceWorker } from "./lib/push.js";
@@ -14,6 +13,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <ErrorBoundary>
       <App />
     </ErrorBoundary>
-    <Analytics />
   </React.StrictMode>
 );

@@ -15,6 +15,59 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — `A52`: Vercel Web Analytics fravælges i appen, og hjemmesiden måles serverside
+
+**Beslutning (produktejeren):** appen får **ikke** Vercel Web Analytics, og
+hjemmesiden måles på **Vercels egne servertal** (Observability → Edge Requests)
+frem for på et script. Begge dele er fravalg, og de har hver sin begrundelse.
+
+**Appen: privatlivspolitikken var allerede skrevet, og den lover det modsatte.**
+Pakken blev installeret og `<Analytics />` monteret i `src/main.jsx` (PR #206,
+merget og udrullet samme dag) — den virkede, tallene kom frem i Vercels panel.
+Men `src/lib/legal.js` har en sektion, der hedder **"Hvad vi ikke gemmer"**, og
+tre af dens linjer holdt ikke længere:
+
+* *"Der er ingen sporing ud over appens egen."*
+* *"Ingen Google Analytics, ingen Facebook-pixel, ingen reklamenetværk, ingen
+  tredjeparts-værktøjer…"*
+* *"Ingen IP-adresse og ingen browser-oplysninger i vores brugslog."* — Vercel
+  Web Analytics registrerer sti, henvisning, land, browser, OS og enhed.
+
+To af politikkens linjer overlevede og er værd at notere, fordi de er dem, folk
+plejer at falde over: **cookie-linjen holdt** (Vercel Web Analytics er
+cookieløs), og **"intet hentet fra andres servere" holdt også** — scriptet
+serveres i produktion fra `/_vercel/insights/script.js` på eget domæne, og
+`va.vercel-scripts.com` bruges kun i udvikling (læst i pakkens `getScriptSrc`).
+Det var altså ikke en teknisk hindring, der lukkede spørgsmålet.
+
+**Det, der lukkede det, er rækkefølgen mellem de to dokumenter.** Appen har
+sit eget måle-lag (`analytics_events`, `DOCUMENTATION.md` §21), som er bygget
+til produktforbedring og beskrevet i politikken. Vercel-tallene ville lægge
+besøgstal oven i det og til gengæld kræve, at et juridisk dokument blev
+omskrevet for at passe til et værktøj, ingen havde bedt om. **En
+privatlivspolitik er et løfte, ikke en beskrivelse, der løbende rettes til
+efter, hvad der er blevet installeret.** Prisen for fravalget er, at der ikke
+findes et besøgstal for appen — det er accepteret, fordi appen kræver login, så
+"besøgende" og "brugere" er næsten samme tal, og det tal kendes allerede.
+
+**Hjemmesiden: `script-src 'none'` er billigere at beholde end at bryde.**
+`I22` (13. august 2026) fastslog, at sitets fravalg af JavaScript var intakt,
+fordi burgermenuen kunne laves i ren CSS, og `site/vercel.json` gjorde fravalget
+til en header. Vercel Web Analytics ville have kostet præcis ét direktivs
+lempelse — `script-src 'none'` → `'self'`, ikke mere, da både script og beacon
+er samme origin. **Men `'self'` er ikke en lille lempelse på et site uden JS:**
+den flytter garantien fra "browseren nægter at køre script" til "vi har for
+øjeblikket ingen scripts", og forskellen er hele pointen med at have skrevet
+direktivet. Til gengæld giver **Observability → Edge Requests** requesttal med
+henvisning, user agent og region **uden kodeændring og uden CSP-ændring**;
+det er med på Hobby-planen. Kendte begrænsninger: opdelingen **pr. rute** er
+bag Observability Plus (Pro), og Hobby har et loft på 50.000 hændelser/måned,
+hvor hver HTML-, CSS-, font- og favicon-hentning tæller med — så tallet er
+requests og ikke sidevisninger. **Det er groft nok til at svare på "vokser
+trafikken", og det er dét, spørgsmålet var.**
+
+---
+
 ## 13. august 2026 — Hjemmesiden gøres udrulningsklar: fire spørgsmål lukket på én gang
 
 **Beslutning (produktejeren):** `I8`s resterende arbejde **i repoet** er udført,
