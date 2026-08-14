@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { currentRoundKey, roundKeyOfDate, nextRoundKey, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, isLocked, filterTippable, filterFromRoundStart, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { currentRoundKey, roundKeyOfDate, nextRoundKey, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, isLocked, filterTippable, wasTippableAt, filterFromRoundStart, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 describe("outcome", () => {
   it("giver 1 ved hjemmesejr, X ved uafgjort, 2 ved udesejr", () => {
@@ -122,6 +122,48 @@ describe("filterTippable", () => {
 
   it("giver tom liste når hele sæsonen er spillet", () => {
     expect(filterTippable([spillet("2026-07-07")])).toEqual([]);
+  });
+
+  // `wasTippableAt` er søsterreglen (`A53`): samme spørgsmål, men stillet om et
+  // GIVET tidspunkt frem for om nu, og om en ny DELTAGER frem for en ny
+  // konkurrence. Kunne kampen stadig tippes, da hun meldte sig til?
+  describe("wasTippableAt — deltagerens nulpunkt", () => {
+    const KAMP = { kickoff_at: "2026-07-06T18:00:00Z", kickoff_tbd: false };
+    const ms = (iso) => Date.parse(iso);
+
+    it("tæller kampen med, når man meldte sig til før låsen", () => {
+      expect(wasTippableAt(KAMP, ms("2026-07-06T16:59:00Z"))).toBe(true);
+    });
+
+    it("tæller den IKKE med, når man meldte sig til efter låsen", () => {
+      expect(wasTippableAt(KAMP, ms("2026-07-06T17:30:00Z"))).toBe(false);
+    });
+
+    // Grænsen ligger ved låsen (1 time før kickoff), ikke ved kickoff. Ét minut
+    // galt her er forskellen på at tage en hel runde med eller lade den ligge.
+    it("lægger grænsen præcis ved låsen og ikke ved kickoff", () => {
+      expect(wasTippableAt(KAMP, ms("2026-07-06T16:59:59Z"))).toBe(true);
+      expect(wasTippableAt(KAMP, ms("2026-07-06T17:00:00Z"))).toBe(false);
+    });
+
+    // Uden fastlagt klokkeslæt er låsen midnat på spilledagen i DANSK tid —
+    // samme svar som `public.match_lock_at()`, der håndhæver den i RLS.
+    it("bruger midnat dansk tid for en kamp uden fastlagt klokkeslæt", () => {
+      const tbd = { kickoff_at: "2026-07-06T18:00:00Z", kickoff_tbd: true };
+      expect(wasTippableAt(tbd, ms("2026-07-05T21:00:00Z"))).toBe(true);  // før midnat DK
+      expect(wasTippableAt(tbd, ms("2026-07-05T23:00:00Z"))).toBe(false); // efter midnat DK
+    });
+
+    // Begge bagstoppere svarer "tæl med". En manglende oplysning må aldrig
+    // kunne nulstille en spillers point.
+    it("tæller med, når tilmeldingstidspunktet er ukendt", () => {
+      expect(wasTippableAt(KAMP, NaN)).toBe(true);
+      expect(wasTippableAt(KAMP, undefined)).toBe(true);
+    });
+
+    it("tæller med, når kampen ikke har noget kendt kickoff", () => {
+      expect(wasTippableAt({ kickoff_at: null }, ms("2026-07-06T17:30:00Z"))).toBe(true);
+    });
   });
 
   // Låst, ikke "har resultat": en kamp, der er fløjtet i gang, kan heller ikke

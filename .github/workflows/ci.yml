@@ -660,6 +660,21 @@ jobs:
           psql -h localhost -U postgres -d simtest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d simtest -v ON_ERROR_STOP=1 -b -f sql/tests/simulate_season.sql
 
+      # Deltagerens nulpunkt (A53). Måler BEGGE steder, konkurrence-point
+      # beregnes i SQL — viewet `competition_match_points` (Story Engine og
+      # milepælene læser kun igennem det) og `award_competition_periods()`, som
+      # har sine egne inline-joins. Fixturen giver fire spillere NØJAGTIG samme
+      # gæt og kun forskellige tilmeldingstidspunkter, så intet andet kan
+      # forklare en forskel i stillingen.
+      - name: Test af deltagerens nulpunkt
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database joinbaseline;'
+          psql -h localhost -U postgres -d joinbaseline -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d joinbaseline -v ON_ERROR_STOP=1 -b -f sql/tests/competition_join_baseline.sql
+
       # SQL-blokkene i docs/ (G74). Det eneste trin i jobbet, der ikke tester en
       # migrering, men DOKUMENTATIONEN: hver ```sql-blok bygges om til et
       # `prepare` mod hele sql/schema.sql, så PostgreSQL selv siger, om

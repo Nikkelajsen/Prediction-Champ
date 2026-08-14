@@ -525,8 +525,19 @@ begin
   returning id into v_comp;
 
   -- Triggeren competition_participants_ensure_group melder dem ind i ligaen.
-  insert into public.competition_participants (competition_id, user_id)
-  select v_comp, u from unnest(v_users) u
+  --
+  -- `joined_at` sættes EKSPLICIT til en uge før sæsonens første runde (`A53`).
+  -- Defaulten er `now()`, og simulatoren bakker kampene i tid — så uden dette
+  -- ville hver eneste deltager være "meldt til efter kampene var spillet", og
+  -- deres tips ville ikke tælle i konkurrencen. Symptomet er ikke en fejl på
+  -- deltageren, men en TOM sæson: `competition_match_points` bliver tom,
+  -- ingen kåringer falder, og Story Engine skriver ingen historier.
+  --
+  -- Det er samtidig den rigtige fixtur: en deltager i en gennemspillet sæson
+  -- HAR været med fra før første kamp. Ændres tallet, så husk, at det skal ligge
+  -- før den FØRSTE kamps lås og ikke bare før dagens dato.
+  insert into public.competition_participants (competition_id, user_id, joined_at)
+  select v_comp, u, (v_first_tue - 7)::timestamptz from unnest(v_users) u
   on conflict do nothing;
 
   insert into public.competition_matches (competition_id, match_id)

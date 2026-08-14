@@ -9,6 +9,75 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — `A53`: en deltager starter på 0 i den konkurrence, hun melder sig til
+
+**Opfølgningen på `G107`, og den kom fra brugeren selv.** Da stillingen endelig
+kunne åbnes, stod der 1 point ud for en spiller, der lige havde meldt sig til.
+Spørgsmålet var, om hun ikke burde starte på 0.
+
+**Hun havde ikke tjent pointet i konkurrencen — men hun havde heller ikke fået
+det ved en fejl.** `predictions` er én række pr. `(bruger, kamp)` og har ingen
+konkurrence-dimension: **der findes ikke sådan noget som "et tip i en
+konkurrence"**. To konkurrencer på samme turnering deler alle deres kampe, så
+hendes gæt fra den anden ligas Superliga-konkurrence talte med, i det sekund hun
+meldte sig til.
+
+**Princippet var afgjort i forvejen — værnet sad bare ét sted for lidt.**
+`filterTippable` materialiserer kun kampe, der stadig kan tippes, når en
+konkurrence oprettes, og `DOCUMENTATION.md` §3 begrunder det med ord, der er
+brugerens situation ordret: *"deltagerne ville ikke stå lige, for den, der ikke
+havde tippet kampen andetsteds, kan ikke nå det."* En konkurrence startede på
+nul; en deltager gjorde ikke.
+
+**Reglen er nu:** et gæt tæller, hvis kampen **låste efter deltagerens
+`joined_at`**. `wasTippableAt()` i `src/lib/scoring.js` (søster til
+`filterTippable`, samme fil) og `public.match_lock_at(…) > cp.joined_at` i SQL
+([`#61 competition_join_baseline.sql`](../sql/competition_join_baseline.sql)).
+Reglen ligger på `predsByKey` og ikke på pointudregningen alene, fordi det kort
+ER stillingens datagrundlag: rundetabellen, formen, ▲/▼-pilene og rundemodalen
+læser alle det samme, så tallene i tabellen og gættene i modalen ikke kan sige
+hver sit.
+
+**To grunde til at lukke hullet, og den første vejer tungest:** en sen
+tilmelding kan gøre **allerede udsendte historier forkerte bagud** — melder man
+sig i sidste runde og slår alle, omskrives den stilling, kortene beskrev, og
+kort er sendt, milepæle er permanente. Den anden er, at det kunne spekuleres i.
+
+**Rækkevidden er ALLE deltagere**, ikke kun dem, der melder sig fra nu af.
+Prisen er sagt højt: stillingen beregnes live, så enhver, der allerede er meldt
+sent til noget, taber de point ved næste åbning. Alternativet var en fast dato i
+både JS og SQL — en regel med en fødselsdag, ingen kan læse sig til. **Bagud
+omskrives intet:** alt frossent står stille (udsendte historier, faldne
+kåringer, permanente milepæle). Rating og Championship er ikke omfattet; de er
+turnerings-scopede og har ingen konkurrence at melde sig til.
+
+🔴 **Rækken gjorde to ældre migreringer farlige at gen-køre** —
+`#37 story_engine_v2_day.sql` og `#26 competition_awards.sql` bærer den gamle
+definition og ruller reglen tavst tilbage. `sql/README.md`s liste er dermed
+vokset fra ti filer til tolv.
+
+🔴 **Og den fandt en landmine, der først ville være sprunget om en uge.**
+`sql/dev/simulate_season.sql` bakker kampene i tid, men lod `joined_at` tage sin
+default (`now()`) — så under den nye regel var hver simuleret deltager "meldt
+til efter kampene var spillet", og hele sæsonen blev **tom**: ingen kåringer,
+ingen historier. Testen er grøn i dag, fordi `sql/schema.sql` er et
+øjebliksbillede uden migreringen; den var blevet rød, når skema-eksporten kørte.
+Fundet ved at køre alle femten skema-indlæsende tests fra **den anden side af
+dumpet** — §13's regel, tredje gang den betaler sig.
+
+**Verificeret:** 1349 tests (tolv nye), lint uændret på loftet (7 advarsler),
+grønt build. **Ny SQL-test** (`sql/tests/competition_join_baseline.sql`,
+CI-trin nr. fireogtredive) kørt mod det RIGTIGE skema på PostgreSQL 16.13:
+fire spillere med **nøjagtig samme gæt** og kun forskellige
+tilmeldingstidspunkter, så intet andet kan forklare en forskel — inklusive én,
+der melder sig i selve låsesekundet, og én, der når det med ét sekund.
+**Efterprøvet med tre SQL-mutationer og én JS-mutation, alle fanget**, og den
+første gengiver den oprindelige fejl ordret. **Alle seksten skema-indlæsende
+tests kørt med migreringen anvendt**, og simulatoren fra begge sider.
+**Intet skal køres bagud; `#61` skal køres i Supabase.**
+
+---
+
 14. august 2026 — `G107`: stillingen for en netop tilmeldt konkurrence var tom, og vælgeren pegede på en anden ligas
 
 **Meldt med to skærmbilleder.** En bruger var medlem af ligaen "Familie Fight"
