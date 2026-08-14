@@ -9,6 +9,26 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — Tier 2 kørt tom: hjemmesiden og appen siger nu det samme om produktet — og hvor de ikke gør, er det med vilje
+
+**Tre rækker, én fejlklasse: to flader, der beskrev det samme produkt forskelligt.** `A54` (turneringens navn), `A55` (turneringen var uofficiel, mens sitet solgte den som live-flagskib) og `A56` (beta-mærkatet, der kun stod på sitet). Svarene blev ikke ens — ét af de tre steder er forskellen den rigtige tilstand.
+
+**`A54`: ingen ændring, og det er svaret.** Sitet beholder "Skotske Premiership", `leagues.name` beholder "Scotland Premiership" — samme form som `A49` gav La Liga/Primera División dagen før: sitet er marketing, `leagues.name` er data. Sitets brødtekst skriver i forvejen "den skotske Premiership" fire steder, og turneringen hedder officielt "Scottish Premiership", så ét fælles navn ville have været et **tredje** navn.
+
+**`A55`: Scotland Premiership forfremmes til officiel** — [`sql/tournament_scotland_promote.sql`](../sql/tournament_scotland_promote.sql) (#64). Generalprøven, der var hele begrundelsen for `is_official = false` 31. juli, er overstået: to uger med rigtige kampe, rigtige tips og en live-sync, og maskineriet er afprøvet af netop den turnering. **Migreringen kalder selv `recompute_ratings()`**, fordi virkningen ellers ville komme snigende: stillingerne er views og tæller skotske tips med i alle historiske runder ved næste opslag, mens ratingen først flytter sig, når triggeren fyrer ved den næste tilfældige målscoring — midt i en runde. Nu sker skiftet på ét tidspunkt, man kan skrive i loggen. ⚠️ **Filen skal køres mellem to spillerunder**, ikke midt i en; betingelsen stod i `#24` fra 31. juli og er ført med over.
+
+**Den største rettelse er den, ingen af rækkerne bad om.** `sql/tournament_scope.sql` (#20) satte `is_official = false` på `501` midt i det script, der definerer `round_standings` og `monthly_standings` — altså i en fil, der **skal** gen-køres, hver gang de to views ændrer sig. En helt almindelig gen-kørsel ville have rullet forfremmelsen tilbage **tavst** og flyttet rating og titler for alle brugere. Sætningen er fjernet (ikke rettet): den var en starttilstand skrevet som en regel, og det er `G65`s fejl en gang til. **Gen-kørslen er heller ikke hypotetisk** — `job-heartbeat`-workflowens rettelses-felt siger ordret *"Kør sql/tournament_scope.sql igen (#20 afløser #12)"*, hvis stillings-viewene mister deres `scope`-kolonne. Fælden ville være blevet stillet af en overvågning, der gjorde sit arbejde.
+
+**Sitet skulle ikke røres, og appen heller ikke.** "Point, stilling og rating opdateres i alle turneringer" bliver sandt, når migreringen køres — og `scopeNote()`-linjen i Championship-fanen forsvinder af sig selv, fordi funktionen returnerer `null` uden uofficielle turneringer. Spec'en fra 31. juli forudsagde det ordret.
+
+**`A56`: appen bærer nu "Beta" ved ordmærket** (`src/ui/Wordmark.jsx`) — de tre steder mærket står: topbjælken, login og onboarding. Alternativet var at fjerne det fra sitet, hvilket ville have rullet `A48` tilbage to dage efter, den blev truffet. Mærkatet bor i mærket og ikke i kaldestederne, så `A48`s exit-kriterium kan udføres ét sted i appen og ét på sitet — og det gælder nu begge flader. Størrelsen skalerer bevidst ikke med `size`: headerens plads er talt på en 320 px skærm.
+
+**Fulgt op i dokumentationen:** `#64` i `sql/README.md` (plus rettede status-celler på #20, #21 og #24), staging-guidens datatrin er gået fra fire til fem, spec'en `turnering-2.md` har fået sin "rettet efter levering"-note, hjemmesidens spec noterer, at beta-mærkatet nu er begge flader, og `DOCUMENTATION.md` §7 beskriver topbjælken med mærkatet.
+
+**Verificeret:** 1368 tests (to nye — mærkatet følger mærket og ikke kaldestedet, og det skalerer ikke med `size`), lint uændret på loftet (7 advarsler), build grønt. **Udestår hos ejeren:** `#64` er ikke kørt i produktionen endnu — den venter på et rundeskifte og står som `B35` øverst i backloggens Tier 1.
+
+---
+
 14. august 2026 — `G109`: livescoren fejlede hvert andet minut, og leverandøren havde ikke sendt én eneste fejl
 
 **`sync-live` stod **USTABIL** i Admin → Drift og rødt på cron-job.org i omtrent to ud af tre minutter.** Fejlen var hver gang `Datakilder fejlede: sportmonks: Tidsgrænse: intet svar fra …/fixtures/multi/<id> inden for 10000 ms` — ét fixture-id i adressen, den letteste include-kombination endpointet kan få, og **ikke ét eneste 4xx eller 5xx fra leverandøren**. Der var altså intet i selve kaldet at optimere.

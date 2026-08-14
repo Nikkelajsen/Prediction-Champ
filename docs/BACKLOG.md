@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A57` · `B35` · `G115` · `I24`.**
+**Næste ledige: `A57` · `B36` · `G115` · `I24`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -47,13 +47,13 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(Tom.)*
+- DOCUMENTATION.md §19 siger, at karriereprofilens globale komplethedsjoin tæller uofficielle turneringer med — afsnittet lige under siger, at det blev rettet i august.
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 40 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 38 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -95,15 +95,13 @@ produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
 gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
 køres på et minut.
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `B35` | Kør `#64 tournament_scotland_promote.sql` i produktionen | Forfremmelsen, `A55` besluttede 14. august 2026. Filen er skrevet, verificeret og merget; kun kørslen mangler, og den kan kun laves i Supabase. ⚠️ **Mellem to spillerunder** — sætningen er lige gyldig når som helst, men den ændrer kåringen af en runde, folk allerede har tippet, mens de tipper den. Filen kalder selv `recompute_ratings()`, så der skal ikke trykkes "Opdater ratings" bagefter. Bagefter: kør skema-eksporten ikke — det er data og ikke skema. |
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-| # | Hvad | Note |
-|---|---|---|
-| `A54` | Hedder turneringen "Skotske Premiership" eller "Scotland Premiership"? | Sitet siger det ene, `leagues`-rækken det andet. Præcis samme spørgsmål, som La Liga fik afgjort med `A49` — svaret dér er formen, dette skal følge. Billigst nu, hvor kun én side og én række bærer navnet. |
-| `A55` | Skal Scotland Premiership forfremmes til officiel — eller skal sitets copy tage forbehold? | Turneringen er `is_official=false`, så tips dér giver **hverken rating eller championship-point**, mens hjemmesiden sælger den som den anden live-turnering. De to udsagn kan ikke begge stå. Forbeholdet er én sætning; forfremmelsen rører rating og championship og er ikke Tier 2-billig — rækken ligger her, fordi den billige udgang findes, ikke fordi begge er små. |
-| `A56` | Skal appen sige "beta", når hjemmesiden gør? | Mærkatet findes kun på sitet. Enten fjernes det dér, eller også skal appen bære det — en bruger, der kommer fra sitet, møder i dag to forskellige løfter om, hvor færdigt produktet er. |
+Tomt.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -197,9 +195,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | A14 | **Skal hele kodebasen gennemformateres med Prettier?** | `npm run format` findes, men `format:check` er bevidst ikke et CI-trin. En fuld gennemformatering ville omskrive ~6.700 linjer ved `printWidth: 140` (~14.000 ved standard 80) på tværs af ~126 filer (86 uden testfiler; genmålt august 2026). Prisen er hele repoets `git blame`; gevinsten er konsistens i en kodebase med én forfatter og en i forvejen ensartet håndstil. Beslutningen er **udskudt, ikke truffet** — se [`DECISIONS.md`](./DECISIONS.md), 30. juli 2026. | Næste gang der alligevel røres bredt i frontenden — ellers aldrig. |
 | A23 | **Skal appen have en router?** | Navigation er i dag to `useState` i `MainApp.jsx` (`tab` + `screen`), og deep links læses ved boot og strippes straks via `history.replaceState` (`App.jsx:104`, `MainApp.jsx:215,239`). Følgen er ingen tilbage-knap, ingen browser-historik og ingen delbare URL'er til interne skærme — mærkbart for en PWA, hvor telefonens tilbage-gestus forventes at virke. Men det er et arkitekturvalg, ikke en fejl: afhængighedsfattigheden er bevidst (fire runtime-deps, ingen router, `docs/reviews/2026-08-app-review.md` §7), og en router omskriver hele navigations-tilstandsmaskinen inkl. begge deep-link-join-flows, som ingen test dækker. | Når tilbage-knappen enten koster brugere (kan aflæses i analytics) eller en feature kræver ægte delbare interne URL'er — `I12`s offentlige ligaside er den første, der ville. |
 | A39 | **Skal et dagskort kunne udgives, mens en anden turnering mangler et resultat?** | `match_day_complete()` er global: den kræver, at ALLE kampe på dagen har resultat, uanset turnering og uanset konkurrence. Én udsat eller uindberettet kamp i én turnering blokerer derfor dagskortet for hver eneste bruger, også dem, hvis konkurrencer slet ikke rører den turnering. **Prisen er bevidst og dokumenteret** — den globale kampdag er produktets ene tvær-turneringsbegreb, og et kort pr. konkurrence ville skulle vælge, hvilken dag der er *dagen* — men den blev betalt synligt under `A38`s undersøgelse, hvor det tog tid at afgøre, om stilheden var en fejl eller en ventende kamp. **To veje:** afgrænse fuldførtheden til de kampe, modtagerens egne konkurrencer dækker (kortet bliver personligt og kan skrives på forskellige tidspunkter for forskellige brugere), eller beholde den globale dag og gøre blokeringen aflæselig, så stilheden kan skelnes fra en fejl. Den første koster determinismen i acceptkriterie 7; den anden koster ingenting og løser heller ikke noget. | **Når `sql/checks/day_card_coverage.sql` melder en blokeret dag, nogen faktisk savnede.** Kontrollen findes siden `A38` og er dermed selve udløseren — indtil den melder noget, er problemet teoretisk. |
-| A54 | **Hedder turneringen "Skotske Premiership" eller "Scotland Premiership"?** | Hjemmesidens turneringsliste siger det første, `leagues`-rækken det andet — og appen viser leverandørens navn, altså basens. **Spørgsmålet er afgjort før:** La Liga fik det med `A49`, og svaret dér er den form, dette skal følge, ikke en ny diskussion. Prisen ved at vente er, at et tredje sted kommer til at bære et af de to navne, og at rettelsen så koster tre steder i stedet for to. **Bemærk, at det ikke kun er kosmetik:** en turnering, brugeren møder under to navne, kan ikke søges eller omtales entydigt. | Ejerens beslutning — samme runde som `A55`, fordi begge rører samme række på sitet. |
-| A55 | **Skal Scotland Premiership forfremmes til officiel, eller skal sitets copy tage forbehold?** | Turneringen har `is_official=false`. Følgen er, at tips i den hverken giver **rating** eller **championship-point** — mens hjemmesiden sælger den som den anden af to live-turneringer, altså sidestillet med Superligaen. De to udsagn kan ikke begge være sande for en bruger, der melder sig til på sitets løfte. **To veje med meget forskellig pris.** Forbeholdet er én sætning på sitet og lukker uoverensstemmelsen med det samme. Forfremmelsen ændrer, hvad der tæller i rating og championship, og er dermed en ændring af selve konkurrencen — den skal i givet fald træffes som en produktbeslutning og ikke som en oprydning i copy. **`is_official` blev sat med vilje**, da turneringen kom til (`B2`, 2. august 2026): den var turnering #2 og skulle prøves af, før den kunne tælle. Det, der har ændret sig, er, at sitet nu markedsfører den. | Ejerens beslutning. Ingen ekstern udløser — men den bør tages, før nogen melder sig til på sitets løfte. |
-| A56 | **Skal appen sige "beta", når hjemmesiden gør?** | Mærkatet står på `leagly.app` og ingen steder i appen. En bruger, der kommer ad den vej, får derfor to forskellige løfter om, hvor færdigt produktet er — og det er netop i appen, et beta-forbehold ville have en funktion (en fejl er lettere at bære, når den var varslet). **To veje, begge billige:** fjern mærkatet på sitet (produktet er i drift med enogtyve brugere og har været det i uger), eller giv appen samme mærkat ét sted, hvor det ikke er i vejen. **Det, der ikke er en mulighed, er at lade dem stå uenige** — det er samme klasse som `A54`: to flader, der beskriver det samme produkt forskelligt. | Ejerens beslutning. Hører sammen med `A54` og `A55`, fordi alle tre er uenigheder mellem site og app. |
 | A51 | **Skal `og:title` følge sælgesætningen og blive fodbold-eksplicit?** | `B30` gjorde sælgesætningen fodbold-eksplicit 13. august 2026, men lod OVERSKRIFTEN stå: `index.html`s `og:title` er fortsat *"Leagly — gæt resultater mod dine venner"*. Den blev holdt uden for rækken med vilje frem for taget med i forbifarten — den er en **anden** dublet med sine egne to aftagere (`og:title` i `index.html` og `GENEREL_TITEL` i `api/invite-preview.js`), bundet sammen af vagtens syvende påstand. **Argumentet for at ændre den:** i et delt link er titlen den største tekst, og den siger nu noget mindre præcist end beskrivelsen lige under. **Argumentet imod:** titlen står ALDRIG alene — den vises sammen med `og:description`, som siger "fodboldkampe" to linjer nede, og med `og:image`. En titel, der gentager ordet, bruger sin korte plads på noget, læseren allerede får. Titlen bærer i dag produktnavnet plus én ting produktet gør, hvilket er den opgave, en titel har. **Prisen ved at ændre er to linjer**; prisen ved at lade være er en asymmetri, der kun ses, hvis man læser de to tags efter hinanden. **Hjemmesidens egen `<title>`** (*"Slå dine venner. Uge efter uge."*) er bevidst en tredje ordlyd og måles ikke af vagten — den skal ikke trækkes ind. | **Ejerens beslutning**, eller næste gang `og:`-tagsene alligevel røres. Ingen ekstern udløser. |
 
 ## Ubygget
@@ -212,6 +207,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. Forespørgslen står i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). **Rækken har stået siden august 2026 med teksten "tilbage står at køre den" — og da den blev kørt 5. august 2026, kunne den ikke:** vinduet partitionerede på `(e.created_at < m.fra)`, som hverken står i `group by` eller er aggregeret, så PostgreSQL afviste den med `42803`. Perioden udledes nu i en CTE, efterprøvet mod PostgreSQL 16.13. **Anden kørsel samme dag afslørede, at kilden var forkert valgt:** hændelsesloggen svarede med tre oprettelser i alt, alle `random` — plausibelt nok ved ~20 testbrugere, men ubrugeligt, fordi `analytics_events` først findes fra 30. juli 2026, så "før mærkatet" var to døgn og ikke appens historik. `competitions.mode` + `created_at` bærer samme oplysning som **rigtige rækker over hele historikken**, og spec'ens §5F er byttet om, så tabellen er den primære kilde og hændelsen kontrollen. **Opslaget er kørt 5. august 2026, og svaret er "ikke endnu":** hele appens historik rummer **syv** konkurrencer — 6 før mærkatet (`time_range` 2, `random` 2, `full_season` 2) og **1** efter (`random`). Med n=1 i den ene periode kan ingen fordeling måles, hvilket er præcis rækkens eget første forbehold. Rækken er derfor flyttet til Tier 6 med en udløser, der kan aflæses med samme opslag: **tosifret `antal` i `efter`-perioden.** Det, der er leveret, er ikke svaret, men at spørgsmålet nu kan stilles — forespørgslen kunne hverken køre eller pege på den rigtige kilde, da rækken blev skrevet. | Lille (opslag) |
 | B34 | **App-originen er indekserbar og konkurrerer med `leagly.app` om brand-søgningen** | `app.leagly.app` serverer appen, men er ikke afskærmet fra søgemaskiner. Følgen er, at en søgning på "Leagly" kan lande på **login-skærmen** frem for på salgssiden — den eneste side, der er skrevet til at overbevise nogen. `I10`s domæneopdeling gav de to origins hver sin opgave; indekseringen kender ikke opdelingen endnu. **Valget mellem de to kure er rækkens egentlige indhold:** `robots.txt` med `Disallow` holder appen helt ude af indekset (enkelt, men også usynligt for en, der søger på selve app-adressen), mens en canonical mod sitet samler signalet uden at skjule siden. **Fem småting hører til samme runde**, fordi de rører de samme filer: `404.html` på sitet (i dag Vercels standard), `og:locale` og `og:image:alt` (begge mangler i et ellers komplet sæt), cache-header på `/css/`, og footer-året, som er hårdkodet. Hører sammen med `I9`, som er den anden halvdel af "hvordan findes siden". | Lille — men indeholder ét valg, der bør træffes bevidst |
 | B32 | **Fjern Champions League's "Fra ligafasen"-forbehold på hjemmesidens turneringsliste** | `site/index.html`s turnerings-sektion (merget 13. august 2026) viser Champions League med mærkatet "Fra ligafasen", fordi ligafasen endnu ikke er lodtrukket (samme forudsætning som `B8`/`B28`). Mærkatet skal fjernes samtidig med, at `B28`s kickoff-aflæsning gentages for CL. | Lille — én linje, samme udløser som `B28` |
+| B35 | **Kør `#64 tournament_scotland_promote.sql` i produktionen** | `A55` (14. august 2026) forfremmede Scotland Premiership til officiel, og migreringen er skrevet, verificeret og merget. Kørslen kan kun laves i Supabase, og indtil den er kørt, er turneringen stadig uofficiel i produktionen: sitets *"rating opdateres i alle turneringer"* er sand i repoet og usand på skærmen. ⚠️ **Mellem to spillerunder** — filen ændrer kåringen af en runde, folk allerede har tippet, mens de tipper den, og `select max(round_key) from matches where home_score is not null` mod `public.round_key(now())` siger, hvor man er. Filen kalder selv `recompute_ratings()`, så "Opdater ratings" i Admin er unødvendig bagefter | Lille — én kørsel plus tre verifikations-selects i filens fod |
 
 ## Teknisk gæld
 
@@ -266,35 +262,31 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 14. august 2026 (nittende kørsel) — Indbakken er tømt: elleve rå linjer blev til ti ID'er og ét lukket hul
+### 14. august 2026 (tyvende kørsel) — Tier 2 er kørt tom: tre uenigheder mellem hjemmeside og app, tre forskellige svar
 
-**Listen er 30 → 40.** Indbakken var fyldt af konsistensgennemgangen samme dag
-plus to observationer fra `G109`-rettelsen, og den er nu tom. Fordelingen:
+**Listen er 40 → 38.** Tier 2's tre rækker er lukket, og én ny er kommet til i
+Tier 1, fordi beslutningen kun kan udføres færdig i Supabase.
 
-- **Ét punkt blev lukket frem for nummereret.** Den rå linje spurgte, om `B31`
-  (lukket 13. august) manglede sin arkivpost. Svaret krævede ikke en række:
-  rækken kunne læses ordret ud af git-historikken og var en ren
-  **bogholderi-række** — *"Ryd/skrump `I17` og `I9`s rækker, når site-opdateringen
-  merges"* — hvis leverance netop er den oprydning, 13. august-indslaget i
-  `CHANGELOG.md` allerede beskriver. Der manglede altså ingen leverance, kun en
-  kvittering; den står nu samme sted, sammen med reglen om, at en række, hvis
-  leverance er en redigering af backloggen, pr. konstruktion ikke efterlader en
-  arkivpost.
-- **Tre uenigheder mellem hjemmeside og app blev til `A54`, `A55` og `A56`**
-  (turneringens navn · `is_official=false` mod sitets salg af den som
-  live-flagskib · beta-mærkatet, der kun findes ét af stederne) og ligger samlet
-  i Tier 2. De hører sammen: hver af dem er to flader, der beskriver det samme
-  produkt forskelligt, og alle tre er ejerens beslutning.
-- **Fem vedligeholds-rækker blev til `G110`–`G114`** i Tier 5: story-vagtens
-  rækkevidde, en vagt mod antalsdrift og døde stier i `docs/`, et
-  "GENERERET"-hoved i `schema.sql`, `G109`s tre værn der kun findes hos den ene
-  leverandør, og varigheden `job_runs` ikke gemmer.
-- **`I23`** (manifestets installationsfelter) i Tier 3 og **`B34`**
-  (app-originens indekserbarhed + fem site-småting) i Tier 7 ved siden af `I9`,
-  som er den anden halvdel af samme spørgsmål.
+- **`A54` lukkede uden en kodeændring, og dét var svaret.** Sitet beholder
+  "Skotske Premiership", `leagues.name` beholder "Scotland Premiership" — samme
+  form som `A49`. Rækken havde selv udpeget forlægget; arbejdet bestod i at
+  efterprøve, at formen passede, og det gjorde den: sitet taler i forvejen det
+  danske ord fire steder, og turneringens officielle navn er et **tredje**
+  ("Scottish Premiership").
+- **`A55` blev afgjort den dyre vej.** Turneringen forfremmes til officiel frem
+  for at sitet tager forbehold, fordi forudsætningen for `is_official = false`
+  — generalprøven — var udløbet. Migreringen er `#64`; kørslen står som `B35` i
+  Tier 1.
+- **`A56`: appen bærer nu "Beta"** ved ordmærket, og `A48`s exit-kriterium
+  gælder begge flader.
 
-**To af de elleve linjer kom fra dagens egen leverance** (`G109`) og er dermed
-eksempler på reglen om at notere frem for at udvide opgaven: værnene mod en
-langsom leverandør blev lagt hos den leverandør, der var langsom, og det tal,
-der afgjorde diagnosen, kunne ikke aflæses i vores egen driftsskærm. Begge dele
-står nu som rækker i stedet for at være noget, nogen huskede.
+**Den største rettelse stod ikke i nogen af rækkerne.** `sql/tournament_scope.sql`
+satte `is_official = false` på Skotland midt i det script, der definerer to
+views — og som derfor skal gen-køres, hver gang de views ændrer sig. En
+almindelig gen-kørsel ville have rullet forfremmelsen tilbage tavst. Sætningen
+er fjernet; den var en starttilstand skrevet som en regel.
+
+**Indbakken har én linje**, fundet undervejs og bevidst ikke ordnet: to
+naboafsnit i `DOCUMENTATION.md` §19 er uenige om, hvad karriereprofilens globale
+komplethedsjoin tæller. Den hører til `G111`s klasse (antalsdrift og modsigelser
+i `docs/`) og skal ikke afgøres af den, der læste den i forbifarten.

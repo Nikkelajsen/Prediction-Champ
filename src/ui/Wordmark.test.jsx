@@ -10,7 +10,26 @@ describe("Wordmark", () => {
   const html = renderToStaticMarkup(<Wordmark />);
 
   it("skriver navnet ud", () => {
-    expect(html.replace(/<[^>]*>/g, "")).toBe("Leagly");
+    expect(html.replace(/<[^>]*>/g, "")).toBe("LeaglyBeta");
+  });
+
+  // A56 (14. august 2026): mærkatet står på sitets fem sider og skal stå i
+  // appen, så længe det står dér. Testen måler, at det følger MÆRKET og ikke
+  // det enkelte kaldested — ellers ville "appen siger beta" igen afhænge af, om
+  // den, der tilføjede en ny skærm, huskede det.
+  it("bærer beta-mærkatet ved siden af navnet", () => {
+    expect(html).toContain("Beta");
+    expect(renderToStaticMarkup(<Wordmark size={20} />)).toContain("Beta");
+  });
+
+  // Størrelsen er bevidst uafhængig af `size`: headeren (20) og login (16) skal
+  // vise det samme mærkat. Skrider det, vokser mærkatet ind i headerens
+  // talte plads.
+  it("skalerer ikke mærkatet med mærket", () => {
+    const lille = renderToStaticMarkup(<Wordmark size={15} />);
+    const stor = renderToStaticMarkup(<Wordmark size={20} />);
+    const mærkat = (h) => h.slice(h.lastIndexOf("<span", h.indexOf(">Beta<")));
+    expect(mærkat(stor)).toBe(mærkat(lille));
   });
 
   it("er tofarvet som logofilen — 'Leag' i guld, 'ly' i tekstfarven", () => {

@@ -179,6 +179,7 @@ Kør datafilerne i denne rækkefølge:
 2. `sql/tournament_footballdata.sql` — de fem football-data.org-turneringer
 3. `sql/tournament_footballdata_promote.sql` — gør dem synlige og officielle
 4. `sql/tournament_scotland_premiership.sql` — Scotland Premiership
+5. `sql/tournament_scotland_promote.sql` — gør også den officiel (`A55`)
 
 **Superliga-filen bærer sine værdier** (sæson `2026/27`, `api_season_id` 27897 —
 aflæst i produktionen 6. august 2026). Skifter sæsonen, står begge opslag i
@@ -186,9 +187,11 @@ filens hoved, og guarden stopper læsbart, hvis nogen tømmer parametrene uden a
 udfylde dem. *(Filen kom til 5. august 2026. Indtil da var Superligaen den
 eneste af de syv turneringer, et miljø bygget af repoet alene ikke kunne få.)*
 
-Efter alle fire: **7 ligaer, 7 sæsoner** — Superligaen officiel, de fem
-football-data officielle, Scotland uofficiel. Hold, kampe og resultater kommer
-af en sync (trin 6).
+Efter alle fem: **7 ligaer, 7 sæsoner**, alle synlige og officielle. *(Scotland
+var den ene uofficielle indtil `A55`, 14. august 2026. Køres trin 5 ikke, står
+staging med en uofficiel turnering, produktionen ikke har — og så er
+`scopeNote()`-linjen og "kun én officiel turnering"-tilstanden noget, kun det
+ene miljø kan vise.)* Hold, kampe og resultater kommer af en sync (trin 6).
 
 ---
 

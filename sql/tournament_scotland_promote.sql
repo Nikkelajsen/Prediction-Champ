@@ -1,0 +1,109 @@
+-- Forfremmelse: Scotland Premiership bliver officiel
+-- (beslutning A55, 14. august 2026 — se docs/DECISIONS.md)
+--
+-- Idempotent — kan køres igen når som helst (kør med "Run without RLS").
+-- FORUDSÆTTER at sql/tournament_scope.sql (#20) og
+-- sql/tournament_scotland_premiership.sql (#21) er kørt.
+--
+-- ---------------------------------------------------------------------------
+-- Hvorfor
+--
+-- Turneringen har været synlig og tipbar siden 31. juli 2026, men uofficiel:
+-- den gav point i sin egen konkurrence og hverken rating eller
+-- championship-point. Hjemmesiden (site/index.html, publiceret 14. august 2026)
+-- sælger den samtidig som den ene af to LIVE-turneringer og lover, at "point,
+-- stilling og rating opdateres i alle turneringer". De to udsagn kunne ikke
+-- begge stå, og valget stod mellem et forbehold i sitets copy og en
+-- forfremmelse. Ejeren valgte forfremmelsen: generalprøven er overstået —
+-- turneringen har kørt to uger med rigtige kampe, rigtige tips og en live-sync
+-- uden datafejl, og dét var præcis, hvad "generalprøve" skulle bevise.
+--
+-- ---------------------------------------------------------------------------
+-- Hvorfor et selvstændigt script
+--
+-- Samme grund som #24 (forfremmelsen af de fem football-data-turneringer):
+-- #21 opretter turneringen og rører bevidst ALDRIG is_visible/is_official ved
+-- en gen-kørsel, netop for at en uskyldig gen-kørsel ikke kan slukke noget, der
+-- er tændt. Forfremmelsen skal derfor være sin egen sætning — og den ændrer,
+-- hvad en titel betyder, så den hører i beslutningsloggen.
+--
+-- ---------------------------------------------------------------------------
+-- Begge kolonner i SAMME update
+--
+-- tournament_scope.sql har check-constrainten `leagues_official_implies_visible`
+-- (not is_official or is_visible). Turneringen ER synlig i dag, så sætningen
+-- ville også virke med is_official alene — men formen er den samme som #24's
+-- med vilje: sættes de to i hver sin sætning, fejler den første, hvis nogen
+-- nogensinde kører scriptet mod en turnering, der er slukket.
+--
+-- ---------------------------------------------------------------------------
+-- Hvad forfremmelsen ændrer — og at den virker BAGUD
+--
+-- is_official styrer to ting: Championship (runde-/måneds-/sæsonkåringerne, som
+-- summerer point på tværs af officielle turneringer) og ratingen
+-- (recompute_ratings() joiner leagues og tæller kun officielle — A17).
+--
+-- Modsat #24, hvor de fem turneringer var tomme og forfremmelsen derfor ikke
+-- flyttede ét eksisterende tal, har DENNE turnering to ugers tips bag sig. Og
+-- begge mekanismer er beregninger og ikke arkiver:
+--
+--   · round_standings / monthly_standings / season_standings er VIEWS. De
+--     regnes ved hvert opslag, så skotske tips træder ind i alle historiske
+--     runder og måneder i samme sekund. Placeringer i tidligere runder kan
+--     dermed skifte — også en runde, hvis "Rundens Champion" allerede er
+--     annonceret.
+--   · recompute_ratings() er en FULD genopbygning fra runde nul (se
+--     rating_core.sql). Hele rating_history skrives om, ikke kun fremtiden.
+--
+-- Det er ikke en bivirkning, men selve valget: "officiel" betyder det samme
+-- overalt (A17), og en turnering, der er officiel, har altid talt med.
+--
+-- Det, forfremmelsen IKKE skriver om, er det, der allerede er sendt eller
+-- gemt: `stories`-rækker, afsendte notifikationer og milepæle er skrevet ud fra
+-- den gamle afgrænsning og bliver stående. Følgen er kendt og accepteret: en
+-- runde kan have en gemt historie om en placering, viewet nu regner anderledes.
+-- Samme vilkår som den modsatte vej (DOCUMENTATION.md §5).
+--
+-- ---------------------------------------------------------------------------
+-- ⚠️ KØR DEN MELLEM TO SPILLERUNDER
+--
+-- Ikke af tekniske grunde — sætningen er lige gyldig når som helst — men fordi
+-- en forfremmelse midt i en igangværende runde ændrer kåringen af en runde,
+-- folk allerede har tippet, mens de tipper den. Betingelsen stod skrevet i #24
+-- fra starten og er den samme her: kør efter at rundens sidste kamp er talt op,
+-- og før den næste runde åbner. `select max(round_key) from matches where
+-- home_score is not null` mod `public.round_key(now())` fortæller, hvor man er.
+--
+-- ============================================================================
+
+update public.leagues
+   set is_visible  = true,
+       is_official = true
+ where api_league_id = '501';
+
+-- Ratingen bygges om MED DET SAMME frem for at vente på næste målscoring.
+--
+-- Uden dette kald ville forfremmelsen ligge og vente: recompute_ratings() fyres
+-- af triggeren på matches, når en kamp får ændret score (se
+-- rating_trigger_optimization.sql), så ratingen ville flytte sig på et
+-- tilfældigt tidspunkt — midt i en runde, ved den første kamp, der blev fløjtet
+-- af. Kaldet her gør skiftet til ét øjeblik, man kan skrive i loggen og aflæse
+-- bagefter. Funktionen er service_role-only (G15); SQL-editoren kører som
+-- postgres og har derfor lov.
+select public.recompute_ratings();
+
+-- ============================================================================
+-- Verifikation — kør efter migreringen
+-- ============================================================================
+-- 1) Ingen synlig turnering er uofficiel længere. Skal give 0 rækker.
+-- select name, api_league_id, is_visible, is_official
+-- from public.leagues where is_visible and not is_official;
+
+-- 2) Skotske tips er trådt ind i det samlede rundechampionship: scope-listen
+--    har nu turneringens uuid ved siden af 'ALL' og Superligaens.
+-- select scope, count(*) from public.round_standings group by scope;
+
+-- 3) Ratingen er bygget om og tæller nu begge turneringer. Antallet af
+--    rating-rækker kan være VOKSET: en bruger, der kun havde tippet skotske
+--    kampe, havde ingen række før (A17's ene pris) og har en nu.
+-- select count(*) as spillere, max(updated_at) as sidst from public.ratings;

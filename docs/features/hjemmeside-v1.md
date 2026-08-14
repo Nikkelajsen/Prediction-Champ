@@ -155,7 +155,7 @@ kræver af repoet, er skrevet. Begrundelserne i sin fulde længde står i
 | Hvad | Hvor |
 |---|---|
 | **`site/vercel.json`** — CSP, `X-Content-Type-Options`, `Referrer-Policy`, cache-headere til `fonts/`+`img/`, og `"cleanUrls": false` | ny fil, læses af sitets eget Vercel-projekt (root directory `site`) |
-| **Beta-mærkat i headeren** (`A48`) | `.beta-tag` ved siden af ordmærket i alle fem sider |
+| **Beta-mærkat i headeren** (`A48`) | `.beta-tag` ved siden af ordmærket i alle fem sider. *(Rettet efter levering, 14. august 2026 — `A56`: **appen bærer det nu også**, i `src/ui/Wordmark.jsx`. Mærkatet var sitets alene i én dag, og det gjorde sitet og appen til to forskellige løfter om produktets modenhed. `A48`s exit-kriterium gælder derfor begge flader: fjernes det, fjernes det begge steder.)* |
 | **Burger-menu under 700px** (`I22`) | `.nav-check` + `.nav-toggle` i alle fem headere, `@media (max-width: 700px)` i `site.css` |
 | **`.html` bliver stående** (`B33`) | `"cleanUrls": false` — canonical, `sitemap.xml` og de interne links røres ikke |
 | **"La Liga" bliver stående** (`A49`) | ingen ændring i `site/` — appen beholder "Primera División" |

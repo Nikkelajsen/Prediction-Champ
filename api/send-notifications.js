@@ -657,8 +657,11 @@ export default async function handler(req, res) {
     // Beskeden rapporterer fra scope = 'ALL', som kun summerer officielle turneringer
     // (sql/tournament_scope.sql), så:
     //   * kampopslaget afgrænses til deres sæsoner — ellers ville en uspillet kamp i en
-    //     turnering, stillingen ikke engang dækker (Skotland er synlig, men ikke
-    //     officiel), holde runden åben og notifikationen tilbage for ALLE. Samme regel
+    //     turnering, stillingen ikke engang dækker (en synlig, men uofficiel turnering:
+    //     Skotland var den ene, til A55 forfremmede den 14. august 2026, og næste
+    //     generalprøve bliver den næste), holde runden åben og notifikationen tilbage
+    //     for ALLE — reglen er altså ikke blevet unødvendig, den er bare uden tilfælde
+    //     lige nu, hvilket er præcis den tilstand, der får nogen til at fjerne den. Samme regel
     //     som loadRoundBoard/scopeSeasonIds i frontenden, jf. DOCUMENTATION.md §5.
     //   * stillingsopslaget filtrerer på scope = 'ALL' — uden det har viewet én række
     //     pr. (round_key, scope, user_id), så board.length bliver et multiplum af det
