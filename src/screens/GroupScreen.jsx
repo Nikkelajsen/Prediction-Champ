@@ -101,11 +101,29 @@ function GroupScreen({ token, userId, groupId, myCompetitions, inviterName, onBa
     } catch { /* annulleret — ignorér */ }
   }
 
+  // ── Hvorfor de tre handlere nedenfor ALLE kalder reloadGroups (G107) ────────
+  //
+  // `load()` henter kun LIGAENS eget billede (detail). Deltagelse er samtidig en
+  // egenskab ved BRUGEREN, og den liste bor i MainApp — den er det, Hjem, Tip og
+  // stillingen bygger på. Kun `onMove` og de to sletninger kaldte begge veje, så
+  // en tilmelding herfra rettede kortet til "Med" uden at nogen anden skærm fik
+  // det at vide.
+  //
+  // Det kunne ses tydeligst på stillingen: man meldte sig til en konkurrence,
+  // trykkede sig ind på den, og fik en TOM tabel med en anden ligas konkurrence
+  // i vælgeren. BoardScreen fik konkurrencens id, men MainApps liste kendte det
+  // ikke — så `comp` var undefined, indlæsningen faldt igennem sin egen guard, og
+  // `<select>` med en værdi uden matchende `<option>` viser browserens første
+  // valgmulighed. Altså to fejl på skærmen og ingen af dem sande.
+  //
+  // Samme skævhed ramte framelding (konkurrencen blev stående på Hjem og Tip) og
+  // arkivering (flaget bor i `competition_participants.hidden`, som MainApp læser
+  // ind som `_hidden` — så det, arkivering findes for, skete ikke).
   async function onJoin(compId) {
     setBusyId(compId); setNote("");
     // groupId med: idempotent for et eksisterende medlem, men gør kaldet ens
     // alle steder, så ingen sti kan glemme liga-medlemskabet (A8).
-    try { await joinCompetition(token, userId, compId, groupId); await load(); }
+    try { await joinCompetition(token, userId, compId, groupId); await load(); await reloadGroups?.(); }
     catch (e) { setNote(e.message || "Kunne ikke deltage — prøv igen."); }
     finally { setBusyId(null); }
   }
@@ -117,7 +135,7 @@ function GroupScreen({ token, userId, groupId, myCompetitions, inviterName, onBa
       // tilladt, når ALLE konkurrencens kampe har resultat — ellers spærrer tips på
       // låste kampe. Beskeden skal sige begge dele, ellers ligner spærren permanent.
       if (!ok) { setNote("Du kan ikke framelde dig midt i en konkurrence, hvor du har tips på låste kampe. Når alle konkurrencens kampe er spillet, kan du frameldes."); }
-      await load();
+      await load(); await reloadGroups?.();
     } catch (e) { setNote(e.message || "Kunne ikke framelde — prøv igen."); }
     finally { setBusyId(null); }
   }
@@ -132,7 +150,7 @@ function GroupScreen({ token, userId, groupId, myCompetitions, inviterName, onBa
   // dem, man selv deltager i — ellers findes rækken, flaget bor på, ikke.
   async function onArchive(compId, hidden) {
     setNote("");
-    try { await setCompetitionHidden(token, userId, compId, hidden); await load(); }
+    try { await setCompetitionHidden(token, userId, compId, hidden); await load(); await reloadGroups?.(); }
     catch { setNote(hidden ? "Kunne ikke arkivere konkurrencen lige nu." : "Kunne ikke gendanne konkurrencen lige nu."); }
   }
 

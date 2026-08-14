@@ -9,6 +9,56 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — `G107`: stillingen for en netop tilmeldt konkurrence var tom, og vælgeren pegede på en anden ligas
+
+**Meldt med to skærmbilleder.** En bruger var medlem af ligaen "Familie Fight"
+og dens konkurrence "Superliga Grundspil". Hun meldte sig ind i ligaen "Runway
+to Glory" med kode og tilmeldte sig konkurrencen "Superligaen". Kortet skiftede
+til "Med" — men et tryk på det gav et **helt tomt** stillings-kort med
+**"Superliga Grundspil"** i vælgeren. Altså en anden ligas konkurrence, valgt
+uden at nogen havde valgt den.
+
+**To fejl på skærmen, én rod: skærmen fik et id, listen ikke indeholdt.**
+`GroupScreen.onJoin` kaldte kun sin egen `load()` — ligaens `detail` — og ikke
+`reloadGroups`, altså MainApps `loadCompetitions()`. **Deltagelse er en egenskab
+ved brugeren og ikke kun ved ligaen:** ligaens kort vidste, at hun var med,
+mens den liste, Hjem, Tip og stillingen alle bygger på, ikke gjorde. I
+`BoardScreen` blev `comp` derfor `undefined`, indlæsningen faldt igennem sin
+egen `if (!comp) return`-guard, og `state` blev stående som `null` — deraf det
+tomme kort uden så meget som en fejltekst. **Og et `<select>`, hvis `value` ikke
+matcher nogen `<option>`, viser browserens FØRSTE valgmulighed.** Vælgeren løj
+ikke af sig selv; den havde ikke andet at vise.
+
+**Samme skævhed ramte to handlinger mere i samme fil.** Framelding lod
+konkurrencen stå på Hjem og Tip, og arkivering gjorde ingenting dér — `_hidden`
+er MainApps kopi af `competition_participants.hidden`, så det, arkivering findes
+for, skete ikke. `onMove` og de to sletninger kaldte begge veje i forvejen;
+mønsteret var kendt, tre handlere manglede det.
+
+**Den anden vej ind var ikke en forglemmelse, men et snit.** Stillingen fik
+`visibleCompetitions`, mens **både** liga-siden og Ligaer-fanen har en
+"Arkiverede"-sektion, hvis kort åbner præcis den skærm — en arkiveret
+konkurrence kunne pr. definition ikke være i listen, så et tryk dér gav
+nøjagtig samme tomme skærm med en fremmed konkurrence i vælgeren.
+
+**Tre rettelser, fordi der er tre veje til den samme tomme skærm.** `onJoin`,
+`onLeave` og `onArchive` kalder nu begge indlæsninger. `competitionsForBoard()`
+i `MainApp.jsx` lægger den **åbnede** konkurrence tilbage i listen, hvis den er
+filtreret væk — kun den, ikke hele arkivet: arkivering rydder min visning, den
+forbyder ikke at se en stilling, jeg selv har trykket på. Og `effectiveCompId()`
+i `BoardScreen.jsx` gør reglen umulig at bryde igen: **vælgeren og tabellen
+læser nu det samme opslag**, og findes den ønskede ikke, falder begge tilbage
+til den første. En anden konkurrence vist ærligt er bedre end den rigtige lovet
+og ingen leveret.
+
+**Begge er rene funktioner og ikke effekter**, og det er ikke stilistisk: repoets
+skærmtests er `renderToStaticMarkup` og kører ingen effekter, så en
+synkroniserende effekt ville hverken kunne prøves af — eller undgå at tegne ét
+render med den gamle uenighed først. Ni nye påstande, ingen migrering, ingen
+ændring i lint-loftet. Fælden står i `DOCUMENTATION.md` §13.
+
+---
+
 14. august 2026 — Tier 5: to steder, hvor en kopi og en optælling manglede en vagt
 
 **Backloggens Tier 5 er kørt.** Fællesnævneren for `G101` og `G103` var, at
