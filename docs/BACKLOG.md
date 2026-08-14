@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A54` · `B34` · `G109` · `I23`.**
+**Næste ledige: `A54` · `B34` · `G110` · `I23`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -56,6 +56,8 @@ eller en linje i "Forkastede ideer".
 - Story-eksempel-vagten læser kun site/index.html — funktioner.html's story-citat er ubevogtet; udvid vagten til alle site-sider.
 - Vagt-idé mod antalsdrift: test at hver sql-fil står i sql/README-tabellen, at CLAUDE.md-rutetabellens stier findes, og at hver docs-fil/spec er routet — antalsdrift og døde fil:linje-ankre var gennemgangens to største fundklasser (14. august).
 - Skema-eksporten kunne prepende et "GENERERET — redigér ikke"-hoved med dato og workflow-navn øverst i schema.sql; filen selv advarer i dag ikke mod håndredigering.
+- footballdata-provideren har hverken live-opslagets egen tidsgrænse, gen-forsøget ved timeout eller tidsbudgettet — de bor kun i sportmonks.js og burde flyttes op i _shared.js, hvis den anden leverandør en dag bliver lige så langsom.
+- job_runs gemmer ikke kørslens varighed, så "de grønne kørsler tog 7-13 sekunder" — dét, der afgjorde livescore-fejlen 14. august — kunne kun aflæses hos cron-job.org og ikke i Admin → Drift.
 
 ---
 

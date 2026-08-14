@@ -10,7 +10,7 @@
 //
 // Miljøvariabel: SPORTMONKS_TOKEN
 
-import { fetchWithTimeout } from "../_shared.js";
+import { fetchWithTimeout, isTimeoutError, FETCH_TIMEOUT_MS } from "../_shared.js";
 import { isMidnightPlaceholder } from "./kickoff.js";
 
 const BASE = "https://api.sportmonks.com/v3/football";
@@ -58,17 +58,82 @@ function retryAfterMs(res) {
   return s * 1000;
 }
 
-// Kalder én gang, og præcis én gang mere hvis svaret er 429. Alle tre opslag
-// nedenfor går gennem den, så grænsen kun håndteres ét sted.
+// ---- live-opslagets egen tidsgrænse og tidsbudget (G109) ----
+//
+// 14. august 2026 fejlede `sync-live` i omtrent to ud af tre minutter med
+// `Tidsgrænse: intet svar fra .../fixtures/multi/19714000 inden for 10000 ms` —
+// ét fixture-id, den letteste include-kombination endpointet kan få, og ikke ét
+// eneste 4xx eller 5xx. De KØRSLER, der lykkedes, tog 7-13 sekunder. Det er
+// signaturen på en leverandør, hvis svartid vandrer omkring vores grænse, og
+// ikke på et nedbrud: klokken var 20 dansk tid, og Sportmonks skriver selv, at
+// deres livescore-endpoints er tunge i myldretiden.
+//
+// To tal, og de hænger sammen:
+//
+//   LIVE_TIMEOUT_MS   pr. kald. Højere end standardens 10 s, fordi de 10 s blev
+//                     valgt for at afskaffe kald, der HÆNGER (`G19`) — et kald,
+//                     der svarer på 14 sekunder, er ikke et hængende kald.
+//   LIVE_BUDGET_MS    for HELE fetchLive, alle klumper og gen-forsøg lagt
+//                     sammen. Uden den ville et højere kald-loft bare flytte
+//                     problemet: to langsomme kald plus en 429-pause kan
+//                     tilsammen sprænge funktionens `maxDuration` på 60 s
+//                     (vercel.json), og en funktion, Vercel klipper over, når
+//                     hverken at skrive sin `job_runs`-række eller at rydde op.
+//                     Det er præcis den tavshed, `G19` blev bygget for at
+//                     afskaffe, så den må ikke komme ind ad bagdøren.
+//
+// Regnestykket: 40 s budget er 20 s kald + 20 s gen-forsøg for én klump, og
+// levner 20 s til Supabase-opslagene og selve skrivningen. Jobbet kører hvert
+// minut, så en kørsel, der bruger hele budgettet, er en fejl og ikke en langsom
+// succes — men den skal fejle som en fejl, ikke som en afklipning.
+const LIVE_TIMEOUT_MS = 20_000;
+const LIVE_BUDGET_MS = 40_000;
+// Under dette er der ikke tid til et kald, der er værd at sende. En klump, der
+// står med 800 ms tilbage, skal sige at budgettet er brugt — ikke sende et kald
+// med en grænse, ingen leverandør kan nå at svare inden for, og kalde det en
+// timeout.
+const LIVE_MIN_CALL_MS = 2_000;
+
+// Kalder én gang, og præcis én gang mere hvis svaret er 429 — eller hvis der
+// slet intet svar kom. Alle tre opslag nedenfor går gennem den, så grænsen kun
+// håndteres ét sted.
 // `sleep` er injicerbar af samme grund som `fetchImpl`: uden den ville en test
 // af gen-forsøget skulle vente i rigtige sekunder.
 const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function smFetch(url, fetchImpl, sleep = defaultSleep) {
-  let res = await fetchImpl(url);
+// `opts` er tom for de to sæson-opslag, og de opfører sig derfor nøjagtig som
+// før: standard-tidsgrænse, intet gen-forsøg ved timeout, intet budget.
+//
+//   timeoutMs       tidsgrænse for dette kald (ellers `fetchWithTimeout`s egen)
+//   retryOnTimeout  ét gen-forsøg, når kaldet løb ud i tid (G109)
+//   timeLeftMs()    hvor meget af kalderens samlede budget der er tilbage
+//
+// Budgettet er en FORUDSÆTNING for begge gen-forsøg og ikke en oprydning
+// bagefter: både et gen-forsøg og en 429-pause tager tid, som kørslen måske
+// ikke har, og et gen-forsøg, der bliver klippet over af Vercel, er værre end
+// intet gen-forsøg — det efterlader ingen fejl at læse.
+export async function smFetch(url, fetchImpl, sleep = defaultSleep, opts = {}) {
+  const { timeoutMs = null, retryOnTimeout = false, timeLeftMs = () => Infinity } = opts;
+  const perCall = timeoutMs ?? FETCH_TIMEOUT_MS;
+  const call = () => (timeoutMs ? fetchImpl(url, {}, timeoutMs) : fetchImpl(url));
+  // Er der plads til at vente `waitMs` OG derefter sende ét kald mere?
+  const fits = (waitMs) => timeLeftMs() >= waitMs + perCall;
+
+  let res;
+  try {
+    res = await call();
+  } catch (e) {
+    if (!retryOnTimeout || !isTimeoutError(e) || !fits(0)) throw e;
+    res = await call();
+  }
   if (res.status === 429) {
-    await (sleep || defaultSleep)(retryAfterMs(res));
-    res = await fetchImpl(url);
+    const waitMs = retryAfterMs(res);
+    // Ikke tid til pausen og kaldet efter den: lever 429'eren videre, som den
+    // er. Kalderen laver den til en højlydt fejl, og det er det rigtige udfald
+    // — en pause, der bliver klippet over, hjælper ingen.
+    if (!fits(waitMs)) return res;
+    await (sleep || defaultSleep)(waitMs);
+    res = await call();
   }
   return res;
 }
@@ -297,12 +362,36 @@ export const sportmonks = {
   // Netop de angivne kampe, ét kald pr. 40. Returnerer en Map globalId → kamp;
   // kampe uden for abonnementet mangler ganske enkelt i den, og kalderen rydder
   // deres live-markering i stedet for at fejle.
-  async fetchLive({ providerIds, token, fetchImpl = fetchWithTimeout, sleep, meta }) {
+  //
+  // Opslaget har sin EGEN tidsgrænse og sit eget samlede budget (`G109`) — se
+  // `LIVE_TIMEOUT_MS` ovenfor. `now` er injicerbar af samme grund som `sleep`:
+  // uden den kunne budgettet kun testes ved at vente i rigtige sekunder.
+  async fetchLive({ providerIds, token, fetchImpl = fetchWithTimeout, sleep, meta, now = Date.now }) {
     const out = new Map();
+    const startedAt = now();
+    const timeLeftMs = () => LIVE_BUDGET_MS - (now() - startedAt);
     for (let i = 0; i < providerIds.length; i += MAX_IDS_PER_CALL) {
       const chunk = providerIds.slice(i, i + MAX_IDS_PER_CALL);
       const endpoint = `${BASE}/fixtures/multi/${chunk.join(",")}`;
-      const call = (include) => smFetch(`${endpoint}?include=${include}&api_token=${token}`, fetchImpl, sleep);
+      // Grænsen for det NÆSTE kald aflæses hver gang, ikke én gang pr. klump:
+      // fald-tilbage-kaldet uden `periods` sendes oven på et kald, der allerede
+      // har brugt af budgettet. Den sidste klump må gerne få en kortere grænse
+      // end den første — men ingen klump må sende et kald, kørslen ikke har tid
+      // til at vente på svaret fra.
+      const nextTimeout = () => {
+        const left = timeLeftMs();
+        if (left < LIVE_MIN_CALL_MS) {
+          throw new Error(
+            `Sportmonks (live): tidsbudgettet på ${LIVE_BUDGET_MS} ms er brugt efter ${i} af ${providerIds.length} kampe. ` +
+            `Kørslen ville blive klippet over af Vercel frem for at fejle.`
+          );
+        }
+        return Math.min(LIVE_TIMEOUT_MS, left);
+      };
+      const call = (include) => smFetch(
+        `${endpoint}?include=${include}&api_token=${token}`, fetchImpl, sleep,
+        { timeoutMs: nextTimeout(), retryOnTimeout: true, timeLeftMs }
+      );
       // periods giver spilleminuttet. Er den include ikke med i abonnementet,
       // svarer Sportmonks 4xx — så prøver vi igen uden, og viser kampen live
       // uden minuttal i stedet for at lade hele kørslen fejle.
@@ -325,4 +414,8 @@ export const sportmonks = {
 };
 
 // Eksporteret til test — mappingen er det, der ikke må flytte sig ved en oprydning.
-export const __test = { normalize, statusOf, currentScore, liveMinute, readRateLimit, retryAfterMs, RETRY_AFTER_MAX_S, RETRY_AFTER_FALLBACK_S };
+export const __test = {
+  normalize, statusOf, currentScore, liveMinute, readRateLimit, retryAfterMs,
+  RETRY_AFTER_MAX_S, RETRY_AFTER_FALLBACK_S,
+  LIVE_TIMEOUT_MS, LIVE_BUDGET_MS, LIVE_MIN_CALL_MS,
+};

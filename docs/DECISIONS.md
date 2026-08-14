@@ -15,6 +15,69 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — `G109`: en langsom leverandør må ikke behandles som en fejlende
+
+**Beslutning:** Live-opslaget hos Sportmonks får sin **egen** tidsgrænse pr.
+kald (`LIVE_TIMEOUT_MS`, 20 s, mod standardens 10) og **ét** gen-forsøg, når
+kaldet løb ud i tid — begge bundet af et samlet tidsbudget for hele opslaget
+(`LIVE_BUDGET_MS`, 40 s). Standardgrænsen fra `G19` står uændret for alle andre
+udgående kald, herunder de to sæson-opslag hos samme leverandør.
+
+**Anledningen:** `sync-live` fejlede aftenen den 14. august 2026 i omtrent to ud
+af tre minutter. Fejlen var hver gang den samme og aldrig et svar fra
+leverandøren: `Tidsgrænse: intet svar fra …/fixtures/multi/<id> inden for
+10000 ms` — ét fixture-id i adressen og den letteste include-kombination,
+endpointet kan få. Der var altså intet i kaldet at optimere.
+
+**Det, der afgjorde diagnosen, var de kørsler, der LYKKEDES.** De tog 7-13
+sekunder. Succes og fejl lå i samme interval, bare på hver sin side af 10, og
+det er signaturen på en leverandør, hvis svartid vandrer omkring vores loft —
+ikke på et nedbrud og ikke på en fejl i koden. Klokken var 20 dansk tid, og
+Sportmonks skriver selv, at deres livescore-endpoints er tunge i myldretiden.
+**Den generelle regel, der kom ud af det:** en fejlrate, der ikke er 100 %, skal
+læses på de grønne kørsler. Er de lige under grænsen, er grænsen fundet.
+
+**Hvorfor grænsen måtte hæves netop dér.** `G19`s 10 sekunder blev valgt for at
+afskaffe kald, der **hænger** — dét, der efterlader en kørsel uden en
+`job_runs`-række overhovedet. Et kald, der svarer på fjorten sekunder, hænger
+ikke; det er langsomt. De to ting havde samme grænse, og derfor kaldte vi et
+langsomt svar for en fejl. Grænsen er hævet dér, hvor problemet er, og ikke
+overalt: sæson-opslagene kører hver 12. time og har ingen grund til at vente
+længere.
+
+**Hvorfor gen-forsøget kun gælder timeouts.** En timeout er en påstand om, at vi
+ikke ved, hvad der skete, og den ene ting, der giver mening at gøre ved den, er
+at prøve igen. En 403 eller en ECONNREFUSED er derimod et **svar** — og et
+gen-forsøg på et svar er bare et kald mere. Skellet bæres af et mærkat på
+fejlen selv (`isTimeoutError()` i `api/_shared.js`) og ikke af fejlteksten, som
+er skrevet til mennesker og må omskrives. Gen-forsøget er desuden **ikke** et
+fald tilbage til en mindre include: en timeout siger intet om, hvad
+abonnementet indeholder (samme skel som `G48` trak for 429).
+
+**Hvorfor budgettet ikke kunne udelades — det er beslutningens anden halvdel.**
+Et højere kald-loft uden et budget flytter blot afklipningen op til funktionens
+`maxDuration` på 60 s, og dér fejler kørslen **uden at efterlade en fejl at
+læse**. Det er præcis den tavshed, `G19` blev bygget for at afskaffe, så den må
+ikke komme ind ad bagdøren. Regnestykket er 20 s kald + 20 s gen-forsøg for én
+klump, med 20 s tilbage til Supabase-opslagene og skrivningen. Budgettet gælder
+også `G48`s 429-pause, som ellers kunne lægge op til 30 sekunder oven i et
+langsomt kald: kan pausen og kaldet efter den ikke nås, leveres 429'eren videre
+som en højlydt fejl frem for som en ventetid, Vercel klipper over.
+
+**Valgt fra:** at dæmpe fejlen (kun melde kørslen rød efter N fejl i træk).
+Heartbeat'en råber allerede først ved tre fejl i træk, og en kørsel, der ikke
+hentede det, den skulle, ER mislykket — at kalde den grøn ville gøre Admin →
+Drift til et ringere instrument for at gøre en aften mindre støjende.
+
+**Prisen, sagt tydeligt:** en dårlig kørsel kan nu bruge op mod 40 sekunder på
+at vente i stedet for 10, og en kamp, der slutter i netop det minut, meldes
+færdig et minut senere. **Det er også grunden til, at budgettet er 40 og ikke
+55:** jobbet kalder hvert minut, så en kørsel skal kunne blive færdig inden for
+sit eget minut. Skulle to alligevel overlappe, er skrivningen en idempotent
+upsert på `api_fixture_id` — to kørsler, der ser det samme, skriver det samme.
+
+---
+
 ## 14. august 2026 — `G106`: et view, ikke en fan-out — kur efter om antallet af kald er bundet
 
 **Beslutning:** Ligaer-fanens medlems- og konkurrencetal tælles i databasen af

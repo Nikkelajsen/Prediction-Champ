@@ -318,6 +318,122 @@ describe("fetchLive og 429", () => {
   });
 });
 
+// G109: en langsom leverandør er ikke en fejlende leverandør.
+//
+// 14. august 2026 fejlede sync-live i omtrent to ud af tre minutter med en
+// tidsgrænse på ét fixture-id og den letteste include-kombination, endpointet
+// kan få — ikke ét eneste 4xx eller 5xx. De kørsler, der lykkedes, tog 7-13
+// sekunder, altså lige under grænsen på 10. Rettelsen er to ting, der kun
+// giver mening sammen: en højere grænse PR. KALD og et budget for HELE
+// opslaget, så det højere loft ikke bare flytter afklipningen op til Vercels
+// `maxDuration`, hvor en kørsel fejler UDEN at efterlade en fejl at læse.
+describe("live-opslaget og en langsom leverandør (G109)", () => {
+  const timeout = () => {
+    const e = new Error("Tidsgrænse: intet svar fra https://x.test inden for 20000 ms");
+    e.timeout = true;
+    return e;
+  };
+  const svar = (status, body = {}) => ({
+    ok: status < 400, status,
+    headers: { get: () => null },
+    text: async () => "", json: async () => body,
+  });
+
+  it("prøver præcis én gang mere, når kaldet løb ud i tid", async () => {
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(timeout())
+      .mockResolvedValueOnce(svar(200, { data: [fixture({ id: 7 })] }));
+
+    const out = await sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(out.get("7").score).toEqual({ home: 2, away: 1 });
+    // Gen-forsøget er det SAMME kald, ikke et fald tilbage til en mindre
+    // include: en timeout siger intet om, hvad abonnementet indeholder.
+    for (const [url] of fetchImpl.mock.calls) expect(url).toContain("periods");
+  });
+
+  it("giver op efter det ene gen-forsøg og lader fejlen nå driftsloggen", async () => {
+    const fetchImpl = vi.fn(async () => { throw timeout(); });
+    await expect(
+      sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl })
+    ).rejects.toThrow(/Tidsgrænse/);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  // Grænsen er hævet netop dér, hvor problemet er — ikke overalt. De to
+  // sæson-opslag kører hver 12. time og har ingen grund til at vente længere.
+  it("sender live-kaldet med sin egen, højere tidsgrænse", async () => {
+    const { LIVE_TIMEOUT_MS } = __test;
+    const fetchImpl = vi.fn(async () => svar(200, { data: [] }));
+    await sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl });
+    expect(fetchImpl.mock.calls[0][2]).toBe(LIVE_TIMEOUT_MS);
+  });
+
+  it("lader sæson-opslagene beholde standardgrænsen", async () => {
+    const fetchImpl = vi.fn(async () => svar(200, { data: [], pagination: { has_more: false } }));
+    await sportmonks.fetchSeasonFixtures({ apiSeasonId: "1", token: "t", fetchImpl });
+    // Ingen tredje parameter = `fetchWithTimeout`s egen FETCH_TIMEOUT_MS.
+    expect(fetchImpl.mock.calls[0][2]).toBeUndefined();
+  });
+
+  // Selve grunden til, at budgettet findes. Uden det ville et gen-forsøg efter
+  // et 20-sekunders kald kunne fortsætte ind i Vercels afklipning.
+  it("prøver IKKE igen, når budgettet ikke rækker til et kald mere", async () => {
+    const { LIVE_BUDGET_MS } = __test;
+    let ur = 0;
+    // Første kald "tager" alt på nær et par sekunder af budgettet.
+    const fetchImpl = vi.fn(async () => { ur += LIVE_BUDGET_MS - 5_000; throw timeout(); });
+    await expect(
+      sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl, now: () => ur })
+    ).rejects.toThrow(/Tidsgrænse/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  // Samme regel for 429-pausen: en pause på op til 30 sekunder oven på et
+  // langsomt kald er præcis den kombination, budgettet skal fange.
+  it("venter ikke på Retry-After, når pausen ikke kan nås inden for budgettet", async () => {
+    const { LIVE_BUDGET_MS } = __test;
+    let ur = 0;
+    const ventet = [];
+    const fetchImpl = vi.fn(async () => {
+      ur += LIVE_BUDGET_MS - 5_000;
+      return { ok: false, status: 429, headers: { get: () => "30" }, text: async () => "", json: async () => ({}) };
+    });
+    await expect(
+      sportmonks.fetchLive({
+        providerIds: ["7"], token: "t", fetchImpl,
+        sleep: async (ms) => { ventet.push(ms); }, now: () => ur,
+      })
+    ).rejects.toThrow(/Sportmonks \(live\): 429/);
+    expect(ventet).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  // Klumperne deler ét budget. Er det brugt, skal den næste klump sige det med
+  // rene ord frem for at sende et kald med en grænse, ingen kan svare inden for.
+  it("stopper med en læsbar fejl, når budgettet er brugt midt i klumperne", async () => {
+    const { LIVE_BUDGET_MS } = __test;
+    let ur = 0;
+    const fetchImpl = vi.fn(async () => { ur += LIVE_BUDGET_MS; return svar(200, { data: [] }); });
+    const ids = Array.from({ length: 41 }, (_, i) => String(i + 1));
+    await expect(
+      sportmonks.fetchLive({ providerIds: ids, token: "t", fetchImpl, now: () => ur })
+    ).rejects.toThrow(/tidsbudgettet på 40000 ms er brugt efter 40 af 41 kampe/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  // Gen-forsøget gælder KUN timeouts. En ECONNREFUSED er et svar, og et
+  // gen-forsøg på et svar er bare et kald mere.
+  it("prøver ikke igen ved en netværksfejl, der ikke er en tidsgrænse", async () => {
+    const fetchImpl = vi.fn(async () => { throw new Error("ECONNREFUSED"); });
+    await expect(
+      sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl })
+    ).rejects.toThrow("ECONNREFUSED");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
 // A15: hvilket tal gælder for gratis-planen — 180 pr. entitet eller 3.000?
 //
 // Spørgsmålet har stået åbent, fordi svaret krævede en henvendelse til
