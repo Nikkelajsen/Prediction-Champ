@@ -15,6 +15,77 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — `A53`: en deltager starter på 0 i den konkurrence, hun melder sig til
+
+**Beslutning:** et gæt tæller i en konkurrence, hvis kampen **låste efter
+deltagerens `joined_at`**. Reglen bor to steder og skal ændres begge steder på
+én gang: `wasTippableAt()` i `src/lib/scoring.js` og
+`public.match_lock_at(…) > cp.joined_at` i `competition_match_points` og
+`award_competition_periods()` ([`#61`](../sql/competition_join_baseline.sql)).
+
+**Beslutningen var ikke, OM princippet gjaldt — det var afgjort i forvejen.**
+`filterTippable` materialiserer kun kampe, der stadig kan tippes, når en
+konkurrence oprettes, og begrundelsen i `DOCUMENTATION.md` §3 er ordret det
+scenarie, en bruger meldte 14. august 2026: *"deltagerne ville ikke stå lige,
+for den, der ikke havde tippet kampen andetsteds, kan ikke nå det."* Værnet
+sad bare på oprettelsen og havde ingen pendant på tilmeldingen. **Det, der
+skulle afgøres, var derfor rækkevidden**, og den koster noget.
+
+**Hvorfor hullet blev lukket frem for beskrevet.** To grunde, og den første
+vejer tungest, fordi den rammer noget, der ikke kan trækkes tilbage: **en sen
+tilmelding kan gøre allerede udsendte historier forkerte bagud.** Story Engine
+fortæller om konkurrencens stilling, og en, der melder sig i sidste runde og
+slår alle, omskriver den stilling, kortene beskrev — kortene er sendt, og
+milepæle er permanente. Den anden er, at adfærden kunne spekuleres i: meld dig
+sent til en turnering, du ved du har tippet godt. Den ene er en fejl i
+produktet, den anden er en åbning i spillet.
+
+**Reglen gælder ALLE deltagere, ikke kun dem, der melder sig efter
+udrulningen.** Prisen er sagt højt: stillingen beregnes live, så enhver, der
+allerede er meldt sent til noget, taber de point ved næste åbning — midt i en
+igangværende konkurrence. Alternativet var en fast dato i både JS og SQL, som
+skulle stå i dokumentationen for altid og lade det forkerte tal blive stående
+sæsonen ud. **En regel med en fødselsdag er en regel, ingen kan læse sig til**,
+og tallet, der udløste rækken, ville overleve rettelsen. Migreringens
+verifikation 2 viser, hvem der taber point, før man kører den.
+
+**Bagud omskrives intet, og det er ikke det samme som at reglen ikke gælder
+bagud.** Skellet er, om tallet beregnes eller er gemt: stillingen beregnes live
+og retter sig selv, mens alt frossent står stille — udsendte historier er
+rækker i `stories`, kåringer er `on conflict do nothing`, milepæle er
+permanente. En kåring, der allerede er faldet på det gamle grundlag, falder
+ikke om.
+
+**Rating og Championship er bevidst IKKE omfattet.** De er turnerings-scopede og
+har slet ingen konkurrence at melde sig til (§5) — ratingen tæller netop hver
+kamp én gang på tværs af alle officielle ligaer, og det er hele dens pointe.
+Karriereprofilens indbyrdes opgør (`rival`) er heller ikke rørt: det er et
+spørgsmål om to spilleres gæt på delte kampe, ikke om en konkurrences stilling.
+Noteret i backloggen frem for taget med.
+
+**To ting tæller MED, og begge er bevidste bagstoppere:** en ukendt
+tilmeldingstid (en manglende værdi må aldrig kunne nulstille nogen — `joined_at`
+er `not null` i skemaet, så det er en bagstopper og ikke en tilstand, databasen
+kan levere) og en kamp uden kendt låsetidspunkt (den kan stadig tippes — samme
+svar som RLS-policyens skrivegren).
+
+🔴 **Rækken gjorde to ældre migreringer farlige at gen-køre.**
+`#37 story_engine_v2_day.sql` og `#26 competition_awards.sql` bærer begge den
+gamle definition og ruller reglen tavst tilbage. Begge står nu i
+`sql/README.md`s liste, som dermed er vokset fra ti filer til tolv.
+
+🔴 **Og den fandt en landmine, der først ville være sprunget om en uge.**
+`sql/dev/simulate_season.sql` bakker kampene i tid, men lod `joined_at` tage sin
+default (`now()`) — så under den nye regel var hver eneste simuleret deltager
+"meldt til efter kampene var spillet". Symptomet var ikke en forkert stilling,
+men en **tom sæson**: ingen kåringer, ingen historier. Testen er grøn i dag,
+fordi `sql/schema.sql` er et øjebliksbillede uden migreringen; den ville være
+blevet rød i det sekund, skema-eksporten kørte. Fundet ved at køre alle femten
+skema-indlæsende tests fra **den anden side af dumpet** — §13's regel, tredje
+gang den betaler sig.
+
+---
+
 ## 14. august 2026 — `G103`: hjemmesidens story-eksempler får en vagt, og rækkens egen præmis bliver rettet
 
 **Beslutning:** koblingen mellem `site/index.html`s story-kort og

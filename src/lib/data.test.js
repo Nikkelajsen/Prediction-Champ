@@ -221,8 +221,14 @@ describe("computeCompetitionState (konkurrence-stillingen)", () => {
     { id: "m3", kickoff_at: "2026-07-13T18:00:00Z", round_key: "2026-07-13", home_score: 1, away_score: 1 },
     { id: "m4", kickoff_at: "2026-07-14T18:00:00Z", round_key: "2026-07-13", home_score: 3, away_score: 0 },
   ];
+  // `joined_at` er 1. januar, hvis en profil ikke siger andet: alle kampene
+  // ligger i juli, så en deltager uden eget tidsstempel har været med hele vejen
+  // og rammes ikke af `A53`s nulpunkt. Testene nedenfor, der vil måle nulpunktet,
+  // sætter deres eget.
   const mockComp = (predictions, profiles, status = [{ concluded: true }]) => mockTables({
-    competition_participants: profiles.map((p) => ({ user_id: p.id })),
+    // `"joined_at" in p` og ikke `p.joined_at || …`: en test sætter feltet til
+    // NULL med vilje, og en `||` ville stille og roligt give den defaulten igen.
+    competition_participants: profiles.map((p) => ({ user_id: p.id, joined_at: "joined_at" in p ? p.joined_at : "2026-01-01T00:00:00Z" })),
     profiles,
     competition_matches: MATCHES.map((m) => ({ match_id: m.id })),
     matches: MATCHES,
@@ -309,6 +315,66 @@ describe("computeCompetitionState (konkurrence-stillingen)", () => {
       () => { throw new Error("nede"); });
     const state = await computeCompetitionState("token", "c1", RULES);
     expect(state.isComplete).toBe(true); // alle fire kampe har resultat
+  });
+
+  // ── A53: deltagerens nulpunkt ──────────────────────────────────────────────
+  //
+  // Fejlen, de her findes for: en bruger meldte sig ind i en ny liga, tilmeldte
+  // sig dens Superliga-konkurrence, og stod med point med det samme — hendes
+  // gæt fra en ANDEN ligas konkurrence talte med, fordi `predictions` er én
+  // række pr. (bruger, kamp) og deles på tværs af konkurrencer. De øvrige
+  // deltagere kunne ikke nå at gætte på kampene; de var spillet.
+  //
+  // Alle fire kampe er tippet ens af begge spillere i testene nedenfor, så
+  // forskellen i resultatet KAN kun komme fra tilmeldingstidspunktet.
+  const ALLE_FIRE = (uid) => [
+    { match_id: "m1", user_id: uid, pred_home: 2, pred_away: 1 }, // præcis  (3)
+    { match_id: "m2", user_id: uid, pred_home: 0, pred_away: 0 }, // præcis  (3)
+    { match_id: "m3", user_id: uid, pred_home: 1, pred_away: 1 }, // præcis  (3)
+    { match_id: "m4", user_id: uid, pred_home: 3, pred_away: 0 }, // præcis  (3)
+  ];
+
+  it("tæller ikke gæt på kampe, der var låst FØR deltageren meldte sig til", async () => {
+    // Sen melder sig 10. juli: runde 1 (6.+7. juli) var forbi, runde 2 (13.+14.)
+    // kunne stadig tippes. Altså halvdelen af de tolv point.
+    await mockComp([...ALLE_FIRE("u1"), ...ALLE_FIRE("u2")], [
+      { id: "u1", display_name: "Fra start" },
+      { id: "u2", display_name: "Sen", joined_at: "2026-07-10T00:00:00Z" },
+    ]);
+    const { rows } = await computeCompetitionState("token", "c1", RULES);
+    expect(rows.map((r) => r.player)).toEqual(["Fra start", "Sen"]);
+    expect(rows.map((r) => r.total)).toEqual([12, 6]);
+    expect(rows.map((r) => r.exactCount)).toEqual([4, 2]);
+    // Den sene har ingen runde 1 — ikke nul point i den, men slet ingen række.
+    expect(rows[1].perRound).toEqual({ "2026-07-13": 6 });
+  });
+
+  it("lader gættene forsvinde fra rundemodalen sammen med deres point", async () => {
+    // `predsByKey` er stillingens datagrundlag OG det, «spillerens tips runde
+    // for runde» viser. Ét filter, så tabellen og modalen ikke kan sige hver
+    // sit — det var netop det, valget om at filtrere her og ikke i
+    // pointudregningen købte.
+    await mockComp(ALLE_FIRE("u2"), [{ id: "u2", display_name: "Sen", joined_at: "2026-07-10T00:00:00Z" }]);
+    const { predsByKey } = await computeCompetitionState("token", "c1", RULES);
+    expect(predsByKey.has("m1:u2")).toBe(false); // låst før tilmeldingen
+    expect(predsByKey.has("m3:u2")).toBe(true);  // kunne stadig tippes
+  });
+
+  it("rammer ikke den, der meldte sig til, mens kampen stadig kunne tippes", async () => {
+    // Låsen er 1 time før kickoff (A21), så 17.00 på kampdagen er stadig åbent
+    // for en kamp, der starter 18.00. Grænsen skal ligge dér og ikke ved kickoff.
+    await mockComp(ALLE_FIRE("u2"), [{ id: "u2", display_name: "Lige nået det", joined_at: "2026-07-06T16:59:00Z" }]);
+    const { rows } = await computeCompetitionState("token", "c1", RULES);
+    expect(rows[0].total).toBe(12);
+  });
+
+  it("tæller alt med, når tilmeldingstidspunktet er ukendt", async () => {
+    // En manglende værdi må aldrig kunne nulstille nogen. `joined_at` er
+    // `not null` i skemaet, så det her er en bagstopper og ikke en tilstand,
+    // databasen kan levere.
+    await mockComp(ALLE_FIRE("u2"), [{ id: "u2", display_name: "Uden stempel", joined_at: null }]);
+    const { rows } = await computeCompetitionState("token", "c1", RULES);
+    expect(rows[0].total).toBe(12);
   });
 });
 

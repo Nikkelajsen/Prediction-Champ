@@ -371,6 +371,37 @@ function filterTippable(matches) {
   return (matches || []).filter((m) => !isLocked(m));
 }
 
+// Kunne kampen stadig tippes på et GIVET tidspunkt? (`A53`)
+//
+// Søsterregel til `filterTippable` ovenfor, og den findes af nøjagtig samme
+// grund — bare på den anden akse. `filterTippable` beskytter en ny KONKURRENCE
+// mod at starte med point på tavlen. Denne beskytter en ny DELTAGER mod at
+// møde op med dem.
+//
+// Problemet er ét og det samme: `predictions` er én række pr. `(bruger, kamp)`
+// og deles på tværs af konkurrencer. Melder man sig til en konkurrence, der er
+// halvvejs, tæller ens gæt fra en ANDEN liga med fra første sekund — på kampe,
+// de øvrige deltagere ikke kan nå at gætte på. Værnet fandtes kun ved
+// oprettelsen; dette er den halvdel, der manglede. Uden den kan man spekulere i
+// at melde sig sent til en turnering, man ved man har tippet godt.
+//
+// `atMs` er deltagerens `joined_at`. To ting tæller MED, og begge er bevidste:
+// en ukendt tilmeldingstid (så en manglende værdi aldrig kan nulstille nogen)
+// og en kamp uden kendt låsetidspunkt (den kan stadig tippes — samme svar som
+// RLS-policyens skrivegren).
+//
+// Reglen står ordret i SQL som `public.match_lock_at(...) > cp.joined_at`
+// (`#61 competition_join_baseline.sql`), fordi Story Engine og kåringerne
+// beregner den samme stilling. **De to skal ændres sammen** — to steder, der
+// svarer forskelligt på ét spørgsmål, er præcis den fejl, Story Engine har
+// kostet før (juli 2026, `DECISIONS.md`).
+function wasTippableAt(match, atMs) {
+  if (!Number.isFinite(atMs)) return true;
+  const lockAt = lockAtOf(match);
+  if (lockAt === null) return true;
+  return atMs < lockAt;
+}
+
 // Startrunde: skal konkurrencen begynde i den runde, der allerede er i gang,
 // eller vente på den næste?
 //
@@ -463,4 +494,4 @@ function liveInfo(m) {
   };
 }
 
-export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, nextRoundKey, currentRoundKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, isLocked, filterTippable, filterFromRoundStart, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };
+export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, nextRoundKey, currentRoundKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, isLocked, filterTippable, wasTippableAt, filterFromRoundStart, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };
