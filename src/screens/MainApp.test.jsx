@@ -12,7 +12,7 @@
 // under iPhonens status-bar eller home-indikator — og kun på rigtig hardware.
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import MainApp from "./MainApp.jsx";
+import MainApp, { competitionsForBoard } from "./MainApp.jsx";
 
 const SESSION = { access_token: "tok", refresh_token: "r", user: { id: "u1" } };
 
@@ -53,5 +53,44 @@ describe("app-skallen og de sikre områder (G29)", () => {
     for (const label of ["Hjem", "Tip", "Ligaer", "Championship", "Rating"]) {
       expect(html).toContain(label);
     }
+  });
+});
+
+// Arkivering er en personlig oprydning i LISTERNE — ikke et forbud mod at se
+// stillingen for noget, man selv har trykket på. Både liga-siden og Ligaer-fanen
+// har en "Arkiverede"-sektion, hvis kort åbner netop den skærm.
+describe("competitionsForBoard — den åbnede skal være med (G107)", () => {
+  const SYNLIG = { id: "a" };
+  const ARKIVERET = { id: "z", _hidden: true };
+  const ALLE = [SYNLIG, ARKIVERET];
+
+  it("lægger den åbnede arkiverede konkurrence tilbage i listen", () => {
+    // Uden den var `comp` undefined i BoardScreen: tom tabel, og vælgeren
+    // udpegede den første synlige konkurrence i stedet for den, man åbnede.
+    expect(competitionsForBoard(ALLE, [SYNLIG], "z")).toEqual([ARKIVERET, SYNLIG]);
+  });
+
+  it("tager ikke resten af arkivet med", () => {
+    const andet = { id: "y", _hidden: true };
+    const ud = competitionsForBoard([SYNLIG, ARKIVERET, andet], [SYNLIG], "z");
+    expect(ud.map((c) => c.id)).toEqual(["z", "a"]);
+  });
+
+  it("lader den synlige liste stå urørt, når den åbnede allerede er i den", () => {
+    // Samme reference, så BoardScreens afhængighedslister ikke invalideres af
+    // et nyt array ved hver render (samme hensyn som G33).
+    const synlige = [SYNLIG];
+    expect(competitionsForBoard(ALLE, synlige, "a")).toBe(synlige);
+  });
+
+  it("lader listen stå urørt, når ingen stilling er åben", () => {
+    const synlige = [SYNLIG];
+    expect(competitionsForBoard(ALLE, synlige, null)).toBe(synlige);
+  });
+
+  it("finder den ikke op af den blå luft, når id'et er ukendt", () => {
+    // En slettet konkurrence, fx. Her overtager `effectiveCompId` i BoardScreen.
+    const synlige = [SYNLIG];
+    expect(competitionsForBoard(ALLE, synlige, "findes-ikke")).toBe(synlige);
   });
 });

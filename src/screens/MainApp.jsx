@@ -38,6 +38,16 @@ import { selectIn } from "../lib/data/chunked.js";
 // hente dem enkeltvis ville bytte én ventetid ud med fem.
 const AdminScreen = lazy(() => import("./AdminScreen.jsx"));
 
+// De synlige konkurrencer plus DEN, der netop er åbnet (G107). Se kaldstedet
+// nedenfor for hvorfor. Ren funktion frem for inline-filter, fordi den er den
+// eneste regel, der afgør, om stillingen kan tegne noget som helst — og
+// projektets skærmtests kan ikke køre effekter (renderToStaticMarkup).
+function competitionsForBoard(alle, synlige, åbnetId) {
+  if (!åbnetId || synlige.some((c) => c.id === åbnetId)) return synlige;
+  const åbnet = alle.find((c) => c.id === åbnetId);
+  return åbnet ? [åbnet, ...synlige] : synlige;
+}
+
 function MainApp({ session, profile, onProfileChanged, onLogout, inviteFromStorage, pendingJoinCode, clearPendingJoinCode, pendingLigaCode, clearPendingLigaCode }) {
   const token = session.access_token;
   const userId = session.user.id;
@@ -335,6 +345,23 @@ function MainApp({ session, profile, onProfileChanged, onLogout, inviteFromStora
   const visibleLeagues = useMemo(() => leagues.filter((l) => l.is_visible !== false), [leagues]);
   const visibleCompetitions = useMemo(() => competitions.filter((c) => !c._hidden), [competitions]);
 
+  // Stillingen skal kunne vise DEN, man åbnede — også en arkiveret (G107).
+  //
+  // Både liga-siden og Ligaer-fanen har en "Arkiverede"-sektion, hvis kort
+  // åbner stillingen. Men BoardScreen fik `visibleCompetitions`, hvor en
+  // arkiveret pr. definition ikke er — så et tryk dér gav præcis samme tomme
+  // skærm med en fremmed konkurrence i vælgeren som den fejl, `effectiveCompId`
+  // beskriver. Arkivering rydder MIN visning; den er ikke et forbud mod at se
+  // stillingen for noget, man selv har bedt om at åbne.
+  //
+  // Kun den åbnede lægges tilbage, ikke hele arkivet: vælgeren er en genvej
+  // mellem de aktuelle konkurrencer, og et arkiv, der genopstår i den, ville
+  // gøre arkiveringen meningsløs den anden vej.
+  const boardCompetitions = useMemo(
+    () => competitionsForBoard(competitions, visibleCompetitions, screen?.type === "board" ? screen.compId : null),
+    [competitions, visibleCompetitions, screen]
+  );
+
   // Ny skærm ⇒ start øverst (G30).
   //
   // Uden dette arvede en ny skærm den forriges scroll-position — der er kun ÉN
@@ -418,7 +445,7 @@ function MainApp({ session, profile, onProfileChanged, onLogout, inviteFromStora
       </div>
     );
   } else if (screen?.type === "board") {
-    body = <BoardScreen token={token} userId={userId} competitions={visibleCompetitions}
+    body = <BoardScreen token={token} userId={userId} competitions={boardCompetitions}
       initialCompId={screen.compId} inviterName={profile?.display_name} onBack={() => setScreen(null)}
       goToPredictions={openPredictions} openProfile={openProfile} onCreate={openCreate} goTab={goTab} />;
   } else if (screen?.type === "predictions") {
@@ -612,4 +639,5 @@ function MainApp({ session, profile, onProfileChanged, onLogout, inviteFromStora
   );
 }
 
+export { competitionsForBoard };
 export default MainApp;

@@ -40,8 +40,36 @@ function AwardLines({ title, rows, labelOf, nameOf, openProfile }) {
   ));
 }
 
+// Hvilken konkurrence VISER skærmen? (G107)
+//
+// Den bedt om og den viste er ikke nødvendigvis den samme: kalderen kan pege på
+// en konkurrence, listen ikke indeholder — fx en, man netop har meldt sig til, før
+// MainApp har hentet sin liste igen, eller en arkiveret, åbnet fra liga-siden.
+//
+// Uden dette opslag betalte skærmen prisen TO gange for det samme:
+//   * indlæsningen faldt igennem sin egen `if (!comp) return`-guard, så
+//     `state` blev stående som null og stillings-kortet stod HELT tomt — ingen
+//     "Beregner…", ingen fejl, ingen "Ingen deltagere endnu";
+//   * og et `<select>`, hvis `value` ikke matcher nogen `<option>`, viser
+//     browserens FØRSTE valgmulighed. Vælgeren udpegede altså en helt anden
+//     konkurrence end den, brugeren havde bedt om — i praksis en fra en anden
+//     liga.
+//
+// Reglen er derfor: vælgeren og tabellen skal altid være enige. Kan den ønskede
+// ikke findes, falder vi tilbage til den første i listen — en anden konkurrence
+// vist ÆRLIGT er bedre end den rigtige lovet og ingen leveret.
+function effectiveCompId(requestedId, competitions) {
+  if (competitions.some((c) => c.id === requestedId)) return requestedId;
+  return competitions[0]?.id ?? null;
+}
+
 function BoardScreen({ token, userId, competitions, initialCompId, inviterName, onBack, goToPredictions, openProfile, onCreate, goTab }) {
-  const [selectedCompId, setSelectedCompId] = useState(initialCompId || competitions[0]?.id || null);
+  // Det ØNSKEDE bor i state, det VISTE udledes ved hver render: listen kan
+  // ændre sig under skærmen (MainApp henter den igen), og et afledt opslag
+  // følger med af sig selv, hvor en synkroniserende effekt ville nå at tegne
+  // ét render med den gamle uenighed.
+  const [requestedCompId, setRequestedCompId] = useState(initialCompId || competitions[0]?.id || null);
+  const selectedCompId = effectiveCompId(requestedCompId, competitions);
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -170,7 +198,7 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
       <BackBar title="Stilling" onBack={onBack} />
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <select className="field" style={{ flex: 1, minWidth: 160 }} value={selectedCompId || ""} onChange={(e) => setSelectedCompId(e.target.value)}>
+        <select className="field" style={{ flex: 1, minWidth: 160 }} value={selectedCompId || ""} onChange={(e) => setRequestedCompId(e.target.value)}>
           {competitions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <button style={btnGold} onClick={shareInvite}>
@@ -353,4 +381,5 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
   );
 }
 
+export { effectiveCompId };
 export default BoardScreen;
