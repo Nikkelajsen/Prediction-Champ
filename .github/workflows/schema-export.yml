@@ -15,7 +15,7 @@ name: Skema-eksport
 # og cron-kørslen dispatches pr. definition på standardgrenen. Følgen var, at
 # `sql/schema.sql` landede i `main` **uden at have været gennem CI**.
 #
-# Det er ikke en teoretisk risiko. Dumpet er reference for femten SQL-tests, og
+# Det er ikke en teoretisk risiko. Dumpet er reference for de skema-indlæsende SQL-tests, og
 # **tre gange har en eksport gjort CI rød bagefter**:
 #
 #   · `G94` — `competition_matches_read.sql` lånte sin før-tilstand af dumpet.
@@ -216,7 +216,7 @@ jobs:
           - Er der objekter, ingen fil i `sql/` opretter? Så er der lavet noget i hånden
             direkte i produktionen, og det bør have en migrering.
 
-          **Merge først, når CI er grøn.** Dumpet er reference for femten SQL-tests, og
+          **Merge først, når CI er grøn.** Dumpet er reference for de skema-indlæsende SQL-tests, og
           tre gange har en eksport gjort CI rød bagefter (`G94`, `G98`, `G96`) — altid
           fordi en test lånte sin før-tilstand af netop denne fil. Det er hele grunden
           til, at eksporten ikke længere committer direkte til standardgrenen.
