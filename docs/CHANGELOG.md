@@ -38,6 +38,15 @@ hentes i produktion fra **eget domæne** (`/_vercel/insights/script.js`;
 på hvert push til `main`, så et deploy i det enes liste intet siger om det
 andet.
 
+**Begge fund er skrevet ind i `DOCUMENTATION.md` §11 samme dag** som `G104` og
+`G105`, og backloggens indbakke er ryddet uden at nogen af dem fik en række:
+de var én rettelse i samme afsnit og dermed billigere at lukke end at føre.
+`G104` var en forældet sætning — §11 påstod stadig, at hjemmesidens
+Vercel-projekt ikke var oprettet, dagen efter ejeren oprettede det. `G105` er
+det, der faktisk kostede tid: **parret af projekter er let at forveksle**,
+fordi de bygger på samme push, og en tom Analytics-fane i det ene projekt
+derfor ikke handler om den ændring, man lige mergede til det andet.
+
 ---
 
 14. august 2026 — Hjemmesiden er LIVE på `leagly.app` — `I8` er leveret
