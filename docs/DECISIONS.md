@@ -15,6 +15,20 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — `G118`: tips-status bor ét sted, og det er ikke i historien
+
+**Beslutning:** dagskortets fod (næste kamp / manglende tips) fjernes. `DayCard` slutter på mini-stillingen, og tips-status bor alene i sit eget kort på Hjem — deadline-kortet, det grønne "alt ok" eller "intet at tippe lige nu".
+
+**Begrundelse.** De to kort hang på ordret de samme udtryk, så foden var ikke en gentagelse, der *kunne* opstå — den var en gentagelse, der ALTID opstod, i alle tre tilstande. Og den var altid den fattigste af de to: nedtællingen, rundenavnet og de manglende kampes navne står kun på kortet nedenunder.
+
+**Hvorfor det er kortets fod og ikke kortet nedenunder, der forsvinder.** Det oplagte alternativ var at lade dagskortet bære handlingen og skjule tips-kortet, når kortet allerede sagde det — det var trods alt spec'ens oprindelige intention. Det ville koste nedtællingen, rundenavnet og kampnavnene på netop de dage, hvor der ER et dagskort, altså kampdagene. Hjem ville miste sit signaturkort, præcis når det betyder mest.
+
+**Den generelle regel, rækken efterlader:** *et kort, der er valgt for at bære ét øjeblik, må ikke slutte på en opgave.* Dagskortets ene job er dagens historie; opgaven har sit eget kort, og skærmen er ikke i tvivl om, hvor man trykker. Rundestoryen havde aldrig foden, og asymmetrien var det første tegn.
+
+**Spec'en er rettet frem for koden.** `story-engine-v3.md` §8 opregnede foden som en del af kortets indhold, men sætningen hvilede på en forudsætning, der aldrig blev til noget: at dagskortet skulle ERSTATTE deadline-kortet (`DayCard.jsx`: *"står PÅ kortet og ikke i et kort mere"*). Når spec'ens forudsætning ikke holder, er det spec'en, der er forældet — linjen er streget over og begrundelsen skrevet frem, så det fremgår, at noget blev ændret undervejs.
+
+---
+
 ## 14. august 2026 — `I23`: manifestets skærmbilleder tages af appen selv, og `id` fryses frem for at sættes
 
 **Beslutning:** `public/manifest.json` får `id: "/"`, `scope: "/"`, `lang: "da"` og fire skærmbilleder. Billederne genereres af `scripts/screenshots/capture.mjs`, som kører den rigtige app mod en attrap-database i en headless Chromium; de committes sammen med koden og tages om i hånden, når skærmene ændrer sig.

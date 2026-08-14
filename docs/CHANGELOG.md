@@ -9,6 +9,32 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — `G118`: dagskortet sagde det samme som kortet lige under det — i alle tre tilstande
+
+**Fundet kom fra `I23`s eget skærmbillede.** Hjem sagde "2 kampe mangler tips" to gange lige efter hinanden: én gang som grøn knap i bunden af dagens historie, og én gang 40 px længere nede i deadline-kortet, med nedtælling, rundenavn og de manglende kampes navne.
+
+**Det var ikke ét uheldigt sammenfald, men en garanti.** Dagskortets fod og tips-kortet hang på ordret de samme udtryk (`tips.allTipped === false`), og duplikeringen findes i alle tre tilstande:
+
+| Tilstand | Dagskortets fod | Kortet umiddelbart under |
+|---|---|---|
+| Mangler tips | "2 kampe mangler tips" | "Deadline om 21 t 55 min · Runde 11.08–17.08 · **2 kampe mangler tips**" + kampnavne + "Tip nu" |
+| Alt tippet | "Næste kamp: søn 16/8 kl. 15.00" | "Alt ok — alle tips er inde" + **samme linje** + "Se tips" |
+| Intet at tippe | "Næste kamp: …" | "Intet at tippe lige nu" + **samme linje** + "Se runden" |
+
+Foden kunne dermed pr. konstruktion aldrig være en faldback for noget, skærmen ikke allerede sagde — og den var altid den fattigste af de to.
+
+**Prisen var kortets egen pointe.** Kortet er VALGT af en nyhedsværdi-score til at bære dagens ene øjeblik, og det sluttede på en administrativ opgave frem for på sin mini-stilling. Rundestoryen — det større format — har aldrig haft en sådan fod, og asymmetrien var utilsigtet.
+
+**Hvorfor den var der:** spec §8 opregner *"næste kamp og evt. manglende tips"* som en del af kortets indhold, og `DayCard.jsx` skrev *"står PÅ kortet og ikke i et kort mere"*. Planen var altså, at dagskortet skulle **erstatte** deadline-kortet. Det skete aldrig — deadline-kortet er Hjems signatur — så de to stod side om side og gentog hinanden. **Spec'en er rettet frem for koden**, med den oprindelige linje streget over og forudsætningen skrevet frem, så det fremgår, at noget blev ændret undervejs.
+
+**Ændringen er en fjernelse:** `DayCard` slutter på mini-stillingen, og `tips`/`openPredictions` er ikke længere props. Ingen ny tilstand, ingen ny regel — tips-status bor kun ét sted, dér hvor den kan sige mest.
+
+**`public/screenshots/hjem.png` er taget om i samme ombæring**, som `I23`s egen tjeklistelinje kræver. Det er første gang, den regel bliver brugt, og den blev brugt af den ændring, der indførte den.
+
+**Verificeret:** 1384 tests, lint uændret på loftet (7 advarsler), build grønt. **Intet skal køres i Supabase for denne række.**
+
+---
+
 14. august 2026 — `I23`: manifestet fik `id`, `scope`, `lang` og fire skærmbilleder — taget af appen selv
 
 **Chrome viser den rige installationsprompt, når manifestet bærer skærmbilleder.** Uden dem er prompten en nøgen ikon-dialog, og installationen er hele distributionsvejen for en app, der ikke ligger i nogen butik. `public/manifest.json` har nu `id: "/"`, `scope: "/"`, `lang: "da"` og fire `screenshots` i `form_factor: "narrow"`.
