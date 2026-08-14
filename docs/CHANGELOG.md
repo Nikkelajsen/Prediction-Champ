@@ -9,6 +9,36 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — Hjemmesiden er LIVE på `leagly.app` — `I8` er leveret
+
+**Ejeren har oprettet hjemmesidens Vercel-projekt** (root directory `site`,
+intet build command), og `leagly.app` svarer. `I8` har været åben siden
+3. august 2026 og er dermed lukket: fem statiske sider, ingen JavaScript, nul
+eksterne requests, og ét formål — at få en besøgende til at oprette eller joine
+en liga.
+
+**`A50` er bevist i samme ombæring, og af den billigste mulige aflæsning.**
+Rækken spurgte, om `site/robots.txt` og `site/sitemap.xml` faktisk blev serveret
+fra sitets ROD. To skærmbilleder svarede ja: `/robots.txt` bærer `Allow: /` og
+peger på `https://leagly.app/sitemap.xml`, og `/sitemap.xml` bærer de fem
+`<loc>`-linjer med `.html`-endelserne intakte (`B33`). **Det samme skærmbillede
+beviser, at root directory er sat rigtigt** — havde feltet stået tomt, ville de
+to filer ligge på `/site/…`.
+
+**To ting er endnu ikke aflæst, og de er skrevet som beviser frem for som nye
+backlog-rækker** ([`DOMAENE.md`](./DOMAENE.md), bevis 6 og 7): hjemmesidens egne
+svar-headere — **CSP'en fra `site/vercel.json` har aldrig kørt i produktion, og
+en headers-blok, der ikke bliver læst, fejler tavst** — og `www.leagly.app` →
+apex, som trin 2 beder om, men som intet har målt. Ingen af de to kan spørges
+herfra: udgående HTTPS til `leagly.app` afvises af arbejdsmiljøets proxy.
+
+**`I10`s trin 2 er dermed kørt**, og `I9` (SEO) er ikke længere gated — der er
+nu en publiceret side at indeksere og melde til Search Console.
+
+**Backloggen er 34 → 32.** `I8` og `A50` er slettet.
+
+---
+
 13. august 2026 — Hjemmesiden er udrulningsklar: burger uden JS, Beta-mærkat og en CSP
 
 **`I8`s resterende arbejde i repoet er gjort, og fire backlog-rækker er lukket
