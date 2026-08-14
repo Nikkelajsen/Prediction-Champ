@@ -487,14 +487,41 @@ describe("liga-laget (grupper)", () => {
   it("loadMyGroups tæller medlemmer + konkurrencer pr. liga og bevarer egen rolle", async () => {
     db.select.mockImplementation(async (token, table, query) => {
       if (table === "group_members" && query.includes("user_id=eq.")) return [{ group_id: "g1", role: "admin" }];
-      if (table === "group_members") return [{ group_id: "g1" }, { group_id: "g1" }]; // alle medlemmer
       if (table === "groups") return [{ id: "g1", name: "Kontoret", invite_code: "abc" }];
-      if (table === "competitions") return [{ id: "c1", group_id: "g1" }, { id: "c2", group_id: "g1" }];
+      if (table === "group_counts") return [{ group_id: "g1", member_count: 2, competition_count: 2 }];
       throw new Error(`uventet tabel: ${table}`);
     });
     const res = await loadMyGroups("token", "u1");
     expect(res).toHaveLength(1);
     expect(res[0]).toMatchObject({ id: "g1", role: "admin", memberCount: 2, compCount: 2 });
+  });
+
+  it("loadMyGroups tæller i databasen og henter ikke længere rækkerne for at tælle dem", async () => {
+    const kaldt = [];
+    db.select.mockImplementation(async (token, table, query) => {
+      kaldt.push([table, query]);
+      if (table === "group_members") return [{ group_id: "g1", role: "admin" }, { group_id: "g2", role: "member" }];
+      if (table === "groups") return [{ id: "g1", name: "Kontoret" }, { id: "g2", name: "Familien" }];
+      if (table === "group_counts") return [{ group_id: "g1", member_count: 1200, competition_count: 3 }];
+      throw new Error(`uventet tabel: ${table}`);
+    });
+    const res = await loadMyGroups("token", "u1");
+
+    // Kernen i G106: tallene kommer fra viewet, ikke fra en liste, klienten
+    // selv har talt op. 1200 medlemmer er over PostgRESTs loft på 1000 og er
+    // derfor et tal, den gamle vej ikke KUNNE svare rigtigt — den ville have
+    // set 1000 rækker og troet, det var facit.
+    expect(res[0]).toMatchObject({ id: "g1", memberCount: 1200, compCount: 3 });
+    // En liga uden en række i viewet falder til 0 frem for at kaste.
+    expect(res[1]).toMatchObject({ id: "g2", memberCount: 0, compCount: 0 });
+
+    // Det opslag, der ER tilbage om medlemstabellen, spørger kun om MIG — ellers
+    // ville optællingen bare være flyttet og ikke fjernet. Og `competitions`
+    // røres slet ikke længere.
+    const medlemsopslag = kaldt.filter(([t]) => t === "group_members");
+    expect(medlemsopslag).toHaveLength(1);
+    expect(medlemsopslag[0][1]).toContain("user_id=eq.u1");
+    expect(kaldt.some(([t]) => t === "competitions")).toBe(false);
   });
 
   it("loadMyGroups giver tom liste uden medlemskaber", async () => {

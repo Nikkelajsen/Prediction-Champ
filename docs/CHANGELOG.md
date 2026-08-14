@@ -9,6 +9,105 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — Tier 5: tre steder, hvor to svar på det samme spørgsmål kunne nå at afvige
+
+**Backloggens Tier 5 er kørt, og tieret er tømt — listen er 33 → 30.**
+Fællesnævneren for `G106`, `G107` og `G108` var, at ingen af dem var en fejl,
+nogen oplevede: enogtyve brugere, ingen liga i nærheden af PostgRESTs loft, ingen
+kendt genindtræden. Alle tre var i stedet steder, hvor **to svar på det samme
+spørgsmål kunne nå at afvige** — en optælling mod et loft, et opgør mod en
+stilling, en stilling mod sin egen historie. Alle tre var desuden **rester**, der
+faldt ud af `G101` og `A53` dagen før og blev noteret frem for taget med.
+
+**`G106`: ligaens to tal tælles i databasen.** `loadMyGroups()` hentede én række
+pr. medlem og pr. konkurrence på tværs af ALLE brugerens ligaer for at tælle dem
+i browseren (`src/lib/data/groups.js:20,24`); PostgREST leverer højst 1000 rækker
+og siger ikke, at den klipper. Svaret er viewet
+[`#62 group_counts.sql`](../sql/group_counts.sql), som aggregerer i databasen og
+svarer én række pr. liga — to opslag bliver til ét, og det loft, der er tilbage,
+er antallet af ligaer, altså nøjagtig det, `groups`-opslaget ved siden af
+allerede er bundet af.
+
+**`G101`s kur kunne ikke kopieres, og det var hele grunden til, at rækken blev
+åbnet frem for lukket samme dag.** Dér tælles deltagere i ÉN ligas konkurrencer,
+så fan-out'en er bundet; her er nævneren brugerens ligaer GANGE TO, og ti ligaer
+ville blive tyve rundture. **Reglen, der kom ud af det** (nu i
+`DOCUMENTATION.md` §13): vælg kur efter, om antallet af kald er BUNDET. Den
+tredje vej — `G35`s synlige loft — blev også valgt fra, og af en grund, der er
+værd at kende: mønsteret findes til en LISTE, brugeren kan handle på. En afkortet
+OPTÆLLING har ingen handling, kun en undskyldning på et tal.
+
+**`security_invoker` er bærende og ikke pynt.** Et view kører som standard med
+sin ejers rettigheder og ville have svaret uden om RLS — altså en offentlig
+optælling af enhver ligas størrelse. Med invoker-formen arver tallene kalderens
+egne policies på alle tre tabeller, og følgen er, at migreringen **ikke ændrer ét
+tal på skærmen**: samme rækkemængde, bare talt ét sted. Testens negative kontrol
+måler netop dét — en fremmed må ikke få en forkert række, hun må slet ingen få.
+
+**`G107`: karriereprofilens indbyrdes opgør bærer nulpunktet.** Et møde tæller nu
+kun, hvis kampen låste, EFTER begge meldte sig til den delte konkurrence.
+**Rækken var stillet som en betydning og ikke som en fejl** — man kunne have
+svaret, at bredden var tilsigtet — og det, der afgjorde den, var ordet *adgang*:
+opgøret spurgte slet ikke om adgang, det talte hver kamp, en delt konkurrence
+dækker, også dem der var spillet og låst, længe før den ene var med. Sætningen
+*"I jeres fælles konkurrencer har I mødt hinanden N gange"* var altså ikke bred,
+den var **usand**. Begge blokke i `sql/career_profile.sql` er rettet **sammen**,
+fordi spec'ens testcase 41 netop er invarianten mellem dem.
+
+🔴 **`career_profile()` havde ingen SQL-test overhovedet** — funktionen har været
+i drift siden juli 2026. Den har nu sin første, og den mest lærerige påstand er
+ikke et tal, men invarianten: `rivals` og `h2h` skal svare det samme, og en
+mutation, der kun retter den ene blok, fanges netop dér.
+
+**`G108`: nulpunktet overlever en framelding.**
+[`#63`](../sql/competition_participant_baseline.sql) husker `joined_at` ved
+framelding og arver det igen ved genindtræden. Uden det tømte `A53` hele sæsonen,
+når nogen forlod en FÆRDIGSPILLET konkurrence og kom tilbage — alle kampe er da
+låst — i en stilling, der er endelig, og for en spiller, der kan have vundet den.
+**`A53` svækkes ikke:** en helt ny deltager har ingen historik og starter fortsat
+på 0. **At spærre for framelding var den anden vej og blev valgt fra**, fordi
+netop den gren findes, for at man kan forlade en konkurrence, man HAR spillet —
+en spærre ville i praksis låse folk inde i deres egen liga.
+
+🔴 **Den migrering brækkede to helt almindelige handlinger, før guarden kom på.**
+En `on delete cascade` er selv en AFTER DELETE-trigger på den refererede tabel,
+så forældrerækken er **væk**, når barnets triggere fyrer — og en hukommelse, der
+skriver en fremmednøgle til forælderen, kunne derfor ikke længere tåle, at man
+slettede en konkurrence eller lukkede en konto (`23503`). Fanget af testens
+påstand 5, som sletter FORÆLDEREN og ikke kun barnet. Fælden står nu i
+`DOCUMENTATION.md` §13.
+
+🔵 **Og vagt 2 i `sql/migration_syntax.test.js` sagde fra på en `on conflict do
+update set`** — den ligner en `update` uden `where` for en grep. Vagten er
+bevidst grov, og filens eget svar er at omskrive sætningen frem for at svække
+den: hukommelsen bruger nu `do nothing` plus en betinget `update`, hvis
+`where first_joined_at > old.joined_at` **siger**, at nulpunktet kun flytter sig
+bagud, hvor `least()` skulle læses for at afsløre det. Den grovkornede vagt gav
+altså en bedre formulering, ikke bare en anden.
+
+🔵 **Og viewet viste sig at være den ene undtagelse i basen, hvor Supabases
+default privileges ikke er inerte.** `alter default privileges` giver
+`authenticated` ALLE privilegier på hver ny relation i `public` — harmløst for de
+øvrige views, fordi ingen af dem er auto-opdaterbare, men `group_counts` **er**
+det (ét `from`, `group_id` er en simpel kolonnereference). Uden et `revoke …
+from authenticated` kunne man altså skrive i `groups` gennem et view, der findes
+for at tælle. Ikke en rettighedseskalering — `security_invoker` lader
+`groups_update_admin` gælde — men en skriveflade, ingen har bedt om, og præcis
+den klasse er dét, `sql/tests/write_surface.sql` findes for. **Fundet ved at
+spørge `information_schema.views` om `is_updatable`**, ikke ved at læse filen;
+det er nu en påstand i testen.
+
+**Verificeret:** 1354 tests (én ny på klientsiden), lint uændret på loftet
+(7 advarsler), grønt build. Tre nye SQL-tests med 17 påstande er kørt mod en
+rigtig PostgreSQL 16.13 og efterprøvet med i alt **fjorten mutationer — alle
+fanget**. Begrundelserne står i [`DECISIONS.md`](./DECISIONS.md).
+🔶 **Tre migreringer skal køres i Supabase:** `#62` **før** frontend-mergen
+(klienten læser viewet, og et 404 giver en tom Ligaer-fane), `#63` og en
+gen-kørsel af `career_profile.sql` (`#10`) i fri rækkefølge. Skema-eksporten
+halter herefter tre migreringer, hvilket er noteret i `sql/README.md`.
+
+---
+
 14. august 2026 — `A53`: en deltager starter på 0 i den konkurrence, hun melder sig til
 
 **Opfølgningen på `G107`, og den kom fra brugeren selv.** Da stillingen endelig

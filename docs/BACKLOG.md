@@ -53,7 +53,7 @@ eller en linje i "Forkastede ideer".
 
 ## Prioriteret rækkefølge
 
-Alle 33 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 30 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -111,11 +111,7 @@ Tomt.
 
 ### Tier 5 — Robusthed og vedligehold
 
-| # | Hvad | Note |
-|---|---|---|
-| `G106` | `loadMyGroups()` tæller ligaens medlemmer og konkurrencer i browseren — samme fælde som `G101`, men uden dens svar | Faldt ud af `G101` 14. august 2026: to opslag i `src/lib/data/groups.js:20,24` henter én række pr. medlem og pr. konkurrence på tværs af ALLE brugerens ligaer for at tælle dem, og et svar på 1000 rækker er et loft og ikke et facit (`DOCUMENTATION.md` §13). **`G101`s kur kan ikke bare kopieres:** dér var der én liga og dermed én tælling pr. konkurrence, her ville det blive to `db.count`-kald pr. liga — tyve kald for en bruger med ti ligaer. Rækken er derfor et valg mellem tre (fan-out, et view, eller et loft man kan se), ikke en oversættelse. |
-| `G107` | Karriereprofilens indbyrdes opgør bærer ikke `A53`s nulpunkt | Faldt ud af `A53` 14. august 2026. `rival`-blokken i `sql/career_profile.sql` summerer to spilleres point på delte konkurrencers kampe uden at spørge, hvornår hver af dem meldte sig til. **Ikke samme fejl** — opgøret spørger *"hvem af os to har tippet bedst på det, vi begge har haft adgang til"* og ikke om konkurrencens stilling — men svaret kan afvige fra den stilling, begge kan se i appen. Afklar først, hvad tallet skal betyde. |
-| `G108` | Forlader man en FÆRDIGSPILLET konkurrence og melder sig til igen, står man med 0 | Faldt ud af `A53` 14. august 2026. `joined_at` sættes forfra, alle kampe er låst, og nulpunktet tømmer hele sæsonen — i en stilling, der er endelig. **Den anden gren er lukket af RLS i forvejen** (`comp_participants_delete_own_unlocked` spærrer framelding, mens man har tips på låste kampe), så kun den færdigspillede konkurrence er åben. Snæver, men den ramte kan have vundet. |
+Tomt.
 
 ### Tier 6 — Venter på en udløser
 
@@ -207,9 +203,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 |---|---|---|---|
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
-| G106 | **`loadMyGroups()` tæller ligaens medlemmer og konkurrencer i browseren.** | Ligaer-fanens kort viser medlemstal og antal konkurrencer pr. liga, og begge tal laves ved at hente rækkerne og tælle listen: `group_members?group_id=in.(…)&select=group_id` og `competitions?group_id=in.(…)&select=id,group_id` (`src/lib/data/groups.js:20,24`). PostgREST leverer højst 1000 rækker pr. svar og siger ikke, at den klipper, så en bruger, hvis ligaer tilsammen har over 1000 medlemsrækker, ville se for lave tal uden en fejl nogen steder — samme tavse afkortning som "· 0 kampe" i Opret → Sæson (`DOCUMENTATION.md` §13) og som `G101`, der blev lukket 14. august 2026. | **Fundet i `G101`s kølvand, men den kur passer ikke:** `loadGroupDetail` tæller deltagere i ÉN ligas konkurrencer, så `db.count` pr. konkurrence er et bundet antal kald. Her er nævneren brugerens ligaer gange to — ti ligaer bliver tyve kald, hvor der i dag er to. Rækken er derfor et valg mellem tre veje (fan-out som `G101`, et `security_invoker`-view med tallene, eller et loft på opslaget, der kan SES rammes efter `G35`s mønster), og det valg er ikke truffet. Ufarligt i dag: enogtyve brugere, og tallene skal være i tusinder, før loftet nås. | Lille—mellem (afhænger af vejen) |
-| G107 | **Karriereprofilens indbyrdes opgør bærer ikke `A53`s nulpunkt.** `rival`-blokken og "vores indbyrdes" i `sql/career_profile.sql` summerer to spilleres point på kampe fra konkurrencer, de deler — uden at spørge, hvornår hver af dem meldte sig til. | Ikke samme fejl som `A53`, og derfor ikke taget med: opgøret spørger *"hvem af os to har tippet bedst på de kampe, vi begge har haft adgang til"*, ikke *"hvad er stillingen i konkurrencen"*. Men svaret kan afvige fra den stilling, begge kan se i appen, og to steder med hvert sit svar er netop det, `A53` blev skrevet for. **Afklar først, hvad tallet skal betyde** — det er en produktbeslutning, ikke en rettelse. | Én CTE hvert sted plus en test; eller én sætning i spec'en, hvis svaret er, at opgøret bevidst er bredere |
-| G108 | **Forlader man en FÆRDIGSPILLET konkurrence og melder sig til igen, står man med 0.** `joined_at` sættes forfra, og alle kampe er da låst, så `A53` nulstiller hele sæsonen — i en konkurrence, hvor stillingen er endelig. | Snæver, men grim: den ramte kan have vundet konkurrencen og står nu som 0 i en afsluttet stilling. **Den anden gren er lukket af RLS i forvejen** — `comp_participants_delete_own_unlocked` spærrer framelding, så længe man har tips på låste kampe, så en igangværende konkurrence kan man ikke forlade og genindtræde i. Tilbage er kun den færdigspillede, hvor framelding er tilladt. | Enten en `first_joined_at`, der ikke sættes forfra ved genindtræden, eller en spærre mod at forlade en konkurrence, man har point i |
 
 ## Ideer
 
@@ -251,49 +244,50 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 14. august 2026 (sekstende kørsel) — to brugerrapporter: en tom stilling og et point, der ikke var tjent
+### 14. august 2026 (syttende kørsel) — Tier 5 er tømt: tre steder, hvor to svar på samme spørgsmål kunne nå at afvige
 
-**Listen er 31 → 33.** Ingen række er lukket; begge nye er fund, der faldt ud af
-arbejdet og blev noteret frem for taget med. **Kørslen kom ikke fra backloggen,
-men fra en bruger** — først et skærmbillede, så et spørgsmål til det, der stod,
-da skærmbilledet var rettet.
+**Listen er 33 → 30, og Tier 5 er `Tomt.`** Alle tre rækker var rester, der faldt
+ud af `G101` og `A53` dagen før og blev noteret frem for taget med. Ingen af dem
+var en fejl, nogen oplevede — enogtyve brugere, ingen liga i nærheden af
+PostgRESTs loft, ingen kendt genindtræden. Fællesnævneren var i stedet, at hver
+især var et sted, hvor **to svar på det samme spørgsmål kunne nå at afvige**: en
+optælling mod et loft, et opgør mod en stilling, en stilling mod sin egen
+historie.
 
-**`G107` (leveret, ikke en backlog-række): stillingen var tom, og vælgeren pegede
-på en anden ligas konkurrence.** Tre veje til samme skærm, én rod: `BoardScreen`
-fik et konkurrence-id, listen ikke indeholdt. `GroupScreen.onJoin` opdaterede kun
-ligaens eget billede og ikke MainApps liste — **deltagelse er en egenskab ved
-brugeren og ikke kun ved ligaen** — og et `<select>` uden matchende `<option>`
-viser browserens første valgmulighed. Samme skævhed ramte framelding og
-arkivering; arkiverede konkurrencer kunne desuden slet ikke åbnes.
+**`G106`: ligaens to tal tælles i databasen.** `loadMyGroups()` hentede én række
+pr. medlem og pr. konkurrence på tværs af ALLE brugerens ligaer for at tælle dem.
+`G101`s kur kunne ikke kopieres — nævneren er ligaer GANGE TO, så ti ligaer var
+blevet tyve rundture — og et synligt loft (`G35`) passer kun på en LISTE, man kan
+handle på. Svaret blev viewet [`#62 group_counts.sql`](../sql/group_counts.sql),
+hvor `security_invoker` er bærende og ikke pynt: uden det ville tallene svare
+uden om RLS. **Reglen, der er værd at tage med: vælg kur efter, om antallet af
+kald er BUNDET.**
 
-**`A53` (afgjort og leveret): en deltager starter på 0 i den konkurrence, hun
-melder sig til.** Spørgsmålet kom fra brugeren selv: hvorfor har hun 1 point, når
-hun lige har meldt sig til? **Princippet var afgjort i forvejen** —
-`filterTippable` beskytter en ny KONKURRENCE mod at starte med point, og §3
-begrunder det med brugerens situation ordret. Værnet havde bare ingen pendant ved
-tilmeldingen. Reglen er nu `match_lock_at(…) > joined_at`, båret ét sted i JS og
-ét sted i SQL ([`#61`](../sql/competition_join_baseline.sql), **kørt i staging og
-produktion samme dag**).
+**`G107` (afgjort og leveret): karriereprofilens indbyrdes opgør bærer
+nulpunktet.** Et møde tæller kun, hvis kampen låste, efter BEGGE meldte sig til
+den delte konkurrence. Det gør den sætning, der stod på skærmen i forvejen, sand
+— og fjerner, at H2H kunne svare noget andet end den stilling, begge kan se.
+Begge blokke i `career_profile.sql` er rettet **sammen**, fordi spec'ens testcase
+41 netop er invarianten mellem dem.
 
-**Det, der gjorde den værd at bygge frem for at beskrive:** en sen tilmelding kan
-gøre **allerede udsendte historier forkerte bagud** — kort er sendt, milepæle er
-permanente — og adfærden kunne spekuleres i.
+**`G108`: nulpunktet overlever en framelding.**
+[`#63`](../sql/competition_participant_baseline.sql) husker `joined_at` ved
+framelding og arver det igen ved genindtræden. **`A53` svækkes ikke** — en helt
+ny deltager har ingen historik og starter fortsat på 0. At spærre for
+framelding var den anden vej og blev valgt fra: gren (a) findes, for at man kan
+forlade en konkurrence, man HAR spillet.
 
-🔴 **Rækken gjorde to ældre migreringer farlige at gen-køre** (`#37`, `#26`), så
-`sql/README.md`s liste er vokset fra ti filer til tolv.
+🔴 **Den nye migrering brækkede to helt almindelige handlinger, før guarden kom
+på:** en `on delete cascade` kører EFTER forældrerækken er væk, så en AFTER
+DELETE-trigger, der skriver en historik-række, kan ikke længere pege på
+forælderen. Uden guarden kunne man hverken slette en konkurrence eller lukke en
+konto (`23503`) — fanget af testens påstand 5, som sletter FORÆLDEREN og ikke kun
+barnet. Fælden står nu i `DOCUMENTATION.md` §13.
 
-🔴 **Og den fandt en landmine, der først ville være sprunget om en uge:**
-`simulate_season.sql` lod `joined_at` tage sin default, mens den bakker kampene i
-tid — under den nye regel blev hele den simulerede sæson **tom** (ingen kåringer,
-ingen historier), og testen ville være blevet rød i det sekund, skema-eksporten
-kørte. Fundet ved at køre alle femten skema-indlæsende tests fra **den anden side
-af dumpet**. Tredje gang den regel betaler sig.
+🔴 **`career_profile()` havde ingen SQL-test overhovedet.** Den har nu sin
+første, og den mest lærerige påstand er ikke et tal, men invarianten: `rivals` og
+`h2h` skal svare det samme, og en mutation, der kun retter den ene blok, fanges
+netop dér.
 
-**Åbnet:** `G107` (karriereprofilens indbyrdes opgør bærer ikke nulpunktet — en
-produktbeslutning, ikke en rettelse) og `G108` (genindtræden i en FÆRDIGSPILLET
-konkurrence giver 0; den anden gren er lukket af RLS i forvejen).
+**Åbnet: ingen.** Indbakken var tom ved kørslens start og er det stadig.
 
-**Indbakken var tom ved kørslens start og er det stadig** — begge fund gik direkte
-i tabellerne med ID. Parentesen, der stod under overskriften og refererede en
-tidligere rydning, er slettet: den var selv den kørselshistorik, overskriftens
-egen regel forbyder.
