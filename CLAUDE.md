@@ -22,22 +22,25 @@
 | en fejl, der ligner en, du har set før | §13 (fejlfindingslog) |
 | brugerstatistik, aktivitet | §15 |
 | push-notifikationer | §16 · `api/send-notifications.js` |
-| Story Engine | §17 · `docs/features/story-engine-v1.md` |
+| Story Engine | §17 · `docs/features/story-engine-v3.md` (aktuel) — v1/v2-spec'erne sammesteds er historik |
 | liga-laget (grupper) | §18 · `docs/features/liga-laget-v1.md` |
 | karriereprofil | §19 · `docs/features/karriereprofil-v1.md` |
+| milepæle | §19 · `docs/features/milepaele-v1.md` · `sql/milestones.sql` |
 | onboarding | §20 · `docs/features/onboarding-v1.md` |
 | invitationsflowet (link-preview, invitationskontekst før login, afsendernavn) | `docs/features/invitationsflow-v1.md` · `api/invite-preview.js` · `sql/invite_preview.sql` |
 | analytics og måle-ordbogen | §21 · `docs/features/analytics-v1.md` |
 | planlagte jobs (cron) | `docs/CRON.md` |
 | mails: afsender, modtager, DNS, skabeloner | `docs/MAIL.md` · `docs/mail/` |
-| bot-værn og e-mailbekræftelse ved oprettelse | `docs/OPRETTELSE.md` · `src/lib/turnstile.js` · `src/lib/data/profile.js` |
+| bot-værn og e-mailbekræftelse ved oprettelse | `docs/OPRETTELSE.md` · `docs/features/opret-flow-v2.md` · `src/lib/turnstile.js` · `src/lib/data/profile.js` |
+| hjemmesiden (marketing-sitet på `leagly.app`) | `site/` · `docs/features/hjemmeside-v1.md` · `docs/DOMAENE.md` |
 | domæner: hvilken adresse hører til hvad, og hvad der skal flyttes med | `docs/DOMAENE.md` · `vercel.json` |
-| en todelt migrering, der skal følges ad med en udrulning | `docs/UDRULNING-A40.md` (afsluttet — står som skabelon) · `sql/invite_lookup.sql` · `sql/invite_policies.sql` |
+| en todelt migrering, der skal følges ad med en udrulning | `docs/UDRULNING-A40.md` og `docs/UDRULNING-A43.md` (begge afsluttede — anden forekomst gjorde formen til et mønster) · `sql/invite_lookup.sql`/`sql/invite_policies.sql` · `sql/read_scope_functions.sql`/`sql/read_scope_narrow.sql` |
 | backup, gendannelse efter tabt data | `docs/RESTORE.md` · §22 · `.github/workflows/data-backup.yml` |
 | feedback fra brugerne | §23 · `sql/feedback.sql` · `src/screens/FeedbackCard.jsx` |
 | privatliv, vilkår, kontolukning | §24 · `src/lib/legal.js` · `api/delete-account.js` · `docs/features/privatliv-og-vilkaar-v1.md` |
 | fejl hos en bruger (crash, hvid skærm) | §25 · `src/lib/telemetry.js` · `sql/client_errors.sql` |
 | historik over ændringer | `docs/CHANGELOG.md` |
+| ældre gennemgange og aflæsninger, der citeres som belæg | `docs/reviews/` |
 
 Ved produktbeslutninger og nye features læses desuden:
 - `docs/PRODUCT_BOOK.md` — produktfilosofi (hvorfor produktet findes, og hvilke principper der beskytter dets identitet).

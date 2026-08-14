@@ -48,7 +48,8 @@ policies og grants. De enkelte migreringer i `sql/` er **ikke** nødvendige;
 de er historikken om, hvordan skemaet blev, som det er.
 
 **Vej A — SQL-editoren (ingen værktøjer krævet).** Supabase → SQL Editor → New
-query → indsæt hele filen → **Run without RLS**. Filen er ~6.700 linjer;
+query → indsæt hele filen → **Run without RLS**. Filen er ~8.500 linjer
+(august 2026 — den vokser med hver migrering);
 editoren kan klare den, men browseren bliver træg undervejs.
 
 **Vej B — `psql` (hurtigere, kræver port 5432).**
@@ -139,7 +140,7 @@ select
 
 `schema.sql` gav **23 tabeller, 9 views, 42 policies** (målt 5. august 2026 mod
 PostgreSQL 16 — tallene vokser med hver migrering, så de er et pejlemærke og
-ikke et krav). Sammenlign med produktionen. **Nul policies er den fejl, der gør
+ikke et krav; pr. 14. august 2026 er tallet 24 tabeller og 10 views). Sammenlign med produktionen. **Nul policies er den fejl, der gør
 mest skade og larmer mindst** — skemaet ser rigtigt ud, og RLS er væk.
 
 ### Døde kørslen midtvejs?

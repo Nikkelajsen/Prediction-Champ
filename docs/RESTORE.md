@@ -18,14 +18,16 @@ Det eneste, der findes, er derfor det, repoet selv tager:
 |---|---|
 | **Hvad** | Hele databasen — skema **og** data, `public` + `auth` |
 | **Hvordan** | `.github/workflows/data-backup.yml`, dagligt kl. 03:00 UTC + manuelt |
-| **Hvor** | GitHub Actions-artefakt, `db-backup-<kørselsnummer>`, gpg-krypteret |
+| **Hvor** | GitHub Actions-artefakt, `db-backup-<run-id>` (GitHubs lange run-id fra kørslens URL — ikke det korte løbenummer, UI'et viser først), gpg-krypteret |
 | **Hvor længe** | 90 dage (GitHubs loft for et offentligt repo) |
 | **Bevist gendannelig** | Ja — hver kørsel gendanner sit eget dump i en tom PostgreSQL og efterprøver rækketallene mod produktion |
 
 **Første kørsel: 2. august 2026 — bestået.** 22 tabeller (20 i `public` plus
-`auth.users` og `auth.identities`), 8.434 rækker, 316 kB krypteret. *(Siden er
-`feedback` (#34) og `client_errors` (#36) kommet til, så forvent 24 tabeller —
-22 i `public` — i nyere dumps.)* Kørslen
+`auth.users` og `auth.identities`), 8.434 rækker, 316 kB krypteret. *(Siden er flere
+tabeller kommet til — bl.a. `feedback` (#29), `client_errors` (#36),
+`milestones` (#39) og `competition_participant_history` (#63) — så forvent
+flere i nyere dumps: pr. 14. august 2026 er tallet 24 i `public` plus de to i
+`auth`. Tallet vokser med hver migrering og er et pejlemærke, ikke et krav.)* Kørslen
 besvarede samtidig det ene, der ikke kunne afgøres fra repoet: **pooler-rollen må
 læse `auth`**, så brugerkontiene er faktisk med i kopien. Tallene står her som
 udgangspunkt, ikke som et krav — men et dump, der pludselig er markant *mindre*
@@ -110,7 +112,7 @@ gendannelse, et menneske har prøvet — maskinen prøver kun sin egen.
 # 1. Hent artefaktet: Actions → Datasikkerhedskopi → vælg kørsel → Artifacts.
 #    manifest.txt i samme artefakt viser dato, commit og rækketal pr. tabel
 #    (målt både før og efter dumpet — det rigtige tal ligger imellem de to).
-unzip db-backup-<nummer>.zip
+unzip db-backup-<run-id>.zip
 
 # 2. Dekryptér (passphrasen indtastes, ikke skrevet i kommandoen)
 gpg --output backup.dump --decrypt leagly-<dato>.dump.gpg
@@ -207,7 +209,7 @@ Derefter, i denne rækkefølge:
 
 1. **Vercel:** ret `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`, og
    `VITE_SUPABASE_URL`/`VITE_SUPABASE_KEY` hvis de er sat. Redeploy.
-2. **`src/lib/supabase.js:7-8`** har produktions-URL'en **hårdkodet** som fallback.
+2. **`src/lib/supabase.js`** (konstanterne øverst) har produktions-URL'en **hårdkodet** som fallback.
    Den skal rettes i koden, ikke kun i miljøvariablerne.
 3. **GitHub-secrets:** `SUPABASE_DB_URL` (bruges af tre workflows).
 4. **VAPID-nøgler:** genbrug dem fra Vercel, hvis de findes. Gør de ikke, generér
@@ -232,21 +234,16 @@ Derefter, i denne rækkefølge:
 
 ## Scenarie 3 — en migrering rullede noget tavst tilbage
 
-**Her er dumpet sjældent svaret.** Fire filer i `sql/` bruger
+**Her er dumpet sjældent svaret.** En række filer i `sql/` bruger
 `drop policy … create policy` / `drop view … create view` og *erstatter tavst* en
 nyere definition med en ældre, uden at fejle. Rettelsen er at køre den **nyere**
-fil bagefter — ikke at gendanne data, som ikke er gået tabt:
+fil bagefter — ikke at gendanne data, som ikke er gået tabt.
 
-| Kørt ved en fejl | Kør derefter |
-|---|---|
-| `predictions_match_lock.sql` (#25) | `matches_kickoff_tbd.sql` (#28) |
-| `standings_tiebreakers.sql` | `tournament_scope.sql` (#20) |
-| `groups.sql` | `group_membership_invariant.sql` |
-| `standings_views.superseded.sql` | `standings_tiebreakers.sql` — og lad filen være |
-
-Den fulde begrundelse for hver af dem står i [`../sql/README.md`](../sql/README.md),
-afsnittet "Fire filer må ikke gen-køres blindt". Listen her er genvejen, ikke
-kilden — ret begge steder, hvis en femte fil kommer til.
+Parrene ("kørt ved en fejl → kør derefter") og begrundelsen for hvert af dem
+står i [`../sql/README.md`](../sql/README.md), afsnittet **"Filerne i listen her
+må ikke gen-køres blindt"**. Der stod tidligere en kopi af listen her som
+genvej, men kopien drev fra kilden (fire rækker mod tolv), så genvejen er
+nedlagt — slå op i kilden, som vedligeholdes ved hver ny migrering.
 
 Har migreringen derimod ændret **data** (ikke kun regler), er det scenarie 1.
 

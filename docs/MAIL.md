@@ -7,8 +7,9 @@ hvilke DNS-poster de to hviler på.
 
 Appen sender **to** mails, og de er begge kritiske: bekræftelse af e-mail og
 nulstilling af adgangskode. Begge afsendes af Supabase Auth, ikke af kode i dette
-repo — `src/lib/supabase.js:126-133` kalder `/auth/v1/signup` og
-`/auth/v1/recover` med kun `{ email, password }`. Der er **ingen**
+repo — `src/lib/supabase.js` kalder `/auth/v1/signup` og
+`/auth/v1/recover` med e-mail, adgangskode, Turnstile-token (`B26`) og — ved
+oprettelse — `data: { display_name }`. Der er **ingen**
 `emailRedirectTo`, ingen skabelon og ingen afsender nogen steder i koden.
 Afsender, emne, brødtekst og linkets adresse bestemmes hundrede procent af
 konfiguration uden for repoet.
@@ -17,8 +18,9 @@ Indtil `B25` gik de gennem Supabases indbyggede mailservice, som er delt og
 stærkt rate-begrænset. Det er en udviklings-facilitet, ikke en leveringskanal, og
 konsekvensen var konkret: **den første fremmede, der glemte sin adgangskode, var
 låst ude.** Glemt-adgangskode er ellers bygget færdig i begge ender —
-`src/screens/Auth.jsx:274` (knappen), `:217` (kaldet), `ResetPasswordScreen` på
-`:134-181`, og `src/App.jsx:34`, som fanger `#type=recovery`.
+knappen "Glemt adgangskode?" og kaldet i `src/screens/Auth.jsx`,
+`ResetPasswordScreen` sammesteds, og `src/App.jsx`, som fanger
+`#type=recovery`.
 
 Filen erstatter ikke Resend, Microsoft 365 eller DNS-panelet. Den er den liste,
 man holder dem op imod.
@@ -71,6 +73,13 @@ kontoens levetid — én bekræftelse, og en nulstilling hvis de glemmer. Selv
 | Adresse | `kontakt@leagly.app` | 9. august 2026 — post udefra kommer frem |
 | Hvor | Microsoft 365-postkasse på domænet | 9. august 2026 |
 | Bruges af | `src/lib/legal.js` (indsigt/sletning), `site/om.html` | 9. august 2026 |
+
+> **Én adresse mere optræder i afsender-rollen uden at være en postkasse:**
+> push-tjenesterne får `VAPID_SUBJECT` (standard
+> `mailto:notifications@leagly.invalid`, sat i `api/send-notifications.js`)
+> som kontaktadresse for hver notifikation. `.invalid` er et bevidst
+> ikke-domæne — der sendes og modtages intet — men registret her ville være
+> ufuldstændigt uden den. Se `DOCUMENTATION.md` §9 og §16.
 
 ### DNS-poster
 
@@ -424,7 +433,7 @@ kun kan lære af at blive fulgt.
 | Supabase afviser SMTP-loginet | DKIM-værdien fra DNS Records er brugt som password | Den er en OFFENTLIG nøgle, ikke en hemmelighed. Password er API-nøglen (`re_…`) fra **API Keys** |
 | Mailen kommer, men lander i spam | DKIM eller DMARC fejler | Læs headeren (kontrol 2). Er `dkim=pass` men `dmarc=fail`, står DMARC på strict — se ⚠️ ovenfor |
 | Nogle mails kommer, andre ikke | Rate limit — Supabase svarer `429: Email rate limit exceeded` | Efterse de 30/time i trin 3. Hæv kun, hvis en RIGTIG spids blev blokeret, og hold dig under Resends 100/dag |
-| Linket åbner appen, men ikke nulstillingsskærmen | Site URL peger forkert, eller `#type=recovery` er strippet | Trin 3.4. Appen læser hash'et i `src/App.jsx:34` |
+| Linket åbner appen, men ikke nulstillingsskærmen | Site URL peger forkert, eller `#type=recovery` er strippet | Trin 3.4. Appen læser hash'et i `src/App.jsx` |
 | Post til `kontakt@` er holdt op med at komme | To SPF-poster på roden | 🛑-advarslen ovenfor |
 
 ## Hold øje med

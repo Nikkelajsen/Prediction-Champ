@@ -14,11 +14,16 @@
 -- er .github/workflows/job-heartbeat.yml, der slår alarm, når et job i
 -- docs/CRON.md holder op med at melde sig.
 --
--- Idempotent — kan køres igen når som helst.
+-- Idempotent — men GEN-KØR DEN IKKE BLINDT: læsepolicyen nedenfor er den
+-- GAMLE form, der læser profiles.is_admin direkte. #60 read_scope_narrow.sql
+-- har afløst den med is_platform_admin(), og efter #60 kan authenticated ikke
+-- længere læse is_admin — den gamle policy FEJLER derfor med 42501 i stedet
+-- for at filtrere, og Admin → Drift går i sort for alle. Kør
+-- read_scope_narrow.sql (#60) bagefter; se listen i sql/README.md.
 
 create table if not exists public.job_runs (
   id bigint generated always as identity primary key,
-  job text not null,                       -- "sync-matches" | "sync-live" | "send-notifications"
+  job text not null,                       -- "sync-matches:<liga-uuid>" (G44) | "sync-live" | "send-notifications"
   started_at timestamp with time zone not null default now(),
   finished_at timestamp with time zone,
   ok boolean,                              -- null = kørslen nåede aldrig at afslutte

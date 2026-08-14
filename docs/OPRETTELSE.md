@@ -19,10 +19,11 @@ begge halvdele til konfiguration frem for en udrulning.
 > på, at linket deles åbent (hjemmesiden publiceres, eller invitationer går uden
 > for vennekredsen), og den blev kørt i forvejen efter ejerens valg 12. august
 > 2026. Prisen er et ekstra trin i onboardingen for de brugere, der allerede er
-> der. **Det, udløseren stadig hænger på, er [`A43`](./BACKLOG.md)** — et
-> bot-værn hæver prisen på en fremmed konto, men `profiles` og
-> `competition_participants` kan fortsat læses af enhver indlogget bruger, og
-> den beslutning bør tages FØR den åbne deling, ikke efter.
+> der. ~~**Det, udløseren stadig hænger på, er `A43`.**~~ ✅ **Den betingelse
+> er indfriet 12. august 2026:** `A43` er udrullet
+> ([`UDRULNING-A43.md`](./UDRULNING-A43.md)) — `authenticated` kan nu kun læse
+> tre kolonner i `profiles`, og deltagerlisten kun for konkurrencer, man selv
+> kan se. Beslutningen blev taget FØR den åbne deling, som rækkefølgen krævede.
 
 ---
 
@@ -144,7 +145,9 @@ Dette trin er hele sikkerhedsnettet. Bot Protection er stadig slået fra, så
 GoTrue ignorerer kvitteringen — intet kan gå i stykker endnu.
 
 1. Redeploy produktionen (Vercel → Deployments → Redeploy på seneste).
-2. Åbn `https://prediction-champ.vercel.app` og log **ud**.
+2. Åbn `https://app.leagly.app` og log **ud**. *(Den gamle
+   `prediction-champ.vercel.app` svarer 308 mod den nye adresse siden
+   13. august 2026 — se `DOMAENE.md`.)*
 3. **Se widgeten stå på login-skærmen.** Gør den ikke det, er nøglen ikke med i
    buildet — gå ikke videre.
 4. **Se widgeten sige "Succes!", og bekræft med én linje i konsollen.** Dette er
@@ -252,7 +255,7 @@ Authentication → Email Templates → **Confirm signup**.
 | Subject | `Bekræft din e-mail` |
 | Body | [`mail/confirm-signup.html`](./mail/confirm-signup.html) **fra `<table role="presentation"` og ned** |
 
-> **Tag ikke kommentarhovedet med.** Filens første 31 linjer er interne noter —
+> **Tag ikke kommentarhovedet med.** Alt før `<table role="presentation"` er interne noter —
 > de nævner backlog-rækker, kodestier og hændelsen 10. august — og en HTML-
 > kommentar forsvinder ikke, fordi den ikke vises: den rejser med i mailens
 > kilde og kan læses af enhver modtager, der åbner "vis original". Den gør

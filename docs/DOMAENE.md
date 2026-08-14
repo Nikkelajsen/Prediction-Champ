@@ -7,7 +7,7 @@ fejlfindingstabel i én fil.
 Formen er besluttet 12. august 2026 og begrundet i
 [`DECISIONS.md`](./DECISIONS.md): **appen får sit eget subdomæne, fordi det er
 appens adresse, brugerne deler** — invitationslinks bygges af
-`window.location.origin` (`GroupScreen.jsx:87`, `BoardScreen.jsx:126`), ikke af
+`window.location.origin` (`GroupScreen.jsx`, `BoardScreen.jsx`), ikke af
 hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 
 > ✅ **`I8` er leveret 14. august 2026 — hjemmesiden er live på `leagly.app`.**
@@ -44,7 +44,8 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 | Appen | `app.leagly.app` | **13. august 2026 — oprettet og svarer, meldt af ejeren** (trin 1 + 3). Ikke aflæst herfra: udgående HTTPS er spærret i arbejdsmiljøet, så adressen er aldrig blevet spurgt af en maskine. Beviserne nedenfor er stadig det, der afgør det |
 | Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | **13. august 2026 — redirect udrullet og BEVIST** for den første: 308 med `Location: https://app.leagly.app/` (bevis 1). Den anden er ikke spurgt. **Listen er ikke aflæst i Vercel → Domains, og det bliver den ikke** (`A47`, afgjort 13. august 2026): de to ER Vercels standardsæt for et team-projekt, og projektet er aldrig omdøbt. Findes der mod forventning en tredje, dør intet — adressen serverer samme deployment og redirigerer bare ikke; rettelsen er da én regel mere her |
 | Cron-jobbenes værtsnavn | Den gamle adresse (`docs/CRON.md` skriver `<app>`) | ? — men **spørgsmålet er flyttet ind i appen 13. august 2026 (`A46`)**: hver kørsel skriver nu sit værtsnavn i `job_runs.detail`, så de ni værdier aflæses i Admin → Drift frem for i cron-job.org. Svaret findes, når hvert job har kørt én gang efter udrulningen — langsomste skema er hver 12. time. Undtagelsen, der beskytter jobbene imens, er bevist samme dag: `/api/sync-live` på den gamle adresse svarer 401 og ikke 308 (bevis 3b), så de rammer funktionen uanset hvilken adresse de er sat op med |
-| Vercel-projektnavn | **Uændret** (bevidst — se `DECISIONS.md`) | 12. august 2026 |
+| Vercel-projektnavn (appen) | **Uændret** (bevidst — se `DECISIONS.md`) | 12. august 2026 |
+| Vercel-projekt #2 (hjemmesiden) | `leagly_site` — root directory `site`, domænerne `leagly.app` + `www.leagly.app`. Begge projekter bygger ved hvert push til `main` (se `DOCUMENTATION.md` §11) | 14. august 2026 |
 | GitHub-repo | `Nikkelajsen/Prediction-Champ` | ? — omdøbes med `B21` |
 | Supabase Site URL | `https://app.leagly.app` — se [`MAIL.md`](./MAIL.md) trin 3.2 | **13. august 2026 — flyttet, testet OG bevist** (trin 4 + bevis 4). Ikke længere kun meldt: `redirect_to=https://app.leagly.app/` er aflæst i kilden på en modtaget nulstillingsmail, og det felt bygger Supabase af Site URL |
 | Turnstile-værtsnavne | Se [`OPRETTELSE.md`](./OPRETTELSE.md)s register | **13. august 2026 — `app.leagly.app` tilføjet, meldt af ejeren** (trin 5). Det gamle værtsnavn står stadig, som trinnet foreskriver. Bevis 3 (et rigtigt login på den nye adresse) er det, der afgør det |
@@ -212,7 +213,8 @@ ovenfor kender.
 hedder det gamle.
 
 De 23 CTA'er kunne rettes uden risiko før flytningen, fordi `site/` ligger uden
-for Vite-buildet og aldrig når et deploy (trin 2 er ikke udført endnu).
+for Vite-buildet og aldrig når et deploy (trin 2 var endnu ikke udført, da de
+blev rettet).
 
 ### Trin 8 — kør de eksisterende beviser igen
 
@@ -320,8 +322,10 @@ link og ikke en konfiguration, der ser rigtig ud.
 
 ## Når noget ændrer sig
 
-- **Skifter appens adresse igen:** trin 4, 5 og 6 er listen. Hvert af de tre
-  steder fejler tavst hver for sig.
+- **Skifter appens adresse igen:** trin 4, 5 og 6 er listen — plus de to
+  hårdkodede fallbacks i koden: `vite.config.js` (OG-adressen, bevis 5) og
+  `api/invite-preview.js` (`https://app.leagly.app` som fallback-origin, `I10`).
+  Hvert af stederne fejler tavst hver for sig.
 - **Fjernes en gammel `.vercel.app`-adresse fra redirectet:** hvert link delt
   før flytningen dør i samme øjeblik. Der er ingen udløbsdato, hvor det bliver
   sikkert — kun et punkt, hvor prisen bliver lille nok.

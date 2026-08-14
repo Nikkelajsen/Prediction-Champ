@@ -16,6 +16,7 @@
 # viste 1. august 2026 SYV funktioner, hvoraf kun tre var endpoints: api/backfill.js
 # og api/providers/*.js er biblioteksmoduler uden handler, men manglede `_`-præfikset
 # og blev derfor routet — offentligt kaldbare og med i loftet. De hedder nu
-# api/_backfill.js og api/_providers/, så tallet er 4 (api/delete-account.js
-# kom til med B4, august 2026).
+# api/_backfill.js og api/_providers/, så kun rigtige endpoints tæller — i dag
+# seks: sync-matches, sync-live, send-notifications, delete-account (B4),
+# admin-close-account og invite-preview (I7).
 api/**/*.test.js
