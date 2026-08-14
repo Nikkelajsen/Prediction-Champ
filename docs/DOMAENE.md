@@ -40,7 +40,7 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 |---|---|---|
 | Domæne | `leagly.app` | 9. august 2026 — i brug til mail (`B25`) |
 | Registrar | ? | ? |
-| Hjemmesiden (`site/`) | `leagly.app` + `www.leagly.app` → apex | ✅ **14. august 2026 — LIVE, meldt af ejeren og delvist bevist.** Vercel-projektet er oprettet (root directory `site`), og `A50` er bestået med et skærmbillede af hver fil: `/robots.txt` og `/sitemap.xml` svarer fra roden med indholdet fra `site/`. **Ikke aflæst: svar-headerne** — CSP'en fra `site/vercel.json` er aldrig set i produktion, og `www` → apex er ikke spurgt. Bevis 6 og 7 nedenfor |
+| Hjemmesiden (`site/`) | `leagly.app` + `www.leagly.app` → apex | ✅ **14. august 2026 — LIVE og fuldt bevist.** Vercel-projektet er oprettet (root directory `site`); `A50`, bevis 6 og bevis 7 er alle bestået samme dag. `leagly.app` svarer 200 med CSP'en fra `site/vercel.json` ord for ord, `www` svarer 308 mod apex, og fontene bærer `immutable`. **Ét led kommer IKKE fra vores fil:** `Strict-Transport-Security: max-age=63072000` sættes af Vercel selv — led ikke efter den i `site/vercel.json` |
 | Appen | `app.leagly.app` | **13. august 2026 — oprettet og svarer, meldt af ejeren** (trin 1 + 3). Ikke aflæst herfra: udgående HTTPS er spærret i arbejdsmiljøet, så adressen er aldrig blevet spurgt af en maskine. Beviserne nedenfor er stadig det, der afgør det |
 | Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | **13. august 2026 — redirect udrullet og BEVIST** for den første: 308 med `Location: https://app.leagly.app/` (bevis 1). Den anden er ikke spurgt. **Listen er ikke aflæst i Vercel → Domains, og det bliver den ikke** (`A47`, afgjort 13. august 2026): de to ER Vercels standardsæt for et team-projekt, og projektet er aldrig omdøbt. Findes der mod forventning en tredje, dør intet — adressen serverer samme deployment og redirigerer bare ikke; rettelsen er da én regel mere her |
 | Cron-jobbenes værtsnavn | Den gamle adresse (`docs/CRON.md` skriver `<app>`) | ? — men **spørgsmålet er flyttet ind i appen 13. august 2026 (`A46`)**: hver kørsel skriver nu sit værtsnavn i `job_runs.detail`, så de ni værdier aflæses i Admin → Drift frem for i cron-job.org. Svaret findes, når hvert job har kørt én gang efter udrulningen — langsomste skema er hver 12. time. Undtagelsen, der beskytter jobbene imens, er bevist samme dag: `/api/sync-live` på den gamle adresse svarer 401 og ikke 308 (bevis 3b), så de rammer funktionen uanset hvilken adresse de er sat op med |
@@ -101,7 +101,8 @@ Apex-domæner kan ikke bruge CNAME; brug den A-record, Vercel oplyser i panelet.
 > repoets rod er urørt og læses kun af app-projektet; de to filer kan ikke se
 > hinanden.
 >
-> ✅ **Kørt af ejeren 14. august 2026 — hjemmesiden er live.** Copy blev
+> ✅ **Kørt af ejeren 14. august 2026 — hjemmesiden er live, og alle tre
+> aflæsninger er bestået samme dag** (`A50`, bevis 6, bevis 7). Copy blev
 > godkendt dagen før ([`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md)),
 > og projektet er oprettet med root directory `site`. **`A50` er bestået i samme
 > ombæring** og er dermed lukket: begge filer serveres fra roden.
@@ -276,20 +277,30 @@ link og ikke en konfiguration, der ser rigtig ud.
    (`vite.config.js`), så den bør følge med af sig selv — **men det er en
    antagelse, indtil den er aflæst.** Gør den ikke, er faldbacken i samme fil
    stedet at rette.
-6. **Hjemmesidens egne headere svarer.** `curl.exe -I https://leagly.app/` skal
-   bære `content-security-policy: default-src 'self'; script-src 'none'; …`
+6. ✅ **Hjemmesidens egne headere svarer.** `curl.exe -I https://leagly.app/`
+   skal bære `content-security-policy: default-src 'self'; script-src 'none'; …`
    samt `x-content-type-options: nosniff` og `referrer-policy`.
-   **`site/vercel.json` er aldrig kørt i produktion**, og en headers-blok, der
-   ikke bliver læst, fejler tavst: siden ser præcis rigtig ud uden den. Findes
-   headeren ikke, er root directory sat forkert eller filen ligger uden for
-   projektets rod. Kontrollér samtidig `cache-control` på en fontfil:
-   `curl.exe -I https://leagly.app/fonts/barlow-400-latin.woff2` skal svare
-   `public, max-age=31536000, immutable`.
-7. **`www.leagly.app` lander på apex.** `curl.exe -I https://www.leagly.app/`
-   → 307/308 med `Location: https://leagly.app/`. Trin 2 beder om redirectet,
-   men intet har målt det, og en `www`, der svarer 200 med samme indhold, er to
-   kanoniske adresser for det samme site — præcis dét, `canonical` og
-   `sitemap.xml` er skrevet for at undgå.
+   **`site/vercel.json` var aldrig kørt i produktion**, og en headers-blok, der
+   ikke bliver læst, fejler tavst: siden ser præcis rigtig ud uden den.
+   **Bestået 14. august 2026, 12:51 UTC** — `HTTP/1.1 200 OK` med CSP'en ord for
+   ord som i filen, `X-Content-Type-Options: nosniff` og `Referrer-Policy:
+   strict-origin-when-cross-origin`. Fontfilen (`/fonts/barlow-400-latin.woff2`)
+   svarede `Cache-Control: public, max-age=31536000, immutable`.
+   **Svaret bar tre led, beviset ikke bad om, og alle tre er værd at kende:**
+   fontfilen fik **også** CSP'en (`source: "/(.*)"` gælder alt, ikke kun HTML —
+   som skrevet); forsiden svarede `Cache-Control: public, max-age=0,
+   must-revalidate`, altså **Vercels standard for statisk HTML og ikke noget fra
+   vores fil**, hvilket er dét, der gør, at en rettet copy slår igennem med det
+   samme; og `Strict-Transport-Security: max-age=63072000` kommer ligeledes fra
+   platformen. **Ingen af de tre står i `site/vercel.json`** — led ikke efter dem
+   der, hvis de en dag mangler.
+7. ✅ **`www.leagly.app` lander på apex.** `curl.exe -I https://www.leagly.app/`
+   → 307/308 med `Location: https://leagly.app/`. En `www`, der svarer 200 med
+   samme indhold, er to kanoniske adresser for det samme site — præcis dét,
+   `canonical` og `sitemap.xml` er skrevet for at undgå.
+   **Bestået 14. august 2026, 12:52 UTC:** `HTTP/1.1 308 Permanent Redirect`,
+   `Location: https://leagly.app/`. **308 og ikke 307 er det rigtige her** —
+   den permanente flytter kanonikaliteten med, ligesom redirectet i trin 6.
 
 ---
 
