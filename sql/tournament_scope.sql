@@ -45,9 +45,24 @@ alter table public.leagues drop constraint if exists leagues_official_implies_vi
 alter table public.leagues
   add constraint leagues_official_implies_visible check (not is_official or is_visible);
 
--- Scotland Premiership er en generalprøve for flere turneringer, ikke en officiel
--- turnering. Den er synlig og kan tippes; den afgør bare ingen titler.
-update public.leagues set is_official = false where api_league_id = '501';
+-- Her stod indtil 14. august 2026:
+--
+--   -- Scotland Premiership er en generalprøve for flere turneringer, ikke en
+--   -- officiel turnering. Den er synlig og kan tippes; den afgør bare ingen titler.
+--   update public.leagues set is_official = false where api_league_id = '501';
+--
+-- Sætningen er FJERNET og ikke rettet, fordi den var en STARTTILSTAND skrevet
+-- som en regel. Scotland Premiership er forfremmet til officiel med `A55`
+-- (14. august 2026, #64 tournament_scotland_promote.sql), og en gen-kørsel af
+-- denne fil — som er nødvendig, hver gang de to views ændrer sig — ville have
+-- rullet forfremmelsen tilbage TAVST og flyttet både rating og titler for alle
+-- brugere. Det er præcis `G65`s fejl en gang til: `is_visible`/`is_official`/
+-- `live_enabled` er manuelle valg, og et script, der sætter dem som en
+-- sidegevinst, kan ikke gen-køres uden at tage valget om igen.
+--
+-- Bygges skemaet op fra scripterne frem for fra `schema.sql`, kommer
+-- turneringens egen række fra #21 (som indsætter den uofficiel) og
+-- forfremmelsen fra #64. Rækkefølgen står i sql/README.md.
 
 -- ============================================================================
 -- round_standings — én spillerunde, samlet og pr. turnering
@@ -190,7 +205,9 @@ grant select on public.monthly_standings to authenticated, service_role;
 -- ============================================================================
 -- Verifikation — kør efter migreringen
 -- ============================================================================
--- 1) Turneringernes status. Skotland skal stå som synlig, men ikke officiel.
+-- 1) Turneringernes status. Skotland stod som synlig, men ikke officiel, indtil
+--    `A55` (14. august 2026) forfremmede den — se #64. Alle synlige turneringer
+--    er officielle i dag.
 -- select name, api_league_id, is_visible, is_official from leagues order by created_at;
 
 -- 2) Summen passer: for hver (bruger, runde) skal per-turnering-rækkerne summere
@@ -217,6 +234,6 @@ grant select on public.monthly_standings to authenticated, service_role;
 -- where scope <> 'ALL'
 --   and scope not in (select id::text from leagues where is_official);
 
--- 5) Kun ÉN scope-værdi i dag (Superligaen), fordi Skotland ikke er officiel:
---    'ALL' + superligaens uuid.
+-- 5) Scope-værdierne: 'ALL' + én uuid pr. officiel turnering, der er tippet på.
+--    Var 'ALL' + superligaens uuid alene, indtil Skotland blev forfremmet (#64).
 -- select scope, count(*) from round_standings group by scope;

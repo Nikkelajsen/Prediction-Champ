@@ -57,6 +57,38 @@ function TrophyMark({ size = 19, title }) {
   );
 }
 
+// Beta-mærkatet (`A56`, 14. august 2026). Hjemmesiden har båret det ved siden af
+// ordmærket på alle fem sider siden `A48` (13. august 2026), og appen bar det
+// ikke — så en bruger, der kom fra sitet, mødte to forskellige løfter om, hvor
+// færdigt produktet er. Det er den samme fejlklasse som navnet og
+// officiel-status: to flader, der beskriver det samme produkt forskelligt.
+//
+// Det bor HER og ikke i de tre kaldesteder, af samme grund som mærket selv gør:
+// `A48`s exit-kriterium (sitet har stået publiceret en måned uden en fundet fejl
+// i copy eller flow) skal kunne udføres ét sted i appen og ét sted på sitet —
+// ikke tre plus fem. Formen er sitets `.beta-tag` oversat til appens tokens:
+// guld, kant i egen farve, pilleform.
+//
+// Størrelsen følger IKKE `size`. Mærkatet er en oplysning om produktet og ikke
+// en del af logoet, så det skal se ens ud i headeren (20) og på login (16); et
+// mærkat, der voksede med mærket, ville konkurrere med navnet i headeren, hvor
+// pladsen i forvejen er talt (se kommentaren ved `<Wordmark size={20} />` i
+// `MainApp.jsx`).
+function BetaTag() {
+  return (
+    <span
+      style={{
+        fontFamily: font.display, fontWeight: 700, fontSize: 10,
+        letterSpacing: "0.1em", color: C.gold,
+        border: "1px solid currentColor", borderRadius: 999,
+        padding: "1px 7px", lineHeight: 1.5, whiteSpace: "nowrap",
+      }}
+    >
+      Beta
+    </span>
+  );
+}
+
 // Navnet er tofarvet som i logofilen: "Leag" i guld, "ly" i tekstfarven.
 // Versaler og letter-spacing er dem, headeren brugte i forvejen — kun navnet og
 // ikonet skifter, så resten af typografien står, som den stod.
@@ -72,6 +104,7 @@ function Wordmark({ size = 15 }) {
       >
         <span style={{ color: C.gold }}>Leag</span>ly
       </span>
+      <BetaTag />
     </span>
   );
 }

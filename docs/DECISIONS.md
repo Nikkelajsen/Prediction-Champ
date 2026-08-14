@@ -15,6 +15,95 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — Tier 2 kørt: tre steder, hvor hjemmesiden og appen beskrev det samme produkt forskelligt
+
+**Beslutning (produktejeren):** backloggens Tier 2 er kørt tom. De tre rækker —
+`A54` (turneringens navn), `A55` (`is_official=false` mod sitets salg af
+turneringen som live-flagskib) og `A56` (beta-mærkatet, der kun fandtes ét af
+stederne) — er afgjort samlet, fordi de er den samme fejlklasse: **to flader,
+der beskriver det samme produkt forskelligt.** Svarene er derimod ikke ens, og
+det er hele pointen med at tage dem sammen.
+
+**`A54` — sitet beholder "Skotske Premiership", `leagues.name` beholder
+"Scotland Premiership".** Rækken sagde selv, at spørgsmålet var *præcis* det,
+`A49` afgjorde for La Liga/Primera División 13. august, og at svaret dér var
+formen. Formen holder: sitet er marketing og møder folk på det danske ord;
+`leagues.name` er leverandørens navn, og et navn i en `leagues`-række er **data,
+ikke tekst**. Ingen migrering, ingen kodeændring. To ting bekræftede, at det ikke
+bare var en genbrugt begrundelse: sitets egen brødtekst skriver i forvejen "den
+skotske Premiership" fire steder, altså er det danske ord dét, siden allerede
+taler i — og turneringen hedder i virkeligheden hverken det ene eller det andet
+(officielt "Scottish Premiership"), så "ét fælles navn" ville have været et
+tredje navn og ikke et af de to.
+
+**`A55` — turneringen forfremmes, frem for at sitet tager forbehold.** Her
+valgte ejeren den dyre udgang, og begrundelsen er, at forudsætningen for `false`
+var udløbet. `is_official = false` blev sat 31. juli med ordene *"en generalprøve
+for flere turneringer, ikke en turnering, nogen skal vinde titler i"* — og
+generalprøven er overstået: to uger med rigtige kampe, rigtige tips og en
+live-sync, og hele maskineriet (scope-dimensionen, per-turnering-stillingerne,
+`scopeNote()`) er afprøvet af netop den turnering. Et forbehold i sitets copy
+ville have skrevet en midlertidig tilstand ind som et vilkår.
+
+**Prisen er, at forfremmelsen virker BAGUD, og den er accepteret med åbne øjne.**
+Stillingerne er views og regnes ved hvert opslag, så skotske tips træder ind i
+alle historiske runder og måneder i samme sekund; `recompute_ratings()` er en
+fuld genopbygning fra runde nul. Placeringer i tidligere runder kan altså skifte
+— også i en runde, hvis Champion allerede er annonceret. Det er ikke en
+bivirkning, men konsekvensen af `A17`s regel om, at "officiel" betyder det samme
+overalt: en officiel turnering har altid talt med. **To ting følger af det, og de
+er skrevet ind i migreringen** (`#64 tournament_scotland_promote.sql`): den skal
+køres **mellem to spillerunder** — betingelsen, `#24` skrev om netop denne
+turnering, og som holdt i to uger — og den kalder selv `recompute_ratings()`,
+så skiftet sker på ét kendt tidspunkt frem for ved den næste tilfældige
+målscoring, hvor triggeren ellers ville have fyret den midt i en runde.
+
+**Det, forfremmelsen IKKE gør, er at skrive historikken om:** `stories`, afsendte
+notifikationer og milepæle er skrevet ud fra den gamle afgrænsning og bliver
+stående. Samme vilkår som den modsatte vej (`DOCUMENTATION.md` §5).
+
+**En fælde blev lukket i samme ombæring, og den var større end selve
+beslutningen.** `sql/tournament_scope.sql` (#20) satte `is_official = false` på
+`501` som en sidegevinst midt i et script, der definerer to views — og som
+derfor **skal** gen-køres, hver gang de views ændrer sig. En helt almindelig
+gen-kørsel ville have rullet forfremmelsen tilbage tavst og flyttet både rating
+og titler for alle brugere. **Og gen-kørslen er ikke hypotetisk: den er en anbefaling, vi selv har
+automatiseret.** `job-heartbeat`-workflowen tjekker, om stillings-viewene har
+deres `scope`-kolonne, og dens `rettelse`-felt siger ordret *"Kør
+sql/tournament_scope.sql igen (#20 afløser #12)"*. Den fælde ville altså være
+blevet stillet af en overvågning, der gjorde præcis sit arbejde. Sætningen er
+fjernet frem for rettet: den var en
+**starttilstand skrevet som en regel**, og det er `G65`s fejl en gang til —
+`is_visible`/`is_official`/`live_enabled` er manuelle valg, og et script, der
+sætter dem i forbifarten, kan ikke gen-køres uden at tage valget om igen.
+
+**Sitets copy skulle ikke røres — det var netop dét, valget afgjorde.** "Point,
+stilling og rating opdateres i alle turneringer" bliver sandt i samme sekund,
+migreringen køres. Og i appen forsvinder `scopeNote()`-linjen af sig selv:
+funktionen returnerer `null`, når der ingen uofficielle turneringer er. Spec'en
+forudsagde det ordret — *"linjen forsvinder af sig selv, den dag alle synlige
+turneringer er officielle"* — så leverancen bekræfter en regel, der blev skrevet
+seksten dage før den kunne afprøves.
+
+**`A56` — appen bærer nu også "Beta".** Alternativet var at fjerne mærkatet fra
+sitet, og det ville have rullet `A48` tilbage to dage efter, den blev truffet,
+uden at dens begrundelse (en fejl på et nyt site læses som sjusk frem for som
+beta) var blevet usand i mellemtiden. Mærkatet bor i `src/ui/Wordmark.jsx` og
+ikke i de tre kaldesteder, af samme grund som mærket selv gør: **`A48`s
+exit-kriterium skal kunne udføres ét sted i appen og ét på sitet** — ikke tre
+plus fem. Kriteriet gælder nu begge flader: fjernes mærkatet, fjernes det begge
+steder. Størrelsen følger bevidst ikke `size`, fordi headerens plads er talt
+(kommentaren ved `<Wordmark size={20} />` regner den ud på en 320 px skærm), og
+et mærkat, der voksede med mærket, ville konkurrere med navnet.
+
+**Det, der binder de tre svar sammen:** uenigheden mellem to flader er ikke i sig
+selv en fejl. `A54` er to rigtige navne til to forskellige formål; `A55` og `A56`
+var to flader, hvor den ene beskrev en verden, den anden var holdt op med at være
+i. Spørgsmålet er altså aldrig "siger de det samme?", men "beskriver de begge
+noget, der er sandt?".
+
+---
+
 ## 14. august 2026 — `G109`: en langsom leverandør må ikke behandles som en fejlende
 
 **Beslutning:** Live-opslaget hos Sportmonks får sin **egen** tidsgrænse pr.

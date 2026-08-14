@@ -35,13 +35,15 @@
 -- konkurrence, nogen opretter i dem. Derfor er nu det billigste tidspunkt.
 --
 -- ---------------------------------------------------------------------------
--- Scotland Premiership forbliver uofficiel — indtil videre
+-- Scotland Premiership var uofficiel — den blev forfremmet 14. august 2026
 --
--- Bevidst udeladt her: den nuværende spillerunde er i gang, og en forfremmelse
--- midt i den ville ændre kåringen af en runde, folk allerede har tippet.
--- Når runden er slut, er det én sætning:
---    update public.leagues set is_official = true where api_league_id = '501';
--- Den hører også til i DECISIONS.md, når den køres.
+-- Bevidst udeladt her: den nuværende spillerunde var i gang, og en forfremmelse
+-- midt i den ville ændre kåringen af en runde, folk allerede havde tippet.
+-- Betingelsen holdt til `A55` (14. august 2026), og sætningen — plus det
+-- `recompute_ratings()`, den skal følges af — bor nu i sin egen fil:
+--    #64 tournament_scotland_promote.sql
+-- Den står i DECISIONS.md samme dato. Denne fil rører fortsat kun de fem
+-- football-data-turneringer og skal ikke udvides med en sjette.
 -- ---------------------------------------------------------------------------
 
 update public.leagues
@@ -58,6 +60,7 @@ update public.leagues
 --   Serie A              footballdata  synlig, officiel
 --   Primera División     footballdata  synlig, officiel
 --   Scotland Premiership sportmonks    synlig, IKKE officiel   ← den ene undtagelse
+--                                       (indtil #64 blev kørt — derefter officiel)
 select l.name, l.provider, l.is_visible, l.is_official, l.live_enabled,
        (select count(*) from public.teams t where t.league_id = l.id) as teams,
        (select count(*) from public.matches m
