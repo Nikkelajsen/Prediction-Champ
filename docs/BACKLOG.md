@@ -49,14 +49,6 @@ eller en linje i "Forkastede ideer".
 
 *Tom.*
 
-*(Her stod indtil 14. august 2026 et referat af syv rydninger — hvilke rå linjer
-der blev til hvilke ID'er, og hvad der blev leveret samme dag. **Det er præcis
-det, filens egen regel fire afsnit længere oppe forbyder:** ingen overskrift her
-bærer sin egen kørselshistorik, og indbakken er nævnt ved navn i den regel.
-Referatet var vokset til femten linjer over en overskrift, hvis hele pointe er,
-at den kan skimmes. Historikken står nu i [Log](#log--seneste-kørsel) og i
-`DECISIONS.md`/`CHANGELOG.md`, som er de filer, der har lov at vokse.)*
-
 ---
 
 ## Prioriteret rækkefølge
@@ -259,51 +251,49 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 14. august 2026 (femtende kørsel) — Tier 5 kørt: to rækker lukket, én åbnet
+### 14. august 2026 (sekstende kørsel) — to brugerrapporter: en tom stilling og et point, der ikke var tjent
 
-**Listen er 32 → 31.** `G101` og `G103` er leveret og slettet, og `G106` er
-skrevet, fordi `G101` fandt sin egen tvilling ét sted længere oppe i samme fil.
-Tier 5 er dermed ikke tomt — det er byttet ud.
+**Listen er 31 → 33.** Ingen række er lukket; begge nye er fund, der faldt ud af
+arbejdet og blev noteret frem for taget med. **Kørslen kom ikke fra backloggen,
+men fra en bruger** — først et skærmbillede, så et spørgsmål til det, der stod,
+da skærmbilledet var rettet.
 
-**`G101` — det var aldrig en hastighedssag, og derfor blev den lavet.** Rækken
-bar `A43`s måling: 2,2 ms for en liga med otte konkurrencer, altså ingen grund
-til at bygge om. Målingen står ved magt, men den målte det forkerte: prisen ved
-at hente én række pr. deltager er ikke tiden, det er **loftet**. PostgREST
-leverer højst 1000 rækker og siger ikke, at den klipper, så tallet på
-konkurrence-kortet ville en dag være for lavt uden en fejl nogen steder — samme
-tavse afkortning som "· 0 kampe" i Opret → Sæson (`DOCUMENTATION.md` §13).
-Deltagerne tælles nu med `db.count()`, ét opslag pr. konkurrence, kørt samtidig
-med det opslag, der i forvejen spørger om MIG.
+**`G107` (leveret, ikke en backlog-række): stillingen var tom, og vælgeren pegede
+på en anden ligas konkurrence.** Tre veje til samme skærm, én rod: `BoardScreen`
+fik et konkurrence-id, listen ikke indeholdt. `GroupScreen.onJoin` opdaterede kun
+ligaens eget billede og ikke MainApps liste — **deltagelse er en egenskab ved
+brugeren og ikke kun ved ligaen** — og et `<select>` uden matchende `<option>`
+viser browserens første valgmulighed. Samme skævhed ramte framelding og
+arkivering; arkiverede konkurrencer kunne desuden slet ikke åbnes.
 
-**Den idiomatiske løsning kunne ikke afprøves og blev derfor fravalgt.**
-PostgRESTs indlejrede `competitions?select=*,competition_participants(count)`
-ville have været ét kald i stedet for otte, men repoet bruger ingen indlejrede
-selects, og syntaksen kunne ikke prøves af: arbejdsmiljøets netværkspolitik
-afviser Supabase (`A32`s snit en gang til). Prisen ved at gætte forkert er, at
-hele liga-siden fejler; prisen ved husets egen form er nogle flere kald.
+**`A53` (afgjort og leveret): en deltager starter på 0 i den konkurrence, hun
+melder sig til.** Spørgsmålet kom fra brugeren selv: hvorfor har hun 1 point, når
+hun lige har meldt sig til? **Princippet var afgjort i forvejen** —
+`filterTippable` beskytter en ny KONKURRENCE mod at starte med point, og §3
+begrunder det med brugerens situation ordret. Værnet havde bare ingen pendant ved
+tilmeldingen. Reglen er nu `match_lock_at(…) > joined_at`, båret ét sted i JS og
+ét sted i SQL ([`#61`](../sql/competition_join_baseline.sql), **kørt i staging og
+produktion samme dag**).
 
-**`G103` — vagten valgt frem for noten, og rækkens præmis var kun halvt sand.**
-Den skrev, at sitets story-eksempler ER motorens ægte formuleringer. Ingen af de
-fire er det ord for ord: sitet sætter punktum, hvor motoren ikke gør, og
-stime-kortet er overskriftens 🔥 sat foran brødtekstens ordlyd, fordi mockup'en
-har én linje, hvor appen har to. En ordret sammenligning ville forbyde
-redaktionelle valg, så vagten måler **ordene mellem værdierne**: sitet markerer
-sine variable med `<span class="story-var">`, kortet siger med
-`data-story-rule`, hvilken regel det citerer, og alt derimellem skal stå i den
-regels strenge.
+**Det, der gjorde den værd at bygge frem for at beskrive:** en sen tilmelding kan
+gøre **allerede udsendte historier forkerte bagud** — kort er sendt, milepæle er
+permanente — og adfærden kunne spekuleres i.
 
-**Den var grøn to gange, før den målte noget** — begge fundet ved at ødelægge
-SQL'en med vilje. Ordlyden står også i en `--`-kommentar (så vagten læser nu kun
-`'…'`-strenge), og "Du sluttede dagen" står også i en anden regel (så den leder
-kun i kortets egen). **En vagt, der ikke er set fejle, er ikke set.**
+🔴 **Rækken gjorde to ældre migreringer farlige at gen-køre** (`#37`, `#26`), så
+`sql/README.md`s liste er vokset fra ti filer til tolv.
 
-**Indbakkens eget referat er væk.** Der stod femten linjers historik om syv
-rydninger under en overskrift, hvis regel fire afsnit længere oppe siger, at
-hverken et tier eller indbakken bærer sin egen kørselshistorik. Samme drift som
-den, `docs/backlog.test.js` blev bygget imod 13. august — bare det ene sted,
-testen ikke kiggede. Den kigger der nu.
+🔴 **Og den fandt en landmine, der først ville være sprunget om en uge:**
+`simulate_season.sql` lod `joined_at` tage sin default, mens den bakker kampene i
+tid — under den nye regel blev hele den simulerede sæson **tom** (ingen kåringer,
+ingen historier), og testen ville være blevet rød i det sekund, skema-eksporten
+kørte. Fundet ved at køre alle femten skema-indlæsende tests fra **den anden side
+af dumpet**. Tredje gang den regel betaler sig.
 
-Fjortende kørsels log (`I8` klargjort og leveret: `A48`, `A49`, `B33`, `I22`,
-`I8`, `A50`) er ikke bevaret her — den er arkiveret i
-[`DECISIONS.md`](./DECISIONS.md) og [`CHANGELOG.md`](./CHANGELOG.md), som er de
-to filer, der har lov at vokse.
+**Åbnet:** `G107` (karriereprofilens indbyrdes opgør bærer ikke nulpunktet — en
+produktbeslutning, ikke en rettelse) og `G108` (genindtræden i en FÆRDIGSPILLET
+konkurrence giver 0; den anden gren er lukket af RLS i forvejen).
+
+**Indbakken var tom ved kørslens start og er det stadig** — begge fund gik direkte
+i tabellerne med ID. Parentesen, der stod under overskriften og refererede en
+tidligere rydning, er slettet: den var selv den kørselshistorik, overskriftens
+egen regel forbyder.
