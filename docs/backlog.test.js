@@ -38,6 +38,12 @@ const PRIORITERING = tekst.slice(
   tekst.indexOf("## Åbne beslutninger")
 );
 
+// Indbakken, fra sin egen overskrift til den næste.
+const INDBAKKE = tekst.slice(
+  tekst.indexOf("## 📥 Indbakke"),
+  tekst.indexOf("## Prioriteret rækkefølge")
+);
+
 // Ét afsnit pr. "### Tier N — …", klippet ved den næste overskrift.
 function tierAfsnit(kilde) {
   const stykker = kilde.split(/^### /m).slice(1);
@@ -104,6 +110,24 @@ describe("backloggens prioriterede rækkefølge", () => {
       faktiske,
       `indledningen lover ${lovet[1]} punkter, tiers indeholder ${faktiske} rækker`
     ).toBe(Number(lovet[1]));
+  });
+
+  // Samme regel, det andet sted den gælder. Filen skriver den om BÅDE tiers og
+  // indbakken — "ingen tier-overskrift og ingen indbakke bærer sin egen
+  // kørselshistorik" — men vagten målte kun tiers, og 14. august 2026 stod der
+  // femten linjers referat af syv rydninger under indbakken: hvilke rå linjer
+  // der blev til hvilke ID'er, og hvad der blev leveret samme dag.
+  //
+  // ID'erne er dét, der afslører den. En indbakke rummer pr. definition linjer
+  // UDEN ID — det er hele pointen med at skrive i den — så et ID under
+  // overskriften er altid et referat af noget, der allerede har fået sit sted i
+  // en tabel. Derfor kan reglen måles uden at måle sproget.
+  it("indbakken bærer ingen kørselshistorik", () => {
+    expect(INDBAKKE.length, "'## 📥 Indbakke' blev ikke fundet").toBeGreaterThan(20);
+    expect(
+      INDBAKKE.match(ID),
+      "der står ID'er i indbakken — historik hører i Log, ikke under indbakkens overskrift"
+    ).toBeNull();
   });
 
   // Hver række begynder med sit ID i første kolonne. Uden det kan et punkt ikke

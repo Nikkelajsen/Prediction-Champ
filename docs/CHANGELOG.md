@@ -9,6 +9,73 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — Tier 5: to steder, hvor en kopi og en optælling manglede en vagt
+
+**Backloggens Tier 5 er kørt.** Fællesnævneren for `G101` og `G103` var, at
+begge rækker beskrev en kobling, ingen holdt øje med — den ene mellem to filer,
+den anden mellem et tal og det loft, der ville klippe det. **Og begge rækkers
+egen præmis viste sig at være lidt forkert**, hvilket er kørslens vigtigste
+resultat: den ene undervurderede sin grund, den anden overvurderede sin påstand.
+
+**`G101`: deltagerantallet tælles nu i databasen.** `loadGroupDetail()` hentede
+én `competition_participants`-række pr. deltager på tværs af ALLE ligaens
+konkurrencer og talte listen i browseren — kun for at skrive "N deltager" på
+hvert kort. Rækken bar `A43`s måling (2,2 ms for otte konkurrencer) og
+konkluderede selv, at der ikke var noget akut. **Den måling står ved magt, men
+den målte det forkerte:** prisen er ikke tiden, det er loftet. PostgREST leverer
+højst 1000 rækker og siger ikke, at den klipper, så tallet ville en dag være for
+lavt uden en fejl nogen steder — nøjagtig den fælde, der kostede "· 0 kampe" i
+Opret → Sæson 1. august 2026. Tællingen sker nu med `db.count()`, ét opslag pr.
+konkurrence, kørt samtidig med det opslag, der i forvejen spørger om MIG, så
+fan-out'en koster én rundtur og ikke to.
+
+**Den idiomatiske løsning blev fravalgt, fordi den ikke kunne prøves af.**
+PostgRESTs indlejrede `competitions?select=*,competition_participants(count)`
+ville have været ét kald frem for otte, men repoet bruger ingen indlejrede
+selects, og syntaksen kunne ikke bekræftes: arbejdsmiljøets netværkspolitik
+afviser Supabase, så end ikke et tomt svar kunne siges god for. **Afvejningen er
+asymmetrisk** — gætter man rigtigt, spares syv kald på en side, der ikke er
+langsom; gætter man forkert, svarer PostgREST 400, og hele liga-siden fejler.
+Begrundelsen står i [`DECISIONS.md`](./DECISIONS.md).
+
+**`G103`: hjemmesidens story-eksempler har fået en vagt** —
+`story-eksempler.test.js`, søskende til `saelgesaetning.test.js`. Rækken tilbød
+en vagt ELLER en note i spec'en; noten virker kun for den, der læser spec'en,
+mens hun redigerer SQL'en, og det er præcis den person, der ikke gør det.
+
+**Rækkens præmis holdt kun halvt, og det formede vagten.** Den skrev, at sitets
+eksempler ER motorens ægte formuleringer; ingen af de fire er det ord for ord.
+Sitet sætter punktum, hvor motoren ikke gør, stime-kortet er overskriftens 🔥
+sat foran brødtekstens ordlyd (mockup'en har én linje, hvor appen har to), og
+"seks" står med bogstaver, hvor motoren indsætter et tal. **Alle tre er
+redaktionelle valg, ikke drift**, så en ordret sammenligning ville bevogte noget,
+ingen havde lovet. Vagten måler i stedet ordene MELLEM værdierne: sitet markerer
+sine variable med `<span class="story-var">`, hvert kort siger med
+`data-story-rule`, hvilken regel det citerer, og alt derimellem skal stå i dén
+regels strenge.
+
+🔴 **Den var grøn to gange, før den målte noget.** Begge huller blev fundet ved
+at ødelægge SQL'en med vilje: ordlyden står også i en `--`-kommentar (`G89`s
+forklaring af, hvorfor duel-teksten kom i datid), og "Du sluttede dagen" bruges
+også af regel 45 ("… som nr. 3 af 8"). Vagten læser derfor kun `'…'`-strenge og
+kun inden for kortets egen regel. **En vagt, der ikke er set fejle, er ikke
+set** — begge udgaver ville have været dekoration: grønne, kørt i CI, og blinde
+for præcis det, de blev bygget til.
+
+**To fund uden for rækkerne, begge noteret frem for udvidet.** `loadMyGroups()`
+tæller ligaens medlemmer og konkurrencer på samme måde som `G101` gjorde, tolv
+linjer længere oppe i samme fil — den er **ikke** rettet med, fordi kuren ikke
+er den samme (nævneren er brugerens ligaer gange to, så fan-out'en ville blive
+tyve kald for ti ligaer), og står nu som `G106`. Og **backloggens indbakke bar
+femten linjers referat** af syv rydninger under en overskrift, hvis egen regel
+fire afsnit længere oppe forbyder netop det; referatet er væk, og
+`docs/backlog.test.js` måler nu reglen begge steder frem for kun i tiers — samme
+drift, samme kur som 13. august.
+
+**Backloggen er 32 → 31.** Se [`DECISIONS.md`](./DECISIONS.md).
+
+---
+
 14. august 2026 — Vercel Web Analytics blev sat op i appen og rullet ud igen samme dag (`A52`)
 
 **Kort levetid, med vilje.** `@vercel/analytics` blev installeret og

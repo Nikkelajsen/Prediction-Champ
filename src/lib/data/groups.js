@@ -44,14 +44,39 @@ async function loadGroupDetail(token, userId, groupId) {
 
   const comps = await db.select(token, "competitions", `group_id=eq.${groupId}&select=*&order=created_at.desc`);
   const compIds = comps.map((c) => c.id);
-  // `hidden` følger med: arkivering er personlig og bor på deltager-rækken, så
-  // liga-siden kan først sortere arkiverede fra, når den kender flaget.
-  const myParts = compIds.length ? await db.select(token, "competition_participants", `user_id=eq.${userId}&competition_id=in.(${compIds.join(",")})&select=competition_id,hidden`) : [];
+  // To opslag om den SAMME tabel, og de spørger om hver sit: det ene om MIG
+  // (deltager jeg, og har jeg arkiveret?), det andet om ANTALLET pr.
+  // konkurrence. De køres samtidig, så fan-out'en nedenfor koster én rundtur og
+  // ikke to. `hidden` følger med i det første: arkivering er personlig og bor på
+  // deltager-rækken, så liga-siden kan først sortere arkiverede fra, når den
+  // kender flaget.
+  //
+  // ANTALLET TÆLLES I DATABASEN, IKKE I BROWSEREN (G101, 14. august 2026).
+  //
+  // Her stod ét opslag, der hentede én række pr. deltager på tværs af ALLE
+  // ligaens konkurrencer og talte listen op i klienten — kun for at skrive
+  // "N deltager" på hvert kort. `A43`s måling (12. august 2026) viste prisen
+  // lav, 2,2 ms for en liga med otte konkurrencer, så rækken var ikke en
+  // hastighedssag. Det, der gør den værd at rette, er en anden pris end tid:
+  // PostgREST leverer højst 1000 rækker pr. svar og siger
+  // ikke, at den klipper, så en liga, hvis deltager-rækker tilsammen når loftet,
+  // ville have vist for lave tal uden en fejl nogen steder. Præcis den fælde
+  // kostede "· 0 kampe" i Opret → Sæson 1. august 2026 (DOCUMENTATION.md §13),
+  // og svaret er det samme som dengang: `db.count()` (`count=exact` + `limit=0`)
+  // lader databasen tælle, ét opslag pr. konkurrence, kørt samtidig — samme form
+  // som `countMatchesPerLeague()` i `data/createSources.js`.
+  //
+  // `loadMyGroups()` ovenfor tæller stadig i browseren, og det er ikke en
+  // forglemmelse: dér er nævneren brugerens ligaer GANGE TO (medlemmer og
+  // konkurrencer), så den samme fan-out ville blive tyve kald for ti ligaer.
+  // Den står som `G106` med de tre veje skrevet ned.
+  const [myParts, partEntries] = await Promise.all([
+    compIds.length ? db.select(token, "competition_participants", `user_id=eq.${userId}&competition_id=in.(${compIds.join(",")})&select=competition_id,hidden`) : [],
+    Promise.all(compIds.map(async (id) => [id, await db.count(token, "competition_participants", `competition_id=eq.${id}`)])),
+  ]);
   const joinedSet = new Set(myParts.map((p) => p.competition_id));
   const hiddenSet = new Set(myParts.filter((p) => p.hidden).map((p) => p.competition_id));
-  const allParts = compIds.length ? await db.select(token, "competition_participants", `competition_id=in.(${compIds.join(",")})&select=competition_id`) : [];
-  const partCount = {};
-  allParts.forEach((p) => { partCount[p.competition_id] = (partCount[p.competition_id] || 0) + 1; });
+  const partCount = Object.fromEntries(partEntries);
   const competitions = comps.map((c) => ({
     ...c, joined: joinedSet.has(c.id), hidden: hiddenSet.has(c.id), participantCount: partCount[c.id] || 0,
   }));

@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A53` · `B34` · `G106` · `I23`.**
+**Næste ledige: `A53` · `B34` · `G107` · `I23`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -47,27 +47,21 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(Ryddet tre gange 12. august 2026. Første gang blev syv linjer til `A42`,
-`A43`, `G95`–`G97`, `I20` og `I21`; de tre `G`-rækker og `A43` er leveret samme dag.
-Anden gang blev tre fund fra den leverance til `G99` og `G100` — begge leveret
-samme dag. Tredje gang blev to linjer til `A45` og `G101` — ingen leveret endnu.
-Ryddet en fjerde gang 13. august 2026: to linjer blev til `A46` og `A47` —
-ingen leveret endnu. Ryddet en femte gang 13. august 2026: ni linjer fra
-gennemgangen af hjemmesidens opdateringsudkast blev til `A48`–`A50`,
-`B30`–`B33`, `G103` og `I22`; `B30` og `B31` er leveret samme dag sammen med
-udkastet selv. Ryddet en sjette gang 13. august 2026: én linje blev til `A51` —
-ikke leveret. Fire af de ni fra femte rydning er lukket samme dag med `I8`s
-udrulningsklargøring: `A48`, `A49`, `B33` og `I22`. Ryddet en syvende gang
-14. august 2026: to linjer fra `A52`-forløbet blev til `G104` og `G105` —
-**begge leveret samme dag**, fordi de var én rettelse i samme afsnit af
-`DOCUMENTATION.md` §11 og dermed billigere at lukke end at føre. Ingen af dem
-fik en række.)*
+*Tom.*
+
+*(Her stod indtil 14. august 2026 et referat af syv rydninger — hvilke rå linjer
+der blev til hvilke ID'er, og hvad der blev leveret samme dag. **Det er præcis
+det, filens egen regel fire afsnit længere oppe forbyder:** ingen overskrift her
+bærer sin egen kørselshistorik, og indbakken er nævnt ved navn i den regel.
+Referatet var vokset til femten linjer over en overskrift, hvis hele pointe er,
+at den kan skimmes. Historikken står nu i [Log](#log--seneste-kørsel) og i
+`DECISIONS.md`/`CHANGELOG.md`, som er de filer, der har lov at vokse.)*
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -127,8 +121,7 @@ Tomt.
 
 | # | Hvad | Note |
 |---|---|---|
-| `G101` | Liga-siden henter hele deltagerlisten for hver konkurrence i ligaen, bare for at tælle den | `A43`s måling (12. august 2026) viste prisen lav — **2,2 ms** for en liga med otte konkurrencer — så ombygningen løser intet akut. Værd at rette alligevel: opslaget er unødigt bredt af konstruktion, og et fremtidigt policy-arbejde på `competition_participants` ville skulle regne den samme pris om igen. Et `count`-opslag giver samme tal uden én række pr. deltager. |
-| `G103` | Sitets story-eksempler ER `story_engine_v3.sql`s ægte formuleringer — en kobling, ingen vagt holder øje med | **Flyttet hertil fra Tier 6 den 13. august 2026**, da udløseren indtraf: site-opdateringen blev merget, så koblingen er ikke længere hypotetisk. Enten en vagt efter samme mønster som `saelgesaetning.test.js` (`G97`) eller en note i [`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md) om, at eksemplerne er kopier og skal tjekkes i hånden. |
+| `G106` | `loadMyGroups()` tæller ligaens medlemmer og konkurrencer i browseren — samme fælde som `G101`, men uden dens svar | Faldt ud af `G101` 14. august 2026: to opslag i `src/lib/data/groups.js:20,24` henter én række pr. medlem og pr. konkurrence på tværs af ALLE brugerens ligaer for at tælle dem, og et svar på 1000 rækker er et loft og ikke et facit (`DOCUMENTATION.md` §13). **`G101`s kur kan ikke bare kopieres:** dér var der én liga og dermed én tælling pr. konkurrence, her ville det blive to `db.count`-kald pr. liga — tyve kald for en bruger med ti ligaer. Rækken er derfor et valg mellem tre (fan-out, et view, eller et loft man kan se), ikke en oversættelse. |
 
 ### Tier 6 — Venter på en udløser
 
@@ -220,8 +213,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 |---|---|---|---|
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
-| G101 | **Liga-siden henter hele deltagerlisten for hver konkurrence i ligaen, bare for at tælle den.** | `loadGroupDetail()` i `src/lib/data/groups.js:52` henter én `competition_participants`-række pr. deltager på tværs af ALLE ligaens konkurrencer (`competition_id=in.(...)&select=competition_id`) og tæller dem op i klienten (linje 53–54) for at vise `${c.participantCount} deltager` på hvert konkurrence-kort. Et `count`-opslag ville give samme tal uden at hente én række pr. deltager. | `A43`s måling (12. august 2026, [`UDRULNING-A43.md`](./UDRULNING-A43.md) trin 5) viste prisen lav — **2,2 ms i alt** for en liga med otte konkurrencer, under tærsklen for policyens pris — så ombygningen løser ikke et akut problem. Værd at rette alligevel: opslaget er unødigt bredt af konstruktion, uanset prisen, og et fremtidigt policy-arbejde på `competition_participants` ville ellers skulle regne den samme pris om igen. | Lille |
-| G103 | **Sitets story-eksempler ER motorens ægte formuleringer — en kobling, ingen vagt holder øje med.** | Site-opdateringen (merget 13. august 2026) erstattede sitets opdigtede story-citater ("Du har slået Anders fem runder i træk") med eksempler i Story Engine v3's faktiske format (⚔️/🔥/🧠-præfikser, "Du sluttede dagen 2 point fra X"). Det gør sitet mere ærligt, men skaber samtidig en ny kobling: ændres skabelonerne i `sql/story_engine_v3.sql`, følger sitets eksempler ikke automatisk med — nøjagtig den slags stille drift, `saelgesaetning.test.js` (`G97`) blev bygget for at forhindre for sælgesætningen. **Koblingen findes nu i repoet** — rækken venter derfor ikke længere på noget og er flyttet til Tier 5. | Enten en vagt efter samme mønster som `saelgesaetning.test.js` (en test, der læser begge og sammenligner ordlyd/format) eller en note i [`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md) om, at sitets story-eksempler er kopier og bør tjekkes manuelt, når `story_engine_v3.sql` ændres. | Lille (en test eller en note) |
+| G106 | **`loadMyGroups()` tæller ligaens medlemmer og konkurrencer i browseren.** | Ligaer-fanens kort viser medlemstal og antal konkurrencer pr. liga, og begge tal laves ved at hente rækkerne og tælle listen: `group_members?group_id=in.(…)&select=group_id` og `competitions?group_id=in.(…)&select=id,group_id` (`src/lib/data/groups.js:20,24`). PostgREST leverer højst 1000 rækker pr. svar og siger ikke, at den klipper, så en bruger, hvis ligaer tilsammen har over 1000 medlemsrækker, ville se for lave tal uden en fejl nogen steder — samme tavse afkortning som "· 0 kampe" i Opret → Sæson (`DOCUMENTATION.md` §13) og som `G101`, der blev lukket 14. august 2026. | **Fundet i `G101`s kølvand, men den kur passer ikke:** `loadGroupDetail` tæller deltagere i ÉN ligas konkurrencer, så `db.count` pr. konkurrence er et bundet antal kald. Her er nævneren brugerens ligaer gange to — ti ligaer bliver tyve kald, hvor der i dag er to. Rækken er derfor et valg mellem tre veje (fan-out som `G101`, et `security_invoker`-view med tallene, eller et loft på opslaget, der kan SES rammes efter `G35`s mønster), og det valg er ikke truffet. Ufarligt i dag: enogtyve brugere, og tallene skal være i tusinder, før loftet nås. | Lille—mellem (afhænger af vejen) |
 
 ## Ideer
 
@@ -263,48 +255,51 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 13.–14. august 2026 (fjortende kørsel) — `I8` klargjort og leveret
+### 14. august 2026 (femtende kørsel) — Tier 5 kørt: to rækker lukket, én åbnet
 
-**Listen er 38 → 32.** `A48`, `A49`, `B33` og `I22` er slettet 13. august; `I8` og `A50` dagen efter, da hjemmesiden gik live. Alle fire var
-rækker om hjemmesiden, og **ingen af dem ventede på en udløser** — de ventede på,
-at nogen tog stilling. Det er kørslens resultat: `I8`s resterende arbejde i
-repoet var fire beslutninger og ét stykke CSS, ikke en ny leverance.
+**Listen er 32 → 31.** `G101` og `G103` er leveret og slettet, og `G106` er
+skrevet, fordi `G101` fandt sin egen tvilling ét sted længere oppe i samme fil.
+Tier 5 er dermed ikke tomt — det er byttet ud.
 
-**`A48` — Beta-mærkatet skal findes** (ejerens valg). Rækken spurgte, hvornår
-mærkatet måtte fjernes, men mærkatet fandtes ikke; spørgsmålet forudsatte en
-tilføjelse, der aldrig var sket. Det står nu i headeren på alle fem sider.
-Exit-kriteriet er skrevet ind i beslutningen frem for efterladt som en ny række.
+**`G101` — det var aldrig en hastighedssag, og derfor blev den lavet.** Rækken
+bar `A43`s måling: 2,2 ms for en liga med otte konkurrencer, altså ingen grund
+til at bygge om. Målingen står ved magt, men den målte det forkerte: prisen ved
+at hente én række pr. deltager er ikke tiden, det er **loftet**. PostgREST
+leverer højst 1000 rækker og siger ikke, at den klipper, så tallet på
+konkurrence-kortet ville en dag være for lavt uden en fejl nogen steder — samme
+tavse afkortning som "· 0 kampe" i Opret → Sæson (`DOCUMENTATION.md` §13).
+Deltagerne tælles nu med `db.count()`, ét opslag pr. konkurrence, kørt samtidig
+med det opslag, der i forvejen spørger om MIG.
 
-**`A49` — "La Liga" bliver stående** (ejerens valg). Sitet og databasen siger
-bevidst hver sit: sitet bruger det navn, folk søger på, appen det officielle.
-**Rækken forudsatte, at de to SKULLE sige det samme** — det er den forudsætning,
-der faldt, ikke navnet.
+**Den idiomatiske løsning kunne ikke afprøves og blev derfor fravalgt.**
+PostgRESTs indlejrede `competitions?select=*,competition_participants(count)`
+ville have været ét kald i stedet for otte, men repoet bruger ingen indlejrede
+selects, og syntaksen kunne ikke prøves af: arbejdsmiljøets netværkspolitik
+afviser Supabase (`A32`s snit en gang til). Prisen ved at gætte forkert er, at
+hele liga-siden fejler; prisen ved husets egen form er nogle flere kald.
 
-**`B33` — clean URLs slås ikke til.** Rækken var betinget (*"hvis"*), og
-betingelsen er nu afgjort til nej i `site/vercel.json`. Uden beslutningen ville
-den have stået i Tier 6 for evigt og ventet på en udløser, ingen havde tænkt sig
-at trykke på.
+**`G103` — vagten valgt frem for noten, og rækkens præmis var kun halvt sand.**
+Den skrev, at sitets story-eksempler ER motorens ægte formuleringer. Ingen af de
+fire er det ord for ord: sitet sætter punktum, hvor motoren ikke gør, og
+stime-kortet er overskriftens 🔥 sat foran brødtekstens ordlyd, fordi mockup'en
+har én linje, hvor appen har to. En ordret sammenligning ville forbyde
+redaktionelle valg, så vagten måler **ordene mellem værdierne**: sitet markerer
+sine variable med `<span class="story-var">`, kortet siger med
+`data-story-rule`, hvilken regel det citerer, og alt derimellem skal stå i den
+regels strenge.
 
-**`I22` — burgeren koster ingen JS.** Rækken skrev, at en burger-menu ville
-koste `I8`s fravalg af JavaScript. Den antagelse var forkert: en skjult checkbox
-og en `<label>` gør det samme i ren CSS. **Rækkens pris var sat for højt**, og
-det er anden gang på to kørsler, at dét er svaret (jf. `A47`).
+**Den var grøn to gange, før den målte noget** — begge fundet ved at ødelægge
+SQL'en med vilje. Ordlyden står også i en `--`-kommentar (så vagten læser nu kun
+`'…'`-strenge), og "Du sluttede dagen" står også i en anden regel (så den leder
+kun i kortets egen). **En vagt, der ikke er set fejle, er ikke set.**
 
-**`I8` og `A50` — leveret 14. august 2026.** Ejeren oprettede Vercel-projektet,
-og `leagly.app` er live. **`A50` blev bevist i samme ombæring og af den
-billigste mulige aflæsning:** to skærmbilleder af `/robots.txt` og
-`/sitemap.xml`. Rækken spurgte, om de to filer blev serveret fra roden — svaret
-var ja, og det samme skærmbillede beviser, at root directory `site` er sat
-rigtigt. **Det, der IKKE er aflæst, er skrevet som beviser frem for som en ny
-række:** hjemmesidens svar-headere (CSP'en fra `site/vercel.json` har aldrig
-kørt i produktion) og `www` → apex, nu bevis 6 og 7 i
-[`DOMAENE.md`](./DOMAENE.md).
+**Indbakkens eget referat er væk.** Der stod femten linjers historik om syv
+rydninger under en overskrift, hvis regel fire afsnit længere oppe siger, at
+hverken et tier eller indbakken bærer sin egen kørselshistorik. Samme drift som
+den, `docs/backlog.test.js` blev bygget imod 13. august — bare det ene sted,
+testen ikke kiggede. Den kigger der nu.
 
-**Mønsteret fra trettende kørsel holder, men med et nyt led:** en række skal
-først spørges, om svaret ændrer handlingen, om det kan gemmes frem for hentes,
-eller om det kan afgøres — **og dernæst, om den pris, den selv oplyser, er
-rigtig.** To af dagens fire (`I22`, og `A47` i går) faldt på det sidste.
-
-Trettende kørsels log (Tier 1 tømt: `A45`, `A46`, `A47`) er ikke bevaret her —
-den er arkiveret i [`DECISIONS.md`](./DECISIONS.md) og
-[`CHANGELOG.md`](./CHANGELOG.md), som er de to filer, der har lov at vokse.
+Fjortende kørsels log (`I8` klargjort og leveret: `A48`, `A49`, `B33`, `I22`,
+`I8`, `A50`) er ikke bevaret her — den er arkiveret i
+[`DECISIONS.md`](./DECISIONS.md) og [`CHANGELOG.md`](./CHANGELOG.md), som er de
+to filer, der har lov at vokse.
