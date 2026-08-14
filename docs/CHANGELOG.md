@@ -25,7 +25,17 @@ peger på `https://leagly.app/sitemap.xml`, og `/sitemap.xml` bærer de fem
 beviser, at root directory er sat rigtigt** — havde feltet stået tomt, ville de
 to filer ligge på `/site/…`.
 
-**To ting er endnu ikke aflæst, og de er skrevet som beviser frem for som nye
+**Rettet senere samme dag: begge de to manglende aflæsninger er kørt og
+bestået** (12:51–12:52 UTC). Afsnittet herunder stod skrevet, mens de udestod,
+og bliver stående som det, der var sandt da — men **`leagly.app` svarer 200 med
+CSP'en ord for ord, fontene bærer `immutable`, og `www` svarer 308 mod apex.**
+Svaret bar tre led, beviset ikke bad om: fontfilerne fik **også** CSP'en
+(`source: "/(.*)"` gælder alt, som skrevet), og forsidens `max-age=0,
+must-revalidate` samt `Strict-Transport-Security` kommer fra **Vercel og ikke
+fra vores fil** — så led ikke efter dem i `site/vercel.json`, hvis de en dag
+mangler.
+
+**To ting var endnu ikke aflæst, og de blev skrevet som beviser frem for som nye
 backlog-rækker** ([`DOMAENE.md`](./DOMAENE.md), bevis 6 og 7): hjemmesidens egne
 svar-headere — **CSP'en fra `site/vercel.json` har aldrig kørt i produktion, og
 en headers-blok, der ikke bliver læst, fejler tavst** — og `www.leagly.app` →
