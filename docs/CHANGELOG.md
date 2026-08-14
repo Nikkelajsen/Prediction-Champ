@@ -24,9 +24,12 @@ hjemmesiden.
 
 **Det, der er værd at tage med, er rækkefølgen.** Både installation, CI og
 udrulning gik glat; ingen maskine kunne fange fejlen, fordi den lå i et
-juridisk dokument og ikke i koden. **Tjeklisten før merge i `DOCUMENTATION.md`
-§11 har et analytics-punkt, men det spørger, om hændelser SKRIVES — ikke om
-politikken må love, at de ikke gør.**
+juridisk dokument og ikke i koden. Tjeklisten før merge i `DOCUMENTATION.md`
+§11 havde et analytics-punkt, men det spurgte, om hændelser SKRIVES — ikke om
+politikken må love, at de ikke gør. **Tjeklisten har derfor fået et punkt
+foran det gamle:** samler en ændring noget nyt om brugeren, læses
+`src/lib/legal.js` før merge. Det gamle punkt står urørt — det tester noget
+rigtigt og andet.
 
 **To ting blev opklaret undervejs og gælder uanset beslutningen:** scriptet
 hentes i produktion fra **eget domæne** (`/_vercel/insights/script.js`;
