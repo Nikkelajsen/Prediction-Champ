@@ -9,6 +9,30 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — `G119`: heartbeat'en blev rød af den migrering, der blev leveret to timer før — og den havde ret
+
+**Alarmen kom fra `job-heartbeat.yml` selv**, tyve minutter efter at `#65 job_health_rate.sql` blev kørt i produktionen: `admin_job_health() | funktion | egen_grant: f | via_public: t | AABEN FOR ANON`. Fire kørsler i træk, hver halve time, fra 20:03 UTC.
+
+**Årsagen er én manglende linje, og den er `drop function`s skygge.** `#65` skulle droppe funktionen, fordi returtypen ændrede sig og `create or replace` svarer `42P13` på det. Rettighederne følger funktionen i graven, og filen vidste det: den gentog `grant execute … to authenticated` med en kommentar om, at grant'en "ikke er pynt". Men `revoke execute … from public` forsvandt i nøjagtig samme sætning og blev ikke gentaget — så den nye funktion fødtes med PostgreSQLs indbyggede default, hvor PUBLIC (og dermed `anon`) har EXECUTE.
+
+**Fælden er asymmetrisk, og det er hele forklaringen på, at kun den ene halvdel blev husket.** En glemt `grant` lukker Admin → Drift for ejeren i samme sekund og er rød i testens allerførste påstand. En glemt `revoke` ændrer intet, nogen kan se. Den halvdel af en oprydning, der ikke gør ondt, er den halvdel, der glemmes.
+
+**Reglen var skrevet ned to dage før — ordret.** Fejlfindingsloggen (§13, `G96`/`G100`, 12. august 2026) siger: *"Gen-kørsler er ufarlige (`create or replace function` bevarer ACL'en), men `drop function` + `create function` nulstiller den"*. Den blev alligevel overtrådt, af det samme repo, 48 timer senere. **En regel, der kun findes i prosa, bliver overtrådt** — også af den, der skrev den. Derfor er rettelsen her ikke kun linjen, men en påstand.
+
+**Hvor slemt var det.** Funktionen er `security definer` med en `is_admin`-vagt og svarer `forbidden` til enhver uden admin-flag, også uden login — så ingen data var tilgængelige, og ingen bruger kunne mærke noget. Men bredden var netop meningen med `#56`: en funktion, en fremmed kan kalde, er en funktion, en fremmed kan kalde, og vagten er ÉN spærring. Det er `#56`s dobbeltsikring, der var væk, ikke selve låsen.
+
+**Overvågningen gjorde præcis det, den blev bygget til.** `G100` (12. august 2026) blev skrevet, fordi CI's vagt over samme regel måler `sql/schema.sql` — et øjebliksbillede, der eksporteres om mandagen — mens migreringerne køres i hånden i SQL-editoren. Uden den femte kontrol i heartbeat'en havde denne fejl stået åben i op til en uge, uden at nogen påstand nogen steder var rød. Den blev i stedet fanget efter tyve minutter, af den kontrol, hvis eksistensberettigelse er præcis dette hul. **Det er anden gang på to dage, at en kontrol fanger noget, der blev leveret samme dag** (`G115`s egen første udgave var den første).
+
+**Rettelsen har to dele.** `#65` bærer nu sin `revoke execute on function public.admin_job_health() from public;`, og `sql/tests/job_health_rate.sql` har fået påstand 6: `anon` kan ikke kalde funktionen, efter migreringen har kørt. Påstanden hører hjemme dér — hos den migrering, der kan bryde reglen — fordi det er det eneste sted, den kan være rød i en **pull request** frem for i produktionen. Den måler `has_function_privilege` og ikke `information_schema.role_routine_grants`, fordi PUBLIC giver adgang uden at nævne `anon` nogen steder (samme fælde som `#43`s sekvenser).
+
+**Begge retninger måles.** At `anon` er lukket ude, er intet værd, hvis `authenticated` blev det samtidig — en for bred revoke ville bare bytte fejlen om og lukke driftskortet for ejeren. Efterprøvet med to mutationer mod PostgreSQL 16.13: uden revoke'en fejler påstand 6 med sin egen tekst, og med `from public, authenticated` fejler påstand 1. Idempotensen er målt igen ovenpå: anden kørsel efterlader `anon = f`, `authenticated = t`.
+
+**🔴 Udestår hos ejeren: `#65` skal gen-køres i Supabase SQL-editoren.** Repoet er rettet, produktionen er det ikke — den kørte udgave er stadig den uden `revoke`, og heartbeat'en er derfor rød hver halve time, indtil filen køres igen. Gen-kørslen er ufarlig (filen dropper først) og lukker samtidig ingenting for ejeren selv. **Det er anden gang, `#65` skal gen-køres samme dag**; første gang var timevinduet.
+
+**Verificeret:** SQL-testen kørt mod en rigtig PostgreSQL 16 og efterprøvet med to mutationer — begge fanget. Lint, tests og build uændrede: ingen JavaScript-kode er rørt.
+
+---
+
 14. august 2026 — `G118`: dagskortet sagde det samme som kortet lige under det — i alle tre tilstande
 
 **Fundet kom fra `I23`s eget skærmbillede.** Hjem sagde "2 kampe mangler tips" to gange lige efter hinanden: én gang som grøn knap i bunden af dagens historie, og én gang 40 px længere nede i deadline-kortet, med nedtælling, rundenavn og de manglende kampes navne.

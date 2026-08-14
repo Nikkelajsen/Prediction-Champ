@@ -52,6 +52,8 @@ eller en linje i "Forkastede ideer".
 - G113 (footballdata mangler G109s tre værn) er delvist forældet: gen-forsøget ved timeout kan ikke være der under cron-job.orgs 30 sekunder, så rækken handler nu kun om kald-grænsen og budgettet.
 - sync-matches er hver 12. time, så live-syncen er den eneste vej til et endeligt resultat inden for rimelig tid — der er intet sikkerhedsnet, hvis den er nede en halv time efter en kamp.
 - skærmbilled-harnessen (I23) kører hele appen mod en attrap i stedet for en database — det er en måde at se og klikke appen igennem uden Supabase, men den findes i dag kun som et led i et script, der tager PNG'er.
+- G119 løste sin egen forekomst med en påstand hos migreringen; en generisk vagt (hvert drop function i sql/ skal følges af en revoke) blev fravalgt ved to forekomster — bliver det tre, er det et mønster.
+- CI's vagt over anon-reglen måler sql/schema.sql, som eksporteres om mandagen, så en migrering skrevet i dag er usynlig for den indtil da — G119 er anden gang, den forskel koster noget.
 
 ---
 

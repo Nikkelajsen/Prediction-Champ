@@ -57,11 +57,20 @@
 -- Opslaget er dækket af `job_runs_job_started_idx (job, started_at desc)`, som
 -- allerede findes.
 --
+-- HVORFOR OGSÅ EN `revoke` — RETTET SAMME DAG, ANDEN GANG
+-- 🔴 Filen manglede `revoke execute … from public`, og dens eget `drop
+-- function` gjorde den nødvendig: rettigheder følger funktionen i graven, så
+-- den gen-oprettede funktion fødtes med PostgreSQLs indbyggede default, hvor
+-- PUBLIC — og dermed `anon` — har EXECUTE. Kørslen i produktionen gjorde
+-- `job-heartbeat.yml` rød tyve minutter senere. Hele begrundelsen står ved
+-- sætningen selv, nederst i filen (`G119`).
+--
 -- REKKEFØLGE OG SIKKERHED
--- ⚠️ **SKAL GEN-KØRES, hvis du kørte filens første udgave 14. august 2026.** Den
--- havde `recent_runs`/`recent_failures` over 24 timer og intet timevindue; se
--- afsnittet ovenfor. Gen-kørslen er ufarlig — filen dropper funktionen først —
--- og uden den mangler klienten sine felter og viser ingen rate.
+-- ⚠️ **SKAL GEN-KØRES, hvis du kørte en af filens to første udgaver 14. august
+-- 2026.** Den første havde `recent_runs`/`recent_failures` over 24 timer og
+-- intet timevindue; den anden manglede `revoke`en. Se de to afsnit ovenfor.
+-- Gen-kørslen er ufarlig — filen dropper funktionen først — og uden den mangler
+-- klienten sine felter og viser ingen rate.
 --
 -- ✅ Kan køres når som helst, før eller efter deployet, og er uafhængig af det.
 -- Den gamle klient læser svaret felt for felt og ignorerer de nye nøgler;
@@ -85,7 +94,8 @@
 -- `drop` før `create` og ikke `create or replace`: returtypen ændrer sig, og
 -- den kan `create or replace` ikke — den svarer `42P13 cannot change return
 -- type of existing function`. Rettighederne følger funktionen i graven, så
--- `grant` nedenfor er ikke pynt.
+-- BÅDE `grant` OG `revoke` nedenfor er nødvendige — og det var kun den første,
+-- filens egen første udgave gentog (`G119`, se blokken ved dem).
 drop function if exists public.admin_job_health();
 
 create or replace function public.admin_job_health()
@@ -167,6 +177,32 @@ end;
 $fn$;
 
 grant execute on function public.admin_job_health() to authenticated;
+
+-- 🔴 **Og `revoke` er heller ikke pynt — den er dét, `drop function` ovenfor
+-- gør nødvendigt.** `#56 anon_grants_functions.sql` lukkede `anon` ude af
+-- `public` og efterlod en regel, databasen ikke kan håndhæve selv: PostgreSQLs
+-- indbyggede default giver PUBLIC — og dermed `anon` — EXECUTE på hver ny
+-- funktion, og den post kan ikke fjernes med `alter default privileges`. Hver
+-- funktion i `public` skal derfor selv bære sin `revoke execute … from public`.
+--
+-- `create or replace` ARVER den eksisterende ACL, så en almindelig ændring af
+-- en funktion er dækket af den revoke, der allerede blev kørt engang. Et `drop`
+-- gør ikke: rettigheder følger funktionen i graven, og den nye fødes med
+-- default-ACL'en. Det er dén forskel, denne fils første udgave overså — den
+-- gentog `grant execute`, fordi den forsvandt, men ikke `revoke`, som forsvandt
+-- af nøjagtig samme grund og i samme sætning.
+--
+-- Fanget 14. august 2026 af den femte kontrol i `job-heartbeat.yml`
+-- (`sql/checks/anon_routine_reach.sql`, `G100`) 20 minutter efter kørslen i
+-- produktion — netop det, den kontrol blev skrevet for at kunne, og netop det,
+-- CI ikke kunne se: CI måler `sql/schema.sql`, altså et øjebliksbillede, der
+-- først eksporteres om mandagen.
+--
+-- Adgangen var ikke reelt åben undervejs: funktionen er `security definer` med
+-- en `is_admin`-vagt og svarer `forbidden` til enhver uden admin-flag, også
+-- uden login. Men vagten er ÉN spærring, og bredden var meningen med `#56` —
+-- en funktion, en fremmed kan kalde, er en funktion, en fremmed kan kalde.
+revoke execute on function public.admin_job_health() from public;
 
 -- ---------------------------------------------------------------------------
 -- Verifikation (kør som administrator i SQL-editoren, ikke "Run without RLS",
