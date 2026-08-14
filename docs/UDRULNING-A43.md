@@ -12,8 +12,10 @@ udrulningen.
 **Rækkefølgen holdt hele vejen.** Ingen bruger oplevede et vindue, hvor appen
 ikke kunne logge ind — det var hele formålet med at dele migreringen i to.
 
-🔶 **Det ene, der udestår, står ikke her:** skema-eksporten. `sql/schema.sql`
-mangler `#56`–`#60`, og den er reference for femten SQL-tests.
+~~🔶 **Det ene, der udestår, står ikke her:** skema-eksporten. `sql/schema.sql`
+mangler `#56`–`#60`, og den er reference for de skema-indlæsende SQL-tests.~~
+✅ **Lukket:** eksporten er kørt 12. august 2026 (før mergen, PR `#192`) og
+igen 14. august 2026, så `sql/schema.sql` bærer `#56`–`#60`.
 
 ## Register — hvor står vi?
 

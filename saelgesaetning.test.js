@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 // HVORFOR DUBLETTEN IKKE KAN FJERNES
 //
 // Den ene sætning — sælgesætningen, hvis anker er `index.html`s
-// `<meta name="description">` — står i FEM filer, og ingen af dem kan hente
+// `<meta name="description">` — står i SEKS filer, og ingen af dem kan hente
 // den fra de andre:
 //
 // (Ordlyden stod skrevet her indtil 13. august 2026. Den blev fjernet samme
@@ -28,6 +28,10 @@ import { fileURLToPath } from "node:url";
 //     at undgå to strenge (funktionens eget hoved).
 //   · `src/screens/Auth.jsx` og `README.md` er de to, der KUNNE importere — og
 //     en import fra hver af dem ville stadig efterlade de tre ovenfor.
+//   · `public/manifest.json` er statisk JSON, som installationsprompten og
+//     hjemmeskærmen læser direkte — den kan pr. konstruktion intet importere.
+//     (Den bar Prediction-Champ-æraens ordlyd til 14. august 2026, netop fordi
+//     ingen vagt læste den.)
 //
 // **Prisen er derfor ikke dubletten, men at intet holder de fem i trit.**
 // Navneskiftet 4. august 2026 og `I7`s OG-tags rørte hver især nogle af dem, og
@@ -45,19 +49,19 @@ import { fileURLToPath } from "node:url";
 // HVORFOR TESTEN IKKE SELV SKRIVER SÆTNINGEN
 //
 // Der står ikke en eneste kopi af ordlyden i denne fil, og det er med vilje.
-// Skrev vagten sin egen kopi, ville en omformulering skulle rettes SEKS steder
-// i stedet for fem, og vagten ville være blevet det sjette sted, der kan drive.
+// Skrev vagten sin egen kopi, ville en omformulering skulle rettes SYV steder
+// i stedet for seks, og vagten ville være blevet det syvende sted, der kan drive.
 // `index.html` er ankeret — det er den udgave, en crawler læser, og dermed den,
 // der er sværest at opdage er forkert — og alle andre måles mod den.
 //
-// Følgen er, at ordlyden kan ændres frit: retter man alle fem, er testen grøn
+// Følgen er, at ordlyden kan ændres frit: retter man alle seks, er testen grøn
 // uden at blive rørt. Det er præcis den ene ting, den skal håndhæve.
 //
 // ---------------------------------------------------------------------------
 // HVAD DEN IKKE PÅSTÅR
 //
 // Ikke at sætningen er GOD — det er en produktbeslutning, ingen test kan tage.
-// Og ikke at de fem filer er ordret identiske i det hele: `site/index.html`
+// Og ikke at de seks filer er ordret identiske i det hele: `site/index.html`
 // føjer bevidst ", Gratis, uden odds og uden betting" til sin `description`, og
 // hjemmesidens `<title>` er sin egen ("Slå dine venner. Uge efter uge."). Kravet
 // er, at sælgesætningen SELV er den samme — altså at den står som et helt
@@ -95,7 +99,7 @@ const INDEX = læs("index.html");
 // Ankeret. Alt andet måles mod denne ene streng.
 const SÆLGESÆTNING = metaIndhold(INDEX, /<meta name="description" content="([^"]*)"/);
 
-describe("sælgesætningen står ens alle fem steder (G97)", () => {
+describe("sælgesætningen står ens alle seks steder (G97)", () => {
   // Vagten må ikke stå og bevogte ingenting. Omdøbes eller fjernes ankeret,
   // ville hver eneste påstand nedenfor blive triviel sand mod `null`, og filen
   // ville fortsætte med at være grøn, mens den intet målte.
@@ -138,6 +142,14 @@ describe("sælgesætningen står ens alle fem steder (G97)", () => {
     const tekst = api.match(/const GENEREL_TEKST\s*=\s*([\s\S]*?);\n/);
     expect(tekst, "GENEREL_TEKST findes ikke i api/invite-preview.js").not.toBeNull();
     expect(énLinje(tekst[1])).toContain(SÆLGESÆTNING);
+  });
+
+  // PWA-manifestet er den tekst, installationsprompten og hjemmeskærmen viser
+  // — det ene sted, en bruger møder beskrivelsen uden at have åbnet appen
+  // eller sitet. JSON kan intet importere, så også den måles mod ankeret.
+  it("public/manifest.json bruger den samme sætning", () => {
+    const manifest = JSON.parse(læs("public/manifest.json"));
+    expect(manifest.description).toBe(SÆLGESÆTNING);
   });
 
   // README'en er ikke marketing, men den er det første, en læser af repoet ser,

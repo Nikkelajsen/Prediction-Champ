@@ -16,7 +16,7 @@ name: Datasikkerhedskopi
 # er derfor forudsætningen for overhovedet at lægge filen her, ikke et ekstra lag.
 #
 # HVORFOR auth ER MED
-# Fem fremmednøgler i public peger på auth.users (profiles, push_subscriptions,
+# Ni fremmednøgler i public peger på auth.users (bl.a. profiles, push_subscriptions,
 # notification_log, user_activity_days, analytics_events). Et dump uden auth er
 # ikke en delvis sikkerhedskopi — det er en, der ikke kan gendannes.
 #

@@ -6,7 +6,7 @@ kampene, og se hvem der er bedst.
 En mobil-først PWA i React + Vite oven på Supabase, med serverless-funktioner på
 Vercel til kampsynkronisering og push-notifikationer. Ingen SDK'er — kun `fetch`.
 
-**Live:** <https://app.leagly.app>
+**Live:** appen på <https://app.leagly.app> · hjemmesiden på <https://leagly.app>
 
 ---
 
@@ -87,9 +87,10 @@ Sportmonks / football-data.org
 |---|---|
 | `src/lib/` | Data-loadere, point/runde-logik, analytics, REST-klient. Ingen React |
 | `src/ui/` | Designtokens og delkomponenter |
-| `src/screens/` | Én fil pr. fane/skærm + `MainApp.jsx` som skal; fem undermapper (`analytics/`, `championship/`, `create/`, `predictions/`, `profile/`) efter opsplitningen (`G1`) |
+| `src/screens/` | Én fil pr. fane/skærm + `MainApp.jsx` som skal; otte undermapper (`admin/`, `analytics/`, `championship/`, `create/`, `hjem/`, `liga/`, `predictions/`, `profile/`) efter opsplitningen (`G1`) |
 | `api/` | Serverless-funktioner. **Kun endpoints ligger uden `_`-præfiks** — `_shared.js`, `_backfill.js` og `_providers/` er biblioteker, som Vercel derfor ikke router |
-| `sql/` | Migreringer, der køres **manuelt** i Supabase SQL-editor med "Run without RLS". **Læs `sql/README.md` først** — to af dem ruller tavst nyere regler tilbage, hvis de gen-køres |
+| `site/` | Marketing-hjemmesiden på `leagly.app` — ren HTML/CSS, eget Vercel-projekt, uden for Vite-buildet (`docs/features/hjemmeside-v1.md`) |
+| `sql/` | Migreringer, der køres **manuelt** i Supabase SQL-editor med "Run without RLS". **Læs `sql/README.md` først** — flere af dem ruller tavst nyere regler tilbage, hvis de gen-køres |
 | `docs/` | Se nedenfor |
 
 Ingen router: navigation er `useState` i `MainApp.jsx`. Det er et bevidst valg —

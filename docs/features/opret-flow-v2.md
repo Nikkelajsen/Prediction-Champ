@@ -1,6 +1,6 @@
 # Feature: Opret-flow v2 — galleri-først + lokale kåringer
 
-**Leveret 1. august 2026** (A22). Samler backloggens `I4`, `I13` og `I14` og
+**Status: ✅ Leveret 1. august 2026** (A22). Samler backloggens `I4`, `I13` og `I14` og
 forbereder `I15`. Opret-skærmen var designet til ét turneringsvalg og stod med
 syv (snart 12+): én flad formular, hvor fire af fem konkurrence-typer gemte sig
 bag en "Flere valg"-fold.

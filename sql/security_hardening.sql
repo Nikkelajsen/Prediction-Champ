@@ -1,5 +1,10 @@
 -- Leagly — Sikkerhedsstramning (G14, G15, G16 — august 2026)
--- Idempotent — kan køres igen når som helst. Kør i Supabase SQL-editor med
+-- Idempotent — men GEN-KØR DEN IKKE BLINDT: matches_insert_admin og
+-- matches_update_admin nedenfor er den GAMLE form, der læser profiles.is_admin
+-- direkte. #60 read_scope_narrow.sql har afløst dem med is_platform_admin(),
+-- og efter #60 kan authenticated ikke længere læse is_admin — den gamle form
+-- FEJLER derfor med 42501 i stedet for at filtrere. Kør read_scope_narrow.sql
+-- (#60) bagefter; se listen i sql/README.md. Kør i Supabase SQL-editor med
 -- "Run without RLS".
 --
 -- Lukker de tre 🔴-fund i docs/reviews/2026-08-app-review.md §3 (S1-S3). Alle

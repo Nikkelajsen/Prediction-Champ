@@ -59,7 +59,7 @@ kommer af `leagueId`, som jobbene allerede sender.
 |---|---|---|---|---|---|---|
 | 1 | Kampprogram + endelige resultater Superliga | cron-job.org | hver 12. time, ved **minut 00** | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | `x-sync-secret` ✓ | 3. august 2026 — kørsel aflæst på cron-job.org (12:00, næste 00:00), lykkedes |
 | 2 | Live-resultater | cron-job.org | hvert minut | `GET https://<app>/api/sync-live` | `x-sync-secret` ✓ | — |
-| 3 | Push-notifikationer **+ kåringer, historie-bagstopper, milepæle og milepæls-kort** | cron-job.org | hver 15.–30. minut, **hele døgnet** | `GET https://<app>/api/send-notifications` (valgfrit `&hours=`) | `x-sync-secret` ✓ | — |
+| 3 | Push-notifikationer **+ kåringer, historie-bagstopper, milepæle og milepæls-kort** | cron-job.org | hver 15.–30. minut, **hele døgnet** — men beskeder sendes kun i vinduet **08–22 dansk tid** (`SEND_WINDOW` i `api/send-notifications.js`); kørsler udenfor logges med `sent: 0` og er no-ops med vilje | `GET https://<app>/api/send-notifications` (valgfrit `&hours=`, klippes til 1–24, standard 3; `&force=true` omgår sendevinduet — kun til manuel test; `&action=vapidKey` svarer med den **offentlige** VAPID-nøgle og ligger med vilje FØR auth-tjekket) | `x-sync-secret` ✓ | — |
 
 > **Job 3 gør mere end at sende beskeder.** Ud over kåringerne (`B11`, august 2026) kalder det siden Story Engine v2 også `generate_stories_catchup()` og `award_milestones(null)` som `service_role` — og siden v3 desuden `apply_milestone_stories()`. Begge er der af samme grund som kåringerne: matches-triggeren kan **per konstruktion** ikke se dem. Bagstopperen dækker en dag, hvis sidste kamp aldrig får et resultat, og en runde med en udsat kamp uden ny dato — i begge tilfælde skrives der intet til `matches`, så der er ingen trigger at fyre. Milepælene har tre familier, der slet ikke er kampdrevne (oprettede ligaer/konkurrencer, deltagne sæsoner, afsluttede konkurrencer). Alle tre kald er idempotente og springes over ved `dryRun`, fordi en forhåndsvisning er en læsning og ikke må uddele en permanent milepæl. **`apply_milestone_stories()` SKAL køre efter `award_milestones()`, og rækkefølgen i kaldelisten er derfor bindende.** Efter v3 får milepæle ikke deres eget kort, men kaprer dagens ene slot. Skriveren af milepæle er dette job, mens dagens kort skrives af matches-triggeren — så normaltilfældet er, at milepælen uddeles *efter* at kortet er udgivet, og uden dette kald ville den aldrig nå Hjem. Kaldet **erstatter** kortet (det lægger aldrig et til) og rører kun kort under 48 timer gamle; er kortet ældre, er det alligevel usynligt for brugeren, og milepælen fanges af frame 5 i den kommende rundestory. **Der er ikke oprettet et nyt job** — de fire er lagt i et job, der i forvejen kører hyppigt nok.
 
@@ -97,6 +97,10 @@ versioneret. Resten er beskrevet her, men lever andetsteds.
 
 `SYNC_SECRET` (miljøvariabel i Vercel) er den delte hemmelighed for alle
 cron-jobbene mod appens endpoints (job 1–3 og 5–10 — samme `isAuthorized()`).
+Én gren er bevidst offentlig og ligger FØR auth-tjekket:
+`send-notifications?action=vapidKey` svarer med den offentlige VAPID-nøgle,
+som klienten skal bruge for at abonnere — så "alt under `/api/` kræver
+headeren" er næsten sandt, men ikke helt.
 Der er to måder at sende den, og begge virker i dag:
 
 | Måde | Status |
