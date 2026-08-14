@@ -10,7 +10,7 @@
 //
 // Miljøvariabel: SPORTMONKS_TOKEN
 
-import { fetchWithTimeout, isTimeoutError, FETCH_TIMEOUT_MS } from "../_shared.js";
+import { fetchWithTimeout } from "../_shared.js";
 import { isMidnightPlaceholder } from "./kickoff.js";
 
 const BASE = "https://api.sportmonks.com/v3/football";
@@ -58,7 +58,7 @@ function retryAfterMs(res) {
   return s * 1000;
 }
 
-// ---- live-opslagets egen tidsgrænse og tidsbudget (G109) ----
+// ---- live-opslagets egen tidsgrænse og tidsbudget (G109, revideret G117) ----
 //
 // 14. august 2026 fejlede `sync-live` i omtrent to ud af tre minutter med
 // `Tidsgrænse: intet svar fra .../fixtures/multi/19714000 inden for 10000 ms` —
@@ -68,74 +68,76 @@ function retryAfterMs(res) {
 // ikke på et nedbrud: klokken var 20 dansk tid, og Sportmonks skriver selv, at
 // deres livescore-endpoints er tunge i myldretiden.
 //
-// To tal, og de hænger sammen:
-//
 //   LIVE_TIMEOUT_MS   pr. kald. Højere end standardens 10 s, fordi de 10 s blev
 //                     valgt for at afskaffe kald, der HÆNGER (`G19`) — et kald,
 //                     der svarer på 14 sekunder, er ikke et hængende kald.
-//   LIVE_BUDGET_MS    for HELE fetchLive, alle klumper og gen-forsøg lagt
-//                     sammen. Uden den ville et højere kald-loft bare flytte
-//                     problemet: to langsomme kald plus en 429-pause kan
-//                     tilsammen sprænge funktionens `maxDuration` på 60 s
-//                     (vercel.json), og en funktion, Vercel klipper over, når
-//                     hverken at skrive sin `job_runs`-række eller at rydde op.
-//                     Det er præcis den tavshed, `G19` blev bygget for at
-//                     afskaffe, så den må ikke komme ind ad bagdøren.
+//                     Målt samme aften: de kørsler, der lykkedes EFTER `G109`,
+//                     tog 18-19 sekunder. Tallet er altså ikke rundhåndet.
+//   LIVE_BUDGET_MS    for HELE fetchLive, alle klumper lagt sammen. Uden den
+//                     ville et højere kald-loft bare flytte problemet: en
+//                     funktion, Vercel klipper over, når hverken at skrive sin
+//                     `job_runs`-række eller at rydde op. Det er præcis den
+//                     tavshed, `G19` blev bygget for at afskaffe.
 //
-// Regnestykket: 40 s budget er 20 s kald + 20 s gen-forsøg for én klump, og
-// levner 20 s til Supabase-opslagene og selve skrivningen. Jobbet kører hvert
-// minut, så en kørsel, der bruger hele budgettet, er en fejl og ikke en langsom
-// succes — men den skal fejle som en fejl, ikke som en afklipning.
+// 🔴 **ÉT UDGÅENDE KALD PR. KØRSEL — og det er en KALDERENS grænse, ikke vores
+// (`G117`, 14. august 2026).** cron-job.org afbryder kaldet efter **30
+// sekunder**, og det tal er maksimum på planen; feltet afviser 60. Den yderste
+// grænse er dermed den strammeste, og den bestemmer:
+//
+//     ét kald à 20 s + Supabase (~2 s)          = ~22 s   passer
+//     to kald à 20 s (gen-forsøg)               = ~42 s   for stort
+//     kald 20 s + 429-pause 5 s + kald 20 s     = ~47 s   for stort
+//
+// `G109` gav derfor live-opslaget et gen-forsøg, der ikke KAN være der. (Det
+// fyrede i øvrigt aldrig — se `G116` i `DOCUMENTATION.md` §13 — så adfærden i
+// produktion er uændret; det er kun løftet, der er væk.) Budgettet er skruet
+// ned til 25 s, så en kørsel ikke kan overskride kalderens vindue, og
+// `smFetch()` kaldes med `retries: false`, så det står som et VALG og ikke som
+// noget, aritmetikken tilfældigvis udelukker. Det er hele læren af `G116`.
+//
+// **Gen-forsøget er jobbet selv.** `sync-live` kører hvert minut, så et
+// mislykket minut prøves igen 60 sekunder senere — af en frisk invokation med
+// hele budgettet. Et gen-forsøg inde i kørslen ville have sparet ét minuts
+// forsinkelse og til gengæld fordoblet belastningen på en leverandør, der
+// allerede var ved at drukne. Det er samme afvejning som `G48` traf for 429.
+//
+// **Rækkefølgen skal holdes, og den står i `docs/CRON.md`:** kalderens 30 s >
+// vores budget 25 s > kald-grænsen 20 s. Vercels `maxDuration` (60 s) er
+// bagstopperen mod løbske kørsler og skal blive ved at være den løseste.
 const LIVE_TIMEOUT_MS = 20_000;
-const LIVE_BUDGET_MS = 40_000;
-// Under dette er der ikke tid til et kald, der er værd at sende. En klump, der
-// står med 800 ms tilbage, skal sige at budgettet er brugt — ikke sende et kald
-// med en grænse, ingen leverandør kan nå at svare inden for, og kalde det en
-// timeout.
+const LIVE_BUDGET_MS = 25_000;
 const LIVE_MIN_CALL_MS = 2_000;
 
-// Kalder én gang, og præcis én gang mere hvis svaret er 429 — eller hvis der
-// slet intet svar kom. Alle tre opslag nedenfor går gennem den, så grænsen kun
+// Kalder én gang — og præcis én gang mere, hvis svaret er 429 OG kalderen
+// tillader det. Alle tre opslag nedenfor går gennem den, så grænsen kun
 // håndteres ét sted.
 // `sleep` er injicerbar af samme grund som `fetchImpl`: uden den ville en test
 // af gen-forsøget skulle vente i rigtige sekunder.
 const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // `opts` er tom for de to sæson-opslag, og de opfører sig derfor nøjagtig som
-// før: standard-tidsgrænse, intet gen-forsøg ved timeout, intet budget.
+// før: standard-tidsgrænse og ét gen-forsøg ved 429.
 //
-//   timeoutMs       tidsgrænse for dette kald (ellers `fetchWithTimeout`s egen)
-//   retryOnTimeout  ét gen-forsøg, når kaldet løb ud i tid (G109)
-//   timeLeftMs()    hvor meget af kalderens samlede budget der er tilbage
+//   timeoutMs   tidsgrænse for dette kald (ellers `fetchWithTimeout`s egen)
+//   retries     må kaldet gentages? `false` = præcis ét kald, uanset svar.
+//               Live-opslaget sætter den, fordi der ikke er plads til to kald
+//               inden for cron-job.orgs 30 sekunder — se blokken ovenfor.
 //
-// Budgettet er en FORUDSÆTNING for begge gen-forsøg og ikke en oprydning
-// bagefter: både et gen-forsøg og en 429-pause tager tid, som kørslen måske
-// ikke har, og et gen-forsøg, der bliver klippet over af Vercel, er værre end
-// intet gen-forsøg — det efterlader ingen fejl at læse.
+// `retries` er et VALG og ikke en udledning. `G109` lod budgettet afgøre, om et
+// gen-forsøg kunne være der, og `G116` viste, hvad det koster: betingelsen var
+// falsk hver eneste gang, uden at nogen kunne se det på koden. Et gen-forsøg,
+// der ikke skal findes, skal slås fra ved navn.
 export async function smFetch(url, fetchImpl, sleep = defaultSleep, opts = {}) {
-  const { timeoutMs = null, retryOnTimeout = false, timeLeftMs = () => Infinity } = opts;
-  const perCall = timeoutMs ?? FETCH_TIMEOUT_MS;
+  const { timeoutMs = null, retries = true } = opts;
   const call = () => (timeoutMs ? fetchImpl(url, {}, timeoutMs) : fetchImpl(url));
-  // Er der plads til at vente `waitMs` OG derefter sende ét kald mere?
-  const fits = (waitMs) => timeLeftMs() >= waitMs + perCall;
 
-  let res;
-  try {
-    res = await call();
-  } catch (e) {
-    if (!retryOnTimeout || !isTimeoutError(e) || !fits(0)) throw e;
-    res = await call();
-  }
-  if (res.status === 429) {
-    const waitMs = retryAfterMs(res);
-    // Ikke tid til pausen og kaldet efter den: lever 429'eren videre, som den
-    // er. Kalderen laver den til en højlydt fejl, og det er det rigtige udfald
-    // — en pause, der bliver klippet over, hjælper ingen.
-    if (!fits(waitMs)) return res;
-    await (sleep || defaultSleep)(waitMs);
-    res = await call();
-  }
-  return res;
+  const res = await call();
+  // Uden gen-forsøg leveres 429'eren videre, som den er. Kalderen laver den til
+  // en højlydt fejl, og det er det rigtige udfald — en pause, kalderen alligevel
+  // afbryder, hjælper ingen.
+  if (!retries || res.status !== 429) return res;
+  await (sleep || defaultSleep)(retryAfterMs(res));
+  return call();
 }
 
 // ---- forbruget, som leverandøren selv opgør det (A15) ----
@@ -388,9 +390,12 @@ export const sportmonks = {
         }
         return Math.min(LIVE_TIMEOUT_MS, left);
       };
+      // `retries: false` — ÉT kald. Se blokken om `LIVE_BUDGET_MS` ovenfor:
+      // cron-job.orgs 30 sekunder er den yderste grænse og kan ikke hæves, så
+      // der er ikke plads til to. Gen-forsøget er jobbet selv, om et minut.
       const call = (include) => smFetch(
         `${endpoint}?include=${include}&api_token=${token}`, fetchImpl, sleep,
-        { timeoutMs: nextTimeout(), retryOnTimeout: true, timeLeftMs }
+        { timeoutMs: nextTimeout(), retries: false }
       );
       // periods giver spilleminuttet. Er den include ikke med i abonnementet,
       // svarer Sportmonks 4xx — så prøver vi igen uden, og viser kampen live

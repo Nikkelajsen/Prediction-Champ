@@ -149,6 +149,63 @@ function summarizeOutbox(wouldSend) {
   return [...byKey.values()];
 }
 
+// ---- fejlRATEN, som fejlSERIEN ikke kan se (G115) ----
+//
+// `consecutive_failures` nulstilles af enhver succes. For et job, der kører
+// hvert minut og fejler to ud af tre, er den seneste kørsel grøn hver tredje
+// gang — og så står tælleren på nul, mens jobbet reelt er nede. Det var
+// tilstanden 14. august 2026 under `G109`: Drift stod på **OK, 0 fejl i træk**
+// i en time, hvor live-syncen fejlede omtrent 2/3 af sine kørsler.
+//
+// `admin_job_health()` måler derfor også to vinduer, og oversættelsen fra tal
+// til tilstand ligger her, hvor de øvrige regler bor.
+//
+// TO VINDUER, FORDI ÉT IKKE RÆKKER. Første udgave havde kun døgnet, og
+// **den ville ikke have fanget `G109`**: hændelsen varede 33 minutter med 25
+// fejl ud af 37 kørsler — 68 % i vinduet, men 1,7 % af et døgn. En nedetid på
+// en kampaften er INTENS OG KORT, og et døgn fortynder præcis den form til
+// usynlighed. Rettet 14. august 2026, efter at kørslerne blev læst.
+//
+//   1 time    Den intense og korte. Et minut-job har ~60 kørsler i timen, så
+//             raten er skarp og altid aktuel. `G109` ville have stået på 42 %.
+//   24 timer  Den langsomme blødning. `send-notifications` kører 2-4 gange i
+//             timen — for få til, at timevinduet nogensinde bedømmes — men
+//             48-96 gange i døgnet. Et job, der stille fejler hver femte gang
+//             hele dagen, når sjældent tre fejl i træk og ville ellers være
+//             usynligt begge veje.
+//
+// GRÆNSEN ER ET VALG, og begge tal er valgt af samme grund: et kort, der ofte
+// er gult uden grund, lærer én at holde op med at kigge (samme afvejning som
+// alarmgrænsen i job-heartbeat.yml).
+//
+//   MIN_RUNS   Under fem kørsler i vinduet er en "rate" ikke et tal, det er en
+//              anekdote — 1 af 2 er 50 %. Kampprogram-jobbene kører to gange i
+//              døgnet og bliver dermed ALDRIG bedømt på deres rate; for dem er
+//              fejlserien i forvejen hele historien, fordi hver kørsel vejer.
+//   THRESHOLD  `sync-live` har ~60 kørsler i timen, så en enkelt hikke er
+//              1,7 %. 10 % er seks tabte minutter i træk-værdi — langt over
+//              støj, og langt under de 68 %, `G109` var.
+const RATE_MIN_RUNS = 5;
+const RATE_THRESHOLD = 0.1;
+
+// Én rate ud af (fejl, kørsler). `null` betyder UMÅLT og aldrig nul:
+//
+//   * feltet mangler   → migreringen er ikke kørt endnu (koden deployes
+//     automatisk, SQL'en køres i hånden). Samme valg som `select=*` i
+//     api/sync-live.js.
+//   * for få kørsler   → en brøk med en nævner under fem er ikke en rate.
+//
+// De to tilfælde er forskellige for LÆSEREN — det ene skal vises som "0 af 3",
+// det andet slet ikke — så `runs` bæres videre ved siden af raten.
+function raten(runs, failures) {
+  if (runs == null || failures == null) return { runs: null, failures: null, rate: null };
+  return {
+    runs: Number(runs),
+    failures: Number(failures),
+    rate: Number(runs) >= RATE_MIN_RUNS ? Number(failures) / Number(runs) : null,
+  };
+}
+
 // Fletter det forventede (expectedJobs) med det målte (rækker fra
 // admin_job_health).
 //
@@ -173,6 +230,14 @@ function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
     const failures = Number(r?.consecutive_failures ?? 0);
     const silentFor = lastRunAt === null ? null : now - lastRunAt;
 
+    const hour = raten(r?.hour_runs, r?.hour_failures);
+    const day = raten(r?.day_runs, r?.day_failures);
+    // Den tilstand, kortet ikke kunne vise: jobbet fejler jævnligt, men den
+    // seneste kørsel lykkedes, så fejlserien er nul. ENTEN-ELLER og ikke
+    // begge: vinduerne findes netop, fordi de fanger hver sin form, så et krav
+    // om at begge slår ud ville gøre dem til det korteste af de to.
+    const unstableRate = [hour.rate, day.rate].some((x) => x !== null && x >= RATE_THRESHOLD);
+
     let state;
     if (lastRunAt === null) state = "ukendt";
     // Et uventet job har ingen forventet kadence, så tavshed kan ikke måles —
@@ -180,7 +245,11 @@ function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
     // forventning, ingen har udtrykt.
     else if (s.stilhedMs && silentFor > s.stilhedMs) state = "tavs";
     else if (failures >= 3) state = "fejler";
-    else if (failures > 0) state = "ustabil";
+    // Raten kan gøre et job ustabilt, men ikke fejlende: `fejler` er den
+    // tilstand, heartbeat-workflowen råber på, og den hører til et job, der er
+    // holdt op med at virke. Et job, der fejler halvdelen af tiden, VIRKER —
+    // dårligt, og det er præcis, hvad ordet "ustabil" siger.
+    else if (failures > 0 || unstableRate) state = "ustabil";
     else state = "ok";
 
     const lastOkAt = r?.last_ok_at ? new Date(r.last_ok_at).getTime() : null;
@@ -192,6 +261,9 @@ function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
       silentFor,
       failures,
       lastOkAt,
+      hour,
+      day,
+      unstableRate,
       // Regnes ud her og ikke i komponenten: `Date.now()` under render er
       // uren og giver et tal, der skifter ved hver gentegning. Alt, der
       // afhænger af "nu", hører hjemme i denne fletning, som får `now` ind.
@@ -218,6 +290,15 @@ const STATE_LABEL = {
   ok: "OK",
 };
 
+// Fejlraten som procent. Rundes til ét ciffer under 10 %, så en rate lige
+// omkring støjgrænsen ikke vises som "0 %" — det ville være det ene tal, der
+// ligner "ingen fejl".
+function fmtRate(rate) {
+  if (rate === null || rate === undefined) return "—";
+  const pct = rate * 100;
+  return `${pct < 10 ? Math.round(pct * 10) / 10 : Math.round(pct)} %`;
+}
+
 function fmtSince(ms) {
   if (ms === null || ms === undefined) return "—";
   const min = Math.floor(ms / 60000);
@@ -228,4 +309,4 @@ function fmtSince(ms) {
   return `${Math.floor(t / 24)} d siden`;
 }
 
-export { BASE_JOBS, expectedJobs, loadJobHealth, loadClientErrors, loadSeasons, setSeasonFinished, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince };
+export { BASE_JOBS, expectedJobs, loadJobHealth, loadClientErrors, loadSeasons, setSeasonFinished, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince, fmtRate, RATE_MIN_RUNS, RATE_THRESHOLD };

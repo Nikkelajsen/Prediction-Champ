@@ -15,6 +15,62 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — `G117`: live-opslaget får ét udgående kald pr. kørsel, fordi kalderen bestemmer
+
+**Beslutning:** gen-forsøget ved timeout fjernes fra live-opslaget. `LIVE_BUDGET_MS` sænkes fra 40 til 25 sekunder, og `smFetch()` kaldes med `retries: false` fra live-stien. De to sæson-opslag er uændrede og beholder `G48`s 429-gen-forsøg.
+
+**Begrundelse.** cron-job.org afbryder kaldet efter 30 sekunder, og det er maksimum på planen — feltet afviser 60. Den yderste grænse i kæden er dermed også den strammeste, og den er ikke vores at vælge. Ét kald à 20 s plus Supabase er ~22 sekunder og passer; to kald er ~42 og gør ikke. Der er ikke et sted at gemme et gen-forsøg.
+
+**Hvorfor ikke i stedet sænke kald-grænsen, så to kald kan være der.** De kørsler, der LYKKEDES efter `G109`, tog 18-19 sekunder. En grænse under det ville genskabe `G109` — altså gøre langsomme kald til fejlede — for at få plads til et gen-forsøg, hvis eneste værdi er at spare ét minuts forsinkelse. Det er den forkerte handel.
+
+**Hvorfor ikke acceptere, at fejlende kørsler overskrider kalderens vindue.** Fordi det log, cron-job.orgs auto-deaktivering tæller på, så ville vise sin egen afklipning i stedet for vores fejl — og auto-deaktivering er den ene mekanisme, der kan slukke live-syncen helt og tavst.
+
+**Gen-forsøget er jobbet selv.** `sync-live` kører hvert minut. Et gen-forsøg inde i kørslen sparer højst 60 sekunders forsinkelse og fordobler til gengæld belastningen på en leverandør, der allerede er ved at drukne — samme afvejning som `G48` traf for 429.
+
+**`retries: false` og ikke "budgettet udelukker det alligevel".** Det er `G116`s lære, brugt med det samme: et gen-forsøg, der ikke skal findes, skal slås fra ved navn. En betingelse, der tilfældigvis altid er falsk, er ikke en beslutning — den er en fejl, der ser ud som en.
+
+**Den generelle regel, rækken efterlader:** *den yderste grænse i en kæde skal være den løseste, og grænser uden for repoet tæller med.* En indstilling hos en tredjepart er lige så bindende som en konstant i koden og hører skrevet ned samme sted som den — i dette tilfælde i `docs/CRON.md`, som i forvejen er registeret over netop de indstillinger.
+
+---
+
+## 14. august 2026 — `G116`: et tidsbudget må ikke være en usynlig betingelse for det, det skal begrænse
+
+**Beslutning:** gen-forsøget ved timeout i `smFetch()` får `min(perCall, resten af budgettet)` og kræver kun `LIVE_MIN_CALL_MS` tilbage — ikke en hel tidsgrænse. Budgettet (`LIVE_BUDGET_MS`) forbliver 40 sekunder og forbliver loftet.
+
+**Begrundelse.** `G109` tilføjede et gen-forsøg og et budget samme dag og satte budgettet til præcis 2 × tidsgrænsen med kommentaren *"40 s budget er 20 s kald + 20 s gen-forsøg"*. Regnestykket går op på papiret og aldrig i virkeligheden: et timeout bruger hele tidsgrænsen plus den smule, opsætningen koster, så betingelsen *"er der en hel tidsgrænse tilbage?"* var falsk hver eneste gang. Gen-forsøget var død kode fra det øjeblik, det blev skrevet, og det blev opdaget fem timer senere ved at sammenholde kørslernes varighed hos cron-job.org (21,7 s) med, hvad to forsøg ville koste (~41 s).
+
+**Hvorfor ikke bare hæve budgettet til 45 sekunder.** Det ville virke i dag og genskabe fælden ved næste ændring af et af de to tal — koblingen "budget = 2 × grænse" stod ingen steder som en regel, og den næste, der justerer tidsgrænsen, har ingen grund til at kigge på budgettet. **Den rigtige rettelse på en skjult kobling er at fjerne den, ikke at give den mere luft.**
+
+**Prisen er 100 millisekunder af gen-forsøget** (19,9 sekunder mod 20). Mod en leverandør, hvis svartid vandrer omkring grænsen, er det ikke til at måle.
+
+**429-pausen beholder den strenge form**, og det er ikke en inkonsekvens: dér er første kald et hurtigt SVAR, så budgettet er reelt urørt, når spørgsmålet stilles, og `G48`s afvejning er en anden — hellere fejle højlydt end vente en ventetid, Vercel klipper over.
+
+**Den generelle regel, rækken efterlader:** *en test af et tidsbudget skal bruge tid.* `G109`s test kastede sit timeout øjeblikkeligt og var derfor grøn for både den rigtige og den forkerte implementering. Det er samme klasse som `G103`s vagt, der var grøn to gange, før den målte noget — en test, man ikke har set fejle, er ikke set.
+
+---
+
+## 14. august 2026 — `G115`: driftskortet måler nu en fejlrate, ikke kun en fejlserie
+
+**Beslutning:** `admin_job_health()` svarer også fejlraten i **to** vinduer — sidste time og sidste døgn — og et job vises som `ustabil`, når mindst 10 % af mindst fem kørsler i **enten** vinduet fejlede, også når den seneste kørsel lykkedes.
+
+**Begrundelsen er en observation og ikke en teori.** Under `G109` fejlede `sync-live` omtrent to ud af tre minutter i en time, mens Admin → Drift stod på **OK** og **Fejl i træk: 0**. `consecutive_failures` tæller fejl siden seneste vellykkede kørsel og nulstilles derfor af enhver succes; for et job, der kører hvert minut og fejler to ud af tre, er hver tredje kørsel grøn. Tælleren kan altså ikke skelne "virker" fra "virker hver tredje gang", og det er præcis den skelnen, et minut-job kræver.
+
+**Fire valg, og hvert af dem kunne være truffet anderledes:**
+
+**To vinduer og ikke ét — afgjort af data, ikke af design.** Beslutningen blev truffet med ét døgnvindue, og den var forkert. Ejerens opslag i `job_runs` viste bagefter, at `G109` var 25 fejl ud af 37 kørsler på 33 minutter: 68 % af timen, 1,7 % af et døgn. Døgnvinduet ville have kaldt hændelsen sund, altså have fejlet på præcis den sag, det blev bygget til. **Læringen er generel: en målings opløsning skal være finere end det fænomen, den skal se** — og "intens og kort" og "svag og lang" er to fænomener, som ét vindue ikke kan dække. Timen fanger den første, døgnet den anden; ingen af dem begge.
+
+**Et TIDSvindue frem for "de sidste N kørsler."** Databasen kender ingen kadencer — dem kender kun `docs/CRON.md` og `src/lib/ops.js`. 30 kørsler er en halv time for `sync-live` og en halv måned for et kampprogram-job, så et antalsvindue ville betyde noget forskelligt for hvert job og kunne vise en fejl fra to uger siden som "nu".
+
+**Rå tal i svaret, procenten i klienten.** Nævneren er selv oplysningen: "2 af 1.431" og "2 af 2" er samme brøk og to vidt forskellige situationer. Havde funktionen svaret en procent, ville tallet ikke kunne aflæses uden et opslag mere.
+
+**Grænsen på fem kørsler er en beskyttelse af kampprogram-jobbene.** To kørsler i døgnet gør "1 af 2" til 50 %, og et kort, der er gult, hver gang et 12-timers job hikker én gang, lærer man at ignorere — samme afvejning som `B8`s tolerance for `season-not-published` og som heartbeat'ens tre-fejl-grænse. For dem er fejlserien i forvejen hele historien, fordi hver kørsel vejer.
+
+**Raten hæver til `ustabil`, aldrig til `fejler`.** Den sidste tilstand er den, heartbeat-workflowen råber på, og den hører til et job, der er holdt op med at virke. Et job, der fejler halvdelen af tiden, virker — dårligt. Ordet findes allerede og betyder det rigtige.
+
+**Hvad beslutningen IKKE er.** Den gør ikke live-syncen mere robust og forklarer ikke, hvorfor Viborg FF–AGF ikke blev færdigmeldt af de grønne kørsler efter `G109`-deployet. Den gør alene den slags nedetid **synlig**, så næste gang kan afgøres med et blik frem for med et SQL-opslag. Rækken kom netop af, at ejeren gjorde det rigtige — kiggede i Drift — og fik det forkerte svar.
+
+---
+
 ## 14. august 2026 — Tier 2 kørt: tre steder, hvor hjemmesiden og appen beskrev det samme produkt forskelligt
 
 **Beslutning (produktejeren):** backloggens Tier 2 er kørt tom. De tre rækker —

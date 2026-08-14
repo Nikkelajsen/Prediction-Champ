@@ -293,16 +293,24 @@ describe("fetchLive og 429", () => {
     text: async () => "", json: async () => body,
   });
 
-  // Selve rettelsen. En for høj kaldefrekvens har intet med `periods` at gøre,
-  // så et kald uden den include ville blot være ET KALD MERE mod en grænse, der
-  // lige er ramt. smFetch har allerede ventet og prøvet igen.
-  it("falder IKKE tilbage til et kald uden periods ved 429", async () => {
+  // `G48`s regel står ved magt: en for høj kaldefrekvens har intet med `periods`
+  // at gøre, så et kald uden den include ville blot være ET KALD MERE mod en
+  // grænse, der lige er ramt.
+  //
+  // Siden `G117` er det ÉT kald og ikke to: live-stien sætter `retries: false`,
+  // fordi der ikke er plads til en pause plus et kald mere inden for
+  // cron-job.orgs 30 sekunder. 429'eren leveres videre som en højlydt fejl, og
+  // gen-forsøget er jobbet selv om et minut.
+  it("kalder præcis én gang ved 429 — hverken fald-tilbage eller gen-forsøg", async () => {
+    const ventet = [];
     const fetchImpl = vi.fn(async () => svar(429));
     await expect(
-      sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl, sleep: async () => {} })
+      sportmonks.fetchLive({
+        providerIds: ["7"], token: "t", fetchImpl, sleep: async (ms) => { ventet.push(ms); },
+      })
     ).rejects.toThrow(/Sportmonks \(live\): 429/);
-    // To kald: det oprindelige og smFetch's ene gen-forsøg. Ikke fire.
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(ventet).toEqual([]);
     for (const [url] of fetchImpl.mock.calls) expect(url).toContain("periods");
   });
 
@@ -339,26 +347,40 @@ describe("live-opslaget og en langsom leverandør (G109)", () => {
     text: async () => "", json: async () => body,
   });
 
-  it("prøver præcis én gang mere, når kaldet løb ud i tid", async () => {
-    const fetchImpl = vi.fn()
-      .mockRejectedValueOnce(timeout())
-      .mockResolvedValueOnce(svar(200, { data: [fixture({ id: 7 })] }));
-
-    const out = await sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl });
-
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(out.get("7").score).toEqual({ home: 2, away: 1 });
-    // Gen-forsøget er det SAMME kald, ikke et fald tilbage til en mindre
-    // include: en timeout siger intet om, hvad abonnementet indeholder.
-    for (const [url] of fetchImpl.mock.calls) expect(url).toContain("periods");
+  // 🔴 DEN REGEL, DER AFLØSTE GEN-FORSØGET (`G117`).
+  //
+  // `G109` gav live-opslaget ét gen-forsøg ved timeout. Det fyrede aldrig
+  // (`G116`), og da fejlen var fundet, viste regnestykket, at det heller ikke
+  // KAN være der: cron-job.org afbryder kaldet efter 30 sekunder, og det tal er
+  // maksimum på planen. To kald à 20 s er ~42 s. Gen-forsøget er derfor jobbet
+  // selv, som kører igen om et minut.
+  //
+  // Testen er skrevet med et timeout, der bruger HELE tidsgrænsen — den fælde
+  // `G116` faldt i var netop en `fetchImpl`, der kastede øjeblikkeligt, så uret
+  // aldrig rykkede sig.
+  it("kalder præcis én gang, når kaldet løber ud i tid", async () => {
+    const { LIVE_TIMEOUT_MS } = __test;
+    let ur = 0;
+    const fetchImpl = vi.fn(async () => { ur += LIVE_TIMEOUT_MS + 120; throw timeout(); });
+    await expect(
+      sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl, now: () => ur })
+    ).rejects.toThrow(/Tidsgrænse/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("giver op efter det ene gen-forsøg og lader fejlen nå driftsloggen", async () => {
-    const fetchImpl = vi.fn(async () => { throw timeout(); });
-    await expect(
-      sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl })
-    ).rejects.toThrow(/Tidsgrænse/);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  // Den påstand, hele `G117` hviler på, målt frem for beskrevet: en kørsel kan
+  // ikke bruge mere tid, end kalderen giver den. Falder budgettet eller
+  // grænsen ud af trit med cron-job.orgs 30 sekunder, siger denne test det.
+  it("kan ikke bruge mere tid, end cron-job.orgs 30 sekunder giver", async () => {
+    const { LIVE_TIMEOUT_MS, LIVE_BUDGET_MS } = __test;
+    const KALDER_MS = 30_000;
+    // Plads til Supabase-opslagene og skrivningen oven i det udgående kald.
+    expect(LIVE_BUDGET_MS).toBeLessThan(KALDER_MS);
+    expect(LIVE_TIMEOUT_MS).toBeLessThanOrEqual(LIVE_BUDGET_MS);
+    // … og to kald à LIVE_TIMEOUT_MS kan IKKE være der. Er den påstand falsk,
+    // er `retries: false` blevet unødvendig — og så skal valget træffes forfra,
+    // ikke bare opdages.
+    expect(2 * LIVE_TIMEOUT_MS).toBeGreaterThan(KALDER_MS);
   });
 
   // Grænsen er hævet netop dér, hvor problemet er — ikke overalt. De to
@@ -377,18 +399,7 @@ describe("live-opslaget og en langsom leverandør (G109)", () => {
     expect(fetchImpl.mock.calls[0][2]).toBeUndefined();
   });
 
-  // Selve grunden til, at budgettet findes. Uden det ville et gen-forsøg efter
-  // et 20-sekunders kald kunne fortsætte ind i Vercels afklipning.
-  it("prøver IKKE igen, når budgettet ikke rækker til et kald mere", async () => {
-    const { LIVE_BUDGET_MS } = __test;
-    let ur = 0;
-    // Første kald "tager" alt på nær et par sekunder af budgettet.
-    const fetchImpl = vi.fn(async () => { ur += LIVE_BUDGET_MS - 5_000; throw timeout(); });
-    await expect(
-      sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl, now: () => ur })
-    ).rejects.toThrow(/Tidsgrænse/);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-  });
+
 
   // Samme regel for 429-pausen: en pause på op til 30 sekunder oven på et
   // langsomt kald er præcis den kombination, budgettet skal fange.
@@ -419,7 +430,7 @@ describe("live-opslaget og en langsom leverandør (G109)", () => {
     const ids = Array.from({ length: 41 }, (_, i) => String(i + 1));
     await expect(
       sportmonks.fetchLive({ providerIds: ids, token: "t", fetchImpl, now: () => ur })
-    ).rejects.toThrow(/tidsbudgettet på 40000 ms er brugt efter 40 af 41 kampe/);
+    ).rejects.toThrow(/tidsbudgettet på 25000 ms er brugt efter 40 af 41 kampe/);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 

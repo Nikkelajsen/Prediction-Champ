@@ -48,6 +48,15 @@ export const FETCH_TIMEOUT_MS = 10_000;
 // Begge grene er nødvendige. `timeout`-mærkatet sættes af `fetchWithTimeout`
 // nedenfor og er den, produktionsstien rammer; navnetjekket fanger et
 // `fetchImpl`, der er injiceret i en test og kaster en rå AbortError.
+//
+// ⚠️ **Ingen produktionssti læser den i dag (`G117`, 14. august 2026).** Den
+// eneste kalder var live-opslagets gen-forsøg ved timeout, og det er fjernet:
+// cron-job.orgs 30 sekunder er den yderste grænse og kan ikke hæves, så der er
+// ikke plads til to kald à 20 s i én kørsel. Funktionen bliver stående, fordi
+// skellet — en timeout er en påstand om, at vi ikke ved noget; en 403 er et
+// svar — er rigtigt og bliver relevant igen, hvis et opslag med en LØSERE ydre
+// grænse en dag skal prøve igen (`G113` i backloggen). **Læs derfor ikke dens
+// tilstedeværelse som et bevis på, at noget gen-forsøger.**
 export function isTimeoutError(e) {
   return e?.timeout === true || e?.name === "TimeoutError" || e?.name === "AbortError";
 }

@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { BASE_JOBS, expectedJobs, mergeJobHealth, summarizeOutbox, STATE_LABEL, fmtSince } from "./ops.js";
+import {
+  BASE_JOBS,
+  expectedJobs,
+  mergeJobHealth,
+  summarizeOutbox,
+  STATE_LABEL,
+  fmtSince,
+  fmtRate,
+  RATE_MIN_RUNS,
+  RATE_THRESHOLD,
+} from "./ops.js";
 
 const NU = new Date("2026-08-01T12:00:00Z").getTime();
 const forSiden = (ms) => new Date(NU - ms).toISOString();
@@ -118,6 +128,102 @@ describe("mergeJobHealth", () => {
     expect(stille(27 * TIME)).toBe("tavs");
   });
 
+  // ---- fejlraten i to vinduer (G115) ----
+  //
+  // Hele grunden til, at rækkerne findes: 14. august 2026 fejlede sync-live
+  // 25 gange ud af 37 kørsler på 33 minutter, og fordi hver tredje lykkedes,
+  // stod fejlserien på nul og kortet på OK. Testen gengiver netop den situation.
+  const rate = (over) =>
+    mergeJobHealth([raek("sync-live", { consecutive_failures: 0, ...over })], { now: NU })
+      .find((j) => j.job === "sync-live");
+
+  // Den vigtigste test i filen, og den er skrevet EFTER at data blev læst:
+  // første udgave havde kun døgnvinduet og ville have kaldt G109 for `ok`.
+  // Tallene er de faktiske fra job_runs, ikke opfundne.
+  it("fanger G109 — 25 fejl af 37 kørsler på en halv time", () => {
+    const j = rate({ hour_runs: 37, hour_failures: 25, day_runs: 1440, day_failures: 25 });
+    expect(j.failures).toBe(0);
+    expect(j.state).toBe("ustabil");
+    expect(j.hour.rate).toBeCloseTo(25 / 37, 5);
+    // … og præcis dét, det gamle døgnvindue ville have svaret alene.
+    expect(j.day.rate).toBeLessThan(RATE_THRESHOLD);
+  });
+
+  // Den anden form, og grunden til at døgnvinduet ikke bare kan fjernes:
+  // send-notifications kører for sjældent til, at timen nogensinde bedømmes.
+  it("fanger en langsom blødning, timevinduet er for lille til at se", () => {
+    const j = mergeJobHealth(
+      [raek("send-notifications", { hour_runs: 3, hour_failures: 1, day_runs: 72, day_failures: 15 })],
+      { now: NU }
+    ).find((x) => x.job === "send-notifications");
+    expect(j.hour.rate).toBeNull();
+    expect(j.state).toBe("ustabil");
+  });
+
+  it("lader en enkelt hikke i en time være ok", () => {
+    const j = rate({ hour_runs: 60, hour_failures: 1, day_runs: 1440, day_failures: 3 });
+    expect(j.state).toBe("ok");
+    expect(j.unstableRate).toBe(false);
+  });
+
+  it("bedømmer ikke en rate, der er regnet på for få kørsler", () => {
+    // 1 af 2 er 50 % og betyder ingenting — det er dét, kampprogram-jobbene
+    // ville blive målt på, hvis grænsen ikke fandtes.
+    const faa = rate({
+      hour_runs: RATE_MIN_RUNS - 1, hour_failures: RATE_MIN_RUNS - 1,
+      day_runs: RATE_MIN_RUNS - 1, day_failures: RATE_MIN_RUNS - 1,
+    });
+    expect(faa.hour.rate).toBeNull();
+    expect(faa.day.rate).toBeNull();
+    expect(faa.state).toBe("ok");
+    // … men tallene bæres videre, så kortet kan vise "4 af 4" uden en procent.
+    expect(faa.hour.failures).toBe(RATE_MIN_RUNS - 1);
+
+    // Nøjagtig på grænsen regnes den.
+    const nok = rate({ hour_runs: RATE_MIN_RUNS, hour_failures: RATE_MIN_RUNS });
+    expect(nok.hour.rate).toBe(1);
+    expect(nok.state).toBe("ustabil");
+  });
+
+  it("rammer grænsen præcist", () => {
+    const p = (f) => rate({ hour_runs: 100, hour_failures: f }).unstableRate;
+    expect(p(100 * RATE_THRESHOLD)).toBe(true);
+    expect(p(100 * RATE_THRESHOLD - 1)).toBe(false);
+  });
+
+  // Vigtigst af alle: koden deployes automatisk, migreringen køres i hånden.
+  // I vinduet derimellem er raten UMÅLT, og en umålt rate må hverken vises
+  // eller bedømmes — den må slet ikke kunne forveksles med nul.
+  it("opfører sig som før, hvis migreringen ikke er kørt endnu", () => {
+    const j = mergeJobHealth([raek("sync-live")], { now: NU }).find((x) => x.job === "sync-live");
+    expect(j.hour).toEqual({ runs: null, failures: null, rate: null });
+    expect(j.day).toEqual({ runs: null, failures: null, rate: null });
+    expect(j.unstableRate).toBe(false);
+    expect(j.state).toBe("ok");
+  });
+
+  // Et job, hvis seneste kørsel er ældre end vinduet, har målt NUL kørsler.
+  // Det er et tal og ikke en manglende måling — men det må ikke give en
+  // division med nul eller en rate på 0 %, der ligner "ingen fejl".
+  it("tåler et job uden kørsler i vinduet", () => {
+    const j = rate({ hour_runs: 0, hour_failures: 0, day_runs: 0, day_failures: 0 });
+    expect(j.hour.runs).toBe(0);
+    expect(j.hour.rate).toBeNull();
+    expect(j.state).toBe("ok");
+  });
+
+  // Raten må gøre et job ustabilt, men ikke fejlende: `fejler` er den
+  // tilstand, heartbeat-workflowen råber på, og et job, der fejler halvdelen
+  // af tiden, virker stadig.
+  it("lader raten hæve til ustabil, men aldrig til fejler eller tavs", () => {
+    expect(rate({ hour_runs: 100, hour_failures: 99 }).state).toBe("ustabil");
+    const stille = mergeJobHealth(
+      [raek("sync-live", { last_run_at: forSiden(2 * TIME), hour_runs: 100, hour_failures: 99 })],
+      { now: NU }
+    ).find((j) => j.job === "sync-live");
+    expect(stille.state).toBe("tavs");
+  });
+
   it("skelner mellem ustabil og fejlende ud fra fejlserien", () => {
     const to = mergeJobHealth([raek("sync-live", { consecutive_failures: 2 })], { now: NU });
     expect(to.find((j) => j.job === "sync-live").state).toBe("ustabil");
@@ -209,6 +315,26 @@ describe("fmtSince", () => {
   it("viser en tankestreg, når der intet er at vise", () => {
     expect(fmtSince(null)).toBe("—");
     expect(fmtSince(undefined)).toBe("—");
+  });
+});
+
+describe("fmtRate", () => {
+  it("skriver hele procenter over ti og ét ciffer under", () => {
+    expect(fmtRate(2 / 3)).toBe("67 %");
+    expect(fmtRate(0.1)).toBe("10 %");
+    expect(fmtRate(0.034)).toBe("3.4 %");
+  });
+
+  // Det ene tal, der ikke må rundes væk: en rate, der er lille men ikke nul,
+  // ville som "0 %" ligne "ingen fejl".
+  it("runder aldrig en rate, der ikke er nul, ned til nul", () => {
+    expect(fmtRate(0.0007)).not.toBe("0 %");
+    expect(fmtRate(0)).toBe("0 %");
+  });
+
+  it("viser en tankestreg, når raten ikke er målt", () => {
+    expect(fmtRate(null)).toBe("—");
+    expect(fmtRate(undefined)).toBe("—");
   });
 });
 

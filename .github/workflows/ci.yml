@@ -128,6 +128,18 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database cetest;'
           psql -h localhost -U postgres -d cetest -v ON_ERROR_STOP=1 -b -f client_errors.sql
 
+      # Driftskortets fejlrate (G115). Testen gengiver G109-formen: 60 kørsler,
+      # 40 fejlede, og den nyeste lykkedes — så fejlSERIEN er nul, mens jobbet
+      # er nede. Præcis den kombination stod grøn i Admin → Drift i en time.
+      - name: Test af driftskortets fejlrate
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database jhrtest;'
+          psql -h localhost -U postgres -d jhrtest -v ON_ERROR_STOP=1 -b -f job_health_rate.sql
+
       # predictions.updated_at-triggeren (G13). En manglende trigger er usynlig
       # — feltet har en default, så en frisk række ser rigtig ud, og fejlen
       # viser sig først som et Analytics-tal, der er lidt for lavt.

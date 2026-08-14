@@ -9,6 +9,90 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — `G117`: den yderste tidsgrænse stod uden for repoet og var den strammeste
+
+**`G116` reparerede et gen-forsøg. Denne række fjerner det igen, og begge dele er rigtige.** Da gen-forsøget begyndte at virke, blev en fejlende kørsel ~42 sekunder lang i stedet for 21,7. Og cron-job.org afbryder kaldet efter **30 sekunder** — et tal, der er maksimum på planen; feltet afviser 60. Rettelsen ville altså have flyttet hver eneste fejlende kørsel fra "inden for kalderens vindue" til "klippet af kalderen", og vores egen fejltekst ville aldrig være nået frem til det log, auto-deaktiveringen tæller på.
+
+**Regnestykket afgør sagen, og det er kort:**
+
+```
+ét kald à 20 s + Supabase (~2 s)          = ~22 s   passer
+to kald à 20 s (gen-forsøg)               = ~42 s   for stort
+kald 20 s + 429-pause 5 s + kald 20 s     = ~47 s   for stort
+```
+
+Der er plads til **ét udgående kald pr. live-kørsel**. `LIVE_BUDGET_MS` er sat til 25 s, så kørslen fejler før kalderen, og live-stien kalder `smFetch()` med `retries: false`.
+
+**`retries: false` frem for at lade budgettet udelukke det, er hele læren af `G116`.** Dér var gen-forsøget umuligt af aritmetiske grunde, og ingen kunne se det på koden. Nu står det som et valg med et navn. Testen måler samme sag direkte: den påstår, at `2 × LIVE_TIMEOUT_MS` er større end kalderens 30 sekunder, så hvis nogen en dag sænker kald-grænsen nok til, at to kald *kan* være der, bliver valget truffet forfra i stedet for opdaget.
+
+**Gen-forsøget er jobbet selv.** `sync-live` kører hvert minut, så et mislykket minut prøves igen 60 sekunder senere af en frisk invokation med hele budgettet. Et gen-forsøg inde i kørslen ville have sparet ét minuts forsinkelse og til gengæld fordoblet belastningen på en leverandør, der allerede var ved at drukne — samme afvejning som `G48` traf for 429. **Adfærden i produktion er i øvrigt uændret**, netop fordi gen-forsøget aldrig fyrede; det er kun løftet, der er væk.
+
+**Kæden af grænser er skrevet ned i [`docs/CRON.md`](./CRON.md), yderste først** — cron-job.orgs 30 s > budgettet 25 s > kald-grænsen 20 s, med Vercels `maxDuration` (60 s) som den bevidst løseste bagstopper mod løbske kørsler. **En indstilling hos en tredjepart er lige så bindende som en konstant i koden**, og indtil nu stod den ingen steder.
+
+**To indstillinger rettet hos cron-job.org samme dag:** `Notify after` fra **1 til 3 fejl** — med 1 ville `G109` have givet ~25 beskeder på en halv time, og en alarm, der ofte er falsk, lærer man at holde op med at læse (samme grænse som heartbeat'ens fejlserie). Og dobbeltkørslerne i `job_runs` er forklaret: det var ejerens egne **testkørsler** fra cron-job.orgs "Testkørsel"-knap, ikke et gen-forsøg eller et dobbelt job.
+
+**`isTimeoutError()` i `api/_shared.js` bliver stående uden nogen kalder**, og det står nu skrevet i funktionen: skellet mellem en timeout (en påstand om, at vi ikke ved noget) og en 403 (et svar) er rigtigt og bliver relevant igen, hvis et opslag med en LØSERE ydre grænse skal prøve igen. Men **dens tilstedeværelse er ikke et bevis på, at noget gen-forsøger.**
+
+**Verificeret:** 1380 tests, lint uændret på loftet (7 advarsler), build grønt. **Intet skal køres i Supabase for denne række.**
+
+---
+
+14. august 2026 — `G116`: gen-forsøget fra `G109` havde aldrig fyret én eneste gang
+
+**Sagen begyndte som et spørgsmål fra ejeren og endte tre lag nede.** Livescoren opdaterede ikke under Viborg FF–AGF, og resultatet måtte tastes i hånden. `G115` forklarede, hvorfor driftskortet stod grønt imens. Denne række forklarer, hvorfor `G109`s rettelse kun halverede problemet i stedet for at fjerne det.
+
+**Selve slutfløjtet var ikke vores fejl.** Kørslerne i `job_runs` viser, at `sync-live` meldte `live: 1, finished: 0` helt frem til **21:05**, og først 21:06 skrev det endelige resultat. Sportmonks holdt altså kampen i gang i omtrent et kvarter efter det rigtige slutfløjt — på den samme aften, hvor dens livescore-endpoints skiftevis timede ud og svarede `503`. Koden gjorde nøjagtig det rigtige: **et endeligt resultat skrives kun, når kilden melder slut**, og at gætte ud fra en live-stilling ville være at gøre point til et øjebliksbillede. Den manuelle indtastning var det rigtige indgreb.
+
+**Men det, der stod tilbage, var et tal, der ikke passede.** Efter `G109`-deployet (20:36) fejlede 12 af 30 kørsler — 40 %, hvor det havde været 68 %. Halvdelen var `503` fra leverandøren selv, som ingen tidsgrænse kan fikse. Den anden halvdel var timeouts, og dem skulle `G109`s gen-forsøg have taget. **Beviset for at det ikke skete, var ikke fejlteksten — den var uændret — men VARIGHEDEN:** cron-job.org viste 21,7 sekunder for de fejlende kørsler. To forsøg à 20 sekunder ville have taget ~41.
+
+**Årsagen er to konstanter, der gik præcis op.** `LIVE_BUDGET_MS` var 40.000 og `LIVE_TIMEOUT_MS` 20.000, og gen-forsøget krævede `timeLeftMs() >= perCall` — altså en HEL tidsgrænse tilbage af budgettet. Men et timeout har pr. definition brugt hele tidsgrænsen, så der manglede altid de få millisekunder, opsætningen koster. **Betingelsen var falsk hver eneste gang.** `G109`s egen kommentar skrev regnestykket ordret — *"40 s budget er 20 s kald + 20 s gen-forsøg"* — uden at nogen bemærkede, at et regnestykke, der går præcis op, ikke har plads til virkeligheden.
+
+**Testen så det ikke, og grunden er værd at holde fast i.** Dens `fetchImpl` kastede sit timeout **øjeblikkeligt**, så uret ikke var rykket, når budgettet blev spurgt. Testen var derfor grøn for både den rigtige og den forkerte implementering. **En test af et tidsbudget skal bruge tid.** Der er nu to, som kaster efter en hel tidsgrænse — og de var røde, før rettelsen blev skrevet.
+
+**Rettelsen fjerner koblingen frem for at give den mere luft.** Gen-forsøget får `min(perCall, resten af budgettet)` og kræver kun `LIVE_MIN_CALL_MS` — et gen-forsøg med resten er et rigtigt gen-forsøg, et med to sekunder er ikke. I praksis er det 19,9 sekunder mod 20, hvilket ikke er til at måle mod en leverandør, hvis svartid vandrer omkring grænsen. **Budgettet er stadig loftet; det er bare ikke længere også en usynlig betingelse for, at gen-forsøget overhovedet findes.** At hæve budgettet til 45 sekunder ville have virket i dag og stillet den samme fælde igen ved næste ændring af et af de to tal.
+
+**429-pausen beholder den strenge form** (plads til en fuld tidsgrænse efter pausen). Dér er første kald et hurtigt svar, så budgettet er reelt urørt, og `G48`s afvejning — hellere fejle højlydt end vente en ventetid, Vercel klipper over — er uændret.
+
+**Verificeret:** 1384 tests (+3 i `api/_providers/sportmonks.test.js`, heraf to der var røde før rettelsen), lint uændret på loftet (7 advarsler), build grønt. **Intet skal køres i Supabase for denne række.**
+
+**Hvad rækken ikke løser:** halvdelen af fejlene var `503 upstream connect error` fra Sportmonks. Det er leverandørens eget nedbrud, og hverken en tidsgrænse eller et gen-forsøg hjælper på det.
+
+---
+
+14. august 2026 — `G115`: driftskortet stod grønt hele vejen igennem en nedetid, det målte
+
+**Symptomet er det vigtigste ved rækken: kortet så rigtigt ud.** Under `G109` fejlede `sync-live` omtrent to ud af tre minutter i en time, mens Admin → Drift stod på **OK** og **Fejl i træk: 0**. Livescoren var frossen, en færdigspillet kamp blev ikke færdigmeldt, og den, der gjorde det eneste rigtige — kiggede i driftsloggen — fik at vide, at alt var i orden.
+
+**Årsagen er én egenskab ved tælleren:** `consecutive_failures` tæller fejl SIDEN SENESTE VELLYKKEDE KØRSEL og nulstilles derfor af enhver succes. For et job, der kører hvert minut og fejler to ud af tre, er den seneste kørsel grøn hver tredje gang. `sync-live` kan altså fejle fyrre gange i timen uden nogensinde at forlade tilstanden `ok`. **En fejlSERIE er ikke en fejlRATE**, og tælleren er blind for præcis det mønster, den skulle fange.
+
+Det er `B8`s og `G44`s fejlklasse en tredje gang: en sund måling, der skjuler en syg. Dér var det ét jobnavn, der dækkede over syv turneringer; her er det én succes, der dækker over to fejl.
+
+**Rettelsen:** `admin_job_health()` svarer også `recent_runs` og `recent_failures` over de sidste 24 timer ([`sql/job_health_rate.sql`](../sql/job_health_rate.sql), #65), og `src/lib/ops.js` kalder et job `ustabil`, når mindst **10 %** af mindst **fem** kørsler fejlede. Kortet viser rå tal ("40 af 60") med procenten som detalje — nævneren er selv oplysningen, for "2 af 1.431" og "2 af 2" er samme brøk og to helt forskellige situationer. Rammer raten grænsen, mens fejlserien er nul, siger kortet det med ord: *"Jobbet fejler 67 % af sine kørsler i døgnet, men den seneste lykkedes — derfor står «Fejl i træk» på nul."*
+
+**Tre valg, der bærer rettelsen.**
+
+**Vinduet er et TIDSvindue og ikke "de sidste N kørsler".** 30 kørsler er en halv time for `sync-live` og en halv måned for et kampprogram-job; databasen kender ingen kadencer, det gør kun `docs/CRON.md` og `ops.js`. 24 timer betyder det samme for alle ni jobs og er altid aktuelt.
+
+**Grænsen på fem kørsler er der, for at kampprogram-jobbene aldrig bedømmes på deres rate.** To kørsler i døgnet gør "1 af 2" til 50 %, hvilket ikke er en rate, men en anekdote — og et kort, der ofte er gult uden grund, lærer én at holde op med at kigge. For dem er fejlserien i forvejen hele historien, fordi hver kørsel vejer.
+
+**Raten kan hæve et job til `ustabil`, aldrig til `fejler`.** Den sidste tilstand er heartbeat-workflowens, og den hører til et job, der er holdt op med at virke. Et job, der fejler halvdelen af tiden, VIRKER — dårligt, og det er præcis, hvad ordet "ustabil" siger.
+
+**En umålt rate må ikke kunne forveksles med nul.** Koden deployes automatisk ved push, mens migreringen køres i hånden bagefter — i vinduet derimellem mangler felterne, og klienten behandler dem som `null` og skjuler rækken frem for at vise "0 fejl". Samme valg som `select=*` i `api/sync-live.js`, og dækket af sin egen test.
+
+**Migreringen kan køres når som helst, begge veje.** Den gamle klient ignorerer de to nye nøgler; den nye virker uden dem. ⚠️ **Men den gør `#18 job_runs.sql` umulig at gen-køre i sin helhed:** filen bærer den gamle definition som `create or replace`, og en returtype kan ikke erstattes — scriptet stopper med `42P13`. Det er den gode retning at fejle i (ingen tavs tilbagerulning, modsat `#37`/`#26` over for `#61`), men rækkefølgen efter en gendannelse er herefter #18 → #65 → #60. Advarslen står nu tre steder: i toppen af `job_runs.sql`, i `#18`s statuscelle og i README'ens liste over filer, der ikke må gen-køres blindt.
+
+🔴 **RETTET SAMME DAG, OG RETTELSEN ER RÆKKENS VIGTIGSTE LÆRING.** Første udgave havde ÉT vindue på 24 timer. Da ejeren kørte migreringen og sendte kørslerne fra `job_runs`, kunne den regnes efter: `G109` var **25 fejl ud af 37 kørsler på 33 minutter** — 68 % af timen, og **1,7 % af et døgn**. Med en grænse på 10 % ville døgnvinduet have kaldt hændelsen sund. **Rettelsen ville ikke have fanget den hændelse, den blev skrevet for.**
+
+Det er samme fejl som den, rækken retter, bare en etage højere: **en måling, hvis opløsning er grovere end det fænomen, den skal se.** En nedetid på en kampaften er intens og kort; et døgn fortynder den til usynlighed. Funktionen svarer derfor nu **to** vinduer — `hour_runs`/`hour_failures` og `day_runs`/`day_failures` — og et job er `ustabil`, når enten slår ud. De dækker hver sin form og ingen af dem begge: timen fanger den intense og korte (`G109` ville have stået på 42 %), døgnet fanger den langsomme blødning hos et job som `send-notifications`, der kører for sjældent til, at timen nogensinde bedømmes, men som kan fejle hver femte gang hele dagen uden at nå tre fejl i træk.
+
+**Fejlen kunne kun findes ét sted: i data.** Grænsen var begrundet, vinduet var begrundet, og begge begrundelser var rigtige hver for sig — de blev bare aldrig holdt op mod en rigtig hændelses varighed. Testen bærer nu de faktiske tal fra produktionen frem for opfundne, og den første af de fire mutationer gengiver filens egen første udgave.
+
+**Verificeret:** 1381 tests (13 nye i `src/lib/ops.test.js`, heriblandt en, der gengiver G109 med de faktiske tal, og en, der viser at døgnvinduet alene ville have kaldt den `ok`), lint uændret på loftet (7 advarsler), build grønt. Ny SQL-test `sql/tests/job_health_rate.sql` kørt mod en rigtig PostgreSQL 16.13 og **efterprøvet med fire mutationer — alle fire fanget** (timevinduet gjort til et døgn, døgnvinduet ubegrænset, `ok is distinct from true` smalnet til `ok = false`, og `coalesce` fjernet); CI-jobbet `sql` har fået et trin til den. **Udestår hos ejeren:** `#65` skal **gen-køres** — den udgave, der er kørt i produktionen, er den med ét vindue.
+
+**Hvad rækken IKKE svarer på.** Den forklarer, hvorfor nedetiden var usynlig, ikke hvorfor Viborg FF–AGF stadig ikke blev færdigmeldt af de kørsler, der lykkedes efter `G109`-deployet. Det spørgsmål kræver et opslag i `job_runs.detail` for den time og står i backloggens indbakke.
+
+---
+
 14. august 2026 — Tier 2 kørt tom: hjemmesiden og appen siger nu det samme om produktet — og hvor de ikke gør, er det med vilje
 
 **Tre rækker, én fejlklasse: to flader, der beskrev det samme produkt forskelligt.** `A54` (turneringens navn), `A55` (turneringen var uofficiel, mens sitet solgte den som live-flagskib) og `A56` (beta-mærkatet, der kun stod på sitet). Svarene blev ikke ens — ét af de tre steder er forskellen den rigtige tilstand.
