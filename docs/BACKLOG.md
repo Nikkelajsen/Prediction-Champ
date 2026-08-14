@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A57` · `B36` · `G117` · `I24`.**
+**Næste ledige: `A57` · `B36` · `G118` · `I24`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -49,7 +49,7 @@ eller en linje i "Forkastede ideer".
 
 - DOCUMENTATION.md §19 siger, at karriereprofilens globale komplethedsjoin tæller uofficielle turneringer med — afsnittet lige under siger, at det blev rettet i august.
 - Sportmonks svarede 503 upstream connect error i halvdelen af de fejlende live-kald 14. august — hverken tidsgrænse eller gen-forsøg hjælper på leverandørens eget nedbrud, og der er ingen aflæsning af, hvor ofte det sker.
-- Der var dobbeltkørsler af live-syncen i samme minut under fejlstormen (19:55, 19:58, 20:00, 20:01), alle med authVia header — enten har cron-job.org retry-on-failure slået til, eller også kalder to jobs ind. Et ekstra kald mod en leverandør, der allerede drukner, gør det værre.
+- G113 (footballdata mangler G109s tre værn) er delvist forældet: gen-forsøget ved timeout kan ikke være der under cron-job.orgs 30 sekunder, så rækken handler nu kun om kald-grænsen og budgettet.
 - sync-matches er hver 12. time, så live-syncen er den eneste vej til et endeligt resultat inden for rimelig tid — der er intet sikkerhedsnet, hvis den er nede en halv time efter en kamp.
 
 ---

@@ -15,6 +15,24 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — `G117`: live-opslaget får ét udgående kald pr. kørsel, fordi kalderen bestemmer
+
+**Beslutning:** gen-forsøget ved timeout fjernes fra live-opslaget. `LIVE_BUDGET_MS` sænkes fra 40 til 25 sekunder, og `smFetch()` kaldes med `retries: false` fra live-stien. De to sæson-opslag er uændrede og beholder `G48`s 429-gen-forsøg.
+
+**Begrundelse.** cron-job.org afbryder kaldet efter 30 sekunder, og det er maksimum på planen — feltet afviser 60. Den yderste grænse i kæden er dermed også den strammeste, og den er ikke vores at vælge. Ét kald à 20 s plus Supabase er ~22 sekunder og passer; to kald er ~42 og gør ikke. Der er ikke et sted at gemme et gen-forsøg.
+
+**Hvorfor ikke i stedet sænke kald-grænsen, så to kald kan være der.** De kørsler, der LYKKEDES efter `G109`, tog 18-19 sekunder. En grænse under det ville genskabe `G109` — altså gøre langsomme kald til fejlede — for at få plads til et gen-forsøg, hvis eneste værdi er at spare ét minuts forsinkelse. Det er den forkerte handel.
+
+**Hvorfor ikke acceptere, at fejlende kørsler overskrider kalderens vindue.** Fordi det log, cron-job.orgs auto-deaktivering tæller på, så ville vise sin egen afklipning i stedet for vores fejl — og auto-deaktivering er den ene mekanisme, der kan slukke live-syncen helt og tavst.
+
+**Gen-forsøget er jobbet selv.** `sync-live` kører hvert minut. Et gen-forsøg inde i kørslen sparer højst 60 sekunders forsinkelse og fordobler til gengæld belastningen på en leverandør, der allerede er ved at drukne — samme afvejning som `G48` traf for 429.
+
+**`retries: false` og ikke "budgettet udelukker det alligevel".** Det er `G116`s lære, brugt med det samme: et gen-forsøg, der ikke skal findes, skal slås fra ved navn. En betingelse, der tilfældigvis altid er falsk, er ikke en beslutning — den er en fejl, der ser ud som en.
+
+**Den generelle regel, rækken efterlader:** *den yderste grænse i en kæde skal være den løseste, og grænser uden for repoet tæller med.* En indstilling hos en tredjepart er lige så bindende som en konstant i koden og hører skrevet ned samme sted som den — i dette tilfælde i `docs/CRON.md`, som i forvejen er registeret over netop de indstillinger.
+
+---
+
 ## 14. august 2026 — `G116`: et tidsbudget må ikke være en usynlig betingelse for det, det skal begrænse
 
 **Beslutning:** gen-forsøget ved timeout i `smFetch()` får `min(perCall, resten af budgettet)` og kræver kun `LIVE_MIN_CALL_MS` tilbage — ikke en hel tidsgrænse. Budgettet (`LIVE_BUDGET_MS`) forbliver 40 sekunder og forbliver loftet.

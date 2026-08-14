@@ -9,6 +9,34 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — `G117`: den yderste tidsgrænse stod uden for repoet og var den strammeste
+
+**`G116` reparerede et gen-forsøg. Denne række fjerner det igen, og begge dele er rigtige.** Da gen-forsøget begyndte at virke, blev en fejlende kørsel ~42 sekunder lang i stedet for 21,7. Og cron-job.org afbryder kaldet efter **30 sekunder** — et tal, der er maksimum på planen; feltet afviser 60. Rettelsen ville altså have flyttet hver eneste fejlende kørsel fra "inden for kalderens vindue" til "klippet af kalderen", og vores egen fejltekst ville aldrig være nået frem til det log, auto-deaktiveringen tæller på.
+
+**Regnestykket afgør sagen, og det er kort:**
+
+```
+ét kald à 20 s + Supabase (~2 s)          = ~22 s   passer
+to kald à 20 s (gen-forsøg)               = ~42 s   for stort
+kald 20 s + 429-pause 5 s + kald 20 s     = ~47 s   for stort
+```
+
+Der er plads til **ét udgående kald pr. live-kørsel**. `LIVE_BUDGET_MS` er sat til 25 s, så kørslen fejler før kalderen, og live-stien kalder `smFetch()` med `retries: false`.
+
+**`retries: false` frem for at lade budgettet udelukke det, er hele læren af `G116`.** Dér var gen-forsøget umuligt af aritmetiske grunde, og ingen kunne se det på koden. Nu står det som et valg med et navn. Testen måler samme sag direkte: den påstår, at `2 × LIVE_TIMEOUT_MS` er større end kalderens 30 sekunder, så hvis nogen en dag sænker kald-grænsen nok til, at to kald *kan* være der, bliver valget truffet forfra i stedet for opdaget.
+
+**Gen-forsøget er jobbet selv.** `sync-live` kører hvert minut, så et mislykket minut prøves igen 60 sekunder senere af en frisk invokation med hele budgettet. Et gen-forsøg inde i kørslen ville have sparet ét minuts forsinkelse og til gengæld fordoblet belastningen på en leverandør, der allerede var ved at drukne — samme afvejning som `G48` traf for 429. **Adfærden i produktion er i øvrigt uændret**, netop fordi gen-forsøget aldrig fyrede; det er kun løftet, der er væk.
+
+**Kæden af grænser er skrevet ned i [`docs/CRON.md`](./CRON.md), yderste først** — cron-job.orgs 30 s > budgettet 25 s > kald-grænsen 20 s, med Vercels `maxDuration` (60 s) som den bevidst løseste bagstopper mod løbske kørsler. **En indstilling hos en tredjepart er lige så bindende som en konstant i koden**, og indtil nu stod den ingen steder.
+
+**To indstillinger rettet hos cron-job.org samme dag:** `Notify after` fra **1 til 3 fejl** — med 1 ville `G109` have givet ~25 beskeder på en halv time, og en alarm, der ofte er falsk, lærer man at holde op med at læse (samme grænse som heartbeat'ens fejlserie). Og dobbeltkørslerne i `job_runs` er forklaret: det var ejerens egne **testkørsler** fra cron-job.orgs "Testkørsel"-knap, ikke et gen-forsøg eller et dobbelt job.
+
+**`isTimeoutError()` i `api/_shared.js` bliver stående uden nogen kalder**, og det står nu skrevet i funktionen: skellet mellem en timeout (en påstand om, at vi ikke ved noget) og en 403 (et svar) er rigtigt og bliver relevant igen, hvis et opslag med en LØSERE ydre grænse skal prøve igen. Men **dens tilstedeværelse er ikke et bevis på, at noget gen-forsøger.**
+
+**Verificeret:** 1380 tests, lint uændret på loftet (7 advarsler), build grønt. **Intet skal køres i Supabase for denne række.**
+
+---
+
 14. august 2026 — `G116`: gen-forsøget fra `G109` havde aldrig fyret én eneste gang
 
 **Sagen begyndte som et spørgsmål fra ejeren og endte tre lag nede.** Livescoren opdaterede ikke under Viborg FF–AGF, og resultatet måtte tastes i hånden. `G115` forklarede, hvorfor driftskortet stod grønt imens. Denne række forklarer, hvorfor `G109`s rettelse kun halverede problemet i stedet for at fjerne det.

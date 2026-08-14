@@ -58,7 +58,7 @@ kommer af `leagueId`, som jobbene allerede sender.
 | # | Job | Hvor | Skema | Kald | Hemmelighed sendes som | Sidst verificeret |
 |---|---|---|---|---|---|---|
 | 1 | Kampprogram + endelige resultater Superliga | cron-job.org | hver 12. time, ved **minut 00** | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | `x-sync-secret` ✓ | 3. august 2026 — kørsel aflæst på cron-job.org (12:00, næste 00:00), lykkedes |
-| 2 | Live-resultater | cron-job.org | hvert minut | `GET https://<app>/api/sync-live` | `x-sync-secret` ✓ | — |
+| 2 | Live-resultater | cron-job.org | hvert minut | `GET https://<app>/api/sync-live` | `x-sync-secret` ✓ | **Timeout er 30 s og kan ikke hæves** (maksimum på planen, aflæst 14. august 2026) — det er den yderste grænse, og `G117` bygger inden for den; se rækkefølge-reglen nederst i filen. `Notify after` sat fra 1 til 3 fejl samme dag. Kørslerne 14. august er aflæst minut for minut i `job_runs` og bar `authVia: header` hele vejen, altså cron-jobbet selv; værtsnavnet er stadig `prediction-champ.vercel.app` (flytningen til `app.leagly.app` tages ét job ad gangen, [`DOMAENE.md`](./DOMAENE.md)) |
 | 3 | Push-notifikationer **+ kåringer, historie-bagstopper, milepæle og milepæls-kort** | cron-job.org | hver 15.–30. minut, **hele døgnet** — men beskeder sendes kun i vinduet **08–22 dansk tid** (`SEND_WINDOW` i `api/send-notifications.js`); kørsler udenfor logges med `sent: 0` og er no-ops med vilje | `GET https://<app>/api/send-notifications` (valgfrit `&hours=`, klippes til 1–24, standard 3; `&force=true` omgår sendevinduet — kun til manuel test; `&action=vapidKey` svarer med den **offentlige** VAPID-nøgle og ligger med vilje FØR auth-tjekket) | `x-sync-secret` ✓ | — |
 
 > **Job 3 gør mere end at sende beskeder.** Ud over kåringerne (`B11`, august 2026) kalder det siden Story Engine v2 også `generate_stories_catchup()` og `award_milestones(null)` som `service_role` — og siden v3 desuden `apply_milestone_stories()`. Begge er der af samme grund som kåringerne: matches-triggeren kan **per konstruktion** ikke se dem. Bagstopperen dækker en dag, hvis sidste kamp aldrig får et resultat, og en runde med en udsat kamp uden ny dato — i begge tilfælde skrives der intet til `matches`, så der er ingen trigger at fyre. Milepælene har tre familier, der slet ikke er kampdrevne (oprettede ligaer/konkurrencer, deltagne sæsoner, afsluttede konkurrencer). Alle tre kald er idempotente og springes over ved `dryRun`, fordi en forhåndsvisning er en læsning og ikke må uddele en permanent milepæl. **`apply_milestone_stories()` SKAL køre efter `award_milestones()`, og rækkefølgen i kaldelisten er derfor bindende.** Efter v3 får milepæle ikke deres eget kort, men kaprer dagens ene slot. Skriveren af milepæle er dette job, mens dagens kort skrives af matches-triggeren — så normaltilfældet er, at milepælen uddeles *efter* at kortet er udgivet, og uden dette kald ville den aldrig nå Hjem. Kaldet **erstatter** kortet (det lægger aldrig et til) og rører kun kort under 48 timer gamle; er kortet ældre, er det alligevel usynligt for brugeren, og milepælen fanges af frame 5 i den kommende rundestory. **Der er ikke oprettet et nyt job** — de fire er lagt i et job, der i forvejen kører hyppigt nok.
@@ -458,4 +458,54 @@ Kort udgave:
    et alternativ — `?secret=` blev fjernet 5. august 2026 (`A11`), så et job
    uden headeren får 401 og står stille.
 3. Slå "Treat redirects as success" fra.
-4. **Tilføj en række i tabellen ovenfor**, inkl. dato for verifikation.
+4. **Advanced → Timeout: 30 sekunder** (maksimum på planen — feltet afviser
+   højere værdier). Det er den YDERSTE grænse i kæden nedenfor, og alt, hvad
+   endpointet gør, skal kunne være inden for den.
+5. **Notify after: 3 failures**, ikke 1. Samme grænse som heartbeat'ens fejlserie
+   — sat 14. august 2026, hvor 1 ville have givet ~25 beskeder på en halv time
+   under `G109`. En alarm, der ofte er falsk, lærer man at holde op med at læse.
+6. **Tilføj en række i tabellen ovenfor**, inkl. dato for verifikation.
+
+### Tidsgrænserne skal stå i rækkefølge — og den yderste er den strammeste
+
+Fire grænser er i spil, når et cron-job kalder et endpoint. **cron-job.orgs
+timeout er den yderste OG den strammeste, og den kan ikke hæves** — 30 sekunder
+er maksimum på planen. Den er dermed ikke en grænse, vi vælger; den er en, vi
+bygger indenfor.
+
+| Grænse | Hvor | Værdi | Rolle |
+|---|---|---|---|
+| cron-job.orgs **Timeout** | Advanced-fanen på jobbet | **30 s** (maks.) | kalderen giver op |
+| Kørslens eget budget | `LIVE_BUDGET_MS` i `api/_providers/sportmonks.js` | 25 s | vi fejler FØR kalderen |
+| Det enkelte kald | `LIVE_TIMEOUT_MS` / `FETCH_TIMEOUT_MS` | 20 s / 10 s | ét kald må ikke hænge |
+| Vercels `maxDuration` | [`vercel.json`](../vercel.json) | 60 s | bagstopper mod løbske kørsler |
+
+Regnestykket, som afgør alt andet:
+
+```
+ét kald à 20 s + Supabase (~2 s)          = ~22 s   passer
+to kald à 20 s (gen-forsøg)               = ~42 s   for stort
+kald 20 s + 429-pause 5 s + kald 20 s     = ~47 s   for stort
+```
+
+**Der er altså plads til ÉT udgående kald pr. live-kørsel.** `G109` gav
+opslaget et gen-forsøg ved timeout, som slet ikke kan være der — og som i
+øvrigt aldrig fyrede (`G116`). Det er fjernet igen (`G117`), og live-stien
+kalder `smFetch()` med `retries: false`, så det står som et **valg** frem for
+som noget, aritmetikken tilfældigvis udelukker. **Gen-forsøget er jobbet selv:**
+`sync-live` kører hvert minut, så et mislykket minut prøves igen 60 sekunder
+senere af en frisk invokation med hele budgettet.
+
+`maxDuration` er den eneste, der må være løsere end kalderen, og det er med
+vilje: den skal fange en løbsk kørsel, ikke afbryde en, der er ved at skrive sin
+`job_runs`-række. Rækkefølgen, der betyder noget, er de tre øverste.
+
+⚠️ **Havde rækkefølgen ikke været læst, ville `G116` have gjort skade.** Den
+rettelse fik gen-forsøget til at virke — og en fejlende kørsel ville dermed være
+gået fra 21,7 til ~42 sekunder, altså fra "inden for kalderens vindue" til
+"klippet af kalderen", hver eneste gang. Vores egen fejltekst ville aldrig være
+nået frem til det log, auto-deaktiveringen tæller på.
+
+**Den generelle regel: en ydre grænse, der er strammere end en indre, er ikke en
+ekstra sikkerhed — den er et sted, hvor fejl forsvinder.** Ændrer du ét af de
+fire tal, så læs hele kolonnen.
