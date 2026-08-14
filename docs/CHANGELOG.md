@@ -9,6 +9,34 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — Vercel Web Analytics blev sat op i appen og rullet ud igen samme dag (`A52`)
+
+**Kort levetid, med vilje.** `@vercel/analytics` blev installeret og
+`<Analytics />` monteret i `src/main.jsx` (PR #206). Det virkede — CI grøn,
+deploy grønt, og besøgstallet kom frem i Vercels panel for projektet
+`prediction-champ`. **Det, der ikke var tjekket først, var
+`src/lib/legal.js`:** appens privatlivspolitik har en sektion, der hedder "Hvad
+vi ikke gemmer", og tre af dens linjer var ikke længere sande med et
+måle-script i appen. Ændringen er derfor rullet tilbage — `src/main.jsx` og
+`package.json` står nøjagtigt som før PR #206 — og begrundelsen står i
+[`DECISIONS.md`](./DECISIONS.md) som `A52` sammen med fravalget for
+hjemmesiden.
+
+**Det, der er værd at tage med, er rækkefølgen.** Både installation, CI og
+udrulning gik glat; ingen maskine kunne fange fejlen, fordi den lå i et
+juridisk dokument og ikke i koden. **Tjeklisten før merge i `DOCUMENTATION.md`
+§11 har et analytics-punkt, men det spørger, om hændelser SKRIVES — ikke om
+politikken må love, at de ikke gør.**
+
+**To ting blev opklaret undervejs og gælder uanset beslutningen:** scriptet
+hentes i produktion fra **eget domæne** (`/_vercel/insights/script.js`;
+`va.vercel-scripts.com` er kun udvikling), og **repoet har to Vercel-projekter**
+— `leagly_site` (root `site`) og `prediction-champ` (roden) — som begge bygger
+på hvert push til `main`, så et deploy i det enes liste intet siger om det
+andet.
+
+---
+
 14. august 2026 — Hjemmesiden er LIVE på `leagly.app` — `I8` er leveret
 
 **Ejeren har oprettet hjemmesidens Vercel-projekt** (root directory `site`,
