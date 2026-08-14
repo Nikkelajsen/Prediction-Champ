@@ -30,6 +30,19 @@ import {
 // forveksles med "det er fint".
 const TONE = { ok: "green", ustabil: "gold", fejler: "red", tavs: "red", ukendt: null };
 
+// Ét vindues fejlrate. Tier helt, når vinduet er tomt eller umålt — se
+// `raten()` i ops.js for forskellen på de to.
+function RateRow({ label, v }) {
+  if (!v?.runs) return null;
+  return (
+    <SignalRow
+      label={label}
+      value={`${v.failures} af ${v.runs}`}
+      detail={v.rate === null ? undefined : fmtRate(v.rate)}
+    />
+  );
+}
+
 function JobCard({ j }) {
   return (
     <Card>
@@ -51,30 +64,26 @@ function JobCard({ j }) {
           value={j.failures}
           detail={j.failures >= 3 ? "→ heartbeat slår alarm" : undefined}
         />
-        {/* Fejlraten (G115). Rå tal FØR procenten, fordi nævneren selv er
-            oplysningen: "2 af 1.431" og "2 af 2" er samme brøk og to helt
-            forskellige situationer. Procenten står som detalje og kun, når der
-            er kørsler nok til, at den betyder noget.
+        {/* Fejlraten i to vinduer (G115). Rå tal FØR procenten, fordi nævneren
+            selv er oplysningen: "2 af 1.431" og "2 af 2" er samme brøk og to
+            helt forskellige situationer. Procenten står som detalje og kun,
+            når der er kørsler nok til, at den betyder noget.
 
-            Rækken vises slet ikke, hvis feltet mangler — så er migreringen
-            ikke kørt endnu, og raten er UMÅLT. En umålt rate må ikke vises
-            som nul. */}
-        {j.recentRuns !== null && j.recentRuns > 0 && (
-          <SignalRow
-            label="Fejl (24 t)"
-            value={`${j.recentFailures} af ${j.recentRuns}`}
-            detail={j.recentFailureRate === null ? undefined : fmtRate(j.recentFailureRate)}
-          />
-        )}
+            En række vises slet ikke, hvis vinduet er tomt eller feltet mangler
+            — så er raten UMÅLT, og en umålt rate må ikke vises som nul. Timen
+            er tom for et 12-timers job, og det er ikke en oplysning. */}
+        <RateRow label="Fejl (1 t)" v={j.hour} />
+        <RateRow label="Fejl (24 t)" v={j.day} />
       </div>
 
       {/* Den ene sætning, kortet manglede 14. august 2026. Uden den ligner et
-          job med "0 fejl i træk" et sundt job — også når det fejler halvdelen
-          af sine kørsler. */}
+          job med "0 fejl i træk" et sundt job — også når det fejler to ud af
+          tre kørsler, hvilket er præcis, hvad `sync-live` gjorde. */}
       {j.unstableRate && j.failures === 0 && (
         <p style={{ color: C.gold, fontSize: 11, marginTop: 8, marginBottom: 0 }}>
-          Jobbet fejler {fmtRate(j.recentFailureRate)} af sine kørsler i døgnet, men den seneste
-          lykkedes — derfor står "Fejl i træk" på nul. En fejlrate kan ikke ses i en fejlserie.
+          Jobbet fejler {fmtRate(j.hour.rate ?? j.day.rate)} af sine kørsler
+          {j.hour.rate === null ? " i døgnet" : " den sidste time"}, men den seneste lykkedes —
+          derfor står "Fejl i træk" på nul. En fejlrate kan ikke ses i en fejlserie.
         </p>
       )}
 

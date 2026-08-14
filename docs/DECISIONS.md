@@ -17,13 +17,15 @@ man ved ikke, om forudsætningen stadig holder.
 
 ## 14. august 2026 — `G115`: driftskortet måler nu en fejlrate, ikke kun en fejlserie
 
-**Beslutning:** `admin_job_health()` svarer også `recent_runs` og `recent_failures` over de sidste 24 timer, og et job vises som `ustabil`, når mindst 10 % af mindst fem kørsler i vinduet fejlede — også når den seneste kørsel lykkedes.
+**Beslutning:** `admin_job_health()` svarer også fejlraten i **to** vinduer — sidste time og sidste døgn — og et job vises som `ustabil`, når mindst 10 % af mindst fem kørsler i **enten** vinduet fejlede, også når den seneste kørsel lykkedes.
 
 **Begrundelsen er en observation og ikke en teori.** Under `G109` fejlede `sync-live` omtrent to ud af tre minutter i en time, mens Admin → Drift stod på **OK** og **Fejl i træk: 0**. `consecutive_failures` tæller fejl siden seneste vellykkede kørsel og nulstilles derfor af enhver succes; for et job, der kører hvert minut og fejler to ud af tre, er hver tredje kørsel grøn. Tælleren kan altså ikke skelne "virker" fra "virker hver tredje gang", og det er præcis den skelnen, et minut-job kræver.
 
 **Fire valg, og hvert af dem kunne være truffet anderledes:**
 
-**Et TIDSvindue frem for "de sidste N kørsler."** Databasen kender ingen kadencer — dem kender kun `docs/CRON.md` og `src/lib/ops.js`. 30 kørsler er en halv time for `sync-live` og en halv måned for et kampprogram-job, så et antalsvindue ville betyde noget forskelligt for hvert job og kunne vise en fejl fra to uger siden som "nu". 24 timer betyder det samme for alle ni og er altid aktuelt.
+**To vinduer og ikke ét — afgjort af data, ikke af design.** Beslutningen blev truffet med ét døgnvindue, og den var forkert. Ejerens opslag i `job_runs` viste bagefter, at `G109` var 25 fejl ud af 37 kørsler på 33 minutter: 68 % af timen, 1,7 % af et døgn. Døgnvinduet ville have kaldt hændelsen sund, altså have fejlet på præcis den sag, det blev bygget til. **Læringen er generel: en målings opløsning skal være finere end det fænomen, den skal se** — og "intens og kort" og "svag og lang" er to fænomener, som ét vindue ikke kan dække. Timen fanger den første, døgnet den anden; ingen af dem begge.
+
+**Et TIDSvindue frem for "de sidste N kørsler."** Databasen kender ingen kadencer — dem kender kun `docs/CRON.md` og `src/lib/ops.js`. 30 kørsler er en halv time for `sync-live` og en halv måned for et kampprogram-job, så et antalsvindue ville betyde noget forskelligt for hvert job og kunne vise en fejl fra to uger siden som "nu".
 
 **Rå tal i svaret, procenten i klienten.** Nævneren er selv oplysningen: "2 af 1.431" og "2 af 2" er samme brøk og to vidt forskellige situationer. Havde funktionen svaret en procent, ville tallet ikke kunne aflæses uden et opslag mere.
 

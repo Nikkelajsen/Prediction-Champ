@@ -9,9 +9,12 @@
 --      `grant execute`.
 --   2. **Den, hele filen findes for:** et job, der fejler to ud af tre
 --      kørsler, men hvis SENESTE kørsel lykkedes, har `consecutive_failures`
---      = 0 og `recent_failures` = 40. Det var tilstanden 14. august 2026, hvor
---      Drift stod grøn i en time, mens live-syncen var nede.
---   3. Vinduet er 24 timer: kørsler ældre end det tælles ikke med.
+--      = 0 og `hour_failures` = 25 af 37. Tallene er de FAKTISKE fra
+--      `G109` 14. august 2026, hvor Drift stod grøn, mens live-syncen var nede.
+--   3. **De to vinduer måler hver sin form.** Samme 25 fejl er 68 % af timen og
+--      1,7 % af døgnet — og det er hele grunden til, at timevinduet findes:
+--      filens første udgave havde kun døgnet og ville have kaldt `G109` sundt.
+--   3b. Døgnvinduet er 24 timer: kørsler ældre end det tælles ikke med.
 --   4. En kørsel, der aldrig nåede at afslutte (`ok is null`), tæller som en
 --      fejl — samme regel som fejlserien allerede bruger.
 --   5. Et job uden kørsler i vinduet får 0 og ikke null: tavshed er
@@ -43,21 +46,31 @@ insert into public.profiles (id, display_name, is_admin) values
   ('00000000-0000-0000-0000-000000000002', 'Bo', false);
 
 -- ---------------------------------------------------------------------------
--- Data: G109-formen, gengivet præcist.
+-- Data: G109-formen, gengivet med de FAKTISKE tal fra produktionen.
 --
--- 60 kørsler af `sync-live` inden for den sidste time. To ud af tre fejlede,
--- og den NYESTE lykkedes — det er den kombination, fejlserien ikke kan se.
+-- 37 kørsler af `sync-live` inden for den sidste halve time, hvoraf 25 fejlede
+-- (ejerens opslag i `job_runs`, 19:48-20:20 den 14. august 2026), og den
+-- NYESTE lykkedes — det er den kombination, fejlserien ikke kan se.
+--
+-- Plus resten af døgnets ~1.400 grønne kørsler, så de to vinduer faktisk kan
+-- give forskellige svar: 25 fejl er 68 % af timen og under 2 % af døgnet.
 -- ---------------------------------------------------------------------------
 insert into public.job_runs (job, started_at, finished_at, ok, detail, error)
 select
   'sync-live',
   now() - (i || ' minutes')::interval,
   now() - (i || ' minutes')::interval,
-  -- i = 0 er den nyeste og skal lykkes. Derefter fejler to ud af tre.
-  (i % 3 = 0),
+  -- i = 0 er den nyeste og skal lykkes. Derefter fejler 25 af de næste 36.
+  not (i between 1 and 25),
   jsonb_build_object('checked', 1),
-  case when i % 3 = 0 then null else 'Tidsgrænse: intet svar' end
-from generate_series(0, 59) as i;
+  case when i between 1 and 25 then 'Tidsgrænse: intet svar' end
+from generate_series(0, 36) as i;
+
+-- Resten af døgnet: grønne kørsler fra 2 til 23 timer siden. Uden dem ville
+-- døgnvinduet være identisk med timevinduet, og testen kunne ikke skelne dem.
+insert into public.job_runs (job, started_at, finished_at, ok)
+select 'sync-live', now() - (i || ' minutes')::interval, now() - (i || ' minutes')::interval, true
+from generate_series(120, 1380) as i;
 
 -- Et kampprogram-job: to kørsler i døgnet, begge grønne, plus en gammel fejl
 -- LIGE UDEN FOR vinduet. Den må ikke tælle med.
@@ -104,35 +117,57 @@ begin
   if r.consecutive_failures <> 0 then
     raise exception 'fejlserien skulle være 0 (seneste kørsel lykkedes), var %', r.consecutive_failures;
   end if;
-  if r.recent_runs <> 60 then
-    raise exception 'vinduet skulle rumme 60 kørsler, rummede %', r.recent_runs;
+  if r.hour_runs <> 37 then
+    raise exception 'timevinduet skulle rumme 37 kørsler, rummede %', r.hour_runs;
   end if;
-  if r.recent_failures <> 40 then
-    raise exception 'vinduet skulle have 40 fejlede kørsler, havde %', r.recent_failures;
+  if r.hour_failures <> 25 then
+    raise exception 'timevinduet skulle have 25 fejlede kørsler, havde %', r.hour_failures;
   end if;
 
   -- Selve påstanden, i den form et menneske ville formulere den: kortet kan
   -- nu vise, at jobbet er nede, MENS fejlserien siger nul.
-  if not (r.consecutive_failures = 0 and r.recent_failures > r.recent_runs / 2) then
+  if not (r.consecutive_failures = 0 and r.hour_failures > r.hour_runs / 2) then
     raise exception 'G109-formen kan stadig ikke aflæses af opslaget';
   end if;
 
-  -- ---------- 3) vinduet er 24 timer ----------
+  -- ---------- 3) de to vinduer måler hver sin form ----------
+  -- Den påstand, filens første udgave ville være faldet på: SAMME 25 fejl er
+  -- to tredjedele af timen og under 2 % af døgnet. Havde vi kun haft døgnet,
+  -- ville G109 have stået som et sundt job.
+  if r.day_failures <> 25 then
+    raise exception 'døgnet skulle bære de samme 25 fejl, bar %', r.day_failures;
+  end if;
+  if r.day_runs < 1000 then
+    raise exception 'døgnvinduet fangede kun % kørsler — nævneren er for lille til at skelne', r.day_runs;
+  end if;
+  if not (r.hour_failures::numeric / r.hour_runs > 0.5
+          and r.day_failures::numeric / r.day_runs < 0.05) then
+    raise exception 'vinduerne giver samme svar (% af % mod % af %) — så måler kun det ene noget',
+      r.hour_failures, r.hour_runs, r.day_failures, r.day_runs;
+  end if;
+
+  -- ---------- 3b) døgnvinduet er 24 timer ----------
   select * into r from public.admin_job_health() h where h.job = 'sync-matches:a';
-  if r.recent_runs <> 2 or r.recent_failures <> 0 then
-    raise exception 'en fejl 25 timer tilbage tælles med: % kørsler, % fejl', r.recent_runs, r.recent_failures;
+  if r.day_runs <> 2 or r.day_failures <> 0 then
+    raise exception 'en fejl 25 timer tilbage tælles med: % kørsler, % fejl', r.day_runs, r.day_failures;
+  end if;
+  -- … og det 12-timers job har INGEN kørsler i timevinduet. Det er ikke en
+  -- mangel: en rate på to kørsler i døgnet er en anekdote, og klienten viser
+  -- rækken slet ikke.
+  if r.hour_runs <> 0 then
+    raise exception 'et 12-timers job havde % kørsler i timevinduet', r.hour_runs;
   end if;
 
   -- ---------- 4) en afbrudt kørsel er en fejl ----------
   select * into r from public.admin_job_health() h where h.job = 'afbrudt-job';
-  if r.recent_runs <> 2 or r.recent_failures <> 1 then
-    raise exception 'en kørsel med ok is null tælles ikke som fejl: % af %', r.recent_failures, r.recent_runs;
+  if r.hour_runs <> 2 or r.hour_failures <> 1 then
+    raise exception 'en kørsel med ok is null tælles ikke som fejl: % af %', r.hour_failures, r.hour_runs;
   end if;
 
   -- ---------- 5) nul kørsler er et tal, ikke en manglende måling ----------
   select * into r from public.admin_job_health() h where h.job = 'send-notifications';
-  if r.recent_runs is null or r.recent_runs <> 0 or r.recent_failures <> 0 then
-    raise exception 'et job uden kørsler i vinduet svarede % / %', r.recent_failures, r.recent_runs;
+  if r.day_runs is null or r.day_runs <> 0 or r.day_failures <> 0 then
+    raise exception 'et job uden kørsler i vinduet svarede % / %', r.day_failures, r.day_runs;
   end if;
   -- … men det er stadig synligt som en kørsel, der ligger langt tilbage.
   if r.last_run_at is null then

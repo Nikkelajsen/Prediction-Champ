@@ -262,20 +262,32 @@ ikke — de laver ikke noget arbejde, og ville ellers nulstille fejlserien.
 > `consecutive_failures` nulstilles af enhver succes, og det gør den blind for
 > det mønster, den skulle fange: et job, der kører hvert minut og fejler to ud
 > af tre, har en grøn seneste kørsel hver tredje gang — så tælleren står på nul,
-> mens jobbet reelt er nede. Det stod grønt i en time under `G109`.
-> `admin_job_health()` svarer derfor også `recent_runs` og `recent_failures`
-> over de sidste **24 timer** (`sql/job_health_rate.sql`), og `src/lib/ops.js`
-> kalder et job `ustabil`, når mindst **10 %** af mindst **fem** kørsler
-> fejlede. Vinduet er et TIDSvindue og ikke "de sidste N kørsler", fordi 30
-> kørsler er en halv time for `sync-live` og en halv måned for et
-> kampprogram-job — databasen kender ingen kadencer, det gør kun dette register
-> og `ops.js`. Kortet viser rå tal ("40 af 60") og procenten som detalje:
-> nævneren er selv oplysningen. **Raten kan hæve et job til `ustabil`, aldrig
-> til `fejler`** — den tilstand er heartbeat'ens, og den hører til et job, der
-> er holdt op med at virke, ikke til et, der virker dårligt.
+> mens jobbet reelt er nede. Det stod grønt hele vejen igennem `G109`.
+> `admin_job_health()` svarer derfor også `hour_runs`/`hour_failures` og
+> `day_runs`/`day_failures` (`sql/job_health_rate.sql`), og `src/lib/ops.js`
+> kalder et job `ustabil`, når mindst **10 %** af mindst **fem** kørsler i
+> ENTEN vinduet fejlede.
 >
-> Grænsen på fem kørsler betyder, at **kampprogram-jobbene aldrig bedømmes på
-> deres rate**: to kørsler i døgnet gør "1 af 2" til 50 %, hvilket ikke er en
+> 🔴 **To vinduer, fordi ét ikke rækker — og det blev bevist på filens egen
+> første udgave.** Den havde kun døgnet. Ejerens opslag i `job_runs` viste
+> bagefter, at `G109` var 25 fejl ud af 37 kørsler på 33 minutter: **68 % af
+> timen, men 1,7 % af et døgn.** Døgnvinduet ville altså have kaldt hændelsen
+> sund. En nedetid på en kampaften er intens og kort, og et døgn fortynder
+> præcis den form til usynlighed. Timevinduet fanger den; døgnvinduet fanger den
+> anden form — et job som `send-notifications`, der kører 2-4 gange i timen
+> (for få til, at timen bedømmes) og stille fejler hver femte gang hele dagen
+> uden nogensinde at nå tre fejl i træk.
+>
+> Vinduerne er TIDSvinduer og ikke "de sidste N kørsler", fordi 30 kørsler er en
+> halv time for `sync-live` og en halv måned for et kampprogram-job — databasen
+> kender ingen kadencer, det gør kun dette register og `ops.js`. Kortet viser rå
+> tal ("25 af 37") og procenten som detalje: nævneren er selv oplysningen.
+> **Raten kan hæve et job til `ustabil`, aldrig til `fejler`** — den tilstand er
+> heartbeat'ens, og den hører til et job, der er holdt op med at virke, ikke til
+> et, der virker dårligt.
+>
+> Grænsen på fem kørsler betyder, at **kampprogram-jobbene bedømmes af ingen af
+> vinduerne**: to kørsler i døgnet gør "1 af 2" til 50 %, hvilket ikke er en
 > rate, men en anekdote. For dem er fejlserien i forvejen hele historien, fordi
 > hver kørsel vejer.
 

@@ -157,8 +157,22 @@ function summarizeOutbox(wouldSend) {
 // tilstanden 14. august 2026 under `G109`: Drift stod på **OK, 0 fejl i træk**
 // i en time, hvor live-syncen fejlede omtrent 2/3 af sine kørsler.
 //
-// `admin_job_health()` måler derfor også vinduet (sidste 24 timer), og
-// oversættelsen fra tal til tilstand ligger her, hvor de øvrige regler bor.
+// `admin_job_health()` måler derfor også to vinduer, og oversættelsen fra tal
+// til tilstand ligger her, hvor de øvrige regler bor.
+//
+// TO VINDUER, FORDI ÉT IKKE RÆKKER. Første udgave havde kun døgnet, og
+// **den ville ikke have fanget `G109`**: hændelsen varede 33 minutter med 25
+// fejl ud af 37 kørsler — 68 % i vinduet, men 1,7 % af et døgn. En nedetid på
+// en kampaften er INTENS OG KORT, og et døgn fortynder præcis den form til
+// usynlighed. Rettet 14. august 2026, efter at kørslerne blev læst.
+//
+//   1 time    Den intense og korte. Et minut-job har ~60 kørsler i timen, så
+//             raten er skarp og altid aktuel. `G109` ville have stået på 42 %.
+//   24 timer  Den langsomme blødning. `send-notifications` kører 2-4 gange i
+//             timen — for få til, at timevinduet nogensinde bedømmes — men
+//             48-96 gange i døgnet. Et job, der stille fejler hver femte gang
+//             hele dagen, når sjældent tre fejl i træk og ville ellers være
+//             usynligt begge veje.
 //
 // GRÆNSEN ER ET VALG, og begge tal er valgt af samme grund: et kort, der ofte
 // er gult uden grund, lærer én at holde op med at kigge (samme afvejning som
@@ -168,11 +182,29 @@ function summarizeOutbox(wouldSend) {
 //              anekdote — 1 af 2 er 50 %. Kampprogram-jobbene kører to gange i
 //              døgnet og bliver dermed ALDRIG bedømt på deres rate; for dem er
 //              fejlserien i forvejen hele historien, fordi hver kørsel vejer.
-//   THRESHOLD  `sync-live` har ~1.440 kørsler i døgnet, så en enkelt hikke er
-//              0,07 %. 10 % er 144 tabte minutter — langt over støj, og langt
-//              under de 67 %, `G109` var.
+//   THRESHOLD  `sync-live` har ~60 kørsler i timen, så en enkelt hikke er
+//              1,7 %. 10 % er seks tabte minutter i træk-værdi — langt over
+//              støj, og langt under de 68 %, `G109` var.
 const RATE_MIN_RUNS = 5;
 const RATE_THRESHOLD = 0.1;
+
+// Én rate ud af (fejl, kørsler). `null` betyder UMÅLT og aldrig nul:
+//
+//   * feltet mangler   → migreringen er ikke kørt endnu (koden deployes
+//     automatisk, SQL'en køres i hånden). Samme valg som `select=*` i
+//     api/sync-live.js.
+//   * for få kørsler   → en brøk med en nævner under fem er ikke en rate.
+//
+// De to tilfælde er forskellige for LÆSEREN — det ene skal vises som "0 af 3",
+// det andet slet ikke — så `runs` bæres videre ved siden af raten.
+function raten(runs, failures) {
+  if (runs == null || failures == null) return { runs: null, failures: null, rate: null };
+  return {
+    runs: Number(runs),
+    failures: Number(failures),
+    rate: Number(runs) >= RATE_MIN_RUNS ? Number(failures) / Number(runs) : null,
+  };
+}
 
 // Fletter det forventede (expectedJobs) med det målte (rækker fra
 // admin_job_health).
@@ -198,17 +230,13 @@ function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
     const failures = Number(r?.consecutive_failures ?? 0);
     const silentFor = lastRunAt === null ? null : now - lastRunAt;
 
-    // `null` og ikke 0, når feltet mangler. Koden deployes automatisk, mens
-    // sql/job_health_rate.sql køres manuelt bagefter — og i vinduet derimellem
-    // er raten UMÅLT, ikke nul. De to må ikke se ens ud, for den ene skal ikke
-    // vises. Samme valg som `select=*` i api/sync-live.js.
-    const recentRuns = r?.recent_runs == null ? null : Number(r.recent_runs);
-    const recentFailures = r?.recent_failures == null ? null : Number(r.recent_failures);
-    const recentFailureRate =
-      recentRuns !== null && recentRuns >= RATE_MIN_RUNS ? recentFailures / recentRuns : null;
+    const hour = raten(r?.hour_runs, r?.hour_failures);
+    const day = raten(r?.day_runs, r?.day_failures);
     // Den tilstand, kortet ikke kunne vise: jobbet fejler jævnligt, men den
-    // seneste kørsel lykkedes, så fejlserien er nul.
-    const unstableRate = recentFailureRate !== null && recentFailureRate >= RATE_THRESHOLD;
+    // seneste kørsel lykkedes, så fejlserien er nul. ENTEN-ELLER og ikke
+    // begge: vinduerne findes netop, fordi de fanger hver sin form, så et krav
+    // om at begge slår ud ville gøre dem til det korteste af de to.
+    const unstableRate = [hour.rate, day.rate].some((x) => x !== null && x >= RATE_THRESHOLD);
 
     let state;
     if (lastRunAt === null) state = "ukendt";
@@ -233,9 +261,8 @@ function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
       silentFor,
       failures,
       lastOkAt,
-      recentRuns,
-      recentFailures,
-      recentFailureRate,
+      hour,
+      day,
       unstableRate,
       // Regnes ud her og ikke i komponenten: `Date.now()` under render er
       // uren og giver et tal, der skifter ved hver gentegning. Alt, der
