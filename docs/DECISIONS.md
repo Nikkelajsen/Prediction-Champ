@@ -15,6 +15,26 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — `G115`: driftskortet måler nu en fejlrate, ikke kun en fejlserie
+
+**Beslutning:** `admin_job_health()` svarer også `recent_runs` og `recent_failures` over de sidste 24 timer, og et job vises som `ustabil`, når mindst 10 % af mindst fem kørsler i vinduet fejlede — også når den seneste kørsel lykkedes.
+
+**Begrundelsen er en observation og ikke en teori.** Under `G109` fejlede `sync-live` omtrent to ud af tre minutter i en time, mens Admin → Drift stod på **OK** og **Fejl i træk: 0**. `consecutive_failures` tæller fejl siden seneste vellykkede kørsel og nulstilles derfor af enhver succes; for et job, der kører hvert minut og fejler to ud af tre, er hver tredje kørsel grøn. Tælleren kan altså ikke skelne "virker" fra "virker hver tredje gang", og det er præcis den skelnen, et minut-job kræver.
+
+**Fire valg, og hvert af dem kunne være truffet anderledes:**
+
+**Et TIDSvindue frem for "de sidste N kørsler."** Databasen kender ingen kadencer — dem kender kun `docs/CRON.md` og `src/lib/ops.js`. 30 kørsler er en halv time for `sync-live` og en halv måned for et kampprogram-job, så et antalsvindue ville betyde noget forskelligt for hvert job og kunne vise en fejl fra to uger siden som "nu". 24 timer betyder det samme for alle ni og er altid aktuelt.
+
+**Rå tal i svaret, procenten i klienten.** Nævneren er selv oplysningen: "2 af 1.431" og "2 af 2" er samme brøk og to vidt forskellige situationer. Havde funktionen svaret en procent, ville tallet ikke kunne aflæses uden et opslag mere.
+
+**Grænsen på fem kørsler er en beskyttelse af kampprogram-jobbene.** To kørsler i døgnet gør "1 af 2" til 50 %, og et kort, der er gult, hver gang et 12-timers job hikker én gang, lærer man at ignorere — samme afvejning som `B8`s tolerance for `season-not-published` og som heartbeat'ens tre-fejl-grænse. For dem er fejlserien i forvejen hele historien, fordi hver kørsel vejer.
+
+**Raten hæver til `ustabil`, aldrig til `fejler`.** Den sidste tilstand er den, heartbeat-workflowen råber på, og den hører til et job, der er holdt op med at virke. Et job, der fejler halvdelen af tiden, virker — dårligt. Ordet findes allerede og betyder det rigtige.
+
+**Hvad beslutningen IKKE er.** Den gør ikke live-syncen mere robust og forklarer ikke, hvorfor Viborg FF–AGF ikke blev færdigmeldt af de grønne kørsler efter `G109`-deployet. Den gør alene den slags nedetid **synlig**, så næste gang kan afgøres med et blik frem for med et SQL-opslag. Rækken kom netop af, at ejeren gjorde det rigtige — kiggede i Drift — og fik det forkerte svar.
+
+---
+
 ## 14. august 2026 — Tier 2 kørt: tre steder, hvor hjemmesiden og appen beskrev det samme produkt forskelligt
 
 **Beslutning (produktejeren):** backloggens Tier 2 er kørt tom. De tre rækker —

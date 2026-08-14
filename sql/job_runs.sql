@@ -14,12 +14,20 @@
 -- er .github/workflows/job-heartbeat.yml, der slår alarm, når et job i
 -- docs/CRON.md holder op med at melde sig.
 --
--- Idempotent — men GEN-KØR DEN IKKE BLINDT: læsepolicyen nedenfor er den
--- GAMLE form, der læser profiles.is_admin direkte. #60 read_scope_narrow.sql
--- har afløst den med is_platform_admin(), og efter #60 kan authenticated ikke
--- længere læse is_admin — den gamle policy FEJLER derfor med 42501 i stedet
--- for at filtrere, og Admin → Drift går i sort for alle. Kør
--- read_scope_narrow.sql (#60) bagefter; se listen i sql/README.md.
+-- Idempotent — men GEN-KØR DEN IKKE BLINDT, af to grunde:
+--
+--   1. Læsepolicyen nedenfor er den GAMLE form, der læser profiles.is_admin
+--      direkte. #60 read_scope_narrow.sql har afløst den med
+--      is_platform_admin(), og efter #60 kan authenticated ikke længere læse
+--      is_admin — den gamle policy FEJLER derfor med 42501 i stedet for at
+--      filtrere, og Admin → Drift går i sort for alle. Kør
+--      read_scope_narrow.sql (#60) bagefter; se listen i sql/README.md.
+--
+--   2. `admin_job_health()` nedenfor er den GAMLE definition uden `recent_runs`
+--      og `recent_failures` (#65 job_health_rate.sql, G115). Den ruller ikke
+--      ændringen tilbage — den STOPPER scriptet med `42P13 cannot change return
+--      type of existing function`, fordi `create or replace` ikke kan ændre en
+--      returtype. Kuren er at køre #65 bagefter; den dropper først.
 
 create table if not exists public.job_runs (
   id bigint generated always as identity primary key,

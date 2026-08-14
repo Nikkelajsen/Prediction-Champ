@@ -149,6 +149,31 @@ function summarizeOutbox(wouldSend) {
   return [...byKey.values()];
 }
 
+// ---- fejlRATEN, som fejlSERIEN ikke kan se (G115) ----
+//
+// `consecutive_failures` nulstilles af enhver succes. For et job, der kører
+// hvert minut og fejler to ud af tre, er den seneste kørsel grøn hver tredje
+// gang — og så står tælleren på nul, mens jobbet reelt er nede. Det var
+// tilstanden 14. august 2026 under `G109`: Drift stod på **OK, 0 fejl i træk**
+// i en time, hvor live-syncen fejlede omtrent 2/3 af sine kørsler.
+//
+// `admin_job_health()` måler derfor også vinduet (sidste 24 timer), og
+// oversættelsen fra tal til tilstand ligger her, hvor de øvrige regler bor.
+//
+// GRÆNSEN ER ET VALG, og begge tal er valgt af samme grund: et kort, der ofte
+// er gult uden grund, lærer én at holde op med at kigge (samme afvejning som
+// alarmgrænsen i job-heartbeat.yml).
+//
+//   MIN_RUNS   Under fem kørsler i vinduet er en "rate" ikke et tal, det er en
+//              anekdote — 1 af 2 er 50 %. Kampprogram-jobbene kører to gange i
+//              døgnet og bliver dermed ALDRIG bedømt på deres rate; for dem er
+//              fejlserien i forvejen hele historien, fordi hver kørsel vejer.
+//   THRESHOLD  `sync-live` har ~1.440 kørsler i døgnet, så en enkelt hikke er
+//              0,07 %. 10 % er 144 tabte minutter — langt over støj, og langt
+//              under de 67 %, `G109` var.
+const RATE_MIN_RUNS = 5;
+const RATE_THRESHOLD = 0.1;
+
 // Fletter det forventede (expectedJobs) med det målte (rækker fra
 // admin_job_health).
 //
@@ -173,6 +198,18 @@ function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
     const failures = Number(r?.consecutive_failures ?? 0);
     const silentFor = lastRunAt === null ? null : now - lastRunAt;
 
+    // `null` og ikke 0, når feltet mangler. Koden deployes automatisk, mens
+    // sql/job_health_rate.sql køres manuelt bagefter — og i vinduet derimellem
+    // er raten UMÅLT, ikke nul. De to må ikke se ens ud, for den ene skal ikke
+    // vises. Samme valg som `select=*` i api/sync-live.js.
+    const recentRuns = r?.recent_runs == null ? null : Number(r.recent_runs);
+    const recentFailures = r?.recent_failures == null ? null : Number(r.recent_failures);
+    const recentFailureRate =
+      recentRuns !== null && recentRuns >= RATE_MIN_RUNS ? recentFailures / recentRuns : null;
+    // Den tilstand, kortet ikke kunne vise: jobbet fejler jævnligt, men den
+    // seneste kørsel lykkedes, så fejlserien er nul.
+    const unstableRate = recentFailureRate !== null && recentFailureRate >= RATE_THRESHOLD;
+
     let state;
     if (lastRunAt === null) state = "ukendt";
     // Et uventet job har ingen forventet kadence, så tavshed kan ikke måles —
@@ -180,7 +217,11 @@ function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
     // forventning, ingen har udtrykt.
     else if (s.stilhedMs && silentFor > s.stilhedMs) state = "tavs";
     else if (failures >= 3) state = "fejler";
-    else if (failures > 0) state = "ustabil";
+    // Raten kan gøre et job ustabilt, men ikke fejlende: `fejler` er den
+    // tilstand, heartbeat-workflowen råber på, og den hører til et job, der er
+    // holdt op med at virke. Et job, der fejler halvdelen af tiden, VIRKER —
+    // dårligt, og det er præcis, hvad ordet "ustabil" siger.
+    else if (failures > 0 || unstableRate) state = "ustabil";
     else state = "ok";
 
     const lastOkAt = r?.last_ok_at ? new Date(r.last_ok_at).getTime() : null;
@@ -192,6 +233,10 @@ function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
       silentFor,
       failures,
       lastOkAt,
+      recentRuns,
+      recentFailures,
+      recentFailureRate,
+      unstableRate,
       // Regnes ud her og ikke i komponenten: `Date.now()` under render er
       // uren og giver et tal, der skifter ved hver gentegning. Alt, der
       // afhænger af "nu", hører hjemme i denne fletning, som får `now` ind.
@@ -218,6 +263,15 @@ const STATE_LABEL = {
   ok: "OK",
 };
 
+// Fejlraten som procent. Rundes til ét ciffer under 10 %, så en rate lige
+// omkring støjgrænsen ikke vises som "0 %" — det ville være det ene tal, der
+// ligner "ingen fejl".
+function fmtRate(rate) {
+  if (rate === null || rate === undefined) return "—";
+  const pct = rate * 100;
+  return `${pct < 10 ? Math.round(pct * 10) / 10 : Math.round(pct)} %`;
+}
+
 function fmtSince(ms) {
   if (ms === null || ms === undefined) return "—";
   const min = Math.floor(ms / 60000);
@@ -228,4 +282,4 @@ function fmtSince(ms) {
   return `${Math.floor(t / 24)} d siden`;
 }
 
-export { BASE_JOBS, expectedJobs, loadJobHealth, loadClientErrors, loadSeasons, setSeasonFinished, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince };
+export { BASE_JOBS, expectedJobs, loadJobHealth, loadClientErrors, loadSeasons, setSeasonFinished, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince, fmtRate, RATE_MIN_RUNS, RATE_THRESHOLD };

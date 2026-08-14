@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A57` · `B36` · `G115` · `I24`.**
+**Næste ledige: `A57` · `B36` · `G116` · `I24`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -48,6 +48,8 @@ pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor
 eller en linje i "Forkastede ideer".
 
 - DOCUMENTATION.md §19 siger, at karriereprofilens globale komplethedsjoin tæller uofficielle turneringer med — afsnittet lige under siger, at det blev rettet i august.
+- Viborg FF–AGF blev ikke færdigmeldt automatisk 14. august, selvom live-syncen kørte grønt i kvarteret efter slutfløjt — resultatet måtte tastes i hånden. Slå kørslerne op i job_runs for den time: kom kampen overhovedet med (checked), og hvad meldte leverandøren.
+- sync-matches er hver 12. time, så live-syncen er den eneste vej til et endeligt resultat inden for rimelig tid — der er intet sikkerhedsnet, hvis den er nede en halv time efter en kamp.
 
 ---
 

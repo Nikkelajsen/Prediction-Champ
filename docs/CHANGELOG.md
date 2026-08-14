@@ -9,6 +9,34 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — `G115`: driftskortet stod grønt hele vejen igennem en nedetid, det målte
+
+**Symptomet er det vigtigste ved rækken: kortet så rigtigt ud.** Under `G109` fejlede `sync-live` omtrent to ud af tre minutter i en time, mens Admin → Drift stod på **OK** og **Fejl i træk: 0**. Livescoren var frossen, en færdigspillet kamp blev ikke færdigmeldt, og den, der gjorde det eneste rigtige — kiggede i driftsloggen — fik at vide, at alt var i orden.
+
+**Årsagen er én egenskab ved tælleren:** `consecutive_failures` tæller fejl SIDEN SENESTE VELLYKKEDE KØRSEL og nulstilles derfor af enhver succes. For et job, der kører hvert minut og fejler to ud af tre, er den seneste kørsel grøn hver tredje gang. `sync-live` kan altså fejle fyrre gange i timen uden nogensinde at forlade tilstanden `ok`. **En fejlSERIE er ikke en fejlRATE**, og tælleren er blind for præcis det mønster, den skulle fange.
+
+Det er `B8`s og `G44`s fejlklasse en tredje gang: en sund måling, der skjuler en syg. Dér var det ét jobnavn, der dækkede over syv turneringer; her er det én succes, der dækker over to fejl.
+
+**Rettelsen:** `admin_job_health()` svarer også `recent_runs` og `recent_failures` over de sidste 24 timer ([`sql/job_health_rate.sql`](../sql/job_health_rate.sql), #65), og `src/lib/ops.js` kalder et job `ustabil`, når mindst **10 %** af mindst **fem** kørsler fejlede. Kortet viser rå tal ("40 af 60") med procenten som detalje — nævneren er selv oplysningen, for "2 af 1.431" og "2 af 2" er samme brøk og to helt forskellige situationer. Rammer raten grænsen, mens fejlserien er nul, siger kortet det med ord: *"Jobbet fejler 67 % af sine kørsler i døgnet, men den seneste lykkedes — derfor står «Fejl i træk» på nul."*
+
+**Tre valg, der bærer rettelsen.**
+
+**Vinduet er et TIDSvindue og ikke "de sidste N kørsler".** 30 kørsler er en halv time for `sync-live` og en halv måned for et kampprogram-job; databasen kender ingen kadencer, det gør kun `docs/CRON.md` og `ops.js`. 24 timer betyder det samme for alle ni jobs og er altid aktuelt.
+
+**Grænsen på fem kørsler er der, for at kampprogram-jobbene aldrig bedømmes på deres rate.** To kørsler i døgnet gør "1 af 2" til 50 %, hvilket ikke er en rate, men en anekdote — og et kort, der ofte er gult uden grund, lærer én at holde op med at kigge. For dem er fejlserien i forvejen hele historien, fordi hver kørsel vejer.
+
+**Raten kan hæve et job til `ustabil`, aldrig til `fejler`.** Den sidste tilstand er heartbeat-workflowens, og den hører til et job, der er holdt op med at virke. Et job, der fejler halvdelen af tiden, VIRKER — dårligt, og det er præcis, hvad ordet "ustabil" siger.
+
+**En umålt rate må ikke kunne forveksles med nul.** Koden deployes automatisk ved push, mens migreringen køres i hånden bagefter — i vinduet derimellem mangler felterne, og klienten behandler dem som `null` og skjuler rækken frem for at vise "0 fejl". Samme valg som `select=*` i `api/sync-live.js`, og dækket af sin egen test.
+
+**Migreringen kan køres når som helst, begge veje.** Den gamle klient ignorerer de to nye nøgler; den nye virker uden dem. ⚠️ **Men den gør `#18 job_runs.sql` umulig at gen-køre i sin helhed:** filen bærer den gamle definition som `create or replace`, og en returtype kan ikke erstattes — scriptet stopper med `42P13`. Det er den gode retning at fejle i (ingen tavs tilbagerulning, modsat `#37`/`#26` over for `#61`), men rækkefølgen efter en gendannelse er herefter #18 → #65 → #60. Advarslen står nu tre steder: i toppen af `job_runs.sql`, i `#18`s statuscelle og i README'ens liste over filer, der ikke må gen-køres blindt.
+
+**Verificeret:** 1380 tests (12 nye i `src/lib/ops.test.js`, heriblandt en, der gengiver G109-formen: 60 kørsler, 40 fejlede, seneste grøn), lint uændret på loftet (7 advarsler), build grønt. Ny SQL-test `sql/tests/job_health_rate.sql` kørt mod en rigtig PostgreSQL 16.13 og **efterprøvet med tre mutationer — alle tre fanget** (vinduet flyttet til 72 timer, `ok is distinct from true` smalnet til `ok = false`, og `coalesce` fjernet); CI-jobbet `sql` har fået et trin til den. **Udestår hos ejeren:** `#65` er ikke kørt i produktionen endnu — indtil den er, viser kortet nøjagtig det, det gjorde i går.
+
+**Hvad rækken IKKE svarer på.** Den forklarer, hvorfor nedetiden var usynlig, ikke hvorfor Viborg FF–AGF stadig ikke blev færdigmeldt af de kørsler, der lykkedes efter `G109`-deployet. Det spørgsmål kræver et opslag i `job_runs.detail` for den time og står i backloggens indbakke.
+
+---
+
 14. august 2026 — Tier 2 kørt tom: hjemmesiden og appen siger nu det samme om produktet — og hvor de ikke gør, er det med vilje
 
 **Tre rækker, én fejlklasse: to flader, der beskrev det samme produkt forskelligt.** `A54` (turneringens navn), `A55` (turneringen var uofficiel, mens sitet solgte den som live-flagskib) og `A56` (beta-mærkatet, der kun stod på sitet). Svarene blev ikke ens — ét af de tre steder er forskellen den rigtige tilstand.

@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { BASE_JOBS, expectedJobs, mergeJobHealth, summarizeOutbox, STATE_LABEL, fmtSince } from "./ops.js";
+import {
+  BASE_JOBS,
+  expectedJobs,
+  mergeJobHealth,
+  summarizeOutbox,
+  STATE_LABEL,
+  fmtSince,
+  fmtRate,
+  RATE_MIN_RUNS,
+  RATE_THRESHOLD,
+} from "./ops.js";
 
 const NU = new Date("2026-08-01T12:00:00Z").getTime();
 const forSiden = (ms) => new Date(NU - ms).toISOString();
@@ -118,6 +128,81 @@ describe("mergeJobHealth", () => {
     expect(stille(27 * TIME)).toBe("tavs");
   });
 
+  // ---- fejlraten (G115) ----
+  //
+  // Hele grunden til, at rækkerne findes: 14. august 2026 fejlede sync-live
+  // ~2/3 af sine kørsler i en time, og fordi hver tredje lykkedes, stod
+  // fejlserien på nul og kortet på OK. Testen gengiver netop den situation.
+  const rate = (over) =>
+    mergeJobHealth([raek("sync-live", { consecutive_failures: 0, ...over })], { now: NU })
+      .find((j) => j.job === "sync-live");
+
+  it("kalder et job ustabilt, når det fejler ofte uden at fejle to gange i træk", () => {
+    const j = rate({ recent_runs: 60, recent_failures: 40 });
+    expect(j.failures).toBe(0);
+    expect(j.state).toBe("ustabil");
+    expect(j.unstableRate).toBe(true);
+    expect(j.recentFailureRate).toBeCloseTo(2 / 3, 5);
+  });
+
+  it("lader en enkelt hikke i et døgn være ok", () => {
+    const j = rate({ recent_runs: 1440, recent_failures: 1 });
+    expect(j.state).toBe("ok");
+    expect(j.unstableRate).toBe(false);
+  });
+
+  it("bedømmer ikke en rate, der er regnet på for få kørsler", () => {
+    // 1 af 2 er 50 % og betyder ingenting — det er dét, kampprogram-jobbene
+    // ville blive målt på, hvis grænsen ikke fandtes.
+    const faa = rate({ recent_runs: RATE_MIN_RUNS - 1, recent_failures: RATE_MIN_RUNS - 1 });
+    expect(faa.recentFailureRate).toBeNull();
+    expect(faa.state).toBe("ok");
+
+    // Nøjagtig på grænsen regnes den.
+    const nok = rate({ recent_runs: RATE_MIN_RUNS, recent_failures: RATE_MIN_RUNS });
+    expect(nok.recentFailureRate).toBe(1);
+    expect(nok.state).toBe("ustabil");
+  });
+
+  it("rammer grænsen præcist", () => {
+    expect(rate({ recent_runs: 100, recent_failures: 100 * RATE_THRESHOLD }).unstableRate).toBe(true);
+    expect(rate({ recent_runs: 100, recent_failures: 100 * RATE_THRESHOLD - 1 }).unstableRate).toBe(false);
+  });
+
+  // Vigtigst af alle: koden deployes automatisk, migreringen køres i hånden.
+  // I vinduet derimellem er raten UMÅLT, og en umålt rate må hverken vises
+  // eller bedømmes — den må slet ikke kunne forveksles med nul.
+  it("opfører sig som før, hvis migreringen ikke er kørt endnu", () => {
+    const j = mergeJobHealth([raek("sync-live")], { now: NU }).find((x) => x.job === "sync-live");
+    expect(j.recentRuns).toBeNull();
+    expect(j.recentFailures).toBeNull();
+    expect(j.recentFailureRate).toBeNull();
+    expect(j.unstableRate).toBe(false);
+    expect(j.state).toBe("ok");
+  });
+
+  // Et job, hvis seneste kørsel er ældre end vinduet, har målt NUL kørsler.
+  // Det er et tal og ikke en manglende måling — men det må ikke give en
+  // division med nul eller en rate på 0 %, der ligner "ingen fejl".
+  it("tåler et job uden kørsler i vinduet", () => {
+    const j = rate({ recent_runs: 0, recent_failures: 0 });
+    expect(j.recentRuns).toBe(0);
+    expect(j.recentFailureRate).toBeNull();
+    expect(j.state).toBe("ok");
+  });
+
+  // Raten må gøre et job ustabilt, men ikke fejlende: `fejler` er den
+  // tilstand, heartbeat-workflowen råber på, og et job, der fejler halvdelen
+  // af tiden, virker stadig.
+  it("lader raten hæve til ustabil, men aldrig til fejler eller tavs", () => {
+    expect(rate({ recent_runs: 100, recent_failures: 99 }).state).toBe("ustabil");
+    const stille = mergeJobHealth(
+      [raek("sync-live", { last_run_at: forSiden(2 * TIME), recent_runs: 100, recent_failures: 99 })],
+      { now: NU }
+    ).find((j) => j.job === "sync-live");
+    expect(stille.state).toBe("tavs");
+  });
+
   it("skelner mellem ustabil og fejlende ud fra fejlserien", () => {
     const to = mergeJobHealth([raek("sync-live", { consecutive_failures: 2 })], { now: NU });
     expect(to.find((j) => j.job === "sync-live").state).toBe("ustabil");
@@ -209,6 +294,26 @@ describe("fmtSince", () => {
   it("viser en tankestreg, når der intet er at vise", () => {
     expect(fmtSince(null)).toBe("—");
     expect(fmtSince(undefined)).toBe("—");
+  });
+});
+
+describe("fmtRate", () => {
+  it("skriver hele procenter over ti og ét ciffer under", () => {
+    expect(fmtRate(2 / 3)).toBe("67 %");
+    expect(fmtRate(0.1)).toBe("10 %");
+    expect(fmtRate(0.034)).toBe("3.4 %");
+  });
+
+  // Det ene tal, der ikke må rundes væk: en rate, der er lille men ikke nul,
+  // ville som "0 %" ligne "ingen fejl".
+  it("runder aldrig en rate, der ikke er nul, ned til nul", () => {
+    expect(fmtRate(0.0007)).not.toBe("0 %");
+    expect(fmtRate(0)).toBe("0 %");
+  });
+
+  it("viser en tankestreg, når raten ikke er målt", () => {
+    expect(fmtRate(null)).toBe("—");
+    expect(fmtRate(undefined)).toBe("—");
   });
 });
 

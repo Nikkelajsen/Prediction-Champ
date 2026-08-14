@@ -22,6 +22,7 @@ import {
   summarizeOutbox,
   STATE_LABEL,
   fmtSince,
+  fmtRate,
 } from "../lib/ops.js";
 
 // Tonen følger StateChips regel: ORDET er signalet, farven er kun ekstra.
@@ -50,7 +51,32 @@ function JobCard({ j }) {
           value={j.failures}
           detail={j.failures >= 3 ? "→ heartbeat slår alarm" : undefined}
         />
+        {/* Fejlraten (G115). Rå tal FØR procenten, fordi nævneren selv er
+            oplysningen: "2 af 1.431" og "2 af 2" er samme brøk og to helt
+            forskellige situationer. Procenten står som detalje og kun, når der
+            er kørsler nok til, at den betyder noget.
+
+            Rækken vises slet ikke, hvis feltet mangler — så er migreringen
+            ikke kørt endnu, og raten er UMÅLT. En umålt rate må ikke vises
+            som nul. */}
+        {j.recentRuns !== null && j.recentRuns > 0 && (
+          <SignalRow
+            label="Fejl (24 t)"
+            value={`${j.recentFailures} af ${j.recentRuns}`}
+            detail={j.recentFailureRate === null ? undefined : fmtRate(j.recentFailureRate)}
+          />
+        )}
       </div>
+
+      {/* Den ene sætning, kortet manglede 14. august 2026. Uden den ligner et
+          job med "0 fejl i træk" et sundt job — også når det fejler halvdelen
+          af sine kørsler. */}
+      {j.unstableRate && j.failures === 0 && (
+        <p style={{ color: C.gold, fontSize: 11, marginTop: 8, marginBottom: 0 }}>
+          Jobbet fejler {fmtRate(j.recentFailureRate)} af sine kørsler i døgnet, men den seneste
+          lykkedes — derfor står "Fejl i træk" på nul. En fejlrate kan ikke ses i en fejlserie.
+        </p>
+      )}
 
       {j.state === "ukendt" && (
         <p style={{ ...muted, fontSize: 11, marginTop: 8, marginBottom: 0 }}>

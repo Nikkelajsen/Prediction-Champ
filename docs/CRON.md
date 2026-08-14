@@ -258,6 +258,27 @@ indeholder varighed, om det gik godt, jobbets eget resumé og fejlteksten.
 Aflæses i **Admin → Drift**. Tørre kørsler (`?dryRun=true`) logges bevidst
 ikke — de laver ikke noget arbejde, og ville ellers nulstille fejlserien.
 
+> **Kortet måler både en fejlSERIE og en fejlRATE (`G115`, 14. august 2026).**
+> `consecutive_failures` nulstilles af enhver succes, og det gør den blind for
+> det mønster, den skulle fange: et job, der kører hvert minut og fejler to ud
+> af tre, har en grøn seneste kørsel hver tredje gang — så tælleren står på nul,
+> mens jobbet reelt er nede. Det stod grønt i en time under `G109`.
+> `admin_job_health()` svarer derfor også `recent_runs` og `recent_failures`
+> over de sidste **24 timer** (`sql/job_health_rate.sql`), og `src/lib/ops.js`
+> kalder et job `ustabil`, når mindst **10 %** af mindst **fem** kørsler
+> fejlede. Vinduet er et TIDSvindue og ikke "de sidste N kørsler", fordi 30
+> kørsler er en halv time for `sync-live` og en halv måned for et
+> kampprogram-job — databasen kender ingen kadencer, det gør kun dette register
+> og `ops.js`. Kortet viser rå tal ("40 af 60") og procenten som detalje:
+> nævneren er selv oplysningen. **Raten kan hæve et job til `ustabil`, aldrig
+> til `fejler`** — den tilstand er heartbeat'ens, og den hører til et job, der
+> er holdt op med at virke, ikke til et, der virker dårligt.
+>
+> Grænsen på fem kørsler betyder, at **kampprogram-jobbene aldrig bedømmes på
+> deres rate**: to kørsler i døgnet gør "1 af 2" til 50 %, hvilket ikke er en
+> rate, men en anekdote. For dem er fejlserien i forvejen hele historien, fordi
+> hver kørsel vejer.
+
 **2. `job-heartbeat.yml` — hvad der IKKE skete.** `job_runs` kan per definition
 kun se de kørsler, der fandt sted. Et job, cron-job.org har auto-deaktiveret,
 skriver ingen rækker, og tavshed ligner ro. Derfor kører en workflow **hver
