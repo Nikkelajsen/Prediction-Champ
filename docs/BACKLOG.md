@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A53` · `B34` · `G104` · `I23`.**
+**Næste ledige: `A53` · `B34` · `G106` · `I23`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -57,10 +57,11 @@ gennemgangen af hjemmesidens opdateringsudkast blev til `A48`–`A50`,
 `B30`–`B33`, `G103` og `I22`; `B30` og `B31` er leveret samme dag sammen med
 udkastet selv. Ryddet en sjette gang 13. august 2026: én linje blev til `A51` —
 ikke leveret. Fire af de ni fra femte rydning er lukket samme dag med `I8`s
-udrulningsklargøring: `A48`, `A49`, `B33` og `I22`.)*
-
-- `DOCUMENTATION.md` §11 siger stadig "Hjemmesidens projekt er endnu ikke oprettet; trin 2" — det er kørt 14. august 2026, og `DOMAENE.md` trin 2 er mærket ✅
-- Ingen af de to Vercel-projekter kan aflæses fra repoet: `leagly_site` (root `site`) og `prediction-champ` (roden) bygger begge på hvert push til `main`, og et deploy i det ene projekts liste siger intet om det andet — det kostede en fejlsøgning at opdage
+udrulningsklargøring: `A48`, `A49`, `B33` og `I22`. Ryddet en syvende gang
+14. august 2026: to linjer fra `A52`-forløbet blev til `G104` og `G105` —
+**begge leveret samme dag**, fordi de var én rettelse i samme afsnit af
+`DOCUMENTATION.md` §11 og dermed billigere at lukke end at føre. Ingen af dem
+fik en række.)*
 
 ---
 
