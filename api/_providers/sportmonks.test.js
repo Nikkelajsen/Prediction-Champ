@@ -361,6 +361,45 @@ describe("live-opslaget og en langsom leverandør (G109)", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  // 🔴 DEN TEST, DER MANGLEDE — og som ville have fanget, at G109s gen-forsøg
+  // aldrig fyrede i produktion.
+  //
+  // Testen ovenfor lader `fetchImpl` kaste ØJEBLIKKELIGT, så uret ikke er
+  // rykket, når budgettet spørges. Et rigtigt timeout tager derimod HELE
+  // tidsgrænsen — og så var `fits(0)` (`timeLeftMs() >= perCall`) falsk med et
+  // budget på præcis 2 × grænsen, hver eneste gang. Aflæst i produktionen
+  // 14. august 2026: de fejlende kørsler tog 21,7 s hos cron-job.org, ikke de
+  // ~41 s, to forsøg ville have kostet.
+  it("prøver igen efter et timeout, der tog HELE tidsgrænsen", async () => {
+    const { LIVE_TIMEOUT_MS } = __test;
+    let ur = 0;
+    const fetchImpl = vi.fn(async () => {
+      // Et rigtigt timeout: grænsen plus den smule, opsætningen koster.
+      ur += LIVE_TIMEOUT_MS + 120;
+      throw timeout();
+    });
+    await expect(
+      sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl, now: () => ur })
+    ).rejects.toThrow(/Tidsgrænse/);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  // Budgettet er stadig loftet: gen-forsøget må gerne få mindre end en fuld
+  // tidsgrænse, men det skal holde sig inden for det, kørslen har tilbage.
+  it("giver gen-forsøget den tid, der er tilbage — aldrig mere", async () => {
+    const { LIVE_TIMEOUT_MS, LIVE_BUDGET_MS } = __test;
+    let ur = 0;
+    const fetchImpl = vi.fn(async () => { ur += LIVE_TIMEOUT_MS + 120; throw timeout(); });
+    await expect(
+      sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl, now: () => ur })
+    ).rejects.toThrow(/Tidsgrænse/);
+    const [, andet] = fetchImpl.mock.calls;
+    expect(andet[2]).toBeLessThanOrEqual(LIVE_TIMEOUT_MS);
+    expect(andet[2]).toBeGreaterThan(0);
+    // Summen af de to grænser må ikke kunne sprænge budgettet.
+    expect(fetchImpl.mock.calls[0][2] + andet[2]).toBeLessThanOrEqual(LIVE_BUDGET_MS);
+  });
+
   // Grænsen er hævet netop dér, hvor problemet er — ikke overalt. De to
   // sæson-opslag kører hver 12. time og har ingen grund til at vente længere.
   it("sender live-kaldet med sin egen, højere tidsgrænse", async () => {
@@ -379,15 +418,39 @@ describe("live-opslaget og en langsom leverandør (G109)", () => {
 
   // Selve grunden til, at budgettet findes. Uden det ville et gen-forsøg efter
   // et 20-sekunders kald kunne fortsætte ind i Vercels afklipning.
-  it("prøver IKKE igen, når budgettet ikke rækker til et kald mere", async () => {
-    const { LIVE_BUDGET_MS } = __test;
+  //
+  // Grænsen er `LIVE_MIN_CALL_MS` og ikke en hel tidsgrænse mere (`G116`): et
+  // gen-forsøg med resten af budgettet er et rigtigt gen-forsøg, et med under
+  // to sekunder er ikke. Kravet om en HEL grænse var netop dét, der gjorde
+  // gen-forsøget til død kode, når budgettet var 2 × grænsen.
+  it("prøver IKKE igen, når der ikke er tid til et kald, der er værd at sende", async () => {
+    const { LIVE_BUDGET_MS, LIVE_MIN_CALL_MS } = __test;
     let ur = 0;
-    // Første kald "tager" alt på nær et par sekunder af budgettet.
-    const fetchImpl = vi.fn(async () => { ur += LIVE_BUDGET_MS - 5_000; throw timeout(); });
+    // Første kald "tager" alt på nær mindre end det mindste brugbare kald.
+    const fetchImpl = vi.fn(async () => {
+      ur += LIVE_BUDGET_MS - (LIVE_MIN_CALL_MS - 500);
+      throw timeout();
+    });
     await expect(
       sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl, now: () => ur })
     ).rejects.toThrow(/Tidsgrænse/);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  // Den anden side af samme grænse — uden den ville testen ovenfor være grøn
+  // for en implementering, der aldrig prøver igen (præcis den, `G116` fandt).
+  it("prøver igen, når der lige akkurat ER tid til et kald", async () => {
+    const { LIVE_BUDGET_MS, LIVE_MIN_CALL_MS } = __test;
+    let ur = 0;
+    const fetchImpl = vi.fn(async () => {
+      ur += LIVE_BUDGET_MS - (LIVE_MIN_CALL_MS + 500);
+      throw timeout();
+    });
+    await expect(
+      sportmonks.fetchLive({ providerIds: ["7"], token: "t", fetchImpl, now: () => ur })
+    ).rejects.toThrow(/Tidsgrænse/);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[1][2]).toBe(LIVE_MIN_CALL_MS + 500);
   });
 
   // Samme regel for 429-pausen: en pause på op til 30 sekunder oven på et

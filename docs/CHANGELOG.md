@@ -9,6 +9,28 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — `G116`: gen-forsøget fra `G109` havde aldrig fyret én eneste gang
+
+**Sagen begyndte som et spørgsmål fra ejeren og endte tre lag nede.** Livescoren opdaterede ikke under Viborg FF–AGF, og resultatet måtte tastes i hånden. `G115` forklarede, hvorfor driftskortet stod grønt imens. Denne række forklarer, hvorfor `G109`s rettelse kun halverede problemet i stedet for at fjerne det.
+
+**Selve slutfløjtet var ikke vores fejl.** Kørslerne i `job_runs` viser, at `sync-live` meldte `live: 1, finished: 0` helt frem til **21:05**, og først 21:06 skrev det endelige resultat. Sportmonks holdt altså kampen i gang i omtrent et kvarter efter det rigtige slutfløjt — på den samme aften, hvor dens livescore-endpoints skiftevis timede ud og svarede `503`. Koden gjorde nøjagtig det rigtige: **et endeligt resultat skrives kun, når kilden melder slut**, og at gætte ud fra en live-stilling ville være at gøre point til et øjebliksbillede. Den manuelle indtastning var det rigtige indgreb.
+
+**Men det, der stod tilbage, var et tal, der ikke passede.** Efter `G109`-deployet (20:36) fejlede 12 af 30 kørsler — 40 %, hvor det havde været 68 %. Halvdelen var `503` fra leverandøren selv, som ingen tidsgrænse kan fikse. Den anden halvdel var timeouts, og dem skulle `G109`s gen-forsøg have taget. **Beviset for at det ikke skete, var ikke fejlteksten — den var uændret — men VARIGHEDEN:** cron-job.org viste 21,7 sekunder for de fejlende kørsler. To forsøg à 20 sekunder ville have taget ~41.
+
+**Årsagen er to konstanter, der gik præcis op.** `LIVE_BUDGET_MS` var 40.000 og `LIVE_TIMEOUT_MS` 20.000, og gen-forsøget krævede `timeLeftMs() >= perCall` — altså en HEL tidsgrænse tilbage af budgettet. Men et timeout har pr. definition brugt hele tidsgrænsen, så der manglede altid de få millisekunder, opsætningen koster. **Betingelsen var falsk hver eneste gang.** `G109`s egen kommentar skrev regnestykket ordret — *"40 s budget er 20 s kald + 20 s gen-forsøg"* — uden at nogen bemærkede, at et regnestykke, der går præcis op, ikke har plads til virkeligheden.
+
+**Testen så det ikke, og grunden er værd at holde fast i.** Dens `fetchImpl` kastede sit timeout **øjeblikkeligt**, så uret ikke var rykket, når budgettet blev spurgt. Testen var derfor grøn for både den rigtige og den forkerte implementering. **En test af et tidsbudget skal bruge tid.** Der er nu to, som kaster efter en hel tidsgrænse — og de var røde, før rettelsen blev skrevet.
+
+**Rettelsen fjerner koblingen frem for at give den mere luft.** Gen-forsøget får `min(perCall, resten af budgettet)` og kræver kun `LIVE_MIN_CALL_MS` — et gen-forsøg med resten er et rigtigt gen-forsøg, et med to sekunder er ikke. I praksis er det 19,9 sekunder mod 20, hvilket ikke er til at måle mod en leverandør, hvis svartid vandrer omkring grænsen. **Budgettet er stadig loftet; det er bare ikke længere også en usynlig betingelse for, at gen-forsøget overhovedet findes.** At hæve budgettet til 45 sekunder ville have virket i dag og stillet den samme fælde igen ved næste ændring af et af de to tal.
+
+**429-pausen beholder den strenge form** (plads til en fuld tidsgrænse efter pausen). Dér er første kald et hurtigt svar, så budgettet er reelt urørt, og `G48`s afvejning — hellere fejle højlydt end vente en ventetid, Vercel klipper over — er uændret.
+
+**Verificeret:** 1384 tests (+3 i `api/_providers/sportmonks.test.js`, heraf to der var røde før rettelsen), lint uændret på loftet (7 advarsler), build grønt. **Intet skal køres i Supabase for denne række.**
+
+**Hvad rækken ikke løser:** halvdelen af fejlene var `503 upstream connect error` fra Sportmonks. Det er leverandørens eget nedbrud, og hverken en tidsgrænse eller et gen-forsøg hjælper på det.
+
+---
+
 14. august 2026 — `G115`: driftskortet stod grønt hele vejen igennem en nedetid, det målte
 
 **Symptomet er det vigtigste ved rækken: kortet så rigtigt ud.** Under `G109` fejlede `sync-live` omtrent to ud af tre minutter i en time, mens Admin → Drift stod på **OK** og **Fejl i træk: 0**. Livescoren var frossen, en færdigspillet kamp blev ikke færdigmeldt, og den, der gjorde det eneste rigtige — kiggede i driftsloggen — fik at vide, at alt var i orden.

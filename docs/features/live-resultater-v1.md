@@ -55,6 +55,8 @@ Uændrede skrivninger springes over, så databasen ikke bankes på hvert minut u
 
 *(Tilføjet efter levering, `G109`, 14. august 2026: trin 3 har sin **egen** tidsgrænse på 20 sekunder pr. kald — ikke de 10, `G19` gav alle andre udgående kald — plus ét gen-forsøg, hvis svaret helt udebliver, og et samlet budget på 40 sekunder for hele opslaget. Baggrunden er en aften, hvor Sportmonks svarede på 7-13 sekunder og dermed fejlede i to ud af tre minutter uden nogensinde at sende en fejl. Begrundelsen for hvert af de tre tal står i `api/_providers/sportmonks.js` og i `DOCUMENTATION.md` §8.)*
 
+*(Rettet efter levering, `G116`, 14. august 2026: **gen-forsøget virkede ikke.** Budgettet var præcis 2 × tidsgrænsen, og gen-forsøget krævede en hel tidsgrænse tilbage — mens et timeout pr. definition har brugt hele grænsen. Det fyrede derfor aldrig i produktion, hvilket kunne aflæses på kørslernes varighed hos cron-job.org: 21,7 sekunder mod de ~41, to forsøg koster. Det får nu `min(20 s, resten af budgettet)`. De 40 sekunder er uændrede.)*
+
 **Sidegevinst:** funktionen færdigmelder også kampe. Før ventede en færdigspillet kamp på næste `sync-matches`-kørsel (dengang hvert 10.-15. minut, i dag hver 12. time); nu opdaterer stillinger og rating inden for et minut efter slutfløjt. `sync-matches` bevares uændret (ét job pr. liga; kadencen er siden skruet ned til hver 12. time) og passer kampprogram, flyttede kampe og nye hold.
 
 ## 5. Brugerfladen

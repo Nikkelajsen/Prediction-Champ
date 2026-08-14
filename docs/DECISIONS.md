@@ -15,6 +15,22 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — `G116`: et tidsbudget må ikke være en usynlig betingelse for det, det skal begrænse
+
+**Beslutning:** gen-forsøget ved timeout i `smFetch()` får `min(perCall, resten af budgettet)` og kræver kun `LIVE_MIN_CALL_MS` tilbage — ikke en hel tidsgrænse. Budgettet (`LIVE_BUDGET_MS`) forbliver 40 sekunder og forbliver loftet.
+
+**Begrundelse.** `G109` tilføjede et gen-forsøg og et budget samme dag og satte budgettet til præcis 2 × tidsgrænsen med kommentaren *"40 s budget er 20 s kald + 20 s gen-forsøg"*. Regnestykket går op på papiret og aldrig i virkeligheden: et timeout bruger hele tidsgrænsen plus den smule, opsætningen koster, så betingelsen *"er der en hel tidsgrænse tilbage?"* var falsk hver eneste gang. Gen-forsøget var død kode fra det øjeblik, det blev skrevet, og det blev opdaget fem timer senere ved at sammenholde kørslernes varighed hos cron-job.org (21,7 s) med, hvad to forsøg ville koste (~41 s).
+
+**Hvorfor ikke bare hæve budgettet til 45 sekunder.** Det ville virke i dag og genskabe fælden ved næste ændring af et af de to tal — koblingen "budget = 2 × grænse" stod ingen steder som en regel, og den næste, der justerer tidsgrænsen, har ingen grund til at kigge på budgettet. **Den rigtige rettelse på en skjult kobling er at fjerne den, ikke at give den mere luft.**
+
+**Prisen er 100 millisekunder af gen-forsøget** (19,9 sekunder mod 20). Mod en leverandør, hvis svartid vandrer omkring grænsen, er det ikke til at måle.
+
+**429-pausen beholder den strenge form**, og det er ikke en inkonsekvens: dér er første kald et hurtigt SVAR, så budgettet er reelt urørt, når spørgsmålet stilles, og `G48`s afvejning er en anden — hellere fejle højlydt end vente en ventetid, Vercel klipper over.
+
+**Den generelle regel, rækken efterlader:** *en test af et tidsbudget skal bruge tid.* `G109`s test kastede sit timeout øjeblikkeligt og var derfor grøn for både den rigtige og den forkerte implementering. Det er samme klasse som `G103`s vagt, der var grøn to gange, før den målte noget — en test, man ikke har set fejle, er ikke set.
+
+---
+
 ## 14. august 2026 — `G115`: driftskortet måler nu en fejlrate, ikke kun en fejlserie
 
 **Beslutning:** `admin_job_health()` svarer også fejlraten i **to** vinduer — sidste time og sidste døgn — og et job vises som `ustabil`, når mindst 10 % af mindst fem kørsler i **enten** vinduet fejlede, også når den seneste kørsel lykkedes.

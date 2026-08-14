@@ -86,6 +86,18 @@ function retryAfterMs(res) {
 // levner 20 s til Supabase-opslagene og selve skrivningen. Jobbet kører hvert
 // minut, så en kørsel, der bruger hele budgettet, er en fejl og ikke en langsom
 // succes — men den skal fejle som en fejl, ikke som en afklipning.
+//
+// 🔴 **DET REGNESTYKKE VAR SELV FEJLEN (`G116`, 14. august 2026).** "20 s kald
+// + 20 s gen-forsøg" går præcis op i 40, og gen-forsøget krævede en HEL
+// tidsgrænse tilbage af budgettet — mens et timeout pr. definition har brugt
+// hele tidsgrænsen. Der manglede altså altid de få millisekunder, opsætningen
+// koster, og **gen-forsøget kunne aldrig fyre.** Målt i produktionen samme
+// aften: de fejlende kørsler tog 21,7 s hos cron-job.org, ikke ~41.
+//
+// De to tal er derfor ikke længere koblet: gen-forsøget får `min(perCall,
+// resten af budgettet)` og kræver kun `LIVE_MIN_CALL_MS`. Budgettet er stadig
+// loftet — det er bare ikke længere også en usynlig betingelse for, at
+// gen-forsøget overhovedet findes. Se `smFetch()` nedenfor.
 const LIVE_TIMEOUT_MS = 20_000;
 const LIVE_BUDGET_MS = 40_000;
 // Under dette er der ikke tid til et kald, der er værd at sende. En klump, der
@@ -107,24 +119,54 @@ const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 //   timeoutMs       tidsgrænse for dette kald (ellers `fetchWithTimeout`s egen)
 //   retryOnTimeout  ét gen-forsøg, når kaldet løb ud i tid (G109)
 //   timeLeftMs()    hvor meget af kalderens samlede budget der er tilbage
+//   minCallMs       under dette er der ikke tid til et kald, der er værd at sende
 //
 // Budgettet er en FORUDSÆTNING for begge gen-forsøg og ikke en oprydning
 // bagefter: både et gen-forsøg og en 429-pause tager tid, som kørslen måske
 // ikke har, og et gen-forsøg, der bliver klippet over af Vercel, er værre end
 // intet gen-forsøg — det efterlader ingen fejl at læse.
+//
+// 🔴 GEN-FORSØGET VED TIMEOUT KRÆVER **RESTEN AF BUDGETTET**, IKKE EN HEL
+// TIDSGRÆNSE MERE (`G116`, 14. august 2026). Betingelsen var `timeLeftMs() >=
+// perCall`, og budgettet var præcis 2 × `perCall` — så efter et timeout, der
+// pr. definition har brugt HELE tidsgrænsen, var der altid nogle få
+// millisekunder for lidt tilbage. **Gen-forsøget kunne dermed aldrig fyre i
+// produktion.** Aflæst hos cron-job.org 14. august 2026: de fejlende kørsler
+// tog 21,7 sekunder, ikke de ~41, to forsøg ville have kostet.
+//
+// Testen så det ikke, fordi dens `fetchImpl` kastede ØJEBLIKKELIGT: uret var
+// ikke rykket, når budgettet blev spurgt, så `fits(0)` var sand. **En test af
+// et tidsbudget skal bruge tid** — ellers måler den alt andet end det, den
+// hedder. Der er nu to, som begge kaster efter en hel tidsgrænse.
+//
+// Gen-forsøget får derfor `min(perCall, resten)`. I praksis er det 19,9 s mod
+// 20 — forskellen er ikke til at måle mod en leverandør, hvis svartid vandrer
+// omkring grænsen — og til gengæld er koblingen "budget = 2 × grænse" væk. Den
+// var ikke skrevet ned nogen steder og kunne brydes igen af en ændring i ét af
+// de to tal.
 export async function smFetch(url, fetchImpl, sleep = defaultSleep, opts = {}) {
-  const { timeoutMs = null, retryOnTimeout = false, timeLeftMs = () => Infinity } = opts;
+  const {
+    timeoutMs = null, retryOnTimeout = false, timeLeftMs = () => Infinity, minCallMs = null,
+  } = opts;
   const perCall = timeoutMs ?? FETCH_TIMEOUT_MS;
-  const call = () => (timeoutMs ? fetchImpl(url, {}, timeoutMs) : fetchImpl(url));
+  const call = (ms = perCall) => (timeoutMs ? fetchImpl(url, {}, ms) : fetchImpl(url));
   // Er der plads til at vente `waitMs` OG derefter sende ét kald mere?
+  // 429-pausen bruger fortsat den STRENGE form (plads til en fuld tidsgrænse
+  // efter pausen): dér er første kald et hurtigt svar, så budgettet er reelt
+  // urørt, og `G48`s afvejning — hellere fejle højlydt end vente en ventetid,
+  // Vercel klipper over — er uændret.
   const fits = (waitMs) => timeLeftMs() >= waitMs + perCall;
 
   let res;
   try {
     res = await call();
   } catch (e) {
-    if (!retryOnTimeout || !isTimeoutError(e) || !fits(0)) throw e;
-    res = await call();
+    if (!retryOnTimeout || !isTimeoutError(e)) throw e;
+    const rest = timeLeftMs();
+    // `minCallMs` og ikke `perCall`: et gen-forsøg med det, der er tilbage, er
+    // et rigtigt gen-forsøg — et med to sekunder er ikke.
+    if (rest < (minCallMs ?? perCall)) throw e;
+    res = await call(Math.min(perCall, rest));
   }
   if (res.status === 429) {
     const waitMs = retryAfterMs(res);
@@ -390,7 +432,7 @@ export const sportmonks = {
       };
       const call = (include) => smFetch(
         `${endpoint}?include=${include}&api_token=${token}`, fetchImpl, sleep,
-        { timeoutMs: nextTimeout(), retryOnTimeout: true, timeLeftMs }
+        { timeoutMs: nextTimeout(), retryOnTimeout: true, timeLeftMs, minCallMs: LIVE_MIN_CALL_MS }
       );
       // periods giver spilleminuttet. Er den include ikke med i abonnementet,
       // svarer Sportmonks 4xx — så prøver vi igen uden, og viser kampen live
