@@ -74,7 +74,7 @@ der melder sig i selve låsesekundet, og én, der når det med ét sekund.
 **Efterprøvet med tre SQL-mutationer og én JS-mutation, alle fanget**, og den
 første gengiver den oprindelige fejl ordret. **Alle seksten skema-indlæsende
 tests kørt med migreringen anvendt**, og simulatoren fra begge sider.
-**Intet skal køres bagud; `#61` skal køres i Supabase.**
+**Intet skal køres bagud.** ✅ **`#61` er kørt i staging og produktion 14. august 2026**, og alle tre verifikationer er aflæst: leddet står i både viewet og funktionen, ingen rækker slipper længere igennem viewet fra før en tilmelding, og ingen opretter blev ramt. 🔶 Tilbage står skema-eksporten.
 
 ---
 
