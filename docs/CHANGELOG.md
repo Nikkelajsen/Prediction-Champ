@@ -9,6 +9,22 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+14. august 2026 — Fuld konsistensgennemgang: dokumentationen i trit med koden, hjemmesiden i trit med appen
+
+**Seks parallelle gennemlæsninger holdt hele dokumentfladen op mod repoet** — `DOCUMENTATION.md` §1–§25, drift-runbøgerne (`CRON`/`MAIL`/`DOMAENE`/`OPRETTELSE`/`RESTORE`/`STAGING`/`UDRULNING-A43`), `sql/README.md` + CI, hjemmesiden i `site/`, og styringsdokumenterne indbyrdes — og rettede ~60 uoverensstemmelser. Fundene faldt i to store klasser: **antalsdrift** (moduler, regler, metrikker, afhængigheder, flag — flere steder er tallet nu enten dateret eller fjernet efter `G21`s princip om, at et tal, ingen opdaterer i samme ombæring, ikke hører hjemme i prosa) og **døde fil:linje-ankre** (MAIL, RESTORE, DOMAENE m.fl. pegede på linjer, der er flyttet — ankrene er erstattet med navne).
+
+**To migreringer manglede på gen-kørselslisten, og det var det alvorligste fund:** `#18 job_runs.sql` og `#27 security_hardening.sql` genskaber policies i den gamle form, der læser `profiles.is_admin` direkte — afløst af `is_platform_admin()` i `#60`, og efter `#60` FEJLER den gamle form med `42501` i stedet for at filtrere: Admin → Drift går i sort, netop på skærmen man verificerer en gendannelse med. Begge filer bærer nu advarslen selv, står i `sql/README.md`s liste, og `RESTORE.md`s scenarie 3-kopi af listen — som var drevet til fire rækker mod kildens tolv — er nedlagt til fordel for et opslag i kilden.
+
+**Hjemmesiden lovede fem ting, appen ikke holder, og copy'en er rettet:** "stillingen følger med live" (point, stilling og rating flytter sig først ved slutfløjt — live er visning; `+3`-pillen er taget af Live-mockup'en), "justér frit indtil kickoff" (tips låser en time før — sætningen modsagde sin egen naboboks), "en påmindelse, når runden åbner" (påmindelsen findes ikke; den, der findes, fyrer FØR en lås), "ratingen er endelig mandag aften" (den er endelig, når rundens sidste kamp er slut), og et opdigtet story-citat ("Du har slået Anders fem runder i træk"), som netop var den klasse, `G103` fjernede — det står nu med motorens egen ordlyd ("Du gik forbi Anders"). Desuden "En liga forsvinder aldrig" → "En liga slutter ikke med sæsonen" (en admin KAN slette en inaktiv liga), og overskriften "Månedskonkurrencer" → "Månedschampionship" (appens eget ord).
+
+**`public/manifest.json` bar stadig Prediction-Champ-æraens beskrivelse** ("Forudsig fodboldresultater …") — den tekst, installationsprompten og hjemmeskærmen viser, og den eneste selvbeskrivelse uden en vagt. Den bærer nu sælgesætningen og er den sjette fil under `saelgesaetning.test.js` (5 → 6 målte steder).
+
+**Styringsdokumenterne er bragt i indbyrdes trit:** CLAUDE.md's rutetabel har fået de rækker, der manglede (Story Engine routede til v1-spec'en — nu v3 — plus milepæle, hjemmesiden, `opret-flow-v2`, `UDRULNING-A43.md` og `docs/reviews/`), ROADMAP'ens "eksplicitte næste handling" pegede på en runbog, der blev kørt for tre dage siden (sætningen udpeger nu backloggen frem for selv at ruste), `A52` er ført ind i ROADMAP (den manglede kun dér), Story Engine-rækken i MVP-tabellen kender nu v2/v3, to "Nyeste øverst"-brud er rettet (et 10. august-indslag stod mellem to 11. august-indslag her i filen; et 8. august-indslag mellem to 7. august i `DECISIONS.md`), og backloggens tre stale celler om `I8`/`A50`/bevis 6+7 samt den afgjorte `A46`-række i "Åbne beslutninger" er ført ajour efter filens egen regel. Én lukket række — B31 — viste sig at mangle sin arkivpost; det står som hul i indbakken frem for at blive digtet efter hukommelsen.
+
+**Verificeret:** 1355 tests (én ny — manifest-vagten), lint uændret på loftet (7 advarsler), build grønt, og begge site-vagter (`saelgesaetning`, `story-eksempler`) grønne mod de rettede sider.
+
+---
+
 14. august 2026 — Tier 5: tre steder, hvor to svar på det samme spørgsmål kunne nå at afvige
 
 **Backloggens Tier 5 er kørt, og tieret er tømt — listen er 33 → 30.**
@@ -724,15 +740,6 @@ når aldrig et deploy. Det, der udestår, står i backloggen: `A50` (serveres
 
 ---
 
-10. august 2026 — Markøren hoppede ud af hvert tekstfelt i en dialog
-**Meldt af en bruger på "Skift brugernavn": knappen virker, men hvert bogstav kræver et nyt klik.** Feltet stod fast på det første tegn.
-**Fejlen lå i `Modal` og ikke i den nye skærm.** Effekten havde `onClose` i sin deps-liste, og hvert eneste kaldssted sender en inline-funktion (`onClose={() => setÅben(false)}`), som har ny identitet ved hver render. Deps ændrede sig altså, hver gang dialogen tegnede — og effekten gør to ting, der ikke tåler gentagelse: den flytter fokus til dialogkortet og gemmer, hvad der var fokuseret før. Ét bogstav → state ændret → render → ny `onClose` → oprydning og ny kørsel → `kortRef.current.focus()` → markøren røg ud af feltet.
-**Den er ældre end `B29` og har ramt to andre dialoger hele tiden:** feedback-formularens tekstfelt og LUK-feltet i "Luk din konto". Ingen af dem meldte den, fordi man skriver få tegn dér og kommer igennem alligevel — navnefeltet er det første sted, man skriver et helt ord.
-**Effekten kører nu én gang (`[]`), og `onClose` læses gennem en ref.** Sidegevinst: `foer` — elementet, der får fokus tilbage ved lukning — er nu det, der var fokuseret, da dialogen ÅBNEDE. Før var det, hvad der tilfældigvis var fokuseret ved sidste kørsel, altså ofte et felt inde i dialogen, som er væk, når oprydningen kalder `focus()`.
-**Efterprøvet i en rigtig Chromium**, fordi testopsætningen bevidst er uden jsdom og en fokusfejl ikke kan ses uden en browser: den rigtige `Modal` monteret med et felt, fire tastetryk, fokus aflæst efter hvert. Med rettelsen står der "Anna" og fokus bliver i feltet; **med den gamle kode rulles tilbage, står feltet på "A" og fokus på `dialog` fra første tast** — altså brugerens melding, gengivet. Reglen står i `DOCUMENTATION.md` §13: en effekt, der flytter fokus, må ikke have en callback-prop i sine deps.
-
----
-
 11. august 2026 — `A40` er udrullet: hullet er lukket i produktion
 **Begge migreringer er kørt, og rækkefølgen holdt.** `#52` (funktionerne) før frontend-mergen, `#53` (policyerne) efter — og ingen bruger oplevede et vindue, hvor en invitation ikke kunne tages imod. Det var hele formålet med at dele migreringen i to, og det er første gang, den form er brugt.
 **Efterprøvet i produktionen på begge måder:** en rigtig invitation af hver slags (`?liga=` og `?join=`, hvor den anden melder ind i to ting på én gang), og et opslag, der svarede **fire** nye policies, **nul** gamle, **tre** funktioner og **nul** ligaer uden medlemmer.
@@ -750,6 +757,15 @@ når aldrig et deploy. Det, der udestår, står i backloggen: `A50` (serveres
 **Den subtile del er `sortBy`.** Hver portion kommer sorteret hjem, men de sættes sammen efter hinanden — så uden den ville rækkefølgen være rigtig for de første 100 kampe og derefter begynde forfra. Runde-inddelingen ville se ud som data, der var noget galt med, ikke som en fejl i koden. Kaldsteder med `order=` sender derfor `sortBy` med, og hjælperen gensorterer med nulls sidst, som `order=` gør.
 **Konverteret er de lister, der kan vokse:** kampe, tips, deltagere og profiler i `home.js`, `PredictionsScreen.jsx`, `competitionState.js`, `competitionStatus.js`, `standings.js`, `groups.js` og `MainApp.jsx`. Lister bundet af antallet af turneringer eller sæsoner (fx `seasons?league_id=in.(…)`) er urørte — de kan ikke nå loftet.
 **Ti nye tests**, heriblandt den, der beviser, at en kort liste giver ét kald med den ordret samme forespørgsel (egenskaben hele lagdelingen hviler på), at 778 id'er bliver til otte kald med hver en URL under 4.200 tegn, og at gensorteringen faktisk retter en portion, der kom hjem i forkert rækkefølge. Symptom, årsag og det tal, man skal aflæse næste gang, står i `DOCUMENTATION.md` §13.
+
+---
+
+10. august 2026 — Markøren hoppede ud af hvert tekstfelt i en dialog
+**Meldt af en bruger på "Skift brugernavn": knappen virker, men hvert bogstav kræver et nyt klik.** Feltet stod fast på det første tegn.
+**Fejlen lå i `Modal` og ikke i den nye skærm.** Effekten havde `onClose` i sin deps-liste, og hvert eneste kaldssted sender en inline-funktion (`onClose={() => setÅben(false)}`), som har ny identitet ved hver render. Deps ændrede sig altså, hver gang dialogen tegnede — og effekten gør to ting, der ikke tåler gentagelse: den flytter fokus til dialogkortet og gemmer, hvad der var fokuseret før. Ét bogstav → state ændret → render → ny `onClose` → oprydning og ny kørsel → `kortRef.current.focus()` → markøren røg ud af feltet.
+**Den er ældre end `B29` og har ramt to andre dialoger hele tiden:** feedback-formularens tekstfelt og LUK-feltet i "Luk din konto". Ingen af dem meldte den, fordi man skriver få tegn dér og kommer igennem alligevel — navnefeltet er det første sted, man skriver et helt ord.
+**Effekten kører nu én gang (`[]`), og `onClose` læses gennem en ref.** Sidegevinst: `foer` — elementet, der får fokus tilbage ved lukning — er nu det, der var fokuseret, da dialogen ÅBNEDE. Før var det, hvad der tilfældigvis var fokuseret ved sidste kørsel, altså ofte et felt inde i dialogen, som er væk, når oprydningen kalder `focus()`.
+**Efterprøvet i en rigtig Chromium**, fordi testopsætningen bevidst er uden jsdom og en fokusfejl ikke kan ses uden en browser: den rigtige `Modal` monteret med et felt, fire tastetryk, fokus aflæst efter hvert. Med rettelsen står der "Anna" og fokus bliver i feltet; **med den gamle kode rulles tilbage, står feltet på "A" og fokus på `dialog` fra første tast** — altså brugerens melding, gengivet. Reglen står i `DOCUMENTATION.md` §13: en effekt, der flytter fokus, må ikke have en callback-prop i sine deps.
 
 ---
 

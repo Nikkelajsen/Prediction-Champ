@@ -1,5 +1,8 @@
 # Milepæle v1 (august 2026)
 
+**Status: ✅ Leveret (august 2026).** Kataloget bor i `src/lib/milestones.js`,
+tabellen i `sql/milestones.sql` (#39); se `DOCUMENTATION.md` §19.
+
 ## 1. Problemet
 
 Milepæle var ikke et begreb i koden. `loadCareerMilestones` hentede alle rækker i `stories` med `priority < 90` og kaldte dem milepæle. Story Engine gemmer **alle** udløste kandidater hver runde — ikke kun den, der vises på Hjem — så en bruger i tre konkurrencer samlede "Kun 3 point op til føringen", "Din bedste runde hidtil" og "2 præcise resultater" op hver eneste uge.

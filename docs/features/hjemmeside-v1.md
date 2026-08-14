@@ -133,12 +133,14 @@ mappen flyttes.
 `leagly.app`-adresser, og de er metadata og links — ikke hentninger). De 23
 CTA'er peger fortsat på `app.leagly.app`.
 
-**Stadig ikke publiceret.** Det, der udestår, står i
+~~**Stadig ikke publiceret.** Det, der udestår, står i
 [`BACKLOG.md`](../BACKLOG.md): `A48` (Beta-mærkatet, som **ikke** findes i
 `site/` — spørgsmålet er først, om det skal), `A49` ("La Liga" vs.
 `leagues.name` = "Primera División"), `A50` (serveres `robots.txt`/`sitemap.xml`
 fra roden?), `B32`, `B33` (`.html`-endelser ved clean URLs), `I22`
-(mobilnavigationen under 880px) og `G103`.
+(mobilnavigationen under 880px) og `G103`.~~ *(Rettet efter levering,
+14. august 2026: siden ER publiceret — se status øverst — og af listen er kun
+`B32` fortsat åben; resten blev lukket 13.–14. august 2026.)*
 
 ## Udrulningsklar — 13. august 2026
 
@@ -186,10 +188,11 @@ containeren blev skubbet 4px ud på fire af de fem sider. Nu `width: min(300px,
 5. ~~**Trin 2 i [`../DOMAENE.md`](../DOMAENE.md)**~~ — **kørt 14. august 2026.**
    Vercel-projektet er oprettet med root directory `site`, og `leagly.app` er
    live. `A50` blev bevist i samme ombæring: `/robots.txt` og `/sitemap.xml`
-   serveres fra roden. **Listen er dermed tom — `I8` er leveret.** To ting er
-   endnu ikke aflæst og står som bevis 6 og 7 i runbogen: hjemmesidens egne
-   svar-headere (CSP'en fra `site/vercel.json` har aldrig kørt i produktion) og
-   `www.leagly.app` → apex.
+   serveres fra roden. **Listen er dermed tom — `I8` er leveret.** ~~To ting er
+   endnu ikke aflæst og står som bevis 6 og 7 i runbogen~~ *(aflæst og bestået
+   senere samme dag, 12:51–12:52 UTC — se `CHANGELOG.md` og `DOMAENE.md`)*:
+   hjemmesidens egne svar-headere (CSP'en fra `site/vercel.json` svarer ord
+   for ord i produktion) og `www.leagly.app` → apex (308).
 2. ~~**Kontakt-mail**~~ — **lukket 9. august 2026 med `B25`.** `om.html` bruger
    nu `kontakt@leagly.app`, som er en rigtig Microsoft 365-postkasse; den samme
    adresse står i `src/lib/legal.js`, og `docs/mail/templates.test.js` holder de
@@ -205,8 +208,10 @@ containeren blev skubbet 4px ud på fire af de fem sider. Nu `width: min(300px,
 4. ~~**SEO** (`I9`) — OG-tags, sitemap, indeksering~~ — **halvt lukket
    13. august 2026 med andet udkast.** Metadataen er skrevet (se ovenfor), og
    `I17` er dermed leveret. Tilbage er det, der kræver en publiceret side:
-   indeksering, Search Console og `A50`s aflæsning af, om `robots.txt` og
-   `sitemap.xml` faktisk serveres fra roden.
+   indeksering og Search Console (`I9`). ~~Og `A50`s aflæsning af, om
+   `robots.txt` og `sitemap.xml` faktisk serveres fra roden~~ *(bevist
+   14. august 2026 — se punkt 5 ovenfor; `A50` er lukket og slettet af
+   backloggen)*.
 
 ## Verifikation af udkastet
 
@@ -214,7 +219,9 @@ Kørt 3. august 2026 med Chromium (Playwright) mod `file://`: alle 5 sider i
 1280 px og 390 px — fonte loader fra `site/fonts/`, nul eksterne requests,
 ingen vandret scroll, ingen konsolfejl. `npm run lint` og `npm test` uændrede
 (`site/` indeholder kun HTML, CSS og — siden 13. august 2026 — `vercel.json`,
-og mappen ligger uden for begge).
+og mappen ligger uden for begge). *(Rettet efter levering: mappen bærer i dag
+også `robots.txt`, `sitemap.xml`, `fonts/` og `img/` — stadig ingen JS og
+intet, Vite eller Vitest rører.)*
 
 **Kørt igen 13. august 2026** med Chromium (Playwright) mod en lokal server,
 fordi to af kontrollerne ikke kan laves over `file://`:

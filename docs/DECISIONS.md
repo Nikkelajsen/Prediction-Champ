@@ -1971,6 +1971,36 @@ beholde.
 
 ---
 
+## 8. august 2026 — `pg_safeupdate` gjorde "jeg prøvede det i hånden" til et misvisende bevis
+
+**Fundet:** Story Engine v3's dagsmotor indeholdt én `update` uden `where`
+(`update _sd_scored set news_value = …`). Supabase indlæser `pg_safeupdate` via
+`session_preload_libraries` på rollen **`authenticator`**, som PostgREST
+forbinder med, og den afviser sådan en sætning. SQL-editoren forbinder som
+`postgres` og indlæser den ikke.
+
+**Beslutning:** sætningen fjernes frem for at få en `where`. `where true` er ikke
+en pålidelig rettelse — en konstant-sand qual kan planlæggeren folde væk, og så
+står sætningen igen uden qual. `news_value` beregnes i en ydre `select`, hvor
+leddene allerede findes. Fejlklassen bevogtes fremover af vagt 2 i
+`sql/migration_syntax.test.js`; `sql/dev/` er undtaget, og undtagelsen vender
+modsat vagt 1's, fordi editoren er det ene sted, udvidelsen ikke findes.
+
+**Begrundelsen er værd at læse, fordi den retter en slutning, der stod i denne
+log dagen før.** Rækken nedenfor konkluderede, at den kaldende rolle var
+irrelevant, "fordi hele kæden er `security definer` som `postgres`". Det er
+sandt om *rollen* og forkert om *sessionen*: `session_preload_libraries` hører
+til forbindelsen og gælder uanset, hvem funktionen kører som. Præcis den
+fejlslutning gjorde, at det manuelle kald — som lykkedes med 20 rækker — blev
+læst som en afkræftelse af, at der var en fejl, mens det i virkeligheden var
+selve symptomet: **funktionen virkede kun der, hvor udvidelsen ikke var.**
+
+**Det generelle:** en afhængighed, der kun findes i den ene af to veje ind i
+databasen, gør "jeg prøvede det i hånden, og det virkede" til et misvisende
+bevis. Det kostede fire afkræftede hypoteser og en tidsmåling, der alle så
+rigtige ud. Sporet fra rækken nedenfor løste det på **første** kørsel — hvilket
+er den efterprøvning, den rettelse ikke kunne få, da den blev truffet.
+
 ## 7. august 2026 (nat) — En historie skal enten være uafhængig af nuet eller trække sig, når nuet er løbet fra den (`A38`)
 
 **Beslutning:** rundestoryen afløses ikke længere kun af et nyere dagskort. Den
@@ -2003,36 +2033,6 @@ et kort om en anden. En præcis regel ville kræve et opslag pr.
 `story.competition_id` — et ekstra kald og en ny kodesti for nogle timers
 gevinst. **Prisen ved beslutningen er, at top-slottet på Hjem kan stå tomt**,
 indtil dagskortet lander. Ingen historie er bedre end en forkert.
-
-## 8. august 2026 — `pg_safeupdate` gjorde "jeg prøvede det i hånden" til et misvisende bevis
-
-**Fundet:** Story Engine v3's dagsmotor indeholdt én `update` uden `where`
-(`update _sd_scored set news_value = …`). Supabase indlæser `pg_safeupdate` via
-`session_preload_libraries` på rollen **`authenticator`**, som PostgREST
-forbinder med, og den afviser sådan en sætning. SQL-editoren forbinder som
-`postgres` og indlæser den ikke.
-
-**Beslutning:** sætningen fjernes frem for at få en `where`. `where true` er ikke
-en pålidelig rettelse — en konstant-sand qual kan planlæggeren folde væk, og så
-står sætningen igen uden qual. `news_value` beregnes i en ydre `select`, hvor
-leddene allerede findes. Fejlklassen bevogtes fremover af vagt 2 i
-`sql/migration_syntax.test.js`; `sql/dev/` er undtaget, og undtagelsen vender
-modsat vagt 1's, fordi editoren er det ene sted, udvidelsen ikke findes.
-
-**Begrundelsen er værd at læse, fordi den retter en slutning, der stod i denne
-log dagen før.** Rækken nedenfor konkluderede, at den kaldende rolle var
-irrelevant, "fordi hele kæden er `security definer` som `postgres`". Det er
-sandt om *rollen* og forkert om *sessionen*: `session_preload_libraries` hører
-til forbindelsen og gælder uanset, hvem funktionen kører som. Præcis den
-fejlslutning gjorde, at det manuelle kald — som lykkedes med 20 rækker — blev
-læst som en afkræftelse af, at der var en fejl, mens det i virkeligheden var
-selve symptomet: **funktionen virkede kun der, hvor udvidelsen ikke var.**
-
-**Det generelle:** en afhængighed, der kun findes i den ene af to veje ind i
-databasen, gør "jeg prøvede det i hånden, og det virkede" til et misvisende
-bevis. Det kostede fire afkræftede hypoteser og en tidsmåling, der alle så
-rigtige ud. Sporet fra rækken nedenfor løste det på **første** kørsel — hvilket
-er den efterprøvning, den rettelse ikke kunne få, da den blev truffet.
 
 ## 7. august 2026 (nat) — Guarden om story-genereringen skal efterlade et spor, ikke kun beskytte
 

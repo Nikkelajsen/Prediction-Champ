@@ -1,6 +1,6 @@
 # Invitationsflowet v1 (`I7`)
 
-Leveret 11. august 2026. Beslutningerne bag: `DECISIONS.md` 11. august 2026
+**Status: ✅ Leveret 11. august 2026.** Beslutningerne bag: `DECISIONS.md` 11. august 2026
 (`A41`, crawler-portvagten, `B20`-fravalget). Migrering: `sql/invite_preview.sql`
 (`#54`).
 

@@ -1,7 +1,7 @@
 {
   "name": "Leagly",
   "short_name": "Leagly",
-  "description": "Forudsig fodboldresultater og konkurrér med vennerne.",
+  "description": "Gæt resultaterne af ugens fodboldkampe mod dine venner. Opret en liga, tip kampene, og se hvem der er bedst.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0C1622",
