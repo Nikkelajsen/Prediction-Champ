@@ -10,10 +10,10 @@ appens adresse, brugerne deler** — invitationslinks bygges af
 `window.location.origin` (`GroupScreen.jsx:87`, `BoardScreen.jsx:126`), ikke af
 hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 
-> ✅ **`I8` gater ikke længere trin 2** (13. august 2026): copy er godkendt af
-> ejeren, og resten af `site/` er udrulningsklart. Reglen bag udløseren står
-> stadig — der er ingen grund til at pege et domæne på en hjemmeside, ejeren
-> ikke har godkendt — men betingelsen er opfyldt. **Trin 2 kan køres.** Appens halvdel (trin 1, 4, 5, 6) kan
+> ✅ **`I8` er leveret 14. august 2026 — hjemmesiden er live på `leagly.app`.**
+> Copy blev godkendt 13. august, trin 2 kørt dagen efter. Reglen bag udløseren
+> står stadig som lære: der er ingen grund til at pege et domæne på en
+> hjemmeside, ejeren ikke har godkendt. Appens halvdel (trin 1, 4, 5, 6) kan
 > derimod køres for sig — og bør køres tidligt, fordi prisen stiger med
 > brugertallet: **en installeret PWA er bundet til sin origin**, så alle, der har
 > installeret fra `.vercel.app`, skal installere igen og logge ind på ny.
@@ -40,7 +40,7 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 |---|---|---|
 | Domæne | `leagly.app` | 9. august 2026 — i brug til mail (`B25`) |
 | Registrar | ? | ? |
-| Hjemmesiden (`site/`) | `leagly.app` + `www.leagly.app` → apex | ? — ikke oprettet. **Repoets halvdel er klar 13. august 2026** (`site/vercel.json`, root directory `site`); tilbage er dashboardet, DNS og ejerens godkendelse af copy |
+| Hjemmesiden (`site/`) | `leagly.app` + `www.leagly.app` → apex | ✅ **14. august 2026 — LIVE, meldt af ejeren og delvist bevist.** Vercel-projektet er oprettet (root directory `site`), og `A50` er bestået med et skærmbillede af hver fil: `/robots.txt` og `/sitemap.xml` svarer fra roden med indholdet fra `site/`. **Ikke aflæst: svar-headerne** — CSP'en fra `site/vercel.json` er aldrig set i produktion, og `www` → apex er ikke spurgt. Bevis 6 og 7 nedenfor |
 | Appen | `app.leagly.app` | **13. august 2026 — oprettet og svarer, meldt af ejeren** (trin 1 + 3). Ikke aflæst herfra: udgående HTTPS er spærret i arbejdsmiljøet, så adressen er aldrig blevet spurgt af en maskine. Beviserne nedenfor er stadig det, der afgør det |
 | Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | **13. august 2026 — redirect udrullet og BEVIST** for den første: 308 med `Location: https://app.leagly.app/` (bevis 1). Den anden er ikke spurgt. **Listen er ikke aflæst i Vercel → Domains, og det bliver den ikke** (`A47`, afgjort 13. august 2026): de to ER Vercels standardsæt for et team-projekt, og projektet er aldrig omdøbt. Findes der mod forventning en tredje, dør intet — adressen serverer samme deployment og redirigerer bare ikke; rettelsen er da én regel mere her |
 | Cron-jobbenes værtsnavn | Den gamle adresse (`docs/CRON.md` skriver `<app>`) | ? — men **spørgsmålet er flyttet ind i appen 13. august 2026 (`A46`)**: hver kørsel skriver nu sit værtsnavn i `job_runs.detail`, så de ni værdier aflæses i Admin → Drift frem for i cron-job.org. Svaret findes, når hvert job har kørt én gang efter udrulningen — langsomste skema er hver 12. time. Undtagelsen, der beskytter jobbene imens, er bevist samme dag: `/api/sync-live` på den gamle adresse svarer 401 og ikke 308 (bevis 3b), så de rammer funktionen uanset hvilken adresse de er sat op med |
@@ -83,7 +83,7 @@ hængelås (SSL udstedes typisk inden for en halv time).
 **Projektnavnet røres ikke.** `.vercel.app`-adresserne bliver ved med at svare —
 det er tilsigtet og håndteres i trin 6.
 
-### Trin 2 — hjemmesiden får `leagly.app` *(klar til at køre)*
+### Trin 2 — hjemmesiden får `leagly.app` ✅ *14. august 2026*
 
 Nyt Vercel-projekt med **root directory `site`** og **intet build command**
 (mappen er ren HTML/CSS og ligger med vilje uden for Vite-buildet — vælg
@@ -101,10 +101,11 @@ Apex-domæner kan ikke bruge CNAME; brug den A-record, Vercel oplyser i panelet.
 > repoets rod er urørt og læses kun af app-projektet; de to filer kan ikke se
 > hinanden.
 >
-> **`I8` gater ikke længere trinnet:** copy er godkendt 13. august 2026, og
-> `site/` er udrulningsklart
-> ([`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md)). Trinnet mangler
-> kun at blive udført.
+> ✅ **Kørt af ejeren 14. august 2026 — hjemmesiden er live.** Copy blev
+> godkendt dagen før ([`features/hjemmeside-v1.md`](./features/hjemmeside-v1.md)),
+> og projektet er oprettet med root directory `site`. **`A50` er bestået i samme
+> ombæring** og er dermed lukket: begge filer serveres fra roden.
+> **`I8` er leveret.**
 >
 > **Begge projekter bygger på hvert push til `main`.** Det er harmløst — et
 > statisk site uden build command deployer på sekunder — men generer støjen,
@@ -112,9 +113,12 @@ Apex-domæner kan ikke bruge CNAME; brug den A-record, Vercel oplyser i panelet.
 > (`git diff --quiet HEAD^ HEAD -- .`; exit 0 = spring over). Den står med vilje
 > ikke i `vercel.json`, fordi den ikke kan efterprøves herfra.
 
-**Efter trin 2, kør `A50`s aflæsning med det samme:** åbn
-`https://leagly.app/robots.txt` og `https://leagly.app/sitemap.xml`. De skal
-svare 200 med indholdet fra `site/` — ikke 404 og ikke hjemmesidens forside.
+✅ **`A50`s aflæsning er kørt 14. august 2026 og bestået.**
+`https://leagly.app/robots.txt` svarer med `User-agent: * / Allow: /` og
+`Sitemap: https://leagly.app/sitemap.xml`; `/sitemap.xml` svarer med de fem
+`<loc>`-linjer fra `site/sitemap.xml`, `.html`-endelserne intakte (`B33`).
+**Det er også den første bekræftelse på, at root directory `site` er sat
+rigtigt** — havde det stået tomt, ville de to filer ligge på `/site/…`.
 
 > **Hvorfor et selvstændigt projekt frem for en sti i appens?** Appen er en SPA
 > på roden, så sitet skulle vindes tilbage med en rewrite — og en rewrite på en
@@ -122,15 +126,15 @@ svare 200 med indholdet fra `site/` — ikke 404 og ikke hjemmesidens forside.
 > To projekter betyder også, at et deploy af sitet pr. konstruktion ikke kan
 > vælte appen.
 
-### Trin 3 — verificér, at begge adresser svarer 🔶 *appens halvdel 13. august 2026*
+### Trin 3 — verificér, at begge adresser svarer ✅ *14. august 2026*
 
 Åbn `https://app.leagly.app` og `https://leagly.app` i en privat fane. **Først
 her må resten køres.**
 
-`app.leagly.app` svarer (meldt af ejeren 13. august 2026). `leagly.app`s halvdel
-kan pr. konstruktion ikke være kørt, fordi trin 2 ikke er udført endnu — og
-det er i orden: de to halvdele gater hver sin resten. Appens halvdel er den, der
-frigiver trin 4, 5 og 6.
+`app.leagly.app` svarer (meldt af ejeren 13. august 2026), og `leagly.app`
+svarer 14. august 2026 — hjemmesiden er live. **Begge halvdele er dermed kørt**,
+og de gater ikke længere hver sin resten. `www.leagly.app` → apex er den ene del
+af trinnet, ingen har spurgt endnu (bevis 7).
 
 ### Trin 4 — Supabase: Site URL og Redirect URLs ✅ *13. august 2026*
 
@@ -272,6 +276,20 @@ link og ikke en konfiguration, der ser rigtig ud.
    (`vite.config.js`), så den bør følge med af sig selv — **men det er en
    antagelse, indtil den er aflæst.** Gør den ikke, er faldbacken i samme fil
    stedet at rette.
+6. **Hjemmesidens egne headere svarer.** `curl.exe -I https://leagly.app/` skal
+   bære `content-security-policy: default-src 'self'; script-src 'none'; …`
+   samt `x-content-type-options: nosniff` og `referrer-policy`.
+   **`site/vercel.json` er aldrig kørt i produktion**, og en headers-blok, der
+   ikke bliver læst, fejler tavst: siden ser præcis rigtig ud uden den. Findes
+   headeren ikke, er root directory sat forkert eller filen ligger uden for
+   projektets rod. Kontrollér samtidig `cache-control` på en fontfil:
+   `curl.exe -I https://leagly.app/fonts/barlow-400-latin.woff2` skal svare
+   `public, max-age=31536000, immutable`.
+7. **`www.leagly.app` lander på apex.** `curl.exe -I https://www.leagly.app/`
+   → 307/308 med `Location: https://leagly.app/`. Trin 2 beder om redirectet,
+   men intet har målt det, og en `www`, der svarer 200 med samme indhold, er to
+   kanoniske adresser for det samme site — præcis dét, `canonical` og
+   `sitemap.xml` er skrevet for at undgå.
 
 ---
 

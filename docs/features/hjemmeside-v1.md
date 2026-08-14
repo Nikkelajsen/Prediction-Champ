@@ -1,10 +1,14 @@
 # Hjemmeside v1 — første udkast (`I8`)
 
-**Status: første udkast 3. august 2026, andet udkast merget 13. august 2026,
-udrulningsklar og copy GODKENDT 13. august 2026 — IKKE publiceret.** Siderne ligger i
-`site/` i repoets rod, uden for Vite-buildet og uden for ethvert deploy: `vite
-build` bruger kun rodens `index.html` + `public/`, så `site/` når aldrig `dist/`
-og dermed aldrig Vercel. Udkastet ses ved at åbne `site/index.html` direkte i en
+**Status: PUBLICERET 14. august 2026 på `leagly.app`.** Første udkast
+3. august 2026, andet udkast merget 13. august, copy godkendt og sitet gjort
+udrulningsklart samme dag, Vercel-projektet oprettet dagen efter.
+**`I8` er dermed leveret.** Siderne ligger i
+`site/` i repoets rod, uden for Vite-buildet: `vite build` bruger kun rodens
+`index.html` + `public/`, så `site/` når aldrig `dist/`. **Mappen deployes i
+stedet af sit EGET Vercel-projekt med root directory `site`** (14. august 2026,
+[`DOMAENE.md`](../DOMAENE.md) trin 2) — sætningen "uden for ethvert deploy"
+stod her indtil da og gælder ikke længere. Udkastet ses ved at åbne `site/index.html` direkte i en
 browser (`file://` virker) eller via `python3 -m http.server` fra mappen.
 
 ## Formål
@@ -167,11 +171,13 @@ containeren blev skubbet 4px ud på fire af de fem sider. Nu `width: min(300px,
 1. ~~**Ejer-godkendelse af copy og udtryk**~~ — **givet 13. august 2026** af
    ejeren, på et klikbart preview af alle fem sider (andet udkast plus dagens
    burger og Beta-mærkat). Ingen rettelser bestilt.
-5. **Trin 2 i [`../DOMAENE.md`](../DOMAENE.md)** — nyt Vercel-projekt, root
-   directory `site`, intet build command, `leagly.app` + `www.leagly.app`.
-   **Repoets halvdel af trinnet er gjort** (`site/vercel.json`); tilbage er
-   dashboardet og DNS. **Det er nu `I8`s eneste åbne punkt**, og det ligger
-   uden for repoet.
+5. ~~**Trin 2 i [`../DOMAENE.md`](../DOMAENE.md)**~~ — **kørt 14. august 2026.**
+   Vercel-projektet er oprettet med root directory `site`, og `leagly.app` er
+   live. `A50` blev bevist i samme ombæring: `/robots.txt` og `/sitemap.xml`
+   serveres fra roden. **Listen er dermed tom — `I8` er leveret.** To ting er
+   endnu ikke aflæst og står som bevis 6 og 7 i runbogen: hjemmesidens egne
+   svar-headere (CSP'en fra `site/vercel.json` har aldrig kørt i produktion) og
+   `www.leagly.app` → apex.
 2. ~~**Kontakt-mail**~~ — **lukket 9. august 2026 med `B25`.** `om.html` bruger
    nu `kontakt@leagly.app`, som er en rigtig Microsoft 365-postkasse; den samme
    adresse står i `src/lib/legal.js`, og `docs/mail/templates.test.js` holder de
