@@ -15,6 +15,102 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 14. august 2026 — `G103`: hjemmesidens story-eksempler får en vagt, og rækkens egen præmis bliver rettet
+
+**Beslutning:** koblingen mellem `site/index.html`s story-kort og
+`sql/story_engine_v3.sql` bevogtes af en test (`story-eksempler.test.js`) frem
+for af en note i spec'en. Rækken tilbød de to som ligeværdige; de er de ikke.
+En note virker kun for den, der læser spec'en, mens den redigerer SQL'en, og
+det er præcis den person, der ikke gør det — samme argument som `G97` traf for
+sælgesætningen.
+
+**Men vagten kunne ikke måle det, rækken bad om.** Rækken skrev, at sitets
+eksempler ER motorens ægte formuleringer. Det er de ikke ord for ord, og ingen
+af de fire er:
+
+* Motoren sætter ikke punktum efter en overskrift. Sitet gør, fordi kortene
+  står som sætninger på en salgsside.
+* Appen viser overskrift OG brødtekst (`screens/hjem/DayCard.jsx`), mockup'en
+  har én linje. Stime-kortet er derfor overskriftens 🔥 sat foran brødtekstens
+  ordlyd, og halen ("… efter den 3. august") er klippet af.
+* Værdierne er valgt til et skærmbillede: "seks" med bogstaver, hvor motoren
+  indsætter et tal.
+
+Alle tre er redaktionelle valg, ikke drift. **En ordret sammenligning ville
+derfor være en vagt mod noget, ingen har lovet** — og den ville tvinge sitet til
+at skrive dårligere for at holde en test grøn. Vagten måler i stedet **ordene
+mellem værdierne**: sitet markerer sine variable med `<span class="story-var">`,
+hvert kort siger med `data-story-rule`, hvilken regel det citerer, og alt
+derimellem skal stå i dén regels strenge.
+
+**Markeringen bor i sitet og ikke i testen, og det er den samme beslutning som
+`G97`s.** Vagten skriver ikke én kopi af ordlyden — gjorde den det, ville hun
+selv blive det næste sted, der kan drive. Prisen er seks usynlige spans og fire
+attributter i en håndskrevet HTML-fil; gevinsten er, at ordlyden må ændres frit,
+så længe begge sider ændres.
+
+**To ting gjorde den grøn, før den målte noget**, og begge blev fundet ved at
+ødelægge SQL'en med vilje frem for ved at læse testen igennem:
+
+1. **Ordlyden står også i en `--`-kommentar.** Duellens formulering forklares ti
+   linjer over skabelonen (`G89`, hvorfor teksten kom i datid), så en søgning i
+   hele filen finder en formulering, motoren ikke længere bruger. Vagten læser
+   nu kun `'…'`-strenge.
+2. **Ordlyden står også i en anden regel.** "Du sluttede dagen" bruges både af
+   duellen og af regel 45 ("… som nr. 3 af 8"), så et omskrevet duel-kort kunne
+   finde sine ord et andet sted i motoren. Derfor `data-story-rule`, og derfor
+   ledes der kun i kortets egen regel.
+
+**Læren er den generelle:** en vagt, der aldrig er set fejle, er ikke en vagt,
+man har set. Begge huller ville have gjort filen til dekoration — grøn, kørt i
+CI, og blind for præcis det, den blev bygget til.
+
+---
+
+## 14. august 2026 — `G101`: deltagerantallet tælles i databasen, og den idiomatiske vej fravælges, fordi den ikke kan prøves af
+
+**Beslutning:** liga-siden tæller deltagere med `db.count()`, ét opslag pr.
+konkurrence, kørt samtidig med det opslag, der i forvejen spørger om brugeren
+selv. **PostgRESTs indlejrede `competitions?select=*,competition_participants(count)`
+er fravalgt**, selvom den ville være ét kald frem for otte.
+
+**Grunden til at gøre noget var ikke den, rækken angav.** Rækken bar `A43`s
+måling — 2,2 ms for en liga med otte konkurrencer — og konkluderede selv, at
+ombygningen ikke løste noget akut. Målingen står ved magt; den målte bare det
+forkerte. Prisen ved at hente én række pr. deltager er ikke tiden, det er
+**loftet:** PostgREST leverer højst 1000 rækker pr. svar og siger ikke, at den
+klipper, så tallet på konkurrence-kortet ville en dag være for lavt uden en fejl
+nogen steder. Det er den fælde, der kostede "· 0 kampe" i Opret → Sæson
+(`DOCUMENTATION.md` §13, 1. august 2026), og reglen derfra — *tæl i databasen,
+ikke i browseren* — havde bare ét sted tilbage, hvor den ikke var fulgt.
+
+**Fravalget af den indlejrede optælling er et vilkår og ikke en smagssag.**
+`A43`s runbog foreslog i sin tid ét `select competition_id, count(*) … group by`,
+og den forespørgsel findes ikke som et almindeligt PostgREST-opslag: den kræver
+enten aggregat-funktioner på en indlejret ressource eller et nyt databaseobjekt.
+Repoet bruger **ingen** indlejrede selects i dag, så formen ville være ny — og
+den kunne ikke afprøves: arbejdsmiljøets netværkspolitik afviser Supabase, så
+end ikke et tomt svar kunne bekræfte, at syntaksen accepteres af projektet.
+Det er `A32`s snit en gang til, bare på en syntaks frem for på et tal.
+
+**Afvejningen er derfor asymmetrisk.** Gætter man rigtigt, spares syv kald på en
+side, der ikke er langsom. Gætter man forkert, svarer PostgREST 400, og **hele
+liga-siden fejler** — en fungerende side sat på spil for en optimering, rækken
+selv kalder ikke-akut. `db.count()` er husets egen form, den bruges allerede af
+`countMatchesPerLeague()` til nøjagtig samme opgave, og den er dækket af tests.
+
+**Et view med tallene blev også fravalgt**, men på pris frem for på risiko: det
+ville være en migrering, der skal køres i hånden i produktionen, plus grants og
+en test — uforholdsmæssigt for et tal på et kort.
+
+**Rækken fandt sin egen tvilling:** `loadMyGroups()` tæller ligaens medlemmer og
+konkurrencer på præcis samme måde, tolv linjer længere oppe i samme fil. Den er
+**ikke** rettet med, fordi kuren ikke er den samme — nævneren dér er brugerens
+ligaer gange to, så fan-out'en ville blive tyve kald for ti ligaer. Den står som
+`G106` med de tre veje skrevet ned.
+
+---
+
 ## 14. august 2026 — `A52`: Vercel Web Analytics fravælges i appen, og hjemmesiden måles serverside
 
 **Beslutning (produktejeren):** appen får **ikke** Vercel Web Analytics, og

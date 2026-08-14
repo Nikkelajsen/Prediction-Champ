@@ -111,6 +111,18 @@ mappen flyttes.
 4. **Story-eksemplerne er nu motorens ægte formuleringer** (⚔️/🔥/🧠) i stedet
    for opdigtede citater. Det er sandere — og det er en **ny kobling** til
    `sql/story_engine_v3.sql`, som ingen vagt holder øje med: se `G103`.
+   🔵 **Rettet efter levering (14. august 2026, `G103`): vagten findes nu
+   (`story-eksempler.test.js`), og punktets egen formulering var for stærk.**
+   Ingen af de fire kort er motorens ord for ord: sitet sætter punktum, hvor
+   motoren ikke gør, og stime-kortet er overskriftens 🔥 sat foran brødtekstens
+   ordlyd, fordi mockup'en har én linje, hvor appen har to (overskrift +
+   brødtekst, `screens/hjem/DayCard.jsx`). De afvigelser er redaktionelle og
+   bevidste. **Det, der er ægte, er ordene mellem værdierne**, og det er dem,
+   vagten holder fast: hver værdi står i et `<span class="story-var">`, hvert
+   kort siger med `data-story-rule`, hvilken regel det citerer, og alt
+   derimellem skal findes i dén regels strenge i `story_engine_v3.sql`.
+   **Skriver du et nyt eksempel, så marker dets værdier** — ellers måler vagten
+   dem som motor-ordlyd og fejler.
 5. **SEO-metadata, som lukker `I17`:** `canonical`, `theme-color`, favicon,
    apple-touch-icon, `og:`/`twitter:`-tags på alle fem sider og et `og:image`
    på 1200×630 — plus `site/robots.txt` og `site/sitemap.xml`. **Fravalget

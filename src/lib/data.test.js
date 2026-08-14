@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // db mockes, så loaderne kan testes uden netværk/Supabase
-vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), del: vi.fn(), insert: vi.fn() }, restFetch: vi.fn() }));
+vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), count: vi.fn(), del: vi.fn(), insert: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
 import { currentRoundKey, nextRoundKey } from "./scoring.js";
 import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadRoundsAvailable, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadDayCard, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data.js";
@@ -18,7 +18,7 @@ function mockTables(tables) {
 
 // bloksyntaks er vigtig: mockReset() returnerer mocken, og en returneret
 // funktion ville blive kørt af vitest som cleanup-hook (uden argumenter)
-beforeEach(() => { db.select.mockReset(); db.del.mockReset(); db.insert.mockReset(); restFetch.mockReset(); });
+beforeEach(() => { db.select.mockReset(); db.count.mockReset(); db.del.mockReset(); db.insert.mockReset(); restFetch.mockReset(); });
 
 // Rundechampionshippet slår først turneringerne op (leagues → seasons), så begge tabeller
 // skal med i mocken, selv når testen handler om noget andet.
@@ -437,7 +437,7 @@ describe("liga-laget (grupper)", () => {
   });
 
   it("loadGroupDetail samler medlemmer, egen rolle og deltagelse pr. konkurrence", async () => {
-    db.select.mockImplementation(async (token, table, query) => {
+    db.select.mockImplementation(async (token, table) => {
       switch (table) {
         case "groups": return [{ id: "g1", name: "Kontoret", invite_code: "abc" }];
         case "group_members": return [
@@ -446,16 +446,47 @@ describe("liga-laget (grupper)", () => {
         ];
         case "profiles": return [{ id: "u1", display_name: "Anna" }, { id: "u2", display_name: "Bo" }];
         case "competitions": return [{ id: "c1", name: "Superliga", mode: "full_season", group_id: "g1" }];
-        case "competition_participants":
-          return query.includes("user_id=eq.u1") ? [{ competition_id: "c1" }] : [{ competition_id: "c1" }, { competition_id: "c1" }];
+        case "competition_participants": return [{ competition_id: "c1" }];
         default: throw new Error(`uventet tabel: ${table}`);
       }
     });
+    db.count.mockResolvedValue(2);
     const d = await loadGroupDetail("token", "u1", "g1");
     expect(d.isMember).toBe(true);
     expect(d.myRole).toBe("admin");
     expect(d.members).toHaveLength(2);
     expect(d.competitions[0]).toMatchObject({ id: "c1", joined: true, participantCount: 2 });
+  });
+
+  // Deltagerantallet tælles i databasen og ikke i browseren (G101).
+  //
+  // Påstanden er ikke, at tallet er rigtigt — det er testen ovenfor — men at det
+  // kommer fra `db.count()`. Hentede loaderen igen én række pr. deltager og talte
+  // listen, ville tallet stadig være rigtigt i en test med to rækker og forkert i
+  // en liga, hvis deltager-rækker når PostgRESTs 1000-rækkers loft. Det er den
+  // forskel, kun kaldsformen kan vise, og derfor den, der holdes fast her.
+  it("loadGroupDetail tæller deltagere med db.count — ét opslag pr. konkurrence", async () => {
+    db.select.mockImplementation(async (token, table) => {
+      switch (table) {
+        case "groups": return [{ id: "g1", name: "Kontoret", invite_code: "abc" }];
+        case "group_members": return [{ user_id: "u1", role: "admin", joined_at: "2026-01-01" }];
+        case "profiles": return [{ id: "u1", display_name: "Anna" }];
+        case "competitions": return [{ id: "c1", group_id: "g1" }, { id: "c2", group_id: "g1" }];
+        case "competition_participants": return [{ competition_id: "c1", hidden: true }];
+        default: throw new Error(`uventet tabel: ${table}`);
+      }
+    });
+    db.count.mockImplementation(async (token, table, query) => (query === "competition_id=eq.c1" ? 7 : 3));
+    const d = await loadGroupDetail("token", "u1", "g1");
+    expect(db.count).toHaveBeenCalledTimes(2);
+    expect(db.count.mock.calls.map((c) => c[1])).toEqual(["competition_participants", "competition_participants"]);
+    expect(d.competitions.map((c) => c.participantCount)).toEqual([7, 3]);
+    // Det opslag, der ER tilbage om tabellen, spørger kun om MIG — ellers ville
+    // optællingen bare være flyttet og ikke fjernet.
+    const parts = db.select.mock.calls.filter((c) => c[1] === "competition_participants");
+    expect(parts).toHaveLength(1);
+    expect(parts[0][2]).toContain("user_id=eq.u1");
+    expect(d.competitions[0]).toMatchObject({ id: "c1", joined: true, hidden: true });
   });
 
   it("leaveCompetition returnerer true når rækken slettes, false når RLS blokerer", async () => {

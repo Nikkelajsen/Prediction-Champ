@@ -94,7 +94,13 @@
           </div>
           <div class="story-card" style="margin-top: 10px;">
             <p class="eyebrow">Dagens historie</p>
-            <p class="story-text">⚔️ Du sluttede dagen 2 point fra Nikolaj.</p>
+            <!-- STORY-EKSEMPLERNE ER MOTORENS EGNE ORD (G103, 14. august 2026).
+                 Alt i en .story-text, der IKKE står i et <span class="story-var">,
+                 skal findes ordret i sql/story_engine_v3.sql — det håndhæves af
+                 story-eksempler.test.js. Sættes en ny værdi ind (et navn, et tal,
+                 et hold), skal den have sit eget span, ellers måler vagten den
+                 som motor-ordlyd og fejler. Spannet har med vilje ingen CSS. -->
+            <p class="story-text" data-story-rule="DUEL">⚔️ Du sluttede dagen <span class="story-var">2</span> point fra <span class="story-var">Nikolaj</span>.</p>
           </div>
         </div>
       </div>
@@ -185,15 +191,15 @@
           </div>
           <div class="story-card">
             <p class="eyebrow">Kapløbet</p>
-            <p class="story-text">⚔️ Du sluttede dagen 2 point fra Anders.</p>
+            <p class="story-text" data-story-rule="DUEL">⚔️ Du sluttede dagen <span class="story-var">2</span> point fra <span class="story-var">Anders</span>.</p>
           </div>
           <div class="story-card">
             <p class="eyebrow">Stimen</p>
-            <p class="story-text">🔥 Du har fået point i seks kampe i træk. Stimen lever.</p>
+            <p class="story-text" data-story-rule="STREAK_STATUS">🔥 Du har fået point i <span class="story-var">seks</span> kampe i træk. Stimen lever.</p>
           </div>
           <div class="story-card">
             <p class="eyebrow">Modet</p>
-            <p class="story-text">🧠 Du var den eneste, der troede på uafgjort i FCK–Brøndby.</p>
+            <p class="story-text" data-story-rule="CONTRARIAN">🧠 Du var den eneste, der troede på uafgjort i <span class="story-var">FCK</span>–<span class="story-var">Brøndby</span>.</p>
           </div>
         </div>
       </div>
