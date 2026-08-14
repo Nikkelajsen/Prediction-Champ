@@ -61,8 +61,16 @@
 --
 -- ⚠️ **Bagud omskrives intet.** Hver, der ALLEREDE har forladt og genindtrådt,
 -- efterlod ingen række at huske ud fra; deres nulpunkt kan ikke gendannes.
--- Verifikation 3 nedenfor tæller, om der findes nogen — svarer den 0, er
--- rækken lukket uden efterslæb.
+-- Verifikation 3a nedenfor finder dem, der KAN bevises — de bærer en kåring
+-- eller en historie fra før deres eget nulpunkt, og frosne artefakter kan kun
+-- være opstået, mens de deltog.
+--
+-- 🔴 **Efterslæbet kan ikke måles på "gæt, der ikke tæller" alene**, og det er
+-- værd at sige højt, fordi den forespørgsel ligger lige for: en helt almindelig
+-- sen tilmelding giver præcis samme billede, og dét er `A53`s hensigt. De to
+-- tilfælde er kun adskillelige, hvis nogen har gemt, at hun var der før — og
+-- det er nøjagtig dét, denne migrering begynder at gøre. Derfor er 3b en
+-- bruttoliste med et forbehold og ikke en kontrol med et facit.
 
 -- ============================================================================
 -- 1. Hukommelsen
@@ -204,18 +212,44 @@ create trigger competition_participants_restore_baseline
 -- select has_table_privilege('anon', 'public.competition_participant_history', 'SELECT'),
 --        has_table_privilege('authenticated', 'public.competition_participant_history', 'SELECT');
 
--- 3) EFTERSLÆBET: deltagere, hvis nulpunkt ligger EFTER en kamp, de har et
---    tælleligt gæt på i samme konkurrence — altså kandidater til at være
---    ramt af fejlen, før hukommelsen fandtes. Forvent 0 rækker; svarer den med
---    noget, skal `first_joined_at` sættes i hånden for netop dem.
--- select cp.competition_id, cp.user_id, cp.joined_at, min(m.kickoff_at) as tidligste_gaet
+-- 3a) EFTERSLÆBET, BEVIST: deltagere, der bærer et FROSSENT spor fra før deres
+--     eget nulpunkt — en kåring eller en historie i samme konkurrence, dateret
+--     tidligere end `joined_at`. Frosne artefakter kan kun være opstået, mens
+--     hun deltog, så rækken her er ikke en formodning: hun HAR været med før og
+--     er kommet tilbage. Forvent 0; svarer den med noget, sættes
+--     `first_joined_at` i hånden for netop dem.
+-- select cp.competition_id, c.name as konkurrence, p.display_name as spiller, cp.joined_at,
+--        count(*) filter (where a.user_id is not null) as kaaringer,
+--        count(*) filter (where s.user_id is not null) as historier
 --   from public.competition_participants cp
+--   join public.competitions c on c.id = cp.competition_id
+--   join public.profiles p on p.id = cp.user_id
+--   left join public.competition_awards a
+--     on a.competition_id = cp.competition_id and a.user_id = cp.user_id and a.awarded_at < cp.joined_at
+--   left join public.stories s
+--     on s.competition_id = cp.competition_id and s.user_id = cp.user_id and s.created_at < cp.joined_at
+--  where a.user_id is not null or s.user_id is not null
+--  group by cp.competition_id, c.name, p.display_name, cp.joined_at;
+
+-- 3b) KANDIDATER, og læs svaret med det forbehold, 3a findes for: gæt, der
+--     ikke tæller, fordi kampen låste før tilmeldingen. **Forvent IKKE 0 her.**
+--     En helt almindelig sen tilmelding giver præcis dette billede, og det er
+--     `A53`s hensigt og ikke en fejl. Forespørgslen er en bruttoliste at holde
+--     3a op imod — den kan ikke i sig selv skelne "meldte sig sent" fra
+--     "forlod og kom tilbage", og det er netop dét, hukommelsen fra i dag
+--     gemmer for fremtiden.
+-- select c.name as konkurrence, p.display_name as spiller, cp.joined_at,
+--        count(*) as gaet_der_ikke_taeller, min(m.kickoff_at) as tidligste
+--   from public.competition_participants cp
+--   join public.competitions c on c.id = cp.competition_id
+--   join public.profiles p on p.id = cp.user_id
 --   join public.competition_matches cm on cm.competition_id = cp.competition_id
 --   join public.matches m on m.id = cm.match_id
---   join public.predictions p on p.match_id = m.id and p.user_id = cp.user_id
---  where p.pred_home is not null
+--   join public.predictions pr on pr.match_id = m.id and pr.user_id = cp.user_id
+--  where pr.pred_home is not null and pr.pred_away is not null
 --    and public.match_lock_at(m.kickoff_at, m.kickoff_tbd) <= cp.joined_at
---  group by cp.competition_id, cp.user_id, cp.joined_at;
+--  group by c.name, p.display_name, cp.joined_at
+--  order by 4 desc;
 
 -- 4) Hukommelsen er tom lige efter kørslen (den fyldes først ved en
 --    framelding). Forvent 0.
