@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A57` · `B36` · `G119` · `I24`.**
+**Næste ledige: `A57` · `B36` · `G125` · `I25`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -47,19 +47,11 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- DOCUMENTATION.md §19 siger, at karriereprofilens globale komplethedsjoin tæller uofficielle turneringer med — afsnittet lige under siger, at det blev rettet i august.
-- Sportmonks svarede 503 upstream connect error i halvdelen af de fejlende live-kald 14. august — hverken tidsgrænse eller gen-forsøg hjælper på leverandørens eget nedbrud, og der er ingen aflæsning af, hvor ofte det sker.
-- G113 (footballdata mangler G109s tre værn) er delvist forældet: gen-forsøget ved timeout kan ikke være der under cron-job.orgs 30 sekunder, så rækken handler nu kun om kald-grænsen og budgettet.
-- sync-matches er hver 12. time, så live-syncen er den eneste vej til et endeligt resultat inden for rimelig tid — der er intet sikkerhedsnet, hvis den er nede en halv time efter en kamp.
-- skærmbilled-harnessen (I23) kører hele appen mod en attrap i stedet for en database — det er en måde at se og klikke appen igennem uden Supabase, men den findes i dag kun som et led i et script, der tager PNG'er.
-- G119 løste sin egen forekomst med en påstand hos migreringen; en generisk vagt (hvert drop function i sql/ skal følges af en revoke) blev fravalgt ved to forekomster — bliver det tre, er det et mønster.
-- CI's vagt over anon-reglen måler sql/schema.sql, som eksporteres om mandagen, så en migrering skrevet i dag er usynlig for den indtil da — G119 er anden gang, den forskel koster noget.
-
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 37 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 42 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -115,7 +107,9 @@ Tomt.
 
 ### Tier 4 — Datarisiko med en lunte
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G122` | `sync-matches` hver 12. time er det eneste sikkerhedsnet, hvis `sync-live` er nede | Får en kamp aldrig et endeligt resultat fra live-syncen — fx en halv times nedetid lige efter kampen — er der intet, der henter det igen, før næste kampprogram-kørsel op til 12 timer senere. Ratingen og stillingerne står forkerte hele vinduet. Ingen løsning er valgt: en kortere fallback-frekvens eller en genopfriskning af de seneste dages kampe i selve kampprogram-kaldet er begge mulige. |
 
 ### Tier 5 — Robusthed og vedligehold
 
@@ -124,8 +118,11 @@ Tomt.
 | `G110` | Story-eksempel-vagten læser kun `site/index.html` | `funktioner.html`s story-citat er ubevogtet. Vagten blev bygget, fordi et **opdigtet** story-citat slap ind på sitet (14. august 2026) — og den dækker i dag én af de sider, den slags kan stå på. En vagt, der kun kender sin første fil, er præcis `G97`s fælde en gang til. |
 | `G111` | Vagt mod antalsdrift og døde henvisninger i `docs/` | Tre påstande, der kan måles: hver fil i `sql/` står i `sql/README.md`s tabel, hver sti i CLAUDE.md's rutetabel findes, og hver fil i `docs/` er routet ét sted fra. **Antalsdrift og døde fil:linje-ankre var konsistensgennemgangens to største fundklasser** (14. august 2026) — altså den slags fejl, der kommer igen, og som ingen opdager ved at læse. |
 | `G112` | `sql/schema.sql` advarer ikke selv mod håndredigering | Filen er et **genereret** øjebliksbillede, men siger det kun i CLAUDE.md og `sql/README.md`. Skema-eksporten kunne prepende et "GENERERET — redigér ikke"-hoved med dato og workflow-navn, så advarslen står dér, hvor nogen ville skrive. |
-| `G113` | footballdata-provideren har ikke `G109`s tre værn | Live-opslagets egen tidsgrænse, gen-forsøget ved timeout og tidsbudgettet bor kun i `sportmonks.js`. Den anden leverandør blev ikke rørt, fordi den ikke var langsom — men så er værnet en egenskab ved den fil, nogen tilfældigvis rettede, og ikke ved live-syncen. Hører op i `_shared.js`, hvis den bliver det. |
+| `G113` | footballdata-provideren har ikke `G109`s to resterende værn | Live-opslagets egen tidsgrænse og tidsbudgettet bor kun i `sportmonks.js`. **Delvist forældet (14. august 2026):** `G117` fjernede gen-forsøget ved timeout fra live-stien helt — det kan ikke være der under cron-job.orgs 30 sekunders loft — så rækken handler nu kun om tidsgrænsen og budgettet, ikke om et gen-forsøg. Den anden leverandør blev ikke rørt, fordi den ikke var langsom — men så er værnet en egenskab ved den fil, nogen tilfældigvis rettede, og ikke ved live-syncen. Hører op i `_shared.js`, hvis den bliver det. |
 | `G114` | `job_runs` gemmer ikke kørslens varighed | Dét, der afgjorde `G109`, var at de **grønne** kørsler tog 7-13 sekunder — og det tal kunne kun aflæses hos cron-job.org, ikke i Admin → Drift. En kolonne (eller et felt i resuméet) ville gøre den slags diagnose mulig fra vores egen skærm. |
+| `G121` | Sportmonks' egne 5xx-nedbrud er usporede | 14. august 2026 svarede halvdelen af de fejlende live-kald `503 upstream connect error` — leverandørens eget nedbrud, som hverken `G117`s tidsgrænse eller et gen-forsøg kan afhjælpe. `job_runs.error` gemmer teksten pr. kørsel, men ingen har talt den op, så det er ukendt, om 14. august var en enkeltstående hændelse eller et mønster. Et opslag (`error like '%503%'`, grupperet pr. dag) svarer uden ny instrumentering. |
+| `G124` | CI's anon-vagt kan være op til en uge bagud, fordi den måler et eksporteret skema | `sql/tests/anon_grants_functions.sql` måler `sql/schema.sql`, som eksporteres om mandagen — en migrering skrevet i dag er usynlig for den, indtil eksporten kører. `G100` (12. august 2026) lukkede hullet i PRODUKTIONEN med heartbeat'ens `anon_routine_reach`, men PR-vagten har stadig samme blinde vinkel. `G119` (14. august 2026) løste sin egen forekomst med en ny, specifik påstand i `sql/tests/job_health_rate.sql` frem for at rette den generelle vagt — anden gang forskellen har kostet noget (første gang: `G100`). |
+| `I24` | Skærmbillede-harnessen (`I23`) kunne bruges løsrevet fra PNG-scriptet | Harnessen kører allerede hele appen mod en attrap-database i en headless Chromium (`scripts/screenshots/`), men findes i dag kun som et led i `capture.mjs`. Løsrevet derfra ville den give en måde at klikke appen igennem uden Supabase — til manuel udforskning eller en fremtidig browser-test (`A42`). |
 
 ### Tier 6 — Venter på en udløser
 
@@ -154,6 +151,7 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 | `I3` | Alarm ved tilstandsskifte i en liga | Afhænger af `I2`. |
 | `A51` | Skal `og:title` følge sælgesætningen og blive fodbold-eksplicit? | Ejerens beslutning, eller næste gang `og:`-tagsene alligevel røres. **Rammer to filer**, fordi vagten binder dem sammen. |
 | `B32` | Fjern CL's "Fra ligafasen"-forbehold på hjemmesidens turneringsliste | Samme udløser som `B28`: CL's ligafase lodtrækkes hos football-data.org. |
+| `G123` | En generisk vagt for `drop function` + `revoke` i `sql/` | `G119` (14. august 2026) fravalgte en tekstlæsende kontrol, der kræver et `revoke execute … from public` efter hvert `drop function` i `sql/` — kun to forekomster fandtes, og en vagt over to koster mere at vedligeholde, end den kan fange. **Udløseren er en tredje forekomst:** bliver det tre, er det et mønster. |
 
 ### Tier 7 — Udadvendt og ubesluttet
 
@@ -221,8 +219,12 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | G110 | **Story-eksempel-vagten læser kun `site/index.html`.** `site/funktioner.html` bærer også et story-citat, og det er ubevogtet. | Vagten blev bygget 14. august 2026, fordi hjemmesiden citerede en historie, Story Engine **aldrig kunne skrive** ("Du har slået Anders fem runder i træk") — den slags er hverken en stavefejl eller en løgn, men et løfte om en funktion, motoren ikke har. Vagten dækker den ene side, fejlen blev fundet på. **Det er samme mønster som `G97`** (sælgesætnings-vagten, der talte fem filer og ikke selv vidste, at to mere citerede sætningen): en vagt, der hårdkoder sin egen kilde, beskytter kun det, den allerede kendte. Kuren er den samme — læs `site/`-mappen frem for ét filnavn, med et krav om mindst én side, så en omdøbning ikke gør vagten tom. | Lille |
 | G111 | **Ingen vagt mod antalsdrift og døde henvisninger i `docs/`.** Tre påstande kan måles i dag: at hver fil i `sql/` står i `sql/README.md`s tabel, at hver sti i CLAUDE.md's rutetabel findes, og at hver fil i `docs/` er routet ét sted fra. | **Klassen er målt, ikke formodet:** konsistensgennemgangen 14. august 2026 rettede ~60 uoverensstemmelser, og de to største fundklasser var netop **antalsdrift** (et tal i prosa, ingen opdaterer) og **døde fil:linje-ankre**. Begge er usynlige ved læsning — teksten ser rigtig ud — og begge kommer igen, fordi de opstår af helt almindelige flytninger. `G21`s princip (et tal, ingen opdaterer i samme ombæring, hører ikke hjemme i prosa) er den halve kur; den anden halvdel er en maskine, der kan se resten. **Rækken er bevidst afgrænset til det målbare:** om en tekst er *sand*, kan kun et menneske afgøre, men om en sti *findes*, kan en test. | Mellem — tre uafhængige påstande, som kan bygges hver for sig |
 | G112 | **`sql/schema.sql` advarer ikke selv mod håndredigering.** Filen er et genereret øjebliksbillede, men siger det kun i CLAUDE.md og `sql/README.md`. | Advarslen står to steder, ingen læser, når de har filen åben — og en håndredigering i den ville blive tavst overskrevet ved næste eksport, altså den værste slags tab: ingen fejl, bare arbejde, der forsvinder. Kuren er et hoved øverst i den genererede fil med "GENERERET — redigér ikke", eksportdato og workflow-navn. **Datoen er den halvdel, der også hjælper læseren:** filen er kun en gyldig reference, når eksporten er kørt efter seneste migrering, og i dag kan man ikke se på filen, hvornår det var. | Lille — en linje i skema-eksport-workflowen |
-| G113 | **footballdata-provideren har ikke `G109`s tre værn.** Live-opslagets egen tidsgrænse, gen-forsøget ved timeout og tidsbudgettet bor kun i `api/_providers/sportmonks.js`. | Den anden leverandør blev ikke rørt 14. august 2026, fordi den ikke var den langsomme — og det var det rigtige valg i situationen. Men følgen er, at værnet nu er en egenskab ved **den fil, nogen tilfældigvis rettede**, og ikke ved live-syncen som sådan: bliver football-data.org en dag lige så træg i myldretiden, gentages hele fejlen med en anden fejltekst. `smFetch`s form (tidsgrænse, ét gen-forsøg ved timeout, budget) er ikke Sportmonks-specifik og hører op i `api/_shared.js`, hvor `fetchWithTimeout` allerede bor. **Ikke haster:** de fem football-data-turneringer har `live_enabled=false`, så deres live-opslag er sjældnere og deres fejl mindre synlig — hvilket omvendt betyder, at den ville være svær at opdage. | Lille — flyt mønsteret op, ingen ny adfærd |
+| G113 | **footballdata-provideren har ikke `G109`s to resterende værn.** Live-opslagets egen tidsgrænse og tidsbudgettet bor kun i `api/_providers/sportmonks.js`. | Den anden leverandør blev ikke rørt 14. august 2026, fordi den ikke var den langsomme — og det var det rigtige valg i situationen. Men følgen er, at værnet nu er en egenskab ved **den fil, nogen tilfældigvis rettede**, og ikke ved live-syncen som sådan: bliver football-data.org en dag lige så træg i myldretiden, gentages hele fejlen med en anden fejltekst. `smFetch`s form (tidsgrænse, budget) er ikke Sportmonks-specifik og hører op i `api/_shared.js`, hvor `fetchWithTimeout` allerede bor. **Delvist forældet (14. august 2026):** `G117` fjernede gen-forsøget ved timeout fra live-stien helt (det kan ikke være der under cron-job.orgs 30 sekunders loft), så rækken handler nu kun om tidsgrænsen og budgettet. **Ikke haster:** de fem football-data-turneringer har `live_enabled=false`, så deres live-opslag er sjældnere og deres fejl mindre synlig — hvilket omvendt betyder, at den ville være svær at opdage. | Lille — flyt mønsteret op, ingen ny adfærd |
 | G114 | **`job_runs` gemmer ikke, hvor længe en kørsel tog.** | Dét, der afgjorde `G109`, var **ikke** fejlbeskeden, men at de GRØNNE kørsler tog 7-13 sekunder mod en grænse på 10 — og det tal fandtes kun i cron-job.orgs egen liste. Admin → Drift viser tidspunkt, udfald og resumé, men ikke varighed, så den samme diagnose kunne ikke stilles fra vores egen skærm. **Det generelle: en langsom leverandør ligner ikke en fejlende, før man kan se fordelingen af varigheder** — og den slags er billig at gemme (ét felt, skrevet af `recordRun`) og umulig at rekonstruere bagud. En sparkline pr. jobkort ville være den fulde udgave; tallet alene er allerede nok til at stille spørgsmålet. | Lille — ét felt og en visning; ingen migrering af eksisterende rækker |
+| G121 | **Sportmonks' egne 5xx-nedbrud er usporede.** 14. august 2026 svarede halvdelen af de fejlende live-kald `503 upstream connect error`. | Det er leverandørens eget nedbrud, som hverken `G117`s tidsgrænse eller et gen-forsøg kan afhjælpe. `job_runs.error` gemmer teksten pr. kørsel, men ingen har talt den op, så det er ukendt, om 14. august var en enkeltstående hændelse eller et mønster, der bør ses i Admin → Drift. | Lille — et opslag, evt. en visning |
+| G122 | **`sync-matches` hver 12. time er det eneste sikkerhedsnet, hvis `sync-live` er nede.** | Får en kamp aldrig et endeligt resultat fra live-syncen — fx en halv times nedetid lige efter kampen — er der intet, der henter det igen, før næste kampprogram-kørsel op til 12 timer senere. Ratingen og stillingerne står forkerte hele vinduet. Ingen løsning er valgt endnu: en kortere fallback-frekvens eller en genopfriskning af de seneste dages kampe i selve kampprogram-kaldet er begge mulige. | Mellem — kræver et designvalg først |
+| G123 | **Ingen generisk vagt for `drop function` + `revoke` i `sql/`.** | `G119` (14. august 2026) fravalgte en tekstlæsende kontrol, der kræver `revoke execute … from public` efter hvert `drop function` — kun to forekomster fandtes, og en vagt over to koster mere at vedligeholde, end den kan fange. Flyttet til Tier 6: en tredje forekomst gør det til et mønster. | Lille, men ikke før udløseren |
+| G124 | **CI's anon-vagt kan være op til en uge bagud, fordi den måler et eksporteret skema.** `sql/tests/anon_grants_functions.sql` måler `sql/schema.sql`, som eksporteres om mandagen. | En migrering skrevet i dag er usynlig for vagten, indtil eksporten kører. `G100` (12. august 2026) lukkede hullet i PRODUKTIONEN med heartbeat'ens `anon_routine_reach`, men PR-vagten har stadig samme blinde vinkel. `G119` (14. august 2026) løste sin egen forekomst med en ny, specifik påstand i `sql/tests/job_health_rate.sql` frem for at rette den generelle vagt — anden gang forskellen har kostet noget. | Mellem — kræver en måde at teste mod en migrering, ikke kun mod skemaet |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
 
 ## Ideer
@@ -245,6 +247,7 @@ idé bliver til en `B`- eller `A`-række, når den er værd at tage stilling til
 | I19 | **"Historik" på karriereprofilen: gamle dagskort** | Karrusellen var utilsigtet også et arkiv — man kunne rulle tilbage i ugens kort. v3 fjerner det, og spørgsmålet er, om nogen savner det. Modargumentet er stærkt: en historikliste over dagskort er præcis den rundelog, `milepaele-v1.md` skilte karriereprofilen af med, og rækkerne bliver i tabellen uanset hvad (de filtreres allerede fra på prioritetsbåndet). | **Vent til nogen spørger.** Bygges den præventivt, er den bygget af samme grund som karrusellens loft på 10 — fordi det kunne lade sig gøre. |
 | I20 | **QR-kode i invitations-fladen** | Til den ene situation, et link er dårligere end et billede: "vi sidder sammen fysisk". **Fravalgt i `I7` (11. august 2026) på pris, ikke på princip** — den koster enten en ny afhængighed eller ~200 linjer egen encoder, og repoets afhængighedsfattigdom er et bevidst valg (fire runtime-deps). Delearket dækker situationen i dag, bare dårligere: man skal finde modtageren i en kontaktliste frem for at pege et kamera. Står i spec'ens "Bevidst ikke med i v1" med samme begrundelse. | Fravalgt i `I7` — hentes frem, hvis nogen savner den |
 | I21 | **OG-billede med ligaens eget navn** | `I7` gav invitationslinket et udseende, men billedet er statisk (`public/og-image.png`, 1200×630) og **`og:title` bærer hele ordlyden** — "Kom med i ligaen X" står som tekst under et generisk billede. Et billede med ligaens navn *i* sig ville være det, der faktisk fylder i en gruppechat. **Prisen er skriftgengivelse på serveren:** en font skal indlejres og et billede tegnes pr. kald, hvilket er en anden slags afhængighed end resten af `api/`, og det skal ske inden for edge-funktionens budget. Hører efter `I17`, som er den billige halvdel af samme idé. | Fravalgt i `I7` — hører til `I17`s runde |
+| I24 | **Skærmbillede-harnessen (`I23`) løsrevet fra PNG-scriptet** | Harnessen kører allerede hele appen mod en attrap-database i en headless Chromium (`scripts/screenshots/`), men findes i dag kun som et led i `capture.mjs`. Løsrevet derfra ville den give en måde at klikke appen igennem uden Supabase — til manuel udforskning eller en fremtidig browser-test (`A42`). | Ny |
 
 ## Forkastede ideer
 
@@ -265,31 +268,29 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 14. august 2026 (tyvende kørsel) — Tier 2 er kørt tom: tre uenigheder mellem hjemmeside og app, tre forskellige svar
+### 15. august 2026 (enogtyvende kørsel) — Indbakken tømt: én doku-modsigelse rettet på stedet, fem linjer blev til rækker
 
-**Listen er 40 → 38.** Tier 2's tre rækker er lukket, og én ny er kommet til i
-Tier 1, fordi beslutningen kun kan udføres færdig i Supabase.
+**Listen er 38 → 42.** Indbakkens seks linjer gav ét gratis svar og fem nye
+rækker; ingen blev afvist.
 
-- **`A54` lukkede uden en kodeændring, og dét var svaret.** Sitet beholder
-  "Skotske Premiership", `leagues.name` beholder "Scotland Premiership" — samme
-  form som `A49`. Rækken havde selv udpeget forlægget; arbejdet bestod i at
-  efterprøve, at formen passede, og det gjorde den: sitet taler i forvejen det
-  danske ord fire steder, og turneringens officielle navn er et **tredje**
-  ("Scottish Premiership").
-- **`A55` blev afgjort den dyre vej.** Turneringen forfremmes til officiel frem
-  for at sitet tager forbehold, fordi forudsætningen for `is_official = false`
-  — generalprøven — var udløbet. Migreringen er `#64`; kørslen står som `B35` i
-  Tier 1.
-- **`A56`: appen bærer nu "Beta"** ved ordmærket, og `A48`s exit-kriterium
-  gælder begge flader.
-
-**Den største rettelse stod ikke i nogen af rækkerne.** `sql/tournament_scope.sql`
-satte `is_official = false` på Skotland midt i det script, der definerer to
-views — og som derfor skal gen-køres, hver gang de views ændrer sig. En
-almindelig gen-kørsel ville have rullet forfremmelsen tilbage tavst. Sætningen
-er fjernet; den var en starttilstand skrevet som en regel.
-
-**Indbakken har én linje**, fundet undervejs og bevidst ikke ordnet: to
-naboafsnit i `DOCUMENTATION.md` §19 er uenige om, hvad karriereprofilens globale
-komplethedsjoin tæller. Den hører til `G111`s klasse (antalsdrift og modsigelser
-i `docs/`) og skal ikke afgøres af den, der læste den i forbifarten.
+- **`DOCUMENTATION.md` §19 rettet direkte, ingen ny række.** Afsnittets første
+  sætning påstod stadig, at de globale komplethedsjoin talte uofficielle
+  turneringer med — men afsnittet lige under havde allerede beskrevet rettelsen
+  (`G62`, august 2026). Svaret lå i filen selv (Rule 1: et svar, vi allerede
+  har, er gratis); den forældede sætning er omskrevet til at pege frem mod
+  `G62`-afsnittet i stedet for at gentage en påstand, der ikke længere er sand.
+- **`G121`** (Tier 5) — Sportmonks' 503-nedbrud 14. august er usporet: ingen
+  har talt op, hvor ofte det sker, selvom `job_runs.error` allerede gemmer
+  teksten.
+- **`G113` opdateret, ikke ny.** Rækken påstod stadig "tre værn" — `G117`
+  fjernede gen-forsøget ved timeout fra live-stien samme dag, rækken blev
+  skrevet. Retter sig nu til "to resterende værn".
+- **`G122`** (Tier 4, ny) — `sync-matches` hver 12. time er eneste sikkerhedsnet,
+  hvis `sync-live` er nede; intet fanger et tabt resultat før næste kørsel.
+- **`I24`** (Tier 5, ny) — skærmbillede-harnessen (`I23`) kunne løsrives fra
+  PNG-scriptet og bruges til at klikke appen igennem uden Supabase.
+- **`G123`** (Tier 6, ny) — den generisk vagt, `G119` fravalgte ved to
+  forekomster, flyttet til at vente på en tredje.
+- **`G124`** (Tier 5, ny) — CI's anon-vagt måler et skema, der kan være en uge
+  bagud; `G119` er anden gang det har kostet noget, og hullet er stadig åbent
+  for PR'er (kun produktionen er dækket, af `G100`).
