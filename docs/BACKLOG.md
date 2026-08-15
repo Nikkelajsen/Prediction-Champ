@@ -54,7 +54,7 @@ eller en linje i "Forkastede ideer".
 
 ## Prioriteret rækkefølge
 
-Alle 34 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 33 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -99,7 +99,6 @@ køres på et minut.
 | # | Hvad | Note |
 |---|---|---|
 | `B35` | Kør `#64 tournament_scotland_promote.sql` i produktionen | Forfremmelsen, `A55` besluttede 14. august 2026. Filen er skrevet, verificeret og merget; kun kørslen mangler, og den kan kun laves i Supabase. ⚠️ **Mellem to spillerunder** — sætningen er lige gyldig når som helst, men den ændrer kåringen af en runde, folk allerede har tippet, mens de tipper den. Filen kalder selv `recompute_ratings()`, så der skal ikke trykkes "Opdater ratings" bagefter. Bagefter: kør skema-eksporten ikke — det er data og ikke skema. |
-| `B36` | Kør `#66 job_run_duration.sql` i produktionen | Varighederne, `G114` leverede 15. august 2026. Filen er skrevet, verificeret og merget; kun kørslen mangler, og den kan kun laves i Supabase. ✅ **Sikker når som helst og uafhængig af deployet** — ingen tabel, ingen policy, ingen rettighed smalnes, ingen række ændres. Indtil den er kørt, viser Admin → Drift ingen varigheder, præcis som i dag: klienten behandler de manglende felter som UMÅLTE. Bagefter gælder diagnosen hele historikken (30 dage), fordi varigheden udledes af `started_at`/`finished_at`, som altid har været der. |
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
@@ -203,7 +202,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | B34 | **App-originen er indekserbar og konkurrerer med `leagly.app` om brand-søgningen** | `app.leagly.app` serverer appen, men er ikke afskærmet fra søgemaskiner. Følgen er, at en søgning på "Leagly" kan lande på **login-skærmen** frem for på salgssiden — den eneste side, der er skrevet til at overbevise nogen. `I10`s domæneopdeling gav de to origins hver sin opgave; indekseringen kender ikke opdelingen endnu. **Valget mellem de to kure er rækkens egentlige indhold:** `robots.txt` med `Disallow` holder appen helt ude af indekset (enkelt, men også usynligt for en, der søger på selve app-adressen), mens en canonical mod sitet samler signalet uden at skjule siden. **Fem småting hører til samme runde**, fordi de rører de samme filer: `404.html` på sitet (i dag Vercels standard), `og:locale` og `og:image:alt` (begge mangler i et ellers komplet sæt), cache-header på `/css/`, og footer-året, som er hårdkodet. Hører sammen med `I9`, som er den anden halvdel af "hvordan findes siden". | Lille — men indeholder ét valg, der bør træffes bevidst |
 | B32 | **Fjern Champions League's "Fra ligafasen"-forbehold på hjemmesidens turneringsliste** | `site/index.html`s turnerings-sektion (merget 13. august 2026) viser Champions League med mærkatet "Fra ligafasen", fordi ligafasen endnu ikke er lodtrukket (samme forudsætning som `B8`/`B28`). Mærkatet skal fjernes samtidig med, at `B28`s kickoff-aflæsning gentages for CL. | Lille — én linje, samme udløser som `B28` |
 | B35 | **Kør `#64 tournament_scotland_promote.sql` i produktionen** | `A55` (14. august 2026) forfremmede Scotland Premiership til officiel, og migreringen er skrevet, verificeret og merget. Kørslen kan kun laves i Supabase, og indtil den er kørt, er turneringen stadig uofficiel i produktionen: sitets *"rating opdateres i alle turneringer"* er sand i repoet og usand på skærmen. ⚠️ **Mellem to spillerunder** — filen ændrer kåringen af en runde, folk allerede har tippet, mens de tipper den, og `select max(round_key) from matches where home_score is not null` mod `public.round_key(now())` siger, hvor man er. Filen kalder selv `recompute_ratings()`, så "Opdater ratings" i Admin er unødvendig bagefter | Lille — én kørsel plus tre verifikations-selects i filens fod |
-| B36 | **Kør `#66 job_run_duration.sql` i produktionen** | `G114` (15. august 2026) gav `admin_job_health()` fem varighedsfelter — den seneste kørsels varighed plus median og maksimum i timen og i døgnet — og Admin → Drift viser dem. Migreringen er skrevet, verificeret mod PostgreSQL 16.13 og merget, men **kørslen kan kun laves i Supabase**, og indtil den er kørt, står Drift uden varigheder: klienten behandler de manglende felter som UMÅLTE og opfører sig nøjagtig som før. **Det, der ikke kan ses uden den, er dét, der afgjorde `G109`:** de GRØNNE kørsler tog 7-13 sekunder mod en grænse på 10, og det tal fandtes kun hos cron-job.org. ✅ Sikker når som helst, begge veje — ingen tabel, ingen policy, ingen rettighed smalnes. ⚠️ Gør `#65` umulig at gen-køre i sin helhed (returtypen ændrer sig → `42P13`); rækkefølgen efter en gendannelse er herefter #18 → #65 → #66 → #60 | Lille — én kørsel |
 
 ## Teknisk gæld
 
@@ -297,7 +295,7 @@ slap igennem den første udgave og rettede både migreringen (et `filter`, hvis
 begrundelse var faktuelt forkert) og fixturen (døgnets værste kørsel lå inde i
 timen, så de to maksima ikke kunne skelnes).
 
-**Én ting mangler at blive kørt:** `#66 job_run_duration.sql` skal køres i
-Supabase. Den er sikker når som helst og uafhængig af deployet — indtil da viser
-Drift ingen varigheder, præcis som i dag. Rækken står i Tier 1 sammen med `B35`.
+✅ **`#66 job_run_duration.sql` er kørt i produktionen 15. august 2026**, så
+Admin → Drift viser varigheder for hele historikken med det samme (`B36` lukket
+og slettet). Tier 1 rummer herefter kun `B35`.
 

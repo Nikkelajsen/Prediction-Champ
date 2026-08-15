@@ -362,8 +362,15 @@ jobs:
           # sæson-simulatorens NOTICE-udskrift alene fylder de sidste par
           # tusinde, og GitHubs log-API svarer kun med en hale. Dette trins
           # egne linjer kan derfor IKKE læses bagefter — hvilket blev opdaget,
-          # da nogen ville efterprøve, om trinnet havde målt noget. Resuméet
-          # står i check-runnets `output` og er læsbart uanset logstørrelsen.
+          # da nogen ville efterprøve, om trinnet havde målt noget.
+          #
+          # ⚠️ **Resuméet løser det for et MENNESKE, ikke for et API-opslag.**
+          # Det står på kørslens egen side i GitHubs brugerflade, to klik væk.
+          # Første udgave af denne kommentar påstod, at det også står i
+          # check-runnets `output` — det gør det ikke: efterprøvet på kørslen
+          # for `#227`, hvor trinnet skrev sin linje, og `output.summary` var
+          # tom. Påstanden er rettet frem for slettet, fordi den er nem at få
+          # igen.
           sig() { echo "$1"; echo "$1" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; }
 
           # ---------------------------------------------------------------
