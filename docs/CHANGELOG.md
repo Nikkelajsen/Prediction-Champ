@@ -9,6 +9,18 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+15. august 2026 — `G128`: fejlfindingsloggens egen kur var forældet
+
+`CLAUDE.md`s rutetabel og `DOCUMENTATION.md` §13 sagde begge, at kuren mod et forældet check-runs-svar er at spørge JOBBET, som *"har den rigtige status og hvert enkelt trins tidsstempler med det samme"*. **Aflæst under `#229`: det gjorde det ikke.** `actions_get`/`get_workflow_job` svarede ordret ens otte gange over ~8 minutter — trin 42 af 44 `in_progress`, samme `completed_at` på det foregående trin — mens `get_check_run` på SAMME job-id imens skiftede til `completed/success`. Kørsels-endpointet var som ventet også bagud.
+
+**§13's generelle regel fangede den, mens dens konkrete kur ikke gjorde.** *"Spørger man to gange og får det samme svar, er det ikke en bekræftelse — det kan være den samme cache to gange"* stod i samme tabelrække som den anvisning, den modsiger, og det var den regel, der udløste skiftet af endpoint.
+
+**Rettelsen er ikke et nyt vinder-endpoint.** De to bruges nu til hver sit: `get_workflow_job` til **hvor langt** (trinlisten findes kun der, så den er fortsat eneste måde at se, hvilket trin der kører), `get_check_run` til **om** den er færdig. Begge steder bærer nu reglen oven på den gamle: en fejlfindingsrække, der navngiver ét endpoint som "det rigtige", skriver et måletidspunkt ned frem for en egenskab — det er *opdaterer den?* og ikke navnet, der skal stå.
+
+**Årsagen er ikke afgjort og påstås ikke:** om cachen ligger hos GitHub eller i MCP-laget kan ikke aflæses herfra. Kun adfærden er. Backloggen er 35 → 34; rækken blev skrevet og lukket samme dag.
+
+---
+
 15. august 2026 — SEO: appen ude af Google, sitet klar til at blive fundet (`B34` lukket, `I9` skrumpet til fem trin)
 
 **`I9`s repo-halvdel og hele `B34` er leveret**, og den nye [`docs/SEO.md`](./SEO.md) samler registeret, ejerens trin i Search Console, seks beviser og fejlfindingen ét sted.

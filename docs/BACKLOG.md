@@ -53,7 +53,7 @@ eller en linje i "Forkastede ideer".
 
 ## Prioriteret rækkefølge
 
-Alle 35 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 34 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -101,7 +101,6 @@ Tomt.
 
 | # | Hvad | Note |
 |---|---|---|
-| `G128` | `get_workflow_job` er udpeget som CI-svaret, der er ajour — og var det ikke | `CLAUDE.md`s rutetabel og `DOCUMENTATION.md` §13 siger begge, at check-runs-svaret kan være forældet, og at kuren er at spørge JOBBET, som *"har den rigtige status og hvert enkelt trins tidsstempler med det samme"*. **Aflæst 15. august 2026 (PR `#229`): også jobbet stod frosset.** Otte opslag over ~8 minutter gav ordret samme svar — trin 42 af 44 `in_progress`, `completed_at` 10:24:02 — mens `get_check_run` på SAMME job-id skiftede til `completed/success`. **§13's egen generelle regel fangede den** (*"spørger man to gange og får det samme svar, er det ikke en bekræftelse"*), men dens anviste kur gjorde ikke. **Kuren er ikke at bytte endpoint ud:** `get_workflow_job` er fortsat den eneste kilde til trin-for-trin-tidsstempler, og `get_check_run` giver kun konklusionen. De to skal navngives hver for sig. Om cachen er GitHubs eller MCP-lagets er **ikke** afgjort — kun adfærden er aflæst. |
 | `G126` | `story_engine_v2.sql` beskriver en dagsmotor, der ikke kører længere — og siger det ikke selv | Filens hoved er en komplet, selvsikker beskrivelse af `generate_daily_stories()`, som `story_engine_v3.sql` har erstattet. Advarslen findes kun i `sql/README.md`s statuskolonne og i dens "farlige at gen-køre"-afsnit, altså ikke dér, hvor man læser, når man har filen åben. **Filen er kun HALVT afløst**, og det er dét, der gør den forvirrende: `stories.period`/`day_key`, de to indexes, `latest_story` og `generate_stories_catchup()` er stadig gældende — det er præcis den funktion, der bærer regelteksten, der er død. Ét banner øverst med hvilken halvdel der er hvad. |
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
@@ -207,7 +206,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
-| G128 | **`get_workflow_job` blev udpeget som det ajourførte CI-svar og var det ikke.** `CLAUDE.md`s rutetabel og `DOCUMENTATION.md` §13 anviser begge jobbet som kuren mod et forældet check-runs-svar, med ordene *"har den rigtige status og hvert enkelt trins tidsstempler med det samme"*. | **Aflæst, ikke formodet, 15. august 2026 under PR `#229`:** otte opslag på `actions_get`/`get_workflow_job` over ~8 minutter svarede ordret ens — trin 42 af 44 `in_progress` med `completed_at` 10:24:02 på det foregående trin — mens `get_check_run` på det samme job-id imens gik fra `in_progress` til `completed/success`. Kørsels-endpointet (`get_workflow_run`) var som ventet også bagud. **Det, der gør fundet værd at skrive ned, er at §13's GENERELLE regel holdt, mens dens konkrete kur ikke gjorde:** *"spørger man to gange og får det samme svar, er det ikke en bekræftelse — det kan være den samme cache to gange"* er præcis det, der afslørede den, og næste læser vil møde en instruktion, der siger det modsatte om netop det endpoint, reglen peger på. **Rettelsen er to led og ikke en udskiftning:** `get_workflow_job` er fortsat eneste kilde til trin-for-trin-tidsstempler (og dermed til at se HVILKET trin der kører), mens `get_check_run` på samme id er den, der beviseligt opdaterede — så teksten skal navngive dem hver for sig frem for at udnævne én vinder. **Årsagen er ikke afgjort:** om cachen ligger hos GitHub eller i MCP-laget kan ikke aflæses herfra, og rækken påstår det ikke. | Lille — to led i to filer |
 | G125 | **`story-eksempler.test.js` kan ikke se en FJERNET regel.** Vagten slår en regels afsnit op i den højeste `sql/story_engine*.sql`, der nævner den. Fjerner en ny motorversion en regel, bliver dens afsnit stående i den gamle fil, og vagten finder ordene dér — så sitet kan citere en formulering, ingen bruger nogensinde får at se. | Vagtens eget hoved kalder prisen bevidst valgt og navngiver `sql/schema.sql` som eneste alternativ: det er produktionens øjebliksbillede, op til en uge bagud (`G124`), og ville derfor være **rødt for enhver regel skrevet i dag** — en falsk rød hver gang er dyrere end en manglende rød sjældent. **Præmissen er rigtig, men listen over alternativer var ikke udtømmende.** Et regelafsnit bor inde i en `create or replace function`, og `generate_daily_stories()` defineres i BÅDE `story_engine_v2.sql` (linje 131) og `story_engine_v3.sql` (linje 118), mens `generate_stories()` kun findes i `story_engine.sql`. Reglen er derfor levende, hvis den højeste fil, der definerer dens **funktion**, også indeholder den — hvilket netop er grunden til, at `H2H_PASS` i v1's fil er ægte og en fjernet dagsregel i v2's ikke er. Skelnen er maskinlæsbar, kræver intet skema-dump og giver ingen falsk rød. Rettes rækken, skal afsnittet "HVAD DEN IKKE PÅSTÅR" i vagtens hoved med i samme ombæring — det er dét, der i dag beskriver hullet som permanent. | Lille |
 | G126 | **`story_engine_v2.sql` beskriver en dagsmotor, der ikke kører længere.** Filens hoved er en komplet og selvsikker beskrivelse af `generate_daily_stories()`, som `story_engine_v3.sql` (#47) har erstattet — og filen siger det ikke selv. | Advarslen findes to steder, og ingen af dem er filen: `sql/README.md`s statuskolonne på #38 og dens "farlige at gen-køre"-afsnit. Begge er de rigtige steder at ADVARE om en gen-kørsel; ingen af dem er der, hvor man kigger, når man har filen åben for at forstå, hvordan motoren virker. **Rækkens vigtigste nuance er, at filen kun er HALVT afløst** — `stories.period`/`day_key`, de to partielle indexes, `latest_story` og `generate_stories_catchup()` er stadig den gældende definition, og en advarsel, der siger "denne fil er forældet", ville derfor være lige så forkert som ingen advarsel. Det, der er dødt, er præcis den funktion, der bærer regelteksten — altså også den halvdel, `G125` handler om. Ét banner øverst, der siger hvilken halvdel der er hvad. | Lille — ét kommentarblok |
 | G127 | **Sitets OG-billede kan ikke genskabes.** `scripts/build-og-image.mjs` bygger kun `public/og-image.png`; `site/img/og-image.png` er en anden fil (49 kB mod 27 kB) med sælgesætningen malet ind under wordmarket. | Scriptets eget hoved bruger to afsnit på, hvorfor ordlyden IKKE males ind — Barlow findes kun som `.woff2`, og at pakke den ud kræver Brotli plus woff2'ens glyf-transformation, altså et bibliotek repoet ikke har og ikke skal have. Sitets billede har den malet ind alligevel, så det er lavet uden for repoet med et værktøj, ingen har skrevet ned. **Det er ordret den tilstand, scriptet findes for at forhindre:** *"ligger opskriften kun i hovedet på den, der lavede filen, kan billedet ikke genskabes den dag wordmarket skiftes — og et OG-billede, der er en generation bagud, opdager ingen, fordi det kun ses af dem, der ikke bruger appen endnu."* Skifter wordmarket eller sælgesætningen, er appens billede dækket og sitets ikke. **To veje:** udvid scriptet, så det bygger begge (kræver skriftgengivelse og dermed den afhængighed, hovedet fravalgte), eller skriv opskriften ned i hovedet, så filen kan laves igen i hånden. Den anden koster ingenting og fjerner hele risikoen. **Rører `I21`s prisargument uden at aflyse det:** at nogen har kunnet male tekst ind én gang i et designværktøj siger intet om skriftgengivelse pr. kald inde i en edge-funktions budget. | Lille (skriv opskriften) eller mellem (udvid scriptet) |
@@ -255,27 +253,24 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 15. august 2026 (femogtyvende kørsel) — én linje ind, én linje ud: `G128`
+### 15. august 2026 (seksogtyvende kørsel) — `G128` rettet: fejlfindingsloggen udnævnte en vinder på ét måletidspunkt
 
-**Listen er 34 → 35.** Indbakken fik én linje under mergen af `#229` og er ryddet
-i samme ombæring.
+**Listen er 35 → 34.** Rækken blev skrevet og lukket samme dag, og det er dens
+eneste interessante egenskab: den beskrev en instruktion, ikke en fejl i koden.
 
-**`G128` (Tier 2) — den rute, dokumentationen selv udpeger som kuren, var
-forældet.** `CLAUDE.md`s rutetabel og `DOCUMENTATION.md` §13 siger begge, at et
-check-runs-svar kan stå `in_progress` længe efter et job er færdigt, og at man
-derfor skal spørge JOBBET, som *"har den rigtige status og hvert enkelt trins
-tidsstempler med det samme"*. Under `#229` svarede jobbet ordret ens otte gange
-over ~8 minutter — trin 42 af 44 `in_progress` — mens `get_check_run` på samme
-job-id imens skiftede til `completed/success`.
+`CLAUDE.md`s rutetabel og `DOCUMENTATION.md` §13 sagde begge, at kuren mod et
+forældet check-runs-svar er at spørge JOBBET, som *"har den rigtige status og
+hvert enkelt trins tidsstempler med det samme"*. Under `#229` svarede jobbet
+ordret ens otte gange over ~8 minutter — trin 42 af 44 `in_progress` — mens
+`get_check_run` på samme job-id imens skiftede til `completed/success`.
 
-**Det lærerige er, at §13's generelle regel fangede den, og dens konkrete kur
-ikke gjorde.** *"Spørger man to gange og får det samme svar, er det ikke en
-bekræftelse — det kan være den samme cache to gange"* står i samme række som
-anvisningen, den modsiger. Rettelsen er derfor ikke at udnævne et nyt vinder-
-endpoint: `get_workflow_job` er fortsat eneste kilde til, hvilket trin der kører,
-og `get_check_run` er den, der beviseligt opdaterede. De skal navngives hver for
-sig.
+**Rettelsen er ikke et nyt vinder-endpoint, og dét er hele pointen.** De to
+bruges nu til hver sit: `get_workflow_job` til **hvor langt** (trinlisten findes
+kun der), `get_check_run` til **om** den er færdig. En fejlfindingsrække, der
+navngiver ét endpoint som "det rigtige", skriver et måletidspunkt ned frem for
+en egenskab — og det var præcis den form, rækken selv havde. Begge steder bærer
+nu den regel oven på den gamle.
 
-**Årsagen er ikke afgjort og påstås ikke.** Om cachen ligger hos GitHub eller i
-MCP-laget kan ikke aflæses herfra — kun adfærden er.
+**Årsagen står stadig uafgjort og påstås ikke:** om cachen ligger hos GitHub
+eller i MCP-laget kan ikke aflæses herfra. Kun adfærden er.
 
