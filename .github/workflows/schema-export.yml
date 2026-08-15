@@ -94,8 +94,50 @@ jobs:
             --schema=public \
             --schema-only \
             --no-owner \
-            -f sql/schema.sql
-          echo "Skrev sql/schema.sql ($(wc -l < sql/schema.sql) linjer)."
+            -f "$RUNNER_TEMP/krop.sql"
+
+          # -------------------------------------------------------------
+          # G112 — advarslen skal stå DÉR, hvor nogen ville skrive
+          #
+          # `sql/schema.sql` er et genereret øjebliksbillede, men sagde det
+          # kun i CLAUDE.md og sql/README.md — altså to steder, ingen læser,
+          # når de har filen åben. En håndredigering i den bliver TAVST
+          # overskrevet ved næste eksport: ingen fejl, ingen konflikt, bare
+          # arbejde, der forsvinder.
+          #
+          # DATOEN er den halvdel, der også hjælper læseren: dumpet er kun en
+          # gyldig reference, når eksporten er kørt efter seneste migrering,
+          # og det kunne indtil nu ikke ses på filen.
+          #
+          # 🔴 **Datoen er "sidst ÆNDRET", ikke "sidst KØRT", og det er ikke en
+          # sproglig detalje.** Skrev hovedet kørselsdatoen, ville hver eneste
+          # mandagskørsel producere en diff, også når skemaet stod stille — og
+          # på standardgrens-vejen nedenfor ville det åbne en
+          # "skema-drift"-pull request UDEN drift i, hver uge. Trinnet "Commit
+          # hvis ændret" sammenligner derfor KROPPENE og lader hovedet stå,
+          # når kun datoen ville flytte sig.
+          HOVED="$RUNNER_TEMP/hoved.sql"
+          {
+            echo "-- ==========================================================================="
+            echo "-- 🔴 GENERERET FIL — REDIGÉR IKKE"
+            echo "--"
+            echo "-- Skrevet af .github/workflows/schema-export.yml (pg_dump --schema=public"
+            echo "-- --schema-only --no-owner) mod produktionsdatabasen. En håndredigering her"
+            echo "-- bliver TAVST overskrevet ved næste eksport: ingen fejl, ingen konflikt,"
+            echo "-- bare arbejde, der forsvinder. Skal skemaet ændres, skrives en migrering i"
+            echo "-- sql/ og køres i Supabases SQL-editor — se sql/README.md."
+            echo "--"
+            echo "-- Skemaet ændrede sig sidst: $(date -u +%Y-%m-%d)"
+            echo "--"
+            echo "-- DATOEN ER FILENS HOLDBARHED, ikke dens kørselsstempel. Den står stille,"
+            echo "-- når en eksport ikke fandt noget nyt, og siger dermed \"skemaet er uændret"
+            echo "-- siden\". Er en migrering kørt i produktionen EFTER den dato, er denne fil"
+            echo "-- bagud — og det er den tilstand, sql/checks/anon_routine_reach.sql findes"
+            echo "-- for at kunne se, fordi CI's egne vagter måler netop dette dump (G124)."
+            echo "-- =================== SLUT PÅ GENERERET HOVED ==================="
+          } > "$HOVED"
+          cat "$HOVED" "$RUNNER_TEMP/krop.sql" > sql/schema.sql
+          echo "Skrev sql/schema.sql ($(wc -l < sql/schema.sql) linjer, heraf $(wc -l < "$HOVED") linjers hoved)."
 
       - name: Verifikationstjekliste
         run: |
@@ -125,6 +167,19 @@ jobs:
           other=$(grep -oE 'CREATE (TABLE|FUNCTION|VIEW) [a-z_]+\.' sql/schema.sql | sort -u | grep -v ' public\.' || true)
           if [ -z "$other" ]; then echo "OK 6: kun public.-objekter"; else echo "FEJL 6: fandt ikke-public objekter:"; echo "$other"; fail=1; fi
 
+          # 7. Advarslen står i filen (G112) → forvent begge markører
+          # Uden dette tjek kunne hovedet forsvinde ved en omskrivning af
+          # trinnet ovenfor, uden at nogen så det: filen ville stadig være et
+          # gyldigt skema, bare uden det ene, der siger, at den er genereret.
+          # Slutmarkøren tælles med, fordi det er DEN, kropssammenligningen
+          # nedenfor klipper på — mangler den, committer jobbet ved hver kørsel.
+          if grep -q '^-- 🔴 GENERERET FIL — REDIGÉR IKKE$' sql/schema.sql \
+             && grep -q '^-- =\{3,\} SLUT PÅ GENERERET HOVED =\{3,\}$' sql/schema.sql; then
+            echo "OK 7: det genererede hoved står i filen"
+          else
+            echo "FEJL 7: hovedet mangler eller er omskrevet"; fail=1
+          fi
+
           if [ "$fail" -ne 0 ]; then echo "::error::Verifikationstjeklisten fejlede."; exit 1; fi
           echo "Alle tjek bestået."
 
@@ -137,6 +192,31 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # ---------------------------------------------------------------
+          # KROPPEN afgør, om der er en ændring — ikke hovedet (G112)
+          #
+          # Hovedet bærer en dato, og en dato flytter sig hver uge. Målte vi
+          # hele filen, ville hver mandagskørsel se en ændring, committe den
+          # og — på standardgrens-vejen nedenfor — åbne en pull request med
+          # titlen "skema-drift opdaget", hvor det eneste, der drev, var
+          # kalenderen. En alarm, der er falsk hver uge, lærer man at holde op
+          # med at læse (samme afvejning som `Notify after 3` i cron-job.org).
+          #
+          # Derfor: klip hovedet af begge udgaver og sammenlign resten. Er de
+          # ens, lægges HEAD's udgave tilbage, så også datoen står stille — og
+          # dét er hvad den skal, fordi den siger "uændret siden".
+          krop() { sed '1,/^-- =\{3,\} SLUT PÅ GENERERET HOVED =\{3,\}$/d' "$1"; }
+
+          git show "HEAD:sql/schema.sql" > "$RUNNER_TEMP/head.sql" 2>/dev/null || : > "$RUNNER_TEMP/head.sql"
+          krop "$RUNNER_TEMP/head.sql" > "$RUNNER_TEMP/head.krop"
+          krop sql/schema.sql          > "$RUNNER_TEMP/ny.krop"
+
+          if [ -s "$RUNNER_TEMP/head.krop" ] && cmp -s "$RUNNER_TEMP/head.krop" "$RUNNER_TEMP/ny.krop"; then
+            echo "Skemaet er uændret — kun hovedets dato ville flytte sig. Lægger HEAD's udgave tilbage."
+            git checkout -- sql/schema.sql
+            exit 0
+          fi
 
           if git diff --quiet -- sql/schema.sql; then
             echo "Ingen ændringer i sql/schema.sql — intet at committe."

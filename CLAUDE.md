@@ -65,6 +65,7 @@ Støder du undervejs på noget, der burde bygges, ryddes op eller besluttes, men
 ## Kommandoer
 
 - `npm run dev` — udviklingsserver · `npm run build` — produktions-build
+- `npm run harness` — hele appen mod en attrap-database, uden Supabase og uden nøgler (`I24`). Til at se en skærm, der kræver data, uden at have et projekt ved hånden; `npm run screenshots` bruger den samme harness til PNG'erne i `public/screenshots/`.
 - `npm test` — Vitest · `npm run lint` — ESLint · `npm run format` — Prettier
 - CI (`.github/workflows/ci.yml`) kører lint + test + build ved hver pull request og ved push til `main`, plus et `sql`-job med otteogtredive SQL-tests (bl.a. rating-ækvivalensen, alle fem overvågnings-kontroller i `sql/checks/` og et tjek af `docs/`' SQL-blokke) mod en rigtig PostgreSQL. **"Tjekliste før merge" i `DOCUMENTATION.md` §11 gælder stadig** — den dækker det, en maskine ikke kan se (rigtig browser, push på iOS, RLS mod produktionsdata).
 - `npm run lint` har et loft på antal advarsler, så tallet kan falde, men aldrig vokse ubemærket. Falder det, sænkes loftet i `package.json` tilsvarende.

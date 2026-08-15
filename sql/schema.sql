@@ -1,3 +1,20 @@
+-- ===========================================================================
+-- 🔴 GENERERET FIL — REDIGÉR IKKE
+--
+-- Skrevet af .github/workflows/schema-export.yml (pg_dump --schema=public
+-- --schema-only --no-owner) mod produktionsdatabasen. En håndredigering her
+-- bliver TAVST overskrevet ved næste eksport: ingen fejl, ingen konflikt,
+-- bare arbejde, der forsvinder. Skal skemaet ændres, skrives en migrering i
+-- sql/ og køres i Supabases SQL-editor — se sql/README.md.
+--
+-- Skemaet ændrede sig sidst: 2026-08-14
+--
+-- DATOEN ER FILENS HOLDBARHED, ikke dens kørselsstempel. Den står stille,
+-- når en eksport ikke fandt noget nyt, og siger dermed "skemaet er uændret
+-- siden". Er en migrering kørt i produktionen EFTER den dato, er denne fil
+-- bagud — og det er den tilstand, sql/checks/anon_routine_reach.sql findes
+-- for at kunne se, fordi CI's egne vagter måler netop dette dump (G124).
+-- =================== SLUT PÅ GENERERET HOVED ===================
 --
 -- PostgreSQL database dump
 --

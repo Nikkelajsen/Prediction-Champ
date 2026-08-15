@@ -7,8 +7,11 @@ import {
   STATE_LABEL,
   fmtSince,
   fmtRate,
+  fmtVarighed,
   RATE_MIN_RUNS,
   RATE_THRESHOLD,
+  CALLER_WINDOW_MS,
+  SLOW_RATIO,
 } from "./ops.js";
 
 const NU = new Date("2026-08-01T12:00:00Z").getTime();
@@ -212,6 +215,66 @@ describe("mergeJobHealth", () => {
     expect(j.state).toBe("ok");
   });
 
+  // ---- varigheden, som udfaldet ikke kan se (G114) ----
+  //
+  // Rækkens egen anledning: `G109`s GRØNNE kørsler tog 7-13 sekunder mod en
+  // grænse på 10, og det tal fandtes kun hos cron-job.org. Et grønt flueben på
+  // en kørsel, der tog 26 sekunder, og et på en, der tog 2, er det samme
+  // flueben — forskellen er, at den første er sekunder fra at blive klippet
+  // over.
+
+  it("bærer varighederne videre fra opslaget", () => {
+    const j = rate({
+      last_duration_ms: 12_400, hour_p50_ms: 11_800, hour_max_ms: 13_100,
+      day_p50_ms: 2_100, day_max_ms: 13_100,
+    });
+    expect(j.lastMs).toBe(12_400);
+    expect(j.hourMs).toEqual({ p50: 11_800, max: 13_100 });
+    expect(j.dayMs).toEqual({ p50: 2_100, max: 13_100 });
+  });
+
+  // Samme regel som raten, og den er vigtigere her: koden deployes automatisk,
+  // migreringen (`#66`) køres i hånden. En umålt varighed må ikke kunne
+  // forveksles med en hurtig kørsel — det er hele forskellen på "vi ved det
+  // ikke" og "alt er fint".
+  it("lader varigheden være UMÅLT, når migreringen ikke er kørt endnu", () => {
+    const j = mergeJobHealth([raek("sync-live")], { now: NU }).find((x) => x.job === "sync-live");
+    expect(j.lastMs).toBeNull();
+    expect(j.hourMs).toEqual({ p50: null, max: null });
+    expect(j.dayMs).toEqual({ p50: null, max: null });
+    expect(j.nearCallerLimit).toBe(false);
+  });
+
+  // En kørsel, der aldrig afsluttede, har `finished_at is null` og dermed ingen
+  // varighed. Migreringen sender null, og null skal blive null hele vejen —
+  // ikke 0 ms, som ville stå som den hurtigste kørsel nogensinde.
+  it("gør ikke en afbrudt kørsel til den hurtigste", () => {
+    const j = rate({ last_duration_ms: null, hour_p50_ms: 9_000, hour_max_ms: 9_500 });
+    expect(j.lastMs).toBeNull();
+    expect(j.hourMs.p50).toBe(9_000);
+  });
+
+  // Grænsen er KALDERENS: cron-job.org afbryder efter 30 sekunder for alle ni
+  // jobs. Målt på MAKSIMUM og ikke på medianen — én kørsel på 26 sekunder er
+  // advarslen, uanset at de øvrige 59 tog to.
+  it("advarer, når den længste kørsel nærmer sig kalderens vindue", () => {
+    const grænse = CALLER_WINDOW_MS * SLOW_RATIO;
+    expect(rate({ hour_p50_ms: 2_000, hour_max_ms: grænse }).nearCallerLimit).toBe(true);
+    expect(rate({ hour_p50_ms: 2_000, hour_max_ms: grænse - 1 }).nearCallerLimit).toBe(false);
+    // Døgnvinduet tæller også: et job med for få kørsler i timen ville ellers
+    // aldrig kunne udløse den (`send-notifications` kører 2-4 gange i timen).
+    expect(rate({ day_max_ms: grænse }).nearCallerLimit).toBe(true);
+  });
+
+  // En LANGSOM kørsel er ikke en fejlende. Tilstanden bliver derfor ikke
+  // `ustabil` af varigheden alene — kortet siger det i en sætning i stedet,
+  // fordi det er en diagnose og ikke en dom.
+  it("lader varigheden være en diagnose og ikke en tilstand", () => {
+    const j = rate({ hour_runs: 60, hour_failures: 0, hour_max_ms: CALLER_WINDOW_MS });
+    expect(j.nearCallerLimit).toBe(true);
+    expect(j.state).toBe("ok");
+  });
+
   // Raten må gøre et job ustabilt, men ikke fejlende: `fejler` er den
   // tilstand, heartbeat-workflowen råber på, og et job, der fejler halvdelen
   // af tiden, virker stadig.
@@ -335,6 +398,31 @@ describe("fmtRate", () => {
   it("viser en tankestreg, når raten ikke er målt", () => {
     expect(fmtRate(null)).toBe("—");
     expect(fmtRate(undefined)).toBe("—");
+  });
+});
+
+describe("fmtVarighed", () => {
+  it("skriver millisekunder under et sekund og sekunder over", () => {
+    expect(fmtVarighed(320)).toBe("320 ms");
+    expect(fmtVarighed(999)).toBe("999 ms");
+    // 12.431 ms siger ingenting; 12,4 s siger, hvor tæt på grænsen kørslen var.
+    expect(fmtVarighed(12_431)).toBe("12,4 s");
+    expect(fmtVarighed(2_000)).toBe("2,0 s");
+  });
+
+  // Komma og ikke punktum: resten af appen er dansk, og et punktum i et tal
+  // læses som en tusindtalsseparator.
+  it("bruger dansk decimalkomma", () => {
+    expect(fmtVarighed(7_650)).toBe("7,7 s");
+    expect(fmtVarighed(7_650)).not.toContain(".");
+  });
+
+  it("viser en tankestreg, når varigheden ikke er målt", () => {
+    expect(fmtVarighed(null)).toBe("—");
+    expect(fmtVarighed(undefined)).toBe("—");
+    // En kørsel uden `finished_at` kan give NaN gennem en gammel klient.
+    // "—" er det rigtige svar; "NaN s" ville se ud som en måling.
+    expect(fmtVarighed(Number.NaN)).toBe("—");
   });
 });
 

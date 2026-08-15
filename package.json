@@ -13,7 +13,9 @@
     "format:check": "prettier --check .",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
-    "dev:api": "vercel dev"
+    "dev:api": "vercel dev",
+    "harness": "node scripts/screenshots/serve.mjs",
+    "screenshots": "node scripts/screenshots/capture.mjs"
   },
   "engines": {
     "node": ">=22"

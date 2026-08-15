@@ -211,6 +211,69 @@ faktiske adresse, job for job. Er et job stadig på den gamle adresse, er det
 ikke en fejl, der skal hastes: undtagelsen `(?!api/)` beskytter det, og
 [`DOMAENE.md`](./DOMAENE.md) siger, at flytningen tages ét job ad gangen.
 
+### Leverandørens egne nedbrud: tæl fejlteksterne (`G121`)
+
+**Tredje gang samme fremgangsmåde, og den er nu et mønster.** `A11` spurgte,
+hvordan jobbene autoriserer sig; `A46` spurgte, hvilket værtsnavn de kalder ind
+på. Begge svar lå i data, appen allerede gemte. Det samme gør dette.
+
+14. august 2026 fejlede omtrent halvdelen af de fejlende live-kald med
+`503 upstream connect error` — **Sportmonks' eget nedbrud**, ikke vores. Det er
+værd at skille ud, fordi det er den ene fejlklasse, hvor **ingen af vores egne
+kure hjælper**: hverken `G117`s tidsgrænse, et gen-forsøg eller et større budget
+gør noget ved en leverandør, der svarer 503. Rettelsen ville i givet fald være
+en helt anden — en anden leverandør, en anden plan eller at leve med det.
+
+Men ingen har talt op, hvor tit det sker. `job_runs.error` gemmer teksten pr.
+kørsel i 30 dage (`prune_job_runs`), så spørgsmålet er et opslag og ikke en
+instrumentering:
+
+```sql
+-- Hvilke fejlKLASSER rammer jobbene, og hvornår?
+select date_trunc('day', started_at)::date as dag,
+       job,
+       case
+         when error is null                     then '(ingen tekst)'
+         when error ~ '\y5\d\d\y'               then 'leverandør 5xx'
+         when error ilike '%Tidsgrænse%'        then 'vores egen tidsgrænse'
+         when error ~ '\y429\y'                 then 'rate limit'
+         when error ~ '\y4\d\d\y'               then 'andet 4xx'
+         else 'øvrigt'
+       end                                      as klasse,
+       count(*)                                 as koersler,
+       max(started_at)                          as senest
+  from job_runs
+ where ok is distinct from true
+   and started_at > now() - interval '30 days'
+ group by 1, 2, 3
+ order by 1 desc, 4 desc;
+```
+
+> **Rækkefølgen i `case`en er ikke tilfældig.** En 503-tekst kan indeholde både
+> et statuskodetal og ordet "Tidsgrænse", hvis kaldet nåede at time ud bagefter,
+> og den, der står først, vinder. Leverandørens egen statuskode er den mest
+> specifikke oplysning i teksten og skal derfor prøves først; `øvrigt` er
+> restklassen og bør være lille — er den stor, mangler `case`en en gren, og det
+> er i sig selv svaret.
+
+**Sådan læses svaret.** Spørgsmålet er ikke antallet, men **formen**:
+
+| Hvad du ser | Hvad det betyder |
+|---|---|
+| `leverandør 5xx` på **én** dag | En hændelse. 14. august 2026 var én sådan dag. Ingen handling |
+| `leverandør 5xx` på **mange** dage, få pr. dag | Et vilkår hos leverandøren. Hører i `DOCUMENTATION.md` §12 frem for i en rettelse |
+| `leverandør 5xx` **stigende** | Et spørgsmål til leverandøren eller til planen — ikke til koden |
+| `vores egen tidsgrænse` dominerer | Så er det os. Se `LIVE_TIMEOUT_MS` i [`../api/_shared.js`](../api/_shared.js) og varighederne i Drift (`G114`) |
+
+⚠️ **Vinduet er 30 dage, fordi det er alt, der findes.** `prune_job_runs(30)`
+sletter resten, så et opslag over "hele historikken" ville tavst beskrive den
+sidste måned. Skal mønsteret følges over længere tid, er det tallet i den
+funktion, der skal hæves — ikke opslaget her.
+
+**Uden SQL:** Admin → Drift viser "Seneste fejl" på hvert jobkort. Det er den
+hurtige aflæsning af ÉN kørsel; opslaget ovenfor er det eneste, der kan sige, om
+den ene kørsel var et mønster.
+
 ### Kørselstallene pegede på et skema, der allerede var rettet
 
 Samme opslag bærer et `count(*)`, og det kan omregnes til en faktisk frekvens.
@@ -478,7 +541,7 @@ bygger indenfor.
 | Grænse | Hvor | Værdi | Rolle |
 |---|---|---|---|
 | cron-job.orgs **Timeout** | Advanced-fanen på jobbet | **30 s** (maks.) | kalderen giver op |
-| Kørslens eget budget | `LIVE_BUDGET_MS` i `api/_providers/sportmonks.js` | 25 s | vi fejler FØR kalderen |
+| Kørslens eget budget | `LIVE_BUDGET_MS` i `api/_shared.js` | 25 s | vi fejler FØR kalderen |
 | Det enkelte kald | `LIVE_TIMEOUT_MS` / `FETCH_TIMEOUT_MS` | 20 s / 10 s | ét kald må ikke hænge |
 | Vercels `maxDuration` | [`vercel.json`](../vercel.json) | 60 s | bagstopper mod løbske kørsler |
 

@@ -5,6 +5,7 @@
 // gør mest skade: en forkert status betyder, at et resultat enten aldrig
 // skrives eller skrives for tidligt, og point flytter sig begge veje.
 import { describe, it, expect, vi } from "vitest";
+import { LIVE_BUDGET_MS, LIVE_TIMEOUT_MS } from "../_shared.js";
 import { footballdata, __test } from "./footballdata.js";
 
 const { normalize, PREFIX } = __test;
@@ -262,6 +263,75 @@ describe("fetchLive", () => {
 
   it("fromGlobalId fjerner præfikset igen", () => {
     expect(footballdata.fromGlobalId("fd:537654")).toBe("537654");
+  });
+
+  // ---- live-opslagets egen tidsgrænse og budget (G113) --------------------
+  //
+  // Indtil 15. august 2026 havde denne leverandørs live-opslag INGEN af de to.
+  // Den blev ikke rørt under `G109`, fordi den ikke var den langsomme — og
+  // følgen var, at værnet var en egenskab ved den fil, nogen tilfældigvis
+  // rettede, frem for ved live-syncen.
+
+  it("kalder med live-tidsgrænsen og ikke standardens", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ matches: [] }));
+    await footballdata.fetchLive({ providerIds: ["1"], token: "t", fetchImpl, now: () => 0 });
+    // Tredje argument er `ms` i `fetchWithTimeout`. Uden budgettet var det
+    // `undefined`, altså standardens 10 s — den grænse, `G109` viste er for
+    // stram for et livescore-endpoint i myldretiden.
+    expect(fetchImpl.mock.calls[0][2]).toBe(LIVE_TIMEOUT_MS);
+  });
+
+  it("de to sæson-opslag er UÆNDREDE — ingen tidsgrænse, som før", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ matches: [] }));
+    await footballdata.fetchSeasonFixtures({
+      apiLeagueId: "PL", apiSeasonId: "2026", token: "t", fetchImpl,
+    });
+    // `sync-matches` kører hver 12. time og har tid. Budgettet hører til den
+    // ene sti, hvor kalderen har et loft på 30 sekunder.
+    expect(fetchImpl.mock.calls[0][2]).toBeUndefined();
+  });
+
+  it("fejler højlydt, når budgettet er brugt, frem for at blive klippet over", async () => {
+    let ur = 0;
+    const fetchImpl = vi.fn(async () => { ur += LIVE_BUDGET_MS; return jsonResponse({ matches: [] }); });
+    // Første kald bruger hele budgettet; 429'eren tvinger et forsøg mere, og
+    // dét er det, der ikke er plads til.
+    const fetchImpl429 = vi.fn(async () => {
+      ur += LIVE_BUDGET_MS;
+      return jsonResponse({}, { ok: false, status: 429 });
+    });
+    await expect(
+      footballdata.fetchLive({ providerIds: ["1"], token: "t", fetchImpl: fetchImpl429, now: () => ur }),
+    ).rejects.toThrow(/football-data\.org: 429/);
+    // Ét kald og ikke to: pausen blev sprunget over, fordi der ikke var plads
+    // til at vente OG nå et kald bagefter.
+    expect(fetchImpl429).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("venter og prøver igen, når budgettet HAR plads — og strammer grænsen for kald nr. 2", async () => {
+    let ur = 0;
+    let kald = 0;
+    const fetchImpl = vi.fn(async () => {
+      ur += 15_000;                               // første kald brugte 15 af de 25 s
+      return ++kald === 1
+        ? jsonResponse({}, { ok: false, status: 429, headers: { "X-RequestCounter-Reset": "1" } })
+        : jsonResponse({ matches: [match({ id: 1, status: "IN_PLAY" })] });
+    });
+    const out = await footballdata.fetchLive({
+      providerIds: ["1"], token: "t", fetchImpl, now: () => ur,
+    });
+    // Gen-forsøget er IKKE fjernet — det er gjort betinget. Ét sekunds pause
+    // plus et kald er der plads til inden for de 10 s, der er tilbage.
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect([...out.keys()]).toEqual(["fd:1"]);
+    // Den bærende påstand: grænsen AFLÆSES pr. kald og er ikke en konstant.
+    // Kald 1 fik hele kald-grænsen; kald 2 får kun det, der er tilbage af
+    // budgettet. En fast grænse på begge ville betyde, at to kald tilsammen
+    // kunne overskride kalderens vindue, uden at noget i koden sagde det.
+    expect(fetchImpl.mock.calls[0][2]).toBe(LIVE_TIMEOUT_MS);
+    expect(fetchImpl.mock.calls[1][2]).toBe(LIVE_BUDGET_MS - 15_000);
+    expect(fetchImpl.mock.calls[1][2]).toBeLessThan(fetchImpl.mock.calls[0][2]);
   });
 });
 

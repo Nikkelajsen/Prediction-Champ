@@ -206,6 +206,40 @@ function raten(runs, failures) {
   };
 }
 
+// ---- varigheden, som udfaldet ikke kan se (G114) ----
+//
+// Dét, der afgjorde `G109`, var ikke fejlbeskeden, men at de GRØNNE kørsler tog
+// 7-13 sekunder mod en grænse på 10. Det tal fandtes kun i cron-job.orgs egen
+// liste: Drift viste tidspunkt, udfald, rate og resumé, men ikke varighed — og
+// en kørsel, der lykkes på 19 sekunder, og en, der lykkes på 2, er det samme
+// grønne flueben.
+//
+// GRÆNSEN ER KALDERENS OG IKKE VORES. cron-job.org afbryder efter 30 sekunder
+// for alle ni jobs, og det tal er maksimum på planen. Det er derfor den ene
+// grænse, der kan skrives ét sted og gælde dem alle — modsat kadencen, som er
+// forskellig pr. job. Den står også i `api/_shared.js` (live-opslagets budget
+// er udledt af den) og i `docs/CRON.md`.
+//
+// 80 % er valgt som `RATE_THRESHOLD` blev det: et kort, der ofte er gult uden
+// grund, lærer én at holde op med at kigge. 24 sekunder er ikke en hikke — det
+// er seks sekunder fra at blive klippet over, og en kørsel, der klippes over,
+// når hverken at skrive sin `job_runs`-række eller at rydde op.
+const CALLER_WINDOW_MS = 30_000;
+const SLOW_RATIO = 0.8;
+
+// Ét vindues varigheder. `null` betyder UMÅLT og aldrig nul — samme regel som
+// `raten()`, og af to grunde her:
+//
+//   * feltet mangler        → migreringen (`#66 job_run_duration.sql`) er ikke
+//     kørt endnu. Koden deployes automatisk, SQL'en køres i hånden.
+//   * kørslen afsluttede ikke → `finished_at` er null, så der ER ingen varighed.
+//     Havde vi vist den som 0 ms, ville en afbrudt kørsel se ud som den
+//     hurtigste, der nogensinde er kørt.
+function varigheder(p50, max) {
+  const tal = (v) => (v == null ? null : Number(v));
+  return { p50: tal(p50), max: tal(max) };
+}
+
 // Fletter det forventede (expectedJobs) med det målte (rækker fra
 // admin_job_health).
 //
@@ -238,6 +272,16 @@ function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
     // om at begge slår ud ville gøre dem til det korteste af de to.
     const unstableRate = [hour.rate, day.rate].some((x) => x !== null && x >= RATE_THRESHOLD);
 
+    // Varigheden (G114). Målt på MAKSIMUM og ikke på medianen: spørgsmålet er
+    // ikke, om jobbet plejer at være hurtigt, men om nogen kørsel er kommet tæt
+    // på kalderens vindue. Én kørsel på 26 sekunder er advarslen; at de øvrige
+    // 59 tog 2 sekunder gør den ikke mindre.
+    const hourMs = varigheder(r?.hour_p50_ms, r?.hour_max_ms);
+    const dayMs = varigheder(r?.day_p50_ms, r?.day_max_ms);
+    const lastMs = r?.last_duration_ms == null ? null : Number(r.last_duration_ms);
+    const slowMs = [hourMs.max, dayMs.max].filter((x) => x !== null);
+    const nearCallerLimit = slowMs.some((x) => x >= CALLER_WINDOW_MS * SLOW_RATIO);
+
     let state;
     if (lastRunAt === null) state = "ukendt";
     // Et uventet job har ingen forventet kadence, så tavshed kan ikke måles —
@@ -264,6 +308,14 @@ function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
       hour,
       day,
       unstableRate,
+      lastMs,
+      hourMs,
+      dayMs,
+      // En LANGSOM kørsel er ikke en fejlende, og tilstanden er derfor
+      // uændret: `state` bliver ikke `ustabil` af varigheden alene. Kortet
+      // siger det i en sætning i stedet, fordi det er en diagnose og ikke en
+      // dom — det er nøjagtig den skelnen, `G109` manglede ord for.
+      nearCallerLimit,
       // Regnes ud her og ikke i komponenten: `Date.now()` under render er
       // uren og giver et tal, der skifter ved hver gentegning. Alt, der
       // afhænger af "nu", hører hjemme i denne fletning, som får `now` ind.
@@ -299,6 +351,18 @@ function fmtRate(rate) {
   return `${pct < 10 ? Math.round(pct * 10) / 10 : Math.round(pct)} %`;
 }
 
+// En varighed, læst af et menneske. Millisekunder under et sekund, ellers
+// sekunder med ét decimal — 12,4 s siger noget, 12.431 ms gør ikke. Komma og
+// ikke punktum: resten af appen er dansk, og et punktum i et tal læses som en
+// tusindtalsseparator.
+function fmtVarighed(ms) {
+  if (ms === null || ms === undefined) return "—";
+  const n = Number(ms);
+  if (!Number.isFinite(n)) return "—";
+  if (n < 1000) return `${Math.round(n)} ms`;
+  return `${(Math.round(n / 100) / 10).toFixed(1).replace(".", ",")} s`;
+}
+
 function fmtSince(ms) {
   if (ms === null || ms === undefined) return "—";
   const min = Math.floor(ms / 60000);
@@ -309,4 +373,4 @@ function fmtSince(ms) {
   return `${Math.floor(t / 24)} d siden`;
 }
 
-export { BASE_JOBS, expectedJobs, loadJobHealth, loadClientErrors, loadSeasons, setSeasonFinished, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince, fmtRate, RATE_MIN_RUNS, RATE_THRESHOLD };
+export { BASE_JOBS, expectedJobs, loadJobHealth, loadClientErrors, loadSeasons, setSeasonFinished, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince, fmtRate, fmtVarighed, RATE_MIN_RUNS, RATE_THRESHOLD, CALLER_WINDOW_MS, SLOW_RATIO };

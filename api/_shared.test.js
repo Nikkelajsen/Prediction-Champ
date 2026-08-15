@@ -19,6 +19,10 @@ import {
   isTimeoutError,
   isUuid,
   failJob,
+  createLiveBudget,
+  LIVE_BUDGET_MS,
+  LIVE_MIN_CALL_MS,
+  LIVE_TIMEOUT_MS,
 } from "./_shared.js";
 
 const URL_BASE = "https://db.example.test";
@@ -748,5 +752,58 @@ describe("isUuid", () => {
     expect(isUuid(undefined)).toBe(false);
     expect(isUuid(null)).toBe(false);
     expect(isUuid(12345)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Live-opslagets tidsregnskab (G109/G117, flyttet hertil af G113)
+//
+// Reglen bor her, fordi den er udledt af KALDEREN og ikke af leverandøren.
+// Begge providere bruger den, og indtil 15. august 2026 gjorde kun den ene —
+// hvilket gjorde værnet til en egenskab ved den fil, nogen tilfældigvis rettede.
+describe("createLiveBudget", () => {
+  it("holder rækkefølgen: kalderens 30 s > budget > kald-grænse > gulv", () => {
+    // Tallet, det hele hænger på, står ikke i repoet: cron-job.org afbryder
+    // efter 30 sekunder, og feltet afviser 60. Er den påstand falsk, er hele
+    // begrundelsen for at have et budget væk.
+    const KALDER_MS = 30_000;
+    expect(LIVE_BUDGET_MS).toBeLessThan(KALDER_MS);
+    expect(LIVE_TIMEOUT_MS).toBeLessThanOrEqual(LIVE_BUDGET_MS);
+    expect(LIVE_MIN_CALL_MS).toBeLessThan(LIVE_TIMEOUT_MS);
+    // …og to kald à kald-grænsen kan IKKE være der. Det er dét, der gør
+    // `retries: false` på live-stien til et VALG og ikke til pynt (G116).
+    expect(2 * LIVE_TIMEOUT_MS).toBeGreaterThan(KALDER_MS);
+  });
+
+  it("giver hele kald-grænsen, mens der er tid, og strammer den bagefter", () => {
+    let ur = 0;
+    const budget = createLiveBudget("Test", { now: () => ur });
+    expect(budget.nextTimeout("0 af 2 kampe")).toBe(LIVE_TIMEOUT_MS);
+    ur += LIVE_BUDGET_MS - 5_000;
+    // Grænsen aflæses HVER gang. Et kald sent i kørslen må gerne få mindre end
+    // det første — men intet kald må sendes, kørslen ikke kan vente på svaret.
+    expect(budget.nextTimeout("1 af 2 kampe")).toBe(5_000);
+  });
+
+  it("fejler højlydt frem for at sende et kald, der ikke kan nå at svare", () => {
+    let ur = 0;
+    const budget = createLiveBudget("Test", { now: () => ur });
+    ur += LIVE_BUDGET_MS - LIVE_MIN_CALL_MS + 1;
+    // Teksten ender i `job_runs.error` og skal kunne læses af et menneske et
+    // halvt år senere: hvad var budgettet, og hvor langt nåede kørslen.
+    expect(() => budget.nextTimeout("1 af 2 kampe")).toThrow(
+      /Test \(live\): tidsbudgettet på 25000 ms er brugt efter 1 af 2 kampe/
+    );
+  });
+
+  it("kanVente kræver plads til BÅDE pausen og et kald bagefter", () => {
+    let ur = 0;
+    const budget = createLiveBudget("Test", { now: () => ur });
+    expect(budget.kanVente(LIVE_BUDGET_MS - LIVE_MIN_CALL_MS)).toBe(true);
+    // Én millisekund mere, og pausen ville bruge den tid, kaldet skal have.
+    // En pause, kalderen alligevel afbryder, hjælper ingen.
+    expect(budget.kanVente(LIVE_BUDGET_MS - LIVE_MIN_CALL_MS + 1)).toBe(false);
+    ur += 20_000;
+    expect(budget.kanVente(6_000)).toBe(false);
   });
 });
