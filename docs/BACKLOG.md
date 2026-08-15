@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A57` · `B37` · `G128` · `I25`.**
+**Næste ledige: `A57` · `B37` · `G129` · `I25`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -253,43 +253,24 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 15. august 2026 (fireogtyvende kørsel) — indbakken tømt: tre linjer, tre `G`-rækker, og alle tre præmisser var forkerte
+### 15. august 2026 (seksogtyvende kørsel) — `G128` rettet: fejlfindingsloggen udnævnte en vinder på ét måletidspunkt
 
-**Listen er 31 → 34.** Ingen af de tre linjer blev forkastet, og ingen af dem
-blev nummereret, som de var skrevet — hver enkelt beskrev noget lidt andet, end
-den troede, og i to af tilfældene noget større.
+**Listen er 35 → 34.** Rækken blev skrevet og lukket samme dag, og det er dens
+eneste interessante egenskab: den beskrev en instruktion, ikke en fejl i koden.
 
-- **`G125` (Tier 5) — vagtens begrundelse var rigtig, dens liste over
-  alternativer ikke.** Linjen sagde, at `story-eksempler.test.js` ikke kan se en
-  fjernet regel, og det er sandt — men vagtens eget hoved kalder allerede prisen
-  bevidst valgt og udpeger `sql/schema.sql` som eneste alternativ. Så vidt var
-  linjen en gentagelse af et afgjort spørgsmål. **Der findes en tredje vej:** et
-  regelafsnit ligger inde i en `create or replace function`, og
-  `generate_daily_stories()` defineres i BÅDE v2 (linje 131) og v3 (linje 118),
-  mens `generate_stories()` kun findes i v1's fil. En regel er levende, hvis den
-  højeste fil, der definerer dens **funktion**, også indeholder den — hvilket er
-  præcis grunden til, at `H2H_PASS` i v1's fil er ægte. Ingen skema-dump, ingen
-  falsk rød.
-- **`G126` (Tier 2) — "fire filer, hvoraf to er afløst" holdt ikke.**
-  `story_engine*.sql` er otte filer, og den, der forvirrer, er kun HALVT afløst:
-  `story_engine_v2.sql`s `generate_daily_stories()` er erstattet af v3, mens
-  `stories.period`/`day_key`, de to indexes, `latest_story` og
-  `generate_stories_catchup()` i samme fil stadig er den gældende definition. En
-  advarsel om, at filen er forældet, ville derfor være lige så forkert som ingen
-  advarsel — og det er dét, der gør rækken til et banner og ikke til en
-  oprydning. Den døde halvdel er samtidig præcis den, `G125` handler om.
-- **`G127` (Tier 5) — linjen om to alt-tekster var forkert, og fejlen lå et
-  andet sted.** Den påstod "samme billede, to alt-tekster". De to billeder er
-  ikke ens: `public/og-image.png` er wordmarket, `site/img/og-image.png` er
-  wordmarket **plus sælgesætningen malet ind**. Følgen er, at
-  `scripts/build-og-image.mjs`, hvis hoved bruger to afsnit på, hvorfor ordlyden
-  IKKE kan males ind, kun bygger det ene af de to — og at sitets billede er
-  ordret den tilstand, scriptet findes for at forhindre.
+`CLAUDE.md`s rutetabel og `DOCUMENTATION.md` §13 sagde begge, at kuren mod et
+forældet check-runs-svar er at spørge JOBBET, som *"har den rigtige status og
+hvert enkelt trins tidsstempler med det samme"*. Under `#229` svarede jobbet
+ordret ens otte gange over ~8 minutter — trin 42 af 44 `in_progress` — mens
+`get_check_run` på samme job-id imens skiftede til `completed/success`.
 
-**Ét fund rettede en fejl fra samme dag i stedet for at blive en række:** `B34`s
-nye `og:image:alt` på sitet sagde *"Leagly-logoet på mørk baggrund"*, hvilket
-udelader den tekst, billedet faktisk bærer. Den er rettet til *"Leagly-logoet
-over sætningen: Slå dine venner. Uge efter uge."* Alt-teksten var skrevet efter
-den anden origins billede, ikke efter sitets — og det var netop dén antagelse,
-`G127` viste var forkert.
+**Rettelsen er ikke et nyt vinder-endpoint, og dét er hele pointen.** De to
+bruges nu til hver sit: `get_workflow_job` til **hvor langt** (trinlisten findes
+kun der), `get_check_run` til **om** den er færdig. En fejlfindingsrække, der
+navngiver ét endpoint som "det rigtige", skriver et måletidspunkt ned frem for
+en egenskab — og det var præcis den form, rækken selv havde. Begge steder bærer
+nu den regel oven på den gamle.
+
+**Årsagen står stadig uafgjort og påstås ikke:** om cachen ligger hos GitHub
+eller i MCP-laget kan ikke aflæses herfra. Kun adfærden er.
 
