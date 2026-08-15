@@ -75,7 +75,14 @@
         <div class="card">
           <svg class="card-icon" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           <h3>Story Engine</h3>
-          <p>Appen finder ugens vigtigste historie — for dig. "Du gik forbi Anders" siger mere end nogen tabel. Historier driller — de ydmyger aldrig.</p>
+          <!-- STORY-CITATET ER MOTORENS EGNE ORD (G110, 15. august 2026).
+               Ordlyden er regel `H2H_PASS` i sql/story_engine.sql — en RUNDE-regel,
+               som v3 ikke rørte. Alt i en .story-text, der IKKE står i et
+               <span class="story-var">, skal findes ordret i den regels afsnit;
+               det håndhæves af story-eksempler.test.js. Et span frem for et <p>,
+               fordi citatet står midt i en sætning; udtrækkeren tæller dybde og
+               klarer det indre story-var-span. Ingen af de to spans har CSS. -->
+          <p>Appen finder ugens vigtigste historie — for dig. "<span class="story-text" data-story-rule="H2H_PASS">Du gik forbi <span class="story-var">Anders</span></span>" siger mere end nogen tabel. Historier driller — de ydmyger aldrig.</p>
         </div>
         <div class="card">
           <svg class="card-icon" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>

@@ -58,14 +58,15 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createServer } from "vite";
+import { join } from "node:path";
 import { beskær, læsPng, skrivPng } from "../png.mjs";
+// Selve harnessen — Vite-serveren og attrap-miljøet — bor i `harness.mjs`
+// (`I24`). Den lå her indtil 15. august 2026, hvilket gjorde "kør appen uden
+// Supabase" til noget, man kun kunne, hvis man også ville have fire PNG'er ud
+// af det. `serve.mjs` er den anden aftager.
+import { harnessURL, startHarness, ROD } from "./harness.mjs";
 
-const ROD = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const UD = join(ROD, "public", "screenshots");
-const PORT = 5199;
 
 const APP_BREDDE = 430;
 const APP_HØJDE = 932;
@@ -177,7 +178,7 @@ async function skyd(chrome, opsætning, navn) {
     `--window-size=${opsætning.vindue.bredde},${opsætning.vindue.højde}`,
     `--force-device-scale-factor=${TÆTHED}`,
     `--screenshot=${rå}`,
-    `http://localhost:${PORT}/scripts/screenshots/index.html?shot=${navn}`,
+    harnessURL({ shot: navn }),
   ]);
   if (!existsSync(rå)) throw new Error(`${navn}: browseren skrev intet billede`);
 
@@ -196,23 +197,16 @@ async function skyd(chrome, opsætning, navn) {
 const chrome = findChrome();
 mkdirSync(UD, { recursive: true });
 
-// Attrappen svarer på alt, appen spørger om, men `src/lib/supabase.js` KASTER
-// ved import, hvis variablerne mangler i udvikling (G4) — det er værnet mod, at
-// en lokal kørsel tavst rammer produktion. Værdierne her er åbenlyst falske af
-// samme grund som i `vite.config.js`' testopsætning: et rigtigt projekt-id ville
-// være den samme tavse kobling i en anden forklædning.
-process.env.VITE_SUPABASE_URL = "https://demo.leagly.invalid";
-process.env.VITE_SUPABASE_KEY = "demo-key-ikke-en-rigtig-nøgle";
-
 const opsætning = await kalibrér(chrome);
 console.log(`vindue ${opsætning.vindue.bredde}×${opsætning.vindue.højde} → viewport ${opsætning.viewport.bredde}×${opsætning.viewport.højde}`);
 
-// HMR er slået FRA med vilje. Vites hot-reload holder en websocket åben, og en
-// åben forbindelse er præcis dét, der kan få Chromiums virtuelle tid til at stå
-// stille: browseren venter på et netværk, der aldrig bliver færdigt. Harnessen
-// skal ikke genindlæse noget — hver kørsel er ét kald til én side.
-const server = await createServer({ root: ROD, server: { port: PORT, strictPort: true, hmr: false } });
-await server.listen();
+// HMR er slået FRA med vilje, og `startHarness` gør det som standard. Vites
+// hot-reload holder en websocket åben, og en åben forbindelse er præcis dét,
+// der kan få Chromiums virtuelle tid til at stå stille: browseren venter på et
+// netværk, der aldrig bliver færdigt. Harnessen skal ikke genindlæse noget —
+// hver kørsel er ét kald til én side. (`serve.mjs` slår den til, fordi der dér
+// sidder et menneske og retter i appen.)
+const server = await startHarness();
 try {
   for (const navn of BILLEDER) {
     const { bredde, højde, kb } = await skyd(chrome, opsætning, navn);

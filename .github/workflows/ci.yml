@@ -82,6 +82,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # Hele historikken, fordi ét trin (`G124`) skal kunne se, hvilke filer
+          # i `sql/` DENNE gren har rørt. Med standardens `fetch-depth: 1`
+          # findes basis-commit'en ikke lokalt, og en diff mod den er umulig.
+          fetch-depth: 0
 
       # Produktionsskemaet bygges ÉN gang og bruges af alle de trin nedenfor,
       # der ikke kan nøjes med et miniskema. Det lå indtil `G91` inde i
@@ -139,6 +144,23 @@ jobs:
           set -euo pipefail
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database jhrtest;'
           psql -h localhost -U postgres -d jhrtest -v ON_ERROR_STOP=1 -b -f job_health_rate.sql
+
+      # Driftskortets varigheder (G114). Kører BEGGE job-migreringer i
+      # produktionens rækkefølge (#65 så #66) og måler dermed også, at #66 kan
+      # lægges oven på #65 — altså at det, en gendannelse ville gøre, virker.
+      #
+      # Fixturen er `G109`-formen målt på TID: 21 kørsler, alle GRØNNE, med
+      # varigheder på 7-13 sekunder. Hvert eneste udfaldstal siger "ok", og
+      # alligevel var leverandøren ved at drukne. Det er den tilstand, Drift
+      # ikke kunne vise, og som kun kunne aflæses hos cron-job.org.
+      - name: Test af driftskortets varigheder
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database jrdtest;'
+          psql -h localhost -U postgres -d jrdtest -v ON_ERROR_STOP=1 -b -f job_run_duration.sql
 
       # predictions.updated_at-triggeren (G13). En manglende trigger er usynlig
       # — feltet har en default, så en frisk række ser rigtig ud, og fejlen
@@ -291,6 +313,124 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database anongrantsfunc;'
           psql -h localhost -U postgres -d anongrantsfunc -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d anongrantsfunc -v ON_ERROR_STOP=1 -b -f sql/tests/anon_grants_functions.sql
+
+      # ANON-VAGTEN MOD GRENENS EGNE MIGREPRINGER (G124).
+      #
+      # 🔴 HULLET, DER LUKKES HER
+      # Trinnet ovenfor måler `sql/schema.sql` — et ØJEBLIKSBILLEDE, der
+      # eksporteres om mandagen. Migreringerne køres i hånden i Supabases
+      # SQL-editor. En migrering skrevet i dag er derfor **usynlig for CI**,
+      # indtil eksporten har kørt: op til en uge, hvor den påstand, der skal
+      # fange en glemt `revoke execute … from public`, måler en verden fra i
+      # forgårs.
+      #
+      # `G100` lukkede hullet i PRODUKTIONEN — heartbeat'en spørger den levende
+      # database hver halve time — men det er en vagt, der melder EFTER kørslen.
+      # `G119` (14. august 2026) er beviset på, at forskellen koster: en glemt
+      # `revoke` blev merget grøn, kørt i produktionen og først fanget tyve
+      # minutter senere af heartbeat'en. Anden gang samme forskel gjorde ondt
+      # (første gang: `G100` selv).
+      #
+      # HVORFOR NETOP DENNE FORM
+      # Rækken efterspurgte "en måde at teste mod en MIGRERING, ikke kun mod
+      # skemaet". Det er præcis, hvad trinnet gør: produktionsskemaet indlæses,
+      # grenens egne `sql/*.sql` lægges ovenpå i registrets rækkefølge, og
+      # derefter stilles `#56`s regel mod resultatet med den SAMME fil, der
+      # kører mod produktion hver halve time.
+      #
+      # Et statisk tekst-tjek var det oplagte alternativ og er valgt fra: over
+      # 30 af de eksisterende filer opretter funktioner uden en egen `revoke`,
+      # fordi `#56` fejede dem alle på én gang, så en tekstregel ville skulle
+      # bære en undtagelsesliste, der er længere end reglen. En kørsel svarer i
+      # stedet på det, der faktisk betyder noget: kan `anon` nå noget bagefter?
+      #
+      # ⚠️ **`job_runs.sql` springes over, og det er en DOKUMENTERET undtagelse,
+      # ikke en bekvemmelighed.** Filen bærer den gamle `admin_job_health()` som
+      # `create or replace`, og en returtype kan ikke erstattes — den svarer
+      # `42P13` mod ethvert skema, hvor `#65`/`#66` er kørt. Det står i toppen af
+      # filen selv og i `sql/README.md`. En fil, der ikke kan lægges oven på
+      # produktionsskemaet, kan pr. definition ikke måles af dette trin.
+      - name: Test af anons rækkevidde efter grenens egne migreringer
+        env:
+          PGPASSWORD: postgres
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+
+          # Hvad har DENNE gren rørt i sql/? Tomt svar er det normale — de
+          # fleste pull requests indeholder ingen migrering.
+          if [ -z "${BASE_SHA:-}" ] || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            echo "::notice::Ingen brugbar basis-commit ($BASE_SHA) — springer over."
+            exit 0
+          fi
+          AENDREDE=$(git diff --name-only "$BASE_SHA" HEAD -- 'sql/*.sql' || true)
+          if [ -z "$AENDREDE" ]; then
+            echo "Grenen rører ingen migreringer i sql/ — intet at måle."
+            exit 0
+          fi
+
+          # Rækkefølgen er REGISTRETS og ikke diff'ens. `sql/README.md`s
+          # filoversigt ER kørerækkefølgen (den står i afsnittets egen
+          # overskrift), og to migreringer i samme pull request kan have en
+          # afhængighed — #63 er meningsløs uden #61. En alfabetisk eller
+          # tilfældig rækkefølge ville fejle på noget, der ikke er en fejl.
+          REKKEFOELGE=$(grep -oE '^\| [0-9—-]+ \| \[`[a-z0-9_]+\.sql`\]' sql/README.md | grep -oE '[a-z0-9_]+\.sql')
+
+          KOERES=""
+          for navn in $REKKEFOELGE; do
+            case "$navn" in
+              schema.sql) continue ;;                       # er selve grundlaget
+              job_runs.sql) HOP="$navn" ;;                   # se den røde blok ovenfor
+              *) HOP="" ;;
+            esac
+            if printf '%s\n' "$AENDREDE" | grep -qx "sql/$navn"; then
+              if [ -n "$HOP" ]; then
+                echo "::notice::Springer sql/$navn over — den kan ikke gen-køres oven på produktionsskemaet (42P13), se sql/README.md."
+              else
+                KOERES="$KOERES $navn"
+              fi
+            fi
+          done
+
+          # En ændret fil, registret ikke kender, er i sig selv en fejl — og den
+          # fanges allerede af `docs/henvisninger.test.js` i `verify`-jobbet.
+          # Her siges den bare højt, så et grønt trin ikke kan betyde "målte
+          # ingenting".
+          for fil in $AENDREDE; do
+            navn=$(basename "$fil")
+            printf '%s\n' "$REKKEFOELGE" | grep -qx "$navn" \
+              || echo "::warning::sql/$navn står ikke i sql/README.md's filoversigt og blev ikke kørt."
+          done
+
+          if [ -z "$KOERES" ]; then
+            echo "Ingen af grenens ændrede sql-filer kunne lægges oven på skemaet — intet at måle."
+            exit 0
+          fi
+          echo "Lægger disse oven på produktionsskemaet:$KOERES"
+
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database anonmigration;'
+          psql -h localhost -U postgres -d anonmigration -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          for navn in $KOERES; do
+            echo "--- sql/$navn"
+            # Fejler en migrering her, er svaret ikke at slække på trinnet: en
+            # migrering, der ikke kan køres mod produktionens skema, kan heller
+            # ikke køres i produktionen.
+            psql -h localhost -U postgres -d anonmigration -v ON_ERROR_STOP=1 -f "sql/$navn" > /dev/null
+          done
+
+          # …og så `#56`s regel, stillet med den SAMME fil, der kører mod
+          # produktion hver halve time. En regel, der er skrevet ét sted og
+          # målt et andet, er to regler (`G84`s begrundelse).
+          AABNE=$(psql -h localhost -U postgres -d anonmigration -q -At -F'|' \
+            -f sql/checks/anon_routine_reach.sql \
+            -c "select rutine, slags, egen_grant, via_public, tilstand
+                  from anon_routine_reach where tilstand <> 'ok' order by rutine")
+          if [ -n "$AABNE" ]; then
+            echo "$AABNE"
+            echo "::error::Grenens migreringer efterlader anon-adgangen forkert. 'AABEN FOR ANON' med via_public = en glemt 'revoke execute … from public' efter et 'drop function' (G119). 'LUKKET FOR ANON' = et revoke, der ramte for bredt. Se sql/checks/anon_routine_reach.sql."
+            exit 1
+          fi
+          echo "OK: anon kan nøjagtig de to tilladte rutiner, også efter grenens migreringer."
 
       # Kontrollen af, hvad `anon` kan nå (G100). Jobbets FEMTE overvågning, og
       # den findes, fordi trinnet ovenfor måler `sql/schema.sql` og ikke

@@ -10,7 +10,13 @@
 //
 // Miljøvariabel: SPORTMONKS_TOKEN
 
-import { fetchWithTimeout } from "../_shared.js";
+import {
+  createLiveBudget,
+  fetchWithTimeout,
+  LIVE_BUDGET_MS,
+  LIVE_MIN_CALL_MS,
+  LIVE_TIMEOUT_MS,
+} from "../_shared.js";
 import { isMidnightPlaceholder } from "./kickoff.js";
 
 const BASE = "https://api.sportmonks.com/v3/football";
@@ -68,21 +74,17 @@ function retryAfterMs(res) {
 // ikke på et nedbrud: klokken var 20 dansk tid, og Sportmonks skriver selv, at
 // deres livescore-endpoints er tunge i myldretiden.
 //
-//   LIVE_TIMEOUT_MS   pr. kald. Højere end standardens 10 s, fordi de 10 s blev
-//                     valgt for at afskaffe kald, der HÆNGER (`G19`) — et kald,
-//                     der svarer på 14 sekunder, er ikke et hængende kald.
-//                     Målt samme aften: de kørsler, der lykkedes EFTER `G109`,
-//                     tog 18-19 sekunder. Tallet er altså ikke rundhåndet.
-//   LIVE_BUDGET_MS    for HELE fetchLive, alle klumper lagt sammen. Uden den
-//                     ville et højere kald-loft bare flytte problemet: en
-//                     funktion, Vercel klipper over, når hverken at skrive sin
-//                     `job_runs`-række eller at rydde op. Det er præcis den
-//                     tavshed, `G19` blev bygget for at afskaffe.
+// ⚠️ **TALLENE BOR IKKE LÆNGERE HER (`G113`, 15. august 2026).** De stod i denne
+// fil, fordi det var Sportmonks, der var langsom den aften — men grænserne er
+// udledt af KALDEREN og ikke af leverandøren, og så længe de stod her, var
+// værnet en egenskab ved den fil, nogen tilfældigvis rettede. `LIVE_TIMEOUT_MS`,
+// `LIVE_BUDGET_MS`, `LIVE_MIN_CALL_MS` og regnskabet `createLiveBudget()` ligger
+// nu i `api/_shared.js` ved siden af `fetchWithTimeout`, og football-data.org
+// bruger de samme. Rækkefølgen (kalderens 30 s > budget 25 s > kald 20 s) og
+// hele begrundelsen står dér.
 //
 // 🔴 **ÉT UDGÅENDE KALD PR. KØRSEL — og det er en KALDERENS grænse, ikke vores
-// (`G117`, 14. august 2026).** cron-job.org afbryder kaldet efter **30
-// sekunder**, og det tal er maksimum på planen; feltet afviser 60. Den yderste
-// grænse er dermed den strammeste, og den bestemmer:
+// (`G117`, 14. august 2026).** Regnestykket er:
 //
 //     ét kald à 20 s + Supabase (~2 s)          = ~22 s   passer
 //     to kald à 20 s (gen-forsøg)               = ~42 s   for stort
@@ -90,23 +92,15 @@ function retryAfterMs(res) {
 //
 // `G109` gav derfor live-opslaget et gen-forsøg, der ikke KAN være der. (Det
 // fyrede i øvrigt aldrig — se `G116` i `DOCUMENTATION.md` §13 — så adfærden i
-// produktion er uændret; det er kun løftet, der er væk.) Budgettet er skruet
-// ned til 25 s, så en kørsel ikke kan overskride kalderens vindue, og
-// `smFetch()` kaldes med `retries: false`, så det står som et VALG og ikke som
-// noget, aritmetikken tilfældigvis udelukker. Det er hele læren af `G116`.
+// produktion er uændret; det er kun løftet, der er væk.) `smFetch()` kaldes med
+// `retries: false`, så det står som et VALG og ikke som noget, aritmetikken
+// tilfældigvis udelukker. Det er hele læren af `G116`.
 //
 // **Gen-forsøget er jobbet selv.** `sync-live` kører hvert minut, så et
 // mislykket minut prøves igen 60 sekunder senere — af en frisk invokation med
 // hele budgettet. Et gen-forsøg inde i kørslen ville have sparet ét minuts
 // forsinkelse og til gengæld fordoblet belastningen på en leverandør, der
 // allerede var ved at drukne. Det er samme afvejning som `G48` traf for 429.
-//
-// **Rækkefølgen skal holdes, og den står i `docs/CRON.md`:** kalderens 30 s >
-// vores budget 25 s > kald-grænsen 20 s. Vercels `maxDuration` (60 s) er
-// bagstopperen mod løbske kørsler og skal blive ved at være den løseste.
-const LIVE_TIMEOUT_MS = 20_000;
-const LIVE_BUDGET_MS = 25_000;
-const LIVE_MIN_CALL_MS = 2_000;
 
 // Kalder én gang — og præcis én gang mere, hvis svaret er 429 OG kalderen
 // tillader det. Alle tre opslag nedenfor går gennem den, så grænsen kun
@@ -370,26 +364,14 @@ export const sportmonks = {
   // uden den kunne budgettet kun testes ved at vente i rigtige sekunder.
   async fetchLive({ providerIds, token, fetchImpl = fetchWithTimeout, sleep, meta, now = Date.now }) {
     const out = new Map();
-    const startedAt = now();
-    const timeLeftMs = () => LIVE_BUDGET_MS - (now() - startedAt);
+    const budget = createLiveBudget("Sportmonks", { now });
     for (let i = 0; i < providerIds.length; i += MAX_IDS_PER_CALL) {
       const chunk = providerIds.slice(i, i + MAX_IDS_PER_CALL);
       const endpoint = `${BASE}/fixtures/multi/${chunk.join(",")}`;
-      // Grænsen for det NÆSTE kald aflæses hver gang, ikke én gang pr. klump:
-      // fald-tilbage-kaldet uden `periods` sendes oven på et kald, der allerede
-      // har brugt af budgettet. Den sidste klump må gerne få en kortere grænse
-      // end den første — men ingen klump må sende et kald, kørslen ikke har tid
-      // til at vente på svaret fra.
-      const nextTimeout = () => {
-        const left = timeLeftMs();
-        if (left < LIVE_MIN_CALL_MS) {
-          throw new Error(
-            `Sportmonks (live): tidsbudgettet på ${LIVE_BUDGET_MS} ms er brugt efter ${i} af ${providerIds.length} kampe. ` +
-            `Kørslen ville blive klippet over af Vercel frem for at fejle.`
-          );
-        }
-        return Math.min(LIVE_TIMEOUT_MS, left);
-      };
+      // Fremdriften er med i fejlteksten, fordi den siger, hvor langt kørslen
+      // NÅEDE, før budgettet slap op — forskellen på "leverandøren er langsom"
+      // og "der er for mange kampe til ét minut".
+      const nextTimeout = () => budget.nextTimeout(`${i} af ${providerIds.length} kampe`);
       // `retries: false` — ÉT kald. Se blokken om `LIVE_BUDGET_MS` ovenfor:
       // cron-job.orgs 30 sekunder er den yderste grænse og kan ikke hæves, så
       // der er ikke plads til to. Gen-forsøget er jobbet selv, om et minut.
@@ -419,6 +401,11 @@ export const sportmonks = {
 };
 
 // Eksporteret til test — mappingen er det, der ikke må flytte sig ved en oprydning.
+//
+// De tre live-grænser gives videre herfra, selvom de nu bor i `_shared.js`:
+// testene stiller påstande om ARITMETIKKEN (to kald à `LIVE_TIMEOUT_MS` kan ikke
+// være der inden for kalderens 30 s), og den påstand hører til dér, hvor
+// opslaget bruger tallene.
 export const __test = {
   normalize, statusOf, currentScore, liveMinute, readRateLimit, retryAfterMs,
   RETRY_AFTER_MAX_S, RETRY_AFTER_FALLBACK_S,

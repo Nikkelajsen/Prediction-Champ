@@ -19,7 +19,7 @@
 //
 // Miljøvariabel: FOOTBALLDATA_TOKEN
 
-import { fetchWithTimeout } from "../_shared.js";
+import { createLiveBudget, fetchWithTimeout } from "../_shared.js";
 import { isMidnightPlaceholder } from "./kickoff.js";
 
 const BASE = "https://api.football-data.org/v4";
@@ -142,14 +142,37 @@ function normalize(m) {
 // (5 sync-matches-jobs + sync-live), så en 429 betyder reelt, at cron-jobbene
 // er faldet sammen på samme minut. Ét gen-forsøg er nok til at komme videre;
 // to ville sløre, at jobbene skal spredes ud.
-async function fdFetch(path, token, fetchImpl) {
-  const call = () => fetchImpl(`${BASE}${path}`, { headers: { "X-Auth-Token": token } });
+//
+// ---- `budget`: live-opslagets tidsregnskab (G113, 15. august 2026) ----
+//
+// De to sæson-opslag sender ingen `budget` og opfører sig derfor nøjagtig som
+// før: standard-tidsgrænse og et gen-forsøg, der venter så længe leverandøren
+// beder om. De køres af `sync-matches` hver 12. time, hvor der er tid.
+//
+// **Live-opslaget må ikke.** Det kaldes af `sync-live` inde i cron-job.orgs 30
+// sekunder, og pausen her kunne blive på op til 60 sekunder — altså dobbelt så
+// lang som hele det vindue, kørslen har. Følgen ville ikke være en fejl, men
+// tavshed: funktionen klippes over af Vercel, uden at nå at skrive sin
+// `job_runs`-række. Præcis dét, `G19` blev bygget for at afskaffe, og præcis den
+// fejl, `G109`/`G117` rettede hos den ANDEN leverandør.
+//
+// Med et budget bliver pausen derfor et spørgsmål og ikke et løfte: er der plads
+// til at vente OG nå et kald bagefter, ventes der; er der ikke, leveres 429'eren
+// videre, som den er, og linjen nedenfor gør den til en højlydt fejl. En pause,
+// kalderen alligevel afbryder, hjælper ingen — samme afvejning som `G48` traf.
+async function fdFetch(path, token, fetchImpl, { budget = null, fremdrift = "" } = {}) {
+  const call = () =>
+    budget
+      ? fetchImpl(`${BASE}${path}`, { headers: { "X-Auth-Token": token } }, budget.nextTimeout(fremdrift))
+      : fetchImpl(`${BASE}${path}`, { headers: { "X-Auth-Token": token } });
   let res = await call();
   if (res.status === 429) {
     const reset = Number(res.headers?.get?.("X-RequestCounter-Reset"));
     const waitMs = (Number.isFinite(reset) && reset > 0 ? Math.min(reset, 60) : 6) * 1000;
-    await new Promise((r) => setTimeout(r, waitMs));
-    res = await call();
+    if (!budget || budget.kanVente(waitMs)) {
+      await new Promise((r) => setTimeout(r, waitMs));
+      res = await call();
+    }
   }
   if (!res.ok) {
     const body = await res.text();
@@ -290,17 +313,34 @@ export const footballdata = {
   // på gratis-planen, så vi henter vinduet omkring de kampe, vi allerede ved
   // ligger dér, og filtrerer selv. Det er ÉT kald uanset hvor mange
   // turneringer der spiller — modsat Sportmonks, der tager 40 id'er pr. kald.
-  async fetchLive({ providerIds, kickoffs = [], token, fetchImpl = fetchWithTimeout }) {
+  //
+  // Opslaget har sin EGEN tidsgrænse og sit eget samlede budget (`G113`) — de
+  // samme, Sportmonks bruger, fra `api/_shared.js`. **Det var ikke tilfældet
+  // indtil 15. august 2026**, og grunden er værd at kende: den anden leverandør
+  // blev ikke rørt under `G109`, fordi den ikke var den langsomme. Men et værn,
+  // der kun findes hos den leverandør, der tilfældigvis fejlede først, er ikke
+  // et værn om live-syncen — og de fem football-data-turneringer har
+  // `live_enabled=false`, så deres live-opslag er sjældnere OG deres fejl
+  // mindre synlig. Netop derfor ville den være svær at opdage.
+  //
+  // `now` er injicerbar af samme grund som `fetchImpl`: uden den kunne budgettet
+  // kun testes ved at vente i rigtige sekunder.
+  async fetchLive({ providerIds, kickoffs = [], token, fetchImpl = fetchWithTimeout, now = Date.now }) {
     const wanted = new Set(providerIds.map(String));
     if (!wanted.size) return new Map();
+    const budget = createLiveBudget(footballdata.label, { now });
 
     const times = kickoffs.map((k) => new Date(k).getTime()).filter(Number.isFinite);
-    const now = Date.now();
+    // Samme ur som budgettet, og i produktion er det bogstaveligt talt det
+    // samme kald. Datovinduet stod før på et `Date.now()` af sin egen, og to
+    // ure i samme funktion — hvoraf det ene kan stilles i en test og det andet
+    // ikke — er en forskel uden en forklaring.
+    const nu = now();
     const day = 24 * 60 * 60 * 1000;
     // Én dags luft i begge ender: kickoff er UTC, og en kamp kl. 21 dansk tid
     // ligger på grænsen til næste dato.
-    let from = (times.length ? Math.min(...times, now) : now) - day;
-    let to = (times.length ? Math.max(...times, now) : now) + day;
+    let from = (times.length ? Math.min(...times, nu) : nu) - day;
+    let to = (times.length ? Math.max(...times, nu) : nu) + day;
     // Endpointet afviser spænd over 10 dage. En hængende live-markering fra en
     // gammel kamp må ikke kunne gøre hele opslaget ubrugeligt, så vi klipper
     // vinduet frem for at fejle — kampen falder da bare ud af svaret, og
@@ -310,7 +350,8 @@ export const footballdata = {
     const data = await fdFetch(
       `/matches?dateFrom=${isoDate(from)}&dateTo=${isoDate(to)}`,
       token,
-      fetchImpl
+      fetchImpl,
+      { budget, fremdrift: `0 af ${wanted.size} kampe` },
     );
     const out = new Map();
     for (const m of data.matches || []) {

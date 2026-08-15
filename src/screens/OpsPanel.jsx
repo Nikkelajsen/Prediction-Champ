@@ -23,6 +23,7 @@ import {
   STATE_LABEL,
   fmtSince,
   fmtRate,
+  fmtVarighed,
 } from "../lib/ops.js";
 
 // Tonen følger StateChips regel: ORDET er signalet, farven er kun ekstra.
@@ -39,6 +40,21 @@ function RateRow({ label, v }) {
       label={label}
       value={`${v.failures} af ${v.runs}`}
       detail={v.rate === null ? undefined : fmtRate(v.rate)}
+    />
+  );
+}
+
+// Én varighedsrække (G114). Tager enten ét tal (`ms`, den seneste kørsel) eller
+// et vindues median/maksimum (`v`). Tier helt, når værdien er umålt — se
+// `varigheder()` i ops.js for de to grunde, den kan være det.
+function DurationRow({ label, ms, v }) {
+  const midt = ms !== undefined ? ms : v?.p50;
+  if (midt === null || midt === undefined) return null;
+  return (
+    <SignalRow
+      label={label}
+      value={fmtVarighed(midt)}
+      detail={v?.max === null || v?.max === undefined ? undefined : `max ${fmtVarighed(v.max)}`}
     />
   );
 }
@@ -74,7 +90,30 @@ function JobCard({ j }) {
             er tom for et 12-timers job, og det er ikke en oplysning. */}
         <RateRow label="Fejl (1 t)" v={j.hour} />
         <RateRow label="Fejl (24 t)" v={j.day} />
+        {/* Varigheden (G114). Medianen som værdi, maksimum som detalje: den
+            første siger, hvad der er NORMALT, den anden hvor tæt på kanten den
+            værste kørsel var. `G109` ville have stået med ~10 s og ~13 s, og
+            de to tal er hele historien.
+
+            En række vises slet ikke, når varigheden er umålt — feltet mangler
+            (migreringen er ikke kørt) eller kørslerne afsluttede aldrig. En
+            umålt varighed må ikke kunne forveksles med en hurtig. */}
+        <DurationRow label="Varighed (seneste)" ms={j.lastMs} />
+        <DurationRow label="Varighed (1 t)" v={j.hourMs} />
+        <DurationRow label="Varighed (24 t)" v={j.dayMs} />
       </div>
+
+      {/* Den diagnose, `G109` manglede ord for: jobbet VIRKER, men er ved at
+          løbe tør for tid hos den, der kalder det. Ikke en tilstand og ikke en
+          farve på chippen — et grønt flueben på en kørsel, der tog 26 sekunder,
+          er stadig et grønt flueben, og det er præcis dét, sætningen siger. */}
+      {j.nearCallerLimit && (
+        <p style={{ color: C.gold, fontSize: 11, marginTop: 8, marginBottom: 0 }}>
+          Den længste kørsel tog {fmtVarighed(Math.max(j.hourMs?.max ?? 0, j.dayMs?.max ?? 0))} — tæt på
+          cron-job.orgs vindue på 30 sekunder. Kørslerne lykkes, men en, der klippes over, når
+          hverken at skrive sin række eller at rydde op. Se <code>docs/CRON.md</code>.
+        </p>
+      )}
 
       {/* Den ene sætning, kortet manglede 14. august 2026. Uden den ligner et
           job med "0 fejl i træk" et sundt job — også når det fejler to ud af

@@ -15,6 +15,93 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 15. august 2026 — `G114`: varigheden udledes, den gemmes ikke
+
+**Beslutning:** `admin_job_health()` regner varigheden ud af `started_at` og
+`finished_at`. Der tilføjes **ingen kolonne** til `job_runs`, og `recordRun()` i
+`api/_shared.js` er urørt.
+
+**Begrundelse — backloggens egen præmis holdt ikke.** Rækken bad om "ét felt,
+skrevet af `recordRun`" og begrundede det med, at varigheden var "umulig at
+rekonstruere bagud". Begge kolonner har været der siden `#18` (juli 2026), så
+varigheden var allerede gemt — den var bare aldrig regnet ud. En kolonne ville
+have kostet en tabelmigrering og en ændring i api/, kun gjaldt FREMAD (så de 30
+dages historik, `prune_job_runs` holder på, ville stå tomme), og været en tredje
+kilde til den samme oplysning, som kunne komme ud af trit med de to, den er
+udledt af.
+
+**Median OG maksimum, ikke ét tal.** Én kørsel, der timede ud efter 20 sekunder,
+trækker et gennemsnit så meget, at det ikke beskriver nogen kørsel; medianen
+beskriver den typiske. Men udslaget må ikke forsvinde — det er dét, der er tæt
+på kalderens grænse. De to sammen ER fordelingen, og det var fordelingen, `G109`
+manglede.
+
+**En langsom kørsel er ikke en fejlende.** Varigheden hæver ikke jobbets
+tilstand til `ustabil`; kortet siger det i en sætning i stedet. Et grønt flueben
+på en kørsel, der tog 26 sekunder, er stadig et grønt flueben — jobbet VIRKER,
+det er bare sekunder fra at blive klippet over. Det er en diagnose, ikke en dom,
+og præcis den skelnen manglede der ord for.
+
+**NULL betyder umålt og aldrig nul.** En kørsel uden `finished_at` har ingen
+varighed. Som "0 ms" ville den se ud som den hurtigste kørsel nogensinde — og
+den er det modsatte. Samme regel som `G115` traf for fejlraten.
+
+---
+
+## 15. august 2026 — `G124`: anon-vagten mod en migrering er en KØRSEL, ikke et tekst-tjek
+
+**Beslutning:** CI lægger de `sql/*.sql`, en pull request har rørt, oven på
+produktionsskemaet i registrets rækkefølge og kører derefter
+`sql/checks/anon_routine_reach.sql`. Et statisk tekst-tjek er valgt fra.
+
+**Begrundelse.** Et tekst-tjek — "hver `create function` i `sql/` skal have en
+`revoke execute … from public`" — ville have over 30 overtrædelser fra dag ét,
+fordi `#56` fejede dem alle på én gang frem for fil for fil. Reglen ville altså
+skulle bære en undtagelsesliste, der er længere end reglen selv, og en sådan
+liste er det næste sted, der driver. En kørsel svarer i stedet på det, der
+faktisk betyder noget: **kan `anon` nå noget bagefter?**
+
+**Og det er den samme fil begge steder.** Kontrollen, der kører mod produktion
+hver halve time, er den, der nu også kører i CI — `G84`s regel om, at en regel
+skrevet ét sted og målt et andet er to regler.
+
+**Rækkefølgen er registrets.** `sql/README.md`s filoversigt ER kørerækkefølgen,
+og to migreringer i samme pull request kan have en afhængighed (`#63` er
+meningsløs uden `#61`). En alfabetisk rækkefølge ville fejle på noget, der ikke
+er en fejl.
+
+**`sql/job_runs.sql` springes over, og undtagelsen er dokumenteret.** Filen kan
+ikke lægges oven på et skema, hvor `#65`/`#66` er kørt — returtypen kan ikke
+erstattes, og PostgreSQL svarer `42P13`. En fil, der ikke kan køres mod
+produktionens skema, kan pr. definition ikke måles af trinnet.
+
+**Hullet var ikke teoretisk.** `G119` (14. august 2026) blev merget grøn med en
+glemt `revoke` og først fanget tyve minutter efter kørslen i produktionen. Efter
+denne beslutning er reglen dækket alle tre steder, den kan brydes: i dumpet, i
+produktionen og i en pull request, hvor rettelsen stadig er gratis.
+
+---
+
+## 15. august 2026 — `G112`: skema-dumpets dato siger "sidst ÆNDRET", ikke "sidst kørt"
+
+**Beslutning:** Skema-eksporten prepender et `GENERERET FIL — REDIGÉR IKKE`-hoved
+til `sql/schema.sql` med workflow-navnet og én dato — den, hvor skemaet sidst
+ændrede sig. Commit-detektionen sammenligner kroppene og lader hovedet stå, når
+kun datoen ville flytte sig.
+
+**Begrundelse.** Advarslen stod i CLAUDE.md og `sql/README.md`, altså to steder,
+ingen læser, når de har filen åben. En håndredigering bliver tavst overskrevet
+ved næste eksport: ingen fejl, ingen konflikt, bare arbejde, der forsvinder.
+
+**Datoens ordlyd er hele valget.** Et kørselsstempel ville give en diff hver
+mandag, også når skemaet stod stille — og på standardgrens-vejen ville det åbne
+en pull request med titlen *"skema-drift opdaget"*, hvor det eneste, der drev,
+var kalenderen. En alarm, der er falsk hver uge, lærer man at holde op med at
+læse. "Sidst ændret" svarer desuden på det, læseren faktisk spørger om: er en
+migrering kørt i produktionen efter den dato, er filen bagud.
+
+---
+
 ## 15. august 2026 — `G122`: bagstopperen for et tabt resultat hører i live-syncen, ikke i kampprogrammet
 
 **Beslutning:** `sync-live` fejer én gang i timen efter kampe, der er 6–36 timer gamle og stadig står uden endeligt resultat, med et loft på 40 kampe pr. fejning. `sync-matches`' kadence på hver 12. time er **uændret**, og der er ikke oprettet et nyt cron-job.

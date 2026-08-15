@@ -86,6 +86,82 @@ export async function fetchWithTimeout(url, opts = {}, ms = FETCH_TIMEOUT_MS) {
   }
 }
 
+// ---- live-opslagets tidsgrænse og tidsbudget (G109/G117, flyttet hertil af G113) ----
+//
+// HVORFOR DE BOR HER OG IKKE HOS ÉN LEVERANDØR
+//
+// Tallene blev skrevet i `api/_providers/sportmonks.js` 14. august 2026, fordi
+// det var Sportmonks, der var langsom den aften. Det var det rigtige valg i
+// situationen, men følgen var, at værnet blev en egenskab ved **den fil, nogen
+// tilfældigvis rettede**, og ikke ved live-syncen: blev football-data.org en dag
+// lige så træg i myldretiden, ville hele fejlen gentage sig med en anden
+// fejltekst. Grænserne er ikke leverandørspecifikke — de er udledt af KALDEREN.
+//
+// 🔴 **RÆKKEFØLGEN ER LOVEN, og den yderste er den strammeste.** cron-job.org
+// afbryder kaldet efter **30 sekunder**, og det tal er maksimum på planen;
+// feltet afviser 60. Derfor:
+//
+//     kalderen 30 s  >  budgettet 25 s  >  kald-grænsen 20 s
+//
+// Vercels `maxDuration` (60 s) er bagstopperen mod løbske kørsler og skal blive
+// ved at være den løseste. Rækkefølgen står også i `docs/CRON.md`.
+//
+//   LIVE_TIMEOUT_MS   pr. kald. Højere end `FETCH_TIMEOUT_MS`, fordi de 10 s
+//                     blev valgt for at afskaffe kald, der HÆNGER (`G19`) — et
+//                     kald, der svarer på 14 sekunder, er ikke et hængende
+//                     kald. Målt 14. august 2026: de kørsler, der lykkedes
+//                     EFTER `G109`, tog 18-19 sekunder. Tallet er ikke rundhåndet.
+//   LIVE_BUDGET_MS    for HELE opslaget, alle klumper og gen-forsøg lagt sammen.
+//                     Uden den ville et højere kald-loft bare flytte problemet:
+//                     en funktion, Vercel klipper over, når hverken at skrive
+//                     sin `job_runs`-række eller at rydde op. Præcis den
+//                     tavshed, `G19` blev bygget for at afskaffe.
+//   LIVE_MIN_CALL_MS  gulvet. Et kald, kørslen ikke har tid til at vente på
+//                     svaret fra, skal ikke sendes.
+export const LIVE_TIMEOUT_MS = 20_000;
+export const LIVE_BUDGET_MS = 25_000;
+export const LIVE_MIN_CALL_MS = 2_000;
+
+// Ét live-opslags tidsregnskab.
+//
+// `now` er injicerbar af samme grund som `fetchImpl`: uden den kunne budgettet
+// kun testes ved at vente i rigtige sekunder.
+//
+// Grænsen for det NÆSTE kald aflæses hver gang, ikke én gang pr. opslag: et
+// fald-tilbage-kald sendes oven på et kald, der allerede har brugt af budgettet.
+// Det sidste kald må gerne få en kortere grænse end det første — men intet kald
+// må sendes, kørslen ikke har tid til at vente på.
+//
+// `fremdrift` er en tekst og ikke et tal, fordi de to leverandører tæller
+// forskelligt: Sportmonks tager 40 id'er pr. kald og kan være nået halvvejs,
+// mens football-data.org henter et datovindue i ét kald. Fejlteksten ender i
+// `job_runs.error` og skal kunne læses af et menneske et halvt år senere.
+export function createLiveBudget(label, { now = Date.now, budgetMs = LIVE_BUDGET_MS, timeoutMs = LIVE_TIMEOUT_MS } = {}) {
+  const startedAt = now();
+  const tilbage = () => budgetMs - (now() - startedAt);
+  return {
+    tilbage,
+    nextTimeout(fremdrift) {
+      const left = tilbage();
+      if (left < LIVE_MIN_CALL_MS) {
+        throw new Error(
+          `${label} (live): tidsbudgettet på ${budgetMs} ms er brugt efter ${fremdrift}. ` +
+          `Kørslen ville blive klippet over af Vercel frem for at fejle.`
+        );
+      }
+      return Math.min(timeoutMs, left);
+    },
+    // Er der plads til at VENTE så længe og stadig nå et kald bagefter?
+    //
+    // Findes for 429-pauser. En pause, kalderen alligevel afbryder, hjælper
+    // ingen — den bruger bare hele funktionens budget på at vente, og et kald,
+    // der aldrig når at blive sendt, er værre end et, der fejler hurtigt.
+    kanVente(ms) {
+      return ms + LIVE_MIN_CALL_MS <= tilbage();
+    },
+  };
+}
+
 // PostgREST-klient mod Supabase med service-nøglen. Kaster ved alt andet end 2xx,
 // så en fejl aldrig kan forveksles med et tomt resultat.
 export function createSb(supabaseUrl, serviceKey) {
