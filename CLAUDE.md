@@ -35,6 +35,7 @@
 | bot-værn og e-mailbekræftelse ved oprettelse | `docs/OPRETTELSE.md` · `docs/features/opret-flow-v2.md` · `src/lib/turnstile.js` · `src/lib/data/profile.js` |
 | hjemmesiden (marketing-sitet på `leagly.app`) | `site/` · `docs/features/hjemmeside-v1.md` · `docs/DOMAENE.md` |
 | domæner: hvilken adresse hører til hvad, og hvad der skal flyttes med | `docs/DOMAENE.md` · `vercel.json` |
+| søgemaskiner: sitemap, robots, hvorfor appen er `noindex` — **og hvorfor et `Disallow` på appen slukker invitationernes link-preview** | `docs/SEO.md` · `seo.test.js` · `public/robots.txt` · `site/robots.txt` |
 | en todelt migrering, der skal følges ad med en udrulning | `docs/UDRULNING-A40.md` og `docs/UDRULNING-A43.md` (begge afsluttede — anden forekomst gjorde formen til et mønster) · `sql/invite_lookup.sql`/`sql/invite_policies.sql` · `sql/read_scope_functions.sql`/`sql/read_scope_narrow.sql` |
 | backup, gendannelse efter tabt data | `docs/RESTORE.md` · §22 · `.github/workflows/data-backup.yml` |
 | feedback fra brugerne | §23 · `sql/feedback.sql` · `src/screens/FeedbackCard.jsx` |

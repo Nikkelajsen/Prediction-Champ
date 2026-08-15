@@ -128,6 +128,14 @@ mappen flyttes.
    på 1200×630 — plus `site/robots.txt` og `site/sitemap.xml`. **Fravalget
    "Ingen SEO ud over `lang`/`title`/`meta description`" ovenfor gælder dermed
    ikke længere.** Resten af `I9` kræver en publiceret side.
+   🔵 **Rettet efter levering (15. august 2026, `B34`): sættet var ikke
+   komplet.** `og:locale` og `og:image:alt` manglede på alle fem sider — og
+   fordi siderne er ens, så mængden komplet ud. Begge er tilføjet, sammen med
+   `site/404.html` (`noindex`, uden for sitemappet, **rod-absolutte stier**,
+   fordi siden serveres for enhver ukendt adresse) og en cache-header på
+   `/css/`. **Sættet har nu en vagt** — `seo.test.js` læser mappen frem for en
+   liste, så en sjette side skal have canonical, `og:url` og en `<loc>` i
+   sitemappet, før CI er grøn. Registeret over det hele: [`../SEO.md`](../SEO.md).
 
 **De to principper holder stadig:** ingen JS, og nul eksterne requests (kun
 `leagly.app`-adresser, og de er metadata og links — ikke hentninger). De 23
@@ -207,11 +215,13 @@ containeren blev skubbet 4px ud på fire af de fem sider. Nu `width: min(300px,
    [`../DOMAENE.md`](../DOMAENE.md), som køres sammen med `B21`.
 4. ~~**SEO** (`I9`) — OG-tags, sitemap, indeksering~~ — **halvt lukket
    13. august 2026 med andet udkast.** Metadataen er skrevet (se ovenfor), og
-   `I17` er dermed leveret. Tilbage er det, der kræver en publiceret side:
-   indeksering og Search Console (`I9`). ~~Og `A50`s aflæsning af, om
+   `I17` er dermed leveret. ~~Tilbage er det, der kræver en publiceret side:
+   indeksering og Search Console (`I9`).~~ ~~Og `A50`s aflæsning af, om
    `robots.txt` og `sitemap.xml` faktisk serveres fra roden~~ *(bevist
    14. august 2026 — se punkt 5 ovenfor; `A50` er lukket og slettet af
-   backloggen)*.
+   backloggen)*. **Repoets sidste halvdel er leveret 15. august 2026 med
+   `B34`** — se punkt 5. Tilbage af `I9` er alene ejerens fem trin i Search
+   Console, som står i [`../SEO.md`](../SEO.md).
 
 ## Verifikation af udkastet
 
@@ -221,7 +231,9 @@ ingen vandret scroll, ingen konsolfejl. `npm run lint` og `npm test` uændrede
 (`site/` indeholder kun HTML, CSS og — siden 13. august 2026 — `vercel.json`,
 og mappen ligger uden for begge). *(Rettet efter levering: mappen bærer i dag
 også `robots.txt`, `sitemap.xml`, `fonts/` og `img/` — stadig ingen JS og
-intet, Vite eller Vitest rører.)*
+intet, Vite rører. **Vitest rører den til gengæld nu:** `seo.test.js` LÆSER
+mappen (uden at bygge eller køre noget i den), og det er netop dét, der gør, at
+en manglende `<loc>` eller et manglende tag bliver rødt i CI.)*
 
 **Kørt igen 13. august 2026** med Chromium (Playwright) mod en lokal server,
 fordi to af kontrollerne ikke kan laves over `file://`:

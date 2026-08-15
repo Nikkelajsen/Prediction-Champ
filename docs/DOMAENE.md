@@ -296,6 +296,9 @@ link og ikke en konfiguration, der ser rigtig ud.
    samme; og `Strict-Transport-Security: max-age=63072000` kommer ligeledes fra
    platformen. **Ingen af de tre står i `site/vercel.json`** — led ikke efter dem
    der, hvis de en dag mangler.
+   *(Søge-siden af den samme opdeling — sitemap, `noindex` på appen og trinnene
+   i Search Console — står i [`SEO.md`](./SEO.md), som er skrevet 15. august
+   2026 og henviser tilbage hertil for adresserne selv.)*
 7. ✅ **`www.leagly.app` lander på apex.** `curl.exe -I https://www.leagly.app/`
    → 307/308 med `Location: https://leagly.app/`. En `www`, der svarer 200 med
    samme indhold, er to kanoniske adresser for det samme site — præcis dét,

@@ -49,12 +49,13 @@ eller en linje i "Forkastede ideer".
 
 - story-eksempel-vagten kan ikke se, at en regel er FJERNET af en nyere motorversion — den finder ordene i den gamle fil
 - sql/story_engine*.sql er fire filer, hvoraf to er afløst, og hvilken der kører kan kun læses i sql/README.md's statuskolonne
+- appens og:image:alt siger bare "Leagly", sitets beskriver billedet — samme billede, to alt-tekster, og kun den ene er en alt-tekst
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -159,8 +160,7 @@ hvor den blev leveret — se [`MAIL.md`](./MAIL.md).)*
 |---|---|---|
 | `I10` | Domænet peget på hjemmesiden OG appen | **Skrumpet 9. august 2026 (`B25`), afgjort 12. august 2026, repoets del skrevet 13. august 2026.** E-mail-halvdelen er lukket, formen er valgt (`leagly.app` → hjemmesiden, `app.leagly.app` → appen, ingen omdøbning af projektet), og **trin 6 + 7 ligger nu som kode: redirect i `vercel.json`, 23 CTA'er + README flyttet, to faldbacks rettet.** ✅ **Trin 1 og 3–7 er kørt 13. august 2026, og `#196` er merget og udrullet.** Bevis 1, 3b og 4 er bestået: den gamle adresse svarer 308 mod `app.leagly.app`, `/api/` gør ikke, og en modtaget nulstillingsmail bærer `redirect_to=https://app.leagly.app/` i kilden. **Tilbage: resten af trin 8** (det gamle `?liga=`-link hele vejen, et login, `og:url`) og `B21`s GitHub-omdøbning. ✅ **Trin 2 er kørt 14. august 2026** — hjemmesidens Vercel-projekt er oprettet, og `leagly.app` er live. ✅ **Bevis 6 og 7 er bestået senere samme dag** (12:51–12:52 UTC): CSP'en fra `site/vercel.json` svarer ord for ord, og `www` svarer 308 mod apex. Tilbage af trin 8 er dermed kun appens egne aflæsninger nævnt ovenfor (`?liga=`-linket, et login, `og:url`). Runbog i [`DOMAENE.md`](./DOMAENE.md). CSP'en skal IKKE røres (to origins deler ikke headere). |
 | `B21` | Omdøb GitHub-repoet | **Tekstdelen er leveret 13. august 2026 sammen med `I10`s trin 7** — de 23 CTA'er og README'ens live-link peger nu på `app.leagly.app`, altså netop ikke skiftet to gange. **Vercel-omdøbningen udgik 12. august 2026.** Tilbage er ét skridt: omdøb GitHub-repoet til `Leagly` (GitHub redirigerer selv gamle links og remotes). `docs/RESTORE.md` rettes IKKE — den navngiver backup-filer, der faktisk hedder det gamle. |
-| `I9` | SEO | ⚠️ **Ikke længere gated 14. august 2026 — siden er publiceret**, så indekseringen og Search Console kan køres. **Skrumpet 13. august 2026:** metadataen er leveret med hjemmesidens andet udkast (canonical, favicon, apple-touch-icon, theme-color, `og:`/`twitter:`-tags, `robots.txt`, `sitemap.xml`). Tilbage er det, der kræver en publiceret side: indeksering og Search Console — `A50`s aflæsning blev bevist 14. august 2026, og dén række er lukket og slettet. |
-| `B34` | App-originen konkurrerer med `leagly.app` om brand-søgningen | Hører sammen med `I9` og bør køres i samme ombæring: `app.leagly.app` er indekserbar, så en søgning på "Leagly" kan lande på login-skærmen frem for på salgssiden. Kuren er enten `robots.txt` med `Disallow` på appen eller en canonical mod sitet — **valget mellem de to er rækkens egentlige indhold.** Med i samme runde: `404.html`, `og:locale` og `og:image:alt`, cache-header på `/css/` og footer-året på sitet. |
+| `I9` | SEO | 🔶 **Repoets halvdel er leveret 15. august 2026 sammen med `B34`** — runbog, register, beviser og fejlfinding i [`SEO.md`](./SEO.md), vagt i `seo.test.js`. **Tilbage er kun ejerens fem trin i Search Console** (domæne-ejendom, sitemap, indeksering af forsiden, kontrol af at appen holdes ude, og Bing valgfrit). Rækken bliver i dette tier og ikke i Tier 1: den er *vækst* og ikke en aflæsning, produktet venter på, og produktbogens kapitel 3 sætter vækst efter fastholdelse — også når adgangen tilfældigvis ligger uden for repoet. |
 | `I21` | OG-billede med ligaens eget navn | Den dyre udgave af `I17` (leveret 13. august 2026): et billede pr. liga kræver skriftgengivelse på serveren, hvor `I7`s løsning lod `og:title` bære ordlyden og billedet være statisk. |
 | `B20` | Personlige invite-links (attribution) | Står nu alene: `I7` gennemgik flowet 11. august 2026 og **blotlagde præcis den mekanik, rækken beskriver** — afsenderens navn kunne kun komme i den tekst, afsenderen selv sender, og det dynamiske link-preview må sige "Kom med i ligaen X" frem for "Nikolaj har inviteret dig", fordi modtagersiden ikke kender afsenderen. `invite_preview()` er formet, så `B20` kun skal tilføje ét felt i svaret. Over `I6`, som ikke kan måle en ambassadør uden den. **Tieret ét sted, hvor ventetid koster:** attributionen kan først tælle fra udrulningsdagen. |
 | `I12` | Offentlig side pr. liga | Kræver stillingtagen til, hvad der må vises uden login — og ville som den første gøre `A23` (router) nødvendig. |
@@ -197,7 +197,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | B20 | **Personlige invite-links** (`invite_links` + `invited_by` på `group_members`/`competition_participants`) | Attributionen "hvem inviterede hvem" findes ikke i skemaet: `groups.invite_code` er én kode pr. liga og ikke pr. bruger, og ingen af medlemstabellerne gemmer afsenderen. Det er derfor, milepælen **"5/10 venner tilmeldt via dit link" ikke kunne bygges** — `milestones` tæller i stedet `LEAGUE_GREW_5/10`, altså hvor mange der kom med i en liga, man har oprettet, hvilket er en anden bedrift. Begrundelsen står ved koden begge steder (`sql/milestones.sql`, `src/lib/milestones.js`) og peger på denne række. **Ventetid er ikke gratis her, og det er rækkens vigtigste egenskab:** attribution kan kun registreres fremad, så en bedrift bygget på den kan først tælle fra udrulningsdagen — de brugere, der allerede er inviteret, tælles aldrig. Gater desuden `I6` (ambassadørprogram), som ikke kan måle noget uden. **`I7` (11. august 2026) rørte flowet uden at trække rækken ind** og er formet, så den kan sættes ind bagefter: `invite_preview()` og `api/invite-preview.js` tager begge en KODE, og en per-bruger-token kan gå ad samme vej. Se `DECISIONS.md` for hvorfor de to attributioner ikke er den samme ting. | Mellem |
 | B28 | **Gentag CL's kickoff-aflæsning, når ligafasen er lodtrukket** | Champions League var den ene af fem turneringer, [`docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md`](./reviews/football-data-kickoff-aflaesning-2026-08-07.md) ikke kunne dække — leverandøren havde pr. 1. august 2026 endnu ikke oprettet sæsonen 2026, fordi ligafasen ikke var lodtrukket (`B8`, lukket 1. august 2026). De fire aflæste turneringer delte sig i to: kun Bundesliga sender en ren midnats-pladsholder (`status: SCHEDULED` + `00:00`), de tre andre sender et opdigtet klokkeslæt for hver ufastsat kamp uden nogen markør at skelne på. Om CL ligner Bundesliga eller de tre andre, afgør om `kickoff_uncertain`s mønstergenkendelse (`G84`/`G85`) også dækker turneringen — og er kun kendt, når svaret aflæses. | Lille (samme PowerShell-opslag, gentaget) |
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. Forespørgslen står i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). **Rækken har stået siden august 2026 med teksten "tilbage står at køre den" — og da den blev kørt 5. august 2026, kunne den ikke:** vinduet partitionerede på `(e.created_at < m.fra)`, som hverken står i `group by` eller er aggregeret, så PostgreSQL afviste den med `42803`. Perioden udledes nu i en CTE, efterprøvet mod PostgreSQL 16.13. **Anden kørsel samme dag afslørede, at kilden var forkert valgt:** hændelsesloggen svarede med tre oprettelser i alt, alle `random` — plausibelt nok ved ~20 testbrugere, men ubrugeligt, fordi `analytics_events` først findes fra 30. juli 2026, så "før mærkatet" var to døgn og ikke appens historik. `competitions.mode` + `created_at` bærer samme oplysning som **rigtige rækker over hele historikken**, og spec'ens §5F er byttet om, så tabellen er den primære kilde og hændelsen kontrollen. **Opslaget er kørt 5. august 2026, og svaret er "ikke endnu":** hele appens historik rummer **syv** konkurrencer — 6 før mærkatet (`time_range` 2, `random` 2, `full_season` 2) og **1** efter (`random`). Med n=1 i den ene periode kan ingen fordeling måles, hvilket er præcis rækkens eget første forbehold. Rækken er derfor flyttet til Tier 6 med en udløser, der kan aflæses med samme opslag: **tosifret `antal` i `efter`-perioden.** Det, der er leveret, er ikke svaret, men at spørgsmålet nu kan stilles — forespørgslen kunne hverken køre eller pege på den rigtige kilde, da rækken blev skrevet. | Lille (opslag) |
-| B34 | **App-originen er indekserbar og konkurrerer med `leagly.app` om brand-søgningen** | `app.leagly.app` serverer appen, men er ikke afskærmet fra søgemaskiner. Følgen er, at en søgning på "Leagly" kan lande på **login-skærmen** frem for på salgssiden — den eneste side, der er skrevet til at overbevise nogen. `I10`s domæneopdeling gav de to origins hver sin opgave; indekseringen kender ikke opdelingen endnu. **Valget mellem de to kure er rækkens egentlige indhold:** `robots.txt` med `Disallow` holder appen helt ude af indekset (enkelt, men også usynligt for en, der søger på selve app-adressen), mens en canonical mod sitet samler signalet uden at skjule siden. **Fem småting hører til samme runde**, fordi de rører de samme filer: `404.html` på sitet (i dag Vercels standard), `og:locale` og `og:image:alt` (begge mangler i et ellers komplet sæt), cache-header på `/css/`, og footer-året, som er hårdkodet. Hører sammen med `I9`, som er den anden halvdel af "hvordan findes siden". | Lille — men indeholder ét valg, der bør træffes bevidst |
 | B32 | **Fjern Champions League's "Fra ligafasen"-forbehold på hjemmesidens turneringsliste** | `site/index.html`s turnerings-sektion (merget 13. august 2026) viser Champions League med mærkatet "Fra ligafasen", fordi ligafasen endnu ikke er lodtrukket (samme forudsætning som `B8`/`B28`). Mærkatet skal fjernes samtidig med, at `B28`s kickoff-aflæsning gentages for CL. | Lille — én linje, samme udløser som `B28` |
 
 ## Teknisk gæld
@@ -219,7 +218,7 @@ idé bliver til en `B`- eller `A`-række, når den er værd at tage stilling til
 | I2 | **Diagnose-historik** | Liga-diagnosen er et øjebliksbillede. Uden historik kan man ikke se, at en liga gik fra "Sund" til "Kun en del tipper" for tre uger siden. Kræver et sted at gemme snapshottet — første gang noget i Analytics ville have brug for et cron eller en tidsserie-tabel, hvilket arkitekturvalg #3 i spec'en lukkede døren for. | Afventer behov |
 | I3 | **Alarm ved tilstandsskifte i en liga** | Naturlig følge af `I2`: en liga, der skifter til rød, er interessant i det øjeblik det sker, ikke næste gang nogen åbner admin. | Afhænger af `I2` |
 | I6 | **Ambassadørprogram ved oprettelse af ligaer/konkurrencer** (evt. med synligt deltagerantal) | Vækstkanal, der bygger på strukturen, der allerede findes (ligaer/konkurrencer), men ingen mekanik eller incitament er designet endnu. | Ny |
-| I9 | **SEO for hjemmesiden** | Siden er publiceret 14. august 2026 (`I8` leveret), så tilbage står indeksering og Search Console. Metadataen (canonical, favicon, apple-touch-icon, theme-color, `robots.txt`, `sitemap.xml`) blev leveret med andet udkast 13. august 2026 og bevist serveret 14. august. | Klar — den publicerede side, der var betingelsen, findes nu |
+| I9 | **SEO for hjemmesiden** | **Repoets halvdel er lukket 15. august 2026** med `B34`: `og:locale` og `og:image:alt` på alle fem sider, `site/404.html`, cache på `/css/`, appens `noindex`-header og `public/robots.txt` — plus [`SEO.md`](./SEO.md), som samler registeret, ejerens trin, seks beviser og fejlfindingen ét sted, og `seo.test.js`, som vogter dem. Tilbage står de fem trin i Search Console, som kræver en Google-konto. | Ejerens tur — repoet er klar |
 | I10 | **Domænet peget på hjemmesiden og appen** | **Halvt leveret 9. august 2026 (`B25`), formen afgjort 12. august 2026.** E-mail-halvdelen er væk: `kontakt@leagly.app` står i `src/lib/legal.js` og `site/om.html`, og pladsholderne `[NAVN]`/`[KONTAKT-E-MAIL]` er udfyldt. Den anden halvdel er nu besluttet frem for åben: **`leagly.app` → hjemmesiden, `app.leagly.app` → appen**, begge på Vercel, projektet omdøbes ikke, og de gamle `.vercel.app`-adresser redirigeres permanent. Begrundelsen står i [`DECISIONS.md`](./DECISIONS.md) (kort: invitationslinks bygges af `window.location.origin`, så det er appens adresse, brugerne deler). **CSP'en skal ikke justeres** — to origins deler ikke headere, og `site/` er selvbærende. **Repoets del er skrevet 13. august 2026:** redirect af de to gamle `.vercel.app`-værtsnavne i `vercel.json` (trin 6), `B21`s 23 CTA'er + README (trin 7) og to faldback-adresser i `vite.config.js`/`api/invite-preview.js`. **`/api/` er med vilje undtaget fra redirectet**, så de ni cron-jobs ikke skal flyttes samtidig — begrundelsen står ved reglen i [`DOMAENE.md`](./DOMAENE.md). ✅ **Trin 1 og 3–7 er kørt 13. august 2026:** domænet er oprettet og svarer, Supabases Site URL er flyttet og testet, Turnstile-værtsnavnet er **udvidet** (ikke skiftet), og `#196` er merget og udrullet. **Bevis 1 og 3b er bestået** — den gamle adresse svarer 308 mod `app.leagly.app`, og `/api/sync-live` svarer 401 og ikke 308, med appens egen CSP-header på, altså helt frem til funktionen. **Bevis 4 er bestået 13. august 2026:** en modtaget nulstillingsmail bærer `redirect_to=https://app.leagly.app/` i kilden, og det felt bygger Supabase af Site URL — altså er trin 4 nu bevist og ikke kun meldt. **Tilbage: resten af trin 8**, hvor beviserne afgør, om de øvrige meldte dashboard-trin faktisk virkede — det gamle `?liga=`-link hele vejen, et login på den nye adresse og `og:url`. | Trin 2 er kørt 14. august 2026 (`I8` leveret), og bevis 6 + 7 bestod samme dag — kun trin 8's sidste aflæsninger står tilbage |
 | I11 | **LinkedIn-side**, hvis der satses på indtægt via virksomheder | Betinget af en B2B-retning, der ikke er besluttet endnu. | Betinget af B2B-retning |
 | I12 | **Offentlig side pr. liga** (fx `predictionhub.app/league/padel-legends`: antal sæsoner, medlemmer, mestre, statistik — ikke tips, kun historik) | Bygger videre på liga-laget (§18) som en delbar, offentlig facade for hver liga. Kræver stillingtagen til, hvad der må vises uden login. | Ny |
@@ -248,52 +247,40 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 15. august 2026 (toogtyvende kørsel) — Tier 5 kørt: otte punkter lukket, og tre af dem rettede deres egen række undervejs
+### 15. august 2026 (treogtyvende kørsel) — `I9`s repo-halvdel og hele `B34`: appen holdes ude af Google uden at blive lukket for crawlerne
 
-**Listen er 41 → 33, og Tier 5 er tomt.** Alle otte punkter er leveret. Tre
-vagter, ét fælles værn, én migrering, ét opslag, ét CI-trin og én løsrivelse.
+**Listen er 32 → 31.** `B34` er leveret og slettet; `I9` er skrumpet til fem
+trin, der kræver en Google-konto. Ny runbog: [`SEO.md`](./SEO.md).
 
-**Det lærerige er ikke leverancerne, men at TRE rækker viste sig at beskrive
-noget andet, end de troede** — og at det i alle tre tilfælde kun kom for dagen,
-fordi vagten blev prøvet af med en mutation frem for læst igennem:
+**Rækkens egne to forslag var begge forkerte, og det ene var farligt.** `B34`
+skrev, at valget stod mellem `robots.txt` med `Disallow` på appen og en
+cross-domain canonical mod sitet — *"valget mellem de to er rækkens egentlige
+indhold"*. Men appens origin er dén, der leverer link-previewet for et delt
+invitationslink (`I7`): `middleware.js` genkender facebookexternalhit, WhatsApp,
+Twitterbot og LinkedInBot og omskriver til `api/invite-preview.js`, **og de
+crawlere respekterer robots.txt.** Et `Disallow: /` ville altså ikke skjule
+appen for Google — det ville slukke previewet i hver eneste gruppechat, uden at
+noget som helst fejlede. Den anden vej er svagere end den lyder: en canonical på
+tværs af domæner er et hint, og den påstår, at loginskærmen og salgssiden er den
+samme side. Svaret er ingen af delene, men `X-Robots-Tag: noindex, follow` —
+den læses kun af søgemaskiner, og deleplatformenes crawlere er ligeglade.
 
-- **`G110` havde ret i sin diagnose og forkert om omfanget.** Rækken sagde, at
-  vagten kun kendte sin ene SIDE. Den kendte også kun sin ene MOTORFIL — og
-  netop `funktioner.html`s citat ("Du gik forbi Anders") står i
-  `sql/story_engine.sql`, ikke i v3. En vagt, der kun læste v3, ville altså have
-  kaldt en ÆGTE formulering opdigtet i samme sekund, den fik siden at se.
-  Begge ender læser nu mapper.
-- **`G114`s præmis holdt ikke.** Rækken bad om "ét felt, skrevet af
-  `recordRun`" og skrev, at varigheden var "umulig at rekonstruere bagud".
-  `job_runs` har haft både `started_at` og `finished_at` siden `#18` — den var
-  allerede gemt og bare aldrig regnet ud. Ingen tabelændring, og diagnosen
-  gælder hele historikken frem for kun fremad.
-- **`G111`s egen første udgave var TOMT GRØN.** Filtret spurgte, om stien
-  indeholdt en skråstreg, hvilket en repo-relativ sti altid gør, så listen var
-  tom og påstanden triviel sand. Den fejl er præcis den klasse, filen findes for
-  at fange. Begge lister har nu en påstand om deres eget antal.
+**Én af rækkens fem småting fandtes ikke.** "Footer-året, som er hårdkodet" står
+ikke nogen steder: `site/` har hverken `©` eller et årstal i sidefoden. Der er
+ikke skrevet et årstal ind for at kunne rette det — en dato, der skal
+vedligeholdes hver 1. januar, er præcis den slags, rækken selv var bekymret for.
+De fire andre er leveret: `og:locale` + `og:image:alt` på alle fem sider,
+`site/404.html`, og cache på `/css/`.
 
-**Fire fund undervejs, som ikke stod i nogen række:**
+**Vagten er prøvet af med 22 mutationer, alle fanget** — heriblandt netop
+`Disallow: /` i `public/robots.txt` og en fjernet `X-Robots-Tag`. De to fejl er
+usynlige hver for sig og modsatrettede: den ene gør appen indekserbar, den anden
+slukker invitationerne, og ingen af dem melder sig selv.
 
-- `sql/tests/_schema.mjs` manglede i `sql/README.md`. Fundet af `G111`s vagt
-  ved dens allerførste kørsel.
-- `site/funktioner.html`s story-citat var ubevogtet — og dets regel (`H2H_PASS`)
-  bor i en anden motorfil end den, vagten læste.
-- `\b` betyder **backspace** i PostgreSQLs regex, ikke ordgrænse. `G121`s
-  opslag klassificerede fem af syv fejltekster forkert, indtil det blev kørt mod
-  rigtige rækker. CI's docs-SQL-tjek kan ikke se det — `prepare` accepterer en
-  regex, der matcher det forkerte.
-- Bash tillader ikke ikke-ASCII i variabelnavne. `G124`s CI-trin var skrevet med
-  `ÆNDREDE` og `REKKEFØLGE` og ville have fejlet ved første kørsel.
-
-**Efterprøvet ved mutation, ikke ved gennemlæsning:** `G110` seks gange, `G111`
-seks, `G112` fem, `G114` syv og `G124` fire — alle fanget. To af `G114`s syv
-slap igennem den første udgave og rettede både migreringen (et `filter`, hvis
-begrundelse var faktuelt forkert) og fixturen (døgnets værste kørsel lå inde i
-timen, så de to maksima ikke kunne skelnes).
-
-✅ **Begge migreringer er kørt i produktionen 15. august 2026.** `#66` giver
-Admin → Drift varigheder for hele historikken, og `#64` gjorde Scotland
-Premiership officiel (`A55`). `B36` og `B35` er lukket og slettet, og **Tier 1 er
-dermed tomt** — der er ingen bestillinger til produktionen tilbage.
+**404-siden bar sin egen fælde.** De fem andre sider ligger på roden og bruger
+relative stier. En 404-side serveres for enhver ukendt adresse, så `css/site.css`
+ville slå op i `/en/dyb/css/site.css` og give en side uden stilark — en fejl,
+der kun viser sig på dybe stier. Siden bruger derfor rod-absolutte stier, og
+vagten måler det. Efterprøvet i Chromium på præcis sådan en dyb sti, i 1280 og
+390 px.
 
