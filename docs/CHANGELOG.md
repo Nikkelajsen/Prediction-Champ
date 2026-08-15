@@ -23,6 +23,8 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 **Én af `B34`s fem småting fandtes ikke:** "footer-året, som er hårdkodet" står ikke nogen steder — `site/` har hverken `©` eller et årstal i sidefoden. Der er ikke skrevet et ind for at kunne rette det.
 
+🔵 **Rettet samme dag, da indbakken blev tømt:** sitets nye `og:image:alt` sagde *"Leagly-logoet på mørk baggrund"*, og det beskriver det forkerte billede. `public/og-image.png` (appen) er wordmarket alene; `site/img/og-image.png` er wordmarket **plus sælgesætningen malet ind** — to forskellige filer, 27 kB mod 49 kB. Alt-teksten er nu *"Leagly-logoet over sætningen: Slå dine venner. Uge efter uge."* Forskellen på de to billeder rejste `G127`: `scripts/build-og-image.mjs` bygger kun appens, og dets hoved forklarer i to afsnit, hvorfor ordlyden ikke kan males ind — mens sitets billede har den malet ind af et værktøj, ingen har skrevet ned.
+
 **Tilbage af `I9`:** fem trin i Search Console, som kræver en Google-konto — domæne-ejendom (dækker også `app.leagly.app`, så `noindex` kan aflæses frem for antages), sitemap, indeksering af forsiden, kontrol af at appen holdes ude, og Bing som valgfrit. Beviserne kan ikke køres herfra: udgående HTTPS til `leagly.app` afvises af arbejdsmiljøets proxy (`A32`).
 
 ---
