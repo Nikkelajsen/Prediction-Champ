@@ -43,6 +43,68 @@ import { getProvider, providerToken, indexSeasons, DEFAULT_PROVIDER } from "./_p
 const WINDOW_BACK_MS = 6 * 60 * 60 * 1000;
 const WINDOW_AHEAD_MS = 15 * 60 * 1000;
 
+// ---- efterfejningen: kampe, der aldrig fik deres resultat (G122) ----
+//
+// HVAD DER VAR GALT. Vinduet ovenfor er også en GRÆNSE: en kamp, hvis kickoff
+// ligger mere end 6 timer tilbage og som stadig står uden endeligt resultat, er
+// usynlig for dette job. Den ventede derfor på næste `sync-matches`-kørsel —
+// hver 12. time — og i hele det vindue stod rating og stillinger forkerte.
+//
+// Backloggen foreslog to veje: køre `sync-matches` hyppigere, eller lade den
+// genopfriske de seneste dages kampe. Den anden er allerede sand — begge
+// providere henter HELE sæsonen, og `matchUpsertRow()` skriver score for alt,
+// der er `finished`, ved hver eneste kørsel. Der var altså ingen manglende
+// genopfriskning at bygge; der var kun en LATENS på op til 12 timer.
+//
+// Derfor ligger rettelsen her i stedet. Det er dette job, der kører hvert
+// minut, og som allerede kender hele vejen fra kamp til leverandør — så
+// bagstopperen koster hverken et nyt cron-job, en ny række i `docs/CRON.md`
+// eller en hyppigere kadence hos leverandørerne.
+//
+// TRE VÆRN, fordi den naive udgave er dyr. Uden dem ville en kamp, der ALDRIG
+// kan få et resultat — en udsat kamp, hvis `kickoff_at` endnu ikke er skrevet
+// om, eller en kamp uden for abonnementet — udløse et leverandørkald hvert
+// eneste minut, i døgnet rundt. Den tidlige retur nedenfor er hele jobbets
+// forbrugsbegrænsning, og en bagstopper, der punkterer den, er dyrere end det
+// hul, den lukker.
+//
+//   1. ÉT MINUT I TIMEN. Efterfejningen kører kun i `STALE_SWEEP_MINUTE`, så
+//      den værst tænkelige pris er 24 ekstra kald i døgnet pr. leverandør frem
+//      for 1.440. Latensen falder dermed fra op til 12 timer til op til én, og
+//      det er den rigtige byttehandel: et tabt resultat er en fejl, der skal
+//      rettes samme aften, ikke inden for et minut.
+//   2. EN ØVRE ALDER. Ud over `STALE_MAX_AGE_MS` er en kamp uden resultat ikke
+//      et tabt slutfløjt længere, men et datapunkt, et menneske skal se på.
+//      `sync-matches` har da haft tre kørsler til at rette den.
+//   3. ET LOFT PÅ ANTALLET. `STALE_MAX` holder Sportmonks-opslaget på ét kald
+//      (grænsen dér er 40 id'er pr. kald), så én turnering med noget galt ikke
+//      kan gøre efterfejningen til jobbets dyreste del.
+//
+// Minuttallet er ikke tilfældigt: 00, 05, 11, 15, 17, 23 og 29 er optaget af
+// kampprogram-jobbene, og `docs/CRON.md` beder udtrykkeligt om, at et nyt
+// football-data-kald ikke lægges oven i et af dem. 41 er ledigt.
+const STALE_SWEEP_MINUTE = 41;
+const STALE_MAX_AGE_MS = 36 * 60 * 60 * 1000;
+const STALE_MAX = 40;
+
+// Skal DENNE kørsel feje efter, og i så fald hvilket tidsrum?
+//
+// Ren funktion og eksporteret af samme grund som `matchUpsertRow()` i
+// sync-matches.js: handleren kan ikke nås uden et HTTP-mock-apparat, så en
+// regel, der kun findes inde i den, er en regel uden test. Netop denne må ikke
+// kunne skride ubemærket — bliver `null` til "altid feje", er det jobbets
+// forbrugsbegrænsning, der ryger.
+//
+// `to` er nøjagtig `from`-grænsen i hovedopslaget nedenfor, så de to vinduer
+// støder op til hinanden uden overlap: en kamp høres af præcis ét af dem.
+export function staleWindow(now, { sweepMinute = STALE_SWEEP_MINUTE } = {}) {
+  if (new Date(now).getUTCMinutes() !== sweepMinute) return null;
+  return {
+    from: new Date(now - STALE_MAX_AGE_MS).toISOString(),
+    to: new Date(now - WINDOW_BACK_MS).toISOString(),
+  };
+}
+
 export default async function handler(req, res) {
   // Sættes så snart autorisationen er i hus. Ligger uden for try'et, fordi
   // catch'en skal kunne bruge den — en kørsel, der vælter, er netop den, der
@@ -88,27 +150,58 @@ export default async function handler(req, res) {
     // ---- 1) hvilke kampe kan være i gang lige nu? ----
     // (a) kampe uden endeligt resultat, hvis kickoff ligger i tidsvinduet, ELLER
     // (b) kampe der stadig står markeret som live (skal ryddes/færdigmeldes,
-    //     også hvis de er faldet ud af vinduet).
+    //     også hvis de er faldet ud af vinduet), ELLER
+    // (c) én gang i timen: kampe, der for længst burde have fået et resultat og
+    //     ikke har et (G122) — se `staleWindow()` ovenfor.
     const now = Date.now();
     const from = new Date(now - WINDOW_BACK_MS).toISOString();
     const to = new Date(now + WINDOW_AHEAD_MS).toISOString();
     const cols = "id,api_fixture_id,season_id,home_team_id,away_team_id,kickoff_at,status,home_score,away_score,live_home_score,live_away_score,live_state,live_minute";
-    // To simple opslag frem for ét or=(and(...))-udtryk: tidsstempler i en PostgREST-
-    // logiktræ-værdi kræver citering, og det er ikke besværet værd for et opslag,
-    // der næsten altid returnerer nul rækker i (b).
-    const [inWindow, stillLive] = await Promise.all([
+    const stale = staleWindow(now);
+    // Simple opslag frem for ét or=(and(...))-udtryk: tidsstempler i en PostgREST-
+    // logiktræ-værdi kræver citering, og det er ikke besværet værd for opslag,
+    // der næsten altid returnerer nul rækker i (b) og (c).
+    //
+    // (c) er `not.is.true` og ikke `is.false`, så rækker fra før `kickoff_tbd`
+    // fandtes (null) tælles med. Kampe UDEN bekræftet klokkeslæt holdes derimod
+    // ude med vilje: efterfejningen bygger på "kampen burde være slut nu", og
+    // det udsagn kan ikke stilles om en kamp, hvis starttid er en pladsholder.
+    // De ville desuden kunne fylde loftet nedenfor og fortrænge ægte fund.
+    const [inWindow, stillLive, staleRows] = await Promise.all([
       sb(`/rest/v1/matches?select=${cols}&home_score=is.null&kickoff_at=gte.${from}&kickoff_at=lte.${to}`),
       sb(`/rest/v1/matches?select=${cols}&live_state=not.is.null`),
+      stale
+        ? sb(`/rest/v1/matches?select=${cols}&home_score=is.null&kickoff_tbd=not.is.true&kickoff_at=gte.${stale.from}&kickoff_at=lt.${stale.to}&order=kickoff_at.desc&limit=${STALE_MAX}`)
+        : Promise.resolve([]),
     ]);
     const byId = new Map();
     for (const m of [...(inWindow || []), ...(stillLive || [])]) byId.set(m.id, m);
+    // Efterfejningens id'er huskes, så resuméet kan skelne "live-syncen gjorde
+    // sit arbejde" fra "bagstopperen fangede noget, der var tabt". Uden den
+    // skelnen ville et hul, der opstår igen og igen, se ud som en normal kørsel.
+    // Sættet fyldes FØR `byId`, så en kamp, der også er i (a) eller (b), ikke
+    // fejlagtigt tælles som et fund.
+    const staleIds = new Set();
+    for (const m of staleRows || []) {
+      if (byId.has(m.id)) continue;
+      staleIds.add(m.id);
+      byId.set(m.id, m);
+    }
+
+    // Kvitteringen for efterfejningen, og den er tre-værdiet med vilje: feltet
+    // MANGLER, når minuttet ikke var fejeminuttet, og står `0`, når der blev
+    // fejet uden fund. Et felt, der altid var der, ville man holde op med at
+    // læse; et felt, der kun var der ved fund, ville ikke kunne skelne "fejede,
+    // alt var fint" fra "holdt op med at feje" — og det er præcis den forskel,
+    // `A11` og `G43` begge kostede noget at lære.
+    const staleInfo = stale ? { staleChecked: staleIds.size } : {};
 
     const withFixture = [...byId.values()].filter((m) => m.api_fixture_id);
     if (!withFixture.length) {
       // Ingen kampe i vinduet — spar API-kaldet helt (det er langt de fleste minutter i døgnet).
       // Dette er hele forbrugsbegrænsningen, og de to liga-opslag nedenfor ligger
       // bevidst EFTER den, så en stille nat ikke koster to Supabase-kald i minuttet.
-      return run.ok(res, { checked: 0, live: 0, finished: 0, cleared: 0, note: "Ingen kampe i tidsvinduet" });
+      return run.ok(res, { checked: 0, live: 0, finished: 0, cleared: 0, ...staleInfo, note: "Ingen kampe i tidsvinduet" });
     }
 
     // ---- 2) hvilken datakilde hører hver kamp til? ----
@@ -169,7 +262,7 @@ export default async function handler(req, res) {
 
     // ---- 4) beslut hvad der skal skrives ----
     const updates = [];
-    let liveCount = 0, finishedCount = 0, clearedCount = 0, liveSuppressed = 0;
+    let liveCount = 0, finishedCount = 0, clearedCount = 0, liveSuppressed = 0, staleRescued = 0;
     const preview = [];
 
     for (const m of withFixture) {
@@ -207,7 +300,11 @@ export default async function handler(req, res) {
         if (m.home_score === hs && m.away_score === as && m.live_state == null) continue;
         updates.push({ ...base, status: "finished", home_score: hs, away_score: as, ...clearLive });
         finishedCount++;
-        preview.push({ fixture: m.api_fixture_id, action: "finished", score: `${hs}-${as}` });
+        // Et resultat, det normale vindue havde tabt (G122). Tælles for sig,
+        // fordi det er selve målet: står tallet vedvarende over nul, er der et
+        // hul i live-syncen, som bagstopperen skjuler frem for at afsløre.
+        if (staleIds.has(m.id)) staleRescued++;
+        preview.push({ fixture: m.api_fixture_id, action: staleIds.has(m.id) ? "finished (efterfejet)" : "finished", score: `${hs}-${as}` });
         continue;
       }
 
@@ -253,6 +350,11 @@ export default async function handler(req, res) {
       // Kampe der ER i gang, men hvis liga ikke har live slået til. Tallet er
       // den synlige kvittering for, hvad €12/md-planen ville købe.
       liveSuppressed,
+      ...staleInfo,
+      // Kun til stede, når bagstopperen faktisk fangede noget. Et resultat her
+      // er ikke en succes at glæde sig over, men et spor efter et tabt
+      // slutfløjt — se tælleren i beslutningsløkken ovenfor.
+      ...(staleRescued ? { staleRescued } : {}),
       providers: [...groups.keys()],
     };
 
