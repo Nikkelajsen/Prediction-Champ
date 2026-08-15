@@ -837,6 +837,19 @@ jobs:
           psql -h localhost -U postgres -d analyticsretention -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d analyticsretention -v ON_ERROR_STOP=1 -b -f sql/tests/analytics_retention.sql
 
+      # Hændelseskataloget efter #67. Migreringen kan kun sætte check-
+      # constrainten i sin helhed og gentager derfor hele listen — altså en
+      # kopi, der kan tabe en linje. Testen læser den GAMLE liste ud af skemaet
+      # før migreringen og kræver, at forskellen er præcis ét navn.
+      - name: Test af hændelseskataloget (standings_shared)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database standingsshare;'
+          psql -h localhost -U postgres -d standingsshare -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d standingsshare -v ON_ERROR_STOP=1 -b -f sql/tests/analytics_standings_share.sql
+
       # Sæson-simulatoren (G82). Jobbets TUNGESTE trin — ~10 sekunder — og det
       # er hele prisen ved rækken: 1.069 linjer SQL, der indtil august 2026 kun
       # var efterprøvet i hånden mod en lokal PG16.

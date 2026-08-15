@@ -72,10 +72,18 @@ async function loadDayCard(token) {
 
 // Afvis en historie (sætter dismissed_at). Best-effort.
 //
-// Efter v3 kan KUN rundestoryen afvises. Dagskortet har hverken Del eller
-// Afvis: det udløber af sig selv efter 48 timer og erstattes hver kampdag, så
-// der er intet at rydde — spec §8's "ingen friktion, intet at åbne, intet at
-// rydde". Feltet og denne funktion bliver stående, fordi rundekortet bruger dem.
+// BEGGE korttyper bruger den siden 15. august 2026. Dagskortet havde indtil da
+// hverken Del eller Afvis (spec §8's "ingen friktion, intet at åbne, intet at
+// rydde"), og begrundelsen — at kortet udløber af sig selv efter 48 timer —
+// holder stadig; den dækkede bare ikke den bruger, der er færdig med kortet nu.
+//
+// ⚠️ EN AFVISNING KAN GENOPSTÅ, og det er en kendt kant frem for en fejl.
+// `generate_daily_stories(p_day)` SLETTER og gen-indsætter dagens rækker, når
+// den kører igen — fx efter en resultatrettelse på en kampdag, der allerede var
+// gjort færdig. Den nye række har et nyt `id`, og `dismissed_at` fulgte med den
+// gamle i graven. Kuren ville være en `dismissed`-liste pr. `(user_id, day_key)`,
+// altså en tabel for en kant, der kræver, at et resultat rettes bagud på præcis
+// den dag, brugeren afviste. Skrevet ned i backloggen frem for bygget.
 async function dismissStory(token, id) {
   try {
     await db.update(token, "stories", `id=eq.${id}`, { dismissed_at: new Date().toISOString() });

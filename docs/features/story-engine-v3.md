@@ -140,11 +140,56 @@ Rundestoryen er den ene om ugen, hvor tap-through er sit besvær værd:
 | 4 | Rundens vinder + status i Månedsligaen |
 | 5 | *Betinget:* ny milepæl + **Se din karriere** |
 
-Frame 1 og 3 skal kunne stå alene som delbart billede uden kontekst — det er de to, folk sender videre. Delefunktionen ligger kun her; hverdagskortet har den ikke længere.
+Frame 1 og 3 skal kunne stå alene som delbart billede uden kontekst — det er de to, folk sender videre. ~~Delefunktionen ligger kun her; hverdagskortet har den ikke længere.~~
+
+> ⚠️ **HVERDAGSKORTET FIK DELEFUNKTIONEN TILBAGE 15. august 2026 (`I25`).** Sætningen ovenfor
+> holdt om det, den handlede om — at *udbrede* deling udvander den — men den svarede på et
+> spørgsmål, produktet ikke stiller: hvad brugeren har lyst til at sende videre. Dagens facit
+> **er** dét, man sender i en ligachat, og et kort, der er valgt af en nyhedsværdi-score til
+> at bære dagens ene øjeblik, er per konstruktion det bedste kandidat til det.
+>
+> **Prisen er betalt to steder frem for ved at lade være:**
+>
+> - **Påmindelseskortet deles ikke** (`payload.variant = 'no_tips'`). Det siger "du mangler at
+>   tippe N kampe" *til dig selv* og er det ene dagskort uden en modtager. Reglen bor i
+>   `isShareableDayCard()` (`src/lib/stories.js`), så begrundelsen står ét sted.
+> - **Ulæst-prikkens tærskel er urørt.** Prikken siger *"dette er værd at afbryde for"* og skal
+>   være sjælden; knappen siger *"dette kan sendes videre"*. Det dæmpede kort har derfor knap
+>   uden prik — de to spørgsmål ligner hinanden og er ikke ens, og `stories.test.js` har en
+>   påstand, hvis eneste formål er, at de ikke stille og roligt bliver det samme.
+>
+> **Mini-stillingen kommer IKKE med på billedet.** Dens navne er afgrænset til folk, modtageren
+> deler konkurrence med — den regel er strukturel i dagsmotoren, og et billede rejser uden for
+> afgrænsningen. Skal en stilling deles, er det Stilling-skærmens egen Del-knap, hvor brugeren
+> **vælger** tabellen.
+>
+> **Maleren er flyttet, ikke kopieret.** `drawFrame()` hed sådan, mens der fandtes ét delbart
+> format; den er nu `drawStoryCard()` i `src/lib/shareCanvas.js` sammen med `drawStandings()`.
+> Det, der skulle holdes ét sted, er ikke koden, men **rammen**: tre skærme, hvis billeder skal
+> ligne hinanden i den samme beskedtråd. Flytningen rettede to fejl, der var usynlige i det
+> gamle format og synlige med det samme i det nye — en tom linje ved et meget langt første ord,
+> og en brødtekst, der blev klippet **midt i et ord** af et `slice(0, 46)`.
 
 ## 8. Frontend
 
-**Hverdag: ét kort på Hjem, ingen tap-through.** Kortet sidder øverst på Hjem, over Aktive konkurrencer. Ingen friktion, intet at åbne, intet at rydde. Indholdet er overskrift + brødtekst + mini-stilling med brugerens række fremhævet + ~~næste kamp og evt. manglende tips~~.
+**Hverdag: ét kort på Hjem, ingen tap-through.** Kortet sidder øverst på Hjem, over Aktive konkurrencer. Ingen friktion, intet at åbne, ~~intet at rydde~~. Indholdet er overskrift + brødtekst + mini-stilling med brugerens række fremhævet + ~~næste kamp og evt. manglende tips~~.
+
+> ⚠️ **KORTET KAN AFVISES SIDEN 15. august 2026 (`I25`).** *"Intet at rydde"* hvilede på, at
+> kortet udløber efter 48 timer og erstattes hver kampdag — og det gør det stadig. Det,
+> sætningen ikke dækkede, er den bruger, der er **færdig med kortet nu** og ikke om halvandet
+> døgn. Afvisningen er den samme som rundestoryens: et `X` i kortets header, `iconBtn`, som
+> sætter `dismissed_at` gennem `dismissStory()`.
+>
+> **Server-side og ikke et lokalt flag**, modsat ulæst-prikken. At man er *færdig* med en
+> historie er en egenskab ved **historien**; at man *har set* den er en egenskab ved **enheden**.
+> Feltet, funktionen og RLS-policyen `stories_update_own` fandtes allerede — kun UI'et manglede.
+>
+> ⚠️ **En afvisning kan genopstå**, og det er en kendt kant frem for en fejl:
+> `generate_daily_stories(p_day)` sletter og gen-indsætter dagens rækker, når den kører igen —
+> fx efter en resultatrettelse på en kampdag, der allerede var gjort færdig — og den nye række
+> har et nyt `id`. Kuren ville være en `dismissed`-liste pr. `(user_id, day_key)`, altså en
+> tabel for en kant, der kræver, at et resultat rettes bagud på præcis den dag, brugeren
+> afviste. Skrevet ned i backloggen og i `src/lib/data/activity.js` frem for bygget.
 
 > ⚠️ **TIPS-STATUS ER FJERNET FRA KORTET IGEN 14. august 2026.** Den blev bygget
 > som beskrevet ovenfor og viste sig at være en **dublet i alle tre tilstande**:

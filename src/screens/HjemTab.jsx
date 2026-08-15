@@ -104,10 +104,18 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
     setSeenStories(markStorySeen(userId, id));
   }
 
-  // Kun rundestoryen kan afvises. Dagskortet har hverken Del eller Afvis:
-  // det udløber af sig selv og erstattes hver kampdag.
-  async function onDismissRound(item) {
-    setRoundStory(null);
+  // BEGGE kort kan afvises siden 15. august 2026. Dagskortet havde det ikke før
+  // — spec §8's "intet at rydde" hvilede på, at det udløber efter 48 timer, og
+  // det gør det stadig; det, sætningen ikke dækkede, er den bruger, der er
+  // færdig med kortet NU. Afvisningen er server-side (`dismissed_at`) og ikke et
+  // lokalt flag som ulæst-prikken: at man er færdig med en historie er en
+  // egenskab ved HISTORIEN, mens "har jeg set den" er en egenskab ved enheden.
+  //
+  // `setter` sendes ind frem for at udlede korttypen af rækken: kalderen ved
+  // allerede, hvilket kort brugeren trykkede på, og en `period === 'day'`-test
+  // her ville være en aflæsning af noget, der ikke behøver aflæses.
+  async function onDismissStory(item, setter) {
+    setter(null);
     if (item?.id) await dismissStory(token, item.id);
   }
 
@@ -233,10 +241,12 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
       {roundIsNewer ? (
         <RoundStory story={roundStory} token={token} competitions={competitions}
           seen={seenStories.has(roundStory.id)} onSeen={onSeen}
-          onDismiss={onDismissRound} openProfile={openProfile} userId={userId} />
+          onDismiss={(s) => onDismissStory(s, setRoundStory)}
+          openProfile={openProfile} userId={userId} />
       ) : (
         <DayCard story={dayCard} token={token} competitions={competitions}
-          seen={seenStories.has(dayCard?.id)} onSeen={onSeen} />
+          seen={seenStories.has(dayCard?.id)} onSeen={onSeen}
+          onDismiss={(s) => onDismissStory(s, setDayCard)} />
       )}
 
       {/* "Kom godt i gang": erstatter de tidligere dashed tom-tilstande. De sagde
