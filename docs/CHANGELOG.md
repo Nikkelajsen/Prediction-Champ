@@ -9,6 +9,18 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+15. august 2026 — `G124` rettet samme dag: vagten sprang tavst over, og dens virkning kunne ikke aflæses
+
+**To fejl, og den anden blev fundet, fordi nogen forsøgte at efterprøve den første.**
+
+**1. Et spring over er ikke et resultat.** Trinnet sprang over med et `::notice::`, hvis basis-commit'en var tom eller ikke kunne slås op. Følgen var, at en fejlkonfigureret `fetch-depth` eller en ref, der ikke kunne opløses, ville give en **grøn vagt, der målte ingenting** — tavshed, der ligner ro, altså præcis den form `A26` og `G43` er skrevet imod. De to tilstande skilles nu ad: *ingen forgænger overhovedet* (lutter nuller, som pr. konstruktion kun kan ske på et `push`) er et lovligt spring over og siges højt; *en basis, vi fik at vide, men ikke kan slå op* er rødt, med en fejltekst der peger på kuren (`fetch-depth: 0`). Et `pull_request` uden base er rødt uanset hvad — det kan ikke ske, og hvis det gør, er antagelsen forkert.
+
+**2. Vagtens virkning kunne ikke aflæses.** Da PR `#226` var merget, blev der forsøgt en efterprøvning af, om trinnet havde målt noget på sin første kørsel. **Det kunne ikke lade sig gøre.** `sql`-jobbet producerer over 9.000 loglinjer, sæson-simulatorens NOTICE-udskrift fylder de sidste par tusinde, og GitHubs log-API svarer kun med en hale — trinnets egne linjer lå uden for det hentbare vindue, og et forsøg på at hente hele arkivet blev afvist af proxyen. Beviset måtte derfor bygges på en lokal gengivelse plus et ræsonnement om, at `github.event.pull_request.base.sha` altid er udfyldt. Det er en udledning, ikke en aflæsning. **Trinnet skriver nu hver udgang i `$GITHUB_STEP_SUMMARY`** — inklusive hvilke filer der faktisk blev lagt oven på skemaet — så resultatet står på kørslens egen side, to klik væk, i stedet for at være begravet i et log, der ikke kan hentes. ⚠️ **Rettet umiddelbart efter: det løser problemet for et MENNESKE og ikke for et API-opslag.** Første formulering påstod, at resuméet også står i check-runnets `output`; det gør det ikke, efterprøvet på kørslen for `#227`, hvor trinnet skrev sin linje, mens `output.summary` var tom. Rettelsen står, fordi den slags formodning er nem at få igen.
+
+**Læren er den samme som trinnets egen:** en vagt, hvis virkning ikke kan aflæses, er en vagt, man må tro på. Syv tilstande efterprøvet i en rigtig shell — `pull_request` uden base (rød), ukendt base (rød), push uden forgænger (grøn, sagt højt), ingen sql-ændringer (grøn, sagt højt), en rigtig migrering (grøn, med filnavnet i resuméet), `G119` genindført (rød) og `job_runs.sql`-undtagelsen.
+
+---
+
 15. august 2026 — Tier 5 kørt: tre vagter, der kun kendte deres første fil, og tre rækker der beskrev noget andet, end de troede
 
 **Alle otte punkter i Tier 5 er leveret**, og listen er 41 → 34 (`B36` kom til: `#66` skal køres i Supabase). Det, der er værd at huske, er ikke leverancerne, men at **tre af rækkerne viste sig at beskrive noget andet, end de sagde** — og at det i alle tre tilfælde kun kom for dagen, fordi vagten blev prøvet af med en mutation frem for læst igennem.

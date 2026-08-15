@@ -70,6 +70,10 @@ og to migreringer i samme pull request kan have en afhængighed (`#63` er
 meningsløs uden `#61`). En alfabetisk rækkefølge ville fejle på noget, der ikke
 er en fejl.
 
+**🔴 RETTET SAMME DAG, og rettelsen er den vigtigste del af beslutningen.** Første udgave sprang trinnet over med et `::notice::`, hvis basis-commit'en var tom eller ikke kunne slås op — altså **tavshed, der ligner ro**, præcis den form `A26` og `G43` er skrevet imod. Vagten ville have været død og grøn ved hver eneste kørsel. De to tilstande er ikke den samme, og kun den ene er lovlig: *ingen forgænger overhovedet* (lutter nuller ved en gren-oprettelse eller et force-push, hvilket pr. konstruktion kun kan ske på et `push`) er der intet at sammenligne med, mens *en basis, vi fik at vide, men ikke kan slå op* betyder, at `fetch-depth` eller ref'en er forkert — og så måler trinnet ingenting og skal være rødt.
+
+**Trinnet skriver desuden sit resultat i jobbets resumé, og det er ikke pynt.** Det blev opdaget, da nogen ville efterprøve, om trinnet havde målt noget på sin allerførste kørsel: `sql`-jobbet producerer over 9.000 loglinjer, sæson-simulatorens NOTICE-udskrift fylder de sidste par tusinde, og GitHubs log-API svarer kun med en hale. Trinnets egne linjer kunne dermed ikke læses bagefter. Resuméet står på kørslens egen side i GitHubs brugerflade, to klik væk. ⚠️ **Det løser problemet for et MENNESKE og ikke for et API-opslag** — første formulering her påstod, at resuméet også står i check-runnets `output`, og det gør det ikke; efterprøvet på kørslen for `#227`, hvor trinnet skrev sin linje, mens `output.summary` var tom. **En vagt, hvis virkning ikke kan aflæses, er en vagt, man må tro på** — og det er den samme fejlklasse som den, trinnet selv findes for at lukke.
+
 **`sql/job_runs.sql` springes over, og undtagelsen er dokumenteret.** Filen kan
 ikke lægges oven på et skema, hvor `#65`/`#66` er kørt — returtypen kan ikke
 erstattes, og PostgreSQL svarer `42P13`. En fil, der ikke kan køres mod
