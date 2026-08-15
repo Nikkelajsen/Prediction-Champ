@@ -1,0 +1,33 @@
+# app.leagly.app — APPEN, ikke hjemmesiden.
+# Hjemmesidens egen fil er `site/robots.txt` og serveres fra leagly.app.
+#
+# ---------------------------------------------------------------------------
+# ⚠️ SKRIV ALDRIG `Disallow` I DENNE FIL
+#
+# Link-previewet for et delt invitationslink (`I7`) leveres fra præcis denne
+# origin: `middleware.js` genkender facebookexternalhit, WhatsApp, Twitterbot,
+# LinkedInBot m.fl. på `/?liga=<kode>` og omskriver til `api/invite-preview.js`.
+# De crawlere RESPEKTERER robots.txt. Et `Disallow: /` ville derfor ikke bare
+# holde appen ude af Google — det ville slukke previewet i hver eneste
+# gruppechat, et invitationslink deles i, og `I7` er hele grunden til, at der
+# står andet end en nøgen URL dér.
+#
+# Appen holdes i stedet ude af søgeindekset med `X-Robots-Tag: noindex, follow`
+# i repoets `vercel.json` (`B34`, 15. august 2026). Den header læses KUN af
+# søgemaskiner; deleplatformenes crawlere er ligeglade og henter siden alligevel.
+# Fejlen ville være tavs begge veje — hverken et manglende preview eller en
+# indekseret loginskærm melder sig selv — så `seo.test.js` vogter begge dele.
+# Begrundelsen i sin fulde længde står i `docs/SEO.md`.
+#
+# ---------------------------------------------------------------------------
+# HVORFOR FILEN FINDES, NÅR DEN INTET FORBYDER
+#
+# Uden den svarer `/robots.txt` med hvad Vercel nu falder tilbage på, og "ingen
+# fil" og "en fil, der tillader alt" er umulige at skelne bagefter. Den er altså
+# ikke en regel, men en skriftlig hensigt — og det sted, advarslen ovenfor kan
+# stå, så den næste, der vil "lukke appen for Google", læser den først.
+#
+# Ingen `Sitemap:`-linje med vilje: sitemappet hører til hjemmesiden, og en
+# henvisning på tværs af værtsnavne kræver krydsverifikation i Search Console.
+User-agent: *
+Allow: /

@@ -9,6 +9,26 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+15. august 2026 — SEO: appen ude af Google, sitet klar til at blive fundet (`B34` lukket, `I9` skrumpet til fem trin)
+
+**`I9`s repo-halvdel og hele `B34` er leveret**, og den nye [`docs/SEO.md`](./SEO.md) samler registeret, ejerens trin i Search Console, seks beviser og fejlfindingen ét sted.
+
+**Appen holdes ude af søgeindekset med `X-Robots-Tag: noindex, follow` i `vercel.json`** — og `public/robots.txt` **tillader alt med vilje**. `B34` foreslog `Disallow` eller en cross-domain canonical; begge er valgt fra, og den første ville have gjort skade. Appens origin er dén, der leverer link-previewet for et delt invitationslink (`I7`): `middleware.js` genkender facebookexternalhit, WhatsApp, Twitterbot og LinkedInBot og omskriver til `api/invite-preview.js`, **og de crawlere respekterer robots.txt.** Et `Disallow: /` ville derfor have slukket previewet i hver eneste gruppechat — uden en fejl, en log eller et symptom på vores side. Begrundelsen i sin fulde længde står i [`DECISIONS.md`](./DECISIONS.md).
+
+**Hjemmesiden:** `og:locale` og `og:image:alt` på alle fem sider (sættet blev leveret 13. august som "komplet" og manglede de to på hver eneste side), `site/404.html` i sitets egen identitet, og `Cache-Control` på `/css/`.
+
+**404-siden bruger rod-absolutte stier, og det er ikke pynt.** De fem andre sider ligger på roden og kan nøjes med `css/site.css`; en 404-side serveres for enhver ukendt adresse, så en relativ sti ville slå op i `/en/dyb/css/site.css` og give en side uden stilark — en fejl, der først viser sig på dybe stier, altså netop dem, ingen prøver i hånden. Efterprøvet i Chromium på præcis sådan en sti, i 1280 og 390 px: stilark, fonte og burger-menu virker, ingen vandret scroll, ingen fejlede requests.
+
+**Ny vagt: `seo.test.js`**, 15 påstande, afprøvet med 22 mutationer — alle fanget. Den måler begge origins: sitets metadata og at `sitemap.xml` lister præcis de sider, mappen har (en ny side uden en `<loc>` fejler i CI), 404-siden (noindex, uden canonical, uden for sitemappet, ingen relative stier), og appens to modsatrettede tavse fejl — et `Disallow`, der slukker invitationerne, og en fjernet `X-Robots-Tag`, der gør loginskærmen indekserbar.
+
+**Én af `B34`s fem småting fandtes ikke:** "footer-året, som er hårdkodet" står ikke nogen steder — `site/` har hverken `©` eller et årstal i sidefoden. Der er ikke skrevet et ind for at kunne rette det.
+
+🔵 **Rettet samme dag, da indbakken blev tømt:** sitets nye `og:image:alt` sagde *"Leagly-logoet på mørk baggrund"*, og det beskriver det forkerte billede. `public/og-image.png` (appen) er wordmarket alene; `site/img/og-image.png` er wordmarket **plus sælgesætningen malet ind** — to forskellige filer, 27 kB mod 49 kB. Alt-teksten er nu *"Leagly-logoet over sætningen: Slå dine venner. Uge efter uge."* Forskellen på de to billeder rejste `G127`: `scripts/build-og-image.mjs` bygger kun appens, og dets hoved forklarer i to afsnit, hvorfor ordlyden ikke kan males ind — mens sitets billede har den malet ind af et værktøj, ingen har skrevet ned.
+
+**Tilbage af `I9`:** fem trin i Search Console, som kræver en Google-konto — domæne-ejendom (dækker også `app.leagly.app`, så `noindex` kan aflæses frem for antages), sitemap, indeksering af forsiden, kontrol af at appen holdes ude, og Bing som valgfrit. Beviserne kan ikke køres herfra: udgående HTTPS til `leagly.app` afvises af arbejdsmiljøets proxy (`A32`).
+
+---
+
 15. august 2026 — Tier 1 er tomt: begge ventende migreringer er kørt i produktionen
 
 **`#66 job_run_duration.sql` (`G114`)** — Admin → Drift viser nu varigheder for hele historikken på én gang, og ikke kun fremad. Det er hele pointen med, at rækken ikke fik den kolonne, den bad om: varigheden udledes af `started_at`/`finished_at`, som har været der siden `#18`, så de 30 dages kørsler, `prune_job_runs` holder på, kunne aflæses i samme sekund filen var kørt.

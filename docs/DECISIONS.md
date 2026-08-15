@@ -15,6 +15,63 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 15. august 2026 — `B34`: appen holdes ude af søgeindekset med `noindex`, ikke med `Disallow`
+
+**Beslutning:** `app.leagly.app` får `X-Robots-Tag: noindex, follow` i
+`vercel.json` og en `public/robots.txt`, der **tillader alt**. Hverken et
+`Disallow` på appens origin eller en cross-domain `canonical` mod `leagly.app`.
+
+**Begrundelse — begge de foreslåede kure ville have kostet noget, rækken ikke
+vidste den betalte.** `B34` skrev, at valget stod mellem de to, og at *"valget
+mellem de to er rækkens egentlige indhold"*. Det var det også — svaret er bare
+en tredje ting.
+
+**`Disallow: /` ville have slukket invitationernes link-preview.** Appens origin
+er præcis dén, der leverer previewet for et delt `?liga=`-link (`I7`,
+11. august 2026): `middleware.js` genkender `facebookexternalhit`, WhatsApp,
+Twitterbot, LinkedInBot m.fl. og omskriver til `api/invite-preview.js`. **De
+crawlere respekterer robots.txt.** Et `Disallow` betyder derfor for dem ikke
+"skjul for søgemaskinen", men "hold op med at hente siden", og resultatet ville
+være en nøgen URL i hver eneste gruppechat — nøjagtig den tilstand, `I7` blev
+bygget for at komme ud af. Prisen ville være betalt uden en fejl, en log eller
+et symptom på vores side: den eneste, der ser forskellen, er modtageren.
+
+**En cross-domain `canonical` er svagere på begge led.** Den er et *hint*, en
+søgemaskine må se bort fra, og dens påstand er "disse to sider er den samme
+side" — hvilket en loginskærm og en salgsside ikke er. `noindex` siger præcis
+det, vi mener. De to må desuden ikke kombineres; signalerne modsiger hinanden.
+
+**`follow` og ikke `nofollow`:** appen skal ud af indekset, men dens links til
+`leagly.app` skal stadig tælle. `nofollow` ville kaste den halvdel væk uden at
+vinde noget.
+
+**`public/robots.txt` findes, selvom den intet forbyder.** Uden filen kan
+"ingen fil" og "en fil, der tillader alt" ikke skelnes bagefter — og vigtigere:
+så er der ikke noget sted, advarslen kan stå. Den er hensigten skrevet ned dér,
+hvor den næste, der vil "lukke appen for Google", kigger først. `seo.test.js`
+vogter begge halvdele, fordi begge fejl er tavse og peger hver sin vej.
+
+**Det, beslutningen IKKE afgør:** om appens forside en dag skal have sit eget
+indhold værd at indeksere. Skulle den få det, er headeren ét sted at fjerne — og
+`Disallow` er stadig forkert svar.
+
+## 15. august 2026 — `B34`: sitets footer får ikke et årstal
+
+**Beslutning:** der skrives ikke et copyright-år ind i `site/`s sidefod.
+
+**Begrundelse — rækkens præmis holdt ikke.** `B34` listede "footer-året, som er
+hårdkodet" som en af fem småting. Der er ikke noget år: `site/` indeholder
+hverken `©` eller et årstal i sidefoden — sidefoden bærer missionssætningen og
+to navigationsblokke. Rækken beskrev et problem, der ikke fandtes.
+
+Det nærliggende var at lukke rækken ved at *tilføje* det, den gik ud fra var der.
+Men et copyright-år er en dato, der skal vedligeholdes hver 1. januar, og
+forkert i tolv måneder, hvis nogen glemmer det — altså præcis den slags
+vedligeholdelsesbyrde, rækkens egen bekymring handlede om. En sidefod uden
+årstal har ingen af de to problemer.
+
+---
+
 ## 15. august 2026 — `G114`: varigheden udledes, den gemmes ikke
 
 **Beslutning:** `admin_job_health()` regner varigheden ud af `started_at` og

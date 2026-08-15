@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A57` · `B37` · `G125` · `I25`.**
+**Næste ledige: `A57` · `B37` · `G128` · `I25`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -47,14 +47,13 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- story-eksempel-vagten kan ikke se, at en regel er FJERNET af en nyere motorversion — den finder ordene i den gamle fil
-- sql/story_engine*.sql er fire filer, hvoraf to er afløst, og hvilken der kører kan kun læses i sql/README.md's statuskolonne
+*(Tom.)*
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 34 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -100,7 +99,9 @@ Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G126` | `story_engine_v2.sql` beskriver en dagsmotor, der ikke kører længere — og siger det ikke selv | Filens hoved er en komplet, selvsikker beskrivelse af `generate_daily_stories()`, som `story_engine_v3.sql` har erstattet. Advarslen findes kun i `sql/README.md`s statuskolonne og i dens "farlige at gen-køre"-afsnit, altså ikke dér, hvor man læser, når man har filen åben. **Filen er kun HALVT afløst**, og det er dét, der gør den forvirrende: `stories.period`/`day_key`, de to indexes, `latest_story` og `generate_stories_catchup()` er stadig gældende — det er præcis den funktion, der bærer regelteksten, der er død. Ét banner øverst med hvilken halvdel der er hvad. |
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -112,7 +113,10 @@ Tomt.
 
 ### Tier 5 — Robusthed og vedligehold
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G125` | `story-eksempler.test.js` kan ikke se, at en regel er FJERNET af en nyere motorversion | Vagten henter en regels afsnit i den højeste motorfil, der nævner den — men en regel, v3 fjernede, bliver stående i v2's fil, så sitet kan citere en formulering, ingen bruger får at se. **Filens eget hoved kalder prisen bevidst valgt og navngiver `sql/schema.sql` som eneste alternativ** (op til en uge bagud, `G124`, altså falsk rød ved hver ny regel). **Der findes en tredje vej, hovedet ikke kendte:** et regelafsnit ligger inde i en `create or replace function`, og `generate_daily_stories()` defineres i BÅDE v2 (linje 131) og v3 (linje 118). En regel er derfor levende, hvis den højeste fil, der definerer dens *funktion*, også indeholder den — maskinlæsbart, uden schema-dump og uden falsk rød. Retter man rækken, skal hovedets afsnit "HVAD DEN IKKE PÅSTÅR" med. |
+| `G127` | Sitets OG-billede kan ikke genskabes — kun appens kan | `scripts/build-og-image.mjs` bygger **kun** `public/og-image.png` og bruger sit hoved på at forklare, hvorfor ordlyden IKKE males ind (Barlow findes kun som `.woff2`, og at pakke den ud kræver Brotli plus woff2'ens glyf-transformation). **`site/img/og-image.png` har den malet ind alligevel** — wordmark plus *"Slå dine venner. Uge efter uge."* — så det billede er lavet uden for repoet, og opskriften findes kun i hovedet på den, der lavede det. Det er ordret den tilstand, scriptets hoved siger, det findes for at undgå: *"kan billedet ikke genskabes den dag wordmarket skiftes"*. **Fejlen er tavs og rammer kun dem, der ikke bruger appen endnu.** To veje: udvid scriptet, eller skriv opskriften ned i scriptets hoved. Rører `I21`s prisargument, men aflyser det ikke: et engangs-eksport fra et designværktøj er ikke skriftgengivelse pr. kald på en edge-funktion. |
 
 ### Tier 6 — Venter på en udløser
 
@@ -159,8 +163,7 @@ hvor den blev leveret — se [`MAIL.md`](./MAIL.md).)*
 |---|---|---|
 | `I10` | Domænet peget på hjemmesiden OG appen | **Skrumpet 9. august 2026 (`B25`), afgjort 12. august 2026, repoets del skrevet 13. august 2026.** E-mail-halvdelen er lukket, formen er valgt (`leagly.app` → hjemmesiden, `app.leagly.app` → appen, ingen omdøbning af projektet), og **trin 6 + 7 ligger nu som kode: redirect i `vercel.json`, 23 CTA'er + README flyttet, to faldbacks rettet.** ✅ **Trin 1 og 3–7 er kørt 13. august 2026, og `#196` er merget og udrullet.** Bevis 1, 3b og 4 er bestået: den gamle adresse svarer 308 mod `app.leagly.app`, `/api/` gør ikke, og en modtaget nulstillingsmail bærer `redirect_to=https://app.leagly.app/` i kilden. **Tilbage: resten af trin 8** (det gamle `?liga=`-link hele vejen, et login, `og:url`) og `B21`s GitHub-omdøbning. ✅ **Trin 2 er kørt 14. august 2026** — hjemmesidens Vercel-projekt er oprettet, og `leagly.app` er live. ✅ **Bevis 6 og 7 er bestået senere samme dag** (12:51–12:52 UTC): CSP'en fra `site/vercel.json` svarer ord for ord, og `www` svarer 308 mod apex. Tilbage af trin 8 er dermed kun appens egne aflæsninger nævnt ovenfor (`?liga=`-linket, et login, `og:url`). Runbog i [`DOMAENE.md`](./DOMAENE.md). CSP'en skal IKKE røres (to origins deler ikke headere). |
 | `B21` | Omdøb GitHub-repoet | **Tekstdelen er leveret 13. august 2026 sammen med `I10`s trin 7** — de 23 CTA'er og README'ens live-link peger nu på `app.leagly.app`, altså netop ikke skiftet to gange. **Vercel-omdøbningen udgik 12. august 2026.** Tilbage er ét skridt: omdøb GitHub-repoet til `Leagly` (GitHub redirigerer selv gamle links og remotes). `docs/RESTORE.md` rettes IKKE — den navngiver backup-filer, der faktisk hedder det gamle. |
-| `I9` | SEO | ⚠️ **Ikke længere gated 14. august 2026 — siden er publiceret**, så indekseringen og Search Console kan køres. **Skrumpet 13. august 2026:** metadataen er leveret med hjemmesidens andet udkast (canonical, favicon, apple-touch-icon, theme-color, `og:`/`twitter:`-tags, `robots.txt`, `sitemap.xml`). Tilbage er det, der kræver en publiceret side: indeksering og Search Console — `A50`s aflæsning blev bevist 14. august 2026, og dén række er lukket og slettet. |
-| `B34` | App-originen konkurrerer med `leagly.app` om brand-søgningen | Hører sammen med `I9` og bør køres i samme ombæring: `app.leagly.app` er indekserbar, så en søgning på "Leagly" kan lande på login-skærmen frem for på salgssiden. Kuren er enten `robots.txt` med `Disallow` på appen eller en canonical mod sitet — **valget mellem de to er rækkens egentlige indhold.** Med i samme runde: `404.html`, `og:locale` og `og:image:alt`, cache-header på `/css/` og footer-året på sitet. |
+| `I9` | SEO | 🔶 **Repoets halvdel er leveret 15. august 2026 sammen med `B34`** — runbog, register, beviser og fejlfinding i [`SEO.md`](./SEO.md), vagt i `seo.test.js`. **Tilbage er kun ejerens fem trin i Search Console** (domæne-ejendom, sitemap, indeksering af forsiden, kontrol af at appen holdes ude, og Bing valgfrit). Rækken bliver i dette tier og ikke i Tier 1: den er *vækst* og ikke en aflæsning, produktet venter på, og produktbogens kapitel 3 sætter vækst efter fastholdelse — også når adgangen tilfældigvis ligger uden for repoet. |
 | `I21` | OG-billede med ligaens eget navn | Den dyre udgave af `I17` (leveret 13. august 2026): et billede pr. liga kræver skriftgengivelse på serveren, hvor `I7`s løsning lod `og:title` bære ordlyden og billedet være statisk. |
 | `B20` | Personlige invite-links (attribution) | Står nu alene: `I7` gennemgik flowet 11. august 2026 og **blotlagde præcis den mekanik, rækken beskriver** — afsenderens navn kunne kun komme i den tekst, afsenderen selv sender, og det dynamiske link-preview må sige "Kom med i ligaen X" frem for "Nikolaj har inviteret dig", fordi modtagersiden ikke kender afsenderen. `invite_preview()` er formet, så `B20` kun skal tilføje ét felt i svaret. Over `I6`, som ikke kan måle en ambassadør uden den. **Tieret ét sted, hvor ventetid koster:** attributionen kan først tælle fra udrulningsdagen. |
 | `I12` | Offentlig side pr. liga | Kræver stillingtagen til, hvad der må vises uden login — og ville som den første gøre `A23` (router) nødvendig. |
@@ -197,13 +200,15 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | B20 | **Personlige invite-links** (`invite_links` + `invited_by` på `group_members`/`competition_participants`) | Attributionen "hvem inviterede hvem" findes ikke i skemaet: `groups.invite_code` er én kode pr. liga og ikke pr. bruger, og ingen af medlemstabellerne gemmer afsenderen. Det er derfor, milepælen **"5/10 venner tilmeldt via dit link" ikke kunne bygges** — `milestones` tæller i stedet `LEAGUE_GREW_5/10`, altså hvor mange der kom med i en liga, man har oprettet, hvilket er en anden bedrift. Begrundelsen står ved koden begge steder (`sql/milestones.sql`, `src/lib/milestones.js`) og peger på denne række. **Ventetid er ikke gratis her, og det er rækkens vigtigste egenskab:** attribution kan kun registreres fremad, så en bedrift bygget på den kan først tælle fra udrulningsdagen — de brugere, der allerede er inviteret, tælles aldrig. Gater desuden `I6` (ambassadørprogram), som ikke kan måle noget uden. **`I7` (11. august 2026) rørte flowet uden at trække rækken ind** og er formet, så den kan sættes ind bagefter: `invite_preview()` og `api/invite-preview.js` tager begge en KODE, og en per-bruger-token kan gå ad samme vej. Se `DECISIONS.md` for hvorfor de to attributioner ikke er den samme ting. | Mellem |
 | B28 | **Gentag CL's kickoff-aflæsning, når ligafasen er lodtrukket** | Champions League var den ene af fem turneringer, [`docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md`](./reviews/football-data-kickoff-aflaesning-2026-08-07.md) ikke kunne dække — leverandøren havde pr. 1. august 2026 endnu ikke oprettet sæsonen 2026, fordi ligafasen ikke var lodtrukket (`B8`, lukket 1. august 2026). De fire aflæste turneringer delte sig i to: kun Bundesliga sender en ren midnats-pladsholder (`status: SCHEDULED` + `00:00`), de tre andre sender et opdigtet klokkeslæt for hver ufastsat kamp uden nogen markør at skelne på. Om CL ligner Bundesliga eller de tre andre, afgør om `kickoff_uncertain`s mønstergenkendelse (`G84`/`G85`) også dækker turneringen — og er kun kendt, når svaret aflæses. | Lille (samme PowerShell-opslag, gentaget) |
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. Forespørgslen står i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). **Rækken har stået siden august 2026 med teksten "tilbage står at køre den" — og da den blev kørt 5. august 2026, kunne den ikke:** vinduet partitionerede på `(e.created_at < m.fra)`, som hverken står i `group by` eller er aggregeret, så PostgreSQL afviste den med `42803`. Perioden udledes nu i en CTE, efterprøvet mod PostgreSQL 16.13. **Anden kørsel samme dag afslørede, at kilden var forkert valgt:** hændelsesloggen svarede med tre oprettelser i alt, alle `random` — plausibelt nok ved ~20 testbrugere, men ubrugeligt, fordi `analytics_events` først findes fra 30. juli 2026, så "før mærkatet" var to døgn og ikke appens historik. `competitions.mode` + `created_at` bærer samme oplysning som **rigtige rækker over hele historikken**, og spec'ens §5F er byttet om, så tabellen er den primære kilde og hændelsen kontrollen. **Opslaget er kørt 5. august 2026, og svaret er "ikke endnu":** hele appens historik rummer **syv** konkurrencer — 6 før mærkatet (`time_range` 2, `random` 2, `full_season` 2) og **1** efter (`random`). Med n=1 i den ene periode kan ingen fordeling måles, hvilket er præcis rækkens eget første forbehold. Rækken er derfor flyttet til Tier 6 med en udløser, der kan aflæses med samme opslag: **tosifret `antal` i `efter`-perioden.** Det, der er leveret, er ikke svaret, men at spørgsmålet nu kan stilles — forespørgslen kunne hverken køre eller pege på den rigtige kilde, da rækken blev skrevet. | Lille (opslag) |
-| B34 | **App-originen er indekserbar og konkurrerer med `leagly.app` om brand-søgningen** | `app.leagly.app` serverer appen, men er ikke afskærmet fra søgemaskiner. Følgen er, at en søgning på "Leagly" kan lande på **login-skærmen** frem for på salgssiden — den eneste side, der er skrevet til at overbevise nogen. `I10`s domæneopdeling gav de to origins hver sin opgave; indekseringen kender ikke opdelingen endnu. **Valget mellem de to kure er rækkens egentlige indhold:** `robots.txt` med `Disallow` holder appen helt ude af indekset (enkelt, men også usynligt for en, der søger på selve app-adressen), mens en canonical mod sitet samler signalet uden at skjule siden. **Fem småting hører til samme runde**, fordi de rører de samme filer: `404.html` på sitet (i dag Vercels standard), `og:locale` og `og:image:alt` (begge mangler i et ellers komplet sæt), cache-header på `/css/`, og footer-året, som er hårdkodet. Hører sammen med `I9`, som er den anden halvdel af "hvordan findes siden". | Lille — men indeholder ét valg, der bør træffes bevidst |
 | B32 | **Fjern Champions League's "Fra ligafasen"-forbehold på hjemmesidens turneringsliste** | `site/index.html`s turnerings-sektion (merget 13. august 2026) viser Champions League med mærkatet "Fra ligafasen", fordi ligafasen endnu ikke er lodtrukket (samme forudsætning som `B8`/`B28`). Mærkatet skal fjernes samtidig med, at `B28`s kickoff-aflæsning gentages for CL. | Lille — én linje, samme udløser som `B28` |
 
 ## Teknisk gæld
 
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
+| G125 | **`story-eksempler.test.js` kan ikke se en FJERNET regel.** Vagten slår en regels afsnit op i den højeste `sql/story_engine*.sql`, der nævner den. Fjerner en ny motorversion en regel, bliver dens afsnit stående i den gamle fil, og vagten finder ordene dér — så sitet kan citere en formulering, ingen bruger nogensinde får at se. | Vagtens eget hoved kalder prisen bevidst valgt og navngiver `sql/schema.sql` som eneste alternativ: det er produktionens øjebliksbillede, op til en uge bagud (`G124`), og ville derfor være **rødt for enhver regel skrevet i dag** — en falsk rød hver gang er dyrere end en manglende rød sjældent. **Præmissen er rigtig, men listen over alternativer var ikke udtømmende.** Et regelafsnit bor inde i en `create or replace function`, og `generate_daily_stories()` defineres i BÅDE `story_engine_v2.sql` (linje 131) og `story_engine_v3.sql` (linje 118), mens `generate_stories()` kun findes i `story_engine.sql`. Reglen er derfor levende, hvis den højeste fil, der definerer dens **funktion**, også indeholder den — hvilket netop er grunden til, at `H2H_PASS` i v1's fil er ægte og en fjernet dagsregel i v2's ikke er. Skelnen er maskinlæsbar, kræver intet skema-dump og giver ingen falsk rød. Rettes rækken, skal afsnittet "HVAD DEN IKKE PÅSTÅR" i vagtens hoved med i samme ombæring — det er dét, der i dag beskriver hullet som permanent. | Lille |
+| G126 | **`story_engine_v2.sql` beskriver en dagsmotor, der ikke kører længere.** Filens hoved er en komplet og selvsikker beskrivelse af `generate_daily_stories()`, som `story_engine_v3.sql` (#47) har erstattet — og filen siger det ikke selv. | Advarslen findes to steder, og ingen af dem er filen: `sql/README.md`s statuskolonne på #38 og dens "farlige at gen-køre"-afsnit. Begge er de rigtige steder at ADVARE om en gen-kørsel; ingen af dem er der, hvor man kigger, når man har filen åben for at forstå, hvordan motoren virker. **Rækkens vigtigste nuance er, at filen kun er HALVT afløst** — `stories.period`/`day_key`, de to partielle indexes, `latest_story` og `generate_stories_catchup()` er stadig den gældende definition, og en advarsel, der siger "denne fil er forældet", ville derfor være lige så forkert som ingen advarsel. Det, der er dødt, er præcis den funktion, der bærer regelteksten — altså også den halvdel, `G125` handler om. Ét banner øverst, der siger hvilken halvdel der er hvad. | Lille — ét kommentarblok |
+| G127 | **Sitets OG-billede kan ikke genskabes.** `scripts/build-og-image.mjs` bygger kun `public/og-image.png`; `site/img/og-image.png` er en anden fil (49 kB mod 27 kB) med sælgesætningen malet ind under wordmarket. | Scriptets eget hoved bruger to afsnit på, hvorfor ordlyden IKKE males ind — Barlow findes kun som `.woff2`, og at pakke den ud kræver Brotli plus woff2'ens glyf-transformation, altså et bibliotek repoet ikke har og ikke skal have. Sitets billede har den malet ind alligevel, så det er lavet uden for repoet med et værktøj, ingen har skrevet ned. **Det er ordret den tilstand, scriptet findes for at forhindre:** *"ligger opskriften kun i hovedet på den, der lavede filen, kan billedet ikke genskabes den dag wordmarket skiftes — og et OG-billede, der er en generation bagud, opdager ingen, fordi det kun ses af dem, der ikke bruger appen endnu."* Skifter wordmarket eller sælgesætningen, er appens billede dækket og sitets ikke. **To veje:** udvid scriptet, så det bygger begge (kræver skriftgengivelse og dermed den afhængighed, hovedet fravalgte), eller skriv opskriften ned i hovedet, så filen kan laves igen i hånden. Den anden koster ingenting og fjerner hele risikoen. **Rører `I21`s prisargument uden at aflyse det:** at nogen har kunnet male tekst ind én gang i et designværktøj siger intet om skriftgengivelse pr. kald inde i en edge-funktions budget. | Lille (skriv opskriften) eller mellem (udvid scriptet) |
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G123 | **Ingen generisk vagt for `drop function` + `revoke` i `sql/`.** | `G119` (14. august 2026) fravalgte en tekstlæsende kontrol, der kræver `revoke execute … from public` efter hvert `drop function` — kun to forekomster fandtes, og en vagt over to koster mere at vedligeholde, end den kan fange. Flyttet til Tier 6: en tredje forekomst gør det til et mønster. | Lille, men ikke før udløseren |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
@@ -219,7 +224,7 @@ idé bliver til en `B`- eller `A`-række, når den er værd at tage stilling til
 | I2 | **Diagnose-historik** | Liga-diagnosen er et øjebliksbillede. Uden historik kan man ikke se, at en liga gik fra "Sund" til "Kun en del tipper" for tre uger siden. Kræver et sted at gemme snapshottet — første gang noget i Analytics ville have brug for et cron eller en tidsserie-tabel, hvilket arkitekturvalg #3 i spec'en lukkede døren for. | Afventer behov |
 | I3 | **Alarm ved tilstandsskifte i en liga** | Naturlig følge af `I2`: en liga, der skifter til rød, er interessant i det øjeblik det sker, ikke næste gang nogen åbner admin. | Afhænger af `I2` |
 | I6 | **Ambassadørprogram ved oprettelse af ligaer/konkurrencer** (evt. med synligt deltagerantal) | Vækstkanal, der bygger på strukturen, der allerede findes (ligaer/konkurrencer), men ingen mekanik eller incitament er designet endnu. | Ny |
-| I9 | **SEO for hjemmesiden** | Siden er publiceret 14. august 2026 (`I8` leveret), så tilbage står indeksering og Search Console. Metadataen (canonical, favicon, apple-touch-icon, theme-color, `robots.txt`, `sitemap.xml`) blev leveret med andet udkast 13. august 2026 og bevist serveret 14. august. | Klar — den publicerede side, der var betingelsen, findes nu |
+| I9 | **SEO for hjemmesiden** | **Repoets halvdel er lukket 15. august 2026** med `B34`: `og:locale` og `og:image:alt` på alle fem sider, `site/404.html`, cache på `/css/`, appens `noindex`-header og `public/robots.txt` — plus [`SEO.md`](./SEO.md), som samler registeret, ejerens trin, seks beviser og fejlfindingen ét sted, og `seo.test.js`, som vogter dem. Tilbage står de fem trin i Search Console, som kræver en Google-konto. | Ejerens tur — repoet er klar |
 | I10 | **Domænet peget på hjemmesiden og appen** | **Halvt leveret 9. august 2026 (`B25`), formen afgjort 12. august 2026.** E-mail-halvdelen er væk: `kontakt@leagly.app` står i `src/lib/legal.js` og `site/om.html`, og pladsholderne `[NAVN]`/`[KONTAKT-E-MAIL]` er udfyldt. Den anden halvdel er nu besluttet frem for åben: **`leagly.app` → hjemmesiden, `app.leagly.app` → appen**, begge på Vercel, projektet omdøbes ikke, og de gamle `.vercel.app`-adresser redirigeres permanent. Begrundelsen står i [`DECISIONS.md`](./DECISIONS.md) (kort: invitationslinks bygges af `window.location.origin`, så det er appens adresse, brugerne deler). **CSP'en skal ikke justeres** — to origins deler ikke headere, og `site/` er selvbærende. **Repoets del er skrevet 13. august 2026:** redirect af de to gamle `.vercel.app`-værtsnavne i `vercel.json` (trin 6), `B21`s 23 CTA'er + README (trin 7) og to faldback-adresser i `vite.config.js`/`api/invite-preview.js`. **`/api/` er med vilje undtaget fra redirectet**, så de ni cron-jobs ikke skal flyttes samtidig — begrundelsen står ved reglen i [`DOMAENE.md`](./DOMAENE.md). ✅ **Trin 1 og 3–7 er kørt 13. august 2026:** domænet er oprettet og svarer, Supabases Site URL er flyttet og testet, Turnstile-værtsnavnet er **udvidet** (ikke skiftet), og `#196` er merget og udrullet. **Bevis 1 og 3b er bestået** — den gamle adresse svarer 308 mod `app.leagly.app`, og `/api/sync-live` svarer 401 og ikke 308, med appens egen CSP-header på, altså helt frem til funktionen. **Bevis 4 er bestået 13. august 2026:** en modtaget nulstillingsmail bærer `redirect_to=https://app.leagly.app/` i kilden, og det felt bygger Supabase af Site URL — altså er trin 4 nu bevist og ikke kun meldt. **Tilbage: resten af trin 8**, hvor beviserne afgør, om de øvrige meldte dashboard-trin faktisk virkede — det gamle `?liga=`-link hele vejen, et login på den nye adresse og `og:url`. | Trin 2 er kørt 14. august 2026 (`I8` leveret), og bevis 6 + 7 bestod samme dag — kun trin 8's sidste aflæsninger står tilbage |
 | I11 | **LinkedIn-side**, hvis der satses på indtægt via virksomheder | Betinget af en B2B-retning, der ikke er besluttet endnu. | Betinget af B2B-retning |
 | I12 | **Offentlig side pr. liga** (fx `predictionhub.app/league/padel-legends`: antal sæsoner, medlemmer, mestre, statistik — ikke tips, kun historik) | Bygger videre på liga-laget (§18) som en delbar, offentlig facade for hver liga. Kræver stillingtagen til, hvad der må vises uden login. | Ny |
@@ -248,52 +253,43 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 15. august 2026 (toogtyvende kørsel) — Tier 5 kørt: otte punkter lukket, og tre af dem rettede deres egen række undervejs
+### 15. august 2026 (fireogtyvende kørsel) — indbakken tømt: tre linjer, tre `G`-rækker, og alle tre præmisser var forkerte
 
-**Listen er 41 → 33, og Tier 5 er tomt.** Alle otte punkter er leveret. Tre
-vagter, ét fælles værn, én migrering, ét opslag, ét CI-trin og én løsrivelse.
+**Listen er 31 → 34.** Ingen af de tre linjer blev forkastet, og ingen af dem
+blev nummereret, som de var skrevet — hver enkelt beskrev noget lidt andet, end
+den troede, og i to af tilfældene noget større.
 
-**Det lærerige er ikke leverancerne, men at TRE rækker viste sig at beskrive
-noget andet, end de troede** — og at det i alle tre tilfælde kun kom for dagen,
-fordi vagten blev prøvet af med en mutation frem for læst igennem:
+- **`G125` (Tier 5) — vagtens begrundelse var rigtig, dens liste over
+  alternativer ikke.** Linjen sagde, at `story-eksempler.test.js` ikke kan se en
+  fjernet regel, og det er sandt — men vagtens eget hoved kalder allerede prisen
+  bevidst valgt og udpeger `sql/schema.sql` som eneste alternativ. Så vidt var
+  linjen en gentagelse af et afgjort spørgsmål. **Der findes en tredje vej:** et
+  regelafsnit ligger inde i en `create or replace function`, og
+  `generate_daily_stories()` defineres i BÅDE v2 (linje 131) og v3 (linje 118),
+  mens `generate_stories()` kun findes i v1's fil. En regel er levende, hvis den
+  højeste fil, der definerer dens **funktion**, også indeholder den — hvilket er
+  præcis grunden til, at `H2H_PASS` i v1's fil er ægte. Ingen skema-dump, ingen
+  falsk rød.
+- **`G126` (Tier 2) — "fire filer, hvoraf to er afløst" holdt ikke.**
+  `story_engine*.sql` er otte filer, og den, der forvirrer, er kun HALVT afløst:
+  `story_engine_v2.sql`s `generate_daily_stories()` er erstattet af v3, mens
+  `stories.period`/`day_key`, de to indexes, `latest_story` og
+  `generate_stories_catchup()` i samme fil stadig er den gældende definition. En
+  advarsel om, at filen er forældet, ville derfor være lige så forkert som ingen
+  advarsel — og det er dét, der gør rækken til et banner og ikke til en
+  oprydning. Den døde halvdel er samtidig præcis den, `G125` handler om.
+- **`G127` (Tier 5) — linjen om to alt-tekster var forkert, og fejlen lå et
+  andet sted.** Den påstod "samme billede, to alt-tekster". De to billeder er
+  ikke ens: `public/og-image.png` er wordmarket, `site/img/og-image.png` er
+  wordmarket **plus sælgesætningen malet ind**. Følgen er, at
+  `scripts/build-og-image.mjs`, hvis hoved bruger to afsnit på, hvorfor ordlyden
+  IKKE kan males ind, kun bygger det ene af de to — og at sitets billede er
+  ordret den tilstand, scriptet findes for at forhindre.
 
-- **`G110` havde ret i sin diagnose og forkert om omfanget.** Rækken sagde, at
-  vagten kun kendte sin ene SIDE. Den kendte også kun sin ene MOTORFIL — og
-  netop `funktioner.html`s citat ("Du gik forbi Anders") står i
-  `sql/story_engine.sql`, ikke i v3. En vagt, der kun læste v3, ville altså have
-  kaldt en ÆGTE formulering opdigtet i samme sekund, den fik siden at se.
-  Begge ender læser nu mapper.
-- **`G114`s præmis holdt ikke.** Rækken bad om "ét felt, skrevet af
-  `recordRun`" og skrev, at varigheden var "umulig at rekonstruere bagud".
-  `job_runs` har haft både `started_at` og `finished_at` siden `#18` — den var
-  allerede gemt og bare aldrig regnet ud. Ingen tabelændring, og diagnosen
-  gælder hele historikken frem for kun fremad.
-- **`G111`s egen første udgave var TOMT GRØN.** Filtret spurgte, om stien
-  indeholdt en skråstreg, hvilket en repo-relativ sti altid gør, så listen var
-  tom og påstanden triviel sand. Den fejl er præcis den klasse, filen findes for
-  at fange. Begge lister har nu en påstand om deres eget antal.
-
-**Fire fund undervejs, som ikke stod i nogen række:**
-
-- `sql/tests/_schema.mjs` manglede i `sql/README.md`. Fundet af `G111`s vagt
-  ved dens allerførste kørsel.
-- `site/funktioner.html`s story-citat var ubevogtet — og dets regel (`H2H_PASS`)
-  bor i en anden motorfil end den, vagten læste.
-- `\b` betyder **backspace** i PostgreSQLs regex, ikke ordgrænse. `G121`s
-  opslag klassificerede fem af syv fejltekster forkert, indtil det blev kørt mod
-  rigtige rækker. CI's docs-SQL-tjek kan ikke se det — `prepare` accepterer en
-  regex, der matcher det forkerte.
-- Bash tillader ikke ikke-ASCII i variabelnavne. `G124`s CI-trin var skrevet med
-  `ÆNDREDE` og `REKKEFØLGE` og ville have fejlet ved første kørsel.
-
-**Efterprøvet ved mutation, ikke ved gennemlæsning:** `G110` seks gange, `G111`
-seks, `G112` fem, `G114` syv og `G124` fire — alle fanget. To af `G114`s syv
-slap igennem den første udgave og rettede både migreringen (et `filter`, hvis
-begrundelse var faktuelt forkert) og fixturen (døgnets værste kørsel lå inde i
-timen, så de to maksima ikke kunne skelnes).
-
-✅ **Begge migreringer er kørt i produktionen 15. august 2026.** `#66` giver
-Admin → Drift varigheder for hele historikken, og `#64` gjorde Scotland
-Premiership officiel (`A55`). `B36` og `B35` er lukket og slettet, og **Tier 1 er
-dermed tomt** — der er ingen bestillinger til produktionen tilbage.
+**Ét fund rettede en fejl fra samme dag i stedet for at blive en række:** `B34`s
+nye `og:image:alt` på sitet sagde *"Leagly-logoet på mørk baggrund"*, hvilket
+udelader den tekst, billedet faktisk bærer. Den er rettet til *"Leagly-logoet
+over sætningen: Slå dine venner. Uge efter uge."* Alt-teksten var skrevet efter
+den anden origins billede, ikke efter sitets — og det var netop dén antagelse,
+`G127` viste var forkert.
 
