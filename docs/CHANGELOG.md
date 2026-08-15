@@ -9,6 +9,34 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+15. august 2026 — `G122`: den foreslåede løsning var allerede bygget, og hullet lå seks timer længere ude
+
+**Backloggen havde to forslag, og det ene var sandt i forvejen.** Rækken sagde, at `sync-matches` hver 12. time var det eneste sikkerhedsnet, hvis `sync-live` var nede, og pegede på enten en hyppigere kadence eller «en genopfriskning af de seneste dages kampe i selve kampprogram-kaldet». Den anden findes: `fetchSeasonFixtures()` henter **hele** sæsonen hos begge providere, og `matchUpsertRow()` skriver score for hver kamp med `status === "finished"` ved hver eneste kørsel. Der var ingen manglende genopfriskning at bygge — kun en latens.
+
+**Og latensen var kortere end antaget, hvilket flyttede hele rettelsen.** `sync-live`s opslag (a) er «kampe uden endeligt resultat, hvis kickoff ligger i tidsvinduet», og vinduet går **6 timer** tilbage (`WINDOW_BACK_MS`). Backloggens eget eksempel — en halv times nedetid lige efter kampen — er derfor dækket i dag: jobbet henter kampen igen i samme minut, det kommer op. Det virkelige hul er den kamp, der er **mere end 6 timer gammel og stadig uden resultat**. Den falder ud af vinduet, og så er der ingen anden vej ind end næste kampprogram-kørsel, op til 12 timer senere. En kamp, der slutter kl. 22, og en live-sync, der ikke er oppe igen før kl. 04, er præcis dét.
+
+**Rettelsen ligger derfor i `sync-live`.** Det er jobbet, der kører hvert minut og allerede kender vejen fra kamp til leverandør, så bagstopperen koster hverken et nyt cron-job, en ny række i `docs/CRON.md` eller en hyppigere kadence hos leverandørerne. For football-data er det ovenikøbet gratis: `fetchLive()` er **ét** kald med et datospænd, uanset hvor mange kampe der spørges om.
+
+**Tre værn, fordi den naive udgave punkterer jobbets forbrugsbegrænsning.** Den tidlige retur — «ingen kampe i tidsvinduet» — er hele grunden til, at live-syncen kan køre 1.440 gange i døgnet uden at koste noget om natten. En kamp, der **aldrig** kan få et resultat (udsat, med et `kickoff_at` der endnu ikke er skrevet om, eller uden for abonnementet), ville uden værn udløse et leverandørkald hvert minut for evigt:
+
+1. **Ét minut i timen.** `STALE_SWEEP_MINUTE = 41`. Værst tænkelige pris: 24 ekstra kald i døgnet pr. leverandør frem for 1.440. Latensen falder fra op til 12 timer til op til 1 — den rigtige byttehandel, fordi et tabt resultat skal rettes samme aften, ikke inden for et minut.
+2. **En øvre alder.** `STALE_MAX_AGE_MS = 36 timer`. Derefter har `sync-matches` haft tre kørsler til at rette kampen, og den er ikke et tabt slutfløjt længere, men et datapunkt for et menneske.
+3. **Et loft på antallet.** `STALE_MAX = 40`, som er Sportmonks' grænse pr. kald, så opslaget bliver ved med at være ét kald og én turnering med noget galt ikke kan gøre bagstopperen til jobbets dyreste del.
+
+**Minuttallet er ikke tilfældigt.** 00, 05, 11, 15, 17, 23 og 29 er optaget af kampprogram-jobbene, og `docs/CRON.md` beder udtrykkeligt om, at et nyt football-data-kald ikke lægges oven i et af de minutter, der allerede er taget. 41 er ledigt.
+
+**Vinduerne støder op til hinanden uden overlap.** Efterfejningens `to` er nøjagtig live-vinduets bagkant, så en kamp høres af præcis ét af de to opslag. Ligger de over hinanden, hentes kampen to gange; er der luft imellem, findes der en alder, hvor ingen af dem ser den — og det er det hul, rækken handlede om. Der er en påstand på netop det.
+
+**Kampe uden bekræftet klokkeslæt holdes ude.** Opslaget bærer `kickoff_tbd=not.is.true` (og ikke `is.false`, så rækker fra før kolonnen fandtes tælles med). Efterfejningen bygger på udsagnet «kampen burde være slut nu», og det kan ikke stilles om en kamp, hvis starttid er en pladsholder — de ville desuden kunne fylde loftet og fortrænge ægte fund.
+
+**Kvitteringen er tre-værdiet med vilje.** `staleChecked` **mangler**, når minuttet ikke var fejeminuttet, og står `0`, når der blev fejet uden fund. Et felt, der altid er der, holder man op med at læse (`A26`); et felt, der kun er der ved fund, kan ikke skelne «fejede, alt var fint» fra «holdt op med at feje» — og præcis den forskel kostede både `A11` og `G43` noget at lære. `staleRescued` er derimod kun til stede ved fund, fordi det ikke er en succes at glæde sig over, men et spor efter et tabt slutfløjt: **står tallet vedvarende over nul, skjuler bagstopperen et hul i live-syncen frem for at afsløre det.**
+
+**Gatet er en ren funktion med fem påstande** (`api/sync-live.test.js`, ny fil), samme mønster som `seasonFetchVerdict()` i sync-matches: handleren kan ikke nås uden et HTTP-mock-apparat, så en regel, der kun findes inde i den, er en regel uden test. Netop denne må ikke kunne skride ubemærket — bliver `null` til «altid feje», går kadencen fra 24 kald i døgnet til 1.440, uden at nogen test bliver rød og uden at noget i appen ser anderledes ud. Én af påstandene tæller kadencen op over et helt døgn frem for at ræsonnere om den, fordi det er antallet, prisen følger.
+
+**Intet skal køres i Supabase, og der skal intet ændres i cron-job.org.**
+
+---
+
 14. august 2026 — `G119`: heartbeat'en blev rød af den migrering, der blev leveret to timer før — og den havde ret
 
 **Alarmen kom fra `job-heartbeat.yml` selv**, tyve minutter efter at `#65 job_health_rate.sql` blev kørt i produktionen: `admin_job_health() | funktion | egen_grant: f | via_public: t | AABEN FOR ANON`. Fire kørsler i træk, hver halve time, fra 20:03 UTC.

@@ -15,6 +15,24 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 15. august 2026 — `G122`: bagstopperen for et tabt resultat hører i live-syncen, ikke i kampprogrammet
+
+**Beslutning:** `sync-live` fejer én gang i timen efter kampe, der er 6–36 timer gamle og stadig står uden endeligt resultat, med et loft på 40 kampe pr. fejning. `sync-matches`' kadence på hver 12. time er **uændret**, og der er ikke oprettet et nyt cron-job.
+
+**Begrundelse — den ene af backloggens to veje var allerede bygget.** Rækken foreslog enten en hyppigere `sync-matches`-kadence eller «en genopfriskning af de seneste dages kampe i selve kampprogram-kaldet». Den anden findes i forvejen: begge providere henter hele sæsonen, og `matchUpsertRow()` skriver score for hver kamp, der er `finished`, ved hver eneste kørsel. Der var altså ikke en manglende genopfriskning at bygge — kun en **latens** på op til 12 timer.
+
+**Hullet er smallere end rækken beskrev, og det flyttede rettelsen.** `sync-live` spørger allerede på kampe uden endeligt resultat med kickoff op til **6 timer** tilbage, så backloggens eget eksempel — en halv times nedetid lige efter kampen — er dækket i dag: jobbet henter kampen igen, så snart det kommer op. Det virkelige hul er kampen, der er **mere end 6 timer** gammel uden resultat. Den falder ud af vinduet og har ingen anden vej ind end næste kampprogram-kørsel.
+
+**Hvorfor `sync-live` og ikke en hyppigere `sync-matches`.** Kampprogram-jobbene er syv, ét pr. turnering, og fem af dem deler football-data.orgs rate limit på 10 kald/minut med seks minutters mellemrum. En hyppigere kadence koster derfor både kald og en omlægning af minuttallene — og reducerer kun vinduet i stedet for at lukke det. `sync-live` kører allerede hvert minut, kender allerede vejen fra kamp til leverandør, og laver for football-data **ét** kald uanset hvor mange kampe der spørges om.
+
+**Hvorfor gatet er et minut i timen og ikke hvert minut.** Den tidlige retur i `sync-live` — «ingen kampe i tidsvinduet» — er hele jobbets forbrugsbegrænsning, og en bagstopper, der punkterer den, er dyrere end det hul, den lukker. En kamp, der **aldrig** kan få et resultat (udsat, med et `kickoff_at` der endnu ikke er skrevet om, eller uden for abonnementet) ville ellers udløse et leverandørkald hvert minut i døgnet rundt. Hver time giver 24 kald i værste fald frem for 1.440 og flytter latensen fra 12 timer til 1 — og det er den rigtige byttehandel: **et tabt resultat er en fejl, der skal rettes samme aften, ikke inden for et minut.**
+
+**Hvorfor der også er en øvre alder.** Ud over 36 timer har `sync-matches` haft tre kørsler til at rette kampen. Er den stadig uden resultat, er den ikke et tabt slutfløjt længere, men et datapunkt, et menneske skal se på — og at blive ved med at spørge er da en udgift uden en modydelse.
+
+**Hvorfor kvitteringen er tre-værdiet.** `staleChecked` mangler, når minuttet ikke var fejeminuttet, og står `0`, når der blev fejet uden fund. Et felt, der altid er der, holder man op med at læse (`A26`); et felt, der kun er der ved fund, kan ikke skelne «fejede, alt var fint» fra «holdt op med at feje» — og præcis dén skelnen er, hvad `A11` og `G43` hver især kostede noget at lære.
+
+---
+
 ## 14. august 2026 — `G119`: en migrerings usynlige halvdel skal være en påstand, ikke en note
 
 **Beslutning:** enhver migrering, der `drop`per og gen-opretter en funktion i `public`, skal gentage **både** `grant execute … to <roller>` og `revoke execute … from public` — og den skal have en test, der efterprøver begge retninger, hos migreringen selv.
