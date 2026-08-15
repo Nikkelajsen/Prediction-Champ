@@ -54,7 +54,7 @@ eller en linje i "Forkastede ideer".
 
 ## Prioriteret rækkefølge
 
-Alle 33 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -96,9 +96,7 @@ produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
 gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
 køres på et minut.
 
-| # | Hvad | Note |
-|---|---|---|
-| `B35` | Kør `#64 tournament_scotland_promote.sql` i produktionen | Forfremmelsen, `A55` besluttede 14. august 2026. Filen er skrevet, verificeret og merget; kun kørslen mangler, og den kan kun laves i Supabase. ⚠️ **Mellem to spillerunder** — sætningen er lige gyldig når som helst, men den ændrer kåringen af en runde, folk allerede har tippet, mens de tipper den. Filen kalder selv `recompute_ratings()`, så der skal ikke trykkes "Opdater ratings" bagefter. Bagefter: kør skema-eksporten ikke — det er data og ikke skema. |
+Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
@@ -201,7 +199,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. Forespørgslen står i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). **Rækken har stået siden august 2026 med teksten "tilbage står at køre den" — og da den blev kørt 5. august 2026, kunne den ikke:** vinduet partitionerede på `(e.created_at < m.fra)`, som hverken står i `group by` eller er aggregeret, så PostgreSQL afviste den med `42803`. Perioden udledes nu i en CTE, efterprøvet mod PostgreSQL 16.13. **Anden kørsel samme dag afslørede, at kilden var forkert valgt:** hændelsesloggen svarede med tre oprettelser i alt, alle `random` — plausibelt nok ved ~20 testbrugere, men ubrugeligt, fordi `analytics_events` først findes fra 30. juli 2026, så "før mærkatet" var to døgn og ikke appens historik. `competitions.mode` + `created_at` bærer samme oplysning som **rigtige rækker over hele historikken**, og spec'ens §5F er byttet om, så tabellen er den primære kilde og hændelsen kontrollen. **Opslaget er kørt 5. august 2026, og svaret er "ikke endnu":** hele appens historik rummer **syv** konkurrencer — 6 før mærkatet (`time_range` 2, `random` 2, `full_season` 2) og **1** efter (`random`). Med n=1 i den ene periode kan ingen fordeling måles, hvilket er præcis rækkens eget første forbehold. Rækken er derfor flyttet til Tier 6 med en udløser, der kan aflæses med samme opslag: **tosifret `antal` i `efter`-perioden.** Det, der er leveret, er ikke svaret, men at spørgsmålet nu kan stilles — forespørgslen kunne hverken køre eller pege på den rigtige kilde, da rækken blev skrevet. | Lille (opslag) |
 | B34 | **App-originen er indekserbar og konkurrerer med `leagly.app` om brand-søgningen** | `app.leagly.app` serverer appen, men er ikke afskærmet fra søgemaskiner. Følgen er, at en søgning på "Leagly" kan lande på **login-skærmen** frem for på salgssiden — den eneste side, der er skrevet til at overbevise nogen. `I10`s domæneopdeling gav de to origins hver sin opgave; indekseringen kender ikke opdelingen endnu. **Valget mellem de to kure er rækkens egentlige indhold:** `robots.txt` med `Disallow` holder appen helt ude af indekset (enkelt, men også usynligt for en, der søger på selve app-adressen), mens en canonical mod sitet samler signalet uden at skjule siden. **Fem småting hører til samme runde**, fordi de rører de samme filer: `404.html` på sitet (i dag Vercels standard), `og:locale` og `og:image:alt` (begge mangler i et ellers komplet sæt), cache-header på `/css/`, og footer-året, som er hårdkodet. Hører sammen med `I9`, som er den anden halvdel af "hvordan findes siden". | Lille — men indeholder ét valg, der bør træffes bevidst |
 | B32 | **Fjern Champions League's "Fra ligafasen"-forbehold på hjemmesidens turneringsliste** | `site/index.html`s turnerings-sektion (merget 13. august 2026) viser Champions League med mærkatet "Fra ligafasen", fordi ligafasen endnu ikke er lodtrukket (samme forudsætning som `B8`/`B28`). Mærkatet skal fjernes samtidig med, at `B28`s kickoff-aflæsning gentages for CL. | Lille — én linje, samme udløser som `B28` |
-| B35 | **Kør `#64 tournament_scotland_promote.sql` i produktionen** | `A55` (14. august 2026) forfremmede Scotland Premiership til officiel, og migreringen er skrevet, verificeret og merget. Kørslen kan kun laves i Supabase, og indtil den er kørt, er turneringen stadig uofficiel i produktionen: sitets *"rating opdateres i alle turneringer"* er sand i repoet og usand på skærmen. ⚠️ **Mellem to spillerunder** — filen ændrer kåringen af en runde, folk allerede har tippet, mens de tipper den, og `select max(round_key) from matches where home_score is not null` mod `public.round_key(now())` siger, hvor man er. Filen kalder selv `recompute_ratings()`, så "Opdater ratings" i Admin er unødvendig bagefter | Lille — én kørsel plus tre verifikations-selects i filens fod |
 
 ## Teknisk gæld
 
@@ -295,7 +292,8 @@ slap igennem den første udgave og rettede både migreringen (et `filter`, hvis
 begrundelse var faktuelt forkert) og fixturen (døgnets værste kørsel lå inde i
 timen, så de to maksima ikke kunne skelnes).
 
-✅ **`#66 job_run_duration.sql` er kørt i produktionen 15. august 2026**, så
-Admin → Drift viser varigheder for hele historikken med det samme (`B36` lukket
-og slettet). Tier 1 rummer herefter kun `B35`.
+✅ **Begge migreringer er kørt i produktionen 15. august 2026.** `#66` giver
+Admin → Drift varigheder for hele historikken, og `#64` gjorde Scotland
+Premiership officiel (`A55`). `B36` og `B35` er lukket og slettet, og **Tier 1 er
+dermed tomt** — der er ingen bestillinger til produktionen tilbage.
 

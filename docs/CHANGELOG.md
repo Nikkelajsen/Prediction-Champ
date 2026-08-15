@@ -9,6 +9,20 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+15. august 2026 — Tier 1 er tomt: begge ventende migreringer er kørt i produktionen
+
+**`#66 job_run_duration.sql` (`G114`)** — Admin → Drift viser nu varigheder for hele historikken på én gang, og ikke kun fremad. Det er hele pointen med, at rækken ikke fik den kolonne, den bad om: varigheden udledes af `started_at`/`finished_at`, som har været der siden `#18`, så de 30 dages kørsler, `prune_job_runs` holder på, kunne aflæses i samme sekund filen var kørt.
+
+**`#64 tournament_scotland_promote.sql` (`A55`)** — Scotland Premiership er officiel. Sitets løfte om, at *"point, stilling og rating opdateres i alle turneringer"*, er dermed sandt på skærmen og ikke kun i repoet.
+
+🔴 **Betingelsen "kør den mellem to spillerunder" blev EFTERPRØVET og ikke skønnet**, og det er rækkens egentlige lære. Ejerens første begrundelse var, at der ikke var aktive lokale konkurrencer med skotske hold — men `is_official` rører slet ikke lokale konkurrencer; de scorer efter deres egen `mode_params`, og Scotland har givet point i sin egen konkurrence siden 31. juli. Det, forfremmelsen flytter, er det GLOBALE championship og ratingen. Den rigtige betingelse kan læses direkte af `round_standings`' definition (`where m.home_score is not null` join `leagues … and l.is_official`): med nul skotske resultater i den igangværende runde ændrer forfremmelsen den rundes stilling med præcis nul. Opslaget svarede endnu bedre end betingelsen krævede — **nul skotske kampe i runden overhovedet** (`2026-08-11`), ikke bare nul spillede — så hverken optjente point eller en kamp, der låser senere i runden, kunne flytte sig.
+
+**Det, timing ikke kan undgå, er sket som beskrevet:** to ugers skotske tips er trådt ind i alle historiske runder og måneder (stillingerne er views), og `recompute_ratings()` har skrevet hele `rating_history` om fra runde nul. Allerede udsendte historier, notifikationer og milepæle står uændret, så en gammel runde kan have en gemt historie, viewet nu regner anderledes — samme vilkår som den modsatte vej (`DOCUMENTATION.md` §5).
+
+**Tier 1 er dermed tomt.** Der er ingen bestillinger til produktionen tilbage — første gang siden tieret blev oprettet.
+
+---
+
 15. august 2026 — `G124` rettet samme dag: vagten sprang tavst over, og dens virkning kunne ikke aflæses
 
 **To fejl, og den anden blev fundet, fordi nogen forsøgte at efterprøve den første.**
