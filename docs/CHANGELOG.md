@@ -9,6 +9,28 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+16. august 2026 — Tier 5 kørt tom: de to delinger kan aflæses, og en forurening kom for dagen
+
+**Backloggens Tier 5 er tømt** (`B37`), og listen er 33 → 32. Tier 1, 2 og 5 er dermed alle tømt samme dag; kun Tier 6 (venter på en udløser) og Tier 7 (udadvendt) bærer rækker.
+
+**Rækken var, at instrumenteringen var på plads og aflæsningen manglede.** `I22` gav stillingen en Del-knap og sit eget hændelsesnavn; `I25` gav dagskortet en. Begge navne stod i hændelseskataloget og i CI-testen — og intet panel læste dem. **Et måletal, ingen aflæser, ligner "funktionen bruges ikke"**, og det er den dyreste slags nul.
+
+**Halvdelen krævede ingen SQL overhovedet.** `admin_analytics_engagement` har hele tiden svaret `events` som en generisk optælling pr. hændelsesnavn, så både `standings_shared` og `story_shared` lå allerede i svaret og manglede kun et sted at stå. Engagement-sektionen har nu en **Deling**-gruppe med de to totaler, og den virker uden at røre databasen. Det var værd at opdage, før migreringen blev skrevet.
+
+**Opdelingen krævede derimod SQL, fordi den bor i `metadata.from`.** `admin_analytics_engagement` svarer nu `shares`: rundekort, dagskort, milepæl og stilling hver for sig, med både antal og distinkte brugere. Rundekortet dækker to former — v3's `frame:ROUND_SUM`/`frame:RATING` og de historiske rækker fra før frames, som slet ingen `from` har. **Den anden form er den, der let forsvinder:** havner de i en 'ukendt'-spand, mister opgørelsen produktets ældste delingsflade uden at fejle.
+
+**Ændringen står i `sql/analytics_dashboard.sql` (#17) og ikke i en ny migrering.** Filen er registreret som *"sikker og forventet at blive gen-kørt"*, og en ny migrering ville have skullet bære en KOPI af to lange RPC'er — præcis den landmine, `sql/README.md`s "Farlige at gen-køre" advarer mod ved `generate_stories()`: en forældet kopi, der ruller den rigtige tilbage, uden at noget fejler.
+
+**Rækken afdækkede en forurening, ingen havde ledt efter.** Karriereprofilens del-knap skriver milepælens nøgle som `rule`, og `MONTH_CHAMP` er **bevidst** både en milepælsnøgle og en story-regel — kommentaren i `src/lib/milestones.js` siger det med rene ord: *"de bor i hver sit navnerum og betyder det samme øjeblik"*. Følgen var, at karriereprofilens delinger blev talt med i Story Engine-regeltabellens `Delt`-kolonne, mens de øvrige milepælsnøgler faldt tavst ud af joinet. Begge dele er nu rettet: milepæls-delinger filtreres fra regeltabellen og tælles som deres egen flade.
+
+**Umålt må ikke ligne nul.** Er RPC'en ikke gen-kørt, mangler `shares` i svaret, og panelet skriver **"ikke målt endnu"** frem for fire nuller — `G115`s regel en gang til, og de to betyder det stik modsatte. Et tomt vindue svarer bevidst `{}` og ikke `null`, så "målt til nul" og "umålt" kan skelnes. Vagten er `shareSurfaceRows()` i `src/lib/analytics.js` med fire tests.
+
+**Verificeret på en rigtig PostgreSQL 16.13 mod det RIGTIGE skema:** `sql/tests/analytics_share_surfaces.sql` (fem påstande) er kørt igennem, og **mutations-testet med de tre fejl, der faktisk kan ske** — fjernes milepæls-filteret, fanges det; bliver `else 'round'` til `else 'ukendt'`, fanges de historiske rækker; falder `standings_shared` ud af `where`-listen, fanges stillingen. Alle tre gav en læsbar besked. Testen kræver `#67` kørt først, fordi `sql/schema.sql` er et øjebliksbillede fra før den migrering — hvilket i sig selv gentager rækkefølgen fra produktionen. 1462 tests (4 nye), lint uændret på loftet (7 advarsler), grønt build.
+
+🔶 **Kræver én kørsel i Supabase for at vise opdelingen:** `sql/analytics_dashboard.sql`. **Uafhængig af deployet, begge veje** — en gammel klient ignorerer den nye nøgle, en ny klient melder umålt, indtil filen er kørt.
+
+---
+
 16. august 2026 — Tier 2 kørt tom: den halvt afløste SQL-fil siger det nu selv
 
 **Backloggens Tier 2 er tømt** (`G126`), og listen er 34 → 33. Med Tier 1 tømt tidligere samme dag står de to øverste tiers begge uden rækker.

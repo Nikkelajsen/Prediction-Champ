@@ -437,6 +437,45 @@ begin
     'league_views_detail', (select count(*) from public.analytics_events
                              where event_name = 'opened_league' and group_id is not null and created_at >= now() - make_interval(days => p_days)),
 
+    -- DELINGSFLADERNE (B37, august 2026). `events` ovenfor tæller hvert NAVN,
+    -- og det er for groft: `story_shared` er ét navn med TRE afsendere, som kun
+    -- kan skelnes på `metadata->>'from'`. Uden opdelingen kan man se AT der
+    -- deles og ikke HVORFRA — altså ikke forskellen på "dagskortets del-knap
+    -- bruges" og "nogen delte noget".
+    --
+    --   'frame:X'    rundekortet (v3's tap-through). X er framens NAVN —
+    --                'ROUND_SUM' eller 'RATING', de to felter, der kan deles
+    --   'day_card'   dagskortet (I25)
+    --   'milestone'  milepælen på karriereprofilen
+    --   (intet felt) rundekortet FØR v3 gav frames. Historiske rækker har
+    --                ingen `from`, og de er alle rundekort — derfor falder
+    --                `else` sammen med 'round' og ikke i en 'ukendt'-spand.
+    --
+    -- `standings_shared` (I22) er sit eget navn og kommer med her, fordi
+    -- spørgsmålet "hvorfra deles der?" ikke kan besvares uden den fjerde flade.
+    -- Den blandes IKKE ind i Story Engine-tallene; se hovedet i
+    -- sql/analytics_standings_share.sql for hvorfor navnet er skilt ad.
+    'shares', (
+      with s as (
+        select
+          case
+            when e.event_name = 'standings_shared' then 'standings'
+            when e.metadata->>'from' = 'day_card'  then 'day_card'
+            when e.metadata->>'from' = 'milestone' then 'milestone'
+            else 'round'
+          end as surface,
+          e.user_id
+        from public.analytics_events e
+        where e.event_name in ('story_shared', 'standings_shared')
+          and e.created_at >= now() - make_interval(days => p_days)
+      )
+      -- Tomt vindue giver `{}` og ikke `null`: klienten skelner mellem "nul
+      -- delinger" (målt) og "nøglen mangler" (RPC'en er ikke gen-kørt), og de
+      -- to må aldrig se ens ud.
+      select coalesce(jsonb_object_agg(surface, jsonb_build_object('count', c, 'users', u)), '{}'::jsonb)
+      from (select surface, count(*) as c, count(distinct user_id) as u from s group by surface) t
+    ),
+
     'events_by_day', (
       select coalesce(jsonb_object_agg(event_name, series), '{}'::jsonb)
       from (
@@ -1144,7 +1183,16 @@ begin
   ev as (
     select e.metadata->>'rule' as rule,
       count(*) filter (where e.event_name = 'story_viewed')  as viewed,
-      count(*) filter (where e.event_name = 'story_shared')  as shared
+      -- MILEPÆLS-DELINGER HØRER IKKE TIL I EN REGELTABEL (B37, august 2026).
+      -- Karriereprofilens del-knap skriver `story_shared` med milepælens nøgle
+      -- som `rule`, og nøglerne bor i et andet navnerum end motorens regler.
+      -- For de fleste er følgen usynlig — `COMP_COMEBACK` matcher ingen
+      -- story-regel og falder ud af joinet nedenfor — men `MONTH_CHAMP` er
+      -- BEGGE dele, bevidst (se kommentaren i src/lib/milestones.js), og den
+      -- rules delinger blev derfor talt med i en tabel over motorens kort.
+      -- Fladen aflæses nu for sig i admin_analytics_engagement's `shares`.
+      count(*) filter (where e.event_name = 'story_shared'
+                         and coalesce(e.metadata->>'from', '') <> 'milestone') as shared
     from public.analytics_events e cross join win w
     where e.event_name in ('story_viewed', 'story_shared')
       and e.created_at >= w.t0

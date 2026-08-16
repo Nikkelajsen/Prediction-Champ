@@ -244,6 +244,33 @@ function storyRuleRows(data) {
   return rows.sort((a, b) => (b.generated - a.generated) || a.rule.localeCompare(b.rule));
 }
 
+// ---------- Delingsflader ----------
+// De fire steder, en deling kan komme fra. Rækkefølgen er den, panelet viser
+// dem i, og den følger fladernes alder: rundekortet (v1), dagskortet (I25),
+// milepælen, stillingen (I22).
+const SHARE_SURFACES = [
+  { id: "round", label: "Rundekort", hint: "Hjem · tap-through" },
+  { id: "day_card", label: "Dagskort", hint: "Hjem · dagens kort" },
+  { id: "milestone", label: "Milepæl", hint: "Karriereprofilen" },
+  { id: "standings", label: "Stilling", hint: "Stilling-skærmen" },
+];
+
+// Opdelingen af `story_shared` findes kun i `metadata.from` og dermed kun i
+// SQL'en. Returnerer `null`, når RPC'en ikke er gen-kørt endnu — og det er hele
+// pointen med funktionen: nul delinger og en umålt opdeling ser ens ud i et
+// panel, der bare skriver 0, og de to betyder det stik modsatte ("knappen
+// bruges ikke" vs. "vi måler ikke endnu"). Samme regel som `admin_job_health`s
+// umålte fejlrate (G115) og `viewable ?? generated` i storyRuleRows.
+function shareSurfaceRows(data) {
+  const s = data?.shares;
+  if (!s || typeof s !== "object") return null;
+  return SHARE_SURFACES.map((f) => ({
+    ...f,
+    count: s[f.id]?.count ?? 0,
+    users: s[f.id]?.users ?? 0,
+  }));
+}
+
 // ---------- Liga-diagnose ----------
 // Afløser Liga Health Score (juli 2026). Den gamle score var ét 0-100-tal,
 // vægtet ud fra fem faktorer i SQL. Den var for BRED til at bruge: på de fire
@@ -416,4 +443,4 @@ function summarizeDiagnoses(diagnosed) {
   return out;
 }
 
-export { logEvent, logEventOnce, loadAnalyticsHealth, loadAnalyticsEngagement, loadAnalyticsLeagueHealth, loadAnalyticsRetention, loadAnalyticsFunnel, loadAnalyticsStories, diagnoseLeague, diagnoseLeagues, summarizeDiagnoses, LEAGUE_THRESHOLDS, funnelRow, funnelSteps, biggestDrop, fmtMinutes, FUNNEL_STALLS, storyRuleRows, STORY_RULES };
+export { logEvent, logEventOnce, loadAnalyticsHealth, loadAnalyticsEngagement, loadAnalyticsLeagueHealth, loadAnalyticsRetention, loadAnalyticsFunnel, loadAnalyticsStories, diagnoseLeague, diagnoseLeagues, summarizeDiagnoses, LEAGUE_THRESHOLDS, funnelRow, funnelSteps, biggestDrop, fmtMinutes, FUNNEL_STALLS, storyRuleRows, STORY_RULES, shareSurfaceRows, SHARE_SURFACES };
