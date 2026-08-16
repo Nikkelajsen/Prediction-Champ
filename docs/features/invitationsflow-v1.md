@@ -57,6 +57,16 @@ skiftes.
 > sat ved 1200 px bredde er ulæselig. `og:title` bærer sætningen som **rigtig
 > tekst** — i modtagerens egen skriftstørrelse og læsbar af en skærmlæser.
 > Et designet billede med tagline er en designopgave og står i backloggen.
+>
+> 🔵 **Rettet 16. august 2026 (`G127`): kun den ANDEN grund bærer beslutningen.**
+> Den første gælder for ren Node og ikke for repoet. Siden `I23` tegner
+> `scripts/screenshots/capture.mjs` PNG'er ved at køre Chromiums egen
+> kommandolinje **uden en ny afhængighed**, og en browser maler med en woff2
+> uden videre — hjemmesidens eget OG-billede bygges nu netop sådan
+> (`scripts/build-og-image-site.mjs`) og HAR sælgesætningen malet ind.
+> **Appens billede er uændret**, fordi grund to er en designbeslutning om et
+> link-preview i en samtaleliste og ikke en pris på et bibliotek. To grunde, der
+> "peger samme vej", skjulte, at kun den ene stadig peger.
 
 **Dynamisk (kun crawlere):** `api/invite-preview.js` svarer med ligaens eget
 navn og antallet af spillere. `middleware.js` omskriver kun, når **både**

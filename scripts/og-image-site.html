@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8" />
+<title>site/img/og-image.png — kilden</title>
+<!--
+  Hjemmesidens OG-billede, som en side. `build-og-image-site.mjs` fotograferer
+  den i 1200×630 og skriver `site/img/og-image.png` (G127).
+
+  FILEN KAN ÅBNES I HÅNDEN. Dobbeltklik den, og browseren viser præcis det
+  billede, scriptet gemmer — det er dét, der gør den til en opskrift og ikke til
+  en konfiguration. Skal designet laves om, laves det om her, og scriptet køres
+  bagefter.
+
+  ---------------------------------------------------------------------------
+  TALLENE OG HVOR DE KOMMER FRA
+
+  Farverne er sitets egne tokens (site/css/site.css » src/ui/theme.js): --bg
+  #0C1622 til baggrunden, --muted #8CA0B3 til sælgesætningen. Skrifttypen er
+  sitets egen Barlow, hentet fra site/fonts/ med samme @font-face som sitet
+  selv bruger — det er dén detalje, der gør browseren til det rigtige værktøj:
+  Barlow findes kun som .woff2, og en browser kan male med den uden videre.
+
+  Wordmarkets bredde er 864 px = 72 % af 1200, altså SAMME skala som appens
+  billede (`SKALA` i build-og-image.mjs). De to billeder skal ligne hinanden.
+
+  Placeringen (top 101 px og 468 px) er målt på den håndlavede fil, dette
+  afløser, så genskabelsen ikke samtidig blev en redesign. Wordmark-PNG'en
+  bærer sin egen gennemsigtige luft — ~70 px foroven og forneden ved denne
+  skala — så tallene kan ikke udledes af en centrering; de ER designet.
+-->
+<style>
+  /* Kun de to vægte, siden bruger. Samme unicode-range-opdeling som site.css,
+     så et bogstav uden for latin (fx i en ny sælgesætning) også har en fil at
+     komme fra i stedet for at falde tilbage på systemets skrift. */
+  @font-face {
+    font-family: 'Barlow';
+    font-style: normal;
+    font-weight: 600;
+    font-display: block;
+    src: url('../site/fonts/barlow-600-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: 'Barlow';
+    font-style: normal;
+    font-weight: 600;
+    font-display: block;
+    src: url('../site/fonts/barlow-600-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+
+  html, body { margin: 0; padding: 0; }
+  body {
+    width: 1200px;
+    height: 630px;
+    background: #0C1622;
+    position: relative;
+    overflow: hidden;
+  }
+  /* 864 = 72 % af 1200, samme skala som appens billede. Højden følger kildens
+     eget forhold (1200×435). */
+  #wordmark {
+    position: absolute;
+    left: 168px;
+    top: 101px;
+    width: 864px;
+    height: 313px;
+  }
+  #saelgesaetning {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 468px;
+    margin: 0;
+    text-align: center;
+    font-family: 'Barlow', system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 44px;
+    line-height: 1;
+    color: #8CA0B3;
+  }
+</style>
+</head>
+<body>
+  <img id="wordmark" src="../public/leagly-wordmark-navy.png" alt="" />
+  <!-- Sælgesætningen står ordret som på sitet (site/index.html's <title> og
+       og:image:alt). Ændres den, ændres den begge steder — og billedet bygges
+       om. -->
+  <p id="saelgesaetning">Slå dine venner. Uge efter uge.</p>
+
+  <!-- Blev Barlow rent faktisk brugt? Uden svaret er fejlen TAVS: falder
+       browseren tilbage på en systemskrift, ser billedet stadig rigtigt ud ved
+       første øjekast, og forskellen opdages først af dem, der ikke bruger
+       appen endnu — præcis den fejlklasse, G127 handler om. Feltet er skjult
+       og kommer derfor ikke med på fotografiet; `build-og-image-site.mjs`
+       læser det i en `--dump-dom`-kørsel før den fotograferer. -->
+  <pre id="skriftstatus" hidden></pre>
+  <script>
+    const linje = document.getElementById("saelgesaetning");
+    document.fonts.ready.then(() => {
+      document.getElementById("skriftstatus").textContent =
+        document.fonts.check("600 44px Barlow", linje.textContent) ? "barlow" : "faldback";
+    });
+  </script>
+</body>
+</html>

@@ -21,27 +21,13 @@
 // appens egen ramme.
 //
 // Chromium køres gennem sin egen kommandolinje (`--headless --screenshot`) og
-// ikke gennem Playwright eller Puppeteer. Grunden er den samme som alle andre
-// steder i repoet: fire runtime-afhængigheder er et bevidst valg, og et
-// browser-bibliotek på et par hundrede megabyte for fire PNG'er er ikke en god
-// handel. Prisen er, at maskinen skal HAVE en Chrome eller Chromium — se
-// `findChrome()`.
+// ikke gennem Playwright eller Puppeteer. Selve browser-håndteringen — find
+// den, kør den, ram en bestemt viewport — bor i `../chromium.mjs` siden `G127`,
+// hvor sitets OG-billede fik brug for den samme.
 //
-// ---------------------------------------------------------------------------
-// HVORFOR DER KALIBRERES FØR DER FOTOGRAFERES
-//
-// `--window-size` er ikke det samme som viewporten, og forskellen er ikke den
-// samme fra browser til browser: den Chromium, dette blev skrevet på, har et
-// MINDSTEMÅL på bredden (500 px) og trækker ~87 px fra højden til sin egen
-// ramme. Skrev vi målene i hånden, ville skærmbillederne blive skæve på den
-// næste maskine — og det ville se ud som et designproblem, ikke som en
-// forkert flag-værdi.
-//
-// Derfor spørger scriptet browseren FØRST (`--dump-dom` på en side, der skriver
-// sin egen `innerWidth`/`innerHeight`), regner vinduet ud, der giver den ønskede
-// viewport, og efterprøver svaret. Bagefter beskæres billedet til appens egen
-// ramme — telefonens 430 px brede spalte midt i viewporten — så resultatet er
-// den app, en telefon ville vise, og ikke et browservindue med grå kanter.
+// Bagefter beskæres billedet til appens egen ramme — telefonens 430 px brede
+// spalte midt i viewporten — så resultatet er den app, en telefon ville vise,
+// og ikke et browservindue med grå kanter.
 //
 // ---------------------------------------------------------------------------
 // MÅLENE
@@ -55,11 +41,14 @@
 // længste side højst 2,3 gange den korteste (her 2,17), og ENS
 // størrelsesforhold på alle skærmbilleder med samme `form_factor`. Det sidste
 // er derfor ikke et valg pr. billede: skiftes målene, skiftes de for alle fire.
-import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beskær, læsPng, skrivPng } from "../png.mjs";
+// Browseren selv — `findChrome`, `kør` og kalibreringen — bor i `chromium.mjs`
+// (`G127`). Den lå her indtil 16. august 2026, hvor `build-og-image-site.mjs`
+// blev den anden aftager.
+import { findChrome, kalibrér, kør } from "../chromium.mjs";
 // Selve harnessen — Vite-serveren og attrap-miljøet — bor i `harness.mjs`
 // (`I24`). Den lå her indtil 15. august 2026, hvilket gjorde "kør appen uden
 // Supabase" til noget, man kun kunne, hvis man også ville have fire PNG'er ud
@@ -76,101 +65,6 @@ const TÆTHED = 2;
 // `public/manifest.json` peger på. Rækkefølgen her er den, manifestet lister
 // dem i — og dermed den, Chrome viser dem i.
 const BILLEDER = ["hjem", "tip", "stilling", "championship"];
-
-// Chrome findes ikke det samme sted på to maskiner, og der er ingen pakke at
-// spørge. Rækkefølgen er: sig det selv (CHROME), Playwrights browser hvis den
-// tilfældigvis er installeret, og derefter de sædvanlige stier.
-function findChrome() {
-  const kandidater = [
-    process.env.CHROME,
-    process.env.PLAYWRIGHT_BROWSERS_PATH && join(process.env.PLAYWRIGHT_BROWSERS_PATH, "chromium", "chrome"),
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-  ].filter(Boolean);
-  const fundet = kandidater.find((sti) => existsSync(sti));
-  if (!fundet) {
-    throw new Error(
-      "Fandt ingen Chrome/Chromium. Sæt CHROME=<sti til browseren> og kør igen.\n" +
-      "Prøvede:\n  " + kandidater.join("\n  "),
-    );
-  }
-  return fundet;
-}
-
-// Kører browseren og venter — ASYNKRONT, og det er ikke en detalje. Med
-// `spawnSync` blokerer Node sin egen event loop, og så kan Vite-serveren i
-// samme proces ikke svare på et eneste modul. Browseren venter da på en side,
-// der aldrig kommer, indtil dens tidsbudget er brugt op. Fejlen ligner en hængt
-// browser og er en hængt server.
-function kør(chrome, argumenter) {
-  const profil = mkdtempSync(join(tmpdir(), "leagly-shot-"));
-  return new Promise((resolve, reject) => {
-    const p = spawn(chrome, [
-      "--headless",
-      "--disable-gpu",
-      "--no-sandbox",
-      "--hide-scrollbars",
-      // Animationer gør billedet UFORUDSIGELIGT: live-prikken pulser i 1,4
-      // sekunders takt, og hvilket sted i takten billedet rammer, afhænger af,
-      // hvornår den virtuelle tid løber ud. To kørsler gav derfor to forskellige
-      // PNG'er af den samme skærm.
-      //
-      // Flaget er appens EGEN vej ud af det: `prefers-reduced-motion: reduce`
-      // slukker alle fire animationer i `src/ui/theme.js` (`G22`), og
-      // grundtilstanden er den, en bruger med den indstilling ser. Et lag
-      // indsprøjtet CSS ville gøre det samme og samtidig gøre skærmbilledet til
-      // noget, ingen bruger kan få vist.
-      "--force-prefers-reduced-motion",
-      `--user-data-dir=${profil}`,
-      // Virtuel tid: browseren spoler sine egne timere frem, så de halvandet
-      // sekunds ventetid i `boot.js` mellem hvert tryk ikke koster halvandet
-      // sekund. Budgettet er loftet for HELE siden — er det brugt op, tages
-      // billedet, uanset hvor langt appen er nået.
-      "--virtual-time-budget=30000",
-      ...argumenter,
-    ], { encoding: "utf8" });
-    let ud = "";
-    p.stdout.on("data", (d) => { ud += d; });
-    p.stderr.on("data", () => { /* Chromium skriver dbus- og socket-støj, der intet betyder her */ });
-    p.on("error", reject);
-    p.on("close", () => { rmSync(profil, { recursive: true, force: true }); resolve(ud); });
-  });
-}
-
-// Hvilken viewport giver et vindue på (bredde × højde)? Siden skriver svaret i
-// sin egen DOM, og `--dump-dom` skriver DOM'en til stdout.
-async function målViewport(chrome, bredde, højde) {
-  const sti = join(tmpdir(), "leagly-kalibrering.html");
-  writeFileSync(sti, `<html><body><pre id="m"></pre><script>m.textContent=innerWidth+"x"+innerHeight;</script></body></html>`);
-  const dom = await kør(chrome, [`--window-size=${bredde},${højde}`, "--dump-dom", `file://${sti}`]);
-  unlinkSync(sti);
-  const m = dom.match(/<pre id="m">(\d+)x(\d+)<\/pre>/);
-  if (!m) throw new Error(`kunne ikke måle browserens viewport:\n${dom.slice(0, 500)}`);
-  return { bredde: Number(m[1]), højde: Number(m[2]) };
-}
-
-async function kalibrér(chrome) {
-  // Første måling: bed om præcis den viewport, vi vil have, og se hvad vi får.
-  const første = await målViewport(chrome, APP_BREDDE, APP_HØJDE);
-  // Bredden kan være klemt op til et mindstemål; højden mangler typisk det, som
-  // browserens egen ramme optager. Begge dele rettes ved at bede om et vindue,
-  // der er så meget større.
-  const vindue = {
-    bredde: Math.max(APP_BREDDE, første.bredde),
-    højde: APP_HØJDE + (APP_HØJDE - første.højde),
-  };
-  const anden = await målViewport(chrome, vindue.bredde, vindue.højde);
-  if (anden.bredde < APP_BREDDE || anden.højde !== APP_HØJDE) {
-    throw new Error(
-      `kunne ikke ramme en viewport på ${APP_BREDDE}×${APP_HØJDE}: et vindue på ` +
-      `${vindue.bredde}×${vindue.højde} gav ${anden.bredde}×${anden.højde}.`,
-    );
-  }
-  return { vindue, viewport: anden };
-}
 
 async function skyd(chrome, opsætning, navn) {
   const rå = join(tmpdir(), `leagly-${navn}-rå.png`);
@@ -197,7 +91,7 @@ async function skyd(chrome, opsætning, navn) {
 const chrome = findChrome();
 mkdirSync(UD, { recursive: true });
 
-const opsætning = await kalibrér(chrome);
+const opsætning = await kalibrér(chrome, APP_BREDDE, APP_HØJDE);
 console.log(`vindue ${opsætning.vindue.bredde}×${opsætning.vindue.højde} → viewport ${opsætning.viewport.bredde}×${opsætning.viewport.højde}`);
 
 // HMR er slået FRA med vilje, og `startHarness` gør det som standard. Vites

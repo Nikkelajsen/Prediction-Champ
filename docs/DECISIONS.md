@@ -15,6 +15,86 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 16. august 2026 — `G127`: browseren er repoets skriftgengiver, når et billede bygges i hånden
+
+**Beslutning:** billeder, der skal bære tekst i repoets egen skrift, bygges ved
+at fotografere en HTML-side med Chromiums egen kommandolinje — ikke ved at male
+glyffer i Node. `site/img/og-image.png` er den første, og opskriften er
+`scripts/og-image-site.html` plus `scripts/build-og-image-site.mjs`.
+**Appens `public/og-image.png` bliver, hvor den er:** ren Node, wordmarket
+alene, ingen tekst.
+
+**Begrundelse — fravalget var rigtigt begrundet og forkert afgrænset.**
+`build-og-image.mjs`s hoved har siden `I7` sagt, at ordlyden ikke kan males ind,
+fordi Barlow kun findes som `.woff2`, og at pakke en woff2 ud kræver Brotli plus
+woff2'ens egen glyf-transformation — et bibliotek, projektet ikke har og ikke
+skal have. **Det er sandt om Node og blev læst som sandt om repoet.** Siden
+`I23` (15. august 2026) tegner `screenshots/capture.mjs` fire PNG'er ved at køre
+Chromium direkte, uden en eneste ny afhængighed, og en browser maler med en
+woff2 uden videre. Prisen for skriftgengivelse var altså allerede betalt et
+andet sted i huset; den lå bare ikke i det værktøj, hovedet kiggede i.
+
+**Hvorfor det ikke ændrer appens billede.** Fravalget havde to ben, og kun det
+ene var en pris. Det andet er en designbeslutning: et OG-billede vises ofte som
+en miniature på ~120 px højde, hvor en tagline sat ved 1200 px bredde er
+ulæselig, mens `og:title` bærer den samme sætning som rigtig tekst — i
+modtagerens skriftstørrelse og læsbar af en skærmlæser. Hjemmesidens billede er
+en anden situation: det ER lavet med sælgesætningen malet ind, det er den fil,
+der ligger live, og spørgsmålet var aldrig, om den skulle se sådan ud, men om
+den kunne laves igen.
+
+**Hvorfor en HTML-side og ikke tal i et script.** Opskriften skal kunne læses og
+ændres af den, der skifter wordmarket eller sælgesætningen, og et layout udtrykt
+som CSS kan åbnes i en browser og ses. `og-image-site.html` er derfor ikke en
+skabelon, scriptet fylder ud — den er billedet, og scriptet er kameraet.
+
+**Hvorfor to scripts og ikke ét.** De kræver forskellige ting af maskinen:
+appens billede kan bygges hvor som helst, sitets kræver en Chrome. Ét fælles
+script ville gøre den nemme halvdel afhængig af den svære.
+
+**Hvad der er accepteret som en pris:** placeringstallene i `og-image-site.html`
+(wordmarkets `top: 101px`, sælgesætningens `top: 468px`) er MÅLT på den
+håndlavede fil frem for udledt af en centrering. Wordmark-PNG'en bærer sin egen
+gennemsigtige luft — ~70 px foroven og forneden ved 72 % — så en centrering ville
+give et andet billede end det, der ligger live. Genskabelsen skulle ikke
+samtidig være en redesign. Tallene står med den begrundelse ved sig.
+
+---
+
+## 16. august 2026 — `G125`: en historieregel er levende, hvis den nyeste udgave af dens FUNKTION har den
+
+**Beslutning:** `story-eksempler.test.js` afgør ikke længere en regels ordlyd ud
+fra den højeste motorfil, der *nævner* reglen, men ud fra den højeste fil, der
+*definerer den funktion*, reglen bor i. Findes reglen kun i en ældre udgave af
+en funktion, en nyere fil har skrevet om, er den fjernet, og vagten går rød.
+
+**Begrundelse — hullet var beskrevet som permanent, og det var det ikke.**
+Vagtens hoved havde regnet prisen ud på det eneste alternativ, nogen havde fået
+øje på: `sql/schema.sql`, produktionens øjebliksbillede, op til en uge bagud
+(`G124`) og dermed rødt for enhver regel skrevet i dag. Den regnestykke er
+rigtigt. Listen var bare ikke udtømmende: et regelafsnit ligger inde i en
+`create or replace function`, og gen-definitionen af den funktion er den
+oplysning, der mangler — maskinlæsbar, uden schema-dump, uden falsk rød.
+
+**Det forklarer en skelnen, hovedet før kun kunne beskrive i prosa.**
+`H2H_PASS` bor i `story_engine.sql` og er ægte, fordi ingen nyere fil
+gen-definerer `generate_stories()`; en dagsregel i `story_engine_v2.sql` er død,
+fordi `story_engine_v3.sql` skriver `generate_daily_stories()` om. Før var det
+noget, en læser måtte vide; nu er det det, vagten måler.
+
+**Rangen og ikke pladsen i listen.** To filer med samme versionstal
+(`story_engine_v2.sql` og `story_engine_v2_day.sql`) er ikke hinandens afløsere.
+Sammenlignes de på deres plads i en sorteret liste, udnævner alfabetet en
+vilkårlig vinder, og resultatet ville være en falsk rød af en ny slags — præcis
+den fejl, fravalget oprindeligt blev truffet for at undgå.
+
+**Hvad der stadig IKKE påstås:** at reglen kører i produktionen. Vagten måler
+repoet, ikke databasen, så en migrering, der ikke er kørt, ser levende ud her.
+Det spørgsmål besvares af `sql/README.md`s statuskolonne, og den grænse er
+uændret.
+
+---
+
 ## 15. august 2026 — `I25`: dagskortet får Del og Afvis, og stillingen kan deles som billede
 
 **Beslutning:** Story Engine v3's hverdagskort får både en **Del**-knap og et

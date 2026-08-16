@@ -16,21 +16,41 @@
 // samme fil ud hver gang.
 //
 // ---------------------------------------------------------------------------
-// HVORFOR ORDLYDEN IKKE ER MALET IND I BILLEDET
+// SITETS OG-BILLEDE ER EN ANDEN FIL OG BYGGES AF ET ANDET SCRIPT
+//
+// `site/img/og-image.png` er hjemmesidens, og det ER wordmarket plus
+// sælgesætningen malet ind. Det bygges af `build-og-image-site.mjs` — læs dét
+// hoved, hvis det er sitets billede, du skal have fat i. Indtil `G127`
+// (16. august 2026) fandtes det script ikke, og filen var lavet uden for repoet
+// med et værktøj, ingen havde skrevet ned; det var ordret den tilstand, dette
+// hoved siger, det findes for at undgå.
+//
+// ---------------------------------------------------------------------------
+// HVORFOR ORDLYDEN IKKE ER MALET IND I APPENS BILLEDE
 //
 // Det oplagte ville være at brænde "Gæt resultater. Slå dine venner." ind under
-// wordmarket. To ting taler imod, og de peger samme vej:
+// wordmarket. To ting taler imod:
 //
-//   1. Der er ingen skrifttype at male med. Projektets egen Barlow ligger kun
-//      som `.woff2` (public/fonts/), og at pakke en woff2 ud kræver Brotli PLUS
-//      woff2'ens egen glyf-transformation — altså et bibliotek, projektet ikke
-//      har og ikke skal have for ét billedes skyld. En systemskrift ville
+//   1. Der er ingen skrifttype at male med HER. Projektets egen Barlow ligger
+//      kun som `.woff2` (public/fonts/), og at pakke en woff2 ud kræver Brotli
+//      PLUS woff2'ens egen glyf-transformation — altså et bibliotek, projektet
+//      ikke har og ikke skal have for ét billedes skyld. En systemskrift ville
 //      hverken være Barlow eller findes på den næste maskine, scriptet køres på.
 //   2. Det ville alligevel være det forkerte sted at skrive den. Et OG-billede
 //      vises ofte som en miniature på ~120 px højde i en samtaleliste, hvor en
 //      tagline sat ved 1200 px bredde er ulæselig. `og:title` bærer den samme
 //      sætning som RIGTIG tekst — i modtagerens egen skriftstørrelse, aldrig
 //      skaleret ned, og læsbar af en skærmlæser.
+//
+// **Punkt 1 er blevet snævrere, end det lyder, og det er værd at vide hvorfor.**
+// Det gælder for REN NODE, ikke for repoet: siden `I23` (15. august 2026)
+// tegner `screenshots/capture.mjs` PNG'er ved at køre Chromiums egen
+// kommandolinje uden en eneste ny afhængighed, og en browser maler med en woff2
+// uden videre. Skriftgengivelsen kostede altså aldrig den afhængighed, prisen
+// blev sat til — den lå bare i et andet værktøj. Det er dén vej,
+// `build-og-image-site.mjs` går. **Punkt 2 er uændret**, og det er derfor
+// APPENS billede stadig er wordmarket alene: det er en designbeslutning om et
+// link-preview i en samtaleliste, ikke en pris på en afhængighed.
 //
 // Billedet siger derfor hvem, og `index.html`s tags siger hvad.
 //

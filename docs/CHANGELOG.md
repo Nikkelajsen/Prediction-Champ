@@ -9,6 +9,30 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+16. august 2026 — Tier 5 kørt: to fravalg, der var rigtigt begrundet på en liste, som ikke var udtømmende
+
+**Backloggens Tier 5 er tømt for gæld** (`G125` og `G127`), og listen er 34 → 35, fordi indbakkens tre linjer fik ID'er (`G129`, `A57`, `B37`). Fællesnævneren er den mere lærerige af de to slags: **ingen af de to hoveder havde regnet forkert.** Begge havde skrevet "det eneste alternativ ville koste X", og begge havde ret i, hvad X kostede. Det, der var forkert, var ordet *eneste*. Et fravalg er en påstand om en liste over alternativer, og en liste forældes stille, mens argumentet oven på den bliver ved med at lyde rigtigt.
+
+**`G125` — vagten kunne ikke se en FJERNET regel.** `story-eksempler.test.js` slog en regels ordlyd op i den højeste `sql/story_engine*.sql`, der NÆVNTE reglen. Fjerner en ny motorversion en regel, bliver dens afsnit stående i den gamle fil, og vagten fandt ordene dér — så hjemmesiden kunne citere en formulering, ingen bruger får at se. Filens hoved kaldte hullet permanent og navngav `sql/schema.sql` som eneste alternativ: produktionens øjebliksbillede, op til en uge bagud (`G124`), altså **rødt for enhver regel skrevet i dag**.
+
+**Det tredje alternativ lå i SQL'ens egen struktur.** Et regelafsnit bor inde i en `create or replace function`, og en funktion kan gen-defineres af en nyere fil: `generate_daily_stories()` skrives i både `story_engine_v2.sql` og `story_engine_v3.sql`, mens `generate_stories()` kun findes i `story_engine.sql`. Spørgsmålet er derfor ikke, hvilken FIL der nævner reglen sidst, men om den nyeste udgave af den FUNKTION, reglen bor i, stadig har den. Det forklarer samtidig, hvorfor `H2H_PASS` i v1's fil er ægte og en dagsregel i v2's fil ikke er — en skelnen, hovedet indtil nu kun kunne beskrive i prosa. Ingen schema-dump, ingen falsk rød.
+
+**Mutations-testet, og det er dét, der gør påstanden værd at tro på:** fjernes `CONTRARIAN` fra v3, er vagten nu rød og navngiver både funktionen og den fil, der skrev den om. Før var den grøn — v2 bærer den identiske ordlyd tre filer nede. Sammenligningen sker på versionsTALLET og ikke på pladsen i fillisten: `story_engine_v2.sql` og `story_engine_v2_day.sql` er ikke hinandens afløsere, og en alfabetisk rækkefølge mellem dem ville udnævne en tilfældig vinder, altså en falsk rød af en ny slags.
+
+**`G127` — sitets OG-billede kunne ikke genskabes.** `scripts/build-og-image.mjs` byggede kun appens billede, og `site/img/og-image.png` — wordmarket **plus** sælgesætningen malet ind — var lavet uden for repoet med et værktøj, ingen havde skrevet ned. Det var ordret den tilstand, scriptets eget hoved siger, det findes for at undgå: *"ligger opskriften kun i hovedet på den, der lavede filen, kan billedet ikke genskabes den dag wordmarket skiftes — og et OG-billede, der er en generation bagud, opdager ingen, fordi det kun ses af dem, der ikke bruger appen endnu."*
+
+**Fravalget hed "der er ingen skrifttype at male med", og det gælder for ren Node.** Barlow ligger kun som `.woff2`, og at pakke en woff2 ud kræver Brotli plus woff2'ens egen glyf-transformation. Men prisen var sat på skriftgengivelse i almindelighed, og **repoet har siden `I23` (15. august 2026) tegnet PNG'er ved at køre Chromiums egen kommandolinje uden en eneste ny afhængighed** — og en browser maler med en woff2, for det er dét, den findes til. Skriftgengivelsen kostede aldrig den afhængighed, prisen blev sat til; den lå bare i et andet værktøj i det samme repo.
+
+**Billedet er nu en side, man kan åbne.** `scripts/og-image-site.html` ER billedet — 1200×630 med sitets egne tokens (`--bg`, `--muted`), sitets egen Barlow fra `site/fonts/` og wordmarket fra `public/` — og `scripts/build-og-image-site.mjs` fotograferer den. Designet ligger dermed i en fil, der kan dobbeltklikkes, ikke i tal spredt ud over et script. Det gen-genererede billede rammer den håndlavede fils geometri inden for 1–2 px på både wordmark og sælgesætning.
+
+**Appens billede er urørt og bygges stadig i ren Node** — gen-genereret som bevis og byte-identisk. Begrundelsens ANDEN halvdel gælder nemlig stadig og er den, der bestemmer: et OG-billede vises ofte som en miniature på ~120 px højde, hvor en tagline sat ved 1200 px bredde er ulæselig, og `og:title` bærer sætningen som rigtig tekst. At appens billede er wordmarket alene, er en designbeslutning om et link-preview i en samtaleliste — ikke en pris på en afhængighed.
+
+**To ting kom med, fordi opgaven forudsatte dem.** Browser-håndteringen (`findChrome`, kørslen, viewport-kalibreringen) er skilt ud i `scripts/chromium.mjs` og deles nu af `screenshots/capture.mjs` og det nye script — to kopier af "find en Chrome og ram 1200×630" ville drive fra hinanden uden at fejle, samme begrundelse som `png.mjs` fik under `I23`. `npm run screenshots` er kørt igennem bagefter som bevis: de fire PNG'er er byte-identiske.
+
+**Det nye script har en vagt mod den tavse fejl, det ellers ville indføre.** Loader Barlow ikke, falder browseren tilbage på en systemskrift, og billedet ser stadig rigtigt nok ud — opdaget af ingen, fordi det kun ses af dem, der ikke bruger appen endnu. Siden svarer derfor selv på, om skriften blev brugt (`document.fonts.check`), og scriptet spørger den, **før** det fotograferer. Mutations-testet: peges `@font-face` på en fil, der ikke findes, stopper kørslen med den besked frem for at skrive et billede.
+
+---
+
 16. august 2026 — `I25`, rettelse: billedet blev sendt sammen med sin egen tekst
 
 **Meldt af ejeren dagen efter udrulningen.** En delt besked bar billedet **og** hele dets indhold som tekst under det: dagskortets overskrift og brødtekst stod både tegnet og skrevet, og stillingen blev sendt to gange — én gang som tabel i billedet, én gang som punktliste.
