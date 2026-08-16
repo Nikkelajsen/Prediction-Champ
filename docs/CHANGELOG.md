@@ -9,6 +9,22 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+16. august 2026 — Gab-feltet stod på nul, og det afslørede en fejl i selve aktivitets-målingen
+
+**Meldt af ejeren timer efter udrulningen:** *"Bør gabet være synligt? Kan ikke se det."* Svaret var to ting, og den anden var vigtigere end den første.
+
+**Den første: rammen var forkert.** "Kiggede uden at spille" (kom forbi − spillede) forudsætter, at alle spillere også er besøgende. Det holder ikke. Aflæst på produktionsdata stod *kom forbi* **lavere** end *spillede* i tre af fire runder — 19/15, 20/18, 17/12 — så feltet viste **nul i hver eneste runde**, fordi en `Math.max(0, …)` klampede den negative difference. Det er husets egen fejlklasse: **et signal gjort til et tavst nul.** Feltet, dets metrik og den afledte værdi er fjernet, og fodnoten siger nu, hvorfor de to tal ikke må trækkes fra hinanden. En test vogter, at rammen ikke sniger sig ind igen.
+
+**Den anden: `user_activity_days` var et gulv, og det gjaldt hele produktet.** `touchActivity()` blev kaldt ét sted — `completeAuth` — som kun kører, når en session etableres eller genoprettes ved BOOT. **En PWA på en telefon bootes sjældent:** iOS holder den i live i dagevis, så en bruger kunne åbne appen hver dag i en uge og efterlade ÉN aktivitetsdag. Pinget fyrer nu fra sin egen effekt ved app-start OG ved hver `visibilitychange`, med den eksisterende throttle på 1×/time pr. bruger som spærre. Ét sted frem for to.
+
+**Rækkevidden er større end den sektion, der fandt fejlen:** DAU/WAU/MAU og stickiness i Statistik, retention, `groups_with_active_member`, liga-diagnosens aktive medlemmer og besøgstallet pr. runde har alle været for lave. ⚠️ **Tallene hopper op ved udrulningen, og det er ikke vækst** — en serie hen over 16. august 2026 sammenligner to målinger, samme slags forbehold som `A21`s skift af enhed for North Star. Det står nu i `DOCUMENTATION.md` §15, i §21 og i måle-ordbogens forbehold ved *Aktive brugere*.
+
+**Hvorfor de to mål alligevel aldrig kan trækkes fra hinanden**, heller ikke efter rettelsen: de måler forskellige udsnit af TID. *Spillede runden* hører til den runde, kampene ligger i; *kom forbi* er kalenderugen — og tips kan gives i forvejen, så man kan spille runde R i ugen før R uden at åbne appen i R's egen uge. Gab-feltet ville altså have været forkert, selv med et perfekt ping.
+
+**Læren er den samme som `G73`s og `G115`s, en tredje gang:** en klampning, et `?? 0` eller et `Math.max(0, …)` gør en måling, der ikke passer, til en måling, der ser rigtig ud. Det var kun, fordi tallet blev sat på skærmen og aflæst af et menneske, at det kom for dagen. 1488 tests (2 nye, 3 omskrevne), lint uændret på loftet (7 advarsler), grønt build. **Intet at køre i Supabase.**
+
+---
+
 16. august 2026 — Hvor mange var i appen i runden? Tallet var målt, men havde ingen plads
 
 **Rækken er lille, fordi målingen allerede fandtes.** `admin_analytics_rounds` har fra første færd svaret `visitors` pr. runde — distinkte brugere med en aktivitetsdag i rundens uge — og `roundActivityRows()` regnede endda gabet `idle_visitors` (kom forbi minus spillede) ud. Men `visitors` stod kun som den sidste kolonne i tabellen, `idle_visitors` blev brugt **ingen steder**, og der var hverken en søjlerække eller et nøgletal. Det er `B37`s lære en gang til: **et måletal, ingen aflæser, ligner "funktionen bruges ikke."** Ingen SQL er rørt, og #17 skal ikke gen-køres for dette.

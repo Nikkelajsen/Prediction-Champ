@@ -55,11 +55,21 @@ describe("RoundsSection", () => {
 
   // Besøgstallet læses af den seneste LUKKEDE runde (9), ikke af den åbne (3),
   // af samme grund som spiller-tallet: en uge, der ikke er forbi, er delvis.
-  it("viser besøgstallet fra den seneste færdige runde og gabet til dem, der spillede", () => {
+  it("viser besøgstallet fra den seneste færdige runde", () => {
+    expect(html()).toContain("Kom forbi, seneste færdige runde");
+  });
+
+  // Feltet "Kiggede uden at spille" fandtes indtil 16. august 2026. Det hvilede
+  // på, at alle spillere også er besøgende, og det holder ikke — se
+  // RoundsSection.jsx' hoved. Skærmen må hverken vise differencen eller
+  // beskrive den, og fodnoten skal sige, HVORFOR de to ikke kan trækkes fra
+  // hinanden. Uden denne vagt ville rammen kunne snige sig ind igen.
+  it("viser hverken et gab eller en sætning, der inviterer til at regne et", () => {
     const h = html();
-    expect(h).toContain("Kom forbi, seneste færdige runde");
-    expect(h).toContain("Kiggede uden at spille");
-    expect(h).toContain("af de 9, der kom forbi i runden"); // 9 kom forbi, 6 spillede → gab 3
+    expect(h).not.toContain("Kiggede uden at spille");
+    expect(h).not.toContain("kiggede uden at spille");
+    expect(h).toContain("skal IKKE trækkes fra hinanden");
+    expect(h).toContain("tips kan gives i forvejen");
   });
 
   // Fixturen har tre runder, men kun ÉN lukket med målte besøg: den første er
@@ -76,10 +86,10 @@ describe("RoundsSection", () => {
     expect(h).toContain("21. jul.: ingen data");
   });
 
-  // De to kolonner ser ud til at modsige hinanden uden denne sætning: en
-  // besøgende behøver hverken konkurrence eller deadline.
-  it("siger, at 'kom forbi' må overstige 'havde deadline'", () => {
-    expect(html()).toContain('kan være større end');
+  // "Kom forbi" kan være det LAVESTE tal i tabellen, og uden en forklaring
+  // ligner det en fejl i visningen frem for to mål over hver sin periode.
+  it("forklarer, at 'kom forbi' godt kan være lavere end 'spillede'", () => {
+    expect(html()).toContain("kan udmærket være det laveste");
   });
 
   // Søjlen for runden i gang er stiplet og halvt gennemsigtig, og dens

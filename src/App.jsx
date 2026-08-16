@@ -106,7 +106,9 @@ export default function App() {
     }
     setSession({ access_token, refresh_token, user });
     saveSession({ refresh_token, user });
-    touchActivity(access_token, user.id); // best-effort aktivitets-ping (throttlet pr. bruger, fejler stille)
+    // Aktivitets-pinget lå HER indtil 16. august 2026 og kun her. Det er nu
+    // flyttet til sin egen effekt nedenfor, som også fyrer, når appen bliver
+    // synlig igen — ét sted frem for to, og med den vækning, en PWA lever af.
     if (source === "signup") { logEvent(access_token, "account_created"); logEvent(access_token, "login"); }
     else if (source === "signin") { logEvent(access_token, "login"); }
   }
@@ -283,6 +285,41 @@ export default function App() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [session?.refresh_token]); // eslint-disable-line
+
+  // Aktivitets-ping: ved app-start OG ved hver vækning.
+  //
+  // 🔴 HVORFOR DEN SIDSTE HALVDEL ER HELE POINTEN. Indtil 16. august 2026 blev
+  // `touchActivity` kaldt ét sted: `completeAuth`. Den kører, når en session
+  // etableres eller genoprettes ved BOOT — og en PWA på en telefon bootes
+  // sjældent. iOS holder den i live i dagevis, så en bruger kunne åbne appen
+  // hver dag i en uge og efterlade ÉN aktivitetsdag. `user_activity_days` var
+  // dermed et gulv, og det gjaldt ikke kun besøgstallet pr. runde, men også
+  // DAU/WAU/MAU i Statistik, retention, `groups_with_active_member` og
+  // liga-diagnosens aktive medlemmer. Fejlen blev synlig, da "kom forbi" pr.
+  // runde stod LAVERE end "spillede" i tre af fire runder.
+  //
+  // ⚠️ TALLENE HOPPER OP VED UDRULNINGEN, og det er ikke vækst. En serie hen
+  // over denne dato sammenligner to målinger — samme forbehold som `A21`s
+  // skift af enhed for North Star. Det står i DOCUMENTATION.md §15.
+  //
+  // Effekten hænger på `access_token` og ikke på `refresh_token`, så en
+  // fornyelse giver den en frisk token at pinge med; throttlen i
+  // `touchActivity` (maks. 1×/time pr. bruger) gør de ekstra kald til no-ops.
+  // Ingen `visibilityState`-vagt bag en friskheds-grænse som token-fornyelsen
+  // har: en bruger, der åbner appen fem gange på en dag, er lige så aktiv som
+  // en, hvis token tilfældigvis var udløbet.
+  useEffect(() => {
+    const token = session?.access_token;
+    const uid = session?.user?.id;
+    if (!token || !uid) return;
+    const ping = () => {
+      if (document.visibilityState !== "visible") return;
+      touchActivity(token, uid); // best-effort: throttlet pr. bruger, fejler stille
+    };
+    ping();
+    document.addEventListener("visibilitychange", ping);
+    return () => document.removeEventListener("visibilitychange", ping);
+  }, [session?.access_token, session?.user?.id]);
 
   // Hvad er jeg inviteret til? — spurgt UDEN login (I7).
   //
