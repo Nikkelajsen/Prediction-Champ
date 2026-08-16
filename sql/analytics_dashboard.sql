@@ -1252,6 +1252,168 @@ $fn$;
 
 grant execute on function public.admin_analytics_stories(int) to authenticated;
 
+-- ================= RPC 7: admin_analytics_rounds =================
+-- "Aktive brugere pr. runde" (B38, august 2026): én række pr. spillerunde,
+-- ÆLDST FØRST, så serien kan læses som en udvikling frem for som et øjebliksbillede.
+--
+-- HVORFOR RUNDEN OG IKKE UGEN. `completion_by_week` findes allerede, men dens uge
+-- er `date_trunc('week', lock_at)` — altså MANDAG, ISO-ugen. Produktets runde er
+-- `public.round_key()`: TIRSDAG, aflæst i dansk tid (sql/round_key_timezone.sql).
+-- De to grids er forskudt et døgn, og det er RUNDEN, brugerne spiller,
+-- Championship kårer og notifikationerne taler om. En aktivitetsserie på ISO-uger
+-- ville altså lægge en tirsdagskamp i en anden spand end den runde, den talte med
+-- i alle andre steder i produktet. `round_key` er desuden global på tværs af
+-- turneringer (samme dato-grid for alle sæsoner), så én runde = én række her,
+-- modsat analytics_round_locks, som er pr. (season_id, round_key).
+--
+-- HVAD "AKTIV" BETYDER HER, og hvorfor det ikke er §15's definition:
+--   spillede runden = havde mindst ét MULIGT tip i runden OG afgav mindst ét af
+--   dem. Begge tal kommer fra analytics_completion_facts — samme kilde som North
+--   Star, Deadline Miss Rate og liga-diagnosens bredde — så de tre ikke kan
+--   modsige hinanden, og så `play_rate` pr. konstruktion ikke kan overstige 100 %.
+--   En optælling af `predictions` direkte ville være det oplagte og det forkerte:
+--   den tæller tips på kampe, brugeren ikke havde en deadline på i nogen
+--   konkurrence, og kan derfor give flere spillere end eksponerede.
+--   `missed` = eksponerede uden ét eneste tip er PRÆCIS Deadline Miss Rates
+--   tæller, bare pr. runde i stedet for over vinduet.
+--
+--   `visitors` (åbnede appen i rundens uge) står ved siden af som den SVAGERE
+--   måling. Gabet mellem de to er selve oplysningen — "kommer de forbi uden at
+--   spille?" — og det er samme skelnen som active_groups vs.
+--   groups_with_active_member. `null` betyder UMÅLT (rundens uge begynder før
+--   aktivitetssporingen fandtes), aldrig nul: samme regel som retention-matrixen.
+--
+-- `is_open` ER IKKE "runden er spillet færdig". Den siger, at ikke alle rundens
+-- kampe er LÅST endnu — altså at eksponeringen (og dermed alle tallene i rækken)
+-- stadig kan vokse. Det er den eneste flagning, der beskytter mod at læse en runde
+-- i gang som et fald; en runde med resultater til gode har for længst frosne tal.
+-- Klienten holder `is_open`-runden ude af både overskriftstallet og retningen.
+create or replace function public.admin_analytics_rounds(p_rounds int default 12)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $fn$
+declare
+  result jsonb;
+  -- Klampet som `&hours=` i api/send-notifications.js: et vindue er en
+  -- oplysning fra klienten, ikke en tillid.
+  n int := least(greatest(coalesce(p_rounds, 12), 1), 52);
+begin
+  perform public.analytics_require_admin();
+
+  with base as (
+    -- Kun runder, der indgår i mindst én konkurrence — samme afgrænsning som
+    -- rounds_completed. En Sportmonks-runde, ingen tipper på, er ikke en runde,
+    -- nogen kunne have været aktiv i.
+    select
+      rl.round_key,
+      min(rl.kickoff_at)                     as first_kickoff,
+      max(rl.kickoff_at)                     as last_kickoff,
+      count(*)                               as match_count,
+      count(*) filter (where rl.is_locked)   as locked_count,
+      count(*) filter (where m.home_score is not null and m.away_score is not null) as finished_count
+    from public.analytics_match_locks rl
+    join public.matches m on m.id = rl.match_id
+    where exists (select 1 from public.competition_matches cm where cm.match_id = rl.match_id)
+    group by rl.round_key
+  ),
+  -- `locked_count > 0`: runden er gået i gang. En runde, hvor intet er låst
+  -- endnu, har ingen mulige tips og ville tegne en tom søjle i fremtiden.
+  win as (
+    select * from base where locked_count > 0 order by round_key desc limit n
+  ),
+  floor_key as (select min(round_key) as k from win),
+  facts as (
+    select f.round_key, f.user_id, bool_or(f.predicted) as any_predicted
+    from public.analytics_completion_facts f
+    where f.round_key >= (select k from floor_key)
+    group by 1, 2
+  ),
+  per_round as (
+    select round_key,
+           count(*)                              as exposed,
+           count(*) filter (where any_predicted) as players
+    from facts group by 1
+  ),
+  -- Volumen: distinkte (bruger, kamp) — grain-reglen fra
+  -- analytics_completion_facts. Uden `distinct` tælles ét tip én gang pr.
+  -- konkurrence, kampen indgår i.
+  tips as (
+    select round_key, count(*) as tips
+    from (
+      select distinct f.round_key, f.user_id, f.match_id
+      from public.analytics_completion_facts f
+      where f.predicted and f.round_key >= (select k from floor_key)
+    ) t
+    group by 1
+  ),
+  -- Første runde, brugeren nogensinde SPILLEDE — over hele historikken og ikke
+  -- kun vinduet. Læses opgørelsen inden for vinduet, ville enhver, der ikke var
+  -- med i vinduets første runde, tælle som ny hver eneste gang vinduet flyttes.
+  -- Det koster en fuld gennemløbning af viewet, præcis som
+  -- completion_rate_all_time i RPC 1.
+  debut as (
+    select user_id, min(round_key) as first_round
+    from public.analytics_completion_facts
+    where predicted
+    group by 1
+  ),
+  newcomers as (
+    select d.first_round as round_key, count(*) as new_players
+    from debut d
+    where d.first_round >= (select k from floor_key)
+    group by 1
+  ),
+  -- Rundens uge er [round_key, round_key + 7). round_key er tirsdag i DANSK
+  -- tid, mens user_activity_days.day er en UTC-dato — et besøg mellem midnat
+  -- og 02.00 dansk tid falder derfor i den foregående runde. Kendt og
+  -- accepteret: skævheden er to timer på en uge og står i måle-ordbogen.
+  visitors as (
+    select w.round_key, count(distinct d.user_id) as visitors
+    from win w
+    join public.user_activity_days d
+      on d.day >= w.round_key and d.day < w.round_key + 7
+    group by 1
+  ),
+  since as (select min(day) as d from public.user_activity_days)
+  select jsonb_build_object(
+    'rounds_window', n,
+    'rounds_available', (select count(*) from base where locked_count > 0),
+    'activity_since', (select d from since),
+    'rounds', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'round_key',      w.round_key,
+        'first_kickoff',  w.first_kickoff,
+        'last_kickoff',   w.last_kickoff,
+        'match_count',    w.match_count,
+        'locked_count',   w.locked_count,
+        'finished_count', w.finished_count,
+        'is_open',        w.locked_count < w.match_count,
+        'exposed',        coalesce(p.exposed, 0),
+        'players',        coalesce(p.players, 0),
+        'missed',         coalesce(p.exposed, 0) - coalesce(p.players, 0),
+        'play_rate',      case when coalesce(p.exposed, 0) = 0 then null
+                               else round(100.0 * p.players / p.exposed, 1) end,
+        'new_players',    coalesce(nc.new_players, 0),
+        'tips',           coalesce(t.tips, 0),
+        'visitors',       case when (select d from since) is null or w.round_key < (select d from since)
+                               then null else coalesce(v.visitors, 0) end
+      ) order by w.round_key)
+      from win w
+      left join per_round p  on p.round_key = w.round_key
+      left join tips t       on t.round_key = w.round_key
+      left join newcomers nc on nc.round_key = w.round_key
+      left join visitors v   on v.round_key = w.round_key
+    ), '[]'::jsonb)
+  ) into result;
+
+  return result;
+end;
+$fn$;
+
+grant execute on function public.admin_analytics_rounds(int) to authenticated;
+
 -- ---------- Verifikation efter kørsel ----------
 -- Kør disse i Supabase SQL-editor. Alle "skal give 0" er ægte invarianter —
 -- samme stil som sql/group_membership_invariant.sql.
@@ -1347,6 +1509,27 @@ grant execute on function public.admin_analytics_stories(int) to authenticated;
 -- select case when (p->>'recipients')::int
 --              = (p->>'opened_n')::int + (p->>'not_opened_n')::int then 0 else 1 end
 -- from (select public.admin_analytics_engagement(30) -> 'push' -> 'effect' as p) t;
+
+-- 6h) Aktive brugere pr. runde: spillere kan aldrig overstige eksponerede, nye
+--     spillere kan aldrig overstige spillere, og missede er præcis differencen.
+--     Alle tre er ægte invarianter — skal give 0:
+-- select count(*) from jsonb_array_elements(
+--   (select public.admin_analytics_rounds(52) -> 'rounds')) e
+-- where (e->>'players')::int > (e->>'exposed')::int
+--    or (e->>'new_players')::int > (e->>'players')::int
+--    or (e->>'missed')::int <> (e->>'exposed')::int - (e->>'players')::int;
+
+-- 6i) `missed` og Deadline Miss Rates `rounds_missed` er IKKE det samme tal, og
+--     forskellen er grainet: deadline_miss tæller pr. (bruger, sæson, runde),
+--     denne RPC pr. (bruger, runde). En bruger, der sad en runde over i to
+--     turneringer, er to missede bruger-runder dér og ÉN inaktiv bruger her —
+--     som den skal være, når enheden er MENNESKER og ikke bruger-runder.
+--     Forespørgslen viser forskellen frem for at påstå en lighed; svarer den 0
+--     for alle runder, tipper ingen i mere end én turnering endnu:
+-- select f.round_key,
+--        count(distinct f.user_id)                     as brugere,
+--        count(distinct (f.user_id, f.season_id))      as bruger_sæsoner
+-- from public.analytics_completion_facts f group by 1 order by 1;
 
 -- 7) Retention: se hvor langt tilbage aktivitetsdata reelt findes, før du
 --    stoler på uge-26/52-tallene:

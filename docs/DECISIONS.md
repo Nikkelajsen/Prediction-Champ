@@ -15,6 +15,60 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 16. august 2026 — `B38`: "aktiv i en runde" er den, der SPILLEDE — ikke den, der åbnede appen
+
+**Beslutning:** Analytics-fanens nye runde-serie måler *spillede runden* (havde
+mindst ét muligt tip i runden og afgav mindst ét af dem) som sit hovedtal, og
+viser *kom forbi* (havde appen åben i rundens uge) som et sekundært tal ved
+siden af. Runden er `round_key` — tirsdag til mandag, dansk tid.
+
+**Hvorfor ikke §15's definition af "aktiv".** Produktet har allerede et
+aktivitetsbegreb: `user_activity_days`, skrevet af `touch_activity()` når appen
+bruges. Det er dét, DAU/WAU/MAU og "Aktive brugere (7 dage)" måler, og det ville
+have været det billigste svar her. Men liga-diagnosen lærte det modsatte for et
+halvt år siden: v1's "andel aktive medlemmer" målte, om folk **åbnede** appen,
+ikke om de **spillede**, og **bredde** blev tilføjet netop som den rettelse. En
+runde-serie bygget på app-åbninger ville gentage fejlen på produktets vigtigste
+enhed. De to tal står nu ved siden af hinanden, fordi gabet mellem dem er en
+oplysning i sig selv — samme greb som `active_groups` vs.
+`groups_with_active_member`.
+
+**Hvorfor ikke tælle `predictions` direkte.** Det oplagte er `count(distinct
+user_id)` over tips på rundens kampe. Det er forkert: `predictions` er én række
+pr. (bruger, kamp) og deles på tværs af konkurrencer, så tallet ville rumme tips
+på kampe, brugeren ikke havde en deadline på i nogen konkurrence — og kunne
+dermed give **flere spillere end eksponerede**, altså en deltagelse over 100 %.
+Begge tal læses derfor af `analytics_completion_facts`, samme kilde som North
+Star og Deadline Miss Rate, så de tre ikke kan modsige hinanden.
+
+**Hvorfor runden og ikke ugen.** `completion_by_week` fandtes allerede, og
+genbrug ville have været gratis. Men dens uge er `date_trunc('week', …)` —
+mandag, ISO-ugen — mens produktets runde er `public.round_key()`: tirsdag,
+aflæst i dansk tid. De to grids er forskudt et døgn, så en tirsdagskamp ville
+lande i en anden spand end den runde, den tæller med i på Tip-skærmen, i
+Championship og i notifikationerne. Et dashboard, der taler et andet sprog end
+produktet, kan ikke bruges til at diskutere produktet.
+
+**Hvorfor sektionen har sin egen vælger.** Panelets 7/30/90 dage skærer midt
+igennem en runde. En serie, der skal vise en udvikling, skal have hele enheder,
+og vinduerne er derfor 12/26/52 runder (et kvartal, et halvår, et år).
+
+**Hvorfor runden i gang vises, men ikke tæller.** Alternativerne var at skjule
+den (og dermed skjule den nyeste nyhed, man har) eller at lade den tælle med
+(og dermed melde et fald hver eneste uge, uanset hvad brugerne gør, fordi et
+delvist tal altid taber til et helt). Den vises som en stiplet søjle og holdes
+ude af overskriftstallet, retningen og gennemsnittet. Flaget hedder `is_open` og
+betyder *ikke alle rundens kampe er låst endnu* — altså "tallet kan stadig
+vokse", ikke "runden er ikke spillet færdig". Det er `G73`s og `G115`s regel en
+gang til: et tal, der ser målt ud, men ikke er sammenligneligt, skal mærkes.
+
+**Hvorfor debut måles over hele historikken.** "Nye spillere" kunne være regnet
+inden for det viste vindue, hvilket er billigere. Så ville hver eneste flytning
+af vinduet se ud som en strøm af nye spillere — en måling, hvis værdi afhænger
+af, hvor man står og kigger fra.
+
+---
+
 ## 16. august 2026 — `A57` lukkes: "Øvrige konkurrencer" er en understøttet tilstand, ikke et overgangslag
 
 **Beslutning (produktejeren):** sektionen bliver, og beskrivelsen rettes. En

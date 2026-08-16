@@ -7,6 +7,7 @@ import {
   logEvent, logEventOnce, diagnoseLeague, diagnoseLeagues, summarizeDiagnoses, LEAGUE_THRESHOLDS,
   funnelRow, funnelSteps, biggestDrop, fmtMinutes, storyRuleRows, STORY_RULES,
   shareSurfaceRows, SHARE_SURFACES,
+  roundActivityRows, roundActivitySummary, ROUND_WINDOWS,
 } from "./analytics.js";
 import { METRICS, metricInfo } from "./analyticsMetrics.js";
 
@@ -348,6 +349,104 @@ describe("shareSurfaceRows — umålt må aldrig kunne forveksles med nul", () =
   });
 });
 
+// ---------- Aktive brugere pr. runde (B38) ----------
+// Serien, RPC'en svarer med: ældst først, én række pr. runde. R4 er runden i
+// gang — ikke alle dens kampe er låst endnu, så tallene kan stadig vokse.
+const rundeSvar = {
+  rounds_window: 12,
+  rounds_available: 4,
+  activity_since: "2026-07-28",
+  rounds: [
+    { round_key: "2026-07-21", players: 4, exposed: 6, missed: 2, play_rate: 66.7, new_players: 4, tips: 12, visitors: null,  match_count: 5, locked_count: 5, is_open: false },
+    { round_key: "2026-07-28", players: 6, exposed: 7, missed: 1, play_rate: 85.7, new_players: 2, tips: 20, visitors: 9,     match_count: 5, locked_count: 5, is_open: false },
+    { round_key: "2026-08-04", players: 5, exposed: 8, missed: 3, play_rate: 62.5, new_players: 1, tips: 15, visitors: 8,     match_count: 6, locked_count: 6, is_open: false },
+    { round_key: "2026-08-11", players: 1, exposed: 8, missed: 7, play_rate: 12.5, new_players: 0, tips: 2,  visitors: 3,     match_count: 6, locked_count: 2, is_open: true  },
+  ],
+};
+
+describe("roundActivityRows — en åben runde må aldrig bære en retning", () => {
+  it("tom eller manglende serie giver [] og ikke en fejl", () => {
+    expect(roundActivityRows(null)).toEqual([]);
+    expect(roundActivityRows({})).toEqual([]);
+    expect(roundActivityRows({ rounds: [] })).toEqual([]);
+  });
+
+  it("regner retningen mod den forrige runde — men ikke for den første", () => {
+    const rows = roundActivityRows(rundeSvar);
+    expect(rows[0].delta).toBeNull();
+    expect(rows[1].delta).toBe(2);   // 6 − 4
+    expect(rows[2].delta).toBe(-1);  // 5 − 6
+  });
+
+  // Kernen i hele funktionen. R4 har 1 spiller, fordi kun 2 af 6 kampe er låst
+  // endnu — en pil dér ville melde et frit fald, uanset hvad brugerne gør.
+  it("runden i gang får ingen retning", () => {
+    const rows = roundActivityRows(rundeSvar);
+    expect(rows[3].is_open).toBe(true);
+    expect(rows[3].delta).toBeNull();
+  });
+
+  it("nye og kendte spillere summer altid til rundens spillere", () => {
+    for (const r of roundActivityRows(rundeSvar)) {
+      expect(r.new_players + r.returning).toBe(r.players);
+    }
+  });
+
+  it("gabet mellem besøgende og spillere er null, når besøg er umålt — aldrig 0", () => {
+    const rows = roundActivityRows(rundeSvar);
+    expect(rows[0].visitors).toBeNull();
+    expect(rows[0].idle_visitors).toBeNull();
+    expect(rows[1].idle_visitors).toBe(3); // 9 kom forbi, 6 spillede
+  });
+});
+
+describe("roundActivitySummary — overskriften læses af den seneste FÆRDIGE runde", () => {
+  it("springer runden i gang over i både tal og retning", () => {
+    const s = roundActivitySummary(roundActivityRows(rundeSvar));
+    expect(s.latest.round_key).toBe("2026-08-04");
+    expect(s.prev.round_key).toBe("2026-07-28");
+    expect(s.delta).toBe(-1);
+    expect(s.open.round_key).toBe("2026-08-11");
+    expect(s.closed_rounds).toBe(3);
+  });
+
+  it("gennemsnittet regnes over de lukkede runder alene", () => {
+    const s = roundActivitySummary(roundActivityRows(rundeSvar));
+    expect(s.avg_players).toBe(5); // (4 + 6 + 5) / 3 — ikke (4+6+5+1)/4
+  });
+
+  it("nye spillere summeres over HELE vinduet, også den åbne runde", () => {
+    const s = roundActivitySummary(roundActivityRows(rundeSvar));
+    expect(s.new_players).toBe(7);
+  });
+
+  it("uden en færdig runde er svaret null og ikke et gæt", () => {
+    const kun_aaben = roundActivitySummary(roundActivityRows({ rounds: [rundeSvar.rounds[3]] }));
+    expect(kun_aaben.latest).toBeNull();
+    expect(kun_aaben.delta).toBeNull();
+    expect(kun_aaben.avg_players).toBeNull();
+    expect(kun_aaben.open.round_key).toBe("2026-08-11");
+  });
+
+  it("én færdig runde giver et tal, men ingen retning", () => {
+    const s = roundActivitySummary(roundActivityRows({ rounds: rundeSvar.rounds.slice(0, 1) }));
+    expect(s.latest.players).toBe(4);
+    expect(s.delta).toBeNull();
+  });
+
+  it("tom liste giver nuller og null, ikke undefined", () => {
+    const s = roundActivitySummary([]);
+    expect(s.latest).toBeNull();
+    expect(s.closed_rounds).toBe(0);
+    expect(s.new_players).toBe(0);
+  });
+
+  it("vinduerne er runder og stiger — 12 uger, et halvår, et år", () => {
+    expect(ROUND_WINDOWS).toEqual([...ROUND_WINDOWS].sort((a, b) => a - b));
+    expect(ROUND_WINDOWS[0]).toBe(12);
+  });
+});
+
 describe("måle-ordbogen — hvert nøgletal skal kunne forklare sig selv", () => {
   it("hver metrik har titel, hvad, hvordan og kilde", () => {
     for (const [id, m] of Object.entries(METRICS)) {
@@ -373,6 +472,7 @@ describe("måle-ordbogen — hvert nøgletal skal kunne forklare sig selv", () =
       "league_story_views", "user_retention", "league_retention_agg", "user_cohorts",
       "push_effect", "push_lead_time", "funnel", "funnel_path", "funnel_stalled", "funnel_time",
       "story_rules", "story_never", "story_coverage", "share_surfaces",
+      "round_players", "round_participation", "round_new_players", "round_visitors", "round_trend",
     ];
     for (const id of used) expect(metricInfo(id), id).not.toBeNull();
   });
