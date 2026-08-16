@@ -65,7 +65,7 @@ Det eksisterende flow får ét nyt felt øverst: **"Liga"** (dropdown over ligae
 
 ### Ligaer-fanen (omstruktureret)
 1. Brugerens **ligaer** som kort (navn, antal medlemmer, antal aktive konkurrencer, evt. egen bedste placering).
-2. **"Øvrige konkurrencer"**: eksisterende/nye konkurrencer uden liga — uændret adfærd (kort, join med kode, arkivér, slet). Sektionen er overgangslaget, ikke en blindgyde: den forsvinder naturligt, efterhånden som konkurrencer flyttes ind i ligaer.
+2. **"Øvrige konkurrencer"**: eksisterende/nye konkurrencer uden liga — uændret adfærd (kort, join med kode, arkivér, slet). ~~Sektionen er overgangslaget, ikke en blindgyde: den forsvinder naturligt, efterhånden som konkurrencer flyttes ind i ligaer.~~ *(Rettet efter levering, 16. august 2026, `A57`: **sektionen forsvinder ikke — den er en understøttet tilstand.** Udkastet regnede med én vej ind i laget, nemlig konkurrencer fra før liga-laget, og den vej ER lukket siden august 2026 (`createCompetition` kræver en liga). Men laget har en anden, som er levende og bliver det: `competitions.group_id` er `on delete set null`, så en slettet liga lægger sine konkurrencer herned — og sletteboksen på liga-siden lover det udtrykkeligt. Sektionen skal derfor blive, uanset hvor mange liga-løse konkurrencer der findes; den renderes i forvejen kun, når der er nogen. Se `DECISIONS.md` og `DOCUMENTATION.md` §12.)*
 3. Opret liga · Join med kode.
 
 ### Hjem

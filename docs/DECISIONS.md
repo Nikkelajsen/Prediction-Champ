@@ -15,6 +15,53 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 16. august 2026 — `A57` lukkes: "Øvrige konkurrencer" er en understøttet tilstand, ikke et overgangslag
+
+**Beslutning (produktejeren):** sektionen bliver, og beskrivelsen rettes. En
+konkurrence uden liga er en tilstand, produktet understøtter — ikke en rest, der
+er på vej væk. Der migreres ingenting, og ligasletningen laves ikke om.
+
+**Hvorfor spørgsmålet kunne afgøres uden den aflæsning, det stod og ventede på.**
+Rækken lå i Tier 1 med ét tal foran sig: hvor mange liga-løse konkurrencer
+findes der stadig? Begrundelsen var, at nul ville gøre blokken i `LigaerTab.jsx`
+til et tomt overgangslag, der kunne slettes. **Det ville det ikke**, og rækken
+bar selv modbeviset to sætninger længere nede: `competitions.group_id` er
+`on delete set null`, så en slettet liga lægger sine konkurrencer ned i laget.
+Vejen ind ved oprettelse er lukket siden august 2026 (`createCompetition`
+kræver en liga), men det er ikke den eneste vej ind, og den anden er hverken en
+fejl eller et hjørnetilfælde: `GroupScreen.jsx` lover den udtrykkeligt i
+sletteboksen — *"de flytter ud af ligaen og står videre under 'Øvrige
+konkurrencer' med stilling, tips og kåringer i behold"*. **Et lag med en levende
+tilgangsvej er ikke midlertidigt**, uanset hvad tallet er i dag.
+
+**Nul havde i øvrigt ingen handling knyttet til sig.** Blokken renderes kun, når
+`loose.length > 0`. Ved nul viser den allerede ingenting, så en sletning af koden
+ville ikke fjerne en eneste pixel — kun evnen til at tage imod den næste
+ligasletning. Tallet kunne altså højst sige, hvor stor en migrering ville være,
+hvis man valgte at lave en, og aldrig om man skulle.
+
+**Hvorfor ikke den anden vej — migrér og luk vejen.** At lukke tilgangsvejen
+betyder, at en ligasletning skal gøre noget andet med konkurrencerne: enten
+slette dem (med stilling, tips og kåringer, altså præcis det, sletteboksen lover
+ikke sker) eller auto-oprette en ny liga (en sletning, der efterlader en ny
+liga). Begge er dyrere end det, de fjerner, og den første fjerner en bevidst
+brugerbeskyttelse. Bemærk desuden, at RLS kun tillader sletning af en liga, hvis
+ingen af dens konkurrencer er uafsluttede — det, der lander i laget, er altså
+netop de færdigspillede med historik, der er værd at beholde.
+
+**Vejen UD findes allerede og er den rigtige.** `move_competition_to_group()`
+lader opretteren flytte sin konkurrence ind i en liga, og engangs-opfordringen på
+fanen peger på den. Det er en enkeltbeslutning truffet af den, der ejer
+konkurrencen — en bulk-migrering ville træffe den på deres vegne.
+
+**Det, der VAR forkert, er ordlyden**, og den er rettet tre steder:
+`liga-laget-v1.md` skrev, at sektionen *"forsvinder naturligt"*,
+`LigaerTab.jsx` og `liga/CompetitionCard.jsx` kaldte den "overgangslaget".
+`DOCUMENTATION.md` §18 sagde allerede det modsatte og rigtige — at blokken lever
+videre, fordi `group_id` ikke kan blive `not null` — så de to dokumenter
+modsagde hinanden, og spec'en var den, en læser ville tro på. Vilkåret står nu i
+§12 sammen med de øvrige, der er sådan med vilje.
+
 ## 16. august 2026 — `G127`: browseren er repoets skriftgengiver, når et billede bygges i hånden
 
 **Beslutning:** billeder, der skal bære tekst i repoets egen skrift, bygges ved

@@ -53,7 +53,7 @@ eller en linje i "Forkastede ideer".
 
 ## Prioriteret rækkefølge
 
-Alle 35 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 34 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -95,9 +95,7 @@ produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
 gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
 køres på et minut.
 
-| # | Hvad | Note |
-|---|---|---|
-| `A57` | Skal liga-løse konkurrencer migreres ind i en liga, eller bliver de stående for evigt? | **Spørgsmålet kan ikke besvares uden ét tal:** hvor mange liga-løse konkurrencer findes der stadig? Er svaret nul, er "Øvrige konkurrencer" i `LigaerTab.jsx` et overgangslag uden indhold og kan slettes — og det er derfor rækken står her og ikke i Tier 6. Opslaget er `select count(*) from competitions where group_id is null` (plus en fordeling på `created_at`, så det ses, om laget stadig får tilgang). Bemærk, at laget ikke kun fyldes ved oprettelse: `GroupScreen.jsx` flytter en ligas konkurrencer UD i det, når ligaen slettes, så det kan ikke tømmes ved kun at lukke oprettelsesvejen. |
+Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
@@ -184,7 +182,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Spørgsmål | Kontekst | Afgøres |
 |---|---|---|---|
-| A57 | **Skal liga-løse konkurrencer migreres ind i en liga, eller bliver de stående for evigt?** | Liga-laget (§18) blev lagt OVEN PÅ de eksisterende konkurrencer, og `LigaerTab.jsx` bærer stadig blokken "Øvrige konkurrencer" med kommentaren *"overgangslag"*. Oprettelse har krævet en liga siden august 2026, så laget kan ikke længere fyldes den vej — men det kan fyldes en anden: sletter man en liga, flytter dens konkurrencer UD i det (`GroupScreen.jsx`, og teksten lover det udtrykkeligt: *"de flytter ud af ligaen og står videre under 'Øvrige konkurrencer' med stilling, tips og kåringer i behold"*). **Et overgangslag, der har en levende tilgangsvej, er ikke et overgangslag, men en understøttet tilstand** — og det er dét, spørgsmålet handler om. **Tre veje:** migrér de eksisterende ind i en auto-oprettet liga og luk vejen (koster en migrering og gør ligasletning dyrere); behold laget og døb det om, så det ikke længere lover at forsvinde; eller lad det stå som i dag og accepter, at "midlertidig" er den forkerte beskrivelse. **Prisen ved at vente er lav og kendt**, hvilket er grunden til, at rækken ikke haster: laget virker, det er bare beskrevet som noget andet, end det er. | **Når det er aflæst, hvor mange liga-løse konkurrencer der findes** — er svaret nul, er de to første veje unødvendige, og rækken skrumper til en oprydning. Opslaget står i Tier 1. |
 | A34 | **Hvornår skiftes Supabase Free ud med Pro?** | Free-planens tre lofter bider i denne rækkefølge: **egress (5 GB/md)** først — appen er REST-fetch-tung, så et sted mellem 200 og 500 ugentligt aktive nærmer forbruget sig loftet; **database (500 MB)** langt senere (tips-rækker er små; `analytics_events` var den hurtigst voksende tabel og har siden `G77`, 7. august 2026, et loft på 18 måneder, så væksten er nu bundet frem for åben); og **backup-vilkåret** er kvalitativt: 24 timers datatab (afsnit 22) er valgt til venner, og når fremmede udgør flertallet, er Pro's backups prisen værd. Aflæses på Supabase-dashboardets Usage-side — én gang om måneden, ikke oftere. Vercel Hobby er IKKE samme spørgsmål: dens tunge trafik skalerer med turneringer, ikke brugere, og skiftet dér udløses af kommercialisering (vilkårene), ikke af brugertal. | Egress nær loftet, eller fremmede i flertal blandt de aktive. |
 | A35 | **Er publiceringstærsklen på 45 den rigtige?** | Story Engine v3 udgiver dagens kort med ulæst-markering, når nyhedsværdien når 45, og som dæmpet `DAY_RESULT` under. Tallet er udledt af grundvægtene (max for `DAY_RESULT` alene er 40), ikke af data — samme slags kvalificerede gæt som v1's A4-tærskler var, og de blev kalibreret på live-data. `story_score_distribution` logger vinderregel, `news_value` og runner-up, så fordelingen kan aflæses uden ny instrumentering. | **Efter to uger med v3 i drift og mindst ti kampdage.** Målet er 40–60 % af kampdagene med ulæst-markering for en aktiv bruger. Over 70 % ⇒ tærsklen er for lav, og v3 har genskabt v2's problem i ny indpakning. Under 25 % ⇒ Hjem er stille igen, og v2's oprindelige problem er tilbage. |
 | A33 | **Er dagsmotorens variation tyndere, end regelantallet lover?** | Story Engine v2 lagde syv dagsregler til, men `DAY_RESULT` alene står for 123 af 280 historier (44 %), og de næste to (`DUEL` 35, `COLLECTIVE_MISS` 19) er tilsammen mindre end halvdelen af den. En motor, der er markedsført på bredde og leverer det samme kort hver anden gang, er en anden oplevelse end tabellen antyder. **Spørgsmålet kan ikke stilles endnu:** ingen af de 197 dagskort er nogensinde blevet vist (`G73`), så der findes ingen, der har oplevet ensformigheden. Måske er 44 % helt rigtigt — "dagens facit" er også den mest almindelige ting at fortælle om en kampdag. **Delvist håndteret af v3 (7. august 2026):** `DAY_RESULT`s 44 % var en konstruktionsfølge — laveste prioritet, udløses altid — og v3 fjerner årsagen ved at give den grundvægt 8, hvilket gør den til fald-tilbage frem for anker. Spørgsmålet om, hvorvidt de øvrige seks regler faktisk varierer, er **ikke** besvaret og skal aflæses på ny fordeling. | Når dagskort faktisk bliver set, altså efter `G73`. |
@@ -256,46 +253,34 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 16. august 2026 (syvogtyvende kørsel) — Tier 5 kørt: to vagter, hvis fravalg var truffet på en liste over alternativer, der ikke var udtømmende
+### 16. august 2026 (otteogtyvende kørsel) — Tier 1 kørt tom: den aflæsning, rækken ventede på, kunne ikke ændre nogen handling
 
-**Listen er 34 → 35** (`G125` og `G127` lukket, `G129`, `A57` og `B37` kom til
-med indbakken). **Tier 5 er tomt for gæld** og bærer nu kun `B37`.
+**Listen er 35 → 34** (`A57` lukket). **Tier 1 er tomt**, og for anden gang i
+træk blev det tømt uden en eneste ny bestilling til produktionen.
 
-**Fællesnævneren er sjældnere end den lyder, og det er dét, der er værd at
-huske: begge rækker beskrev et fravalg, som var rigtigt begrundet og forkert
-konkluderet.** Ingen af de to hoveder havde regnet forkert — de havde begge
-skrevet "det eneste alternativ ville koste X", og i begge tilfælde fandtes der et
-tredje alternativ, som ikke kostede X. Et fravalg er en påstand om en LISTE, og
-en liste er den slags, der stille bliver forældet, mens argumentet oven på den
-bliver ved med at lyde rigtigt.
+**`A57` stod i Tier 1 på ét tal:** hvor mange konkurrencer findes der stadig
+uden liga? Begrundelsen for at ligge her og ikke i Tier 6 var, at nul ville gøre
+"Øvrige konkurrencer" i `LigaerTab.jsx` til et tomt overgangslag, der kunne
+slettes. **Nul kan ikke det**, og rækken bar selv modbeviset to sætninger
+længere nede: `competitions.group_id` er `on delete set null`, så en slettet
+liga lægger sine konkurrencer ned i laget — og sletteboksen i `GroupScreen.jsx`
+lover det udtrykkeligt. Vejen ind ved oprettelse er lukket siden august 2026,
+men den er ikke den eneste vej ind, og den anden er en lovet funktion frem for
+en rest.
 
-**`G125`:** `story-eksempler.test.js` hentede en regels ordlyd i den højeste
-motorfil, der NÆVNTE reglen, og kunne derfor ikke se en regel, v3 havde fjernet.
-Hovedet kaldte hullet permanent og navngav `sql/schema.sql` som eneste
-alternativ — et schema-dump op til en uge bagud (`G124`), altså falsk rød ved
-hver ny regel. Det tredje alternativ lå i SQL'ens egen struktur: et regelafsnit
-bor inde i en `create or replace function`, og en regel er levende, hvis den
-nyeste udgave af DEN FUNKTION stadig har den. `H2H_PASS` i v1 er ægte, fordi
-ingen nyere fil gen-definerer `generate_stories()`; en dagsregel i v2 er død,
-fordi v3 skriver `generate_daily_stories()` om. **Mutations-testet:** fjernes
-`CONTRARIAN` fra v3, er vagten nu rød og navngiver både funktionen og filen —
-hvor den før var grøn, fordi v2 bærer den identiske ordlyd.
+**Nul havde i det hele taget ingen handling knyttet til sig.** Blokken renderes
+kun, når `loose.length > 0`, så ved nul viser den allerede ingenting: en
+sletning ville ikke fjerne en pixel, kun evnen til at tage imod den næste
+ligasletning. Tallet kunne højst sige, hvor STOR en migrering ville være, hvis
+man valgte en — aldrig om man skulle.
 
-**`G127`:** `site/img/og-image.png` var lavet uden for repoet, og opskriften lå
-kun i hovedet på den, der lavede den. Fravalget hed "Node kan ikke male med en
-woff2", og det er sandt — men prisen var sat på skriftgengivelse i almindelighed,
-og repoet har siden `I23` (15. august 2026) tegnet PNG'er ved at køre Chromiums
-egen kommandolinje **uden en eneste ny afhængighed**. Skriftgengivelsen var altså
-allerede betalt et andet sted i repoet. Billedet er nu en side
-(`scripts/og-image-site.html`), der kan åbnes i hånden, og et script, der
-fotograferer den — og det gen-genererede billede rammer den håndlavede fils
-geometri inden for 1–2 px.
+**Afgjort frem for aflæst** (ejerens valg): laget er en understøttet tilstand.
+Ordlyden er rettet fire steder — `liga-laget-v1.md` skrev, at sektionen
+*"forsvinder naturligt"*, `LigaerTab.jsx` og `liga/CompetitionCard.jsx` kaldte
+den "overgangslaget", og `DOCUMENTATION.md` §18 sagde allerede det modsatte og
+rigtige, så de to dokumenter modsagde hinanden. Vilkåret står nu i §12.
 
-**Det, der kom med, fordi opgaven forudsatte det:** browser-håndteringen er
-skilt ud i `scripts/chromium.mjs` og deles nu af begge aftagere (samme
-udskillelse som `png.mjs` fik under `I23`), og `npm run screenshots` er kørt
-igennem bagefter som bevis — de fire PNG'er er byte-identiske. Det nye script
-har sin egen vagt mod den tavse fejl, det ellers ville indføre: siden svarer
-selv på, om Barlow faktisk blev brugt, og et faldback stopper kørslen frem for
-at skrive et billede med systemskrift.
-
+**Mønsteret fra 13. august holdt en gang til:** en række, der beder om en
+aflæsning, skal først spørges, om svaret ændrer handlingen (`A45`), om det kan
+gemmes i stedet for hentes (`A46`), eller om det kan afgøres (`A47`). `A57`
+faldt på det første.

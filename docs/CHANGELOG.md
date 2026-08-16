@@ -9,6 +9,22 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+16. august 2026 — Tier 1 kørt tom: den aflæsning, rækken ventede på, kunne ikke ændre nogen handling
+
+**Backloggens Tier 1 er tømt** (`A57`), og listen er 35 → 34. Tieret rummer det, hvis svar ligger uden for repoet, og `A32` (10. august 2026) har afgjort, at de aflæsninger er ejerens arbejde. **Der blev ingen bestilling denne gang** — rækkens spørgsmål viste sig at kunne afgøres uden tallet.
+
+**Rækken ventede på ét tal:** hvor mange konkurrencer findes der stadig uden liga? Begrundelsen for at stå i Tier 1 og ikke i Tier 6 var, at nul ville gøre "Øvrige konkurrencer"-blokken i `LigaerTab.jsx` til et tomt overgangslag, der kunne slettes. **Nul kan ikke det**, og rækken bar selv modbeviset to sætninger længere nede: `competitions.group_id` er `on delete set null`, så en slettet liga lægger sine konkurrencer ned i laget — og sletteboksen i `GroupScreen.jsx` lover det udtrykkeligt: *"de flytter ud af ligaen og står videre under 'Øvrige konkurrencer' med stilling, tips og kåringer i behold."* Vejen ind ved oprettelse er lukket siden august 2026, men den er ikke den eneste vej ind, og den anden er en lovet funktion frem for en rest.
+
+**Nul havde i det hele taget ingen handling knyttet til sig.** Blokken renderes kun, når `loose.length > 0`, så ved nul viser den allerede ingenting: en sletning af koden ville ikke fjerne en pixel, kun evnen til at tage imod den næste ligasletning. Tallet kunne højst sige, hvor stor en migrering ville være, hvis man valgte en — aldrig om man skulle.
+
+**Beslutningen er derfor truffet frem for aflæst** (ejerens valg): "Øvrige konkurrencer" er en **understøttet tilstand** og ikke et overgangslag. Ingen migrering, ingen ændring af ligasletningen. Alternativet — at lukke tilgangsvejen — kræver, at en ligasletning enten sletter konkurrencer med stilling og historik eller auto-opretter en ny liga; begge er dyrere end det, de fjerner. Vejen UD findes i forvejen og er den rigtige: `move_competition_to_group()` lader opretteren flytte sin egen konkurrence ind i en liga, og det er en beslutning, en bulk-migrering ville tage fra dem.
+
+**Det, der VAR forkert, var ordlyden, og de to dokumenter modsagde allerede hinanden.** `DOCUMENTATION.md` §18 sagde det rigtige — blokken lever videre, fordi `group_id` ikke kan blive `not null` — mens `liga-laget-v1.md` skrev, at sektionen *"forsvinder naturligt, efterhånden som konkurrencer flyttes ind i ligaer"*, og `LigaerTab.jsx` plus `liga/CompetitionCard.jsx` kaldte den "overgangslaget". Spec'en er den, en læser ville tro på. Alle fire steder er rettet, og vilkåret står nu i `DOCUMENTATION.md` §12 blandt de øvrige, der er sådan med vilje. **Ingen adfærdsændring, intet at køre i Supabase, intet deploy-afhængigt.**
+
+**Mønsteret fra 13. august holdt en gang til.** Det står i ROADMAP'en som læren af sidste tømning: en række, der beder om en aflæsning, skal først spørges, om svaret ændrer handlingen (`A45`), om det kan gemmes i stedet for hentes (`A46`), eller om det kan afgøres (`A47`). `A57` faldt på det første spørgsmål — og det er anden gang i træk, at Tier 1 er blevet tomt uden en eneste ny bestilling til produktionen.
+
+---
+
 16. august 2026 — Tier 5 kørt: to fravalg, der var rigtigt begrundet på en liste, som ikke var udtømmende
 
 **Backloggens Tier 5 er tømt for gæld** (`G125` og `G127`), og listen er 34 → 35, fordi indbakkens tre linjer fik ID'er (`G129`, `A57`, `B37`). Fællesnævneren er den mere lærerige af de to slags: **ingen af de to hoveder havde regnet forkert.** Begge havde skrevet "det eneste alternativ ville koste X", og begge havde ret i, hvad X kostede. Det, der var forkert, var ordet *eneste*. Et fravalg er en påstand om en liste over alternativer, og en liste forældes stille, mens argumentet oven på den bliver ved med at lyde rigtigt.
