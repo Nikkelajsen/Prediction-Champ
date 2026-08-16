@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DAY_CARD_MAX_AGE_MS, isFresh, isNewsworthy, renderFrame, roundStoryEyebrow, roundStorySuperseded, ROUND_STORY_EYEBROW, ROUND_STORY_MAX_AGE_MS, usableFrames } from "./stories.js";
+import { DAY_CARD_MAX_AGE_MS, isFresh, isNewsworthy, isShareableDayCard, renderFrame, roundStoryEyebrow, roundStorySuperseded, ROUND_STORY_EYEBROW, ROUND_STORY_MAX_AGE_MS, usableFrames } from "./stories.js";
 
 // Testcases spejler docs/features/story-engine-v1.md afsnit 9 (det der kan
 // udtrykkes rent i JS; DB-idempotens og trigger-adfærd verificeres i skyggetilstand).
@@ -60,6 +60,25 @@ describe("ulæst-markering og udløb (v3)", () => {
     // valgt, fordi det ligger OVER tærsklen: det er netop den kombination, en
     // aflæsning af news_value alene ville tage fejl af.
     expect(isNewsworthy({ news_value: 90, priority: 180 })).toBe(false);
+  });
+
+  // Del-knappen og ulæst-prikken stilles med VILJE hvert sit spørgsmål, og
+  // testen står her, ved siden af prikkens, netop for at de to ikke stille og
+  // roligt kan blive det samme. Prikken siger "dette er værd at afbryde for" og
+  // skal være sjælden; knappen siger "dette kan sendes videre", og dagens facit
+  // er præcis det, man sender i en ligachat.
+  it("kan dele det dæmpede kort, selvom det aldrig får en prik", () => {
+    const dæmpet = { news_value: 90, priority: 180 };
+    expect(isNewsworthy(dæmpet)).toBe(false);
+    expect(isShareableDayCard(dæmpet)).toBe(true);
+  });
+
+  // Påmindelsen siger "du mangler at tippe N kampe" TIL DIG SELV. Den er det
+  // ene dagskort uden en modtager i en gruppechat.
+  it("deler ikke påmindelseskortet", () => {
+    expect(isShareableDayCard({ priority: 180, payload: { variant: "no_tips" } })).toBe(false);
+    expect(isShareableDayCard({ priority: 180, payload: { day: "15/8" } })).toBe(true);
+    expect(isShareableDayCard(null)).toBe(false);
   });
 
   it("dagskortet udløber efter 48 timer", () => {

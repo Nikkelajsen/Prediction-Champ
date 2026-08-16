@@ -136,6 +136,22 @@ export function isNewsworthy(story) {
   return story.news_value != null && !isDailyQuiet(story.priority);
 }
 
+// Kan dagens kort sendes videre? (august 2026)
+//
+// Alle dagskort kan — ét kan ikke. Påmindelsen (`payload.variant === 'no_tips'`)
+// siger "du mangler at tippe N kampe" TIL DIG SELV; den har ingen modtager i en
+// gruppechat, og en Del-knap på den ville være den eneste af sin slags, der ikke
+// gav mening.
+//
+// Det DÆMPEDE kort har derimod en knap, selvom det ikke har en ulæst-prik. De to
+// spørgsmål ligner hinanden og er ikke ens: prikken er en påstand om, at noget er
+// værd at AFBRYDE for, og den skal være sjælden for at betyde noget. Dagens facit
+// er ikke det — men det er præcis det, man sender i en ligachat.
+export function isShareableDayCard(story) {
+  if (!story) return false;
+  return story.payload?.variant !== "no_tips";
+}
+
 // Udløb: et kort ældre end dette vises ikke, selvom rækken bliver stående.
 // Uden det er "dagens historie" en løgn på en tirsdag efter en stille weekend.
 export const DAY_CARD_MAX_AGE_MS = 48 * 60 * 60 * 1000;

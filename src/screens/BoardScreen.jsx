@@ -1,14 +1,15 @@
 // Stilling for én konkurrence: tabellen, point pr. runde, kåringer og
 // invitationslinket. Drill-in fra Hjem og Ligaer.
 import { useState, useEffect } from "react";
-import { Trophy, Copy, Check, ClipboardList } from "lucide-react";
+import { Trophy, Copy, Check, ClipboardList, Share2 } from "lucide-react";
 import { lockedRoundsOf, roundLabel } from "../lib/scoring.js";
 import { leaders } from "../lib/standings.js";
 import { computeCompetitionState, loadRatingMap, ensureCompetitionAwards, loadCompetitionAwards, monthName } from "../lib/data.js";
 import { isAborted } from "../lib/supabase.js";
 import { logEvent } from "../lib/analytics.js";
-import { shareText, inviteShareText } from "../lib/share.js";
-import { C, btnGhost, btnGold, font, muted, thStyle } from "../ui/theme.js";
+import { shareText, shareImage, inviteShareText } from "../lib/share.js";
+import { drawStandings, standingsHeight, standingsShareText } from "../lib/shareCanvas.js";
+import { C, btnGhost, btnGold, font, iconBtn, muted, thStyle } from "../ui/theme.js";
 import { BackBar, Card, EmptyCompetitions, InviteCode, PlayerName, UserRoundPredictions } from "../ui/components.jsx";
 
 // Én kåringslinje pr. periode: "🏅 Ugens bedste · 12/08 – 18/08: Nikolaj (14
@@ -168,6 +169,35 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
     } catch { /* bruger annullerede deling — ignorér */ }
   }
 
+  // Del stillingen som BILLEDE (august 2026). Det er en anden handling end
+  // Invitér, som deler et LINK: her er hele pointen, at modtageren skal kunne se
+  // tallene uden at åbne noget — en tabel i en gruppechat er en påstand, ikke en
+  // invitation. Derfor bærer delingen heller ikke invite-koden; den bor to
+  // knapper væk og har sin egen tragt at måles i.
+  //
+  // KUN #, NAVN OG POINT kommer med. Rating, 🎯 og Form kræver hver deres
+  // forklaring — den står i tabellens fodnote og kan ikke rejse med et billede.
+  async function shareStandings() {
+    if (!comp || !state?.rows?.length) return;
+    const meIndex = state.rows.findIndex((r) => r.userId === userId);
+    const view = {
+      title: comp.name,
+      subtitle: state.isComplete ? "Afsluttet" : `${state.playedMatches}/${state.totalMatches} spillet`,
+      rows: state.rows,
+      meIndex: meIndex < 0 ? null : meIndex,
+    };
+    try {
+      await shareImage((ctx, w, h) => drawStandings(view, ctx, w, h), {
+        text: standingsShareText(view),
+        height: standingsHeight(view),
+      });
+      logEvent(token, "standings_shared", {
+        competitionId: comp.id, groupId: comp.group_id || null,
+        metadata: { rows: state.rows.length, complete: !!state.isComplete },
+      });
+    } catch { /* bruger annullerede deling — ignorér */ }
+  }
+
   if (!competitions.length) {
     return (
       <div>
@@ -214,9 +244,20 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
       <Card>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, textTransform: "uppercase" }}>Stilling</div>
-          {state?.isComplete
-            ? <span style={{ background: "rgba(240,180,41,0.15)", color: C.gold, fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 4 }}><Trophy size={12} />Afsluttet</span>
-            : state && state.totalMatches > 0 && <span style={{ color: C.muted, fontSize: 12 }}>{state.playedMatches}/{state.totalMatches} spillet</span>}
+          {/* Del sidder HER og ikke i handlingsrækken øverst. To grunde: den
+              række har allerede en vælger og to knapper og ombryder på en
+              telefon — og knappen hører til TABELLEN, ikke til valget af
+              konkurrence. Den vises kun, når der er en tabel at dele. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {!loading && state?.rows?.length > 0 && (
+              <button style={iconBtn} aria-label="Del stillingen" title="Del stillingen" onClick={shareStandings}>
+                <Share2 size={16} />
+              </button>
+            )}
+            {state?.isComplete
+              ? <span style={{ background: "rgba(240,180,41,0.15)", color: C.gold, fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 4 }}><Trophy size={12} />Afsluttet</span>
+              : state && state.totalMatches > 0 && <span style={{ color: C.muted, fontSize: 12 }}>{state.playedMatches}/{state.totalMatches} spillet</span>}
+          </div>
         </div>
         {loading && <p style={{ ...muted, margin: 0 }}>Beregner…</p>}
         {/* Fejlen står inde i stillings-kortet frem for at erstatte hele skærmen:

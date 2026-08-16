@@ -15,6 +15,73 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 15. august 2026 — `I25`: dagskortet får Del og Afvis, og stillingen kan deles som billede
+
+**Beslutning:** Story Engine v3's hverdagskort får både en **Del**-knap og et
+**Afvis**-kryds, og Stilling-skærmen får en Del-knap, der sender tabellen som
+billede. Spec'ens §7 (*"delefunktionen ligger kun her; hverdagskortet har den
+ikke længere"*) og §8 (*"ingen friktion, intet at åbne, intet at rydde"*) er
+dermed omgjort og rettet i samme ombæring.
+
+**Begrundelse — begge fravalg var rigtige om det, de handlede om, og svarede på
+et spørgsmål, produktet ikke stiller.** §7's argument var, at en delefunktion på
+hver flade gør ingen af dem til noget særligt; det holder om *udbredelse*. §8's
+var, at et kort med 48 timers udløb ikke SKAL ryddes; det holder om
+*nødvendighed*. Ingen af dem handlede om det, brugeren faktisk bad om: dagens
+facit **er** dét, man sender i en ligachat, og et kort, man er færdig med, vil
+man af med nu og ikke om halvandet døgn. Ingen af de to sætninger stod i
+spec'ens §2 "Låste beslutninger", så der var ingen låst beslutning at bryde.
+
+**Prisen er betalt frem for undgået — tre steder:**
+
+1. **Påmindelseskortet deles ikke** (`payload.variant = 'no_tips'`). Det siger
+   "du mangler at tippe N kampe" *til dig selv* og er det ene dagskort uden en
+   modtager. Reglen har sin egen prædikat (`isShareableDayCard`), så
+   begrundelsen står ét sted og ikke i en betingelse i JSX.
+2. **Ulæst-prikkens tærskel er urørt.** Prikken siger *"værd at afbryde for"*,
+   knappen siger *"kan sendes videre"* — to spørgsmål, der ligner hinanden nok
+   til at kunne smelte sammen ved et uheld. `stories.test.js` har en påstand,
+   hvis eneste formål er, at de ikke gør det.
+3. **Mini-stillingen kommer ikke med på dagskortets billede.** Dens navne er
+   afgrænset til folk, modtageren deler konkurrence med — en strukturel regel i
+   dagsmotoren — og et billede rejser uden for den afgrænsning. Skal en stilling
+   deles, er det Stilling-skærmens egen knap, hvor brugeren **vælger** tabellen.
+
+**Stillingens billede bærer kun `#`, navn og point.** Rating, 🎯 og Form kræver
+hver deres forklaring, og den står i tabellens fodnote, som ikke kan rejse med
+et billede. Er feltet større end ti, vises top-10, en `…`-række og modtagerens
+**egen** række: den, der deler, skal kunne se sig selv, også som nr. 17 — samme
+greb som dagskortets mini-stilling.
+
+**`standings_shared` er et nyt hændelsesnavn og ikke en `metadata.via` på
+`story_shared`.** En `via` skelner mellem KILDER til det samme trin, og det er
+netop derfor dagskortets deling ER `story_shared` med `from: 'day_card'` — det
+er en delt historie, bare fra en anden flade. En stilling har hverken
+`stories`-række, regel eller nyhedsværdi og ville forurene enhver opgørelse over
+Story Engine, den blev talt med i. Samme afvejning som `invite_landed` traf.
+
+**Maleren flyttede frem for at blive kopieret.** `drawFrame()` boede i
+`RoundStory.jsx`, hvilket var rigtigt, mens der fandtes ét delbart format. Det,
+der nu skal holdes ét sted, er ikke koden, men **rammen**: tre skærme, hvis
+billeder skal kunne ligge i den samme beskedtråd og se ud som ét produkt. Den
+hedder `drawStoryCard()` i `src/lib/shareCanvas.js` ved siden af
+`drawStandings()`, mens `share.js` fortsat kun er transporten.
+
+**To fejl blev synlige, første gang en rigtig canvas tegnede resultatet**, og
+begge var arvet: brødteksten var `slice(0, 46)` og klippede **midt i et ord**
+uden at sige det, og stillingens titel tog kun første ombrudte linje, så
+"Kontorets Premier League" blev til "Kontorets Premier" — tavst, i det ene felt
+hvor en forkortelse gør mest skade. Begge klipper nu med "…" og ombryder. Det er
+grunden til, at billedet blev tegnet i en browser og ikke kun enhedstestet:
+påstandene dækkede *beslutningerne* (hvilke rækker, hvem fremhæves), og ingen af
+dem kunne se en tekst løbe ud over kanten.
+
+**Kendt kant, skrevet ned frem for bygget væk:** `generate_daily_stories(p_day)`
+sletter og gen-indsætter dagens rækker ved en gen-kørsel, og den nye række har
+et nyt `id` — så et afvist kort kan genopstå, hvis et resultat rettes bagud på
+netop den dag. Kuren ville være en `dismissed`-liste pr. `(user_id, day_key)`,
+altså en tabel for en kant.
+
 ## 15. august 2026 — `B34`: appen holdes ude af søgeindekset med `noindex`, ikke med `Disallow`
 
 **Beslutning:** `app.leagly.app` får `X-Robots-Tag: noindex, follow` i
@@ -781,7 +848,7 @@ findes et besøgstal for appen — det er accepteret, fordi appen kræver login,
 "besøgende" og "brugere" er næsten samme tal, og det tal kendes allerede.
 
 **Hjemmesiden: `script-src 'none'` er billigere at beholde end at bryde.**
-`I22` (13. august 2026) fastslog, at sitets fravalg af JavaScript var intakt,
+`I25` (13. august 2026) fastslog, at sitets fravalg af JavaScript var intakt,
 fordi burgermenuen kunne laves i ren CSS, og `site/vercel.json` gjorde fravalget
 til en header. Vercel Web Analytics ville have kostet præcis ét direktivs
 lempelse — `script-src 'none'` → `'self'`, ikke mere, da både script og beacon
@@ -802,7 +869,7 @@ trafikken", og det er dét, spørgsmålet var.**
 
 **Beslutning (produktejeren):** `I8`s resterende arbejde **i repoet** er udført,
 og fire åbne rækker om hjemmesiden er afgjort samlet — `A48`, `A49`, `B33` og
-`I22`. Ingen af dem ventede på en udløser uden for repoet; de ventede på et
+`I25`. Ingen af dem ventede på en udløser uden for repoet; de ventede på et
 valg. Tilbage af `I8` står to ting, som ikke kan skrives i en fil:
 ejer-godkendelse af copy og trin 2 i [`DOMAENE.md`](./DOMAENE.md).
 
@@ -834,7 +901,7 @@ browser (`file://`). Clean URLs ville gøre hvert internt link til enten en
 redirect eller et link, der kun virker i produktion — og canonical, `sitemap.xml`
 og 20+ interne links skulle skiftes for at vinde en kosmetisk URL.
 
-**`I22` — burgeren koster ingen JavaScript.** Rækken oplyste selv sin pris:
+**`I25` — burgeren koster ingen JavaScript.** Rækken oplyste selv sin pris:
 *"en burger-menu (koster den ene JS-afhængighed, `I8` har bevidst fravalgt)"*.
 **Den pris var forkert.** En skjult checkbox plus en `<label>` gør præcis det
 samme i ren CSS (`.nav-check:checked ~ .site-nav`), og fravalget "ingen JS

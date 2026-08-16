@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A57` · `B37` · `G129` · `I25`.**
+**Næste ledige: `A57` · `B37` · `G129` · `I26`.**
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -47,7 +47,9 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(Tom.)*
+- Et afvist dagskort kan genopstå: `generate_daily_stories(p_day)` sletter og gen-indsætter dagens rækker ved en gen-kørsel, og den nye række har et nyt `id`, som `dismissed_at` ikke fulgte med til
+- Liga-løse konkurrencer findes stadig som overgangslag ("Øvrige konkurrencer"), selvom oprettelse har krævet en liga siden august 2026 — skal de migreres ind i en liga, eller bliver de stående for evigt?
+- Måles delingerne? `story_shared` med `from: 'day_card'` og `standings_shared` har ingen aftager i Admin → Analytics endnu, så tallene skal læses i SQL
 
 ---
 

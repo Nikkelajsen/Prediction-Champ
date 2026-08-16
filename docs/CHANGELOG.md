@@ -9,6 +9,28 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+15. august 2026 — `I25`: dagens kort kan deles og ryddes, og stillingen kan sendes som billede
+
+**Tre knapper, to omgjorte spec-sætninger og én migrering.** Story Engine v3's hverdagskort fik både **Del** og **Afvis**, og Stilling-skærmen fik en Del-knap, der sender tabellen som billede.
+
+**Spec §7 og §8 fravalgte begge dele med vilje**, og begge argumenter holder stadig om det, de handlede om — at udbrede deling udvander den, og at et kort med 48 timers udløb ikke SKAL ryddes. De svarede bare ikke på det, brugeren bad om: dagens facit **er** dét, man sender i en ligachat, og et kort, man er færdig med, vil man af med nu. Ingen af sætningerne stod i spec'ens "Låste beslutninger"; begge er rettet med en markeret rettelsesblok frem for slettet.
+
+**Afvis var UI og intet andet:** `dismissed_at`, `dismissStory()`, `loadDayCard`s `dismissed_at=is.null`-filter og policyen `stories_update_own` fandtes allerede og bruges nu af begge korttyper. Afvisningen er server-side og ikke et lokalt flag, modsat ulæst-prikken — *"jeg er færdig med denne historie"* er en egenskab ved historien, *"jeg har set den"* ved enheden.
+
+**Prisen for delingen er betalt tre steder frem for undgået:** påmindelseskortet (`variant = 'no_tips'`) har ingen Del-knap, ulæst-prikkens tærskel er urørt (knap uden prik på det dæmpede kort, vogtet af en test, hvis eneste formål er at de to ikke smelter sammen), og mini-stillingen kommer ikke med på billedet, fordi dens navne er afgrænset til modtagerens egen konkurrence.
+
+**Stillingens billede bærer kun `#`, navn og point** — Rating, 🎯 og Form kræver hver deres forklaring, og den kan ikke rejse med et billede. Over ti deltagere vises top-10, en `…`-række og **modtagerens egen række**, så den, der deler, kan se sig selv, også som nr. 17. Tekst-faldbacken bruger samme afkortning som billedet.
+
+**Maleren flyttede ud af `RoundStory.jsx`** til `src/lib/shareCanvas.js` (`drawStoryCard` + `drawStandings`); `share.js` er fortsat kun transporten. **Det, der skal holdes ét sted, er rammen** — tre skærme, hvis billeder skal kunne ligge i den samme beskedtråd.
+
+🔴 **To arvede fejl blev synlige, første gang en rigtig canvas tegnede resultatet:** brødteksten var `slice(0, 46)` og klippede midt i et ord, og stillingens titel tog kun første ombrudte linje, så "Kontorets Premier League" blev til "Kontorets Premier" — tavst. Begge ombryder nu og klipper med "…". Enhedstestene dækkede *beslutningerne* (hvilke rækker, hvem fremhæves) og kunne pr. konstruktion ikke se en tekst løbe ud over kanten; billedet blev derfor tegnet i en browser, før det blev meldt færdigt.
+
+🔴 **[`#67 analytics_standings_share.sql`](../sql/analytics_standings_share.sql) skal køres FØR frontenden udrulles**, og fælden er, at intet går i stykker, hvis den ikke bliver det: `analytics.js` svælger en afvist insert stille, så Del-knappen ville virke, mens hver deling blev tabt — og et tal, der står tavst på nul, læses som "funktionen bruges ikke". `standings_shared` er et selvstændigt navn og ikke en `via` på `story_shared`, fordi en stilling hverken har `stories`-række, regel eller nyhedsværdi. Migreringens test læser den GAMLE liste ud af skemaet og kræver, at forskellen er præcis ét navn — en vagt, der holder sig selv opdateret, efterprøvet mod PostgreSQL 16 og mutations-testet.
+
+⚠️ **Kendt kant:** `generate_daily_stories(p_day)` sletter og gen-indsætter dagens rækker ved en gen-kørsel, så et afvist kort kan genopstå, hvis et resultat rettes bagud på netop den dag. Skrevet ned i backloggen og i koden frem for bygget væk. Skærmbillederne til `hjem` og `stilling` er taget om. Se [`DECISIONS.md`](./DECISIONS.md).
+
+---
+
 15. august 2026 — `G128`: fejlfindingsloggens egen kur var forældet
 
 `CLAUDE.md`s rutetabel og `DOCUMENTATION.md` §13 sagde begge, at kuren mod et forældet check-runs-svar er at spørge JOBBET, som *"har den rigtige status og hvert enkelt trins tidsstempler med det samme"*. **Aflæst under `#229`: det gjorde det ikke.** `actions_get`/`get_workflow_job` svarede ordret ens otte gange over ~8 minutter — trin 42 af 44 `in_progress`, samme `completed_at` på det foregående trin — mens `get_check_run` på SAMME job-id imens skiftede til `completed/success`. Kørsels-endpointet var som ventet også bagud.

@@ -17,6 +17,7 @@ import { useState, useEffect } from "react";
 import { Share2, X, ChevronRight } from "lucide-react";
 import { logEvent, logEventOnce } from "../../lib/analytics.js";
 import { shareImage, storyShareText } from "../../lib/share.js";
+import { drawStoryCard } from "../../lib/shareCanvas.js";
 import { roundStoryEyebrow, usableFrames } from "../../lib/stories.js";
 import { C, btnGhost, btnGold, font, iconBtn } from "../../ui/theme.js";
 import { Card, Eyebrow } from "../../ui/components.jsx";
@@ -31,37 +32,11 @@ const SHARABLE = new Set(["ROUND_SUM", "RATING"]);
 // Billedet tegnes med canvas og ikke som en skærmbillede-kopi af DOM'en: det
 // skal kunne læses uden appens baggrund, i en beskedtråd, på en telefon, der
 // aldrig har set produktet. Derfor egen ramme, eget navn nederst.
-function drawFrame(view, ctx, w, h) {
-  ctx.fillStyle = "#14212F";
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = "#F2C14E";
-  ctx.fillRect(0, 0, w, 10);
-
-  ctx.fillStyle = "#8DA2B8";
-  ctx.font = "600 34px system-ui, sans-serif";
-  ctx.fillText((view.eyebrow || "").toUpperCase(), 80, 200);
-
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = "700 92px system-ui, sans-serif";
-  // Ombrydning i hånden: canvas har ingen. Grænsen er tegn og ikke pixels,
-  // fordi målet er læsbarhed og ikke typografisk perfektion.
-  const words = String(view.headline || "").split(" ");
-  let line = "";
-  let y = 340;
-  for (const word of words) {
-    if ((line + word).length > 18) { ctx.fillText(line.trim(), 80, y); y += 108; line = ""; }
-    line += `${word} `;
-  }
-  if (line.trim()) ctx.fillText(line.trim(), 80, y);
-
-  ctx.fillStyle = "#8DA2B8";
-  ctx.font = "400 40px system-ui, sans-serif";
-  ctx.fillText(String(view.body || "").slice(0, 46), 80, y + 90);
-
-  ctx.fillStyle = "#F2C14E";
-  ctx.font = "700 36px system-ui, sans-serif";
-  ctx.fillText("Leagly", 80, h - 80);
-}
+//
+// MALEREN LÅ HER INDTIL AUGUST 2026 og hedder nu `drawStoryCard` i
+// `src/lib/shareCanvas.js`. Den flyttede, da dagskortet og stillingen fik deres
+// egne Del-knapper: det, der skulle holdes ét sted, var ikke koden, men RAMMEN —
+// tre skærme, hvis billeder skal ligne hinanden i den samme beskedtråd.
 
 function Frames({ story, frames, token, groupId, onClose, openProfile, userId }) {
   const [i, setI] = useState(0);
@@ -79,7 +54,7 @@ function Frames({ story, frames, token, groupId, onClose, openProfile, userId })
 
   async function share() {
     try {
-      await shareImage((ctx, w, h) => drawFrame(cur.view, ctx, w, h), {
+      await shareImage((ctx, w, h) => drawStoryCard(cur.view, ctx, w, h), {
         text: storyShareText({ headline: cur.view.headline, body: cur.view.body }),
       });
       logEvent(token, "story_shared", {
