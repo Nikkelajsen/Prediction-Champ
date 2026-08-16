@@ -486,7 +486,14 @@ Deltagelsen (`play_rate`) er spillere ÷ eksponerede. Begge tal kommer fra samme
 
 **`new_players` måles over hele historikken**, ikke over vinduet: en brugers debutrunde er den ældste runde, hun overhovedet har tippet i. Måltes den inden for vinduet, ville hver eneste flytning af vinduet se ud som en strøm af nye spillere.
 
-**`visitors = null` betyder umålt**, aldrig nul — aktivitetssporingen findes først fra `activity_since`, og en runde, hvis uge begynder før den dato, viser "–". Samme regel som retention-matrixen. Kendt skævhed: aktivitetsdagen er en UTC-dato, mens rundens grænse er dansk midnat, så et besøg mellem 00 og 02 natten til tirsdag falder i den foregående runde.
+**`visitors = null` betyder umålt**, aldrig nul — aktivitetssporingen findes først fra `activity_since`, og en runde, hvis uge begynder før den dato, viser "–". Samme regel som retention-matrixen.
+
+*Tilføjet 16. august 2026:* besøgstallet har sin egen søjlerække og to nøgletal — *kom forbi* og **gabet** (`idle_visitors` = kom forbi − spillede) — fordi det er dét, spørgsmålet "hvor mange var i appen i runden?" handler om, og fordi et måletal, ingen aflæser, ligner "funktionen bruges ikke" (`B37`s lære). To ting skal siges på skærmen, ellers læses tallene forkert:
+
+- 🔴 **Gabet er ikke en misset deadline.** Det rummer også brugere, der slet ikke havde en deadline i runden — nogen uden en konkurrence, eller nogen der først meldte sig til efter kampene låste. `missed` tæller kun dem, der HAVDE mulige tips og lod dem alle ligge.
+- **"Kom forbi" kan være større end "havde deadline"**, og det er ikke en fejl. En besøgende behøver hverken at være med i en konkurrence eller at have en låst kamp i runden.
+
+Gennemsnittet regner kun på lukkede runder med et MÅLT besøgstal: en umålt uge talt som nul ville halvere tallet i et 52-runders vindue, uden at nogen var blevet væk. Kendt skævhed: aktivitetsdagen er en UTC-dato, mens rundens grænse er dansk midnat, så et besøg mellem 00 og 02 natten til tirsdag falder i den foregående runde.
 
 `missed` (eksponerede uden ét eneste tip) er præcis Deadline Miss Rates tæller, bare pr. runde — med den forskel, at deadline_miss tæller pr. (bruger, **sæson**, runde), mens denne RPC tæller pr. (bruger, runde). Enheden her er mennesker, ikke bruger-runder.
 

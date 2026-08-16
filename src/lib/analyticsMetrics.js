@@ -123,6 +123,13 @@ const METRICS = {
     source: "user_activity_days (samme kilde som DAU/WAU/MAU i Admin → Statistik).",
     caveat: "TOM celle betyder UMÅLT og ikke nul: aktivitetssporingen findes først fra den dato, der står under tabellen. Aktivitetsdagen er en UTC-dato, mens rundens grænse er dansk midnat, så et besøg mellem 00 og 02 natten til tirsdag falder i den foregående runde.",
   },
+  round_idle_visitors: {
+    title: "Kiggede uden at spille",
+    what: "Brugere, der var i appen i rundens uge, men ikke afgav ét eneste tip i runden.",
+    how: "Kom forbi − spillede. Begge tal er distinkte brugere i samme runde, så differencen er brugere og ikke besøg.",
+    source: "user_activity_days minus analytics_completion_facts.",
+    caveat: "Er IKKE det samme som en misset deadline. Tallet rummer også brugere, der slet ikke havde en deadline i runden — nogen uden en konkurrence, eller nogen der først meldte sig til efter kampene låste. 'Missede runder' i Produktets sundhed tæller kun dem, der HAVDE mulige tips og lod dem alle ligge. Tom celle betyder umålt, fordi 'kom forbi' er det.",
+  },
   round_trend: {
     title: "Retning mod forrige runde",
     what: "Forskellen i antal aktive brugere mellem den seneste FÆRDIGE runde og runden før den.",
