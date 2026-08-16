@@ -1412,6 +1412,24 @@ begin
 end;
 $fn$;
 
+-- 🔴 REVOKE FØR GRANT, og den første linje er den, der let glemmes. `#56`
+-- (`anon_grants_functions.sql`) lukkede `anon` ude af hver funktion i `public`
+-- og efterlod en regel, databasen ikke kan håndhæve selv: PostgreSQLs
+-- indbyggede default giver PUBLIC — og dermed `anon` — EXECUTE på hver NY
+-- funktion, og den post kan ikke fjernes med `alter default privileges`. Hver
+-- ny funktion i `public` skal derfor selv bære sin revoke.
+--
+-- De seks øvrige RPC'er i filen har ingen revoke-linje, og det er ikke en
+-- uoverensstemmelse: `create or replace` ARVER den eksisterende ACL, så de er
+-- dækket af den `revoke execute on all functions`, `#56` kørte engang. Kun en
+-- funktion, der FØDES her, fødes med default-ACL'en. Det er samme forskel, som
+-- kostede `#65` en rød heartbeat 20 minutter efter kørslen (`G119`) — dér efter
+-- et `drop function`, her efter en helt ny.
+--
+-- Adgangen ville ikke være reelt åben: RPC'en er `security definer` bag
+-- `analytics_require_admin()` og svarer `forbidden` til enhver uden admin-flag,
+-- også uden login. Men vagten er ÉN spærring, og bredden var meningen med `#56`.
+revoke execute on function public.admin_analytics_rounds(int) from public;
 grant execute on function public.admin_analytics_rounds(int) to authenticated;
 
 -- ---------- Verifikation efter kørsel ----------
