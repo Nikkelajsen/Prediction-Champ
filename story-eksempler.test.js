@@ -46,6 +46,33 @@ import { fileURLToPath } from "node:url";
 // `story_engine_v4.sql` samles op af sig selv.
 //
 // ---------------------------------------------------------------------------
+// G125: EN FJERNET REGEL SÅ LEVENDE UD
+//
+// "Den højeste fil, der NÆVNER reglen" var ikke helt det rigtige spørgsmål, og
+// forskellen viser sig kun i ét tilfælde: når en ny motorversion FJERNER en
+// regel. Dens afsnit bliver stående i den gamle fil, ordene står der stadig, og
+// vagten fandt dem — så sitet kunne citere en formulering, ingen bruger får at
+// se. Præcis den tavse drift, filen findes for at fange, bare den anden vej.
+//
+// **Skelnen er maskinlæsbar, og den bor i SQL'ens egen struktur.** Et regelafsnit
+// ligger inde i en `create or replace function`, og en funktion kan gen-defineres
+// af en nyere fil: `generate_daily_stories()` skrives i BÅDE `story_engine_v2.sql`
+// og `story_engine_v3.sql`, mens `generate_stories()` kun findes i
+// `story_engine.sql`. Spørgsmålet er derfor ikke, hvilken FIL der nævner reglen
+// sidst, men om den nyeste udgave af den FUNKTION, reglen bor i, stadig har den:
+//
+//   · `H2H_PASS` i v1's `generate_stories()` er ÆGTE — ingen nyere fil
+//     gen-definerer den funktion, så v1's udgave er den, der kører.
+//   · En dagsregel, v3 droppede, står i v2's `generate_daily_stories()` — men
+//     v3 skriver den funktion om, og v3's udgave er den, der kører. Reglen er
+//     væk, og vagten siger det nu.
+//
+// Rangen sammenlignes og ikke pladsen i listen: to filer med samme versionstal
+// (`story_engine_v2.sql` og `story_engine_v2_day.sql`) er ikke hinandens
+// afløsere, og en alfabetisk rækkefølge mellem dem ville udnævne en tilfældig
+// vinder — altså en falsk rød.
+//
+// ---------------------------------------------------------------------------
 // HVORFOR DER IKKE MÅLES ORDRET
 //
 // **Rækkens præmis holdt ikke helt.** Den sagde, at sitets eksempler ER motorens
@@ -113,12 +140,19 @@ import { fileURLToPath } from "node:url";
 // realistiske. Kun at hvert ord, sitet har lånt, stadig står i den regel, kortet
 // siger, det kommer fra.
 //
-// Og den påstår ikke, at reglen stadig KØRER. Fjernes en regel af en ny
-// motorversion, bliver dens afsnit i den gamle fil stående, og vagten ville
-// finde ordene dér. Det ville kræve `sql/schema.sql` — produktionens
-// øjebliksbillede — som kilde, og den er op til en uge bagud (`G124`), altså
-// rød for enhver regel skrevet i dag. Prisen er valgt bevidst: en falsk rød ved
-// hver ny regel er dyrere end en manglende rød ved en fjernet.
+// Den påstår heller ikke, at reglen KØRER I PRODUKTIONEN. Det ville kræve
+// `sql/schema.sql` — produktionens øjebliksbillede — som kilde, og den er op til
+// en uge bagud (`G124`), altså rød for enhver regel skrevet i dag. Den pris er
+// stadig fravalgt bevidst: en falsk rød ved hver ny regel er dyrere end det, den
+// ville fange.
+//
+// Det, der IKKE længere står åbent, er en regel fjernet af en nyere
+// motorversion. Indtil `G125` (16. august 2026) beskrev dette afsnit hullet som
+// permanent, netop fordi schema-dumpet var det eneste alternativ, nogen havde
+// fået øje på. Det var det ikke — se `G125` ovenfor. Forskellen på de to er
+// stadig værd at holde fast i: vagten måler REPOET, ikke databasen, så en
+// migrering, der ikke er kørt, ser levende ud her. Det er `sql/README.md`s
+// statuskolonne, der svarer på dét spørgsmål.
 
 const ROD = dirname(fileURLToPath(import.meta.url));
 const læs = (f) => readFileSync(join(ROD, f), "utf8");
@@ -150,12 +184,37 @@ const harBogstav = (s) => /\p{L}/u.test(s);
 // det den nyeste, der kører.
 const MOTOR_FILER = readdirSync(join(ROD, "sql"))
   .filter((f) => /^story_engine.*\.sql$/.test(f))
-  .map((f) => ({
-    fil: `sql/${f}`,
-    rang: Number((f.match(/_v(\d+)/) || [])[1] ?? 1),
-    tekst: læs(`sql/${f}`),
-  }))
+  .map((f) => {
+    const tekst = læs(`sql/${f}`);
+    return {
+      fil: `sql/${f}`,
+      rang: Number((f.match(/_v(\d+)/) || [])[1] ?? 1),
+      tekst,
+      funktioner: funktionsSpænd(tekst),
+    };
+  })
   .sort((a, b) => a.rang - b.rang || a.fil.localeCompare(b.fil));
+
+// Filens funktioner og hvor langt hver af dem rækker. Ikke en SQL-parser: en
+// definition begynder i første kolonne, og den næste definition (eller filens
+// slutning) er dens grænse. Kravet om kolonne 1 er det, der holder omtaler ude
+// — `story_engine_v2_day.sql` nævner »create or replace function public.match_day«
+// inde i en indrykket `--`-kommentar, og den er ikke en definition.
+function funktionsSpænd(sql) {
+  const fundne = [...sql.matchAll(/^create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?([a-z_][a-z0-9_]*)/gim)]
+    .map((m) => ({ navn: m[1].toLowerCase(), start: m.index }));
+  return fundne.map((f, i) => ({ ...f, slut: fundne[i + 1]?.start ?? sql.length }));
+}
+
+// Hvilken motorversion skriver en given funktion SIDST? Det er den udgave, der
+// kører, og dermed den, en regel skal stå i for at være levende.
+const SIDST_SKREVET = new Map();
+for (const motor of MOTOR_FILER) {
+  for (const fn of motor.funktioner) {
+    const kendt = SIDST_SKREVET.get(fn.navn);
+    if (!kendt || motor.rang > kendt.rang) SIDST_SKREVET.set(fn.navn, { rang: motor.rang, fil: motor.fil });
+  }
+}
 
 // Motorens STRENGE — ikke dens kommentarer.
 //
@@ -189,6 +248,9 @@ function sqlStrenge(sql) {
 // motorversion, der nævner reglen. Hovederne er filernes egen inddeling
 // (`-- ======== 150 · Duel …`), og regelnavnet står som sin egen streng præcis
 // ét sted pr. fil, nemlig i den `insert`, der skriver kortet.
+//
+// `fjernetAf` er `G125`s svar: fandt vi kun reglen i en udgave af en funktion,
+// som en nyere fil har skrevet om, er ordene et levn og ikke en skabelon.
 function regelAfsnit(regel) {
   for (const motor of [...MOTOR_FILER].reverse()) {
     const i = motor.tekst.indexOf(`'${regel}'`);
@@ -196,7 +258,15 @@ function regelAfsnit(regel) {
     const hoveder = [...motor.tekst.matchAll(/^[ \t]*-- ={4,}/gm)].map((m) => m.index);
     const start = Math.max(0, ...hoveder.filter((h) => h < i));
     const slut = Math.min(motor.tekst.length, ...hoveder.filter((h) => h > i));
-    return { fil: motor.fil, tekst: motor.tekst.slice(start, slut) };
+    // Står reglen uden for enhver funktion (en efterfyldningsfil er ren SQL),
+    // er der ingen nyere udgave at holde den op imod, og afsnittet tages som det er.
+    const fn = motor.funktioner.find((f) => i >= f.start && i < f.slut);
+    const nyeste = fn ? SIDST_SKREVET.get(fn.navn) : null;
+    return {
+      fil: motor.fil,
+      tekst: motor.tekst.slice(start, slut),
+      fjernetAf: nyeste && nyeste.rang > motor.rang ? { funktion: fn.navn, fil: nyeste.fil } : null,
+    };
   }
   return null;
 }
@@ -262,6 +332,7 @@ function læsKort(fil, citat) {
     fragmenter: [erEmoji ? først.slice(mellemrum) : først, ...resten],
     variable: (citat.indhold.match(/<span class="story-var">/g) || []).length,
     kilde: afsnit?.fil ?? null,
+    fjernetAf: afsnit?.fjernetAf ?? null,
     strenge: afsnit ? sqlStrenge(afsnit.tekst) : [],
   };
 }
@@ -305,6 +376,17 @@ describe("hjemmesidens story-eksempler er motorens ordlyd (G103, G110)", () => {
       kort.strenge.length,
       `reglen »${kort.regel}« har intet afsnit i nogen sql/story_engine*.sql`,
     ).toBeGreaterThan(0);
+
+    // `G125`: ordene findes, men i en udgave, der ikke kører længere. Står de
+    // kun i en funktion, som en nyere motorfil har skrevet om, har motoren
+    // droppet reglen — og sitet sælger en historie, ingen bruger får.
+    expect(
+      kort.fjernetAf,
+      kort.fjernetAf === null ? "" :
+        `reglen »${kort.regel}« findes kun i ${kort.kilde}s ${kort.fjernetAf.funktion}(), og ` +
+        `${kort.fjernetAf.fil} skriver den funktion om UDEN reglen — den er altså fjernet, og ` +
+        `${kort.fil} citerer en formulering, ingen bruger får at se`,
+    ).toBeNull();
 
     // Emojien er ikke pynt: den er kortets regel-signatur (⚔️ duel, 🔥 stime,
     // 🧠 kontrarian), og den skal stå FØRST i en af reglens strenge — ikke blot
