@@ -157,6 +157,11 @@ function DayCard({ story, token, competitions, seen, onSeen, onDismiss }) {
   async function share() {
     try {
       await shareImage((ctx, w, h) => drawStoryCard({ eyebrow, headline: story.headline, body: story.body }, ctx, w, h), {
+        // Billedteksten er øjenbrynet — kortets adresse, ikke dets indhold.
+        // Overskrift og brødtekst STÅR på billedet, og at sende dem med som
+        // tekst gjorde beskeden til den samme historie fortalt to gange.
+        caption: eyebrow,
+        // Kun hvis billedet ikke kan sendes: da er teksten hele beskeden.
         text: storyShareText(story),
       });
       logEvent(token, "story_shared", {

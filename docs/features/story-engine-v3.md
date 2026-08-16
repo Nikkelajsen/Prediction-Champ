@@ -163,6 +163,14 @@ Frame 1 og 3 skal kunne stå alene som delbart billede uden kontekst — det er 
 > afgrænsningen. Skal en stilling deles, er det Stilling-skærmens egen Del-knap, hvor brugeren
 > **vælger** tabellen.
 >
+> **BILLEDTEKSTEN ER KORT, OG DET ER EN RETTELSE FRA DAGEN EFTER (16. august 2026).**
+> `shareImage()` havde ét tekstfelt, som blev brugt begge veje, så beskeden bar billedet
+> **og** hele dets indhold som tekst under det — den samme historie fortalt to gange.
+> Feltet er delt i to: `caption` følger billedet og er kortets **øjenbryn** (*"Kampdag 15/8"*,
+> *"Rundens historie · 28.07 – 03.08"*), mens `text` kun bruges, når browseren ikke kan
+> dele filer og teksten dermed **er** hele beskeden. Billedteksten er ikke tom, fordi
+> chat-apps viser teksten og ikke billedet i notifikationen.
+>
 > **Maleren er flyttet, ikke kopieret.** `drawFrame()` hed sådan, mens der fandtes ét delbart
 > format; den er nu `drawStoryCard()` i `src/lib/shareCanvas.js` sammen med `drawStandings()`.
 > Det, der skulle holdes ét sted, er ikke koden, men **rammen**: tre skærme, hvis billeder skal

@@ -56,7 +56,7 @@ function inviteShareText({ inviterName, mål, link }) {
   return `${intro}\nGæt resultater, saml point og se hvem der er bedst. Tryk her for at være med:\n${link}`;
 }
 
-// Deling som BILLEDE — rundestoryens frame 1 og 3 (Story Engine v3 §7).
+// Deling som BILLEDE — rundestoryen, dagskortet og stillingen.
 //
 // `draw` får et canvas og tegner rammen; helperen står for resten. To ting
 // gøres bevidst forsigtigt, fordi delefunktioner fejler forskelligt på hver
@@ -68,9 +68,27 @@ function inviteShareText({ inviterName, mål, link }) {
 //   2. Alt, der ikke er filedeling, falder tilbage på `shareText`. Et billede,
 //      der ikke kan sendes, må aldrig betyde, at knappen ikke gør noget.
 //
+// ── `caption` og `text` er TO forskellige ting, og det er hele pointen ───────
+// Indtil 16. august 2026 var der kun `text`, og den blev brugt begge veje. Det
+// gav en besked, hvor billedet stod med hele historien OG den samme historie
+// stod som tekst under det — en stilling blev sendt to gange, én gang tegnet og
+// én gang som en liste. Duplikeringen kunne ikke ses i koden, fordi de to veje
+// deler ét felt.
+//
+//   · `caption` følger BILLEDET. Kort, og den må ikke gentage det, man kan læse
+//     på billedet — den siger, hvad det er. Den er ikke tom, fordi chat-apps
+//     viser teksten og ikke billedet i notifikationen, og fordi en modtager med
+//     skærmlæser ellers får en besked helt uden indhold.
+//   · `text` bruges KUN, når billedet ikke kunne sendes. Der er teksten hele
+//     beskeden og skal derfor bære det fulde indhold.
+//
+// En kalder, der kun sætter `text`, får den gamle adfærd — det er med vilje:
+// karriereprofilens milepæl deler ren tekst gennem `shareText()` og har intet
+// billede at være billedtekst til.
+//
 // Kaster videre som shareText: en bruger, der annullerer arket, er ikke en fejl,
 // og det er kaldstedet, der ved, om der skal siges noget.
-async function shareImage(draw, { text = "", title = "Leagly", width = 1080, height = 1080 } = {}) {
+async function shareImage(draw, { text = "", caption, title = "Leagly", width = 1080, height = 1080 } = {}) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -86,7 +104,13 @@ async function shareImage(draw, { text = "", title = "Leagly", width = 1080, hei
   const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
   if (!blob) return shareText(text, { title });
 
-  await navigator.share({ title, text, files: [new File([blob], "leagly.png", { type: "image/png" })] });
+  await navigator.share({
+    title,
+    // `?? text` og ikke `|| text`: en kalder, der bevidst sender en TOM
+    // billedtekst, skal få en tom — ikke den fulde faldback-tekst tilbage.
+    text: caption ?? text,
+    files: [new File([blob], "leagly.png", { type: "image/png" })],
+  });
   return "share";
 }
 

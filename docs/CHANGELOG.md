@@ -9,6 +9,22 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+16. august 2026 — `I25`, rettelse: billedet blev sendt sammen med sin egen tekst
+
+**Meldt af ejeren dagen efter udrulningen.** En delt besked bar billedet **og** hele dets indhold som tekst under det: dagskortets overskrift og brødtekst stod både tegnet og skrevet, og stillingen blev sendt to gange — én gang som tabel i billedet, én gang som punktliste.
+
+**Årsagen var ét felt brugt to steder.** `shareImage()` tog kun `text`, og den blev både sendt med filen og brugt som faldback, når browseren ikke kan dele filer. De to har modsatte krav: sammen med billedet skal teksten sige **hvad** det er, mens den i faldbacken **er** hele beskeden og skal bære det fulde indhold. Med ét felt kunne kun det ene krav opfyldes — og fejlen var usynlig i koden, fordi den ene linje så rigtig ud begge veje.
+
+**Feltet er delt i to.** `caption` følger billedet og er **kortets øjenbryn** — *"Kampdag 15/8"*, *"Rundens historie · 28.07 – 03.08"*, *"Stillingen · Kontorets Premier League"* — altså den adresse, koden allerede kaldte kortets egen. `text` bruges kun i faldbacken og er uændret.
+
+**Billedteksten er ikke tom**, selvom billedet er designet til at kunne stå alene og selv bærer "Leagly": chat-apps viser teksten og ikke billedet i notifikationen, og en modtager med skærmlæser ville ellers få en besked helt uden indhold.
+
+**`?? ` og ikke `|| `:** en kalder, der bevidst sender en tom billedtekst, skal få en tom — ikke den fulde tekst tilbage, hvilket ville sætte duplikeringen tilbage ad bagvejen. Karriereprofilens milepæl er urørt: den deler ren tekst gennem `shareText()` og har intet billede at være billedtekst til, så en kalder uden `caption` opfører sig præcis som før.
+
+Fire nye påstande i `src/lib/share.test.js` vogter, at de to felter havner hvert sit sted — mutations-testet: sættes det gamle ene-felt tilbage, bliver to af dem røde. Suiten kører i Node uden jsdom, så canvas'et stubbes i testen frem for at trække en afhængighed ind.
+
+---
+
 15. august 2026 — `I25`: dagens kort kan deles og ryddes, og stillingen kan sendes som billede
 
 **Tre knapper, to omgjorte spec-sætninger og én migrering.** Story Engine v3's hverdagskort fik både **Del** og **Afvis**, og Stilling-skærmen fik en Del-knap, der sender tabellen som billede.

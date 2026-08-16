@@ -188,6 +188,12 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
     };
     try {
       await shareImage((ctx, w, h) => drawStandings(view, ctx, w, h), {
+        // Billedteksten siger, HVAD der deles — ikke tabellen igen. Uden den
+        // fulgte hele stillingen med som en punktliste under et billede af den
+        // samme stilling. Konkurrencens navn står med, fordi det er den ene
+        // oplysning, en modtager i en gruppechat kan mangle.
+        caption: `Stillingen · ${comp.name}`,
+        // Kun hvis billedet ikke kan sendes: da er teksten hele beskeden.
         text: standingsShareText(view),
         height: standingsHeight(view),
       });
