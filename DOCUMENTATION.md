@@ -673,7 +673,7 @@ Regelbaseret historie-motor (ingen AI). Fuld spec: `docs/features/story-engine-v
 | | Runde-motoren | Dags-motoren |
 |---|---|---|
 | Funktion | `generate_stories(p_round_key text)` | `generate_daily_stories(p_day date)` |
-| Udløses når | rundens sidste resultat er inde | dagens sidste kamp er færdigspillet |
+| Udløses når | rundens sidste resultat er inde | den sidste kamp i **modtagerens egne konkurrencer** er færdigspillet (`A39`) |
 | Skriver | `period = 'round'` (`day_key` null) | `period = 'day'` |
 | Antal | 1 vist kort (`latest_story`) | præcis **ét** pr. bruger pr. dag, på tværs af alle konkurrencer |
 | Valg mellem kandidater | fast prioritet, laveste vinder | **nyhedsværdi-score**, højeste vinder |
@@ -687,6 +687,18 @@ Beregning: begge kaldes fra matches-triggeren (`sql/rating_trigger_optimization.
 **Triggeren har to porte siden v2.** Rating-porten reagerer kun på ægte resultatændringer (uændret fra v1). Historie-porten er bredere: den reagerer også på **flytninger** (`match_day`/`round_key` ændret), fordi en udsat kamp, der flytter *ud* af en dag eller runde, kan GØRE den færdig uden at ét resultat er ændret — et øjeblik v1 aldrig så. Rating må ikke trækkes med i den genberegning, da kampen ingen score havde.
 
 **`match_day` er den danske kalenderdag** — en genereret `date`-kolonne på `matches` fra `public.match_day(kickoff_at)`, samme form og samme G11-begrundelse som `round_key()`: `timezone(text, timestamptz)` er immutable, mens casten `timestamptz::date` er stable. Afled aldrig en runde med `round_key(dag::timestamptz)` — brug `round_key_of_date(date)`, ellers genindføres G11 ad bagvejen.
+
+**KAMPDAGEN ER PERSONLIG SIDEN `A39` (16. august 2026), og det er dagsmotorens største ændring siden v3.** Indtil da spurgte motoren `match_day_complete(p_day)`, som er **global**: hver eneste kamp på dagen skulle have et resultat, uanset turnering og uanset konkurrence. En bruger, hvis konkurrencer kun rører Superliga, og hvis sidste kamp var slut kl. 16, ventede derfor på La Ligas kamp kl. 22:45 — og ved en udsat eller uindberettet kamp ventede hun for evigt. Motoren bygger nu i stedet modtagerkredsen `_sd_ready` fra `public.users_with_complete_day(p_day)` (`sql/story_engine_personal_day.sql`, `#68`) og returnerer kun, hvis den er tom. `match_day_complete()` lever videre uændret som produktets globale begreb — den er bare ikke længere motorens spørgsmål.
+
+**Afgrænsningen er ALLE dagens kampe i modtagerens konkurrencer, ikke kun dem, hun har tippet.** Den nærliggende regel lyder rigtigere og er forkert: kortet bærer stillingen (`_sd_after`) og mini-stillingen (`G88`), og de tal flytter sig, når **modstanderne** får point. Fakta-tabellerne (`_sd_pts`, `_sd_after`, `_sd_before`, …) er derfor **uændrede og globale** — afgrænsningen sker på modtagerkredsen, ikke på datagrundlaget. Fordi den gør det, er den sammenhængende: er jeg klar, er `_sd_after` for netop mine konkurrencer regnet på en færdig dag.
+
+**Et udgivet kort fryses, hvis dagen VOKSER bagefter.** Den globale dag gjorde det umuligt; den personlige åbner tre veje — jeg opretter en konkurrence (lovligt indtil en time før kickoff), jeg melder mig ind i en, eller en anden melder sig ind i min. (Efterfyldningen er ikke en vej ind: `api/_backfill.js` håndhæver "en runde, der er gået i gang, vokser aldrig".) Kortet bærer `payload.day_scope_matches` — antallet af kampe, det blev regnet på — og er tallet nu større, springes brugeren over. Retningen er `<` og ikke `<>`: bliver dagen **mindre**, skrives kortet om, ellers ville et frosset kort på en dag, der ikke længere findes, stå for evigt.
+
+**Skrivningen er et FORLIG og ikke længere delete-then-insert.** Motoren kaldes nu ved hvert resultat, der gør nogens dag færdig — fire-fem gange på en stor lørdag frem for én — og en bruger, hvis tal ikke havde flyttet sig siden kl. 16, ville ellers få nyt `id`, nyt `created_at` og et tabt `dismissed_at` ved hver af dem. Rækkerne bygges i `_sd_out` og skrives kun, hvor de faktisk bliver forskellige. **Sletningen drives dermed af det, der skal skrives, og ikke af dagen**, hvilket gør invarianten *"en tidlig udgang må aldrig efterlade mindre, end den fandt"* strukturel: en bruger, hvis dag ikke er færdig — eller hvis kort er frosset — står ikke i `_sd_out` og kan ikke røres. "Den farligste linje i v2" er ikke længere farlig.
+
+⚠️ **`_sd_ready` joines fem steder, og ingen af dem er individuelt påviselig.** Fjernes ét join, når resultatet stadig frem via de øvrige; fjernes alle fem, får hver eneste bruger et kort. Redundansen er ikke sløseri — hvert join har et ærinde mere (`_sd_reach` sparer arbejdet, de tre udgivende grene henter samtidig `n_matches`, og no_tips-grenen passerer slet ikke `_sd_reach`) — men følgen er, at en test ikke kan opdage, at ét af dem forsvinder.
+
+⚠️ **Gevinsten gælder ikke på rundens sidste kampdag.** Den udgang er stadig global, fordi rundens sidste dag er et *runde*-begreb, og rundekortet er pr. runde og ikke pr. bruger.
 
 **Bagstopper.** `generate_stories_catchup()` kaldes af notifikations-jobbet ved hver kørsel og dækker de huller, triggeren per konstruktion er blind for, fordi der ikke skrives til `matches`, når de opstår: en dag, hvis sidste kamp aldrig får et resultat, og en runde med en udsat kamp uden ny dato (det sidste hul fandtes allerede i v1).
 

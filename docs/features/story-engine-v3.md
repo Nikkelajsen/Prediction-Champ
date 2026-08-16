@@ -297,10 +297,10 @@ Det tredje event er det, der afgør, om §6 løser den bekymring, der udløste d
 4. En dag uden kampe giver intet kort. Uændret fra v2 og fortsat testet.
 5. En milepæl uddelt samme dag erstatter dagens kort — der findes efterfølgende stadig kun én række.
 6. En milepæl uddelt i løbet af runden giver frame 5 i rundestoryen, og præcis én frame uanset antal milepæle.
-7. To gen-kørsler af `generate_daily_stories` for samme dag giver **samme** kort (deterministisk afgørelse ved lige score).
+7. To gen-kørsler af `generate_daily_stories` for samme dag giver **samme** kort (deterministisk afgørelse ved lige score). ⚠️ **Omformuleret med `A39`** (§13.10): determinisme *givet samme faktamængde* — en gen-kørsel senere på dagen giver med rette et andet kort, hvis modtagerens dag er vokset.
 8. En bruger uden tips på en kampdag får det dæmpede kort med tips-påmindelse, ikke et drama-kort om andre.
 9. Karriereprofilens milepælsliste er uændret af hele v3. Regressionstest på `loadCareerMilestones`.
-10. Skaleringsforsøget (`sql/tests/story_engine_scale.sql`) køres igen med referencen `recompute_ratings()`. Scoringen tilføjer én pas over kandidatsættet; forholdet til referencen må ikke stige.
+10. Skaleringsforsøget (`sql/tests/story_engine_scale.sql`) køres igen med referencen `recompute_ratings()`. Scoringen tilføjer én pas over kandidatsættet; forholdet til referencen må ikke stige. ⚠️ **`A39` efterlader kriteriet delvist ubesvaret** (§13.10): forholdet holder, men frekvensen — hvor ofte motorens fulde krop kører — er det, der steg, og den måler kriteriet ikke.
 
 ## 12. Kendte begrænsninger og åbne spørgsmål
 
@@ -597,3 +597,71 @@ prøvede det i hånden, og det virkede" bliver et *misvisende* bevis. Det kosted
 fire afkræftede hypoteser og en måling, der alle så rigtige ud. Sporet fra §13.8
 løste det på første forsøg — og det er den egentlige bekræftelse af, at den
 rettelse var den rigtige at lave, dengang årsagen var ukendt.
+
+### 13.10 Kampdagen blev personlig (`A39`, 16. august 2026)
+
+Den største ændring af dagsmotoren siden v3 selv, og den rører netop dét, §3
+lovede var uændret: **hvornår motoren kører**. Udkastets §2, låst beslutning 1 —
+*"der genereres fortsat en historie hver dag, hvor dagens sidste kamp er
+færdigspillet"* — er ikke længere sand som skrevet. Sætningen forudsatte, at
+"dagens sidste kamp" er ét globalt begreb. Det er den ikke mere.
+
+**Hvad der var galt.** `match_day_complete()` er global over alle syv
+synkroniserede turneringer. En bruger, hvis konkurrencer kun rører Superliga, og
+hvis sidste kamp var slut kl. 16, ventede på La Ligas kamp kl. 22:45 — og ved en
+udsat eller uindberettet kamp ventede hun for evigt. Prisen var dokumenteret som
+bevidst (backloggens `A39`), men blev betalt hver eneste kampdag.
+
+**Hvad der blev bygget.** Motoren spørger nu `users_with_complete_day(p_day)` og
+bygger modtagerkredsen `_sd_ready`. Afgrænsningen er **alle** dagens kampe i
+modtagerens konkurrencer, ikke kun dem, hun har tippet — kortet bærer stillingen
+og mini'en (§8), og de flytter sig, når modstanderne får point. Fakta-tabellerne
+er uændrede og globale; afgrænsningen sker på modtagerkredsen.
+
+**To ting, udkastet ikke kunne forudse, fordi de først opstår med den personlige
+dag:**
+
+- **Et udgivet kort kan blive overhalet af sin egen dag.** Opretter modtageren en
+  konkurrence om aftenen, vokser hendes dag, efter kortet er skrevet. Kortet
+  fryses, målt på `payload.day_scope_matches`. Det er samme snapshot-semantik,
+  §8's overskrift allerede bar (*"Stillingen efter kampdag 03.08"*) — kortet er et
+  øjebliksbillede, STILLING-fanen er live, og de må gerne sige noget forskelligt,
+  så længe kortet daterer sig selv.
+- **Delete-then-insert måtte blive et forlig.** Motoren kaldes nu ved hvert
+  resultat, der gør nogens dag færdig. En bruger, hvis tal ikke havde flyttet sig,
+  ville få nyt `id` og tabt `dismissed_at` fire-fem gange på en lørdag —
+  ulæst-prikken nulstillet tre gange på en aften, altså præcis det signal, §5
+  findes for at gøre sjældent.
+
+**§11's acceptkriterier, der flytter sig:**
+
+- **Kriterie 7 er omformuleret.** "To gen-kørsler af `generate_daily_stories` for
+  samme dag giver samme kort" er ikke længere sand som skrevet: en gen-kørsel
+  *senere på dagen* giver med rette et andet kort, fordi faktamængden voksede.
+  Kriteriet er nu determinisme **givet samme faktamængde** — og forliget gør det
+  stærkere end før, for anden kørsel skriver nu slet ingenting.
+- **Kriterie 10 holder, men måler ikke længere det hele.** Målt like-for-like på
+  samme maskine gik forholdet til `recompute_ratings()` fra ~2,55 til ~2,59, hvor
+  baseline selv svingede 2,51–2,59 mellem kørsler. Det er inden for støjen.
+  ⚠️ **Men kriteriet måler ét kald, og det, der stiger, er FREKVENSEN.** Motorens
+  fulde krop kørte før ~1 gang pr. kampdag; nu kører den ved hver `matches`-sætning,
+  hvor mindst én brugers dag bliver færdig — realistisk 4-10 på en stor lørdag.
+  Værste trigger-sætning er uændret; hvor ofte værste tilfælde indtræffer, er det
+  ikke. ⚠️ Skaleringsforsøgets fixture er desuden en **fuldt spillet** dag, hvor
+  alle er klar, så den besparelse, den mindre modtagerkreds giver på en delvis dag,
+  indgår ikke i tallet.
+
+**Kriterie 1, 2, 3, 4, 5, 8 og 9 er urørte**, og påstand 14 (`priority < 180 ⟺
+news_value >= 45`) holder uændret: A39 tilføjer **nul** udgivende grene. Det var
+selve grunden til at lægge reglen som en tidlig udgang plus et filter på
+modtagerkredsen frem for som en fjerde `insert`.
+
+**Det, der er værd at tage med sig,** er, at leverancen næsten ødelagde sit eget
+måleinstrument. `sql/checks/day_card_coverage.sql`s værste tilstand — `KORT PÅ EN
+DAG, DER SPILLES` — ville have lyst på hver eneste delvist spillede dag, og filen
+siger selv, at *"en alarm, der altid lyser, er slukket"*. Kontrollen var samtidig
+`A39`s egen udløser i backloggen. Havde den ikke fulgt med i samme ombæring,
+ville den have været rød for evigt om noget, der var rigtigt — og den, der skulle
+fortælle, om ændringen virkede, var netop den, ændringen brød. Ved samme
+lejlighed viste det sig, at kontrollen blev læst af **ingen** planlagt kørsel;
+den har nu et trin i `job-heartbeat.yml`.

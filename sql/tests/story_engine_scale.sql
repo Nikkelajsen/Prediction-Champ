@@ -105,6 +105,11 @@ create table public.analytics_completion_facts (
 \ir ../story_engine.sql
 \ir ../story_engine_v2.sql
 \ir ../milestones.sql
+-- #68 FØR #47: dagsmotoren kalder users_with_complete_day(), og filen bærer
+-- desuden de to indekser, hele A39s ydelse hviler på — uden dem måler forsøget
+-- en seq scan af competition_matches ved hvert kald og melder A39 langt dyrere,
+-- end den er.
+\ir ../story_engine_personal_day.sql
 -- v3 SKAL indlæses efter v2 og milestones: den erstatter generate_daily_stories
 -- med scorings-udgaven og tilføjer build_round_frames + apply_milestone_stories.
 -- Uden linjen ville forsøget måle v2's motor og melde v3 billigere, end den er.

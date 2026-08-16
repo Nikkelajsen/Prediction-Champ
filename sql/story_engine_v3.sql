@@ -168,10 +168,62 @@ begin
   -- her, og det gjorde det ikke. Nu gør det, og begrundelsen er blevet sand.
   --
   -- VÆRNET LIGGER I MOTOREN OG IKKE HOS KALDERNE, fordi en regel, hver kalder
-  -- skal huske, er en regel, den femte kalder glemmer. Prisen er et kald, der
-  -- returnerer med det samme, når triggeren allerede har spurgt — et `exists` mod
-  -- et indekseret prædikat, målt i mikrosekunder.
+  -- skal huske, er en regel, den femte kalder glemmer.
   --
+  -- 🔴 SPØRGSMÅLET ER SIDEN A39 IKKE LÆNGERE BOOLSK (august 2026). `G92`s
+  -- begrundelse ovenfor står ord for ord ved magt — værnet bor her og kun her —
+  -- men `match_day_complete()` var GLOBAL: den krævede, at hver eneste kamp på
+  -- dagen havde resultat, uanset turnering og uanset konkurrence. En bruger, hvis
+  -- konkurrencer kun rører Superliga, ventede derfor på La Ligas kamp kl. 22:45,
+  -- og ved en udsat eller uindberettet kamp ventede hun for evigt.
+  --
+  -- Det, der ændrer sig, er ikke HVOR reglen bor, men hvad den spørger om: ikke
+  -- "er hele dagen færdig?" men "for HVEM er dagen færdig?". Svaret er en MÆNGDE
+  -- og ikke et ja/nej — derfor ét opslag for alle brugere frem for ét pr. bruger.
+  -- Afgrænsningen selv står i `public.user_day_scope()` (`#68`), og den er ALLE
+  -- dagens kampe i mine konkurrencer, ikke kun dem jeg har tippet: kortet bærer
+  -- stillingen og mini'en, og de flytter sig, når modstanderne får point.
+  --
+  -- `match_day_complete()` lever videre uden ændring. Den er stadig produktets
+  -- ærlige globale begreb, den er grantet til `authenticated`, og
+  -- story_engine_v2_backfill.sql og _measure.sql spørger den. Efter i dag er den
+  -- bare ikke længere motorens spørgsmål.
+  drop table if exists _sd_ready;
+  create temporary table _sd_ready as
+  select u.user_id, u.n_matches from public.users_with_complete_day(p_day) u;
+  create unique index on _sd_ready (user_id);
+
+  -- ---------- FRYSNINGEN: et udgivet kort skrives ikke om, fordi dagen voksede ----------
+  -- Den personlige kampdag åbner et hul, den globale lukkede ved konstruktion:
+  -- min dag kan VOKSE, efter mit kort er skrevet. Tre veje derhen, og alle tre
+  -- er menneskehandlinger — jeg opretter en konkurrence (lovligt indtil en time
+  -- før kickoff), jeg melder mig ind i en, eller en anden melder sig ind i min.
+  -- Efterfyldningen `api/_backfill.js` er derimod IKKE en vej ind: den håndhæver
+  -- "en runde, der er gået i gang, vokser aldrig".
+  --
+  -- Kortet fryses, fordi det VAR sandt, da det blev skrevet. Det er samme
+  -- semantik, overskriften allerede bærer ("Stillingen efter kampdag 03.08"):
+  -- kortet er et snapshot, STILLING-fanen er live, og de to må gerne sige noget
+  -- forskelligt, så længe kortet daterer sig selv. Alternativet — at skrive om —
+  -- ville lade en afvisning genopstå og nulstille ulæst-prikken, hver gang nogen
+  -- oprettede en konkurrence om aftenen.
+  --
+  -- `<` OG IKKE `<>`, og retningen er ikke en detalje: kun en VOKSENDE dag
+  -- fryser. Bliver dagen mindre — jeg melder mig ud, eller en kamp udsættes ud af
+  -- dagen — skal kortet skrives om, ellers ville et frosset kort på en dag, der
+  -- ikke længere findes, stå for evigt. Frysningen skal være selvhelbredende.
+  --
+  -- `coalesce(..., r.n_matches)` gør et kort UDEN nøglen (skrevet før A39, eller
+  -- af v2) til "ens" og dermed til noget, der skrives om én gang og derefter
+  -- bærer nøglen. Alternativet ville fryse hvert eksisterende kort for evigt på
+  -- et tal, der ikke findes.
+  delete from _sd_ready r
+  using public.stories s
+  where s.period = 'day' and s.day_key = p_day
+    and s.user_id = r.user_id
+    and s.news_value is not null
+    and coalesce((s.payload ->> 'day_scope_matches')::int, r.n_matches) < r.n_matches;
+
   -- UDGANGEN STÅR FØR SLETNINGEN, af samme grund som udgangen ovenfor: stod den
   -- efter, ville et kald midt på kampdagen tømme dagen og returnere uden at
   -- skrive noget tilbage.
@@ -179,16 +231,28 @@ begin
   -- DEN ER IKKE EN TREDJE KORT-UDGANG. Advarslen i filens hoved — "en TREDJE
   -- udgang herfra ville bryde det" — handler om de to UDGIVENDE grene, som
   -- frontendens `priority < 180` hviler på. En udgang, der intet skriver, rører
-  -- ikke den invariant, lige så lidt som sidste-dag-udgangen gør det.
-  if not public.match_day_complete(p_day) then
+  -- ikke den invariant, lige så lidt som sidste-dag-udgangen gør det. Påstand 14
+  -- i sql/tests/story_engine_daily.sql er stedet, det ville blive opdaget.
+  if not exists (select 1 from _sd_ready) then
+    drop table if exists _sd_ready;
     return;
   end if;
 
-  -- Idempotens: KUN dagens dag-kort. `period = 'day'` er ikke pynt — uden det
-  -- ville en gen-kørsel slette rundens afsluttende kort. Symmetrisk sletter
-  -- generate_stories() kun `period = 'round'`. Den farligste linje i v2 er
-  -- lige så farlig i v3.
-  delete from public.stories where period = 'day' and day_key = p_day;
+  -- 🔴 IDEMPOTENSEN ER FLYTTET TIL BUNDEN OG BLEVET ET FORLIG (A39). v2 og v3
+  -- slettede her dagens rækker med `delete … where period = 'day' and day_key =
+  -- p_day` — "den farligste linje" — og skrev dem igen. Den linje kan ikke blive
+  -- stående efter A39, og der er to grunde, hvor den anden er den alvorlige:
+  --
+  --   1) Sletningen var GLOBAL over dagen. Kørte motoren kl. 22, fordi bruger B's
+  --      dag netop blev færdig, ville den slette det kort, bruger A fik kl. 16.
+  --   2) Motoren kører nu ved HVERT resultat, der gør nogens dag færdig — fire-
+  --      fem gange på en stor lørdag frem for én. En bruger, hvis tal ikke har
+  --      flyttet sig siden kl. 16, ville få nyt `id`, nyt `created_at` og et tabt
+  --      `dismissed_at` ved hver af dem. Frysningen fanger det IKKE: hendes dag
+  --      voksede jo ikke.
+  --
+  -- Se forliget nederst i funktionen. Her står kun, at der bevidst ikke slettes
+  -- noget på dette sted længere.
 
   -- ---------- fakta (uændret fra v2) ----------
   drop table if exists _sd_pts;
@@ -614,12 +678,44 @@ begin
   -- der DELER KONKURRENCE med hovedpersonen — designreglen håndhævet af joinet
   -- og ikke af en betingelse. En global kandidat (STREAK_STATUS) når via
   -- enhver delt konkurrence, og duplikaterne kollapses nedenfor med max().
+  --
+  -- 🔴 A39-FILTERET HØRER HER OG IKKE I `_sd_scored`. `_sd_reach` er stedet,
+  -- hvor en kandidat bliver til en MODTAGER, og reglen "kun brugere, hvis egen
+  -- dag er færdig" er en regel om modtagere. Lagt her ligger den i JOINET —
+  -- samme form som konkurrence-afgrænsningen lige nedenfor — og nærhed, scoring
+  -- og udvælgelse arbejder med et mindre sæt på enhver delvis dag, hvilket er
+  -- dét, acceptkriterie 10 skal bruge.
+  --
+  -- ⚠️ FILTRENE ER INDBYRDES REDUNDANTE, OG DET SKAL STÅ HER FREM FOR AT BLIVE
+  -- OPDAGET. `_sd_ready` joines fem steder: her (to gange), i hver af de tre
+  -- udgivende grene. Mutationsforsøg viser, at ingen af dem er individuelt
+  -- påviselig — fjernes ét, når resultatet stadig frem via de øvrige; fjernes
+  -- alle fem, får hver eneste bruger et kort, og påstand 18c fanger det.
+  --
+  -- Redundansen er ikke sløseri, for hvert join har et ærinde mere: dette
+  -- sparer arbejdet, de tre i grenene henter samtidig `n_matches` til
+  -- frysningen, og no_tips-grenens er den eneste vej, fordi den slet ikke
+  -- passerer `_sd_reach`. Men følgen er, at en test IKKE kan opdage, at ét af
+  -- dem forsvinder. Fjerner du et join her, så fjern også det, der læser
+  -- `rd.n_matches` — ellers står reglen halvt håndhævet, og intet siger fra.
+  --
+  -- Bemærk, at fakta-tabellerne ovenfor (`_sd_pts`, `_sd_after`, `_sd_before`,
+  -- `_sd_size`, …) med vilje IKKE er afgrænset. De bærer stillingen, og
+  -- stillingen i MIN konkurrence afhænger af modstandernes point, ikke af hvis
+  -- dag der er færdig. Afgrænsningen sker på modtagerkredsen, ikke på
+  -- datagrundlaget — og fordi den gør det, er den sammenhængende: er jeg i
+  -- `_sd_ready`, har alle kampe i alle MINE konkurrencer resultat, så `_sd_after`
+  -- for netop dem er regnet på en færdig dag. Mini-stillingen og `_sd_rival`
+  -- læser kun gennem `via_competition`, som pr. konstruktion er en konkurrence,
+  -- jeg deler med hovedpersonen, altså en af mine, altså en færdig. Intet kort
+  -- kan komme til at bære et halvt regnet tal.
   drop table if exists _sd_reach;
   create temporary table _sd_reach (cid bigint, user_id uuid, via_competition uuid);
 
   insert into _sd_reach (cid, user_id, via_competition)
   select c.cid, c.subject_id, c.competition_id
   from _sd_cand c
+  join _sd_ready rd on rd.user_id = c.subject_id
   where c.headline3 is null;
 
   insert into _sd_reach (cid, user_id, via_competition)
@@ -627,6 +723,7 @@ begin
   from _sd_cand c
   join public.competition_participants cs on cs.user_id = c.subject_id
   join public.competition_participants cp on cp.competition_id = cs.competition_id
+  join _sd_ready rd on rd.user_id = cp.user_id
   where c.headline3 is not null
     and (c.competition_id is null or cs.competition_id = c.competition_id);
 
@@ -832,21 +929,43 @@ begin
   -- skal give SAMME række (acceptkriterie 7), så motoren udelader mini, og
   -- kapringen fjerner den. Det er også dét, `DayCard.jsx` har beskrevet hele
   -- tiden: en milepæl er global og har ingen stilling at stå i.
-  insert into public.stories
-    (round_key, day_key, period, user_id, competition_id, rule, priority,
-     league_size, news_value, payload, headline, body)
-  select v_round_text, p_day, 'day', w.user_id, w.competition_id, w.rule, w.priority,
+  -- 🔴 DE TRE GRENE SKRIVER I `_sd_out` OG IKKE DIREKTE I `public.stories` (A39).
+  -- Rækkerne bygges færdige her og forliges med det, der allerede står, nederst
+  -- i funktionen. Grenenes indhold, betingelser og antal er ordret uændrede —
+  -- `priority < 180 ⟺ news_value >= v_threshold` er stadig sandt, og påstand 14
+  -- måler det.
+  --
+  -- `day_scope_matches` er frysningens tal: hvor mange af dagens kampe kortet
+  -- blev regnet på. Det kommer fra `_sd_ready`, altså fra samme udtryk som
+  -- modtagerkredsen — kom de to fra hver sit sted, kunne de drive fra hinanden,
+  -- uden at nogen så det. Joinet mod `_sd_ready` er samtidig en påstand: fandtes
+  -- modtageren ikke i modtagerkredsen, ville rækken ikke blive skrevet.
+  --
+  -- ⚠️ NØGLEN MÅ IKKE HEDDE `matches`. Den er optaget af no_tips-kortet nedenfor
+  -- med en anden betydning (antal kampe i ÉN konkurrence), og et sammenfald ville
+  -- gøre frysningen tavst forkert for netop de brugere, der intet tippede.
+  drop table if exists _sd_out;
+  create temporary table _sd_out (
+    user_id uuid, competition_id uuid, rule text, priority int,
+    league_size int, news_value int, payload jsonb, headline text, body text
+  );
+
+  insert into _sd_out
+    (user_id, competition_id, rule, priority, league_size, news_value, payload, headline, body)
+  select w.user_id, w.competition_id, w.rule, w.priority,
          w.league_size, w.news_value,
          w.payload || jsonb_build_object(
            'day', v_daylabel, 'day_key', p_day,
            'third', w.user_id <> w.subject_id,
            'winner_rule', w.rule,
+           'day_scope_matches', rd.n_matches,
            'runner_up_value', coalesce(up.news_value, 0))
            || case when w.rule <> 'MILESTONE' and mn.mini is not null
                    then jsonb_build_object('mini', mn.mini) else '{}'::jsonb end,
          case when w.user_id <> w.subject_id then w.headline3 else w.headline end,
          case when w.user_id <> w.subject_id then w.body3     else w.body     end
   from _sd_rank w
+  join _sd_ready rd on rd.user_id = w.user_id
   left join _sd_rank up on up.user_id = w.user_id and up.rn = 2
   left join _sd_mini mn on mn.competition_id = w.competition_id and mn.user_id = w.user_id
   where w.rn = 1 and w.news_value >= v_threshold;
@@ -859,14 +978,14 @@ begin
   --
   -- news_value bærer stadig den højeste kandidatscore, så en dag, der lå ét
   -- point under, kan kendes fra en dag, hvor intet skete.
-  insert into public.stories
-    (round_key, day_key, period, user_id, competition_id, rule, priority,
-     league_size, news_value, payload, headline, body)
-  select v_round_text, p_day, 'day', d.user_id, d.competition_id, 'DAY_RESULT', 180,
+  insert into _sd_out
+    (user_id, competition_id, rule, priority, league_size, news_value, payload, headline, body)
+  select d.user_id, d.competition_id, 'DAY_RESULT', 180,
          d.league_size, coalesce(best.news_value, 0),
          d.payload || jsonb_build_object(
            'day', v_daylabel, 'day_key', p_day, 'third', false,
            'winner_rule', coalesce(best.rule, 'DAY_RESULT'),
+           'day_scope_matches', rd.n_matches,
            'runner_up_value', 0)
            || case when mn.mini is not null
                    then jsonb_build_object('mini', mn.mini) else '{}'::jsonb end,
@@ -877,6 +996,7 @@ begin
     where s.rule = 'DAY_RESULT'
     order by s.user_id, s.league_size desc nulls last, s.competition_id asc
   ) d
+  join _sd_ready rd on rd.user_id = d.user_id
   left join lateral (
     select r.news_value, r.rule from _sd_rank r where r.user_id = d.user_id and r.rn = 1
   ) best on true
@@ -888,14 +1008,20 @@ begin
   -- tip. De har ingen DAY_RESULT-kandidat og ville ellers stå helt uden kort —
   -- og et drama-kort om andre er udtrykkeligt det forkerte svar. De får dagens
   -- omfang og en fremadrettet slutning. Ingen emoji: dette er dæmpet tier.
-  insert into public.stories
-    (round_key, day_key, period, user_id, competition_id, rule, priority,
-     league_size, news_value, payload, headline, body)
-  select v_round_text, p_day, 'day', q.user_id, q.competition_id, 'DAY_RESULT', 180,
+  -- 🔴 A39-FILTERET SKAL GENTAGES HER, og det er den ene undtagelse fra "reglen
+  -- ligger i `_sd_reach`". Denne gren går slet ikke gennem `_sd_reach` eller
+  -- `_sd_scored` — den læser `competition_matches` direkte, fordi dens
+  -- modtagere pr. definition er dem, ingen kandidat nåede. Uden joinet ville den
+  -- udgive kort til brugere, hvis egen dag stadig spilles, og A39 ville være
+  -- lækket netop dér, hvor ingen kiggede.
+  insert into _sd_out
+    (user_id, competition_id, rule, priority, league_size, news_value, payload, headline, body)
+  select q.user_id, q.competition_id, 'DAY_RESULT', 180,
          q.league_size, 0,
          jsonb_build_object('variant', 'no_tips', 'matches', q.matches,
                             'league', q.league, 'day', v_daylabel, 'day_key', p_day,
                             'third', false, 'winner_rule', 'DAY_RESULT',
+                            'day_scope_matches', q.n_matches,
                             'runner_up_value', 0)
            || case when mn.mini is not null
                    then jsonb_build_object('mini', mn.mini) else '{}'::jsonb end,
@@ -906,17 +1032,76 @@ begin
   from (
     select distinct on (cp.user_id)
       cp.user_id, cm.competition_id, c.name as league, sz.n as league_size,
+      rd.n_matches,
       count(*) over (partition by cp.user_id, cm.competition_id)::int as matches
     from public.competition_matches cm
     join public.matches m on m.id = cm.match_id
     join public.competition_participants cp on cp.competition_id = cm.competition_id
     join public.competitions c on c.id = cm.competition_id
     join _sd_size sz on sz.competition_id = cm.competition_id
+    join _sd_ready rd on rd.user_id = cp.user_id
     where m.match_day = p_day and m.home_score is not null and m.away_score is not null
       and not exists (select 1 from _sd_today t where t.user_id = cp.user_id)
     order by cp.user_id, sz.n desc, cm.competition_id asc
   ) q
   left join _sd_mini mn on mn.competition_id = q.competition_id and mn.user_id = q.user_id;
+
+  -- ---------- SKRIVNINGEN ER ET FORLIG OG IKKE EN GEN-SKRIVNING (A39) ----------
+  -- ÉT SLOT, påstået allerede her. Det unikke indeks `stories_day_slot_uniq` er
+  -- nettet; dette er påstanden om, at nettet aldrig skal bruges — og den fejler
+  -- i en temporær tabel frem for halvvejs inde i en skrivning til produktionen.
+  create unique index on _sd_out (user_id);
+
+  -- v2 og v3 slettede dagens rækker og skrev dem igen. Det var rigtigt, da
+  -- motoren kørte ÉN gang pr. dag. Efter A39 kører den, hver gang EN BRUGERS dag
+  -- bliver færdig — fire-fem gange på en stor lørdag — og en bruger, hvis tal
+  -- ikke har flyttet sig siden kl. 16, ville få nyt `id`, nyt `created_at` og et
+  -- tabt `dismissed_at` ved hver af dem. Det er `G129` gjort til hverdag, og det
+  -- er ulæst-prikken nulstillet tre gange på en aften — præcis det signal, spec
+  -- §5 findes for at gøre sjældent. Frysningen ovenfor fanger det ikke: dagen
+  -- voksede jo ikke.
+  --
+  -- 🔴 SLETNINGEN DRIVES AF `_sd_out` OG IKKE AF DAGEN, og det er dét, der gør
+  -- invarianten "en tidlig udgang må aldrig efterlade mindre, end den fandt"
+  -- STRUKTUREL frem for argumenteret: en række kan kun slettes, hvis der findes
+  -- en erstatning for netop den bruger. En bruger, hvis dag ikke er færdig, og en
+  -- bruger, hvis kort er frosset, står slet ikke i `_sd_out` og kan dermed ikke
+  -- røres. Den farligste linje i v2 er ikke længere farlig.
+  --
+  -- DÆKNINGSPÅSTANDEN, DER GØR DET SIKKERT: `_sd_ready ⊆ {brugere, der får en
+  -- række i _sd_out}`. Led for led — er jeg i `_sd_ready`, deltager jeg i mindst
+  -- én konkurrence med mindst én kamp i dag, og alle dens kampe har resultat.
+  -- Har jeg et scoret tip, har jeg en `_sd_today`-række og dermed en
+  -- DAY_RESULT-kandidat (grenens joins er alle garanterede: `_sd_size` har en
+  -- række for enhver konkurrence med deltagere, `_sd_after ⊇ _sd_today`, og
+  -- `competitions` er FK-garanteret) → jeg lander i gren 1 eller gren 2. Har jeg
+  -- intet scoret tip, falder jeg ud på den hårde regel og fanges af gren 3.
+  -- Bagstopperens klasse 2 hviler på netop denne påstand for at være endelig.
+  --
+  -- ⚠️ SLETNINGEN MÅ IKKE FILTRERE PÅ `news_value is not null`. Gjorde den det,
+  -- kunne en v2-række og en v3-række stå på samme `(user_id, day_key)` — det
+  -- unikke indeks tillader det, fordi dets `where` udelader v2 — og
+  -- `loadDayCard`s `order=day_key.desc&limit=1` ville vælge frit mellem dem.
+  delete from public.stories s
+  using _sd_out o
+  where s.period = 'day' and s.day_key = p_day
+    and s.user_id = o.user_id
+    and (s.rule, s.competition_id, s.priority, s.league_size, s.news_value,
+         s.headline, s.body, s.payload)
+        is distinct from
+        (o.rule, o.competition_id, o.priority, o.league_size, o.news_value,
+         o.headline, o.body, o.payload);
+
+  insert into public.stories
+    (round_key, day_key, period, user_id, competition_id, rule, priority,
+     league_size, news_value, payload, headline, body)
+  select v_round_text, p_day, 'day', o.user_id, o.competition_id, o.rule, o.priority,
+         o.league_size, o.news_value, o.payload, o.headline, o.body
+  from _sd_out o
+  where not exists (
+    select 1 from public.stories s
+    where s.period = 'day' and s.day_key = p_day and s.user_id = o.user_id
+  );
 
   drop table if exists _sd_pts;
   drop table if exists _sd_size;
@@ -934,6 +1119,8 @@ begin
   drop table if exists _sd_scored;
   drop table if exists _sd_rank;
   drop table if exists _sd_mini;
+  drop table if exists _sd_ready;
+  drop table if exists _sd_out;
 end;
 $fn$;
 

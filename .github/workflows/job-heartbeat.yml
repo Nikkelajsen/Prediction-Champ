@@ -562,3 +562,68 @@ jobs:
             exit 1
           fi
           echo "anon kan nøjagtig de to tilladte funktioner."
+
+      # ---- 6. Fik en færdigspillet kampdag sit dagskort? (A39) ----
+      #
+      # Kontrollen `sql/checks/day_card_coverage.sql` har eksisteret siden `A38`
+      # og blev læst af INGEN planlagt kørsel — kun af en CI-test, altså mod en
+      # tom engangsdatabase. Følgen var, at `A39`s egen udløser i backloggen
+      # ("når `day_card_coverage` melder en blokeret dag, nogen savnede") hvilede
+      # på et instrument, ingen aflæste. Det er samme fejlklasse som `G100`:
+      # reglen fandtes, vagten var i CI, og produktionen blev aldrig spurgt.
+      #
+      # Den er værd at have netop nu, fordi den personlige kampdag flytter
+      # motoren fra ét kald om dagen til ét pr. slutfløjt, der gør nogens dag
+      # færdig. Symptomet på en fejlet generering er stadig STILHED, og stilhed
+      # er stadig uskelnelig fra en rolig uge.
+      #
+      # DEN LOGGER INGEN BRUGERDATA — kun datoer og antal. Ingen navne, ingen
+      # liga, ingen rækker fra en tabel. Det er den samme egenskab, der gør
+      # anon-kontrollen egnet til en Actions-log.
+      - name: Tjek at færdigspillede kampdage fik deres dagskort
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::error::Secret SUPABASE_DB_URL mangler. Tilføj den under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+          # Samme mønster som de tre kontroller ovenfor: `-f` og `-c` deler
+          # session, så den temporære view findes, når der læses fra den, og
+          # forsvinder, når psql lukker. Der installeres intet i produktionen.
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -q -At -F'|' \
+            -f sql/checks/day_card_coverage.sql \
+            -c "select dag, klar, mangler, for_tidligt, tilstand
+                  from day_card_coverage
+                 where tilstand in ('MANGLER DAGSKORT', 'KORT PÅ EN DAG, DER SPILLES')
+                 order by dag desc" > dagskort.txt
+
+          if [ ! -s dagskort.txt ]; then
+            echo "Alle færdigspillede kampdage i vinduet har deres dagskort."
+            exit 0
+          fi
+
+          # DE TO FEJL VEJER IKKE DET SAMME, og rækkefølgen her er den samme som
+          # i kontrollens egen `case`-stige: et manglende kort er et udeblevet
+          # svar, et for tidligt kort er et FORKERT svar, brugeren allerede har
+          # læst. Derfor fejler kun den anden trinnet.
+          fail=0
+          while IFS='|' read -r dag klar mangler for_tidligt tilstand; do
+            [ -z "$dag" ] && continue
+            case "$tilstand" in
+              "KORT PÅ EN DAG, DER SPILLES")
+                echo "::error::$dag: $for_tidligt kort påstår at dække mere, end der er spillet. Motorens frysning eller dens modtagerkreds er forkert — se sql/story_engine_v3.sql."
+                fail=1
+                ;;
+              "MANGLER DAGSKORT")
+                echo "::warning::$dag: $mangler af $klar klare brugere mangler deres dagskort. Bagstopperen har 15-30 minutter til at samle det op; er det der stadig i morgen, er det A39s udløser."
+                ;;
+            esac
+          done < dagskort.txt
+
+          if [ "$fail" -ne 0 ]; then
+            exit 1
+          fi
+          echo "Ingen for tidlige kort. Manglende kort er meldt som advarsler ovenfor."

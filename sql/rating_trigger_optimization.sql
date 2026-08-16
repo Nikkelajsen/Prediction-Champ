@@ -56,6 +56,7 @@ declare
   v_ok      boolean := true;
   v_err     text;
   v_n       int;
+  v_ready   int;   -- A39: antal brugere, hvis EGEN kampdag er færdig
   v_days    jsonb := '[]'::jsonb;
   v_rounds  jsonb := '[]'::jsonb;
 begin
@@ -134,17 +135,30 @@ begin
       -- DAGE FØRST og i kronologisk orden: en dags kort må ikke lande efter
       -- rundens afsluttende kort, og karusellen læses i samme retning.
       for v_day in (select distinct day_key from _se_story_days order by 1) loop
-        if public.match_day_complete(v_day) then
-          perform public.generate_daily_stories(v_day);
-          select count(*) into v_n
-            from public.stories where period = 'day' and day_key = v_day;
-          v_days := v_days || jsonb_build_object('day', v_day, 'complete', true, 'cards', v_n);
-        else
-          -- Den gren er værd at logge for sig: "dagen var ikke komplet" og
-          -- "dagen fejlede" ligner hinanden udefra (intet kort), men er to helt
-          -- forskellige problemer med hver sin rettelse.
-          v_days := v_days || jsonb_build_object('day', v_day, 'complete', false, 'cards', 0);
-        end if;
+        -- 🔴 INTET FORTJEK (A39, august 2026). Her stod
+        -- `if public.match_day_complete(v_day) then …`, og det kunne ikke blive
+        -- stående: prædikatet er GLOBALT, så det ville spærre triggerens vej ind
+        -- for enhver bruger, hvis egne konkurrencer var færdigspillet, og A39
+        -- ville ikke være leveret uanset hvad motoren gjorde.
+        --
+        -- Det kunne heller ikke bare gøres personligt HER. Så ville reglen ligge
+        -- to steder — ordret den tilstand, `G92` blev til for at afskaffe: en
+        -- regel, hver kalder skal huske, er den regel, den femte kalder glemmer.
+        -- Motoren spørger selv, og efter A39 er spørgsmålet ikke længere boolsk,
+        -- men "for HVEM er dagen færdig?". Det er ikke triggerens at stille.
+        perform public.generate_daily_stories(v_day);
+
+        -- SPORET OVERLEVER, MEN SKIFTER FORM. `complete` var et ja/nej om DAGEN
+        -- og har ingen sand værdi længere. `ready` er antallet af brugere, hvis
+        -- egen dag er færdig: nul betyder præcis dét, `complete: false` betød —
+        -- ingen kan få et kort endnu — mens en forskel mellem `ready` og `cards`
+        -- er frosne kort, altså en oplysning, det gamle boolske ikke kunne bære.
+        -- Grenen "dagen var ikke komplet" og grenen "dagen fejlede" kan stadig
+        -- skelnes, og det var hele grunden til at logge dem hver for sig.
+        select count(*) into v_ready from public.users_with_complete_day(v_day);
+        select count(*) into v_n
+          from public.stories where period = 'day' and day_key = v_day;
+        v_days := v_days || jsonb_build_object('day', v_day, 'ready', v_ready, 'cards', v_n);
       end loop;
 
       -- DEREFTER rundens afsluttende kort. Betingelsen er uændret fra v1 og ER
