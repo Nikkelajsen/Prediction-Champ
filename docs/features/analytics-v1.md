@@ -134,7 +134,7 @@ To views i `sql/analytics_dashboard.sql`, begge revoked fra klienter (kun læst 
 
 ## 5. Nøgletal og formler
 
-### Dashboard — 6 sektioner (Admin → Analytics, RPC'er i parentes) *(rettet efter levering: 4 ved leveringen; Tragt og Story Engine-regler kom til 30.–31. juli 2026)*
+### Dashboard — 7 sektioner (Admin → Analytics, RPC'er i parentes) *(rettet efter levering: 4 ved leveringen; Tragt og Story Engine-regler kom til 30.–31. juli 2026, Aktive brugere pr. runde 16. august 2026)*
 
 1. **Produktets sundhed** (`admin_analytics_health`): aktive brugere (7 dage), aktive ligaer, aktive konkurrencer, Prediction Completion Rate (med retning mod forrige vindue), Deadline Miss Rate, missede runder, gennemførte spillerunder (alt tid).
 2. **Engagement** (`admin_analytics_engagement`): Story/Karriere/Rating/Liga/Tip Views, Push Notification Open Rate (i alt og pr. type), sessionstid (gennemsnit, median, kun-flere-hændelser og hændelser pr. session).
@@ -142,8 +142,9 @@ To views i `sql/analytics_dashboard.sql`, begge revoked fra klienter (kun læst 
 4. **Retention** (`admin_analytics_retention`): uge 1/4/12/26/52, for brugere og for ligaer.
 5. **Tragt for nye brugere** (`admin_analytics_funnel`): konto → liga → konkurrence → første tip, splittet på selvstarter/inviteret — se afsnit 5C.
 6. **Story Engine-regler** (`admin_analytics_stories`): genereret/vist/delt/afvist pr. regel + dækning — se afsnit 5D.
+7. **Aktive brugere pr. runde** (`admin_analytics_rounds`): én række pr. spillerunde, ældst først — se afsnit 5H.
 
-Sektionerne står i brugerens rejsefølge: kommer de ind (tragt), bliver de (sundhed/engagement), hvad ser de (Story Engine), hvor bor de (liga-diagnose), og bliver de hængende (retention).
+Sektionerne står i brugerens rejsefølge: kommer de ind (tragt), bliver de (sundhed/runder/engagement), hvad ser de (Story Engine), hvor bor de (liga-diagnose), og bliver de hængende (retention).
 
 ### Deadline Miss Rate
 
@@ -464,6 +465,35 @@ i backloggen nu siger: **tosifret `antal` i `efter`-perioden.** Indtil da hviler
 mærkatet på produktjudgement, hvilket er et legitimt grundlag — bare ikke et
 målt et.
 
+## 5H. Aktive brugere pr. runde (`B38`, 16. august 2026)
+
+Alt det øvrige på dashboardet er et **vindue**: 7, 30 eller 90 dage. Et vindue svarer på, hvordan det står til lige nu, men ikke på om det går op eller ned — og de to søjlerækker, "Produktets sundhed" havde, er ISO-uger (mandag), ikke runder. Denne sektion er den løbende udvikling målt på produktets egen enhed.
+
+**Runden er `round_key`: tirsdag til mandag, dansk tid** (`sql/round_key_timezone.sql`), global på tværs af turneringer. Det er den enhed, Championship kårer, notifikationerne taler om, og brugerne spiller. `date_trunc('week', …)` er mandag og forskudt et døgn, så en tirsdagskamp ville lande i en anden spand end den runde, den tæller med i alle andre steder.
+
+**To målinger ved siden af hinanden, og forskellen er hele pointen:**
+
+| | Hvad | Hvorfra |
+|---|---|---|
+| **Spillede** | havde mindst ét muligt tip i runden **og** afgav mindst ét af dem | `analytics_completion_facts` |
+| **Kom forbi** | havde blot appen åben i rundens uge | `user_activity_days` |
+
+Gabet mellem de to er "de kigger, men spiller ikke" — samme skelnen som `active_groups` vs. `groups_with_active_member`, og samme lære som liga-diagnosens **bredde**: den gamle "andel aktive medlemmer" målte, om folk ÅBNEDE appen, ikke om de SPILLEDE.
+
+Deltagelsen (`play_rate`) er spillere ÷ eksponerede. Begge tal kommer fra samme kilde som North Star og Deadline Miss Rate, så de tre ikke kan modsige hinanden, og så raten pr. konstruktion ikke kan overstige 100 %. Den oplagte implementering — tæl `predictions` direkte — er netop den forkerte: den tæller tips på kampe, brugeren ikke havde en deadline på i nogen konkurrence.
+
+**`is_open` er ikke "runden er spillet færdig".** Flaget siger, at ikke alle rundens kampe er LÅST endnu, altså at tallene stadig kan vokse. En runde i gang vises (den er den nyeste nyhed, man har) som en stiplet søjle, men den bærer hverken overskriftstallet, retningen eller gennemsnittet: et delvist tal sammenlignet med et helt giver et fald hver eneste gang, uanset hvad brugerne gør. Samme klasse som `G73`s nævner og `G115`s umålte fejlrate.
+
+**`new_players` måles over hele historikken**, ikke over vinduet: en brugers debutrunde er den ældste runde, hun overhovedet har tippet i. Måltes den inden for vinduet, ville hver eneste flytning af vinduet se ud som en strøm af nye spillere.
+
+**`visitors = null` betyder umålt**, aldrig nul — aktivitetssporingen findes først fra `activity_since`, og en runde, hvis uge begynder før den dato, viser "–". Samme regel som retention-matrixen. Kendt skævhed: aktivitetsdagen er en UTC-dato, mens rundens grænse er dansk midnat, så et besøg mellem 00 og 02 natten til tirsdag falder i den foregående runde.
+
+`missed` (eksponerede uden ét eneste tip) er præcis Deadline Miss Rates tæller, bare pr. runde — med den forskel, at deadline_miss tæller pr. (bruger, **sæson**, runde), mens denne RPC tæller pr. (bruger, runde). Enheden her er mennesker, ikke bruger-runder.
+
+Sektionen har sin **egen vælger** (12/26/52 runder) og er den eneste, panelets dagsvindue ikke gælder for: 7/30/90 dage skærer midt igennem en runde. `p_rounds` klampes til [1, 52] i SQL'en.
+
+---
+
 ## 6. Liga-diagnose (afløser Health Score, 30. juli 2026)
 
 **Den sammenvejede Health Score (0-100) er fjernet.** Den var for bred til at bruge til noget, af fire grunde:
@@ -553,13 +583,15 @@ Hver tilstand giver en **begrundelse med ligaens egne tal** ("Én af 4 medlemmer
 | `src/ui/components.jsx` | `StatTile`/`StatGroup`/`MiniBars` flyttet fra `AdminScreen.jsx` (nu 2 forbrugere) + `PctGrid`. **30. juli 2026:** `HealthBar` fjernet, `StateChip`/`SignalRow` tilføjet; `StatTile` fik `info`-prop; `MiniBars` skelner nu `null` (ingen måling) fra 0 |
 | `src/screens/AdminScreen.jsx` | fjerde chip "Analytics", render-gren til `AnalyticsPanel` |
 | `src/screens/AnalyticsPanel.jsx` (ny) | 4-sektions dashboard. **30. juli 2026:** ⓘ på hvert nøgletal, North Star med retning, Liga-diagnose i stedet for Health Score, døde felter taget i brug |
-| `src/lib/analyticsMetrics.js` (ny, 30. juli 2026) | måle-ordbogen: 36 metrikker × hvad/hvordan/kilde/forbehold |
+| `src/lib/analyticsMetrics.js` (ny, 30. juli 2026) | måle-ordbogen: 36 metrikker × hvad/hvordan/kilde/forbehold. **16. august 2026 (`B38`):** fem til for runde-serien |
+| `src/screens/analytics/RoundsSection.jsx` (ny, 16. august 2026) | "Aktive brugere pr. runde" — egen runde-vælger, to søjlerækker og en tabel pr. runde. `MiniBars` fik samtidig en tredje tilstand, `partial`, til runden i gang |
 
 ---
 
 ## 9. Udrulning
 
-0. **Efter 30. juli 2026-udvidelsen:** gen-kør `sql/analytics_dashboard.sql` — den indeholder to nye RPC'er (`admin_analytics_funnel`, `admin_analytics_stories`) og et udvidet `push`-objekt i `admin_analytics_engagement`. Filen er idempotent; ingen anden fil er rørt.
+0. **Efter 16. august 2026 (`B38`):** gen-kør `sql/analytics_dashboard.sql` — den indeholder RPC 7, `admin_analytics_rounds`. ✅ **Kørt i produktionen 16. august 2026, før frontend-mergen.** 🔴 Rækkefølgen er ægte den ene vej: en gammel klient kender ikke RPC'en, men en NY klient mod en database uden den får `404` og en fejlende sektion (de øvrige seks er upåvirkede — `useSection` isolerer hver sektion).
+0b. **Efter 30. juli 2026-udvidelsen:** gen-kør `sql/analytics_dashboard.sql` — den indeholder to nye RPC'er (`admin_analytics_funnel`, `admin_analytics_stories`) og et udvidet `push`-objekt i `admin_analytics_engagement`. Filen er idempotent; ingen anden fil er rørt.
 1. Kør `sql/analytics_events.sql` i Supabase ("Run without RLS"). Verificér: tabellen findes, præcis én policy, en almindelig bruger får 0 rækker ved SELECT.
 2. Kør `sql/analytics_dashboard.sql`. Kør verifikationsblokken nederst i filen — de fleste kan køres FØR nogen events er logget, da de læser `predictions`/`matches`/`user_activity_days` (3 af 4 dashboard-sektioner har derfor reel historik allerede på dag ét; kun Engagement og story-views-signalet i Liga-diagnosen starter tomme).
 3. Merge frontend-branchen (events begynder at strømme ind).

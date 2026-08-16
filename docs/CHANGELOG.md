@@ -9,6 +9,28 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+16. august 2026 — Aktive brugere pr. runde: dashboardet kan for første gang vise en udvikling
+
+**Alt på Analytics-fanen var indtil nu et vindue** — 7, 30 eller 90 dage. Et vindue svarer på, hvordan det står til lige nu, men aldrig på om det går op eller ned, og de to søjlerækker, "Produktets sundhed" havde, målte ISO-uger (mandag) og ikke runder. **Ny sektion, `admin_analytics_rounds`:** én søjle pr. spillerunde, ældst til venstre, med sin egen vælger (12/26/52 runder) og dermed den eneste sektion, panelets dagsvindue ikke gælder for — 7/30/90 dage skærer midt igennem en runde.
+
+**Runden er produktets egen enhed og ikke ugens.** `round_key` går tirsdag til mandag i dansk tid og er global på tværs af turneringer; `date_trunc('week', …)` er mandag. De to grids er forskudt et døgn, så en tirsdagskamp ville lande i en anden spand end den runde, den tæller med i overalt ellers — i Championship, i notifikationerne og på Tip-skærmen.
+
+**To målinger står ved siden af hinanden, og gabet mellem dem er hele oplysningen.** *Spillede* = havde mindst ét muligt tip i runden og afgav mindst ét af dem. *Kom forbi* = havde blot appen åben i rundens uge. Det er samme skelnen som `active_groups` vs. `groups_with_active_member` — og samme lære som liga-diagnosens **bredde**, hvor v1's "andel aktive medlemmer" målte, om folk ÅBNEDE appen, ikke om de SPILLEDE.
+
+**Den oplagte implementering er den forkerte.** At tælle `predictions` direkte pr. runde ville tage tips med på kampe, brugeren ikke havde en deadline på i nogen konkurrence, og kunne give flere spillere end eksponerede — altså en deltagelse over 100 %. Begge tal læses derfor af `analytics_completion_facts`, samme kilde som North Star og Deadline Miss Rate, så de tre ikke kan modsige hinanden.
+
+🔴 **Runden i gang må ikke bære et tal.** `is_open` betyder ikke "spillet færdig", men "ikke alle rundens kampe er låst endnu" — altså at tallene stadig kan vokse. Den vises som en stiplet søjle (`MiniBars` fik en tredje tilstand, `partial`, ved siden af målt og umålt), men bærer hverken overskriftstallet, retningen eller gennemsnittet: **et delvist tal sammenlignet med et helt giver et fald hver eneste gang, uanset hvad brugerne gør.** Samme klasse som `G73`s nævner og `G115`s umålte fejlrate.
+
+**Nye spillere tælles på debut over hele historikken**, ikke inden for vinduet — ellers ville hver flytning af vinduet ligne en strøm af nye brugere. Og **`visitors = null` betyder umålt**, aldrig nul: aktivitetssporingen findes først fra `activity_since`, og en runde, hvis uge begynder før, viser "–" som retention-matrixen gør.
+
+**Verificeret på en rigtig PostgreSQL 16.13 mod det RIGTIGE skema:** `sql/tests/analytics_rounds.sql` (ti påstande) er kørt igennem og **mutations-testet med otte fejl, der faktisk kan ske** — et glemt `distinct` (grain-reglen: samme kamp i to konkurrencer), en debut målt over vinduet, et `visitors` der svarer 0 for en uge uden sporing, et manglende konkurrence-filter, en fremtidig runde tegnet som en tom søjle, en fjernet klampning af `p_rounds`, en serie vendt nyeste-først, og en eksponering talt uden gruppering. Alle otte fanget med en læsbar besked. Fixturen tjekker sig selv (fem runder, ikke fire), så en rundegrænse midt i kørslen fejler højlydt frem for at måle noget andet, end den påstår. 1479 tests (17 nye), lint uændret på loftet (7 advarsler), grønt build.
+
+🔴 **CI fandt `G119` en gang til, og denne gang på en helt ny funktion.** Kontrollen for anons rækkevidde efter grenens egne migreringer (`sql/checks/anon_routine_reach.sql`) svarede `admin_analytics_rounds(integer) … AABEN FOR ANON` med `via_public = t`. Årsagen er den regel, databasen ikke kan håndhæve selv: PostgreSQLs indbyggede default giver PUBLIC — og dermed `anon` — EXECUTE på hver NY funktion, og den post kan ikke fjernes med `alter default privileges`, så hver ny funktion i `public` skal bære sin egen `revoke execute … from public`. **De seks øvrige RPC'er i filen har ingen revoke-linje, og det er ikke en uoverensstemmelse:** `create or replace` arver den eksisterende ACL, så de er dækket af den `revoke execute on all functions`, `#56` kørte engang — kun en funktion, der FØDES, fødes med default-ACL'en. `#65` betalte den samme pris efter et `drop function`; her var det en helt ny. Adgangen er ikke reelt åben (RPC'en er `security definer` bag `analytics_require_admin()` og svarer `forbidden` uden admin-flag, også uden login), men bredden var hele meningen med `#56`. ⚠️ **Filen var allerede kørt i produktionen, da fejlen blev fanget**, så #17 skal køres ÉN GANG TIL; indtil da er `job-heartbeat.yml` rød på netop denne kontrol.
+
+✅ **`sql/analytics_dashboard.sql` (#17) er gen-kørt i produktionen 16. august 2026** (ejeren), før frontend-mergen. Rækkefølgen var ægte den ene vej: en gammel klient kender ikke RPC'en og mærker ingenting, mens en ny klient mod en database uden den ville få `404` og en fejlende runde-sektion. De øvrige seks sektioner er upåvirkede — `useSection` isolerer hver af dem.
+
+---
+
 16. august 2026 — Tier 5 kørt tom: de to delinger kan aflæses, og en forurening kom for dagen
 
 **Backloggens Tier 5 er tømt** (`B37`), og listen er 33 → 32. Tier 1, 2 og 5 er dermed alle tømt samme dag; kun Tier 6 (venter på en udløser) og Tier 7 (udadvendt) bærer rækker.

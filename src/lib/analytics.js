@@ -85,6 +85,13 @@ const loadAnalyticsFunnel = (token, days = 30) =>
 const loadAnalyticsStories = (token, days = 30) =>
   restFetch(`/rest/v1/rpc/admin_analytics_stories`, { method: "POST", token, body: { p_days: days } });
 
+// Runde-serien tager et antal RUNDER og ikke et antal dage. Den er den eneste
+// sektion, panelets dagsvælger ikke gælder for, og det er med vilje: en
+// udvikling aflæses på produktets egen enhed (spillerunden), ikke på 7/30/90
+// dage, som skærer midt igennem en runde.
+const loadAnalyticsRounds = (token, rounds = 12) =>
+  restFetch(`/rest/v1/rpc/admin_analytics_rounds`, { method: "POST", token, body: { p_rounds: rounds } });
+
 // ---------- Tragt for nye brugere ----------
 // RPC'en returnerer én flad `rows`-liste med grouping sets: to scopes
 // (vinduet + alt tid) × (totalen + hver vej ind). Klienten plukker den række,
@@ -271,6 +278,69 @@ function shareSurfaceRows(data) {
   }));
 }
 
+// ---------- Aktive brugere pr. runde ----------
+// Vinduerne er RUNDER og ikke dage. En runde er en uge, så 12 ≈ et kvartal,
+// 26 ≈ et halvår, 52 ≈ et år.
+const ROUND_WINDOWS = [12, 26, 52];
+
+// Læg serien ud til visning: retning mod forrige runde, og de afledte tal,
+// skærmen ellers ville regne inde i sin JSX.
+//
+// 🔴 EN ÅBEN RUNDE FÅR ALDRIG EN RETNING, og det er hele grunden til, at
+// funktionen findes. `is_open` betyder, at ikke alle rundens kampe er låst
+// endnu — altså at tallene stadig kan vokse. En delvis runde sammenlignet med
+// en hel giver et fald hver eneste gang, uanset hvad brugerne gør, og det fald
+// ville blive læst som en udvikling. Runden VISES (den er den nyeste nyhed,
+// man har), men den er mærket, og hverken den eller dens nabo får en pil.
+// Samme klasse som G73's nævner og G115's umålte fejlrate: et tal, der ser
+// målt ud, men ikke er sammenligneligt.
+function roundActivityRows(data) {
+  const rounds = Array.isArray(data?.rounds) ? data.rounds : [];
+  return rounds.map((r, i) => {
+    const prev = i > 0 ? rounds[i - 1] : null;
+    const comparable = prev && !r.is_open && !prev.is_open;
+    return {
+      ...r,
+      // `returning` frem for at lade skærmen trække to tal fra hinanden: nye
+      // og tilbagevendende skal altid summe til spillerne på skærmen.
+      returning: Math.max(0, (r.players ?? 0) - (r.new_players ?? 0)),
+      delta: comparable ? (r.players ?? 0) - (prev.players ?? 0) : null,
+      // Gabet mellem "kom forbi" og "spillede". null når besøg er umålt —
+      // aldrig 0, som ville betyde "alle der kom forbi, spillede".
+      idle_visitors: r.visitors === null || r.visitors === undefined
+        ? null : Math.max(0, r.visitors - (r.players ?? 0)),
+    };
+  });
+}
+
+// Overskriftstallet og retningen. Begge læses af den seneste LUKKEDE runde —
+// en runde i gang er et delvist tal og må hverken bære overskriften eller
+// pilen. Er der ingen lukket runde endnu, er svaret null og ikke et gæt.
+function roundActivitySummary(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const closed = list.filter((r) => !r.is_open);
+  const latest = closed.length ? closed[closed.length - 1] : null;
+  const prev = closed.length > 1 ? closed[closed.length - 2] : null;
+  const open = list.find((r) => r.is_open) || null;
+  const players = closed.map((r) => r.players ?? 0);
+  return {
+    latest,
+    prev,
+    open,
+    closed_rounds: closed.length,
+    delta: latest && prev ? (latest.players ?? 0) - (prev.players ?? 0) : null,
+    // Gennemsnittet er et niveau at holde den seneste runde op mod — regnet
+    // over de lukkede runder alene, af samme grund som pilen.
+    avg_players: players.length
+      ? Math.round((players.reduce((a, b) => a + b, 0) / players.length) * 10) / 10
+      : null,
+    // Summen af debuter i vinduet: hvor meget af spillerbasen der er kommet
+    // til i den viste periode. Åbne runder tælles med her — en debut er en
+    // debut, uanset om runden er færdig.
+    new_players: list.reduce((a, r) => a + (r.new_players ?? 0), 0),
+  };
+}
+
 // ---------- Liga-diagnose ----------
 // Afløser Liga Health Score (juli 2026). Den gamle score var ét 0-100-tal,
 // vægtet ud fra fem faktorer i SQL. Den var for BRED til at bruge: på de fire
@@ -443,4 +513,4 @@ function summarizeDiagnoses(diagnosed) {
   return out;
 }
 
-export { logEvent, logEventOnce, loadAnalyticsHealth, loadAnalyticsEngagement, loadAnalyticsLeagueHealth, loadAnalyticsRetention, loadAnalyticsFunnel, loadAnalyticsStories, diagnoseLeague, diagnoseLeagues, summarizeDiagnoses, LEAGUE_THRESHOLDS, funnelRow, funnelSteps, biggestDrop, fmtMinutes, FUNNEL_STALLS, storyRuleRows, STORY_RULES, shareSurfaceRows, SHARE_SURFACES };
+export { logEvent, logEventOnce, loadAnalyticsHealth, loadAnalyticsEngagement, loadAnalyticsLeagueHealth, loadAnalyticsRetention, loadAnalyticsFunnel, loadAnalyticsStories, loadAnalyticsRounds, roundActivityRows, roundActivitySummary, ROUND_WINDOWS, diagnoseLeague, diagnoseLeagues, summarizeDiagnoses, LEAGUE_THRESHOLDS, funnelRow, funnelSteps, biggestDrop, fmtMinutes, FUNNEL_STALLS, storyRuleRows, STORY_RULES, shareSurfaceRows, SHARE_SURFACES };

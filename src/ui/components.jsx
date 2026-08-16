@@ -539,6 +539,12 @@ function StatGroup({ title, children }) {
 // tegnes som en gråtonet stump med "–" — aldrig som en nulsøjle, der ikke kan
 // skelnes fra et ægte nul. Samme regel som PctGrid følger for retention.
 // `suffix` sættes, når enheden ikke er et antal (fx "%").
+//
+// `partial: true` er den tredje tilstand og kom til med B38: værdien ER målt,
+// men perioden er ikke forbi, så tallet kan stadig vokse. Søjlen tegnes stiplet
+// og halvt gennemsigtig, og dens `title` siger "i gang" — uden den ville den
+// sidste søjle i enhver løbende serie se ud som et fald. Hverken målt eller
+// umålt kunne bære den betydning.
 function MiniBars({ data, color, formatLabel, suffix = "" }) {
   if (!data || !data.length) return <p style={{ ...muted, margin: 0 }}>Ingen data endnu.</p>;
   const max = Math.max(1, ...data.map((d) => (d.value === null || d.value === undefined ? 0 : d.value)));
@@ -546,8 +552,11 @@ function MiniBars({ data, color, formatLabel, suffix = "" }) {
     <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 96, borderBottom: `1px solid ${C.line}`, paddingBottom: 0 }}>
       {data.map((d, i) => {
         const missing = d.value === null || d.value === undefined;
+        const partial = !missing && d.partial;
         return (
-          <div key={i} title={missing ? `${formatLabel(d.key)}: ingen data` : `${formatLabel(d.key)}: ${d.value}${suffix}`}
+          <div key={i} title={missing
+            ? `${formatLabel(d.key)}: ingen data`
+            : `${formatLabel(d.key)}: ${d.value}${suffix}${partial ? " (i gang — tallet kan stadig vokse)" : ""}`}
             style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", minWidth: 0 }}>
             <span style={{ color: C.muted, fontSize: 9, lineHeight: 1, marginBottom: 2, opacity: missing ? 0.5 : 1 }}>
               {missing ? "–" : (d.value || "")}
@@ -556,6 +565,8 @@ function MiniBars({ data, color, formatLabel, suffix = "" }) {
               width: "100%",
               height: missing ? "2px" : `${Math.max(d.value > 0 ? 3 : 0, (d.value / max) * 74)}px`,
               background: missing ? C.line : color,
+              opacity: partial ? 0.45 : 1,
+              border: partial ? `1px dashed ${color}` : undefined,
               borderRadius: "4px 4px 0 0",
             }} />
           </div>

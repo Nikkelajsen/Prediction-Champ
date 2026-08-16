@@ -94,6 +94,43 @@ const METRICS = {
     caveat: "Følger turneringskalenderen. Landsholdspauser giver ægte nul-uger, ikke et datahul.",
   },
 
+  // ---------- Aktive brugere pr. runde ----------
+  round_players: {
+    title: "Aktive brugere pr. runde",
+    what: "Hvor mange forskellige brugere der rent faktisk SPILLEDE hver spillerunde.",
+    how: "Pr. runde: brugere med mindst ét muligt tip i runden, som afgav mindst ét af dem. Hver bruger tælles én gang, uanset hvor mange konkurrencer og turneringer runden dækker for dem.",
+    source: "analytics_completion_facts — samme kilde som North Star og liga-diagnosens bredde, så de tre ikke kan modsige hinanden.",
+    caveat: "Måler deltagelse, ikke tilstedeværelse. En bruger, der åbnede appen hele ugen uden at tippe, er IKKE aktiv her — hun står i 'Kom forbi'. Runden er `round_key`: tirsdag til mandag, dansk tid, og altså ikke den ISO-uge, completion rate pr. uge bruger.",
+  },
+  round_participation: {
+    title: "Deltagelse pr. runde",
+    what: "Hvor stor en del af de brugere, der HAVDE en deadline i runden, som spillede den.",
+    how: "Spillere ÷ eksponerede. Eksponeret = mindst ét muligt tip i runden, altså mindst én låst kamp i en konkurrence, brugeren var meldt til inden låsen.",
+    source: "analytics_completion_facts.",
+    caveat: "Nævneren vokser med brugere, der lige er meldt til, og falder, når en sæson slutter — derfor står spiller- og deltagelsestallet altid ved siden af hinanden. De eksponerede uden ét eneste tip er præcis Deadline Miss Rates tæller, bare pr. runde.",
+  },
+  round_new_players: {
+    title: "Nye spillere pr. runde",
+    what: "Hvor mange af rundens spillere der afgav deres allerførste tip nogensinde i netop den runde.",
+    how: "Brugerens debutrunde er den ældste runde, hun har afgivet et tip i — målt over HELE historikken, ikke over det viste vindue. Resten af rundens spillere er 'kendte'.",
+    source: "analytics_completion_facts.",
+    caveat: "Måles debut inden for vinduet i stedet, ser hver eneste flytning af vinduet ud som en strøm af nye spillere. En bruger kan kun være ny én gang; kommer hun tilbage efter et halvt år, tæller hun som kendt.",
+  },
+  round_visitors: {
+    title: "Kom forbi (rundens uge)",
+    what: "Brugere, der havde appen åben i rundens uge — den svagere måling ved siden af dem, der spillede.",
+    how: "Distinkte brugere med en aktivitetsdag i vinduet [rundens tirsdag, +7 dage). Gabet til spillerne er selve oplysningen: kom de forbi uden at spille?",
+    source: "user_activity_days (samme kilde som DAU/WAU/MAU i Admin → Statistik).",
+    caveat: "TOM celle betyder UMÅLT og ikke nul: aktivitetssporingen findes først fra den dato, der står under tabellen. Aktivitetsdagen er en UTC-dato, mens rundens grænse er dansk midnat, så et besøg mellem 00 og 02 natten til tirsdag falder i den foregående runde.",
+  },
+  round_trend: {
+    title: "Retning mod forrige runde",
+    what: "Forskellen i antal aktive brugere mellem den seneste FÆRDIGE runde og runden før den.",
+    how: "Spillere (seneste lukkede runde) − spillere (runden før). Runden i gang indgår ikke, hverken som tæller eller som sammenligning.",
+    source: "analytics_completion_facts.",
+    caveat: "En runde, hvor ikke alle kampe er låst endnu, er mærket 'i gang' og har hverken pil eller plads i overskriften — dens tal kan stadig vokse, og et delvist tal vil altid ligne et fald.",
+  },
+
   // ---------- Engagement ----------
   event_views: {
     title: "Visninger pr. funktion",

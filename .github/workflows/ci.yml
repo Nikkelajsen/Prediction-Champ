@@ -852,6 +852,21 @@ jobs:
           psql -h localhost -U postgres -d sharesurfaces -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d sharesurfaces -v ON_ERROR_STOP=1 -b -f sql/tests/analytics_share_surfaces.sql
 
+      # Aktive brugere pr. runde (B38). En serie, ingen kan efterprøve i hånden:
+      # fire kilder lagt i én spand pr. runde, og hver fejlmåde er et forkert
+      # TAL og ikke en fejl. Testen kører de otte mutationer, der faktisk kan
+      # ske — bl.a. et glemt `distinct` (grain-reglen), en debut målt over
+      # vinduet i stedet for over historikken, og et `visitors`, der svarer 0
+      # for en uge, sporingen ikke dækker.
+      - name: Test af aktive brugere pr. runde
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database rundeaktivitet;'
+          psql -h localhost -U postgres -d rundeaktivitet -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d rundeaktivitet -v ON_ERROR_STOP=1 -b -f sql/tests/analytics_rounds.sql
+
       # Hændelseskataloget efter #67. Migreringen kan kun sætte check-
       # constrainten i sin helhed og gentager derfor hele listen — altså en
       # kopi, der kan tabe en linje. Testen læser den GAMLE liste ud af skemaet
