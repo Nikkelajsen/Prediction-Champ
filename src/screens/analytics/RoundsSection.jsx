@@ -7,11 +7,23 @@
 // pr. spillerunde, ældst til venstre. Derfor har sektionen også sin EGEN
 // vælger — panelets dagsvælger ville skære midt igennem en runde.
 //
-// TO MÅLINGER VED SIDEN AF HINANDEN, og forskellen er hele pointen:
+// TO MÅLINGER VED SIDEN AF HINANDEN:
 //   · SPILLEDE  — havde en deadline i runden og afgav mindst ét tip.
 //   · KOM FORBI — havde appen åben i rundens uge.
-// Den anden er den svage; gabet mellem dem er "de kigger, men spiller ikke".
-// Samme skelnen som active_groups vs. groups_with_active_member.
+//
+// 🔴 DE TO INDEHOLDER IKKE HINANDEN, og det er den fælde, sektionen faldt i
+// først. Her stod, at gabet mellem dem er "de kigger, men spiller ikke", og der
+// var et felt, som viste differencen. Målt på produktionsdata var "kom forbi"
+// LAVERE end "spillede" i tre af fire runder, så feltet stod på nul hver gang —
+// en `Math.max(0, …)` gjorde et signal til et tavst nul. Grunden er, at de
+// måler forskellige udsnit af TID: "spillede runden" hører til den runde,
+// KAMPENE ligger i, mens "kom forbi" er kalenderugen — og tips kan gives i
+// forvejen, så man kan spille runde R i ugen før R uden at åbne appen i R's
+// egen uge. Dertil var aktivitets-pinget indtil 16. august 2026 bundet til kold
+// app-start alene, så tallet også var et gulv i sig selv.
+//
+// KOM FORBI ER DERFOR ET TAL FOR SIG og ikke en nævner: det siger, hvor mange
+// der var i appen i rundens uge, punktum. En difference må ikke regnes.
 import { useState } from "react";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { loadAnalyticsRounds, roundActivityRows, roundActivitySummary, ROUND_WINDOWS } from "../../lib/analytics.js";
@@ -100,15 +112,6 @@ function RoundsSection({ token }) {
                     ? "besøg er ikke målt for de viste runder"
                     : `gennemsnit ${sum.avg_visitors} over ${roundCount(sum.measured_visitor_rounds)} med målte besøg`}
                   info={<M id="round_visitors" />} />
-                {/* Gabet får sit eget felt, fordi det er det tal, der let
-                    forveksles med en misset deadline — og de to er ikke det
-                    samme: en besøgende behøver slet ikke at have haft en. */}
-                <StatTile label="Kiggede uden at spille"
-                  value={maalt(sum.latest?.idle_visitors) ? sum.latest.idle_visitors : "—"}
-                  hint={maalt(sum.latest?.idle_visitors)
-                    ? `af de ${sum.latest.visitors}, der kom forbi i runden`
-                    : "kræver et målt besøgstal"}
-                  info={<M id="round_idle_visitors" />} />
                 <StatTile label="Nye spillere i alt" value={sum.new_players}
                   hint="brugere med deres allerførste tip" info={<M id="round_new_players" />} />
                 <StatTile label="Deltagelse, seneste færdige runde"
@@ -190,10 +193,11 @@ function RoundsSection({ token }) {
                 En <b>runde</b> går fra tirsdag til mandag, dansk tid (<code>round_key</code>) — den samme enhed som
                 Championship kårer og notifikationerne taler om, og altså ikke den ISO-uge, completion rate bruger.
                 <b> Spillede</b> = havde mindst én låst kamp i en konkurrence og afgav mindst ét tip;
-                <b> kom forbi</b> = havde blot appen åben i rundens uge. Gabet mellem de to er dem, der kiggede uden at spille.
-                <b> "Kom forbi" kan være større end "havde deadline"</b>, og det er ikke en fejl: en besøgende behøver hverken
-                at være med i en konkurrence eller at have en låst kamp i runden. Gabet er derfor ikke det samme som en
-                misset deadline — det tal står som <b>Missede runder</b> i Produktets sundhed.
+                <b> kom forbi</b> = havde blot appen åben i rundens uge.
+                <b> De to tal skal IKKE trækkes fra hinanden</b>, og "kom forbi" kan udmærket være det laveste: de måler
+                forskellige udsnit af tid. "Spillede" hører til den runde, <i>kampene</i> ligger i, mens "kom forbi" er
+                kalenderugen — og tips kan gives i forvejen, så man kan spille en runde i ugen før den uden at åbne appen
+                i rundens egen uge. <b>Kom forbi er desuden et gulv:</b> det tælles kun, når appen har registreret et besøg.
                 <b> Nye</b> tælles på brugerens allerførste tip nogensinde, ikke på det første i vinduet.
                 {data.activity_since
                   ? ` Besøgstal findes først fra ${dtFmt(data.activity_since)}; runder før den dato viser "–" og ikke 0.`

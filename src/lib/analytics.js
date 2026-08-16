@@ -305,10 +305,15 @@ function roundActivityRows(data) {
       // og tilbagevendende skal altid summe til spillerne på skærmen.
       returning: Math.max(0, (r.players ?? 0) - (r.new_players ?? 0)),
       delta: comparable ? (r.players ?? 0) - (prev.players ?? 0) : null,
-      // Gabet mellem "kom forbi" og "spillede". null når besøg er umålt —
-      // aldrig 0, som ville betyde "alle der kom forbi, spillede".
-      idle_visitors: r.visitors === null || r.visitors === undefined
-        ? null : Math.max(0, r.visitors - (r.players ?? 0)),
+      // Her lå `idle_visitors` (kom forbi − spillede) indtil 16. august 2026.
+      // Feltet er FJERNET og ikke rettet, fordi dets forudsætning ikke holder:
+      // de to mål indeholder ikke hinanden. Målt på produktionsdata var "kom
+      // forbi" LAVERE end "spillede" i tre af fire runder, og en `Math.max(0,…)`
+      // gjorde differencen til et tavst nul i stedet for at afsløre det.
+      // To grunde, begge ægte: tips gives i FORVEJEN (man kan spille runde R i
+      // ugen før R og aldrig åbne appen i R's egen uge), og aktivitets-pinget
+      // var indtil samme dag bundet til kold app-start alene. Se DOCUMENTATION
+      // §15 og §21 — `visitors` er et GULV og må ikke trækkes fra `players`.
     };
   });
 }

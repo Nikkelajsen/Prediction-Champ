@@ -42,7 +42,7 @@ const METRICS = {
     what: "Antal forskellige brugere, der har haft appen åben i perioden.",
     how: "Distinkte user_id i user_activity_days, som skrives af touchActivity(), når appen bruges. Én dag pr. bruger pr. dag — ikke antal besøg.",
     source: "user_activity_days (samme kilde som DAU/WAU/MAU i Admin → Statistik).",
-    caveat: "Måler tilstedeværelse, ikke deltagelse. En bruger, der åbner appen hver dag uden nogensinde at tippe, tæller fuldt med her.",
+    caveat: "Måler tilstedeværelse, ikke deltagelse. En bruger, der åbner appen hver dag uden nogensinde at tippe, tæller fuldt med her. ⚠️ Tallet er et GULV før 16. august 2026: aktivitets-pinget blev indtil da kun sendt ved kold app-start, og en PWA bootes sjældent, så en bruger kunne åbne appen hele ugen og efterlade én aktivitetsdag. Fra den dato fyrer pinget også ved hver vækning — tallet hopper derfor op, og det er ikke vækst.",
   },
   active_groups: {
     title: "Aktive ligaer",
@@ -121,14 +121,7 @@ const METRICS = {
     what: "Brugere, der havde appen åben i rundens uge — den svagere måling ved siden af dem, der spillede.",
     how: "Distinkte brugere med en aktivitetsdag i vinduet [rundens tirsdag, +7 dage). Gabet til spillerne er selve oplysningen: kom de forbi uden at spille?",
     source: "user_activity_days (samme kilde som DAU/WAU/MAU i Admin → Statistik).",
-    caveat: "TOM celle betyder UMÅLT og ikke nul: aktivitetssporingen findes først fra den dato, der står under tabellen. Aktivitetsdagen er en UTC-dato, mens rundens grænse er dansk midnat, så et besøg mellem 00 og 02 natten til tirsdag falder i den foregående runde.",
-  },
-  round_idle_visitors: {
-    title: "Kiggede uden at spille",
-    what: "Brugere, der var i appen i rundens uge, men ikke afgav ét eneste tip i runden.",
-    how: "Kom forbi − spillede. Begge tal er distinkte brugere i samme runde, så differencen er brugere og ikke besøg.",
-    source: "user_activity_days minus analytics_completion_facts.",
-    caveat: "Er IKKE det samme som en misset deadline. Tallet rummer også brugere, der slet ikke havde en deadline i runden — nogen uden en konkurrence, eller nogen der først meldte sig til efter kampene låste. 'Missede runder' i Produktets sundhed tæller kun dem, der HAVDE mulige tips og lod dem alle ligge. Tom celle betyder umålt, fordi 'kom forbi' er det.",
+    caveat: "Et GULV, ikke et facit — og det må IKKE trækkes fra 'spillede'. De to mål indeholder ikke hinanden: tips kan gives i forvejen, så man kan spille en runde i ugen før den og aldrig åbne appen i rundens egen uge. Målt på produktionsdata var 'kom forbi' derfor lavere end 'spillede' i tre af fire runder. TOM celle betyder UMÅLT og ikke nul: sporingen findes først fra den dato, der står under tabellen. Aktivitetsdagen er en UTC-dato, mens rundens grænse er dansk midnat, så et besøg mellem 00 og 02 natten til tirsdag falder i den foregående runde. Tallet steg desuden pr. 16. august 2026, hvor pinget begyndte at ramme en genoptaget app og ikke kun en kold start — tal før og efter den dato er ikke sammenlignelige.",
   },
   round_trend: {
     title: "Retning mod forrige runde",

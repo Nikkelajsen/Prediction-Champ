@@ -392,11 +392,22 @@ describe("roundActivityRows — en åben runde må aldrig bære en retning", () 
     }
   });
 
-  it("gabet mellem besøgende og spillere er null, når besøg er umålt — aldrig 0", () => {
+  // `idle_visitors` (kom forbi − spillede) fandtes indtil 16. august 2026 og er
+  // FJERNET, fordi de to mål ikke indeholder hinanden: på produktionsdata var
+  // "kom forbi" lavere end "spillede" i tre af fire runder, og differencen blev
+  // klampet til et tavst nul. Vagten her sikrer, at feltet ikke sniger sig ind
+  // igen — et gab ville blive læst som "kiggede uden at spille", og det er ikke
+  // det, tallet er.
+  it("regner ikke et gab mellem besøgende og spillere", () => {
+    for (const r of roundActivityRows(rundeSvar)) {
+      expect(r).not.toHaveProperty("idle_visitors");
+    }
+  });
+
+  it("bærer besøgstallet igennem, og umålt bliver ved med at være null", () => {
     const rows = roundActivityRows(rundeSvar);
     expect(rows[0].visitors).toBeNull();
-    expect(rows[0].idle_visitors).toBeNull();
-    expect(rows[1].idle_visitors).toBe(3); // 9 kom forbi, 6 spillede
+    expect(rows[1].visitors).toBe(9);
   });
 });
 
@@ -497,8 +508,7 @@ describe("måle-ordbogen — hvert nøgletal skal kunne forklare sig selv", () =
       "league_story_views", "user_retention", "league_retention_agg", "user_cohorts",
       "push_effect", "push_lead_time", "funnel", "funnel_path", "funnel_stalled", "funnel_time",
       "story_rules", "story_never", "story_coverage", "share_surfaces",
-      "round_players", "round_participation", "round_new_players", "round_visitors",
-      "round_idle_visitors", "round_trend",
+      "round_players", "round_participation", "round_new_players", "round_visitors", "round_trend",
     ];
     for (const id of used) expect(metricInfo(id), id).not.toBeNull();
   });

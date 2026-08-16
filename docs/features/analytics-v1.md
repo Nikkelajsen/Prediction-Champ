@@ -488,10 +488,21 @@ Deltagelsen (`play_rate`) er spillere ÷ eksponerede. Begge tal kommer fra samme
 
 **`visitors = null` betyder umålt**, aldrig nul — aktivitetssporingen findes først fra `activity_since`, og en runde, hvis uge begynder før den dato, viser "–". Samme regel som retention-matrixen.
 
-*Tilføjet 16. august 2026:* besøgstallet har sin egen søjlerække og to nøgletal — *kom forbi* og **gabet** (`idle_visitors` = kom forbi − spillede) — fordi det er dét, spørgsmålet "hvor mange var i appen i runden?" handler om, og fordi et måletal, ingen aflæser, ligner "funktionen bruges ikke" (`B37`s lære). To ting skal siges på skærmen, ellers læses tallene forkert:
+*Tilføjet 16. august 2026:* besøgstallet har sin egen søjlerække og sit eget nøgletal, fordi det er dét, spørgsmålet "hvor mange var i appen i runden?" handler om, og fordi et måletal, ingen aflæser, ligner "funktionen bruges ikke" (`B37`s lære).
 
-- 🔴 **Gabet er ikke en misset deadline.** Det rummer også brugere, der slet ikke havde en deadline i runden — nogen uden en konkurrence, eller nogen der først meldte sig til efter kampene låste. `missed` tæller kun dem, der HAVDE mulige tips og lod dem alle ligge.
-- **"Kom forbi" kan være større end "havde deadline"**, og det er ikke en fejl. En besøgende behøver hverken at være med i en konkurrence eller at have en låst kamp i runden.
+🔴 **Rettet efter levering samme dag: et gab-felt (`idle_visitors` = kom forbi − spillede) blev bygget og fjernet igen.** Det hvilede på, at alle spillere også er besøgende, og det holder ikke. Aflæst på produktionsdata:
+
+| Runde | Spillede | Kom forbi |
+|---|---|---|
+| 21. jul. | 17 | 17 |
+| 28. jul. | 19 | **15** |
+| 4. aug. | 20 | **18** |
+| 11. aug. | 17 | **12** |
+
+Feltet stod derfor på **nul i hver eneste runde**, fordi en `Math.max(0, …)` klampede en negativ difference — et signal gjort til et tavst nul. To ægte grunde, og de skal begge stå på skærmen:
+
+- **De måler forskellige udsnit af tid.** *Spillede runden* hører til den runde, KAMPENE ligger i; *kom forbi* er kalenderugen. Tips kan gives i forvejen, så man kan spille runde R i ugen før R og aldrig åbne appen i R's egen uge.
+- **Besøgstallet var et gulv i sig selv.** `touch_activity()` blev indtil samme dag kun kaldt fra `completeAuth`, altså ved kold app-start — og en PWA bootes sjældent. Rettet i samme ombæring (se `DOCUMENTATION.md` §15); ⚠️ tal før og efter 16. august 2026 er ikke sammenlignelige.
 
 Gennemsnittet regner kun på lukkede runder med et MÅLT besøgstal: en umålt uge talt som nul ville halvere tallet i et 52-runders vindue, uden at nogen var blevet væk. Kendt skævhed: aktivitetsdagen er en UTC-dato, mens rundens grænse er dansk midnat, så et besøg mellem 00 og 02 natten til tirsdag falder i den foregående runde.
 
