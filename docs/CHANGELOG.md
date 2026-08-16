@@ -9,6 +9,22 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+16. august 2026 — Hvor mange var i appen i runden? Tallet var målt, men havde ingen plads
+
+**Rækken er lille, fordi målingen allerede fandtes.** `admin_analytics_rounds` har fra første færd svaret `visitors` pr. runde — distinkte brugere med en aktivitetsdag i rundens uge — og `roundActivityRows()` regnede endda gabet `idle_visitors` (kom forbi minus spillede) ud. Men `visitors` stod kun som den sidste kolonne i tabellen, `idle_visitors` blev brugt **ingen steder**, og der var hverken en søjlerække eller et nøgletal. Det er `B37`s lære en gang til: **et måletal, ingen aflæser, ligner "funktionen bruges ikke."** Ingen SQL er rørt, og #17 skal ikke gen-køres for dette.
+
+**"Logget ind" er valgt til at betyde "var i appen", og det er en beslutning og ikke en genvej.** Appen er en PWA, hvor sessionen fornys i baggrunden og folk forbliver logget ind i månedsvis; et tal for faktiske login-hændelser ville derfor måle nye brugere og udlogninger, ikke tilstedeværelse — og det ville oven i købet være et gulv, fordi hændelsesloggen er fire-and-forget. `user_activity_days` er den samme kilde, DAU/WAU/MAU i Statistik-fanen bruger, og `auth.users.last_sign_in_at` er fravalgt af den grund, §15 skrev den ned for.
+
+**Besøgstallet har nu en søjlerække og to nøgletal:** *kom forbi* og **gabet**. Gabet fik sit eget felt frem for en linje i en hint, fordi det er præcis dét tal, der let forveksles med noget andet. 🔴 **Et gab er IKKE en misset deadline:** det rummer også brugere, der slet ikke havde en deadline i runden — nogen uden en konkurrence, eller nogen der først meldte sig til efter kampene låste. "Missede runder" i Produktets sundhed tæller kun dem, der HAVDE mulige tips og lod dem alle ligge. Begge har nu hver sin ⓘ, og forskellen står i begge.
+
+**Fodnoten fik den sætning, der gør to kolonner læsbare sammen:** *"Kom forbi" kan være større end "havde deadline"*, og det er ikke en fejl — en besøgende behøver hverken at være med i en konkurrence eller at have en låst kamp i runden. Uden den sætning ser tabellen ud til at modsige sig selv, og et tal, der ligner en fejl, bliver ikke brugt.
+
+**Gennemsnittet springer de umålte runder over frem for at kalde dem nul.** Aktivitetssporingen findes først fra `activity_since`, så de ældste runder i et 52-runders vindue svarer `null` — talt som nuller ville de halvere gennemsnittet, uden at én eneste bruger var blevet væk. Samme regel som `MiniBars`' gråtoning og retention-matrixens tomme celler, og den er unit-testet fra begge sider. Runden i gang holdes ude af gennemsnittet af den grund, `B38` allerede havde: en uge, der ikke er forbi, er et delvist tal.
+
+**En sprogfejl kom med ud:** "over 1 færdige runder". En forkert bøjning ved siden af et tal læses som en tastefejl og trækker tvivl over selve tallet; `roundCount()` bøjer nu begge steder. 1486 tests (7 nye), lint uændret på loftet (7 advarsler), grønt build. **Intet at køre i Supabase.**
+
+---
+
 16. august 2026 — Aktive brugere pr. runde: dashboardet kan for første gang vise en udvikling
 
 **Alt på Analytics-fanen var indtil nu et vindue** — 7, 30 eller 90 dage. Et vindue svarer på, hvordan det står til lige nu, men aldrig på om det går op eller ned, og de to søjlerækker, "Produktets sundhed" havde, målte ISO-uger (mandag) og ikke runder. **Ny sektion, `admin_analytics_rounds`:** én søjle pr. spillerunde, ældst til venstre, med sin egen vælger (12/26/52 runder) og dermed den eneste sektion, panelets dagsvindue ikke gælder for — 7/30/90 dage skærer midt igennem en runde.

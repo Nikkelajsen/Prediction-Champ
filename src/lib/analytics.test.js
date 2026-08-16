@@ -415,6 +415,31 @@ describe("roundActivitySummary — overskriften læses af den seneste FÆRDIGE r
     expect(s.avg_players).toBe(5); // (4 + 6 + 5) / 3 — ikke (4+6+5+1)/4
   });
 
+  // Besøg har en tredje tilstand, spillere ikke har: UMÅLT. Fixturens første
+  // runde ligger før aktivitetssporingen og svarer null — tælles den som 0,
+  // halveres gennemsnittet, uden at nogen er blevet væk.
+  it("besøgs-gennemsnittet springer de umålte runder over i stedet for at kalde dem nul", () => {
+    const s = roundActivitySummary(roundActivityRows(rundeSvar));
+    expect(s.avg_visitors).toBe(8.5); // (9 + 8) / 2 — hverken /3 (med null) eller /4 (med den åbne)
+    expect(s.measured_visitor_rounds).toBe(2);
+  });
+
+  it("er ingen af de lukkede runder målt, er svaret null og ikke 0", () => {
+    const umaalt = roundActivitySummary(roundActivityRows({
+      rounds: [{ ...rundeSvar.rounds[0], visitors: null }],
+    }));
+    expect(umaalt.avg_visitors).toBeNull();
+    expect(umaalt.measured_visitor_rounds).toBe(0);
+  });
+
+  // Den åbne runde har et RIGTIGT besøgstal (3), men for en uge, der ikke er
+  // forbi. Den må derfor ikke trække gennemsnittet ned, præcis som for spillere.
+  it("den åbne runde tælles ikke med i besøgs-gennemsnittet", () => {
+    const s = roundActivitySummary(roundActivityRows(rundeSvar));
+    expect(s.open.visitors).toBe(3);
+    expect(s.avg_visitors).toBeGreaterThan(3);
+  });
+
   it("nye spillere summeres over HELE vinduet, også den åbne runde", () => {
     const s = roundActivitySummary(roundActivityRows(rundeSvar));
     expect(s.new_players).toBe(7);
@@ -472,7 +497,8 @@ describe("måle-ordbogen — hvert nøgletal skal kunne forklare sig selv", () =
       "league_story_views", "user_retention", "league_retention_agg", "user_cohorts",
       "push_effect", "push_lead_time", "funnel", "funnel_path", "funnel_stalled", "funnel_time",
       "story_rules", "story_never", "story_coverage", "share_surfaces",
-      "round_players", "round_participation", "round_new_players", "round_visitors", "round_trend",
+      "round_players", "round_participation", "round_new_players", "round_visitors",
+      "round_idle_visitors", "round_trend",
     ];
     for (const id of used) expect(metricInfo(id), id).not.toBeNull();
   });

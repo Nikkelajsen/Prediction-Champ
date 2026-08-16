@@ -323,6 +323,12 @@ function roundActivitySummary(rows) {
   const prev = closed.length > 1 ? closed[closed.length - 2] : null;
   const open = list.find((r) => r.is_open) || null;
   const players = closed.map((r) => r.players ?? 0);
+  // Besøg har en tredje tilstand, spillere ikke har: UMÅLT. En runde, hvis uge
+  // begynder før aktivitetssporingen fandtes, svarer `null`, og den må ikke
+  // trækkes ned i et gennemsnit som et nul — så ville de ældste runder i et
+  // 52-runders vindue halvere tallet uden at nogen var blevet væk. Runderne
+  // filtreres derfor FRA, i stedet for at blive talt som 0.
+  const visitors = closed.map((r) => r.visitors).filter((v) => v !== null && v !== undefined);
   return {
     latest,
     prev,
@@ -334,6 +340,13 @@ function roundActivitySummary(rows) {
     avg_players: players.length
       ? Math.round((players.reduce((a, b) => a + b, 0) / players.length) * 10) / 10
       : null,
+    avg_visitors: visitors.length
+      ? Math.round((visitors.reduce((a, b) => a + b, 0) / visitors.length) * 10) / 10
+      : null,
+    // Hvor mange af de lukkede runder besøgstallet overhovedet er målt for.
+    // Står ved siden af gennemsnittet, så "5,0 over 2 runder" ikke kan
+    // forveksles med "5,0 over 12".
+    measured_visitor_rounds: visitors.length,
     // Summen af debuter i vinduet: hvor meget af spillerbasen der er kommet
     // til i den viste periode. Åbne runder tælles med her — en debut er en
     // debut, uanset om runden er færdig.

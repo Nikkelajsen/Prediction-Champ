@@ -53,6 +53,35 @@ describe("RoundsSection", () => {
     expect(html()).toContain("9 spillede runder i alt");
   });
 
+  // Besøgstallet læses af den seneste LUKKEDE runde (9), ikke af den åbne (3),
+  // af samme grund som spiller-tallet: en uge, der ikke er forbi, er delvis.
+  it("viser besøgstallet fra den seneste færdige runde og gabet til dem, der spillede", () => {
+    const h = html();
+    expect(h).toContain("Kom forbi, seneste færdige runde");
+    expect(h).toContain("Kiggede uden at spille");
+    expect(h).toContain("af de 9, der kom forbi i runden"); // 9 kom forbi, 6 spillede → gab 3
+  });
+
+  // Fixturen har tre runder, men kun ÉN lukket med målte besøg: den første er
+  // umålt (visitors: null) og den sidste er i gang. Gennemsnittet skal derfor
+  // være 9 over én runde — ikke 6 (som et null talt som nul ville give) og ikke
+  // 6 (som den åbne runde ville trække det ned til).
+  it("regner besøgs-gennemsnittet på de målte, lukkede runder og siger hvor mange det er", () => {
+    expect(html()).toContain("gennemsnit 9 over 1 færdig runde med målte besøg");
+  });
+
+  it("tegner en søjlerække for besøg, hvor den umålte uge er 'ingen data'", () => {
+    const h = html();
+    expect(h).toContain("Kom forbi (var i appen)");
+    expect(h).toContain("21. jul.: ingen data");
+  });
+
+  // De to kolonner ser ud til at modsige hinanden uden denne sætning: en
+  // besøgende behøver hverken konkurrence eller deadline.
+  it("siger, at 'kom forbi' må overstige 'havde deadline'", () => {
+    expect(html()).toContain('kan være større end');
+  });
+
   // Søjlen for runden i gang er stiplet og halvt gennemsigtig, og dens
   // værktøjstip siger hvorfor. Uden det ville den sidste søjle i serien se ud
   // som et fald frem for som en periode, der ikke er forbi.

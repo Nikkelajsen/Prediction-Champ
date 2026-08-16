@@ -24,6 +24,15 @@ import { M, Section, SubHead, useSection, dayLabel, dtFmt } from "./shared.jsx";
 // og notifikationerne bruger, så en runde kan slås op på tværs af flader.
 const roundLabel = (key) => dayLabel(key);
 
+// "1 færdig runde" mod "2 færdige runder". Et tal med en forkert bøjning
+// læses som en tastefejl og trækker tvivl over selve tallet.
+const roundCount = (n) => (n === 1 ? "1 færdig runde" : `${n} færdige runder`);
+
+// Besøgstallene har tre tilstande, ikke to: et tal, et ægte nul, og UMÅLT.
+// Kun den sidste må blive til "—", og `!value` ville slå et ægte nul sammen
+// med den — altså gøre "ingen kom forbi" til "vi ved det ikke".
+const maalt = (v) => v !== null && v !== undefined;
+
 function RoundsSection({ token }) {
   const [rounds, setRounds] = useState(ROUND_WINDOWS[0]);
   const { data, loading, err } = useSection(() => loadAnalyticsRounds(token, rounds), token, [token, rounds]);
@@ -71,7 +80,7 @@ function RoundsSection({ token }) {
                   {sum.latest
                     ? `Runden fra ${roundLabel(sum.latest.round_key)} · ${sum.latest.players} af ${sum.latest.exposed} med en deadline spillede${sum.latest.play_rate === null ? "" : ` (${sum.latest.play_rate} %)`}`
                     : "Ingen runde er færdig endnu — alle rundens kampe skal være låst."}
-                  {sum.avg_players !== null && ` · gennemsnit ${sum.avg_players} over ${sum.closed_rounds} færdige runder`}
+                  {sum.avg_players !== null && ` · gennemsnit ${sum.avg_players} over ${roundCount(sum.closed_rounds)}`}
                 </div>
                 {sum.open && (
                   <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>
@@ -82,6 +91,24 @@ function RoundsSection({ token }) {
               </div>
 
               <StatGroup title={`De viste ${list.length} runder`}>
+                {/* `visitors` kan være null (en uge før aktivitetssporingen
+                    fandtes) — da skal feltet vise "—" og ikke et 0, der ville
+                    betyde "ingen kom forbi". */}
+                <StatTile label="Kom forbi, seneste færdige runde"
+                  value={maalt(sum.latest?.visitors) ? sum.latest.visitors : "—"}
+                  hint={sum.avg_visitors === null
+                    ? "besøg er ikke målt for de viste runder"
+                    : `gennemsnit ${sum.avg_visitors} over ${roundCount(sum.measured_visitor_rounds)} med målte besøg`}
+                  info={<M id="round_visitors" />} />
+                {/* Gabet får sit eget felt, fordi det er det tal, der let
+                    forveksles med en misset deadline — og de to er ikke det
+                    samme: en besøgende behøver slet ikke at have haft en. */}
+                <StatTile label="Kiggede uden at spille"
+                  value={maalt(sum.latest?.idle_visitors) ? sum.latest.idle_visitors : "—"}
+                  hint={maalt(sum.latest?.idle_visitors)
+                    ? `af de ${sum.latest.visitors}, der kom forbi i runden`
+                    : "kræver et målt besøgstal"}
+                  info={<M id="round_idle_visitors" />} />
                 <StatTile label="Nye spillere i alt" value={sum.new_players}
                   hint="brugere med deres allerførste tip" info={<M id="round_new_players" />} />
                 <StatTile label="Deltagelse, seneste færdige runde"
@@ -104,6 +131,16 @@ function RoundsSection({ token }) {
                 <MiniBars
                   data={list.map((r) => ({ key: r.round_key, value: r.play_rate, partial: r.is_open }))}
                   color={C.green} formatLabel={roundLabel} suffix=" %" />
+              </div>
+              <div>
+                <SubHead>Kom forbi (var i appen) <M id="round_visitors" /></SubHead>
+                {/* Den svagere måling, tegnet under de to stærke, så gabet kan
+                    aflæses ved at sammenligne søjlehøjderne. `visitors` og ikke
+                    `visitors ?? 0`: en uge før aktivitetssporingen fandtes er
+                    UMÅLT og gråtones — et 0 ville betyde "ingen kom forbi". */}
+                <MiniBars
+                  data={list.map((r) => ({ key: r.round_key, value: r.visitors, partial: r.is_open }))}
+                  color={C.muted} formatLabel={roundLabel} />
               </div>
 
               <div style={{ overflowX: "auto" }}>
@@ -154,6 +191,9 @@ function RoundsSection({ token }) {
                 Championship kårer og notifikationerne taler om, og altså ikke den ISO-uge, completion rate bruger.
                 <b> Spillede</b> = havde mindst én låst kamp i en konkurrence og afgav mindst ét tip;
                 <b> kom forbi</b> = havde blot appen åben i rundens uge. Gabet mellem de to er dem, der kiggede uden at spille.
+                <b> "Kom forbi" kan være større end "havde deadline"</b>, og det er ikke en fejl: en besøgende behøver hverken
+                at være med i en konkurrence eller at have en låst kamp i runden. Gabet er derfor ikke det samme som en
+                misset deadline — det tal står som <b>Missede runder</b> i Produktets sundhed.
                 <b> Nye</b> tælles på brugerens allerførste tip nogensinde, ikke på det første i vinduet.
                 {data.activity_since
                   ? ` Besøgstal findes først fra ${dtFmt(data.activity_since)}; runder før den dato viser "–" og ikke 0.`
