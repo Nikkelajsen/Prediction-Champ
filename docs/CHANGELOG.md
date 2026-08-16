@@ -9,6 +9,24 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+16. august 2026 — Tier 2 kørt tom: den halvt afløste SQL-fil siger det nu selv
+
+**Backloggens Tier 2 er tømt** (`G126`), og listen er 34 → 33. Med Tier 1 tømt tidligere samme dag står de to øverste tiers begge uden rækker.
+
+**`sql/story_engine_v2.sql` er kun HALVT afløst, og det er dét, der gør den farlig.** Filens afsnit 3 — `generate_daily_stories()`, godt 350 linjer og over halvdelen af filen — er erstattet af `story_engine_v3.sql` (#47). Afsnittet beskriver reglerne, vægtene og teksterne fuldstændigt og selvsikkert, uden ét ord om, at det er historik. En læser, der åbner filen for at forstå, hvad et dagskort siger, får altså et komplet og forkert svar — og filen er den, navnet peger på.
+
+**Advarslen fandtes, men ikke dér, hvor man læser.** `sql/README.md`s afsnit "Farlige at gen-køre" beskriver risikoen udførligt og præcist. Det er den rigtige plads for gen-kørsels-rækkefølgen og den forkerte for "hvad af dette gælder overhovedet": man slår op i registret, før man kører en fil, ikke mens man læser den.
+
+**Skellet står nu som et banner øverst i filen**, med to lister frem for en advarsel. **Dødt:** `generate_daily_stories()` (v3 udgiver ét dagskort pr. bruger pr. dag i stedet for to, vælger på nyhedsværdi med tærskel 45, udgiver intet dagskort på rundens sidste dag og har ingen akkumulerende karrusel) og `stories_day_uniq` (droppet af #48). **Stadig gældende — og defineret KUN her, hvilket er grunden til, at filen ikke bare kan afskrives:** `stories.period`/`day_key` med deres to constraints, `stories_round_uniq`, `stories_user_round_day_idx`, `latest_story` (hverken #8 eller v3 definerer viewet) og bagstopperen `generate_stories_catchup()`, som `recompute_derived.sql` kalder.
+
+**To markører mere, hvor en læser faktisk lander.** Afsnittet "Hvad v2 tilføjer" lovede to kort om dagen og en karrusel og bærer nu sin egen rettelse; afsnit 3 åbner med, at hele afsnittet er historik, og hvorfor det alligevel bliver stående (filen skal kunne gen-køres i sin helhed). Prioritetsbåndet 110–189 er derimod uændret i v3 — det er reglerne i båndet, der er skiftet ud, ikke båndet.
+
+**Registret modsagde sig selv, og det kom med.** Rækken for #38 i `sql/README.md` sagde "Aktiv" uden at nævne v3 og bar instruktionen *"Gen-kør #8 bagefter"*, mens faresektionen længere nede i samme fil siger, at #8 **ikke** skal med, og at rækkefølgen ved en gen-kørsel er #38 → #47 → #48. **Følger man rækken alene, ruller man v3's dagsmotor tilbage, uden at noget fejler** — nøjagtig den tavse tilbagerulning, `G126` handler om. Rækken bærer nu skellet, og #8-instruktionen står som det, den var: en anvisning til den FØRSTE installation, hvis begrundelse (`generate_stories()`s periode-afgrænsede `delete`) for længst er en del af #8 i repoet.
+
+**Intet at køre i Supabase.** Ændringen er kommentarer i én SQL-fil plus en række i registret; ingen SQL-sætning er rørt, og `git diff` på filen er nul ikke-kommentar-linjer.
+
+---
+
 16. august 2026 — Tier 1 kørt tom: den aflæsning, rækken ventede på, kunne ikke ændre nogen handling
 
 **Backloggens Tier 1 er tømt** (`A57`), og listen er 35 → 34. Tieret rummer det, hvis svar ligger uden for repoet, og `A32` (10. august 2026) har afgjort, at de aflæsninger er ejerens arbejde. **Der blev ingen bestilling denne gang** — rækkens spørgsmål viste sig at kunne afgøres uden tallet.

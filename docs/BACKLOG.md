@@ -53,7 +53,7 @@ eller en linje i "Forkastede ideer".
 
 ## Prioriteret rækkefølge
 
-Alle 34 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 33 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -99,9 +99,7 @@ Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-| # | Hvad | Note |
-|---|---|---|
-| `G126` | `story_engine_v2.sql` beskriver en dagsmotor, der ikke kører længere — og siger det ikke selv | Filens hoved er en komplet, selvsikker beskrivelse af `generate_daily_stories()`, som `story_engine_v3.sql` har erstattet. Advarslen findes kun i `sql/README.md`s statuskolonne og i dens "farlige at gen-køre"-afsnit, altså ikke dér, hvor man læser, når man har filen åben. **Filen er kun HALVT afløst**, og det er dét, der gør den forvirrende: `stories.period`/`day_key`, de to indexes, `latest_story` og `generate_stories_catchup()` er stadig gældende — det er præcis den funktion, der bærer regelteksten, der er død. Ét banner øverst med hvilken halvdel der er hvad. |
+Tomt.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -207,7 +205,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
-| G126 | **`story_engine_v2.sql` beskriver en dagsmotor, der ikke kører længere.** Filens hoved er en komplet og selvsikker beskrivelse af `generate_daily_stories()`, som `story_engine_v3.sql` (#47) har erstattet — og filen siger det ikke selv. | Advarslen findes to steder, og ingen af dem er filen: `sql/README.md`s statuskolonne på #38 og dens "farlige at gen-køre"-afsnit. Begge er de rigtige steder at ADVARE om en gen-kørsel; ingen af dem er der, hvor man kigger, når man har filen åben for at forstå, hvordan motoren virker. **Rækkens vigtigste nuance er, at filen kun er HALVT afløst** — `stories.period`/`day_key`, de to partielle indexes, `latest_story` og `generate_stories_catchup()` er stadig den gældende definition, og en advarsel, der siger "denne fil er forældet", ville derfor være lige så forkert som ingen advarsel. Det, der er dødt, er præcis den funktion, der bærer regelteksten — altså også den halvdel, `G125` handler om. Ét banner øverst, der siger hvilken halvdel der er hvad. | Lille — ét kommentarblok |
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G123 | **Ingen generisk vagt for `drop function` + `revoke` i `sql/`.** | `G119` (14. august 2026) fravalgte en tekstlæsende kontrol, der kræver `revoke execute … from public` efter hvert `drop function` — kun to forekomster fandtes, og en vagt over to koster mere at vedligeholde, end den kan fange. Flyttet til Tier 6: en tredje forekomst gør det til et mønster. | Lille, men ikke før udløseren |
 | G129 | **Et afvist dagskort kan genopstå.** `generate_daily_stories(p_day)` sletter og gen-indsætter dagens rækker ved en gen-kørsel; den nye række har et nyt `id`, og `dismissed_at` blev i graven sammen med den gamle. | Udløses kun af en gen-kørsel EFTER at dagen er gjort færdig — i praksis en resultatrettelse bagud på præcis den dag, brugeren afviste. **Kanten er kendt og står allerede skrevet ved koden** (`src/lib/data/activity.js`, `dismissStory`), tilføjet sammen med `I25` 15. august 2026, som var det, der gav dagskortet et Afvis-kryds overhovedet. Rækken findes, fordi begrundelsen ellers kun ville stå ét sted og aldrig blive taget op igen — ikke fordi den skal rettes nu. Kuren er en `dismissed`-liste pr. `(user_id, day_key)`, altså en tabel, en policy og en ekstra læsning i `loadDayCard` for en kant, ingen endnu har meldt. Flyttet til Tier 6 med den første melding som udløser. | Lille—mellem, men ikke før udløseren |
@@ -253,34 +250,30 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 16. august 2026 (otteogtyvende kørsel) — Tier 1 kørt tom: den aflæsning, rækken ventede på, kunne ikke ændre nogen handling
+### 16. august 2026 (niogtyvende kørsel) — Tier 2 kørt tom: den halvt afløste fil siger det nu selv
 
-**Listen er 35 → 34** (`A57` lukket). **Tier 1 er tomt**, og for anden gang i
-træk blev det tømt uden en eneste ny bestilling til produktionen.
+**Listen er 34 → 33** (`G126` lukket). **Tier 2 er tomt**, og med Tier 1 tømt
+tidligere samme dag er de to øverste tiers begge uden rækker.
 
-**`A57` stod i Tier 1 på ét tal:** hvor mange konkurrencer findes der stadig
-uden liga? Begrundelsen for at ligge her og ikke i Tier 6 var, at nul ville gøre
-"Øvrige konkurrencer" i `LigaerTab.jsx` til et tomt overgangslag, der kunne
-slettes. **Nul kan ikke det**, og rækken bar selv modbeviset to sætninger
-længere nede: `competitions.group_id` er `on delete set null`, så en slettet
-liga lægger sine konkurrencer ned i laget — og sletteboksen i `GroupScreen.jsx`
-lover det udtrykkeligt. Vejen ind ved oprettelse er lukket siden august 2026,
-men den er ikke den eneste vej ind, og den anden er en lovet funktion frem for
-en rest.
+**`sql/story_engine_v2.sql` var kun HALVT afløst, og det var dét, der gjorde
+den farlig.** Filens afsnit 3 — `generate_daily_stories()`, godt 350 linjer,
+over halvdelen af filen — er erstattet af `story_engine_v3.sql`, men afsnittet
+beskriver reglerne fuldstændigt og selvsikkert uden ét ord om, at det er
+historik. Advarslen fandtes udførligt i `sql/README.md`s "Farlige at gen-køre",
+altså netop ikke dér, hvor man læser, når man har filen åben.
 
-**Nul havde i det hele taget ingen handling knyttet til sig.** Blokken renderes
-kun, når `loose.length > 0`, så ved nul viser den allerede ingenting: en
-sletning ville ikke fjerne en pixel, kun evnen til at tage imod den næste
-ligasletning. Tallet kunne højst sige, hvor STOR en migrering ville være, hvis
-man valgte en — aldrig om man skulle.
+**Skellet er nu et banner øverst i filen** med to lister: dødt er
+`generate_daily_stories()` og `stories_day_uniq`; stadig gældende — og defineret
+KUN her — er `stories.period`/`day_key` med deres constraints,
+`stories_round_uniq`, `stories_user_round_day_idx`, `latest_story` og
+bagstopperen `generate_stories_catchup()`. To markører mere, hvor en læser
+faktisk lander: ved "Hvad v2 tilføjer" (to kort om dagen og karrusellen er væk)
+og som første linje i afsnit 3.
 
-**Afgjort frem for aflæst** (ejerens valg): laget er en understøttet tilstand.
-Ordlyden er rettet fire steder — `liga-laget-v1.md` skrev, at sektionen
-*"forsvinder naturligt"*, `LigaerTab.jsx` og `liga/CompetitionCard.jsx` kaldte
-den "overgangslaget", og `DOCUMENTATION.md` §18 sagde allerede det modsatte og
-rigtige, så de to dokumenter modsagde hinanden. Vilkåret står nu i §12.
-
-**Mønsteret fra 13. august holdt en gang til:** en række, der beder om en
-aflæsning, skal først spørges, om svaret ændrer handlingen (`A45`), om det kan
-gemmes i stedet for hentes (`A46`), eller om det kan afgøres (`A47`). `A57`
-faldt på det første.
+**Registret modsagde sig selv, og det kom med.** `sql/README.md`s række for #38
+sagde "Aktiv" uden at nævne v3 og bar instruktionen *"Gen-kør #8 bagefter"*,
+mens filens egen faresektion fem hundrede linjer længere nede siger, at #8 ikke
+skal med, og at rækkefølgen er #38 → #47 → #48. Følger man rækken alene, ruller
+man v3's dagsmotor tilbage uden at noget fejler — præcis den fejl, hele
+`G126` handler om. Rækken bærer nu skellet, og #8-instruktionen står som det,
+den var: en anvisning til den FØRSTE installation.
