@@ -55,6 +55,10 @@ function Frames({ story, frames, token, groupId, onClose, openProfile, userId })
   async function share() {
     try {
       await shareImage((ctx, w, h) => drawStoryCard(cur.view, ctx, w, h), {
+        // Samme regel som dagskortets: framens øjenbryn siger HVAD det er,
+        // mens overskrift og brødtekst allerede står på billedet. Framens eget
+        // øjenbryn og ikke kortets — det er den side, der deles.
+        caption: cur.view.eyebrow || roundStoryEyebrow(story),
         text: storyShareText({ headline: cur.view.headline, body: cur.view.body }),
       });
       logEvent(token, "story_shared", {
