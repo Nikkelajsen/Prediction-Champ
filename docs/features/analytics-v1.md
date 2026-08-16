@@ -590,7 +590,7 @@ Hver tilstand giver en **begrundelse med ligaens egne tal** ("Én af 4 medlemmer
 
 ## 9. Udrulning
 
-0. **Efter 16. august 2026 (`B38`):** gen-kør `sql/analytics_dashboard.sql` — den indeholder RPC 7, `admin_analytics_rounds`. 🔴 Rækkefølgen er ægte den ene vej: en gammel klient kender ikke RPC'en, men en NY klient mod en database uden den får `404` og en fejlende sektion (de øvrige seks er upåvirkede — `useSection` isolerer hver sektion).
+0. **Efter 16. august 2026 (`B38`):** gen-kør `sql/analytics_dashboard.sql` — den indeholder RPC 7, `admin_analytics_rounds`. ✅ **Kørt i produktionen 16. august 2026, før frontend-mergen.** 🔴 Rækkefølgen er ægte den ene vej: en gammel klient kender ikke RPC'en, men en NY klient mod en database uden den får `404` og en fejlende sektion (de øvrige seks er upåvirkede — `useSection` isolerer hver sektion).
 0b. **Efter 30. juli 2026-udvidelsen:** gen-kør `sql/analytics_dashboard.sql` — den indeholder to nye RPC'er (`admin_analytics_funnel`, `admin_analytics_stories`) og et udvidet `push`-objekt i `admin_analytics_engagement`. Filen er idempotent; ingen anden fil er rørt.
 1. Kør `sql/analytics_events.sql` i Supabase ("Run without RLS"). Verificér: tabellen findes, præcis én policy, en almindelig bruger får 0 rækker ved SELECT.
 2. Kør `sql/analytics_dashboard.sql`. Kør verifikationsblokken nederst i filen — de fleste kan køres FØR nogen events er logget, da de læser `predictions`/`matches`/`user_activity_days` (3 af 4 dashboard-sektioner har derfor reel historik allerede på dag ét; kun Engagement og story-views-signalet i Liga-diagnosen starter tomme).

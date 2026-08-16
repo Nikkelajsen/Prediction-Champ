@@ -25,7 +25,7 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 **Verificeret på en rigtig PostgreSQL 16.13 mod det RIGTIGE skema:** `sql/tests/analytics_rounds.sql` (ti påstande) er kørt igennem og **mutations-testet med otte fejl, der faktisk kan ske** — et glemt `distinct` (grain-reglen: samme kamp i to konkurrencer), en debut målt over vinduet, et `visitors` der svarer 0 for en uge uden sporing, et manglende konkurrence-filter, en fremtidig runde tegnet som en tom søjle, en fjernet klampning af `p_rounds`, en serie vendt nyeste-først, og en eksponering talt uden gruppering. Alle otte fanget med en læsbar besked. Fixturen tjekker sig selv (fem runder, ikke fire), så en rundegrænse midt i kørslen fejler højlydt frem for at måle noget andet, end den påstår. 1479 tests (17 nye), lint uændret på loftet (7 advarsler), grønt build.
 
-🔴 **`sql/analytics_dashboard.sql` (#17) skal gen-køres**, og rækkefølgen er ægte den ene vej: en gammel klient kender ikke RPC'en og mærker ingenting, mens en ny klient mod en database uden den får `404` og en fejlende runde-sektion. De øvrige seks sektioner er upåvirkede — `useSection` isolerer hver af dem.
+✅ **`sql/analytics_dashboard.sql` (#17) er gen-kørt i produktionen 16. august 2026** (ejeren), før frontend-mergen. Rækkefølgen var ægte den ene vej: en gammel klient kender ikke RPC'en og mærker ingenting, mens en ny klient mod en database uden den ville få `404` og en fejlende runde-sektion. De øvrige seks sektioner er upåvirkede — `useSection` isolerer hver af dem.
 
 ---
 
