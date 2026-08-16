@@ -116,6 +116,13 @@ const METRICS = {
     source: "analytics_events (event_name = 'opened_league').",
     caveat: "Samme gulv-forbehold som alle andre hændelsestal.",
   },
+  share_surfaces: {
+    title: "Deling",
+    what: "Hvor mange delinger der sendes, og fra hvilken af de fire flader: rundekortet, dagskortet, milepælen og stillingen.",
+    how: "Totalerne er hændelsesnavne: `story_shared` for de tre historie-flader, `standings_shared` for stillingen. Opdelingen af de tre kan kun laves i SQL, fordi den står i `metadata.from` — 'day_card', 'milestone' eller 'frame:ROUND_SUM'/'frame:RATING' for rundekortets to delbare felter. Rækker helt uden `from` er rundekort fra før v3 gav det frames og tælles som rundekort.",
+    source: "analytics_events (story_shared + standings_shared).",
+    caveat: "Samme gulv-forbehold som alle andre hændelsestal — en tabt logning ligner en deling, der ikke skete. Bemærk to ting mere. **En deling tælles pr. TRYK, ikke pr. modtager:** én deling i en gruppechat kan nå ti mennesker. Og **rundekortet tæller pr. felt** — deler man to felter af samme tap-through-story, er det to delinger, hvilket er meningen (det er to forskellige billeder), men det gør fladen mindre sammenlignelig med dagskortet, hvor der kun er ét at dele. Står der 'ikke målt endnu', er `sql/analytics_dashboard.sql` ikke gen-kørt — det er ikke det samme som nul.",
+  },
   push_open_rate: {
     title: "Push Notification Open Rate",
     what: "Hvor stor en del af de sendte push-beskeder, der førte til, at appen blev åbnet fra beskeden.",

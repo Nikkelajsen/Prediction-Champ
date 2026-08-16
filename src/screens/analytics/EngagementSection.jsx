@@ -1,7 +1,7 @@
 // Sektion 2: engagement — aktive brugere, serier og push-effekten.
 import { useState } from "react";
 
-import { loadAnalyticsEngagement } from "../../lib/analytics.js";
+import { loadAnalyticsEngagement, shareSurfaceRows } from "../../lib/analytics.js";
 
 import { C } from "../../ui/theme.js";
 import { StatTile, StatGroup, MiniBars, SignalRow } from "../../ui/components.jsx";
@@ -69,6 +69,8 @@ function EngagementSection({ token, days }) {
   const [metric, setMetric] = useState("opened_home");
   const ev = data?.events || {};
   const series = (data?.events_by_day?.[metric] || []).map((r) => ({ key: r.day, value: r.count }));
+  // `null` = RPC'en er ikke gen-kørt, altså UMÅLT. Må ikke vises som fire nuller.
+  const shares = shareSurfaceRows(data);
 
   return (
     <Section title="Engagement" subtitle="Alle tal her kommer fra hændelsesloggen og er et gulv — se ⓘ." loading={loading} err={err}>
@@ -94,6 +96,31 @@ function EngagementSection({ token, days }) {
             <StatTile label="Invitationer accepteret" value={ev.league_invite_accepted?.count ?? 0}
               hint={`${ev.league_invite_accepted?.users ?? 0} nye medlemmer`} info={<M id="invite_funnel" />} />
           </StatGroup>
+          {/* Deling (B37). De to totaler kommer fra `events`-optællingen og har
+              altid været i svaret — de manglede bare et sted at stå, og et
+              måletal, ingen aflæser, ligner "funktionen bruges ikke".
+              Opdelingen nedenunder kræver derimod, at RPC'en er gen-kørt. */}
+          <StatGroup title="Deling">
+            <StatTile label="Historier delt" value={ev.story_shared?.count ?? 0}
+              hint={`${ev.story_shared?.users ?? 0} brugere · tre flader`} info={<M id="share_surfaces" />} />
+            <StatTile label="Stillinger delt" value={ev.standings_shared?.count ?? 0}
+              hint={`${ev.standings_shared?.users ?? 0} brugere`} info={<M id="share_surfaces" />} />
+          </StatGroup>
+          <div>
+            <SubHead>Hvorfra deles der? <M id="share_surfaces" /></SubHead>
+            {shares
+              ? shares.map((f) => (
+                  <SignalRow key={f.id} label={f.label} value={f.count}
+                    detail={`${f.hint} · ${f.users} ${f.users === 1 ? "bruger" : "brugere"}`} />
+                ))
+              : (
+                <div style={{ color: C.muted, fontSize: 12 }}>
+                  Ikke målt endnu — opdelingen kræver, at <code>sql/analytics_dashboard.sql</code> er
+                  gen-kørt. <b>Ikke det samme som nul delinger:</b> totalerne ovenfor tælles uafhængigt
+                  af den og er rigtige nu.
+                </div>
+              )}
+          </div>
           <StatGroup title="Notifikationer & sessioner">
             <StatTile label="Push Notification Open Rate" value={data.push.open_rate === null ? "—" : `${data.push.open_rate} %`}
               hint={`${data.push.opened} åbnet af ${data.push.sent} sendt`} info={<M id="push_open_rate" />} />

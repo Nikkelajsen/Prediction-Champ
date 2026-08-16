@@ -6,6 +6,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import {
   logEvent, logEventOnce, diagnoseLeague, diagnoseLeagues, summarizeDiagnoses, LEAGUE_THRESHOLDS,
   funnelRow, funnelSteps, biggestDrop, fmtMinutes, storyRuleRows, STORY_RULES,
+  shareSurfaceRows, SHARE_SURFACES,
 } from "./analytics.js";
 import { METRICS, metricInfo } from "./analyticsMetrics.js";
 
@@ -300,6 +301,53 @@ describe("summarizeDiagnoses — optælling frem for gennemsnit", () => {
   });
 });
 
+describe("shareSurfaceRows — umålt må aldrig kunne forveksles med nul", () => {
+  // Hele grunden til, at funktionen findes. Opdelingen af `story_shared` bor i
+  // `metadata.from` og dermed kun i SQL'en, så en klient mod en database, hvor
+  // admin_analytics_engagement ikke er gen-kørt, får slet ingen `shares`. Fire
+  // nuller ville dér betyde "ingen deler noget" — det stik modsatte af "vi
+  // måler ikke endnu". Samme regel som den umålte fejlrate i G115.
+  it("giver null, når RPC'en ikke er gen-kørt", () => {
+    expect(shareSurfaceRows({ events: {} })).toBeNull();
+    expect(shareSurfaceRows({})).toBeNull();
+    expect(shareSurfaceRows(null)).toBeNull();
+    expect(shareSurfaceRows(undefined)).toBeNull();
+  });
+
+  it("giver fire rækker med nul, når vinduet er målt og tomt", () => {
+    const rows = shareSurfaceRows({ shares: {} });
+    expect(rows).toHaveLength(SHARE_SURFACES.length);
+    expect(rows.map((r) => r.id)).toEqual(["round", "day_card", "milestone", "standings"]);
+    for (const r of rows) {
+      expect(r.count).toBe(0);
+      expect(r.users).toBe(0);
+    }
+  });
+
+  it("bærer tallene igennem og udfylder de flader, svaret ikke nævner", () => {
+    const rows = shareSurfaceRows({
+      shares: { day_card: { count: 7, users: 3 }, standings: { count: 2, users: 2 } },
+    });
+    const by = Object.fromEntries(rows.map((r) => [r.id, r]));
+    expect(by.day_card.count).toBe(7);
+    expect(by.day_card.users).toBe(3);
+    expect(by.standings.count).toBe(2);
+    // Ikke nævnt af RPC'en = målt til nul. Den skelnen ligger på `shares`
+    // selv (objektet findes), ikke på den enkelte flade.
+    expect(by.milestone.count).toBe(0);
+    expect(by.round.count).toBe(0);
+  });
+
+  it("hver flade har en etiket og et kildehint, så en række kan læses alene", () => {
+    for (const f of SHARE_SURFACES) {
+      expect(typeof f.label).toBe("string");
+      expect(f.label.length).toBeGreaterThan(0);
+      expect(typeof f.hint).toBe("string");
+      expect(f.hint.length).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe("måle-ordbogen — hvert nøgletal skal kunne forklare sig selv", () => {
   it("hver metrik har titel, hvad, hvordan og kilde", () => {
     for (const [id, m] of Object.entries(METRICS)) {
@@ -324,7 +372,7 @@ describe("måle-ordbogen — hvert nøgletal skal kunne forklare sig selv", () =
       "league_activity", "league_retention", "league_last_activity", "league_competitions",
       "league_story_views", "user_retention", "league_retention_agg", "user_cohorts",
       "push_effect", "push_lead_time", "funnel", "funnel_path", "funnel_stalled", "funnel_time",
-      "story_rules", "story_never", "story_coverage",
+      "story_rules", "story_never", "story_coverage", "share_surfaces",
     ];
     for (const id of used) expect(metricInfo(id), id).not.toBeNull();
   });

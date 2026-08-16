@@ -837,6 +837,21 @@ jobs:
           psql -h localhost -U postgres -d analyticsretention -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d analyticsretention -v ON_ERROR_STOP=1 -b -f sql/tests/analytics_retention.sql
 
+      # Delingsfladerne (B37). Opdelingen af `story_shared` er en case-stige
+      # over `metadata.from`, og hver af dens fejlmåder er TAVS: en flade i den
+      # forkerte spand giver et forkert tal, ikke en fejl. Testen kører de tre
+      # mutationer igennem, der faktisk kan ske — en glemt `else`-gren for de
+      # historiske rækker uden `from`, et manglende navn i `where`, og et
+      # fjernet milepæls-filter i regeltabellen.
+      - name: Test af delingsfladerne (shares + regeltabellen)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database sharesurfaces;'
+          psql -h localhost -U postgres -d sharesurfaces -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d sharesurfaces -v ON_ERROR_STOP=1 -b -f sql/tests/analytics_share_surfaces.sql
+
       # Hændelseskataloget efter #67. Migreringen kan kun sætte check-
       # constrainten i sin helhed og gentager derfor hele listen — altså en
       # kopi, der kan tabe en linje. Testen læser den GAMLE liste ud af skemaet

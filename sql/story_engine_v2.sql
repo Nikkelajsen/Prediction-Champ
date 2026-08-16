@@ -1,5 +1,47 @@
 -- Story Engine v2, trin 2 af 2 — DAGLIGE HISTORIER.
 --
+-- ===========================================================================
+-- 🔶 HALVT AFLØST — LÆS DETTE FØRST (G126, 16. august 2026)
+--
+-- Filen er aktiv, men kun den ene halvdel af den. Det STØRSTE objekt —
+-- `generate_daily_stories()`, afsnit 3 nedenfor og godt 350 linjer, altså
+-- over halvdelen af filen — er erstattet af sql/story_engine_v3.sql (#47).
+-- Regelteksten dér beskriver en dagsmotor, produktionen ikke kører, og den
+-- beskriver den fuldstændigt og selvsikkert. Det er dét, der gør filen farlig
+-- at læse: der stod ikke ét sted i afsnittet, at det er historik.
+--
+-- DØDT — læs sql/story_engine_v3.sql i stedet:
+--   · afsnit 3, `generate_daily_stories(date)`. v3 udgiver højst ÉT dagskort
+--     pr. bruger pr. dag (ikke to), vælger det på en nyhedsværdi-score med
+--     tærskel 45, lader rundens sidste dag udgive intet dagskort, og har
+--     ingen akkumulerende karrusel — rundekortet er blevet tap-through.
+--   · `stories_day_uniq` (afsnit 1). Droppet af story_engine_v3_cleanup.sql
+--     (#48); v3's `stories_day_slot_uniq` er strengere og afviser alt, det
+--     gamle ville have afvist.
+--
+-- STADIG GÆLDENDE — og defineret KUN her, hvilket er grunden til, at filen
+-- ikke bare kan afskrives:
+--   · afsnit 1: `stories.period` + `stories.day_key` med deres to constraints,
+--     samt indeksene `stories_round_uniq` og `stories_user_round_day_idx`.
+--     v3 tilføjer kun kolonnen `news_value` oven på dem.
+--   · afsnit 2: `latest_story`. Hverken story_engine.sql (#8) eller v3
+--     definerer viewet — #8 bærer med vilje kun en henvisning hertil.
+--   · afsnit 4: `generate_stories_catchup()`, bagstopperen, som kaldes af
+--     sql/recompute_derived.sql og af cron-jobbet.
+--
+-- 🛑 SKAL FILEN GEN-KØRES, ER RÆKKEFØLGEN BINDENDE OG HAR TRE TRIN. Filen
+-- indeholder sin egen `generate_daily_stories()` og overskriver v3's uden at
+-- noget fejler — produktionen falder tavst tilbage til to kort om dagen:
+--   1. denne fil (#38)
+--   2. sql/story_engine_v3.sql (#47) — genskaber dagsmotoren, #38 lige
+--      overskrev
+--   3. sql/story_engine_v3_cleanup.sql (#48) — #38 genskabte
+--      `stories_day_uniq`, som #48 er skrevet for at fjerne
+-- `story_engine.sql` (#8) behøver ikke at komme med: den definerer kun
+-- `generate_stories()`, som hverken #38 eller #47 rører. Hele begrundelsen
+-- står i "Farlige at gen-køre" i sql/README.md.
+-- ===========================================================================
+--
 -- KØR sql/story_engine_v2_day.sql FØRST (match_day, match_day_complete,
 -- round_key_of_date, competition_match_points), og GEN-KØR BAGEFTER
 -- sql/story_engine.sql (generate_stories er ændret til at slette periode-
@@ -18,6 +60,10 @@
 -- gennem runden i en vandret karrusel på Hjem (nyeste dag først), og på rundens
 -- sidste dag lægger v1-motorens konkluderende kort sig øverst. Ny runde ⇒ nyt
 -- round_key ⇒ karrusellen er tom af sig selv.
+--
+-- 🔶 Afsnittet ovenfor beskriver v2 og ikke produktionen. To kort om dagen og
+-- karrusellen er væk med v3 (august 2026) — se banneret øverst. DAG-laget
+-- selv, altså kolonnerne og periodeskellet nedenfor, er stadig fundamentet.
 --
 -- ---------------------------------------------------------------------------
 -- TYPER — tre nøgletyper i én tabel. Bland dem ikke.
@@ -116,6 +162,15 @@ order by user_id, round_key, priority asc, league_size desc nulls last, competit
 grant select on public.latest_story to authenticated;
 
 -- ======================= 3. generate_daily_stories() =======================
+--
+-- 🔶 HELE DETTE AFSNIT ER HISTORIK. Funktionen er erstattet af
+-- sql/story_engine_v3.sql (#47), og reglerne, vægtene og teksterne nedenfor er
+-- IKKE dem, en bruger møder. Læs v3, hvis du er kommet hertil for at forstå
+-- eller ændre, hvad et dagskort siger. Afsnittet bliver stående, fordi filen
+-- skal kunne gen-køres i sin helhed (se banneret øverst for rækkefølgen) — og
+-- fordi prioritetsbåndet, typereglen og de øvrige begrundelser herunder stadig
+-- er de gældende; det er reglerne selv, der er udskiftet.
+--
 -- PRIORITETSBÅND 110–189 (180+ reserveret til et dæmpet dagstier, hvis det
 -- nogensinde bliver nødvendigt). Båndet er valgt frem for en parallel
 -- 10–100-stige af tre grunde, i vigtighedsrækkefølge:

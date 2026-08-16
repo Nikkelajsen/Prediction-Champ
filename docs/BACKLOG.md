@@ -47,13 +47,13 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(Tom.)*
+- analytics.test.js' liste over ⓘ-id'er, panelet slår op, vedligeholdes i hånden og mangler allerede story_viewable — kan den udledes af JSX'en?
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 35 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -95,15 +95,11 @@ produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
 gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
 køres på et minut.
 
-| # | Hvad | Note |
-|---|---|---|
-| `A57` | Skal liga-løse konkurrencer migreres ind i en liga, eller bliver de stående for evigt? | **Spørgsmålet kan ikke besvares uden ét tal:** hvor mange liga-løse konkurrencer findes der stadig? Er svaret nul, er "Øvrige konkurrencer" i `LigaerTab.jsx` et overgangslag uden indhold og kan slettes — og det er derfor rækken står her og ikke i Tier 6. Opslaget er `select count(*) from competitions where group_id is null` (plus en fordeling på `created_at`, så det ses, om laget stadig får tilgang). Bemærk, at laget ikke kun fyldes ved oprettelse: `GroupScreen.jsx` flytter en ligas konkurrencer UD i det, når ligaen slettes, så det kan ikke tømmes ved kun at lukke oprettelsesvejen. |
+Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-| # | Hvad | Note |
-|---|---|---|
-| `G126` | `story_engine_v2.sql` beskriver en dagsmotor, der ikke kører længere — og siger det ikke selv | Filens hoved er en komplet, selvsikker beskrivelse af `generate_daily_stories()`, som `story_engine_v3.sql` har erstattet. Advarslen findes kun i `sql/README.md`s statuskolonne og i dens "farlige at gen-køre"-afsnit, altså ikke dér, hvor man læser, når man har filen åben. **Filen er kun HALVT afløst**, og det er dét, der gør den forvirrende: `stories.period`/`day_key`, de to indexes, `latest_story` og `generate_stories_catchup()` er stadig gældende — det er præcis den funktion, der bærer regelteksten, der er død. Ét banner øverst med hvilken halvdel der er hvad. |
+Tomt.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -115,9 +111,7 @@ Tomt.
 
 ### Tier 5 — Robusthed og vedligehold
 
-| # | Hvad | Note |
-|---|---|---|
-| `B37` | De to delinger måles ikke i Admin → Analytics | `standings_shared` (`I22`) har **ingen** aftager i `analytics_dashboard.sql` — navnet står i hændelseskataloget og i CI-testen, men intet panel læser det, så tallet kan kun ses i SQL-editoren. `story_shared` tælles som ét samlet tal (Story Engine-sektionen), og siden `I25` dækker det navn tre forskellige knapper: rundekortet, dagskortet (`from: 'day_card'`) og milepælen (`from: 'milestone'`). En opdeling findes altså i dataene og ikke i aflæsningen. **Hændelserne skrives allerede**, så rækken er en forespørgsel og et panel, ikke ny instrumentering. |
+Tomt.
 
 ### Tier 6 — Venter på en udløser
 
@@ -184,7 +178,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Spørgsmål | Kontekst | Afgøres |
 |---|---|---|---|
-| A57 | **Skal liga-løse konkurrencer migreres ind i en liga, eller bliver de stående for evigt?** | Liga-laget (§18) blev lagt OVEN PÅ de eksisterende konkurrencer, og `LigaerTab.jsx` bærer stadig blokken "Øvrige konkurrencer" med kommentaren *"overgangslag"*. Oprettelse har krævet en liga siden august 2026, så laget kan ikke længere fyldes den vej — men det kan fyldes en anden: sletter man en liga, flytter dens konkurrencer UD i det (`GroupScreen.jsx`, og teksten lover det udtrykkeligt: *"de flytter ud af ligaen og står videre under 'Øvrige konkurrencer' med stilling, tips og kåringer i behold"*). **Et overgangslag, der har en levende tilgangsvej, er ikke et overgangslag, men en understøttet tilstand** — og det er dét, spørgsmålet handler om. **Tre veje:** migrér de eksisterende ind i en auto-oprettet liga og luk vejen (koster en migrering og gør ligasletning dyrere); behold laget og døb det om, så det ikke længere lover at forsvinde; eller lad det stå som i dag og accepter, at "midlertidig" er den forkerte beskrivelse. **Prisen ved at vente er lav og kendt**, hvilket er grunden til, at rækken ikke haster: laget virker, det er bare beskrevet som noget andet, end det er. | **Når det er aflæst, hvor mange liga-løse konkurrencer der findes** — er svaret nul, er de to første veje unødvendige, og rækken skrumper til en oprydning. Opslaget står i Tier 1. |
 | A34 | **Hvornår skiftes Supabase Free ud med Pro?** | Free-planens tre lofter bider i denne rækkefølge: **egress (5 GB/md)** først — appen er REST-fetch-tung, så et sted mellem 200 og 500 ugentligt aktive nærmer forbruget sig loftet; **database (500 MB)** langt senere (tips-rækker er små; `analytics_events` var den hurtigst voksende tabel og har siden `G77`, 7. august 2026, et loft på 18 måneder, så væksten er nu bundet frem for åben); og **backup-vilkåret** er kvalitativt: 24 timers datatab (afsnit 22) er valgt til venner, og når fremmede udgør flertallet, er Pro's backups prisen værd. Aflæses på Supabase-dashboardets Usage-side — én gang om måneden, ikke oftere. Vercel Hobby er IKKE samme spørgsmål: dens tunge trafik skalerer med turneringer, ikke brugere, og skiftet dér udløses af kommercialisering (vilkårene), ikke af brugertal. | Egress nær loftet, eller fremmede i flertal blandt de aktive. |
 | A35 | **Er publiceringstærsklen på 45 den rigtige?** | Story Engine v3 udgiver dagens kort med ulæst-markering, når nyhedsværdien når 45, og som dæmpet `DAY_RESULT` under. Tallet er udledt af grundvægtene (max for `DAY_RESULT` alene er 40), ikke af data — samme slags kvalificerede gæt som v1's A4-tærskler var, og de blev kalibreret på live-data. `story_score_distribution` logger vinderregel, `news_value` og runner-up, så fordelingen kan aflæses uden ny instrumentering. | **Efter to uger med v3 i drift og mindst ti kampdage.** Målet er 40–60 % af kampdagene med ulæst-markering for en aktiv bruger. Over 70 % ⇒ tærsklen er for lav, og v3 har genskabt v2's problem i ny indpakning. Under 25 % ⇒ Hjem er stille igen, og v2's oprindelige problem er tilbage. |
 | A33 | **Er dagsmotorens variation tyndere, end regelantallet lover?** | Story Engine v2 lagde syv dagsregler til, men `DAY_RESULT` alene står for 123 af 280 historier (44 %), og de næste to (`DUEL` 35, `COLLECTIVE_MISS` 19) er tilsammen mindre end halvdelen af den. En motor, der er markedsført på bredde og leverer det samme kort hver anden gang, er en anden oplevelse end tabellen antyder. **Spørgsmålet kan ikke stilles endnu:** ingen af de 197 dagskort er nogensinde blevet vist (`G73`), så der findes ingen, der har oplevet ensformigheden. Måske er 44 % helt rigtigt — "dagens facit" er også den mest almindelige ting at fortælle om en kampdag. **Delvist håndteret af v3 (7. august 2026):** `DAY_RESULT`s 44 % var en konstruktionsfølge — laveste prioritet, udløses altid — og v3 fjerner årsagen ved at give den grundvægt 8, hvilket gør den til fald-tilbage frem for anker. Spørgsmålet om, hvorvidt de øvrige seks regler faktisk varierer, er **ikke** besvaret og skal aflæses på ny fordeling. | Når dagskort faktisk bliver set, altså efter `G73`. |
@@ -203,14 +196,12 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | B20 | **Personlige invite-links** (`invite_links` + `invited_by` på `group_members`/`competition_participants`) | Attributionen "hvem inviterede hvem" findes ikke i skemaet: `groups.invite_code` er én kode pr. liga og ikke pr. bruger, og ingen af medlemstabellerne gemmer afsenderen. Det er derfor, milepælen **"5/10 venner tilmeldt via dit link" ikke kunne bygges** — `milestones` tæller i stedet `LEAGUE_GREW_5/10`, altså hvor mange der kom med i en liga, man har oprettet, hvilket er en anden bedrift. Begrundelsen står ved koden begge steder (`sql/milestones.sql`, `src/lib/milestones.js`) og peger på denne række. **Ventetid er ikke gratis her, og det er rækkens vigtigste egenskab:** attribution kan kun registreres fremad, så en bedrift bygget på den kan først tælle fra udrulningsdagen — de brugere, der allerede er inviteret, tælles aldrig. Gater desuden `I6` (ambassadørprogram), som ikke kan måle noget uden. **`I7` (11. august 2026) rørte flowet uden at trække rækken ind** og er formet, så den kan sættes ind bagefter: `invite_preview()` og `api/invite-preview.js` tager begge en KODE, og en per-bruger-token kan gå ad samme vej. Se `DECISIONS.md` for hvorfor de to attributioner ikke er den samme ting. | Mellem |
 | B28 | **Gentag CL's kickoff-aflæsning, når ligafasen er lodtrukket** | Champions League var den ene af fem turneringer, [`docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md`](./reviews/football-data-kickoff-aflaesning-2026-08-07.md) ikke kunne dække — leverandøren havde pr. 1. august 2026 endnu ikke oprettet sæsonen 2026, fordi ligafasen ikke var lodtrukket (`B8`, lukket 1. august 2026). De fire aflæste turneringer delte sig i to: kun Bundesliga sender en ren midnats-pladsholder (`status: SCHEDULED` + `00:00`), de tre andre sender et opdigtet klokkeslæt for hver ufastsat kamp uden nogen markør at skelne på. Om CL ligner Bundesliga eller de tre andre, afgør om `kickoff_uncertain`s mønstergenkendelse (`G84`/`G85`) også dækker turneringen — og er kun kendt, når svaret aflæses. | Lille (samme PowerShell-opslag, gentaget) |
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. Forespørgslen står i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). **Rækken har stået siden august 2026 med teksten "tilbage står at køre den" — og da den blev kørt 5. august 2026, kunne den ikke:** vinduet partitionerede på `(e.created_at < m.fra)`, som hverken står i `group by` eller er aggregeret, så PostgreSQL afviste den med `42803`. Perioden udledes nu i en CTE, efterprøvet mod PostgreSQL 16.13. **Anden kørsel samme dag afslørede, at kilden var forkert valgt:** hændelsesloggen svarede med tre oprettelser i alt, alle `random` — plausibelt nok ved ~20 testbrugere, men ubrugeligt, fordi `analytics_events` først findes fra 30. juli 2026, så "før mærkatet" var to døgn og ikke appens historik. `competitions.mode` + `created_at` bærer samme oplysning som **rigtige rækker over hele historikken**, og spec'ens §5F er byttet om, så tabellen er den primære kilde og hændelsen kontrollen. **Opslaget er kørt 5. august 2026, og svaret er "ikke endnu":** hele appens historik rummer **syv** konkurrencer — 6 før mærkatet (`time_range` 2, `random` 2, `full_season` 2) og **1** efter (`random`). Med n=1 i den ene periode kan ingen fordeling måles, hvilket er præcis rækkens eget første forbehold. Rækken er derfor flyttet til Tier 6 med en udløser, der kan aflæses med samme opslag: **tosifret `antal` i `efter`-perioden.** Det, der er leveret, er ikke svaret, men at spørgsmålet nu kan stilles — forespørgslen kunne hverken køre eller pege på den rigtige kilde, da rækken blev skrevet. | Lille (opslag) |
-| B37 | **De to delinger har ingen aftager i Admin → Analytics** | `I22` (stillingen kan deles) og `I25` (dagskortet kan deles) skriver begge deres hændelse, og begge navne står i hændelseskataloget — men aflæsningen mangler. `standings_shared` læses af **intet** panel i `analytics_dashboard.sql`, og `story_shared` tælles som ét samlet tal, selvom navnet siden `I25` dækker tre knapper, der skelnes på `metadata.from` (`day_card`, `milestone`, og rundekortet uden felt). **Fælden er den samme, som `#67`s statuskolonne advarer om, bare et lag senere:** et måletal, der ikke aflæses, ligner "funktionen bruges ikke". Rækken er en forespørgsel og et panel — instrumenteringen er der allerede, og `I22`s begrundelse for at give stillingen sit EGET hændelsesnavn (frem for en `via` på `story_shared`) er netop det, der gør opdelingen mulig. | Lille (forespørgsel + panel) |
 | B32 | **Fjern Champions League's "Fra ligafasen"-forbehold på hjemmesidens turneringsliste** | `site/index.html`s turnerings-sektion (merget 13. august 2026) viser Champions League med mærkatet "Fra ligafasen", fordi ligafasen endnu ikke er lodtrukket (samme forudsætning som `B8`/`B28`). Mærkatet skal fjernes samtidig med, at `B28`s kickoff-aflæsning gentages for CL. | Lille — én linje, samme udløser som `B28` |
 
 ## Teknisk gæld
 
 | # | Gæld | Hvorfor den betyder noget | Omfang |
 |---|---|---|---|
-| G126 | **`story_engine_v2.sql` beskriver en dagsmotor, der ikke kører længere.** Filens hoved er en komplet og selvsikker beskrivelse af `generate_daily_stories()`, som `story_engine_v3.sql` (#47) har erstattet — og filen siger det ikke selv. | Advarslen findes to steder, og ingen af dem er filen: `sql/README.md`s statuskolonne på #38 og dens "farlige at gen-køre"-afsnit. Begge er de rigtige steder at ADVARE om en gen-kørsel; ingen af dem er der, hvor man kigger, når man har filen åben for at forstå, hvordan motoren virker. **Rækkens vigtigste nuance er, at filen kun er HALVT afløst** — `stories.period`/`day_key`, de to partielle indexes, `latest_story` og `generate_stories_catchup()` er stadig den gældende definition, og en advarsel, der siger "denne fil er forældet", ville derfor være lige så forkert som ingen advarsel. Det, der er dødt, er præcis den funktion, der bærer regelteksten — altså også den halvdel, `G125` handler om. Ét banner øverst, der siger hvilken halvdel der er hvad. | Lille — ét kommentarblok |
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G123 | **Ingen generisk vagt for `drop function` + `revoke` i `sql/`.** | `G119` (14. august 2026) fravalgte en tekstlæsende kontrol, der kræver `revoke execute … from public` efter hvert `drop function` — kun to forekomster fandtes, og en vagt over to koster mere at vedligeholde, end den kan fange. Flyttet til Tier 6: en tredje forekomst gør det til et mønster. | Lille, men ikke før udløseren |
 | G129 | **Et afvist dagskort kan genopstå.** `generate_daily_stories(p_day)` sletter og gen-indsætter dagens rækker ved en gen-kørsel; den nye række har et nyt `id`, og `dismissed_at` blev i graven sammen med den gamle. | Udløses kun af en gen-kørsel EFTER at dagen er gjort færdig — i praksis en resultatrettelse bagud på præcis den dag, brugeren afviste. **Kanten er kendt og står allerede skrevet ved koden** (`src/lib/data/activity.js`, `dismissStory`), tilføjet sammen med `I25` 15. august 2026, som var det, der gav dagskortet et Afvis-kryds overhovedet. Rækken findes, fordi begrundelsen ellers kun ville stå ét sted og aldrig blive taget op igen — ikke fordi den skal rettes nu. Kuren er en `dismissed`-liste pr. `(user_id, day_key)`, altså en tabel, en policy og en ekstra læsning i `loadDayCard` for en kant, ingen endnu har meldt. Flyttet til Tier 6 med den første melding som udløser. | Lille—mellem, men ikke før udløseren |
@@ -256,46 +247,34 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 16. august 2026 (syvogtyvende kørsel) — Tier 5 kørt: to vagter, hvis fravalg var truffet på en liste over alternativer, der ikke var udtømmende
+### 16. august 2026 (tredivte kørsel) — Tier 5 kørt tom: de to delinger har en aflæsning nu
 
-**Listen er 34 → 35** (`G125` og `G127` lukket, `G129`, `A57` og `B37` kom til
-med indbakken). **Tier 5 er tomt for gæld** og bærer nu kun `B37`.
+**Listen er 33 → 32** (`B37` lukket). **Tier 5 er tomt**, og dermed er Tier 1,
+2 og 5 alle tømt samme dag; kun Tier 6 (venter på en udløser) og Tier 7
+(udadvendt) bærer rækker.
 
-**Fællesnævneren er sjældnere end den lyder, og det er dét, der er værd at
-huske: begge rækker beskrev et fravalg, som var rigtigt begrundet og forkert
-konkluderet.** Ingen af de to hoveder havde regnet forkert — de havde begge
-skrevet "det eneste alternativ ville koste X", og i begge tilfælde fandtes der et
-tredje alternativ, som ikke kostede X. Et fravalg er en påstand om en LISTE, og
-en liste er den slags, der stille bliver forældet, mens argumentet oven på den
-bliver ved med at lyde rigtigt.
+**Halvdelen krævede ingen SQL overhovedet, og det var værd at opdage FØR
+migreringen blev skrevet.** `admin_analytics_engagement` har hele tiden svaret
+`events` som en generisk optælling pr. hændelsesnavn, så både `standings_shared`
+og `story_shared` lå allerede i svaret — de manglede kun et sted at stå. To
+tiles i Engagement-sektionen aflæser dem nu, og de virker uden at røre
+databasen.
 
-**`G125`:** `story-eksempler.test.js` hentede en regels ordlyd i den højeste
-motorfil, der NÆVNTE reglen, og kunne derfor ikke se en regel, v3 havde fjernet.
-Hovedet kaldte hullet permanent og navngav `sql/schema.sql` som eneste
-alternativ — et schema-dump op til en uge bagud (`G124`), altså falsk rød ved
-hver ny regel. Det tredje alternativ lå i SQL'ens egen struktur: et regelafsnit
-bor inde i en `create or replace function`, og en regel er levende, hvis den
-nyeste udgave af DEN FUNKTION stadig har den. `H2H_PASS` i v1 er ægte, fordi
-ingen nyere fil gen-definerer `generate_stories()`; en dagsregel i v2 er død,
-fordi v3 skriver `generate_daily_stories()` om. **Mutations-testet:** fjernes
-`CONTRARIAN` fra v3, er vagten nu rød og navngiver både funktionen og filen —
-hvor den før var grøn, fordi v2 bærer den identiske ordlyd.
+**Opdelingen krævede derimod SQL**, fordi den bor i `metadata.from`:
+`admin_analytics_engagement` svarer nu `shares` med fire flader — rundekort
+(`frame:ROUND_SUM`/`frame:RATING` OG de historiske rækker helt uden `from`),
+dagskort, milepæl og stilling. Ændringen står i `sql/analytics_dashboard.sql`
+(#17) og ikke i en ny migrering: filen er registreret som *"sikker og forventet
+at blive gen-kørt"*, og en kopi af to lange RPC'er ville være præcis den
+landmine, `sql/README.md` advarer mod ved `generate_stories()`.
 
-**`G127`:** `site/img/og-image.png` var lavet uden for repoet, og opskriften lå
-kun i hovedet på den, der lavede den. Fravalget hed "Node kan ikke male med en
-woff2", og det er sandt — men prisen var sat på skriftgengivelse i almindelighed,
-og repoet har siden `I23` (15. august 2026) tegnet PNG'er ved at køre Chromiums
-egen kommandolinje **uden en eneste ny afhængighed**. Skriftgengivelsen var altså
-allerede betalt et andet sted i repoet. Billedet er nu en side
-(`scripts/og-image-site.html`), der kan åbnes i hånden, og et script, der
-fotograferer den — og det gen-genererede billede rammer den håndlavede fils
-geometri inden for 1–2 px.
+**Rækken afdækkede en forurening, ingen havde ledt efter.** Karriereprofilens
+del-knap skriver milepælsnøglen som `rule`, og `MONTH_CHAMP` er BEVIDST både en
+milepælsnøgle og en story-regel (kommentaren står i `src/lib/milestones.js`).
+Milepæls-delinger blev derfor talt med i Story Engine-regeltabellens
+`Delt`-kolonne. De er nu filtreret fra dér og tælles som deres egen flade.
 
-**Det, der kom med, fordi opgaven forudsatte det:** browser-håndteringen er
-skilt ud i `scripts/chromium.mjs` og deles nu af begge aftagere (samme
-udskillelse som `png.mjs` fik under `I23`), og `npm run screenshots` er kørt
-igennem bagefter som bevis — de fire PNG'er er byte-identiske. Det nye script
-har sin egen vagt mod den tavse fejl, det ellers ville indføre: siden svarer
-selv på, om Barlow faktisk blev brugt, og et faldback stopper kørslen frem for
-at skrive et billede med systemskrift.
-
+**Umålt må ikke ligne nul.** Er RPC'en ikke gen-kørt, mangler `shares`, og
+panelet skriver "ikke målt endnu" frem for fire nuller — `G115`s regel en gang
+til. Vagten er `shareSurfaceRows()` med fire tests, og et tomt vindue svarer
+bevidst `{}` og ikke `null`, så "målt til nul" og "umålt" kan skelnes.

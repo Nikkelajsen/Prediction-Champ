@@ -9,6 +9,62 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+16. august 2026 — Tier 5 kørt tom: de to delinger kan aflæses, og en forurening kom for dagen
+
+**Backloggens Tier 5 er tømt** (`B37`), og listen er 33 → 32. Tier 1, 2 og 5 er dermed alle tømt samme dag; kun Tier 6 (venter på en udløser) og Tier 7 (udadvendt) bærer rækker.
+
+**Rækken var, at instrumenteringen var på plads og aflæsningen manglede.** `I22` gav stillingen en Del-knap og sit eget hændelsesnavn; `I25` gav dagskortet en. Begge navne stod i hændelseskataloget og i CI-testen — og intet panel læste dem. **Et måletal, ingen aflæser, ligner "funktionen bruges ikke"**, og det er den dyreste slags nul.
+
+**Halvdelen krævede ingen SQL overhovedet.** `admin_analytics_engagement` har hele tiden svaret `events` som en generisk optælling pr. hændelsesnavn, så både `standings_shared` og `story_shared` lå allerede i svaret og manglede kun et sted at stå. Engagement-sektionen har nu en **Deling**-gruppe med de to totaler, og den virker uden at røre databasen. Det var værd at opdage, før migreringen blev skrevet.
+
+**Opdelingen krævede derimod SQL, fordi den bor i `metadata.from`.** `admin_analytics_engagement` svarer nu `shares`: rundekort, dagskort, milepæl og stilling hver for sig, med både antal og distinkte brugere. Rundekortet dækker to former — v3's `frame:ROUND_SUM`/`frame:RATING` og de historiske rækker fra før frames, som slet ingen `from` har. **Den anden form er den, der let forsvinder:** havner de i en 'ukendt'-spand, mister opgørelsen produktets ældste delingsflade uden at fejle.
+
+**Ændringen står i `sql/analytics_dashboard.sql` (#17) og ikke i en ny migrering.** Filen er registreret som *"sikker og forventet at blive gen-kørt"*, og en ny migrering ville have skullet bære en KOPI af to lange RPC'er — præcis den landmine, `sql/README.md`s "Farlige at gen-køre" advarer mod ved `generate_stories()`: en forældet kopi, der ruller den rigtige tilbage, uden at noget fejler.
+
+**Rækken afdækkede en forurening, ingen havde ledt efter.** Karriereprofilens del-knap skriver milepælens nøgle som `rule`, og `MONTH_CHAMP` er **bevidst** både en milepælsnøgle og en story-regel — kommentaren i `src/lib/milestones.js` siger det med rene ord: *"de bor i hver sit navnerum og betyder det samme øjeblik"*. Følgen var, at karriereprofilens delinger blev talt med i Story Engine-regeltabellens `Delt`-kolonne, mens de øvrige milepælsnøgler faldt tavst ud af joinet. Begge dele er nu rettet: milepæls-delinger filtreres fra regeltabellen og tælles som deres egen flade.
+
+**Umålt må ikke ligne nul.** Er RPC'en ikke gen-kørt, mangler `shares` i svaret, og panelet skriver **"ikke målt endnu"** frem for fire nuller — `G115`s regel en gang til, og de to betyder det stik modsatte. Et tomt vindue svarer bevidst `{}` og ikke `null`, så "målt til nul" og "umålt" kan skelnes. Vagten er `shareSurfaceRows()` i `src/lib/analytics.js` med fire tests.
+
+**Verificeret på en rigtig PostgreSQL 16.13 mod det RIGTIGE skema:** `sql/tests/analytics_share_surfaces.sql` (fem påstande) er kørt igennem, og **mutations-testet med de tre fejl, der faktisk kan ske** — fjernes milepæls-filteret, fanges det; bliver `else 'round'` til `else 'ukendt'`, fanges de historiske rækker; falder `standings_shared` ud af `where`-listen, fanges stillingen. Alle tre gav en læsbar besked. Testen kræver `#67` kørt først, fordi `sql/schema.sql` er et øjebliksbillede fra før den migrering — hvilket i sig selv gentager rækkefølgen fra produktionen. 1462 tests (4 nye), lint uændret på loftet (7 advarsler), grønt build.
+
+✅ **Kørt i produktionen 16. august 2026** (ejeren), så opdelingen vises, så snart frontenden er ude. **Uafhængig af deployet, begge veje** — en gammel klient ignorerer den nye nøgle, en ny klient melder umålt, indtil filen er kørt.
+
+---
+
+16. august 2026 — Tier 2 kørt tom: den halvt afløste SQL-fil siger det nu selv
+
+**Backloggens Tier 2 er tømt** (`G126`), og listen er 34 → 33. Med Tier 1 tømt tidligere samme dag står de to øverste tiers begge uden rækker.
+
+**`sql/story_engine_v2.sql` er kun HALVT afløst, og det er dét, der gør den farlig.** Filens afsnit 3 — `generate_daily_stories()`, godt 350 linjer og over halvdelen af filen — er erstattet af `story_engine_v3.sql` (#47). Afsnittet beskriver reglerne, vægtene og teksterne fuldstændigt og selvsikkert, uden ét ord om, at det er historik. En læser, der åbner filen for at forstå, hvad et dagskort siger, får altså et komplet og forkert svar — og filen er den, navnet peger på.
+
+**Advarslen fandtes, men ikke dér, hvor man læser.** `sql/README.md`s afsnit "Farlige at gen-køre" beskriver risikoen udførligt og præcist. Det er den rigtige plads for gen-kørsels-rækkefølgen og den forkerte for "hvad af dette gælder overhovedet": man slår op i registret, før man kører en fil, ikke mens man læser den.
+
+**Skellet står nu som et banner øverst i filen**, med to lister frem for en advarsel. **Dødt:** `generate_daily_stories()` (v3 udgiver ét dagskort pr. bruger pr. dag i stedet for to, vælger på nyhedsværdi med tærskel 45, udgiver intet dagskort på rundens sidste dag og har ingen akkumulerende karrusel) og `stories_day_uniq` (droppet af #48). **Stadig gældende — og defineret KUN her, hvilket er grunden til, at filen ikke bare kan afskrives:** `stories.period`/`day_key` med deres to constraints, `stories_round_uniq`, `stories_user_round_day_idx`, `latest_story` (hverken #8 eller v3 definerer viewet) og bagstopperen `generate_stories_catchup()`, som `recompute_derived.sql` kalder.
+
+**To markører mere, hvor en læser faktisk lander.** Afsnittet "Hvad v2 tilføjer" lovede to kort om dagen og en karrusel og bærer nu sin egen rettelse; afsnit 3 åbner med, at hele afsnittet er historik, og hvorfor det alligevel bliver stående (filen skal kunne gen-køres i sin helhed). Prioritetsbåndet 110–189 er derimod uændret i v3 — det er reglerne i båndet, der er skiftet ud, ikke båndet.
+
+**Registret modsagde sig selv, og det kom med.** Rækken for #38 i `sql/README.md` sagde "Aktiv" uden at nævne v3 og bar instruktionen *"Gen-kør #8 bagefter"*, mens faresektionen længere nede i samme fil siger, at #8 **ikke** skal med, og at rækkefølgen ved en gen-kørsel er #38 → #47 → #48. **Følger man rækken alene, ruller man v3's dagsmotor tilbage, uden at noget fejler** — nøjagtig den tavse tilbagerulning, `G126` handler om. Rækken bærer nu skellet, og #8-instruktionen står som det, den var: en anvisning til den FØRSTE installation, hvis begrundelse (`generate_stories()`s periode-afgrænsede `delete`) for længst er en del af #8 i repoet.
+
+**Intet at køre i Supabase.** Ændringen er kommentarer i én SQL-fil plus en række i registret; ingen SQL-sætning er rørt, og `git diff` på filen er nul ikke-kommentar-linjer.
+
+---
+
+16. august 2026 — Tier 1 kørt tom: den aflæsning, rækken ventede på, kunne ikke ændre nogen handling
+
+**Backloggens Tier 1 er tømt** (`A57`), og listen er 35 → 34. Tieret rummer det, hvis svar ligger uden for repoet, og `A32` (10. august 2026) har afgjort, at de aflæsninger er ejerens arbejde. **Der blev ingen bestilling denne gang** — rækkens spørgsmål viste sig at kunne afgøres uden tallet.
+
+**Rækken ventede på ét tal:** hvor mange konkurrencer findes der stadig uden liga? Begrundelsen for at stå i Tier 1 og ikke i Tier 6 var, at nul ville gøre "Øvrige konkurrencer"-blokken i `LigaerTab.jsx` til et tomt overgangslag, der kunne slettes. **Nul kan ikke det**, og rækken bar selv modbeviset to sætninger længere nede: `competitions.group_id` er `on delete set null`, så en slettet liga lægger sine konkurrencer ned i laget — og sletteboksen i `GroupScreen.jsx` lover det udtrykkeligt: *"de flytter ud af ligaen og står videre under 'Øvrige konkurrencer' med stilling, tips og kåringer i behold."* Vejen ind ved oprettelse er lukket siden august 2026, men den er ikke den eneste vej ind, og den anden er en lovet funktion frem for en rest.
+
+**Nul havde i det hele taget ingen handling knyttet til sig.** Blokken renderes kun, når `loose.length > 0`, så ved nul viser den allerede ingenting: en sletning af koden ville ikke fjerne en pixel, kun evnen til at tage imod den næste ligasletning. Tallet kunne højst sige, hvor stor en migrering ville være, hvis man valgte en — aldrig om man skulle.
+
+**Beslutningen er derfor truffet frem for aflæst** (ejerens valg): "Øvrige konkurrencer" er en **understøttet tilstand** og ikke et overgangslag. Ingen migrering, ingen ændring af ligasletningen. Alternativet — at lukke tilgangsvejen — kræver, at en ligasletning enten sletter konkurrencer med stilling og historik eller auto-opretter en ny liga; begge er dyrere end det, de fjerner. Vejen UD findes i forvejen og er den rigtige: `move_competition_to_group()` lader opretteren flytte sin egen konkurrence ind i en liga, og det er en beslutning, en bulk-migrering ville tage fra dem.
+
+**Det, der VAR forkert, var ordlyden, og de to dokumenter modsagde allerede hinanden.** `DOCUMENTATION.md` §18 sagde det rigtige — blokken lever videre, fordi `group_id` ikke kan blive `not null` — mens `liga-laget-v1.md` skrev, at sektionen *"forsvinder naturligt, efterhånden som konkurrencer flyttes ind i ligaer"*, og `LigaerTab.jsx` plus `liga/CompetitionCard.jsx` kaldte den "overgangslaget". Spec'en er den, en læser ville tro på. Alle fire steder er rettet, og vilkåret står nu i `DOCUMENTATION.md` §12 blandt de øvrige, der er sådan med vilje. **Ingen adfærdsændring, intet at køre i Supabase, intet deploy-afhængigt.**
+
+**Mønsteret fra 13. august holdt en gang til.** Det står i ROADMAP'en som læren af sidste tømning: en række, der beder om en aflæsning, skal først spørges, om svaret ændrer handlingen (`A45`), om det kan gemmes i stedet for hentes (`A46`), eller om det kan afgøres (`A47`). `A57` faldt på det første spørgsmål — og det er anden gang i træk, at Tier 1 er blevet tomt uden en eneste ny bestilling til produktionen.
+
+---
+
 16. august 2026 — Tier 5 kørt: to fravalg, der var rigtigt begrundet på en liste, som ikke var udtømmende
 
 **Backloggens Tier 5 er tømt for gæld** (`G125` og `G127`), og listen er 34 → 35, fordi indbakkens tre linjer fik ID'er (`G129`, `A57`, `B37`). Fællesnævneren er den mere lærerige af de to slags: **ingen af de to hoveder havde regnet forkert.** Begge havde skrevet "det eneste alternativ ville koste X", og begge havde ret i, hvad X kostede. Det, der var forkert, var ordet *eneste*. Et fravalg er en påstand om en liste over alternativer, og en liste forældes stille, mens argumentet oven på den bliver ved med at lyde rigtigt.

@@ -7,7 +7,8 @@
 // havde sit eget, som ikke viste noget: en konkurrence i en liga stod med navn,
 // mode og deltagerantal, uden pokal, uden vinder og uden at man kunne se, om den
 // overhovedet var slut. Det var den forkerte vej rundt — liga-laget ER stedet,
-// konkurrencer bor, og "Øvrige konkurrencer" er overgangslaget.
+// konkurrencer bor, og "Øvrige konkurrencer" er dem uden (en understøttet
+// tilstand, ikke et overgangslag — `A57`).
 //
 // Delingen går på STATUS-visningen: badge, pokal, fremdrift, flueben og
 // vinderlinje. Handlingerne er forskellige de to steder (Deltag/Frameld inde i

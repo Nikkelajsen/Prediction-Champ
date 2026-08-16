@@ -1,5 +1,15 @@
 // Ligaer-fanen (liga-laget). Øverst: brugerens ligaer (fællesskaber). Nedenunder:
-// "Øvrige konkurrencer" — liga-løse konkurrencer, der virker som før (overgangslag).
+// "Øvrige konkurrencer" — konkurrencer uden liga, som virker som før.
+//
+// Det er en UNDERSTØTTET tilstand og ikke et overgangslag (`A57`, 16. august
+// 2026). Oprettelse har krævet en liga siden august 2026, så vejen IND ved
+// oprettelse er lukket — men laget har en anden, som er levende:
+// `competitions.group_id` er `on delete set null`, så en slettet liga lægger
+// sine konkurrencer herned, og sletteboksen i `GroupScreen.jsx` lover det
+// udtrykkeligt ("de flytter ud af ligaen og står videre under 'Øvrige
+// konkurrencer'"). Blokken kan derfor ikke fjernes, heller ikke den dag ingen
+// bruger den — og den behøver det ikke: den renderes i forvejen kun, når der
+// ER liga-løse konkurrencer, så en tom tilstand koster ingen pixels.
 // Spec: docs/features/liga-laget-v1.md.
 import { useState, useEffect, useCallback } from "react";
 import { ChevronRight, Plus, Archive, Trash2, Users, Info } from "lucide-react";
