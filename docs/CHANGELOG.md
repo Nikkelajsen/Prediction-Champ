@@ -27,7 +27,7 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 **Verificeret på en rigtig PostgreSQL 16.13 mod det RIGTIGE skema:** `sql/tests/analytics_share_surfaces.sql` (fem påstande) er kørt igennem, og **mutations-testet med de tre fejl, der faktisk kan ske** — fjernes milepæls-filteret, fanges det; bliver `else 'round'` til `else 'ukendt'`, fanges de historiske rækker; falder `standings_shared` ud af `where`-listen, fanges stillingen. Alle tre gav en læsbar besked. Testen kræver `#67` kørt først, fordi `sql/schema.sql` er et øjebliksbillede fra før den migrering — hvilket i sig selv gentager rækkefølgen fra produktionen. 1462 tests (4 nye), lint uændret på loftet (7 advarsler), grønt build.
 
-🔶 **Kræver én kørsel i Supabase for at vise opdelingen:** `sql/analytics_dashboard.sql`. **Uafhængig af deployet, begge veje** — en gammel klient ignorerer den nye nøgle, en ny klient melder umålt, indtil filen er kørt.
+✅ **Kørt i produktionen 16. august 2026** (ejeren), så opdelingen vises, så snart frontenden er ude. **Uafhængig af deployet, begge veje** — en gammel klient ignorerer den nye nøgle, en ny klient melder umålt, indtil filen er kørt.
 
 ---
 
