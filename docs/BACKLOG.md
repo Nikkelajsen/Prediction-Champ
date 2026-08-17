@@ -47,7 +47,8 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(Tom.)*
+- `kickoff_uncertain` markerer bekræftede kampe: PL's 15.00-lørdage (14:00 UTC) og PD's 17.00 (15:00 UTC) står med `~`, fordi det indlærte pladsholder-klokkeslæt er turneringens ægte anspilstid — samme kollision, som kandidat A blev forkastet på.
+- Kort holdnavn til visning: `teams.short_name` udfyldt fra football-data.orgs `shortName` (samme svar, nul ekstra kald), så "Real Racing Club de Santander" ikke fylder to linjer — `teams.name` skal blive, da syncen matcher hold på den.
 
 ---
 
