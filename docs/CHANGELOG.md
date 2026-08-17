@@ -9,6 +9,31 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+17. august 2026 — En konkurrence kunne ikke oprettes, og det havde den ikke kunnet i fem dage
+
+- **Rettet (`G130`):** oprettelse af en konkurrence fejlede med `42501: new row
+  violates row-level security policy for table "competitions"` — for hver
+  bruger, i produktionen, siden `#60` blev kørt 12. august. Fejlen er latent:
+  alt andet virkede, og den viste sig først, da nogen faktisk prøvede at oprette
+  en konkurrence.
+- **Årsagen var ikke insert-policyen.** PostgREST sender `Prefer:
+  return=representation`, så et insert er reelt `INSERT … RETURNING *`, og ved
+  RETURNING anvender PostgreSQL også SELECT-policyen på den nye række. Siden
+  `#60` lød den `using (is_competition_visible(id))`, og den funktion slår
+  rækken op i `competitions` **selv** — hvor den endnu ikke findes. Samme insert
+  lykkes uden `returning` og fejler med.
+- **Rettelsen** (`#69 competitions_returning_fix.sql`) lægger `created_by =
+  auth.uid()` ind som hurtig sti foran funktionskaldet. Adgangen er uændret:
+  funktionen bar allerede samme led — det kan nu bare evalueres direkte på den
+  nye række. Klienten røres ikke.
+- **Hullet, der lod det ske:** `sql/tests/read_scope.sql` dækkede `returning *`
+  for `profiles` og `competition_participants`, men ikke for `competitions`.
+  Påstand 7e lukker det, og 7f er modprøven. 7e er efterprøvet ved at fjerne
+  leddet igen og se den fejle.
+- **Fælden er skrevet ind i `DOCUMENTATION.md` §13 som en klasse** frem for som
+  ét tilfælde: en omskrivning fra et inline-prædikat til et funktionskald er
+  aldrig et no-op for en tabel, klienten skriver til.
+
 16. august 2026 — Dagskortet venter ikke længere på en turnering, du ikke er med i
 
 - **Dagskortet udgives nu, når DINE konkurrencer er færdigspillet** (`A39`).

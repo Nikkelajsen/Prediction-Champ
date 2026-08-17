@@ -247,13 +247,24 @@ select pg_temp.kamp(public.round_key_of_date(current_date - 7), null, null);
 select pg_temp.kort(public.round_key_of_date(current_date - 7), 44, 1);
 select pg_temp.kamp(public.round_key_of_date(current_date - 7) + 1, 2, 0);
 
--- 11) I DAG: en færdigspillet kamp i konkurrencen, uden kort. Motoren skriver
---     kortet i samme sætning som resultatet, men kontrollen kan ramme
---     mellemrummet — og efter A39 åbner det mellemrum N gange om dagen frem for
---     én. Dagen må derfor ikke dømmes for et MANGLENDE kort, før den er forbi.
---     Morgendagens kamp holder dagen ude af "rundens sidste dag".
-select pg_temp.kamp(current_date, 1, 0);
-select pg_temp.kamp(current_date + 1, null, null);
+-- 11) EN DAG, DER IKKE ER FORBI: en færdigspillet kamp i konkurrencen, uden
+--     kort. Motoren skriver kortet i samme sætning som resultatet, men
+--     kontrollen kan ramme mellemrummet — og efter A39 åbner det mellemrum N
+--     gange om dagen frem for én. Dagen må derfor ikke dømmes for et MANGLENDE
+--     kort, før den er forbi.
+--
+--     ⚠️ DAGEN ER FORANKRET I EN RUNDE OG IKKE I `current_date` ALENE, af samme
+--     grund som `pg_temp.dag(n)` ovenfor. Den nærliggende form — en kamp i dag
+--     og en i morgen — er afhængig af UGEDAG: falder kørslen på en mandag, er
+--     "i morgen" i den NÆSTE runde, i dag bliver rundens sidste kampdag, og
+--     påstanden måler noget helt andet. Den fejl kostede en rød test 17. august
+--     2026, dagen efter fixturen blev skrevet.
+--
+--     `round_key_of_date(current_date + 7)` er tirsdagen i næste runde og
+--     dermed ALTID mindst i morgen, uanset hvilken dag det er i dag. Onsdagen
+--     samme runde holder den ude af "rundens sidste dag".
+select pg_temp.kamp(public.round_key_of_date(current_date + 7), 1, 0);
+select pg_temp.kamp(public.round_key_of_date(current_date + 7) + 1, null, null);
 
 -- 8) En dag LANGT uden for vinduet, som mangler sit kort. Historiske huller —
 --    fx dem fra før v3 — må ikke kunne ses i kontrollen overhovedet.
@@ -342,13 +353,17 @@ begin
     raise exception 'senere runde: forventede 0 for tidlige kort, fik %', r.for_tidligt;
   end if;
 
-  -- 11) A39: dagen i dag dømmes ikke for et manglende kort.
-  select * into r from day_card_coverage where dag = current_date;
+  -- 11) A39: en dag, der ikke er forbi, dømmes ikke for et manglende kort.
+  select * into r from day_card_coverage
+   where dag = public.round_key_of_date(current_date + 7);
   if r.tilstand <> 'i dag' then
     raise exception 'i dag: en dag, der ikke er forbi, må ikke meldes som MANGLER DAGSKORT — fik %', r.tilstand;
   end if;
   if r.klar <> 1 then
     raise exception 'i dag: forventede 1 klar bruger, fik % — ellers prøver påstanden ingenting', r.klar;
+  end if;
+  if r.kort <> 0 then
+    raise exception 'i dag: dagen skal være UDEN kort, ellers er det ikke MANGLER DAGSKORT, den slipper for — fik % kort', r.kort;
   end if;
 
   -- 8) vinduet

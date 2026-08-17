@@ -48,6 +48,8 @@ pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor
 eller en linje i "Forkastede ideer".
 
 - analytics.test.js' liste over ⓘ-id'er, panelet slår op, vedligeholdes i hånden og mangler allerede story_viewable — kan den udledes af JSX'en?
+- generisk vagt for SELECT-policies, hvis prædikat kalder en funktion, der slår sin egen tabel op — de spærrer enhver skrivning med return=representation (G130, nu set to gange: #55 og #60)
+- de tre inserts i createCompetition() deler ingen transaktion, så en fejl på nr. 2 eller 3 efterlader en halv konkurrence uden deltager eller kampe
 
 ---
 

@@ -1,0 +1,129 @@
+-- En konkurrence kan ikke oprettes: SELECT-policyen kan ikke se sin egen nye
+-- række (`G130`).
+-- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
+--
+-- 📍 `#N` er en migrering: nummeret står i kolonne 1 i filoversigten i
+--    `sql/README.md`, hvor filnavnene er links. `#68` =
+--    `story_engine_personal_day.sql`, denne fil er `#69`.
+--
+-- 🔴 **DETTE ER EN FEJLRETTELSE, OG DEN HASTER: oprettelse af en konkurrence
+-- har været umulig siden `#60` blev kørt 12. august 2026.** Symptomet er
+-- `42501: new row violates row-level security policy for table "competitions"`
+-- ved hvert forsøg, for hver bruger. Fejlen er latent — den viser sig først, når
+-- nogen faktisk opretter en konkurrence — og blev derfor først aflæst 17.
+-- august, i staging, af ejeren.
+--
+-- ✅ **REN RETTELSE — SIKKER AT KØRE NÅR SOM HELST og uafhængigt af et deploy.**
+-- Én policy gen-skabes. Ingen tabel, ingen funktion, ingen rettighed, ingen
+-- række ændres, og **klienten røres ikke** — der er ingen frontend-halvdel.
+--
+-- ---------------------------------------------------------------------------
+-- HVAD DER VAR GALT — OG DET ER IKKE INSERT-CHECKET
+--
+-- Den nærliggende læsning af fejlbeskeden er, at `create competitions`
+-- (`with check (created_by = auth.uid())`) afviser rækken. Det gør den ikke, og
+-- det er efterprøvet frem for udledt: samme insert, samme bruger, samme værdier
+-- **lykkes uden `returning`** og **fejler med `returning *`**.
+--
+-- PostgREST sender `Prefer: return=representation` på hver skrivning, så et
+-- insert fra klienten er reelt `INSERT … RETURNING *`. Og ved RETURNING anvender
+-- PostgreSQL også **SELECT**-policyen på den nye række. Siden `#60` lyder den:
+--
+--     using (public.is_competition_visible(id))
+--
+-- `is_competition_visible()` er `stable` og `security definer`, og den **slår
+-- rækken op i `public.competitions` igen**. Rækken er ved at blive indsat af
+-- netop den sætning og findes ikke i funktionens snapshot. Funktionen svarer
+-- derfor `false`, SELECT-policyen fejler, og hele skrivningen afvises.
+--
+-- ---------------------------------------------------------------------------
+-- FÆLDEN ER GENEREL OG VÆRD AT HUSKE
+--
+-- **En omskrivning fra et inline-prædikat til et funktionskald er ALDRIG et
+-- no-op for en tabel, der skrives til med `Prefer: return=representation`.**
+--
+-- Et inline-prædikat evalueres direkte på den nye række og virker. Et
+-- funktionskald, der slår sin EGEN tabel op, kan pr. konstruktion ikke se den —
+-- og forskellen er usynlig for enhver læsetest, fordi den kun findes i den ene
+-- sætning, hvor rækken endnu ikke er der.
+--
+-- `#60` beskriver sin egen omskrivning som "et no-op (prædikatet er ordret
+-- `#53`s)". Det er sandt for læsninger og falsk for skrivninger, og det er dét,
+-- der gjorde fejlen mulig at indføre uden at nogen så den.
+--
+-- Det er anden gang, samme fælde koster: `#55` (11. august 2026) var den samme
+-- mekanik på `profiles`, og `#60` skrev endda leddet `user_id = auth.uid()` ind
+-- på `competition_participants` netop for at undgå den. Den ene tabel, hvor
+-- policyen IKKE fik et led, der kan evalueres direkte, var `competitions`.
+--
+-- ---------------------------------------------------------------------------
+-- HVORFOR CI VAR GRØN
+--
+-- `sql/tests/read_scope.sql` dækker `returning *` for `profiles` (påstand 5) og
+-- for `competition_participants` (påstand 7a) — men ikke for `competitions`.
+-- Testens egne konkurrencer indsættes som ejer, altså uden om RLS. Hullet i
+-- dækningen lå præcis dér, hvor fejlen bor. Påstand 7c er skrevet sammen med
+-- denne fil og lukker det.
+
+-- ============================================================================
+-- Rettelsen
+-- ============================================================================
+-- 🔴 **LEDDET ER EN HURTIG STI OG IKKE EN UDVIDELSE AF ADGANGEN.**
+-- `is_competition_visible()` bærer allerede `c.created_by = auth.uid()` som sit
+-- FØRSTE led (`sql/read_scope_functions.sql`), så mængden af rækker, en bruger
+-- kan se, er nøjagtig den samme før og efter. Det eneste, der ændrer sig, er at
+-- leddet nu kan evalueres **direkte på den nye række** frem for ved et opslag,
+-- der ikke kan se den.
+--
+-- Formen er ordret den, `#60` selv valgte til `competition_participants`
+-- (`user_id = auth.uid() or …`), og begrundelsen dér er den samme som her —
+-- den blev bare ikke gentaget på denne tabel.
+--
+-- ⚠️ RÆKKEFØLGEN I `or` ER IKKE LIGEGYLDIG. `created_by = auth.uid()` skal stå
+-- FØRST: det er en kolonnesammenligning uden opslag, og PostgreSQL kortslutter
+-- `or` fra venstre. Byttes de om, betaler hver eneste synlig egen konkurrence et
+-- funktionskald, den ikke har brug for.
+drop policy if exists competitions_select_involved on public.competitions;
+create policy competitions_select_involved on public.competitions
+  for select to authenticated
+  using (created_by = auth.uid() or public.is_competition_visible(id));
+
+-- ============================================================================
+-- Verifikation — kør efter migreringen
+-- ============================================================================
+-- ⚠️ Blokkene er KOMMENTERET UD, så hele filen kan pastes i ét stykke.
+--
+-- 1) Policyen har begge led. Forvent ét `t`:
+-- select with_check is null
+--        and qual like '%created_by = auth.uid()%'
+--        and qual like '%is_competition_visible%' as ok
+--   from pg_policies
+--  where schemaname = 'public' and tablename = 'competitions'
+--    and policyname = 'competitions_select_involved';
+--
+-- 2) SELVE FEJLEN, stillet som den var. Sæt dit eget bruger-id, en liga du er
+--    medlem af, og kør. Begge skal svare `ok` — før rettelsen svarede den
+--    anden `afvist:42501`. Intet efterlades: blokken ruller tilbage.
+--
+-- begin;
+-- set local request.jwt.claims = '{"sub":"<dit-uid>","role":"authenticated"}';
+-- set local role authenticated;
+-- insert into public.competitions (name, group_id, created_by, mode)
+-- values ('RLS-test A', '<din-liga>', '<dit-uid>', 'full_season');
+-- insert into public.competitions (name, group_id, created_by, mode)
+-- values ('RLS-test B', '<din-liga>', '<dit-uid>', 'full_season')
+-- returning *;
+-- rollback;
+--
+-- 3) Adgangen er UÆNDRET og ikke udvidet: en konkurrence, du hverken har
+--    oprettet, deltager i eller deler liga med, må stadig ikke kunne ses.
+--    Forvent 0 rækker (kræver en sådan konkurrence i basen for at sige noget):
+-- begin;
+-- set local request.jwt.claims = '{"sub":"<dit-uid>","role":"authenticated"}';
+-- set local role authenticated;
+-- select count(*) from public.competitions c
+--  where c.created_by <> '<dit-uid>'::uuid
+--    and c.group_id is null
+--    and not exists (select 1 from public.competition_participants p
+--                     where p.competition_id = c.id and p.user_id = '<dit-uid>'::uuid);
+-- rollback;
