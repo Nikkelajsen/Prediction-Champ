@@ -53,9 +53,9 @@ dokumentation skal kunne læses uden at læse historikken med.
   `p_now`-argument ville have gjort funktionen til en overload, og PostgREST
   afviser da syncens RPC-kald med "could not choose a candidate function". Det
   var den første udgave af rettelsen, og den blev forkastet af netop den grund.
-- 🔴 **`sql/matches_kickoff_uncertain_round.sql` skal køres i Supabase —
-  produktion og staging.** Adfærdsændring ved kørsel: markeringer **fjernes**,
-  ingen tilføjes. Første kørsel efter migreringen rydder de falske positive og
+- ✅ **`#70 matches_kickoff_uncertain_round.sql` er kørt i staging og produktion
+  17. august 2026.** Adfærdsændring ved kørsel: markeringer **fjernes**, ingen
+  tilføjes — første kørsel efter migreringen rydder de falske positive og
   returnerer antallet.
 - **Endnu ikke gjort:** kort holdnavn til visning (`teams.short_name` fra
   football-data.orgs `shortName`) står i backloggens indbakke. Feltet er
