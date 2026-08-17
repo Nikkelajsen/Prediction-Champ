@@ -60,8 +60,30 @@ begin
 
   select string_agg(navn, ', ' order by navn) into v_nye
   from (select navn from _katalog_efter except select navn from _katalog_foer) t;
-  if v_nye is distinct from 'standings_shared' then
-    raise exception 'forventede præcis "standings_shared" som nyt navn, fik "%"', coalesce(v_nye, '(ingen)');
+
+  -- 🔴 VAGTEN HAVDE EN UDLØBSDATO, OG DEN UDLØB 17. AUGUST 2026 (`G134`).
+  -- Påstanden lød `v_nye is distinct from 'standings_shared'`, altså: forskellen
+  -- skal være PRÆCIS det ene navn. Den kan kun være sand, så længe
+  -- `sql/schema.sql` ligger FØR `#67` — og `schema.sql` er et genereret
+  -- øjebliksbillede, som indhenter produktionen, første gang skema-eksporten
+  -- kører efter migreringen. I det øjeblik er forskellen TOM, og vagten blev
+  -- rød af, at verden var kommet i orden.
+  --
+  -- Det er samme fejlklasse som den, `sql/checks/`-filerne kalder "en alarm, der
+  -- ikke kan blive grøn" — bare med fortegnet vendt: en alarm, der ikke kan
+  -- blive ved med at være grøn. Og den er ikke særegen for denne fil: ENHVER
+  -- test, der læser en tilstand "før migreringen" ud af `schema.sql`, har den.
+  --
+  -- Vagtens egentlige indhold er uændret og står stadig: migreringen må ikke
+  -- tabe navne (ovenfor), og efter den skal `standings_shared` være i kataloget
+  -- (nedenfor). Det, der er blevet blødt op, er kun HVOR navnet kom fra —
+  -- migreringen eller dumpet — og det er ikke noget, vagten har til opgave at
+  -- vide. Alt ANDET end de to lovlige udfald er stadig en fejl.
+  if v_nye is not null and v_nye <> 'standings_shared' then
+    raise exception 'migreringen tilføjede uventede navne: "%"', v_nye;
+  end if;
+  if not exists (select 1 from _katalog_efter where navn = 'standings_shared') then
+    raise exception '"standings_shared" står ikke i kataloget efter migreringen';
   end if;
 end $$;
 

@@ -9,6 +9,27 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+17. august 2026 — En vagt, der ikke kunne blive ved med at være grøn (G134)
+
+- **Rettet:** `sql/tests/analytics_standings_share.sql` påstod, at forskellen på
+  hændelseskataloget før og efter `#67` er **præcis** `standings_shared`. Den
+  påstand kan kun være sand, så længe `sql/schema.sql` ligger FØR migreringen —
+  og `schema.sql` er et genereret øjebliksbillede, der indhenter produktionen,
+  første gang skema-eksporten kører efter den. I det øjeblik er forskellen tom,
+  og vagten blev **rød af, at verden var kommet i orden**.
+- **Fanget før den nåede `main`.** Skema-eksportens pull request oprettes af en
+  workflow og udløser derfor ingen CI (GitHubs værn mod rekursive kørsler), så
+  ingen havde kørt SQL-testene mod det nye dump. De blev kørt i hånden mod både
+  det gamle og det nye: testen bestod mod det gamle og fejlede mod det nye.
+- **Vagtens indhold er uændret.** Migreringen må stadig ikke tabe navne, og
+  `standings_shared` skal stadig stå i kataloget bagefter. Det, der er blødt op,
+  er kun HVOR navnet kom fra — migreringen eller dumpet — og det er ikke noget,
+  vagten har til opgave at vide. Efterprøvet med en mutation: et ekstra navn i
+  migreringen fanges stadig.
+- **Fejlklassen er ikke særegen for filen.** Enhver test, der læser en tilstand
+  *"før migreringen"* ud af `schema.sql`, har den samme udløbsdato. Det står nu
+  ved koden.
+
 17. august 2026 — En konkurrence kunne ikke oprettes, og det havde den ikke kunnet i fem dage
 
 - **Rettet (`G130`):** oprettelse af en konkurrence fejlede med `42501: new row
