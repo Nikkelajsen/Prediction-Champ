@@ -19,7 +19,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict egxlvuOjOq4I3MvpanE20uVfwca4VWZSi7TVXdLlmlkBXfUg3uzcYZ74is0Lr5Z
+\restrict dAbkoLBdSA0uFgEyMbeeolBhOfdWOEqa6IJ1L2eyJ522JeULadBmoIGpTIicLlS
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.11 (Ubuntu 17.11-1.pgdg24.04+2)
@@ -5817,68 +5817,6 @@ $$;
 
 
 --
--- Name: refresh_kickoff_uncertain(uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.refresh_kickoff_uncertain(p_season_id uuid) RETURNS integer
-    LANGUAGE plpgsql
-    AS $$
-declare
-  v_n integer;
-begin
-  -- `drop` først: funktionen kan kaldes to gange i samme transaktion (to sæsoner
-  -- i samme turnering), og `on commit drop` rydder først ved commit. Samme
-  -- mønster som `_se_changed_rounds` i rating_trigger_optimization.sql.
-  drop table if exists _ku_maal;
-  create temporary table _ku_maal on commit drop as
-  with laert as (
-    -- Trin 2. `having count(*) >= 3` er gulvet, og `group by` på klokkeslættet
-    -- er det, der gør, at tre flytninger fra TRE FORSKELLIGE klokkeslæt ikke
-    -- lærer noget: en omberammelse her og der ser ikke ud som et regime.
-    select (m.kickoff_prev_at at time zone 'UTC')::time as tid
-      from public.matches m
-     where m.season_id = p_season_id
-       and m.kickoff_prev_at is not null
-     group by 1
-    having count(*) >= 3
-  ),
-  beregnet as (
-    -- Trin 3. Bemærk at udtrykket også siger `false` — en kamp, hvis tid er
-    -- blevet rettet, eller som er blevet spillet, mister sin markør her.
-    -- `home_score is null` ALENE, uden `away_score`. Hele appen læser netop den
-    -- ene kolonne som "kampen er spillet" (api/sync-matches.js, `_rs` i
-    -- rating_core.sql, G84's kontrol), og en ekstra betingelse, der aldrig kan
-    -- være uenig med den, er en gren, ingen test kan nå — `G84`s egen lære.
-    select m.id,
-           m.home_score is null
-             and exists (
-               select 1 from laert l
-                where l.tid = (m.kickoff_at at time zone 'UTC')::time
-             ) as vaerdi
-      from public.matches m
-     where m.season_id = p_season_id
-  )
-  select b.id, b.vaerdi
-    from beregnet b
-    join public.matches m on m.id = b.id
-   where m.kickoff_uncertain is distinct from b.vaerdi;
-
-  select count(*)::int into v_n from _ku_maal;
-  if v_n = 0 then
-    return 0;
-  end if;
-
-  update public.matches m
-     set kickoff_uncertain = t.vaerdi
-    from _ku_maal t
-   where m.id = t.id;
-
-  return v_n;
-end;
-$$;
-
-
---
 -- Name: remember_participant_baseline(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5911,20 +5849,6 @@ begin
      and first_joined_at > old.joined_at;
 
   return old;
-end;
-$$;
-
-
---
--- Name: remember_previous_kickoff(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.remember_previous_kickoff() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-begin
-  new.kickoff_prev_at := old.kickoff_at;
-  return new;
 end;
 $$;
 
@@ -6128,9 +6052,7 @@ CREATE TABLE public.matches (
     live_minute integer,
     live_updated_at timestamp with time zone,
     kickoff_tbd boolean DEFAULT false NOT NULL,
-    match_day date GENERATED ALWAYS AS (public.match_day(kickoff_at)) STORED,
-    kickoff_prev_at timestamp with time zone,
-    kickoff_uncertain boolean DEFAULT false NOT NULL
+    match_day date GENERATED ALWAYS AS (public.match_day(kickoff_at)) STORED
 );
 
 
@@ -6174,20 +6096,6 @@ COMMENT ON COLUMN public.matches.live_updated_at IS 'Hvornår live-felterne sids
 --
 
 COMMENT ON COLUMN public.matches.kickoff_tbd IS 'Klokkeslættet i kickoff_at er en pladsholder — kun datoen er kendt. Sættes af api/sync-matches ud fra leverandørens egen markør.';
-
-
---
--- Name: COLUMN matches.kickoff_prev_at; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.matches.kickoff_prev_at IS 'Den forrige kickoff_at, gemt af matches_remember_previous_kickoff når tiden flytter sig. Grundlaget for de indlærte pladsholder-klokkeslæt (G85).';
-
-
---
--- Name: COLUMN matches.kickoff_uncertain; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.matches.kickoff_uncertain IS 'Klokkeslættet i kickoff_at er sandsynligvis leverandørens gæt — datoen er kendt. DISPLAY-ONLY: låsen og påmindelserne er upåvirkede, modsat kickoff_tbd. Sættes af refresh_kickoff_uncertain() (G85).';
 
 
 --
@@ -7358,13 +7266,6 @@ CREATE TRIGGER matches_recompute_ratings_ins AFTER INSERT ON public.matches REFE
 --
 
 CREATE TRIGGER matches_recompute_ratings_upd AFTER UPDATE ON public.matches REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public.recompute_ratings_if_scores_changed();
-
-
---
--- Name: matches matches_remember_previous_kickoff; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER matches_remember_previous_kickoff BEFORE UPDATE ON public.matches FOR EACH ROW WHEN ((new.kickoff_at IS DISTINCT FROM old.kickoff_at)) EXECUTE FUNCTION public.remember_previous_kickoff();
 
 
 --
@@ -8640,29 +8541,12 @@ GRANT ALL ON FUNCTION public.recompute_ratings_if_scores_changed() TO service_ro
 
 
 --
--- Name: FUNCTION refresh_kickoff_uncertain(p_season_id uuid); Type: ACL; Schema: public; Owner: -
---
-
-REVOKE ALL ON FUNCTION public.refresh_kickoff_uncertain(p_season_id uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.refresh_kickoff_uncertain(p_season_id uuid) TO service_role;
-
-
---
 -- Name: FUNCTION remember_participant_baseline(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.remember_participant_baseline() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.remember_participant_baseline() TO authenticated;
 GRANT ALL ON FUNCTION public.remember_participant_baseline() TO service_role;
-
-
---
--- Name: FUNCTION remember_previous_kickoff(); Type: ACL; Schema: public; Owner: -
---
-
-REVOKE ALL ON FUNCTION public.remember_previous_kickoff() FROM PUBLIC;
-GRANT ALL ON FUNCTION public.remember_previous_kickoff() TO authenticated;
-GRANT ALL ON FUNCTION public.remember_previous_kickoff() TO service_role;
 
 
 --
@@ -9096,5 +8980,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict egxlvuOjOq4I3MvpanE20uVfwca4VWZSi7TVXdLlmlkBXfUg3uzcYZ74is0Lr5Z
+\unrestrict dAbkoLBdSA0uFgEyMbeeolBhOfdWOEqa6IJ1L2eyJ522JeULadBmoIGpTIicLlS
 
