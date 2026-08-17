@@ -145,6 +145,10 @@ create table public.monthly_standings (
 \ir ../story_engine_v2.sql
 -- milestones FØR v3: dagsmotoren læser tabellen til kapringen (regel 110).
 \ir ../milestones.sql
+-- #68 FØR #47, og rækkefølgen er produktionens (se filens eget hoved):
+-- generate_daily_stories() kalder users_with_complete_day(), og #68 overtager
+-- desuden generate_stories_catchup() fra story_engine_v2.sql ovenfor.
+\ir ../story_engine_personal_day.sql
 \ir ../story_engine_v3.sql
 
 -- GEN-KØRSEL AF story_engine.sql, og den er ikke pynt. Produktionens rækkefølge
@@ -1061,7 +1065,7 @@ begin
   end if;
 end $$;
 
--- ---------- 18. En dag, der stadig spilles, får INTET kort ----------
+-- ---------- 18. Den PERSONLIGE kampdag (A39) ----------
 -- REGRESSIONEN FRA 9. AUGUST 2026. Kravet "dagens sidste kamp er færdigspillet"
 -- lå kun i matches-triggeren, mens `generate_daily_stories()` selv aldrig
 -- spurgte. Bagstopperens dagsløkke filtrerer pr. KAMP (`home_score is not
@@ -1080,9 +1084,28 @@ end $$;
 -- **TRIN 5 ER LIGE SÅ NØDVENDIG.** Uden modprøven ville 18a-18b være opfyldt af
 -- en motor, der var holdt op med at skrive overhovedet — nøjagtig den slags
 -- tavshed, hele denne fils punkt 1 findes for.
+--
+-- 🔴 **BLOKKEN ER SKREVET OM MED `A39` (august 2026), OG PÅSTANDEN ER VENDT.**
+-- Indtil da påstod 18c/18d, at en ufuldstændig dag gav NUL kort — for alle.
+-- Prædikatet var globalt, så det var sandt. Efter den personlige kampdag er en
+-- dag ikke længere færdig eller ufærdig; den er færdig FOR NOGEN. Den åbne kamp
+-- lægges derfor kun i `c1`, og påstanden er nu tvedelt: u4/u5 (kun c1) og
+-- u1/u2/u3 (begge) får INTET, mens u6/u7 (kun c2) får hver ét.
+--
+-- **Den gamle påstand ville stadig bestå med en motor, der havde glemt A39
+-- helt** — nul kort er nul kort. Det er derfor, den todelte form er nødvendig:
+-- den kan kun opfyldes af en motor, der skelner.
+--
+-- Regressionen fra 9. august er stadig dækket, og trin 4 er stadig selve den:
+-- bagstopperen var vejen ind, og en test, der kun kaldte motoren direkte, ville
+-- bevise noget, der aldrig var i tvivl.
 do $$
 declare
   v_sn uuid; v_ta uuid; v_tb uuid; v_mid uuid; v_n int; v_før int;
+  v_klar int; v_omfang int; v_id6 uuid; v_id7 uuid;
+  u4 uuid := '00000000-0000-0000-0000-000000000004';
+  u6 uuid := '00000000-0000-0000-0000-000000000006';
+  u7 uuid := '00000000-0000-0000-0000-000000000007';
 begin
   select id into v_sn from public.seasons
    where league_id = (select id from public.leagues where name = 'Testliga');
@@ -1108,23 +1131,62 @@ begin
     raise exception 'FEJL 18b: dagen meldes komplet, selvom en kamp mangler resultat';
   end if;
 
-  -- (3) Direkte kald til motoren.
+  -- (2b) PRÆDIKATET SELV, og den billigste påstand i blokken. Den fejler først,
+  -- hvis afgrænsningen driver — fx hvis nogen afgrænser til de TIPPEDE kampe i
+  -- stedet for til konkurrencens. u4 er kun i c1 og skal have en åben kamp; u6
+  -- er kun i c2 og skal være klar med præcis fixturens seks kampe... nej, fem:
+  -- m6 er torsdag, m5 onsdag, så tirsdagen er m1-m4 = fire kampe.
+  select count(*) into v_klar from public.users_with_complete_day('2026-03-03');
+  if v_klar <> 2 then
+    raise exception 'FEJL 18b2: % brugere meldes klar, forventede 2 (u6 og u7)', v_klar;
+  end if;
+  if exists (select 1 from public.users_with_complete_day('2026-03-03') u where u.user_id = u4) then
+    raise exception 'FEJL 18b3: u4 meldes klar, men hendes egen konkurrence c1 har en åben kamp';
+  end if;
+  select u.n_matches into v_omfang
+    from public.users_with_complete_day('2026-03-03') u where u.user_id = u6;
+  if v_omfang <> 4 then
+    raise exception 'FEJL 18b4: u6s dagsomfang er %, forventede 4 (m1-m4)', v_omfang;
+  end if;
+
+  -- (3) Direkte kald til motoren. TVEDELT PÅSTAND: u6/u7 får hver ét kort,
+  -- alle andre intet.
   perform public.generate_daily_stories('2026-03-03');
   select count(*) into v_n from public.stories
    where period = 'day' and day_key = '2026-03-03';
-  if v_n <> 0 then
-    raise exception 'FEJL 18c: motoren udgav % kort for en dag, der stadig spilles', v_n;
+  if v_n <> 2 then
+    raise exception 'FEJL 18c: motoren udgav % kort, forventede 2 (u6 og u7)', v_n;
+  end if;
+  if exists (select 1 from public.stories s
+              where s.period = 'day' and s.day_key = '2026-03-03'
+                and s.user_id not in (u6, u7)) then
+    raise exception 'FEJL 18c2: en bruger, hvis egen dag stadig spilles, fik et kort';
   end if;
 
-  -- (4) Bagstopperen — vejen, kortet faktisk kom ad.
+  -- (4) Bagstopperen — vejen, kortet faktisk kom ad 9. august. Den skal nå
+  -- SAMME resultat og må hverken skrive mere eller mindre.
   perform public.generate_stories_catchup(0);
   select count(*) into v_n from public.stories
    where period = 'day' and day_key = '2026-03-03';
-  if v_n <> 0 then
-    raise exception 'FEJL 18d: bagstopperen udgav % kort for en dag, der stadig spilles', v_n;
+  if v_n <> 2 then
+    raise exception 'FEJL 18d: bagstopperen bragte antallet til %, forventede 2', v_n;
   end if;
 
-  -- (5) MODPRØVEN: dagen bliver færdig, og kortene kommer.
+  -- (4b) …og den skal DRÆNE. Klasse 2 kvalificerer kun dagen, så længe en klar
+  -- bruger mangler sit kort; u6 og u7 har deres nu. Uden denne påstand ville
+  -- endelighedsargumentet i #68 være en formodning.
+  select id into v_id6 from public.stories
+   where period = 'day' and day_key = '2026-03-03' and user_id = u6;
+  select id into v_id7 from public.stories
+   where period = 'day' and day_key = '2026-03-03' and user_id = u7;
+  perform public.generate_stories_catchup(0);
+  if not exists (select 1 from public.stories
+                  where period = 'day' and day_key = '2026-03-03'
+                    and user_id = u6 and id = v_id6) then
+    raise exception 'FEJL 18d2: bagstopperen skrev u6s kort om, selvom intet var ændret';
+  end if;
+
+  -- (5) MODPRØVEN: dagen bliver færdig for alle, og resten af kortene kommer.
   update public.matches set home_score = 1, away_score = 1 where id = v_mid;
   if not public.match_day_complete('2026-03-03') then
     raise exception 'FEJL 18e: dagen meldes stadig ufuldstændig, efter sidste resultat er inde';
@@ -1134,6 +1196,164 @@ begin
    where period = 'day' and day_key = '2026-03-03';
   if v_n = 0 then
     raise exception 'FEJL 18f: den færdige dag gav ingen kort — værnet lukker mere end den skal';
+  end if;
+  if v_n <> 7 then
+    raise exception 'FEJL 18f2: den færdige dag gav % kort, forventede 7', v_n;
+  end if;
+
+  -- (6) A'S KORT OVERLEVER B'S KØRSEL — den påstand, hele forliget findes for.
+  -- `id`-lighed er den ENESTE form, der kan skelne "kortet overlevede" fra
+  -- "kortet blev slettet og skrevet identisk igen", og det er netop dén forskel,
+  -- `dismissed_at` og ulæst-prikken kan mærke. Uden den ville den gamle globale
+  -- delete bestå hver eneste påstand ovenfor.
+  if not exists (select 1 from public.stories
+                  where period = 'day' and day_key = '2026-03-03'
+                    and user_id = u6 and id = v_id6) then
+    raise exception 'FEJL 18g: u6s kort fra den halve dag blev slettet, da u1-u5 fik deres';
+  end if;
+  if not exists (select 1 from public.stories
+                  where period = 'day' and day_key = '2026-03-03'
+                    and user_id = u7 and id = v_id7) then
+    raise exception 'FEJL 18g2: u7s kort fra den halve dag blev slettet, da u1-u5 fik deres';
+  end if;
+end $$;
+
+-- ---------- 19. Forliget: ingen churn, men en rettelse skriver stadig om ----------
+-- **DEN HYPPIGSTE KØRSEL EFTER A39 ER DEN, DER INTET ÆNDRER.** Motoren kaldes
+-- nu ved hvert slutfløjt, der gør nogens dag færdig — fire-fem gange på en stor
+-- lørdag frem for én. Skrev den dagens rækker om hver gang, ville en bruger,
+-- hvis tal ikke havde flyttet sig siden kl. 16, få nyt `id`, nyt `created_at`
+-- og et tabt `dismissed_at` ved hver af dem. Frysningen fanger det IKKE: hendes
+-- dag voksede jo ikke. Det er forliget, der fanger det.
+--
+-- **19b ER MODPRØVEN OG LIGE SÅ NØDVENDIG SOM 19a.** Uden den ville 19a være
+-- opfyldt af en motor, der var holdt op med at skrive — igen den tavshed, hele
+-- filens punkt 1 findes for. En resultatrettelse SKAL stadig nå frem.
+do $$
+declare
+  v_foer text; v_efter text; v_rettet int;
+begin
+  select string_agg(id::text || ':' || created_at::text, ',' order by user_id)
+    into v_foer from public.stories where period = 'day' and day_key = '2026-03-03';
+
+  perform public.generate_daily_stories('2026-03-03');
+
+  select string_agg(id::text || ':' || created_at::text, ',' order by user_id)
+    into v_efter from public.stories where period = 'day' and day_key = '2026-03-03';
+  if v_foer is distinct from v_efter then
+    raise exception 'FEJL 19a: en gen-kørsel uden ændringer skrev dagens kort om';
+  end if;
+
+  -- (19b) MODPRØVEN: en resultatrettelse på dagen skal nå frem. m1 var 2-1 og
+  -- bliver 5-0 — u1s CONTRARIAN falder, og kortene skal blive andre.
+  update public.matches set home_score = 5, away_score = 0
+   where kickoff_at = '2026-03-03 12:00:00+00';
+  perform public.generate_daily_stories('2026-03-03');
+
+  select count(*) into v_rettet from public.stories s
+   where s.period = 'day' and s.day_key = '2026-03-03'
+     and s.id::text || ':' || s.created_at::text <> all (string_to_array(v_efter, ','));
+  if v_rettet = 0 then
+    raise exception 'FEJL 19b: en resultatrettelse ændrede intet kort — forliget skriver aldrig';
+  end if;
+end $$;
+
+-- ---------- 20. Frysningen: en dag, der VOKSER, rører ikke det udgivne kort ----------
+-- **DEN FÆLDE, A39 SELV ÅBNER.** Den globale kampdag gjorde det umuligt for en
+-- allerede skrevet dag at vokse: en kamp kl. 20 blokerede alle. Den personlige
+-- gør det muligt — jeg opretter en konkurrence om aftenen, jeg melder mig ind i
+-- en, eller en anden melder sig ind i min — og uden frysningen ville kortet
+-- blive skrevet om, min afvisning genopstå og ulæst-prikken tændes igen.
+--
+-- 20b ER IKKE PYNT: uden den ville 20a være opfyldt af en motor, der er holdt op
+-- med at skrive overhovedet. u7 er ikke i c3, hendes omfang er uændret, og
+-- hendes kort skal derfor være urørt af nøjagtig samme grund — men ad en anden
+-- vej. De to sammen kan kun opfyldes af en motor, der skelner.
+do $$
+declare
+  v_sn uuid; v_ta uuid; v_tb uuid; v_mid uuid;
+  v_id6 uuid; v_id7 uuid; v_scope int; v_omfang int;
+  c3 uuid := '10000000-0000-0000-0000-000000000003';
+  u6 uuid := '00000000-0000-0000-0000-000000000006';
+  u7 uuid := '00000000-0000-0000-0000-000000000007';
+begin
+  select id into v_sn from public.seasons
+   where league_id = (select id from public.leagues where name = 'Testliga');
+  select id into v_ta from public.teams where name = 'Randers';
+  select id into v_tb from public.teams where name = 'OB';
+
+  select id, (payload ->> 'day_scope_matches')::int into v_id6, v_scope
+    from public.stories where period = 'day' and day_key = '2026-03-03' and user_id = u6;
+  select id into v_id7
+    from public.stories where period = 'day' and day_key = '2026-03-03' and user_id = u7;
+  if v_scope is null then
+    raise exception 'FEJL 20a0: kortet bærer ingen day_scope_matches — frysningen har intet at måle mod';
+  end if;
+
+  -- En SPILLET kamp på tirsdagen i en helt ny konkurrence, som u6 melder sig
+  -- ind i. Hendes dag er stadig færdig — den er bare blevet større.
+  insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at, home_score, away_score)
+    values (v_sn, v_ta, v_tb, '2026-03-03 17:00:00+00', 2, 0) returning id into v_mid;
+  insert into public.competitions (id, name, mode) values (c3, 'Aftenkonkurrencen', 'custom');
+  insert into public.competition_matches (competition_id, match_id) values (c3, v_mid);
+  insert into public.competition_participants (competition_id, user_id) values (c3, u6);
+
+  select u.n_matches into v_omfang
+    from public.users_with_complete_day('2026-03-03') u where u.user_id = u6;
+  if v_omfang is null then
+    raise exception 'FEJL 20a1: u6s dag meldes ufærdig, men den nye kamp ER spillet';
+  end if;
+  if v_omfang <= v_scope then
+    raise exception 'FEJL 20a2: u6s omfang er % og kortet står på % — dagen voksede ikke, og testen måler ingenting', v_omfang, v_scope;
+  end if;
+
+  perform public.generate_daily_stories('2026-03-03');
+
+  if not exists (select 1 from public.stories
+                  where period = 'day' and day_key = '2026-03-03'
+                    and user_id = u6 and id = v_id6) then
+    raise exception 'FEJL 20a: u6s kort blev skrevet om, fordi hendes dag voksede efter udgivelsen';
+  end if;
+  if (select (payload ->> 'day_scope_matches')::int from public.stories
+       where period = 'day' and day_key = '2026-03-03' and user_id = u6) <> v_scope then
+    raise exception 'FEJL 20a3: u6s day_scope_matches flyttede sig på et frosset kort';
+  end if;
+  if not exists (select 1 from public.stories
+                  where period = 'day' and day_key = '2026-03-03'
+                    and user_id = u7 and id = v_id7) then
+    raise exception 'FEJL 20b: u7s kort blev rørt, selvom hendes omfang er uændret';
+  end if;
+end $$;
+
+-- ---------- 21. Milepælskapringen bevarer frysningens nøgle ----------
+-- `apply_milestone_stories()` UPDATE'r et færdigt dagskort i stedet for at lægge
+-- et til, og den skriver `payload = (payload - 'mini') || …`. Nøglen overlever
+-- derfor pr. konstruktion — men "pr. konstruktion" er præcis den slags påstand,
+-- der holder op med at være sand, når nogen omskriver udtrykket. Uden nøglen
+-- ville et kapret kort blive UFRYSBART: `coalesce(null, n) < n` er falsk, så det
+-- ville blive skrevet om, hver gang dagen voksede.
+do $$
+declare
+  u6 uuid := '00000000-0000-0000-0000-000000000006';
+  v_scope int;
+begin
+  select (payload ->> 'day_scope_matches')::int into v_scope
+    from public.stories where period = 'day' and day_key = '2026-03-03' and user_id = u6;
+
+  insert into public.milestones (user_id, key, family, tier, achieved_at)
+    values (u6, 'TIPS_500', 'community', 1, '2026-03-03 20:00:00+00')
+    on conflict do nothing;
+  perform public.apply_milestone_stories(200000);
+
+  if not exists (select 1 from public.stories
+                  where period = 'day' and day_key = '2026-03-03'
+                    and user_id = u6 and rule = 'MILESTONE') then
+    raise exception 'FEJL 21a: milepælen kaprede ikke u6s dagskort — testen måler ingenting';
+  end if;
+  if (select (payload ->> 'day_scope_matches')::int from public.stories
+       where period = 'day' and day_key = '2026-03-03' and user_id = u6)
+     is distinct from v_scope then
+    raise exception 'FEJL 21b: kapringen tabte day_scope_matches — kortet er blevet ufrysbart';
   end if;
 end $$;
 

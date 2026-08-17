@@ -9,6 +9,60 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+17. august 2026 — En konkurrence kunne ikke oprettes, og det havde den ikke kunnet i fem dage
+
+- **Rettet (`G130`):** oprettelse af en konkurrence fejlede med `42501: new row
+  violates row-level security policy for table "competitions"` — for hver
+  bruger, i produktionen, siden `#60` blev kørt 12. august. Fejlen er latent:
+  alt andet virkede, og den viste sig først, da nogen faktisk prøvede at oprette
+  en konkurrence.
+- **Årsagen var ikke insert-policyen.** PostgREST sender `Prefer:
+  return=representation`, så et insert er reelt `INSERT … RETURNING *`, og ved
+  RETURNING anvender PostgreSQL også SELECT-policyen på den nye række. Siden
+  `#60` lød den `using (is_competition_visible(id))`, og den funktion slår
+  rækken op i `competitions` **selv** — hvor den endnu ikke findes. Samme insert
+  lykkes uden `returning` og fejler med.
+- **Rettelsen** (`#69 competitions_returning_fix.sql`) lægger `created_by =
+  auth.uid()` ind som hurtig sti foran funktionskaldet. Adgangen er uændret:
+  funktionen bar allerede samme led — det kan nu bare evalueres direkte på den
+  nye række. Klienten røres ikke.
+- **Hullet, der lod det ske:** `sql/tests/read_scope.sql` dækkede `returning *`
+  for `profiles` og `competition_participants`, men ikke for `competitions`.
+  Påstand 7e lukker det, og 7f er modprøven. 7e er efterprøvet ved at fjerne
+  leddet igen og se den fejle.
+- **Fælden er skrevet ind i `DOCUMENTATION.md` §13 som en klasse** frem for som
+  ét tilfælde: en omskrivning fra et inline-prædikat til et funktionskald er
+  aldrig et no-op for en tabel, klienten skriver til.
+
+16. august 2026 — Dagskortet venter ikke længere på en turnering, du ikke er med i
+
+- **Dagskortet udgives nu, når DINE konkurrencer er færdigspillet** (`A39`).
+  `match_day_complete()` var global: den krævede, at hver eneste kamp på dagen
+  havde et resultat, uanset turnering og uanset konkurrence. En bruger, hvis
+  konkurrencer kun rører Superliga, og hvis sidste kamp var slut kl. 16, ventede
+  derfor på La Ligas kamp kl. 22:45 — og ved en udsat eller uindberettet kamp
+  ventede hun for evigt. Motoren spørger nu `users_with_complete_day()` i stedet:
+  hvem er dagen færdig for?
+- **Afgrænsningen er alle dagens kampe i dine konkurrencer, ikke kun dem, du har
+  tippet.** Kortet bærer stillingen og mini-stillingen, og de flytter sig, når
+  modstanderne får point. Havde afgrænsningen fulgt tippene, ville en bruger, der
+  glemte aftenkampen, få "du ligger nr. 2" kl. 16 og en anden sandhed kl. 22.
+- **Et udgivet kort fryses, hvis din dag vokser bagefter.** Opretter du en
+  konkurrence om aftenen — eller melder nogen sig ind i din — skrives kortet ikke
+  om. Det var sandt, da det blev skrevet, og det daterer sig selv.
+- **Sletningen blev til et forlig.** Motoren kalder sig selv fire-fem gange på en
+  stor lørdag i stedet for én, så den skriver nu kun de rækker, der faktisk bliver
+  forskellige. Uden det ville en afvisning genopstå og ulæst-prikken nulstilles
+  flere gange på en aften. Det lukker den hyppige halvdel af `G129`.
+- **Kontrollen `day_card_coverage` tæller nu brugere frem for dage** — ellers ville
+  dens værste alarm have lyst på hver eneste delvist spillede dag — og den fik for
+  første gang en aftager: et trin i `job-heartbeat.yml`. Indtil nu blev den læst af
+  ingen planlagt kørsel, hvilket gjorde `A39`s egen udløser til et instrument, ingen
+  aflæste.
+- Tre migreringer i bindende rækkefølge: `#68 story_engine_personal_day.sql` →
+  gen-kør `#47 story_engine_v3.sql` → gen-kør `#5 rating_trigger_optimization.sql`.
+  Hvert mellemtrin er en gyldig tilstand; frontenden røres ikke.
+
 16. august 2026 — Gab-feltet stod på nul, og det afslørede en fejl i selve aktivitets-målingen
 
 **Meldt af ejeren timer efter udrulningen:** *"Bør gabet være synligt? Kan ikke se det."* Svaret var to ting, og den anden var vigtigere end den første.

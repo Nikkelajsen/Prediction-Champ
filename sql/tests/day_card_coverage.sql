@@ -68,17 +68,28 @@
 --      `uden for konkurrencerne`.
 --  10. Rundeafgrænsningen: en senere kampdag i en ANDEN runde gør ikke påstand
 --      6's dag til en ikke-sidste dag.
+--  11. **A39:** et FROSSET kort på en dag, der stadig spilles, er ikke en fejl.
+--      Påstår kortet kun de kampe, det blev regnet på, er det korrekt — og
+--      alarmen skal tie. Det er modstykket til påstand 4, hvor kortet påstår at
+--      dække en kamp, der ikke er spillet.
+--  12. **A39:** dagen I DAG dømmes ikke for et manglende kort. Motoren skriver
+--      kortet i samme sætning som resultatet, men kontrollen kan ramme
+--      mellemrummet, og efter A39 åbner det N gange om dagen frem for én.
 --
--- Testen er efterprøvet ved at mutere kontrollen ti gange — hver af de fem
--- `case`-grene slået fra på skift, æra-filteret, begge halvdele af
--- `uden_resultat`, rundefilteret, `match_day > d.dag` og vinduet — og se den
--- fange hver enkelt. **Alle ti blev fanget i første kørsel**, hvilket ikke er
--- held: to af påstandene findes KUN for at gøre en mutation synlig og bærer
--- ingen egen produktværdi. Påstand 10 (en senere runde) er den eneste ting, der
--- kan skelne rundefilteret fra ingenting, og fixturens opdeling i "kun
--- `away_score` mangler" (torsdag) og "kun `home_score` mangler" (fredag) er det
--- eneste, der kan skelne de to led i `uden_resultat`. Fjernes én af dem, kan
--- kontrollen muteres uden at testen siger fra.
+-- Testen er efterprøvet ved at mutere kontrollen — hver `case`-gren slået fra på
+-- skift, æra-filteret, rundefilteret, `match_day > d.dag`, vinduet, og efter
+-- A39 desuden frysningens grænse (`>= f.n_matches` svækket til `> 0`),
+-- `i dag`-grenen, stigens rækkefølge og `klar`-definitionen. **Alle blev fanget
+-- i første kørsel**, hvilket ikke er held: flere af påstandene findes KUN for at
+-- gøre en mutation synlig og bærer ingen egen produktværdi. Påstand 10 (en
+-- senere runde) er det eneste, der kan skelne rundefilteret fra ingenting, og
+-- påstand 11 det eneste, der kan skelne et frosset kort fra et for tidligt.
+-- Fjernes én af dem, kan kontrollen muteres, uden at testen siger fra.
+--
+-- ⚠️ `uden_resultat` FANDTES INDTIL A39 og er væk med den. Fixturens opdeling i
+-- "kun `away_score` mangler" (torsdag) og "kun `home_score` mangler" (fredag)
+-- står stadig, fordi `user_day_scope()` nu bærer det samme tveled i sit eget
+-- `is_open` — og det skal stadig kunne skelnes.
 --
 -- KØR LOKALT
 --   node sql/tests/_schema.mjs > /tmp/skema.sql
@@ -87,6 +98,24 @@
 
 \set ON_ERROR_STOP on
 \timing off
+
+-- ---------------------------------------------------------------------------
+-- Migreringen, kontrollen hviler på
+-- ---------------------------------------------------------------------------
+-- 🔴 SKEMAET INDLÆSES FØR MIGREINGEN, OG TESTEN LÆSER DEN SELV — samme mønster
+-- og samme begrundelse som `competition_matches_read.sql`s trin i CI: trinnet
+-- gør dermed præcis det, en kørsel i Supabase gør.
+--
+-- Uden linjen fejler kontrollen med `function public.user_day_scope(date) does
+-- not exist`, fordi `sql/schema.sql` er et GENERERET øjebliksbillede og først
+-- kender `#68`, når skema-eksporten har kørt efter migreringen. At lade testen
+-- vente på den eksport ville gøre den grøn eller rød efter, hvornår en ugentlig
+-- workflow sidst kørte — og det er ikke en test, det er et lotteri.
+--
+-- Fejlen blev fanget af CI og ikke lokalt, fordi migreringen lokalt var lagt på
+-- i hånden før kørslen. Det er værd at huske: en test, der efterprøves i en
+-- opsætning, CI ikke har, er kun efterprøvet i den opsætning.
+\ir ../story_engine_personal_day.sql
 
 -- ---------------------------------------------------------------------------
 -- Fixture
@@ -111,6 +140,16 @@ insert into public.competitions (id, name, mode, created_by, league_id, season_i
   ('55555555-0000-4000-8000-000000000001', 'Testkonkurrencen', 'time_range',
    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
    '11111111-0000-4000-8000-000000000001', '22222222-0000-4000-8000-000000000001');
+
+-- 🔴 DELTAGEREN ER IKKE PYNT (A39, august 2026). Kontrollen tæller siden den
+-- personlige kampdag BRUGERE og ikke dage: `klar` kommer fra
+-- `public.user_day_scope()`, som går fra kamp til konkurrence til DELTAGER.
+-- Uden denne række har ingen dag en klar bruger, hver eneste dag melder
+-- `spilles endnu`, og hele filen påstår ingenting. Fixturen bestod indtil da
+-- uden en eneste deltager, fordi den gamle kontrol kun spurgte til kampene.
+insert into public.competition_participants (competition_id, user_id, joined_at) values
+  ('55555555-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+   current_date - 60);
 
 -- DATOERNE ER RELATIVE OG FORANKRET I EN RUNDE, ikke i `current_date` alene.
 -- Kontrollens vindue er `current_date - 30`, så absolutte datoer (som
@@ -153,12 +192,21 @@ begin
 end $$;
 
 -- Et dagskort. `p_news = null` er et kort fra FØR v3 — æra-skellet i påstand 5.
-create function pg_temp.kort(p_dag date, p_news int) returns void language sql as $$
+--
+-- `p_scope` er A39's frysningstal (`payload.day_scope_matches`): hvor mange af
+-- dagens kampe kortet blev regnet på. Det er dét, der efter A39 afgør, om et
+-- kort på en uafsluttet dag er en FEJL eller et frosset kort, der er
+-- fuldstændig korrekt — se påstand 4 og 4b. `null` er et kort uden tallet,
+-- altså et fra før migreringen.
+create function pg_temp.kort(p_dag date, p_news int, p_scope int default null)
+returns void language sql as $$
   insert into public.stories
-    (round_key, user_id, rule, priority, headline, body, period, day_key, news_value)
+    (round_key, user_id, rule, priority, headline, body, period, day_key, news_value, payload)
   values (public.round_key_of_date(p_dag)::text,
           'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          'DAY_RESULT', 180, 'Dagens facit', 'Anna tog dagen.', 'day', p_dag, p_news);
+          'DAY_RESULT', 180, 'Dagens facit', 'Anna tog dagen.', 'day', p_dag, p_news,
+          case when p_scope is null then '{}'::jsonb
+               else jsonb_build_object('day_scope_matches', p_scope) end);
 $$;
 
 -- 1) + 9) Tirsdag: tre kampe, to af dem i konkurrencen, alle spillet, kort skrevet.
@@ -180,9 +228,13 @@ select pg_temp.kamp(pg_temp.dag(2), 2, null);
 
 -- 4) Fredag: dagen spilles endnu, OG kortet er allerede udgivet. Her mangler
 --    `home_score`, altså den anden halvdel af samme betingelse.
+--    Kortet påstår at dække BEGGE dagens kampe (`day_scope_matches = 2`), mens
+--    den ene stadig spilles. Det er efter A39 selve definitionen på den værre
+--    fejl — og modstykket til påstand 4b nedenfor, hvor kortet kun påstår den
+--    ene og derfor er et frosset, korrekt kort.
 select pg_temp.kamp(pg_temp.dag(3), 1, 1);
 select pg_temp.kamp(pg_temp.dag(3), null, 2);
-select pg_temp.kort(pg_temp.dag(3), 51);
+select pg_temp.kort(pg_temp.dag(3), 51, 2);
 
 -- 5) Lørdag: samme som fredag, men kortet er fra før v3 (`news_value` null).
 select pg_temp.kamp(pg_temp.dag(4), 0, 1);
@@ -200,7 +252,37 @@ select pg_temp.kamp(pg_temp.dag(6), 2, 2);
 -- 10) En kampdag i en SENERE runde. Den findes kun for at gøre påstand 6 til en
 --     rigtig prøve: uden den ville rundefilteret i `not exists (… round_key = …)`
 --     kunne fjernes, uden at nogen påstand flyttede sig.
+--
+--     4b) DEN SAMME DAG BÆRER A39'S NYE TILSTAND: et FROSSET kort. Anna har to
+--     kampe i konkurrencen, den ene spilles endnu, og kortet påstår kun den ene
+--     (`day_scope_matches = 1`). Det er præcis det, frysningen producerer, når
+--     nogen opretter en konkurrence om aftenen — og det er KORREKT. Uden denne
+--     påstand kunne `>= f.n_matches` i kontrollen ændres til `> 0`, og hver
+--     eneste frosne dag ville melde den værste alarm, uden at testen sagde fra.
+--     Onsdagen i samme runde gør tirsdagen til en ikke-sidste kampdag.
 select pg_temp.kamp(public.round_key_of_date(current_date - 7), 1, 1);
+select pg_temp.kamp(public.round_key_of_date(current_date - 7), null, null);
+select pg_temp.kort(public.round_key_of_date(current_date - 7), 44, 1);
+select pg_temp.kamp(public.round_key_of_date(current_date - 7) + 1, 2, 0);
+
+-- 11) EN DAG, DER IKKE ER FORBI: en færdigspillet kamp i konkurrencen, uden
+--     kort. Motoren skriver kortet i samme sætning som resultatet, men
+--     kontrollen kan ramme mellemrummet — og efter A39 åbner det mellemrum N
+--     gange om dagen frem for én. Dagen må derfor ikke dømmes for et MANGLENDE
+--     kort, før den er forbi.
+--
+--     ⚠️ DAGEN ER FORANKRET I EN RUNDE OG IKKE I `current_date` ALENE, af samme
+--     grund som `pg_temp.dag(n)` ovenfor. Den nærliggende form — en kamp i dag
+--     og en i morgen — er afhængig af UGEDAG: falder kørslen på en mandag, er
+--     "i morgen" i den NÆSTE runde, i dag bliver rundens sidste kampdag, og
+--     påstanden måler noget helt andet. Den fejl kostede en rød test 17. august
+--     2026, dagen efter fixturen blev skrevet.
+--
+--     `round_key_of_date(current_date + 7)` er tirsdagen i næste runde og
+--     dermed ALTID mindst i morgen, uanset hvilken dag det er i dag. Onsdagen
+--     samme runde holder den ude af "rundens sidste dag".
+select pg_temp.kamp(public.round_key_of_date(current_date + 7), 1, 0);
+select pg_temp.kamp(public.round_key_of_date(current_date + 7) + 1, null, null);
 
 -- 8) En dag LANGT uden for vinduet, som mangler sit kort. Historiske huller —
 --    fx dem fra før v3 — må ikke kunne ses i kontrollen overhovedet.
@@ -275,6 +357,31 @@ begin
   if not exists (select 1 from day_card_coverage
                   where dag = public.round_key_of_date(current_date - 7)) then
     raise exception 'fixturen holder ikke: den senere runde skal selv være med i vinduet, ellers prøver påstand 10 ingenting';
+  end if;
+
+  -- 4b) A39: et FROSSET kort på en dag, der stadig spilles, er ikke en fejl.
+  select * into r from day_card_coverage where dag = public.round_key_of_date(current_date - 7);
+  if r.tilstand = 'KORT PÅ EN DAG, DER SPILLES' then
+    raise exception 'senere runde: et kort, der kun påstår de kampe, det blev regnet på, er FROSSET og korrekt — alarmen må ikke lyse';
+  end if;
+  if r.tilstand <> 'spilles endnu' then
+    raise exception 'senere runde: forventede "spilles endnu" for den frosne dag — fik %', r.tilstand;
+  end if;
+  if r.for_tidligt <> 0 then
+    raise exception 'senere runde: forventede 0 for tidlige kort, fik %', r.for_tidligt;
+  end if;
+
+  -- 11) A39: en dag, der ikke er forbi, dømmes ikke for et manglende kort.
+  select * into r from day_card_coverage
+   where dag = public.round_key_of_date(current_date + 7);
+  if r.tilstand <> 'i dag' then
+    raise exception 'i dag: en dag, der ikke er forbi, må ikke meldes som MANGLER DAGSKORT — fik %', r.tilstand;
+  end if;
+  if r.klar <> 1 then
+    raise exception 'i dag: forventede 1 klar bruger, fik % — ellers prøver påstanden ingenting', r.klar;
+  end if;
+  if r.kort <> 0 then
+    raise exception 'i dag: dagen skal være UDEN kort, ellers er det ikke MANGLER DAGSKORT, den slipper for — fik % kort', r.kort;
   end if;
 
   -- 8) vinduet

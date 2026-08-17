@@ -15,6 +15,90 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 16. august 2026 — `A39`: kampdagen er blevet personlig
+
+**Beslutning:** et dagskort udgives, når alle kampe på dagen i de konkurrencer,
+**modtageren deltager i**, har et resultat — ikke når hver eneste kamp i alle syv
+synkroniserede turneringer har det. `match_day_complete()` er dermed ikke længere
+motorens spørgsmål; den lever videre uændret som produktets globale begreb.
+
+Backloggens `A39` stillede spørgsmålet som "skal et dagskort kunne udgives, mens
+en anden turnering mangler et resultat?" og beskrev to veje. Det er den første,
+der er valgt: fuldførtheden afgrænses til modtagerens egne konkurrencer, kortet
+bliver personligt, og det kan skrives på forskellige tidspunkter for forskellige
+brugere. Den anden vej — behold den globale dag og gør blokeringen aflæselig —
+blev fravalgt af backloggens egen begrundelse: den "koster ingenting og løser
+heller ikke noget".
+
+**Det ophæver `G92`s forbehold.** Beslutningen fra 9. august 2026 sluttede med
+"`A39` er ikke afgjort af dette". Det er den nu. `G92`s egen regel — at værnet
+hører i motoren og ikke hos kalderne, fordi en regel, hver kalder skal huske, er
+den regel, den femte kalder glemmer — står uændret ved magt og er selve grunden
+til, at triggerens fortjek blev fjernet frem for gjort personligt.
+
+**Afgrænsningen er ALLE dagens kampe i mine konkurrencer, ikke kun dem, jeg har
+tippet.** Den nærliggende regel lyder rigtigere og er forkert. Kortet påstår ikke
+kun noget om modtagerens egne tips: det bærer stillingen (`_sd_after`, med hele
+tiebreaker-stigen) og siden `G88` en mini-stilling med tre rækker. De tal flytter
+sig, når **modstanderne** får point. En bruger, der glemte at tippe aftenkampen,
+ville få "du ligger nr. 2" kl. 16 og en anden sandhed kl. 22 — altså `A38`s
+fejltype, som hele v3 er bygget for at undgå. Den valgte afgrænsning er til
+gengæld sammenhængende hele vejen: er jeg klar, er `_sd_after` for netop mine
+konkurrencer regnet på en færdig dag, og mini-stillingen og `_sd_rival` læser kun
+gennem en konkurrence, jeg deler med hovedpersonen.
+
+**Et udgivet kort fryses, når dagen VOKSER.** Den globale kampdag gjorde det
+umuligt for en allerede skrevet dag at vokse — en kamp kl. 20 blokerede alle. Den
+personlige åbner tre veje: jeg opretter en konkurrence (lovligt indtil en time før
+kickoff), jeg melder mig ind i en, eller en anden melder sig ind i min.
+Efterfyldningen er derimod ikke en vej ind: `api/_backfill.js` håndhæver "en
+runde, der er gået i gang, vokser aldrig", så kun menneskehandlinger kan udløse
+det. Kortet beholdes, som det stod, fordi det VAR sandt, da det blev skrevet —
+samme semantik, overskriften allerede bærer ("Stillingen efter kampdag 03.08").
+Målt på `payload.day_scope_matches`, antallet af kampe kortet blev regnet på.
+
+**Retningen er `<` og ikke `<>`, og det er ikke en detalje.** Kun en *voksende*
+dag fryser. Bliver dagen mindre — en udmeldelse, en udsat kamp — skrives kortet
+om. En frysning, der også ramte den retning, ville efterlade et kort på en dag,
+der ikke længere findes, stående for evigt. Frysningen skal være selvhelbredende.
+
+**Slet-og-indsæt blev til et FORLIG, og det var ikke frivilligt.** Motoren
+slettede dagens rækker og skrev dem igen. Det var rigtigt, da den kørte én gang
+pr. kampdag. Efter A39 kører den ved hvert resultat, der gør nogens dag færdig —
+fire-fem gange på en stor lørdag — og en bruger, hvis tal ikke havde flyttet sig
+siden kl. 16, ville få nyt `id`, nyt `created_at` og et tabt `dismissed_at` ved
+hver af dem. Frysningen fanger det ikke: dagen voksede jo ikke. Motoren bygger
+derfor rækkerne i en temporær tabel og skriver kun dem, der faktisk bliver
+forskellige. Det lukker den hyppige halvdel af `G129` som sidegevinst.
+
+**Og det gør en invariant strukturel frem for argumenteret.** Sletningen drives nu
+af det, der skal skrives, og ikke af dagen: en række kan kun slettes, hvis der
+findes en erstatning for netop den bruger. "En tidlig udgang må aldrig efterlade
+mindre, end den fandt" hvilede før på rækkefølgen af to udgange; nu kan en bruger,
+hvis dag ikke er færdig — eller hvis kort er frosset — ikke røres overhovedet.
+"Den farligste linje i v2" er ikke længere farlig.
+
+**Prisen, der ikke blev betalt.** Gevinsten gælder ikke på rundens sidste kampdag:
+den udgang er stadig global, fordi rundens sidste dag er et *runde*-begreb, og
+rundekortet er pr. runde og ikke pr. bruger. Gøres den personlig, kan to brugere
+få hver sin "sidste dag" i samme runde, og rundestoryens afløsning mister sin
+grund.
+
+**Acceptkriterie 7 er omformuleret.** "To gen-kørsler giver samme kort" er ikke
+længere sandt som skrevet — en gen-kørsel senere på dagen giver med rette et andet
+kort, fordi faktamængden voksede. Kriteriet er nu determinisme *givet samme
+faktamængde*, og forliget gør det stærkere end før: anden kørsel skriver intet.
+
+**Kontrollen måtte skrives om, ellers ville leverancen have ødelagt sin egen
+udløser.** `day_card_coverage`s værste tilstand — `KORT PÅ EN DAG, DER SPILLES` —
+ville have lyst på hver eneste delvist spillede dag, og filen siger selv, at "en
+alarm, der altid lyser, er slukket". Den tæller nu brugere frem for dage, og den
+værste fejl er omdefineret: ikke "et kort på en uafsluttet dag" (det er præcis,
+hvad frysningen med vilje producerer), men et kort, der påstår at dække mindst
+det, brugeren har nu, mens noget af det stadig spilles. Samtidig fik kontrollen
+for første gang en aftager: den blev læst af **ingen** planlagt kørsel og har nu
+et trin i `job-heartbeat.yml`.
+
 ## 16. august 2026 — `B38`: "aktiv i en runde" er den, der SPILLEDE — ikke den, der åbnede appen
 
 **Beslutning:** Analytics-fanens nye runde-serie måler *spillede runden* (havde

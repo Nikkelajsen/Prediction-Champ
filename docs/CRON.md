@@ -370,6 +370,22 @@ håndhæver, håndhæver den i praksis ikke. Repoet er offentligt, så de 48 kø
 i døgnet er gratis; GitHub kører dog planlagte workflows med forsinkelse under
 belastning, så kadencen er et loft for hyppigheden, ikke en garanti.
 
+Workflowen kører desuden fire forespørgsler fra `sql/checks/` mod den levende
+database: `kickoff_coverage` (`G84`), `rating_freshness` (`G83`),
+`anon_routine_reach` (`G100`) og siden `A39` (16. august 2026)
+**`day_card_coverage`**. Den sidste er værd at bemærke, fordi den havde
+eksisteret siden `A38` og blev læst af **ingen** planlagt kørsel — kun af en
+CI-test, altså mod en tom engangsdatabase. Følgen var, at `A39`s egen udløser i
+backloggen ("når `day_card_coverage` melder en blokeret dag, nogen savnede")
+hvilede på et instrument, ingen aflæste. Det er samme fejlklasse som `G100`:
+reglen fandtes, vagten var i CI, og produktionen blev aldrig spurgt.
+
+De to tilstande, dagskort-trinnet dømmer, vejer ikke det samme, og det afspejles
+i, hvad de gør: `KORT PÅ EN DAG, DER SPILLES` **fejler** trinnet (et forkert svar,
+brugeren allerede har læst), mens `MANGLER DAGSKORT` kun giver en **advarsel** —
+bagstopperen har 15-30 minutter til at samle det op, og en alarm, der fyrer i det
+mellemrum, ville blinke frem for at melde.
+
 Alarmen ligger med vilje **uden for appen**: kører Supabase eller Vercel ikke,
 ville en alarm inde i appen dø af præcis samme årsag som jobbet. Kanalen er
 GitHubs egen notifikation, når workflowen fejler.

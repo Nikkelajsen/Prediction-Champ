@@ -35,8 +35,10 @@
 --      `profiles` direkte længere.
 --   7. Deltagerpolicyen, målt som en matrix: deltager, ligamedlem uden
 --      deltagelse, opretter og fremmed × liga-konkurrence og liga-løs
---      konkurrence. Og de fire skrivninger, der læser deres egen række tilbage
---      (tilmeld, arkivér, forlad, og liga-admin fjerner en ANDEN).
+--      konkurrence. Og de SEKS skrivninger, der læser deres egen række tilbage
+--      (opret konkurrencen, tilmeld, arkivér, forlad, liga-admin fjerner en
+--      ANDEN, og forsøget på at oprette i en andens navn). Listen var fire og
+--      manglede netop oprettelsen — se 7e og `G130`.
 --   8. **Ingen rekursion.** `competitions` kan stadig læses — den naive policy
 --      slukker for BEGGE tabeller, og testen viser fejlen ved siden af.
 --   9. `is_competition_visible()` svarer det samme som `#53`s inline-prædikat
@@ -253,6 +255,11 @@ end $$;
 -- Migrering, trin 2
 -- ---------------------------------------------------------------------------
 \ir ../read_scope_narrow.sql
+-- #69 hører med til trin 2 og ikke til et trin for sig: den retter en fejl,
+-- `#60` indførte i samme policy, og en base med #60 uden #69 er en tilstand,
+-- ingen skal køre i — oprettelse af en konkurrence er umulig dér (`G130`).
+-- Påstand 7e er skrevet til at fejle præcis i den tilstand.
+\ir ../competitions_returning_fix.sql
 
 -- ===========================================================================
 -- 3. `profiles`' læseflade er smal
@@ -572,9 +579,15 @@ begin
   end loop;
 end $$;
 
--- De fire skrivninger, der læser deres egen række tilbage. Alle sender
+-- De SEKS skrivninger, der læser deres egen række tilbage. Alle sender
 -- `Prefer: return=representation`, så SELECT-policyen anvendes på den rørte
 -- række — fælden fra 11. august 2026 (`#55`), kendt på forhånd her.
+--
+-- 🔴 LISTEN VAR FIRE OG SKULLE HAVE VÆRET SEKS (`G130`, 17. august 2026). Den,
+-- der manglede, var oprettelsen af selve konkurrencen, og prisen var, at `#60`
+-- kunne gøre den umulig i produktionen uden at én påstand blev rød. En liste
+-- over "alle skrivninger, der læser sig selv tilbage" er kun værd at have, hvis
+-- den er fuldstændig — se 7e.
 do $$
 declare v_udfald text;
 begin
@@ -617,6 +630,45 @@ begin
               where competition_id = '43430000-0000-4000-8000-0000000000c1'
                 and user_id = '43430000-0000-4000-8000-00000000000b') then
     raise exception '7d) rækken blev ikke slettet — udfaldet `ok` kom fra nul rørte rækker';
+  end if;
+
+  -- 7e. 🔴 DEN FEMTE SKRIVNING, OG DEN MANGLEDE (`G130`, 17. august 2026).
+  --     Overskriften ovenfor sagde "de FIRE skrivninger", og det var netop den,
+  --     der ikke stod på listen: oprettelsen af selve konkurrencen. Følgen var,
+  --     at `#60` kunne gøre det umuligt at oprette en konkurrence — for hver
+  --     bruger, i produktionen, fra 12. august — uden at én påstand blev rød.
+  --
+  --     Fælden er den samme som 7a's, men et led værre: `competitions_select_
+  --     involved` kalder `is_competition_visible()`, som slår rækken op i
+  --     `competitions` SELV. Ved `INSERT … RETURNING` findes den række endnu
+  --     ikke i funktionens snapshot, så den svarer `false`, og hele skrivningen
+  --     afvises med `42501`. Leddet `created_by = auth.uid()` i policyen er dét,
+  --     der redder den: det kan evalueres direkte på den nye række.
+  --
+  --     Testen er efterprøvet ved at fjerne leddet igen og se den fejle.
+  v_udfald := pg_temp.forsoeg('43430000-0000-4000-8000-00000000000a',
+                $s$insert into public.competitions (id, name, mode, created_by, group_id)
+                   values ('43430000-0000-4000-8000-0000000000c9', 'Ny konkurrence', 'random',
+                           '43430000-0000-4000-8000-00000000000a',
+                           '43430000-0000-4000-8000-000000000f01') returning *$s$);
+  if v_udfald <> 'ok' then
+    raise exception '7e) oprettelse med `returning *` blev afvist (%) — leddet `created_by = auth.uid()` mangler i competitions_select_involved', v_udfald;
+  end if;
+  if not exists (select 1 from public.competitions
+                  where id = '43430000-0000-4000-8000-0000000000c9') then
+    raise exception '7e) rækken blev ikke skrevet — udfaldet `ok` kom fra ingenting';
+  end if;
+
+  -- 7f. MODPRØVEN, og uden den er 7e opfyldt af en policy, der slap alt igennem.
+  --     Insert-checket `created_by = auth.uid()` skal stadig afvise en række,
+  --     der udgiver sig for at være en andens.
+  v_udfald := pg_temp.forsoeg('43430000-0000-4000-8000-00000000000a',
+                $s$insert into public.competitions (id, name, mode, created_by, group_id)
+                   values ('43430000-0000-4000-8000-0000000000ca', 'Paa andres vegne', 'random',
+                           '43430000-0000-4000-8000-00000000000b',
+                           '43430000-0000-4000-8000-000000000f01') returning *$s$);
+  if v_udfald <> 'afvist:42501' then
+    raise exception '7f) en konkurrence oprettet i en ANDENS navn slap igennem (%) — insert-checket er væk', v_udfald;
   end if;
 end $$;
 
@@ -693,6 +745,7 @@ drop policy cp_naiv on public.competition_participants;
 -- ===========================================================================
 \ir ../read_scope_functions.sql
 \ir ../read_scope_narrow.sql
+\ir ../competitions_returning_fix.sql
 
 do $$
 declare v_n text;
