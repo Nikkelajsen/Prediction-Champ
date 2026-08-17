@@ -25,7 +25,11 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A58` · `B39` · `G130` · `I26`.**
+**Næste ledige: `A58` · `B39` · `G136` · `I26`.**
+*(G-tallet stod på `G130` til 17. august 2026 og var forældet: `G130` og `G134`
+var leveret, og `G131`–`G133` er rækker i denne fil. `G135` er brugt samme dag.
+Slå efter med `grep -rhoE "\bG1[0-9][0-9]\b" docs/ sql/ src/ api/ | sort -u | tail`
+frem for at stole på linjen her.)*
 
 **Historikken står nederst og kun i ét eksemplar.** Rydninger af indbakken og
 kørsler af et tier hører til i [Log](#log--seneste-kørsel) i bunden af filen, og
@@ -47,8 +51,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- `kickoff_uncertain` markerer bekræftede kampe: PL's 15.00-lørdage (14:00 UTC) og PD's 17.00 (15:00 UTC) står med `~`, fordi det indlærte pladsholder-klokkeslæt er turneringens ægte anspilstid — samme kollision, som kandidat A blev forkastet på.
-- Kort holdnavn til visning: `teams.short_name` udfyldt fra football-data.orgs `shortName` (samme svar, nul ekstra kald), så "Real Racing Club de Santander" ikke fylder to linjer — `teams.name` skal blive, da syncen matcher hold på den.
+- Kort holdnavn til visning: `teams.short_name` udfyldt fra football-data.orgs `shortName` (samme svar, nul ekstra kald), så "Real Racing Club de Santander" ikke fylder to linjer — `teams.name` skal blive, da syncen matcher hold på den. Feltnavnet er IKKE aflæst hos leverandøren; egress er blokeret fra udviklingsmiljøet, så aflæsningen skal køres først (samme PowerShell-opslag som i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md`). Sportmonks har kun `short_code` (3 bogstaver), altså ikke det samme.
 
 ---
 

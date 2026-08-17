@@ -171,6 +171,33 @@ Ingen af de to er besluttet her — det hører til i `G85`.
 > Markøren er `matches.kickoff_uncertain` og er display-only. Se
 > `sql/matches_kickoff_uncertain.sql`.
 
+> 🔴 **Anden rettelse efter levering, 17. august 2026: B arvede A's fælde, og
+> det står allerede skrevet ovenfor.** Linjen "efterårspladsholderen ER
+> turneringens typiske anspilstid, så en tabel over pladsholderværdier ville
+> markere ægte kampe på netop de klokkeslæt, de rigtigt spilles på" var
+> begrundelsen for at forkaste A. Men B markerer OGSÅ på klokkeslæt — den
+> *lærer* bare tabellen frem for at hardkode den. **B undgik A's
+> kalibreringsproblem, ikke A's kollisionsproblem**, og forskellen blev ikke
+> set, da valget blev truffet.
+>
+> Følgen blev aflæst på skærmen af en bruger: tre ægte Premier League-kampe
+> lør. 22. august, fire dage ude, stod med "~ tid ikke bekræftet" — 14:00 UTC,
+> altså 15.00 i London, blackout-slottet. Samme billede i Primera División på
+> 15:00 UTC (17.00 i Madrid). Værre endnu: markeringen falder først bort, når
+> kampens EGEN tid flytter sig, og en ægte lørdag-15.00-kamp flytter sig
+> aldrig — så netop de sikreste kampe bar markøren permanent frem til
+> kampstart.
+>
+> Rettelsen er `G135` (`sql/matches_kickoff_uncertain_round.sql`): det indlærte
+> klokkeslæt skal bære **over halvdelen** af rundens ikke-spillede kampe. Det er
+> den NEGATIVE form af formodning 3 nedenfor — og den er sikker, netop hvor den
+> positive ikke var: "spredte klokkeslæt ⇒ ikke en pladsholder" kan kun fjerne
+> markeringer, mens "ensartet runde ⇒ pladsholder" ville have markeret
+> Bundesligaens sidste spillerunde. **Formodning 3 var altså ikke forkert, kun
+> vendt forkert.** Horisonten på ti dage, der dækker resten, ligger i visningen
+> og ikke i SQL, fordi `G84`s kontrol ellers ville blive stum kode; hele
+> begrundelsen står i `docs/DECISIONS.md`.
+
 **A. Genkend pladsholderværdierne.** Kræver en tabel over hver turnerings
 efterårs- og forårspladsholder og en beslutning om, hvad der sker, når
 leverandøren ændrer dem. Det er kalibrerede tal uden data at kalibrere på —

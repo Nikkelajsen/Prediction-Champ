@@ -32,8 +32,21 @@ describe("hhmm", () => {
   // oplysning ud med ingen oplysning — og det er ikke en forbedring for en
   // bruger, der skal vide, om kampen ligger lørdag formiddag eller aften.
   it("sætter ~ foran, når tiden ikke er bekræftet", () => {
-    expect(hhmm("2026-12-12T15:00:00Z", false, true)).toMatch(/^~\d{2}[.:]\d{2}$/);
-    expect(hhmm("2026-12-12T15:00:00Z", false, false)).not.toMatch(/~/);
+    // `now` skrives ud af samme grund som datoerne selv: horisonten i `G135`
+    // regner fra den, og uden et fast ur holdt påstanden op med at passe, når
+    // kalenderen indhentede december 2026.
+    const nu = Date.parse("2026-11-01T12:00:00Z");
+    expect(hhmm("2026-12-12T15:00:00Z", false, true, nu)).toMatch(/^~\d{2}[.:]\d{2}$/);
+    expect(hhmm("2026-12-12T15:00:00Z", false, false, nu)).not.toMatch(/~/);
+  });
+
+  // G135. Skærmbilledet fra 17. august 2026: tre ægte Premier League-kampe fire
+  // dage ude bar `~`, fordi 14:00 UTC både er blackout-slottet og
+  // football-data.orgs efterårsgæt. Tilden må ikke stå på en nær kamp.
+  it("dropper tilden på en kamp inden for ti dage", () => {
+    const nu = Date.parse("2026-08-18T12:00:00Z");
+    expect(hhmm("2026-08-22T14:00:00Z", false, true, nu)).toMatch(/^\d{2}[.:]\d{2}$/);
+    expect(hhmm("2026-08-22T14:00:00Z", false, true, nu)).not.toMatch(/~/);
   });
 
   it("lader 'ingen tid' vinde over 'ikke bekræftet'", () => {
@@ -148,9 +161,22 @@ describe("groupIntoDays", () => {
     const dage = groupIntoDays([
       { id: "a", kickoff_at: "2026-12-12T15:00:00Z", kickoff_tbd: false, kickoff_uncertain: true },
       { id: "b", kickoff_at: "2026-12-12T17:00:00Z", kickoff_tbd: false, kickoff_uncertain: false },
-    ]);
+    ], undefined, Date.parse("2026-11-01T12:00:00Z"));
     expect(dage).toHaveLength(1);
     expect(dage[0].label).toMatch(/~ = tid ikke bekræftet/);
+  });
+
+  // G135. Tegnforklaringen og tegnet må ikke kunne komme i utakt: er dagen inde
+  // under horisonten, står der ingen tilder i rækkerne, og en overskrift, der
+  // alligevel forklarede dem, ville sende brugeren ud at lede efter et tegn,
+  // der ikke er der.
+  it("nævner ikke tilden, når dagen ligger inden for horisonten", () => {
+    const dage = groupIntoDays([
+      { id: "a", kickoff_at: "2026-08-22T14:00:00Z", kickoff_tbd: false, kickoff_uncertain: true },
+      { id: "b", kickoff_at: "2026-08-22T16:30:00Z", kickoff_tbd: false, kickoff_uncertain: false },
+    ], undefined, Date.parse("2026-08-18T12:00:00Z"));
+    expect(dage).toHaveLength(1);
+    expect(dage[0].label).not.toMatch(/bekræftet/);
   });
 
   it("nævner ikke tilden på en dag helt uden ubekræftede tider", () => {
