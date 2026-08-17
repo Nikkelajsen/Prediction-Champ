@@ -3,7 +3,7 @@
 // Ren logik uden React — udskilt så den kan testes direkte, hvilket den ikke
 // kunne, da den lå midt i en 705-linjers skærmfil.
 
-import { APP_TZ, byKickoffThenTeams, formatKickoff, zonedDateKey } from "../../lib/scoring.js";
+import { APP_TZ, byKickoffThenTeams, formatKickoff, showUncertain, zonedDateKey } from "../../lib/scoring.js";
 
 // Datoen står i dagens overskrift; rækken viser kun klokkeslæt.
 //
@@ -18,10 +18,16 @@ import { APP_TZ, byKickoffThenTeams, formatKickoff, zonedDateKey } from "../../l
 // forskellen på "kl. 16.00" og "vi ved det ikke" er hele pointen — mens en
 // skjult tid ville koste brugeren den dato- og tidsplanlægning, der faktisk
 // holder. Tegnets betydning står i dagsoverskriften, hvor der er plads.
-function hhmm(iso, tbd = false, uncertain = false) {
+//
+// Om markøren overhovedet VISES afgøres af `showUncertain` (`G135`) og ikke af
+// flaget alene: inden for ti dage er den næsten altid falsk, fordi et
+// pladsholder-klokkeslæt er turneringens egen typiske anspilstid. Hele
+// begrundelsen — og hvorfor horisonten ligger i visningen og ikke i SQL — står
+// ved funktionen i `src/lib/scoring.js`.
+function hhmm(iso, tbd = false, uncertain = false, now = Date.now()) {
   if (!iso || tbd) return "";
   const t = new Date(iso).toLocaleTimeString("da-DK", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit" });
-  return uncertain ? "~" + t : t;
+  return showUncertain(iso, tbd, uncertain, now) ? "~" + t : t;
 }
 // Dagsnøglen er den DANSKE kalenderdato (G32). Med enhedens dato kunne en
 // søndagskamp kl. 20 dansk lande i lørdagens gruppe for en bruger vestpå — og
@@ -48,7 +54,7 @@ function dayLabel(iso) {
 // er reglen frem for undtagelsen på en dag uden fastlagte tider: dér bærer ALLE
 // kampe det samme, og uden en tiebreaker kunne listen skifte orden mellem to
 // visninger af den samme runde.
-function groupIntoDays(matches, teamNameOf) {
+function groupIntoDays(matches, teamNameOf, now = Date.now()) {
   const days = [];
   const byKey = new Map();
   for (const m of matches) {
@@ -71,7 +77,12 @@ function groupIntoDays(matches, teamNameOf) {
     // tegn, der skal have sin betydning med. Står der ét på dagen, skal
     // overskriften sige hvad det betyder — også hvis de øvrige kampe har
     // bekræftede tider (G85).
-    } else if (day.key !== "?" && day.matches.some((m) => m.kickoff_uncertain && !m.kickoff_tbd)) {
+    //
+    // `showUncertain` og ikke flaget, så tegnforklaringen og tegnet selv aldrig
+    // kan komme i utakt: en dag inden for horisonten har ingen tilder at
+    // forklare, og en overskrift, der alligevel forklarede dem, ville lede
+    // brugeren efter et tegn, der ikke er der (G135).
+    } else if (day.key !== "?" && day.matches.some((m) => showUncertain(m.kickoff_at, m.kickoff_tbd, m.kickoff_uncertain, now))) {
       day.label += " · ~ = tid ikke bekræftet";
     }
   }

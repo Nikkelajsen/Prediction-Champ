@@ -9,6 +9,60 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+17. august 2026 — "Tid ikke bekræftet" stod på de kampe, der var mest bekræftede (G135)
+
+- **Rettet (`#70 matches_kickoff_uncertain_round.sql`):** tre ÆGTE Premier
+  League-kampe lør. 22. august — en runde, der lå **fire dage ude** — stod med
+  "~ tid ikke bekræftet", og to Primera División-kampe med "(ikke bekræftet)".
+  Fundet af en bruger, der spurgte, om det samme kunne gælde andre ligaer. Det
+  kunne det.
+- **Årsagen er den indvending, kandidat A blev forkastet på.** `G85` markerede på
+  KLOKKESLÆT alene, og aflæsningen 7. august havde selv skrevet, at
+  efterårspladsholderen **er** turneringens typiske anspilstid. 14:00 UTC er
+  15.00 i London — blackout-slottet, ligaens mest brugte og mindst flyttede
+  tidspunkt. Kandidat B blev valgt for at undgå A's fælde, men B markerer også på
+  klokkeslæt; den *lærer* bare tabellen frem for at hardkode den. **B undgik A's
+  kalibreringsproblem, ikke A's kollisionsproblem.**
+- **To ting gjorde den værre end en almindelig falsk positiv.** Læringen fornyes
+  hver uge hele efteråret, når tv-valgene flytter tre kampe væk fra 14:00. Og
+  markeringen rydder først sig selv, når kampens EGEN tid flytter sig — en ægte
+  lørdag-15.00-kamp flytter sig aldrig, så netop de sikreste kampe bar markøren
+  permanent frem til kampstart.
+- **Rettelsen er dominans i runden.** Et pladsholder-regime tildeler ét
+  klokkeslæt til en hel runde ad gangen (aflæsningen: PL november = 15:00 ×40).
+  En tv-planlagt runde har spredte slots — 12.30/15.00/17.30 er præcis det,
+  skærmbilledet viser. Et indlært klokkeslæt markerer nu kun, hvis det bærer
+  **over halvdelen** af rundens ikke-spillede kampe.
+- **Den negative form er sikker, hvor den positive blev forkastet.** Aflæsningen
+  afviste "alle kampe samme klokkeslæt ⇒ pladsholder", fordi Bundesligaens sidste
+  spillerunde er ægte og ensartet. "Spredte klokkeslæt ⇒ ikke en pladsholder" kan
+  kun FJERNE markeringer og kan derfor kun fejle i den billige retning.
+- 🔴 **Horisonten på ti dage ligger i `src/lib/scoring.js` og ikke i SQL, og det
+  er en beslutning.** `G84`s kontrol alarmerer, når ALLE en turnerings kampe
+  inden for ti dage bærer `kickoff_uncertain`. Lå horisonten i SQL, kunne ingen
+  kamp i det vindue længere være markeret, og grenen ville blive **stum kode** —
+  en kontrol, der ikke kan lyse, ligner dækning. `sql/checks/kickoff_coverage.sql`
+  er derfor uændret, og dens test er stadig grøn uden en linjes ændring; det var
+  dét, der afgjorde, hvor snittet skulle ligge.
+- **Fejlen blev reproduceret før den blev rettet.** En engelsk lørdag med
+  13.30/16.00×3/18.30 mod det rigtige skema: den gamle regel markerede de tre
+  16.00-kampe, den nye markerer nul. Tre SQL-mutationer og tre JS-mutationer,
+  alle fanget. Tolv påstande i `sql/tests/kickoff_uncertain.sql`, fire nye om
+  horisonten i `scoring.test.js`/`time.test.js`.
+- **Signaturen er uændret**, så `api/sync-matches.js` ikke skal deployes med: et
+  `p_now`-argument ville have gjort funktionen til en overload, og PostgREST
+  afviser da syncens RPC-kald med "could not choose a candidate function". Det
+  var den første udgave af rettelsen, og den blev forkastet af netop den grund.
+- ✅ **`#70 matches_kickoff_uncertain_round.sql` er kørt i staging og produktion
+  17. august 2026.** Adfærdsændring ved kørsel: markeringer **fjernes**, ingen
+  tilføjes — første kørsel efter migreringen rydder de falske positive og
+  returnerer antallet.
+- **Endnu ikke gjort:** kort holdnavn til visning (`teams.short_name` fra
+  football-data.orgs `shortName`) står i backloggens indbakke. Feltet er
+  **ikke** efterprøvet mod leverandøren — egress er blokeret fra udviklings-
+  miljøet, og det var netop en uprøvet dokumentationslæsning, der gav fejlen
+  2. august.
+
 17. august 2026 — En vagt, der ikke kunne blive ved med at være grøn (G134)
 
 - **Rettet:** `sql/tests/analytics_standings_share.sql` påstod, at forskellen på

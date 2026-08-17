@@ -285,13 +285,60 @@ function modeLabel(mode, modeParams) {
 // bruges i Admin → Kampe, Admin → Resultater og kampvælgeren, hvor der er en
 // hel kolonne at skrive i, mens tid-kolonnen på tip-skærmen er ~40 px bred og
 // bærer sin forklaring i dagsoverskriften i stedet.
-function formatKickoff(iso, tbd = false, uncertain = false) {
+// ---------- horisonten for "ikke bekræftet" (G135, 17. august 2026) ----------
+//
+// `matches.kickoff_uncertain` siger to ting tilsammen: klokkeslættet er et,
+// turneringen har lært at mistro, OG det bærer over halvdelen af rundens kampe
+// (`sql/matches_kickoff_uncertain_round.sql`). Det er en god regel om FJERNE
+// kampe og en utilstrækkelig om nære.
+//
+// HVORFOR DEN STADIG KAN TAGE FEJL TÆT PÅ. Et pladsholder-klokkeslæt ER
+// turneringens typiske anspilstid — aflæsningen 7. august 2026 fandt, at
+// football-data.orgs efterårsgæt for Premier League er 15.00 i London, altså
+// blackout-slottet, ligaens mest brugte tidspunkt. Dominansen fanger den
+// almindelige tv-runde, hvor slottene er spredte, men ikke en runde, hvor alle
+// kampe rigtigt spilles samtidig (Bundesligaens sidste spillerunde er
+// aflæsningens eget eksempel). 17. august 2026 stod tre ægte PL-kampe fire dage
+// ude med markøren på, og det er den fejl, de ti dage lukker.
+//
+// TALLET ER LÅNT OG IKKE NYT. Ti dage er `G84`s vindue i
+// `sql/checks/kickoff_coverage.sql`, og det bruges her på præcis den påstand, det
+// blev valgt på: "En kamp, der spilles inden for ti dage, har et klokkeslæt."
+//
+// 🔴 HVORFOR HORISONTEN LIGGER HER OG IKKE I SQL. Fordi `G84`s kontrol alarmerer,
+// når ALLE en turnerings kampe inden for ti dage bærer `kickoff_uncertain`. Lå
+// horisonten i `refresh_kickoff_uncertain()`, kunne ingen kamp i det vindue
+// længere være markeret, og grenen ville blive stum kode — en kontrol, der ikke
+// kan lyse, er værre end ingen kontrol, fordi den ligner dækning. Med
+// horisonten her beholder kolonnen én ren betydning, kontrollen beholder sin
+// følsomhed over for et pladsholder-regime, der overlever ind i tipsvinduet, og
+// brugeren ser alligevel ikke markøren på en nær kamp.
+//
+// Prisen er kendt og valgt: en runde, hvor alle kampe RIGTIGT spilles samtidig,
+// kan gøre `G84`s kontrol rød uden en fejl bag. Det er et menneske, der læser
+// den, og en falsk alarm i en kontrol er langt billigere end en falsk markør på
+// hver bruger-skærm.
+const UNCERTAIN_HORIZON_MS = 10 * 24 * 60 * 60 * 1000;
+
+// Skal "ikke bekræftet" vises for denne kamp? `now` er injicerbar af samme grund
+// som `fetchImpl` i providerne: uden den kunne påstanden kun prøves med datoer,
+// der holdt op med at passe, når kalenderen indhentede dem.
+//
+// `tbd` vinder fortsat: "der er ingen tid" gør spørgsmålet om bekræftelse
+// ligegyldigt, og et "~02.00" ville være det værste af begge udgaver.
+function showUncertain(iso, tbd = false, uncertain = false, now = Date.now()) {
+  if (!iso || tbd || !uncertain) return false;
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t) && t - now > UNCERTAIN_HORIZON_MS;
+}
+
+function formatKickoff(iso, tbd = false, uncertain = false, now = Date.now()) {
   if (!iso) return "";
   const d = new Date(iso);
   const date = d.toLocaleDateString("da-DK", { timeZone: APP_TZ, weekday: "short", day: "2-digit", month: "2-digit" });
   if (tbd) return date;
   const tid = date + " kl. " + d.toLocaleTimeString("da-DK", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit" });
-  return uncertain ? tid + " (ikke bekræftet)" : tid;
+  return showUncertain(iso, tbd, uncertain, now) ? tid + " (ikke bekræftet)" : tid;
 }
 const LOCK_LEAD_MS = 60 * 60 * 1000; // 1 time før kampens eget kickoff
 
@@ -494,4 +541,4 @@ function liveInfo(m) {
   };
 }
 
-export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, nextRoundKey, currentRoundKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, isLocked, filterTippable, wasTippableAt, filterFromRoundStart, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };
+export { APP_TZ, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, roundKeyOfDate, nextRoundKey, currentRoundKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, showUncertain, UNCERTAIN_HORIZON_MS, isLocked, filterTippable, wasTippableAt, filterFromRoundStart, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel };

@@ -15,6 +15,74 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 17. august 2026 — `G135`: en pladsholder kendes på RUNDEN, ikke på klokkeslættet — og horisonten hører i visningen
+
+**Beslutning:** `refresh_kickoff_uncertain()` markerer kun en kamp, hvis det
+indlærte klokkeslæt bærer **over halvdelen** af rundens ikke-spillede kampe. Oven
+i lægger visningen en horisont på **ti dage** — men den ligger i
+`src/lib/scoring.js` og bevidst **ikke** i SQL.
+
+**Hvorfor dominans.** `G85` spurgte kun om klokkeslættet, aldrig om kampen. Det
+kunne ikke virke, og aflæsningen 7. august havde allerede skrevet hvorfor:
+efterårspladsholderen **er** turneringens typiske anspilstid. Det var netop
+indvendingen, kandidat A blev forkastet på — og kandidat B, der blev valgt for at
+undgå den, markerer også på klokkeslæt og *lærer* bare tabellen frem for at
+hardkode den. **B undgik A's kalibreringsproblem, ikke A's kollisionsproblem.**
+Den sætning er det, der er værd at tage med videre: to mekanismer, der udleder det
+samme tal på forskellig vis, arver de samme fejl.
+
+Runden er den rigtige enhed, fordi pladsholder-regimet tildeler ét klokkeslæt til
+en hel runde ad gangen (PL november = 15:00 ×40), mens en tv-planlagt runde har
+spredte slots. **Tærsklen er flertal og ikke ensartethed:** PL's december bærer to
+distinkte pladsholdere (15:00 ×40, 20:00 ×20), og et krav om fuld ensartethed
+ville tabe dem begge. Flertal er samtidig den eneste tærskel, man kan sætte uden
+data at kalibrere på (`A35`) — den er ikke et valgt tal.
+
+**Den negative form er sikker, hvor den positive blev forkastet.** Aflæsningen
+afviste "alle kampe samme klokkeslæt ⇒ pladsholder", fordi Bundesligaens sidste
+spillerunde er ægte og ensartet. "Spredte klokkeslæt ⇒ ikke en pladsholder" kan
+kun fjerne markeringer og kan derfor kun fejle i retning af en umarkeret
+pladsholder — den billige fejl, og den tilstand appen levede i før `G85`.
+
+**Hvorfor horisonten IKKE ligger i SQL, og hvorfor det er den vigtigste halvdel af
+beslutningen.** Den første udgave af rettelsen lagde de ti dage i funktionen med
+et injicerbart `p_now`. To ting slog den ihjel:
+
+1. **`G84`s kontrol ville være blevet stum kode.**
+   `sql/checks/kickoff_coverage.sql` alarmerer, når ALLE en turnerings kampe inden
+   for ti dage bærer `kickoff_uncertain`. Med horisonten i SQL kan ingen kamp i
+   det vindue være markeret, så grenen kunne aldrig lyse igen. En kontrol, der
+   ikke kan lyse, er værre end ingen kontrol, fordi den ligner dækning — og det
+   var netop den blindhed, `G85` blev bygget for at lukke.
+2. **Signaturen.** `p_now` med en default gør funktionen til en **overload** af
+   `#49`s, og PostgREST kan da ikke binde syncens ét-argument-kald: "could not
+   choose a candidate function". Det ville have krævet et `drop function` plus et
+   gen-etableret grant — altså en migrering, der kan tage adgangen fra jobbet, i
+   stedet for en, der kun kan give færre markeringer.
+
+Med snittet i visningen beholder kolonnen **én** ren betydning ("det indlærte
+klokkeslæt dominerer runden"), kontrollen beholder sin følsomhed, syncen røres
+ikke, og brugeren ser alligevel ikke markøren på en nær kamp. Markøren har været
+display-only siden `#49`, så en visnings-side horisont er den samme slags regel ét
+lag længere ude. **At `kickoff_coverage.sql` og dens test kunne stå fuldstændig
+uændret, er beviset på, at snittet lå rigtigt.**
+
+**Tallet ti er lånt og ikke nyt.** Det er `G84`s eget vindue, brugt på præcis den
+påstand, det blev valgt på: "En kamp, der spilles inden for ti dage, har et
+klokkeslæt." Samme disciplin som `G85`s gulv på tre, der blev lånt af `G84`.
+
+**Prisen er kendt og valgt:** en runde, hvor alle kampe RIGTIGT spilles samtidig
+(Bundesligaens sidste spillerunde), kan gøre `G84`s kontrol rød uden en fejl bag.
+Det er et menneske, der læser den kontrol, og en falsk alarm der er langt billigere
+end en falsk markør på hver bruger-skærm.
+
+**Hvorfor testen ikke fangede fejlen, og hvad det siger.** Påstand 3 i
+`sql/tests/kickoff_uncertain.sql` **påstod** adfærden: kampe, der "ALDRIG har
+flyttet sig", markeres. Fixturet lå i december/januar, hvor det er rigtigt. Der
+fandtes ingen påstand om en runde med spredte klokkeslæt — altså om
+normaltilstanden. En test, der kun beskriver den tilstand, reglen blev bygget til,
+kan ikke se, at reglen også rammer alt andet.
+
 ## 16. august 2026 — `A39`: kampdagen er blevet personlig
 
 **Beslutning:** et dagskort udgives, når alle kampe på dagen i de konkurrencer,

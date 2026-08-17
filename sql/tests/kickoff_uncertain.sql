@@ -1,4 +1,5 @@
--- Test af `sql/matches_kickoff_uncertain.sql` (G85).
+-- Test af `sql/matches_kickoff_uncertain.sql` (G85) og
+-- `sql/matches_kickoff_uncertain_round.sql` (G135).
 --
 -- Kører mod en engangsdatabase, hvor PRODUKTIONSSKEMAET allerede er indlæst
 -- (`node sql/tests/_schema.mjs`). Rører aldrig produktion.
@@ -35,6 +36,23 @@
 --   9. Funktionen er idempotent: andet kald returnerer 0, fordi den kun tæller
 --      de rækker, hvis markør FAKTISK skiftede.
 --
+-- OG SIDEN `G135` (17. august 2026), som gjorde markeringen kræsen:
+--  10. **Dominansen:** et indlært klokkeslæt, der bærer et MINDRETAL af rundens
+--      kampe, markerer ingenting. Det er skærmbilledet fra 17. august ordret —
+--      en ægte engelsk lørdag med 12.30/15.00/17.30, hvor kun 15.00-slottet stod
+--      med `~`.
+--  11. Bærer det indlærte klokkeslæt hele runden, markeres den stadig. Uden den
+--      påstand ville rettelsen bare have slukket `G85`.
+--  12. **Grænsen er et FLERTAL og ikke en halvdel:** præcis halvdelen markerer
+--      ingenting.
+--
+-- HORISONTEN PRØVES IKKE HER, og det er ikke en udeladelse. `G135` lagde de ti
+-- dage i `src/lib/scoring.js` og ikke i funktionen, netop for at `G84`s kontrol
+-- (`sql/checks/kickoff_coverage.sql`) fortsat kan se en markeret kamp i sit
+-- ti-dages vindue. Begrundelsen står i filhovedet i
+-- `sql/matches_kickoff_uncertain_round.sql`; påstanden ligger i
+-- `src/lib/scoring.test.js` og `src/screens/predictions/time.test.js`.
+--
 -- KØR LOKALT
 --   node sql/tests/_schema.mjs > /tmp/skema.sql
 --   psql -d kutest -v ON_ERROR_STOP=1 -f /tmp/skema.sql
@@ -43,7 +61,12 @@
 \set ON_ERROR_STOP on
 \timing off
 
+-- BEGGE filer, i den rækkefølge produktionen kører dem. `#70` erstatter
+-- funktionen fra `#49`, så inkluderingen her er samtidig prøven på, at
+-- migreringen kan lægges oven på den, der allerede står i basen — og at
+-- signaturen er uændret, så syncens RPC-kald stadig kan bindes.
 \ir ../matches_kickoff_uncertain.sql
+\ir ../matches_kickoff_uncertain_round.sql
 
 -- ---------------------------------------------------------------------------
 -- Fixture
@@ -334,10 +357,93 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- Påstand 10-12: dominansen i runden (G135)
+-- ---------------------------------------------------------------------------
+-- En tredje turnering, holdt helt ude af påstand 1-9, fordi flere af dem tæller
+-- markerede kampe GLOBALT. Fixturet er bygget om ét indlært klokkeslæt (16:00
+-- UTC, Primera Divisións efterårspladsholder) og tre runder, der adskiller sig
+-- på præcis ét: hvor stor en del af runden det klokkeslæt bærer.
+--
+-- Rundenøglen er tirsdag-mandag, så de tre runder ligger i hver sin kalenderuge.
+-- Alle datoer er absolutte og ligger i 2027, af samme grund som ovenfor.
+
+insert into public.leagues (id, name, is_official, is_visible, provider, api_league_id) values
+  ('11111111-0000-4000-8000-000000000003', 'Primera División', true, true, 'footballdata', 'PD');
+insert into public.seasons (id, league_id, name, start_date) values
+  ('22222222-0000-4000-8000-000000000003', '11111111-0000-4000-8000-000000000003', '26/27', '2026-08-01');
+insert into public.teams (id, league_id, name) values
+  ('33333333-0000-4000-8000-000000000005', '11111111-0000-4000-8000-000000000003', 'P-hjemme'),
+  ('33333333-0000-4000-8000-000000000006', '11111111-0000-4000-8000-000000000003', 'P-ude');
+
+insert into public.matches (id, season_id, home_team_id, away_team_id, kickoff_at) values
+  -- LÆRINGEN. Tre kampe, der flytter sig væk fra 16:00 nedenfor — hver i sin
+  -- egen uge, så ingen af dem kan dominere en runde bagefter.
+  ('66666666-0000-4000-8000-000000000001', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000005', '33333333-0000-4000-8000-000000000006', '2027-02-06 16:00+00'),
+  ('66666666-0000-4000-8000-000000000002', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000006', '33333333-0000-4000-8000-000000000005', '2027-02-13 16:00+00'),
+  ('66666666-0000-4000-8000-000000000003', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000005', '33333333-0000-4000-8000-000000000006', '2027-02-20 16:00+00'),
+
+  -- RUNDE A (påstand 10) — den ægte tv-runde. Én kamp på det indlærte
+  -- klokkeslæt, to på andre. Det er 17. august-skærmbilledet i miniature.
+  ('66666666-0000-4000-8000-00000000000a', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000005', '33333333-0000-4000-8000-000000000006', '2027-03-06 16:00+00'),
+  ('66666666-0000-4000-8000-00000000000b', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000006', '33333333-0000-4000-8000-000000000005', '2027-03-06 18:00+00'),
+  ('66666666-0000-4000-8000-00000000000c', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000005', '33333333-0000-4000-8000-000000000006', '2027-03-07 20:00+00'),
+
+  -- RUNDE B (påstand 11) — pladsholder-regimet. Hele runden på 16:00.
+  ('66666666-0000-4000-8000-00000000000d', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000005', '33333333-0000-4000-8000-000000000006', '2027-03-13 16:00+00'),
+  ('66666666-0000-4000-8000-00000000000e', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000006', '33333333-0000-4000-8000-000000000005', '2027-03-13 16:00+00'),
+  ('66666666-0000-4000-8000-00000000000f', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000005', '33333333-0000-4000-8000-000000000006', '2027-03-14 16:00+00'),
+
+  -- RUNDE C (påstand 12) — præcis halvdelen. To af fire på det indlærte
+  -- klokkeslæt. Grænsen er et FLERTAL, så her sker der ingenting.
+  ('66666666-0000-4000-8000-000000000011', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000005', '33333333-0000-4000-8000-000000000006', '2027-03-20 16:00+00'),
+  ('66666666-0000-4000-8000-000000000012', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000006', '33333333-0000-4000-8000-000000000005', '2027-03-20 16:00+00'),
+  ('66666666-0000-4000-8000-000000000013', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000005', '33333333-0000-4000-8000-000000000006', '2027-03-21 19:00+00'),
+  ('66666666-0000-4000-8000-000000000014', '22222222-0000-4000-8000-000000000003',
+   '33333333-0000-4000-8000-000000000006', '33333333-0000-4000-8000-000000000005', '2027-03-21 19:00+00');
+
+-- Flytningerne, der lærer 16:00. Hver til sit eget nye klokkeslæt, så der ikke
+-- opstår et ANDET indlært klokkeslæt undervejs.
+update public.matches set kickoff_at = '2027-02-06 11:00+00' where id = '66666666-0000-4000-8000-000000000001';
+update public.matches set kickoff_at = '2027-02-13 12:00+00' where id = '66666666-0000-4000-8000-000000000002';
+update public.matches set kickoff_at = '2027-02-20 13:00+00' where id = '66666666-0000-4000-8000-000000000003';
+
+do $$
+declare markerede uuid[];
+begin
+  perform public.refresh_kickoff_uncertain('22222222-0000-4000-8000-000000000003');
+
+  select array_agg(id order by id) into markerede
+    from public.matches
+   where season_id = '22222222-0000-4000-8000-000000000003'
+     and kickoff_uncertain;
+
+  -- KUN runde B. Havde `G135` ikke været der, ville listen også have båret
+  -- runde A's ene 16:00-kamp og begge runde C's — altså seks i stedet for tre,
+  -- og de tre ekstra er præcis de falske positive, brugeren så på skærmen.
+  if markerede is distinct from array['66666666-0000-4000-8000-00000000000d',
+                                      '66666666-0000-4000-8000-00000000000e',
+                                      '66666666-0000-4000-8000-00000000000f']::uuid[] then
+    raise exception 'kun den dominerede runde må markeres, fik %', markerede;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
 
 drop table _laas_foer;
 
 do $$
 begin
-  raise notice 'kickoff_uncertain: alle ni påstande holdt.';
+  raise notice 'kickoff_uncertain: alle tolv påstande holdt.';
 end $$;
