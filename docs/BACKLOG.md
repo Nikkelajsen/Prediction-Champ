@@ -51,7 +51,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-En periode-konkurrence (time_range), hvis slutdato er passeret, kårer først sin vinder når HELE sæsonen er slut — sæson-gaten (season_end.sql) ser på mode, ikke på end_date (set med "TEST - Superliga" 17. august 2026, 22/22 spillet, ingen pokal).
+*(Tom.)*
 
 ---
 

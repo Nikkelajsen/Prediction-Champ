@@ -20,6 +20,12 @@
 --      den kan ikke vokse, så alle kampe spillet ER afsluttet.
 --   7. Det samme gælder en gammel `full_season` med `mode_params.stages` —
 --      mærkatet for "afgrænset i hånden under den gamle ordning".
+--   8. En periode (`time_range`), hvis slutdato er passeret, er afsluttet uden
+--      at vente på sæsonen — men først DAGEN EFTER slutdatoen, kun med en
+--      kendt slutdato, og stadig kun med alle resultater inde. Efterfyldningen
+--      kan ikke lægge en kamp ind i et passeret vindue (dens runde er pr.
+--      definition begyndt), så der er intet at vente på — uden undtagelsen
+--      ventede en færdigspillet augustperiode på hele sæsonen.
 --
 -- Testen findes, fordi den gamle fejl var USYNLIG i data: viewet svarede
 -- `concluded = true`, alt så rigtigt ud, og prisen blev betalt et helt andet
@@ -208,6 +214,71 @@ begin
   if (select count(*) from public.admin_seasons()) <> 1 then
     raise exception '11) admin_seasons svarede ikke med sæsonen';
   end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Perioden: sæson-gaten slipper, når slutdatoen er passeret. Sæsonen står ÅBEN
+-- her (is_finished = false, ends_at = null, seneste kickoff i går — sådan
+-- efterlod blokken ovenfor den), og det er hele pointen: perioden skal
+-- afslutte alligevel, mens `full_season` ved siden af stadig venter.
+insert into public.competitions (id, name, mode, mode_params) values
+  ('c0000000-0000-0000-0000-000000000004', 'Periode, passeret', 'time_range',
+   jsonb_build_object('start_date', to_char(current_date - 30, 'YYYY-MM-DD'),
+                      'end_date',   to_char(current_date - 1,  'YYYY-MM-DD'))),
+  ('c0000000-0000-0000-0000-000000000005', 'Periode, sidste dag', 'time_range',
+   jsonb_build_object('start_date', to_char(current_date - 30, 'YYYY-MM-DD'),
+                      'end_date',   to_char(current_date,      'YYYY-MM-DD'))),
+  ('c0000000-0000-0000-0000-000000000006', 'Periode, uden slutdato', 'time_range',
+   '{}'::jsonb);
+
+insert into public.competition_matches (competition_id, match_id)
+select c.id, m.id
+from public.competitions c
+cross join public.matches m
+where c.id in ('c0000000-0000-0000-0000-000000000004',
+               'c0000000-0000-0000-0000-000000000005',
+               'c0000000-0000-0000-0000-000000000006');
+
+do $$
+declare
+  passeret   uuid := 'c0000000-0000-0000-0000-000000000004';
+  sidste_dag uuid := 'c0000000-0000-0000-0000-000000000005';
+  uden_slut  uuid := 'c0000000-0000-0000-0000-000000000006';
+  hel        uuid := 'c0000000-0000-0000-0000-000000000001';
+begin
+  -- 12) Passeret slutdato + alle kampe spillet ⇒ afsluttet, selvom sæsonen er
+  --     åben. Det er selve lempelsen.
+  if not pg_temp.concluded(passeret) then
+    raise exception '12) en periode med passeret slutdato ventede stadig på sæsonen';
+  end if;
+
+  -- 12b) …og den gælder KUN perioden: hel-sæson-konkurrencen på præcis de
+  --      samme kampe venter stadig. Uden denne modprøve kunne 12) også bestås
+  --      af en gate, der var faldet helt af.
+  if pg_temp.concluded(hel) then
+    raise exception '12b) sæson-gaten er væk — en full_season afsluttede med åben sæson';
+  end if;
+
+  -- 12c) På selve slutdatoen er vinduet stadig åbent — dagens kampe kan nå at
+  --      komme til, så `<` og ikke `<=` er reglen.
+  if pg_temp.concluded(sidste_dag) then
+    raise exception '12c) en periode blev afsluttet på sin egen sidste dag';
+  end if;
+
+  -- 12d) Uden slutdato gælder undtagelsen ikke: uvished trækker mod "ikke
+  --      afsluttet", samme princip som seasons_done's coalesce.
+  if pg_temp.concluded(uden_slut) then
+    raise exception '12d) en periode uden slutdato blev afsluttet med sæsonen åben';
+  end if;
+
+  -- 12e) Undtagelsen løsner kun sæson-kravet, ikke resultat-kravet.
+  update public.matches set home_score = null, away_score = null
+   where id = '10000000-0000-0000-0000-000000000002';
+  if pg_temp.concluded(passeret) then
+    raise exception '12e) en uspillet kamp blev afsluttet af periode-undtagelsen';
+  end if;
+  update public.matches set home_score = 1, away_score = 1
+   where id = '10000000-0000-0000-0000-000000000002';
 end $$;
 
 -- Idempotens: anden kørsel erstatter view, kolonner og funktioner uden at fejle.
