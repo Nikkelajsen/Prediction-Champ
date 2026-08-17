@@ -1,0 +1,89 @@
+-- Leagly — "ikke bekræftet"-markøren fjernes helt (august 2026)
+-- Idempotent. Kør i Supabase SQL-editor med "Run without RLS".
+--
+-- 🔴 KØRSELSRÆKKEFØLGE — OMVENDT AF #49. Denne fil må først køres, EFTER at
+-- koden uden markøren er merget til `main`. `job-heartbeat.yml` kører hvert
+-- 30. minut fra `main`, og indtil merge læser dens kontrol kolonnen
+-- `kickoff_uncertain` — droppes kolonnen først, fejler kontrollen med `42703`.
+-- Mellemtilstanden den anden vej (kode merget, kolonner stadig i databasen)
+-- er harmløs: ingen kode læser eller skriver dem længere.
+--
+-- ============================================================================
+-- BESLUTNINGEN
+-- ============================================================================
+-- Markøren `kickoff_uncertain` (#49/`G85`, strammet i #70/`G135`) gættede på,
+-- om et klokkeslæt var leverandørens pladsholder, ved at lære turneringens
+-- "standardklokkeslæt" af tidligere tidsflytninger. 17. august 2026 viste et
+-- brugerskærmbillede, at selv den strammede regel rammer forkert: i en runde,
+-- der tydeligt HAR været igennem tv-flytninger (kampe fredag 21.00, lørdag
+-- 13.30 og 18.30), stod lørdagens 16.00-kampe stadig som "(ikke bekræftet)",
+-- fordi over halvdelen af runden lå på det indlærte klokkeslæt.
+--
+-- Beslutningen (se `docs/DECISIONS.md`, 17. august 2026) er at fjerne hele
+-- maskineriet: har kampen et klokkeslæt, vises det uden forbehold — det
+-- opdaterer sig selv via synkroniseringen, hvis det flyttes. Har den ingen
+-- tid, viser `kickoff_tbd` allerede kun datoen. `kickoff_tbd` og alt omkring
+-- lås og deadline røres IKKE af denne fil.
+--
+-- ============================================================================
+-- HVAD DER FJERNES
+-- ============================================================================
+--   · triggeren `matches_remember_previous_kickoff` og dens funktion
+--     `remember_previous_kickoff()` (observationen, trin 1 i #49)
+--   · funktionen `refresh_kickoff_uncertain(uuid)` (læring + markering,
+--     trin 2-3; #70's version)
+--   · kolonnerne `matches.kickoff_uncertain` og `matches.kickoff_prev_at`
+--     (kolonnekommentarerne forsvinder med kolonnerne)
+--
+-- Ingen `revoke` er nødvendig: en droppet funktion tager sine rettigheder med
+-- sig. Ingen views eller policies afhænger af kolonnerne (efterprøvet mod
+-- skema-eksporten før denne fil blev skrevet).
+--
+-- ⛔ #49 `matches_kickoff_uncertain.sql` og #70 `matches_kickoff_uncertain_round.sql`
+-- må ALDRIG gen-køres efter denne fil: #49 genskaber tavst kolonner, trigger
+-- og funktion; #70's `create or replace` genskaber en funktion, hvis krop
+-- refererer droppede kolonner — den oprettes uden fejl (plpgsql valideres
+-- først ved kald) og eksploderer så ved første kald.
+--
+-- ============================================================================
+-- ADFÆRDSÆNDRING VED KØRSEL
+-- ============================================================================
+-- 🟢 Ingen lås flytter sig. Markøren har været DISPLAY-ONLY siden #49 —
+-- `match_lock_at()`, `match_locked()`, RLS-policies og `analytics_match_locks`
+-- kender kun `kickoff_tbd`, og den bliver stående.
+--
+-- 🟢 Synkroniseringen kalder ikke længere `refresh_kickoff_uncertain` (fjernet
+-- fra `api/sync-matches.js` i samme leverance), så der er ingen kalder at
+-- brække. Gamle `job_runs.detail`-rækker med `uncertainMarked` er harmløse og
+-- ældes ud via `prune_job_runs(30)`.
+
+drop trigger if exists matches_remember_previous_kickoff on public.matches;
+drop function if exists public.remember_previous_kickoff();
+drop function if exists public.refresh_kickoff_uncertain(uuid);
+
+alter table public.matches drop column if exists kickoff_uncertain;
+alter table public.matches drop column if exists kickoff_prev_at;
+
+-- ============================================================================
+-- Verifikation — kør efter scriptet
+-- ============================================================================
+-- 1) Kolonnerne er væk — forventet resultat er præcis to rækker,
+--    `kickoff_at` og `kickoff_tbd`:
+--
+--    select column_name from information_schema.columns
+--    where table_schema = 'public' and table_name = 'matches'
+--      and column_name like 'kickoff%';
+--
+-- 2) Funktionerne og triggeren er væk — forventet resultat er nul rækker:
+--
+--    select proname from pg_proc
+--    where proname in ('remember_previous_kickoff', 'refresh_kickoff_uncertain');
+--
+--    select tgname from pg_trigger
+--    where tgname = 'matches_remember_previous_kickoff';
+--
+-- 3) Ingen lås har flyttet sig. Tallene skal være de samme før og efter denne
+--    fil — det var hele pointen med en display-only markør:
+--
+--    select count(*) filter (where is_locked) as laaste, count(*) as i_alt
+--    from public.analytics_match_locks;

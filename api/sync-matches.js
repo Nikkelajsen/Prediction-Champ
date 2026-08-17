@@ -195,37 +195,6 @@ export function matchUpsertRow(fx, { seasonId, homeTeamId, awayTeamId }) {
   };
 }
 
-// Markér de kampe, hvis klokkeslæt sandsynligvis er leverandørens gæt (G85).
-//
-// Reglen bor i `public.refresh_kickoff_uncertain()` og ikke her, fordi den er en
-// aggregering over hele sæsonens rækker: den lærer turneringens pladsholder-
-// klokkeslæt af de tider, der HAR flyttet sig (`matches.kickoff_prev_at`, sat af
-// en trigger), og markerer de øvrige kampe på samme klokkeslæt. Hele
-// begrundelsen — hvorfor gulvet er tre, hvorfor UTC, og hvorfor markøren ikke er
-// `kickoff_tbd` — står i filhovedet i sql/matches_kickoff_uncertain.sql.
-//
-// KASTER ALDRIG VIDERE, samme regel som readSeasonMeta() og efterfyldningen: en
-// sync, der har hentet kampene rigtigt, må ikke fejle på en markering, der kun
-// rører visningen. Fejlen bæres i stedet ud i `detail`, så en markering, der
-// tavst holder op med at virke, kan ses i Admin → Drift frem for kun i Vercels
-// logs.
-//
-// Tallet er, hvor mange kampes markør der SKIFTEDE — ikke hvor mange der er
-// markeret. Nul ved de første kørsler er den forventede tilstand og ikke en
-// fejl: reglen kan først svare, når en tid har flyttet sig mellem to kørsler.
-export async function refreshKickoffUncertain(sb, seasonId) {
-  try {
-    const n = await sb(`/rest/v1/rpc/refresh_kickoff_uncertain`, {
-      method: "POST",
-      body: JSON.stringify({ p_season_id: seasonId }),
-    });
-    return { marked: Number.isFinite(n) ? n : 0 };
-  } catch (e) {
-    console.warn(`[ubekræftede klokkeslæt] ${e.message}`);
-    return { marked: 0, error: e.message };
-  }
-}
-
 // Sæsonens slutning fra datakilden — best effort.
 //
 // Metoden er VALGFRI i provider-kontrakten (api/_providers/index.js), og et
@@ -504,13 +473,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Ubekræftede klokkeslæt (G85). SKAL ligge efter upserten: det er dér,
-    // triggeren har set, hvilke tider der flyttede sig i denne kørsel, og det er
-    // netop de flytninger, reglen lærer af. Kaldes også når `toUpsert` er tom —
-    // en kørsel uden kampe kan stadig have en markering, der skal ryddes, fordi
-    // en kamp er blevet spillet siden sidst.
-    const uncertain = await refreshKickoffUncertain(sb, seasonId);
-
     // Sæsonens slutning, som datakilden ser den (`seasons.ends_at`/`is_finished`).
     //
     // Det er dét, der holder `competition_status` fra at erklære en konkurrence
@@ -586,12 +548,6 @@ export default async function handler(req, res) {
       backfilled: backfill.added,
       backfilledCompetitions: backfill.competitions,
       ...(backfill.error ? { backfillError: backfill.error } : {}),
-      // G85: hvor mange kampes "klokkeslættet er ikke bekræftet"-markør der
-      // skiftede. Hører i detail'en af samme grund som `backfilled` — reglen
-      // rører kun visningen og ville ellers kunne holde op med at virke, uden at
-      // nogen kunne se det andre steder end på en forkert tid i appen.
-      uncertainMarked: uncertain.marked,
-      ...(uncertain.error ? { uncertainError: uncertain.error } : {}),
       unmatched: [...unmatched],
     });
   } catch (e) {

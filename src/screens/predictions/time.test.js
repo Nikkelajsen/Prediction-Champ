@@ -25,35 +25,6 @@ describe("hhmm", () => {
     expect(hhmm("2026-09-13T00:00:00Z", true)).toBe("");
     expect(hhmm("2026-09-13T00:00:00Z", false)).not.toBe("");
   });
-
-  // G85. Den svagere markør gør det MODSATTE af tbd: tiden bliver stående,
-  // fordi den er brugbar at planlægge efter, og siger bare at den er
-  // leverandørens gæt. Havde den skjult tiden, ville vi have byttet en forkert
-  // oplysning ud med ingen oplysning — og det er ikke en forbedring for en
-  // bruger, der skal vide, om kampen ligger lørdag formiddag eller aften.
-  it("sætter ~ foran, når tiden ikke er bekræftet", () => {
-    // `now` skrives ud af samme grund som datoerne selv: horisonten i `G135`
-    // regner fra den, og uden et fast ur holdt påstanden op med at passe, når
-    // kalenderen indhentede december 2026.
-    const nu = Date.parse("2026-11-01T12:00:00Z");
-    expect(hhmm("2026-12-12T15:00:00Z", false, true, nu)).toMatch(/^~\d{2}[.:]\d{2}$/);
-    expect(hhmm("2026-12-12T15:00:00Z", false, false, nu)).not.toMatch(/~/);
-  });
-
-  // G135. Skærmbilledet fra 17. august 2026: tre ægte Premier League-kampe fire
-  // dage ude bar `~`, fordi 14:00 UTC både er blackout-slottet og
-  // football-data.orgs efterårsgæt. Tilden må ikke stå på en nær kamp.
-  it("dropper tilden på en kamp inden for ti dage", () => {
-    const nu = Date.parse("2026-08-18T12:00:00Z");
-    expect(hhmm("2026-08-22T14:00:00Z", false, true, nu)).toMatch(/^\d{2}[.:]\d{2}$/);
-    expect(hhmm("2026-08-22T14:00:00Z", false, true, nu)).not.toMatch(/~/);
-  });
-
-  it("lader 'ingen tid' vinde over 'ikke bekræftet'", () => {
-    // Bærer en kamp begge markører, er der ikke noget klokkeslæt at sætte et
-    // tilde foran. Et "~02.00" ville være det værste af begge udgaver.
-    expect(hhmm("2026-09-13T00:00:00Z", true, true)).toBe("");
-  });
 });
 
 describe("dayKey", () => {
@@ -152,49 +123,6 @@ describe("groupIntoDays", () => {
     ]);
     expect(dage).toHaveLength(1);
     expect(dage[0].label).not.toMatch(/Tid ikke fastlagt/);
-  });
-
-  // G85. Tegnforklaringen skal med, så snart der står ét `~` på dagen — modsat
-  // "Tid ikke fastlagt", som kun sættes, når HELE dagen mangler tid. Forskellen
-  // er, at en tom tidskolonne forklarer sig selv, mens et tegn ikke gør.
-  it("forklarer tilden, også når kun én kamp på dagen er ubekræftet", () => {
-    const dage = groupIntoDays([
-      { id: "a", kickoff_at: "2026-12-12T15:00:00Z", kickoff_tbd: false, kickoff_uncertain: true },
-      { id: "b", kickoff_at: "2026-12-12T17:00:00Z", kickoff_tbd: false, kickoff_uncertain: false },
-    ], undefined, Date.parse("2026-11-01T12:00:00Z"));
-    expect(dage).toHaveLength(1);
-    expect(dage[0].label).toMatch(/~ = tid ikke bekræftet/);
-  });
-
-  // G135. Tegnforklaringen og tegnet må ikke kunne komme i utakt: er dagen inde
-  // under horisonten, står der ingen tilder i rækkerne, og en overskrift, der
-  // alligevel forklarede dem, ville sende brugeren ud at lede efter et tegn,
-  // der ikke er der.
-  it("nævner ikke tilden, når dagen ligger inden for horisonten", () => {
-    const dage = groupIntoDays([
-      { id: "a", kickoff_at: "2026-08-22T14:00:00Z", kickoff_tbd: false, kickoff_uncertain: true },
-      { id: "b", kickoff_at: "2026-08-22T16:30:00Z", kickoff_tbd: false, kickoff_uncertain: false },
-    ], undefined, Date.parse("2026-08-18T12:00:00Z"));
-    expect(dage).toHaveLength(1);
-    expect(dage[0].label).not.toMatch(/bekræftet/);
-  });
-
-  it("nævner ikke tilden på en dag helt uden ubekræftede tider", () => {
-    const dage = groupIntoDays([
-      { id: "a", kickoff_at: "2026-12-12T15:00:00Z", kickoff_tbd: false, kickoff_uncertain: false },
-    ]);
-    expect(dage[0].label).not.toMatch(/bekræftet/);
-  });
-
-  // Bærer alle dagens kampe begge markører, er "Tid ikke fastlagt" det rigtige
-  // svar: rækkerne viser ingen tid, så der er ingen tilde at forklare.
-  it("siger 'Tid ikke fastlagt' frem for tegnforklaringen, når begge markører står", () => {
-    const dage = groupIntoDays([
-      { id: "a", kickoff_at: "2026-09-13T00:00:00Z", kickoff_tbd: true, kickoff_uncertain: true },
-      { id: "b", kickoff_at: "2026-09-13T00:00:00Z", kickoff_tbd: true, kickoff_uncertain: true },
-    ]);
-    expect(dage[0].label).toMatch(/Tid ikke fastlagt/);
-    expect(dage[0].label).not.toMatch(/~/);
   });
 
   it("taber ingen kampe", () => {

@@ -106,7 +106,7 @@ function CustomFields({
                       }} />
                       <span style={{ color: C.text }}>{upcomingTeams[m.home_team_id]} - {upcomingTeams[m.away_team_id]}</span>
                       <span style={{ color: C.muted, fontSize: 11, marginLeft: "auto", whiteSpace: "nowrap" }}>
-                        {m._leagueName} · {locked ? "Låst" : formatKickoff(m.kickoff_at, m.kickoff_tbd, m.kickoff_uncertain)}
+                        {m._leagueName} · {locked ? "Låst" : formatKickoff(m.kickoff_at, m.kickoff_tbd)}
                       </span>
                     </label>
                   );

@@ -58,7 +58,7 @@ function ResultsPanel({ token, leagues }) {
               <tr key={m.id} className="rowline">
                 <td style={{ padding: "10px 6px" }}>
                   <div style={{ color: C.text, fontWeight: 600 }}>{teamsById[m.home_team_id]} vs {teamsById[m.away_team_id]}</div>
-                  <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>{formatKickoff(m.kickoff_at, m.kickoff_tbd, m.kickoff_uncertain)}</div>
+                  <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>{formatKickoff(m.kickoff_at, m.kickoff_tbd)}</div>
                 </td>
                 <td>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>

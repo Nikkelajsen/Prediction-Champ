@@ -15,6 +15,45 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 17. august 2026 — "Ikke bekræftet"-markøren fjernes helt: et klokkeslæt vises uden forbehold
+
+**Beslutning:** `matches.kickoff_uncertain` og hele maskineriet bag den —
+kolonnen `kickoff_prev_at`, triggeren `matches_remember_previous_kickoff`,
+`refresh_kickoff_uncertain()`, syncens RPC-kald, `"(ikke bekræftet)"`/`~` i
+visningen og `ALLE UBEKRAEFTEDE`-halvdelen af `kickoff_coverage`-kontrollen —
+er fjernet (`#71 matches_kickoff_uncertain_drop.sql`). Reglen er herefter den
+simple, ejeren selv formulerede: **har kampen et klokkeslæt, vises det uden
+forbehold; har den ingen, viser `kickoff_tbd` kun datoen.** `kickoff_tbd` og
+alt omkring lås og deadline er urørt.
+
+**Hvorfor.** Truffet samme dag som `G135`-rettelsen (beslutningen nedenfor) og
+oven på den: ejerens skærmbillede viste, at markøren stod på 16.00-kampene i en
+runde, der tydeligt HAVDE været igennem tv-flytninger (kampe fredag 21.00,
+lørdag 13.30 og 18.30) — netop de kampe, der er mest sikre. Dominans-reglen
+indsnævrede gættet, men genoprettede ikke tilliden til det: et gæt, der har
+ramt de mest bekræftede kampe én gang, læses ikke som information igen. Og
+markørens reelle værdi var lille — et klokkeslæt, leverandøren flytter, retter
+sig selv via syncen (hver 12. time), og markøren var display-only fra første
+dag, så den beskyttede aldrig et tip eller en lås. Mod det stod en betydelig
+vedligeholdsflade: to kolonner, en trigger på `matches`, en indlæringsregel med
+to kalibrerede tærskler, en RPC pr. sync-kørsel, en 449-linjers SQL-test og en
+kontrol-halvdel i heartbeat'en.
+
+**Prisen, og den er valgt med åbne øjne:** `sql/checks/kickoff_coverage.sql`
+er igen blind for præcis den tilstand, `G85` blev bygget for — Premier League,
+Primera División og Serie A får et opdigtet klokkeslæt fra football-data.org
+og kan aldrig få `kickoff_tbd` sat, så deres foreløbige tider vises, som var de
+fastsatte. Accepteret, fordi fejlen retter sig selv ved næste sync, når tiden
+flyttes, og fordi alternativet var en markør, der løj den anden vej.
+`kickoff_tbd`-halvdelen af kontrollen (`ALLE UDEN TID`, `G84`) står urørt.
+
+**Følger for gen-kørsel:** `#49` og `#70` må aldrig gen-køres (🛑 i
+`sql/README.md` — #49 genskaber maskineriet tavst, #70 genskaber en funktion,
+der først fejler ved kald). Kørselsrækkefølgen for `#71` er omvendt af `#49`s:
+merge/deploy først, migrering bagefter, ellers fejler heartbeat'en med `42703`.
+
+---
+
 ## 17. august 2026 — `G135`: en pladsholder kendes på RUNDEN, ikke på klokkeslættet — og horisonten hører i visningen
 
 **Beslutning:** `refresh_kickoff_uncertain()` markerer kun en kamp, hvis det
