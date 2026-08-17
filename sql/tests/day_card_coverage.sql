@@ -100,6 +100,24 @@
 \timing off
 
 -- ---------------------------------------------------------------------------
+-- Migreringen, kontrollen hviler på
+-- ---------------------------------------------------------------------------
+-- 🔴 SKEMAET INDLÆSES FØR MIGREINGEN, OG TESTEN LÆSER DEN SELV — samme mønster
+-- og samme begrundelse som `competition_matches_read.sql`s trin i CI: trinnet
+-- gør dermed præcis det, en kørsel i Supabase gør.
+--
+-- Uden linjen fejler kontrollen med `function public.user_day_scope(date) does
+-- not exist`, fordi `sql/schema.sql` er et GENERERET øjebliksbillede og først
+-- kender `#68`, når skema-eksporten har kørt efter migreringen. At lade testen
+-- vente på den eksport ville gøre den grøn eller rød efter, hvornår en ugentlig
+-- workflow sidst kørte — og det er ikke en test, det er et lotteri.
+--
+-- Fejlen blev fanget af CI og ikke lokalt, fordi migreringen lokalt var lagt på
+-- i hånden før kørslen. Det er værd at huske: en test, der efterprøves i en
+-- opsætning, CI ikke har, er kun efterprøvet i den opsætning.
+\ir ../story_engine_personal_day.sql
+
+-- ---------------------------------------------------------------------------
 -- Fixture
 -- ---------------------------------------------------------------------------
 
