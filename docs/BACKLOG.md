@@ -51,7 +51,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(Tom.)*
+- Rundestoryens port i triggeren er global (alle turneringers kampe i runden skal have resultat) — brugeren venter på ligaer, hun ikke er med i, og en resultatløs kamp udskyder storyen til catchup-vinduet (i dag − 7 − grace); samme problem som A39 løste for dagskortet, meldt af bruger 17. august 2026.
 
 ---
 
