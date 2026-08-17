@@ -7,7 +7,7 @@
 -- bare arbejde, der forsvinder. Skal skemaet ændres, skrives en migrering i
 -- sql/ og køres i Supabases SQL-editor — se sql/README.md.
 --
--- Skemaet ændrede sig sidst: 2026-08-14
+-- Skemaet ændrede sig sidst: 2026-08-17
 --
 -- DATOEN ER FILENS HOLDBARHED, ikke dens kørselsstempel. Den står stille,
 -- når en eksport ikke fandt noget nyt, og siger dermed "skemaet er uændret
@@ -19,7 +19,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict CUKDHzJ7fvt7V08YnCHbMmTKA46MMMEc8NhS8r6nud8Z1XEqBfSLDjpkvrgAdFc
+\restrict egxlvuOjOq4I3MvpanE20uVfwca4VWZSi7TVXdLlmlkBXfUg3uzcYZ74is0Lr5Z
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.11 (Ubuntu 17.11-1.pgdg24.04+2)
@@ -340,6 +340,45 @@ begin
                              where event_name = 'opened_league' and created_at >= now() - make_interval(days => p_days)),
     'league_views_detail', (select count(*) from public.analytics_events
                              where event_name = 'opened_league' and group_id is not null and created_at >= now() - make_interval(days => p_days)),
+
+    -- DELINGSFLADERNE (B37, august 2026). `events` ovenfor tæller hvert NAVN,
+    -- og det er for groft: `story_shared` er ét navn med TRE afsendere, som kun
+    -- kan skelnes på `metadata->>'from'`. Uden opdelingen kan man se AT der
+    -- deles og ikke HVORFRA — altså ikke forskellen på "dagskortets del-knap
+    -- bruges" og "nogen delte noget".
+    --
+    --   'frame:X'    rundekortet (v3's tap-through). X er framens NAVN —
+    --                'ROUND_SUM' eller 'RATING', de to felter, der kan deles
+    --   'day_card'   dagskortet (I25)
+    --   'milestone'  milepælen på karriereprofilen
+    --   (intet felt) rundekortet FØR v3 gav frames. Historiske rækker har
+    --                ingen `from`, og de er alle rundekort — derfor falder
+    --                `else` sammen med 'round' og ikke i en 'ukendt'-spand.
+    --
+    -- `standings_shared` (I22) er sit eget navn og kommer med her, fordi
+    -- spørgsmålet "hvorfra deles der?" ikke kan besvares uden den fjerde flade.
+    -- Den blandes IKKE ind i Story Engine-tallene; se hovedet i
+    -- sql/analytics_standings_share.sql for hvorfor navnet er skilt ad.
+    'shares', (
+      with s as (
+        select
+          case
+            when e.event_name = 'standings_shared' then 'standings'
+            when e.metadata->>'from' = 'day_card'  then 'day_card'
+            when e.metadata->>'from' = 'milestone' then 'milestone'
+            else 'round'
+          end as surface,
+          e.user_id
+        from public.analytics_events e
+        where e.event_name in ('story_shared', 'standings_shared')
+          and e.created_at >= now() - make_interval(days => p_days)
+      )
+      -- Tomt vindue giver `{}` og ikke `null`: klienten skelner mellem "nul
+      -- delinger" (målt) og "nøglen mangler" (RPC'en er ikke gen-kørt), og de
+      -- to må aldrig se ens ud.
+      select coalesce(jsonb_object_agg(surface, jsonb_build_object('count', c, 'users', u)), '{}'::jsonb)
+      from (select surface, count(*) as c, count(distinct user_id) as u from s group by surface) t
+    ),
 
     'events_by_day', (
       select coalesce(jsonb_object_agg(event_name, series), '{}'::jsonb)
@@ -1122,6 +1161,133 @@ $$;
 
 
 --
+-- Name: admin_analytics_rounds(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admin_analytics_rounds(p_rounds integer DEFAULT 12) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  result jsonb;
+  -- Klampet som `&hours=` i api/send-notifications.js: et vindue er en
+  -- oplysning fra klienten, ikke en tillid.
+  n int := least(greatest(coalesce(p_rounds, 12), 1), 52);
+begin
+  perform public.analytics_require_admin();
+
+  with base as (
+    -- Kun runder, der indgår i mindst én konkurrence — samme afgrænsning som
+    -- rounds_completed. En Sportmonks-runde, ingen tipper på, er ikke en runde,
+    -- nogen kunne have været aktiv i.
+    select
+      rl.round_key,
+      min(rl.kickoff_at)                     as first_kickoff,
+      max(rl.kickoff_at)                     as last_kickoff,
+      count(*)                               as match_count,
+      count(*) filter (where rl.is_locked)   as locked_count,
+      count(*) filter (where m.home_score is not null and m.away_score is not null) as finished_count
+    from public.analytics_match_locks rl
+    join public.matches m on m.id = rl.match_id
+    where exists (select 1 from public.competition_matches cm where cm.match_id = rl.match_id)
+    group by rl.round_key
+  ),
+  -- `locked_count > 0`: runden er gået i gang. En runde, hvor intet er låst
+  -- endnu, har ingen mulige tips og ville tegne en tom søjle i fremtiden.
+  win as (
+    select * from base where locked_count > 0 order by round_key desc limit n
+  ),
+  floor_key as (select min(round_key) as k from win),
+  facts as (
+    select f.round_key, f.user_id, bool_or(f.predicted) as any_predicted
+    from public.analytics_completion_facts f
+    where f.round_key >= (select k from floor_key)
+    group by 1, 2
+  ),
+  per_round as (
+    select round_key,
+           count(*)                              as exposed,
+           count(*) filter (where any_predicted) as players
+    from facts group by 1
+  ),
+  -- Volumen: distinkte (bruger, kamp) — grain-reglen fra
+  -- analytics_completion_facts. Uden `distinct` tælles ét tip én gang pr.
+  -- konkurrence, kampen indgår i.
+  tips as (
+    select round_key, count(*) as tips
+    from (
+      select distinct f.round_key, f.user_id, f.match_id
+      from public.analytics_completion_facts f
+      where f.predicted and f.round_key >= (select k from floor_key)
+    ) t
+    group by 1
+  ),
+  -- Første runde, brugeren nogensinde SPILLEDE — over hele historikken og ikke
+  -- kun vinduet. Læses opgørelsen inden for vinduet, ville enhver, der ikke var
+  -- med i vinduets første runde, tælle som ny hver eneste gang vinduet flyttes.
+  -- Det koster en fuld gennemløbning af viewet, præcis som
+  -- completion_rate_all_time i RPC 1.
+  debut as (
+    select user_id, min(round_key) as first_round
+    from public.analytics_completion_facts
+    where predicted
+    group by 1
+  ),
+  newcomers as (
+    select d.first_round as round_key, count(*) as new_players
+    from debut d
+    where d.first_round >= (select k from floor_key)
+    group by 1
+  ),
+  -- Rundens uge er [round_key, round_key + 7). round_key er tirsdag i DANSK
+  -- tid, mens user_activity_days.day er en UTC-dato — et besøg mellem midnat
+  -- og 02.00 dansk tid falder derfor i den foregående runde. Kendt og
+  -- accepteret: skævheden er to timer på en uge og står i måle-ordbogen.
+  visitors as (
+    select w.round_key, count(distinct d.user_id) as visitors
+    from win w
+    join public.user_activity_days d
+      on d.day >= w.round_key and d.day < w.round_key + 7
+    group by 1
+  ),
+  since as (select min(day) as d from public.user_activity_days)
+  select jsonb_build_object(
+    'rounds_window', n,
+    'rounds_available', (select count(*) from base where locked_count > 0),
+    'activity_since', (select d from since),
+    'rounds', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'round_key',      w.round_key,
+        'first_kickoff',  w.first_kickoff,
+        'last_kickoff',   w.last_kickoff,
+        'match_count',    w.match_count,
+        'locked_count',   w.locked_count,
+        'finished_count', w.finished_count,
+        'is_open',        w.locked_count < w.match_count,
+        'exposed',        coalesce(p.exposed, 0),
+        'players',        coalesce(p.players, 0),
+        'missed',         coalesce(p.exposed, 0) - coalesce(p.players, 0),
+        'play_rate',      case when coalesce(p.exposed, 0) = 0 then null
+                               else round(100.0 * p.players / p.exposed, 1) end,
+        'new_players',    coalesce(nc.new_players, 0),
+        'tips',           coalesce(t.tips, 0),
+        'visitors',       case when (select d from since) is null or w.round_key < (select d from since)
+                               then null else coalesce(v.visitors, 0) end
+      ) order by w.round_key)
+      from win w
+      left join per_round p  on p.round_key = w.round_key
+      left join tips t       on t.round_key = w.round_key
+      left join newcomers nc on nc.round_key = w.round_key
+      left join visitors v   on v.round_key = w.round_key
+    ), '[]'::jsonb)
+  ) into result;
+
+  return result;
+end;
+$$;
+
+
+--
 -- Name: admin_analytics_stories(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1160,7 +1326,16 @@ begin
   ev as (
     select e.metadata->>'rule' as rule,
       count(*) filter (where e.event_name = 'story_viewed')  as viewed,
-      count(*) filter (where e.event_name = 'story_shared')  as shared
+      -- MILEPÆLS-DELINGER HØRER IKKE TIL I EN REGELTABEL (B37, august 2026).
+      -- Karriereprofilens del-knap skriver `story_shared` med milepælens nøgle
+      -- som `rule`, og nøglerne bor i et andet navnerum end motorens regler.
+      -- For de fleste er følgen usynlig — `COMP_COMEBACK` matcher ingen
+      -- story-regel og falder ud af joinet nedenfor — men `MONTH_CHAMP` er
+      -- BEGGE dele, bevidst (se kommentaren i src/lib/milestones.js), og den
+      -- rules delinger blev derfor talt med i en tabel over motorens kort.
+      -- Fladen aflæses nu for sig i admin_analytics_engagement's `shares`.
+      count(*) filter (where e.event_name = 'story_shared'
+                         and coalesce(e.metadata->>'from', '') <> 'milestone') as shared
     from public.analytics_events e cross join win w
     where e.event_name in ('story_viewed', 'story_shared')
       and e.created_at >= w.t0
@@ -1328,7 +1503,7 @@ end $$;
 -- Name: admin_job_health(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.admin_job_health() RETURNS TABLE(job text, last_run_at timestamp with time zone, last_ok_at timestamp with time zone, consecutive_failures integer, last_error text, last_detail jsonb)
+CREATE FUNCTION public.admin_job_health() RETURNS TABLE(job text, last_run_at timestamp with time zone, last_ok_at timestamp with time zone, consecutive_failures integer, hour_runs integer, hour_failures integer, day_runs integer, day_failures integer, last_duration_ms integer, hour_p50_ms integer, hour_max_ms integer, day_p50_ms integer, day_max_ms integer, last_error text, last_detail jsonb)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -1338,14 +1513,69 @@ begin
   end if;
 
   return query
-  with seneste_ok as (
+  with koersler as (
+    -- Varigheden regnes ÉT sted og genbruges af alle fire mål. Stod udtrykket
+    -- i hvert `filter`, ville de fire kunne komme ud af trit ved en rettelse —
+    -- og en median, der måler noget andet end sit eget maksimum, er værre end
+    -- ingen af delene.
+    --
+    -- `finished_at is null` giver `ms is null`, og det er med vilje: en kørsel,
+    -- der aldrig afsluttede, har ingen varighed. Aggregaterne springer null
+    -- over af sig selv.
+    select
+      r.job,
+      r.ok,
+      r.started_at > now() - interval '1 hour'                                as i_timen,
+      (extract(epoch from (r.finished_at - r.started_at)) * 1000)::integer    as ms
+    from public.job_runs r
+    where r.started_at > now() - interval '24 hours'
+  ),
+  vindue as (
+    -- ÉT gennemløb for begge vinduer: døgnet afgrænser rækkerne, og timen er et
+    -- `filter` oven i. To separate opslag ville læse de samme rækker to gange.
+    --
+    -- Aliasserne hedder med vilje IKKE det samme som OUT-parametrene: plpgsql
+    -- kan ikke skelne en OUT-parameter fra en kolonne med samme navn, og fejlen
+    -- viser sig først, når funktionen KALDES (samme fælde som `admin_feedback()`s
+    -- `id`, se docs/CHANGELOG.md).
+    select
+      k.job                                                                   as jobnavn,
+      count(*) filter (where k.i_timen)::integer                              as t_antal,
+      count(*) filter (where k.i_timen and k.ok is distinct from true)::integer as t_fejl,
+      count(*)::integer                                                       as d_antal,
+      count(*) filter (where k.ok is distinct from true)::integer             as d_fejl,
+      -- `percentile_cont` er en ordered-set-aggregat og tager `filter` som
+      -- enhver anden (efterprøvet mod PostgreSQL 16.13).
+      --
+      -- ⚠️ **Her stod `and k.ms is not null` i første udgave, og begrundelsen
+      -- var forkert.** Den sagde, at en afbrudt kørsel ellers ville indgå i
+      -- sorteringen som en null og flytte medianen. Det gør den ikke:
+      -- ordered-set-aggregater springer null-input over af sig selv — målt mod
+      -- PostgreSQL 16.13, hvor `(1000, null, 3000, 5000, null)` og
+      -- `(1000, 3000, 5000)` begge giver 3000. Sætningen var altså et no-op med
+      -- en forklaring, der lød rigtig, og den slags er dyrere end ingen
+      -- forklaring: den næste læser tror, mekanismen findes. Fundet ved at
+      -- mutere filen og se testen forblive grøn.
+      --
+      -- At null holdes ude af medianen er stadig en PÅSTAND, der skal vogtes —
+      -- den står som påstand 4 i `sql/tests/job_run_duration.sql` og måler
+      -- udfaldet frem for skrivemåden.
+      (percentile_cont(0.5) within group (order by k.ms)
+         filter (where k.i_timen))::integer                                   as t_p50,
+      max(k.ms) filter (where k.i_timen)                                      as t_max,
+      (percentile_cont(0.5) within group (order by k.ms))::integer            as d_p50,
+      max(k.ms)                                                               as d_max
+    from koersler k
+    group by k.job
+  ),
+  seneste_ok as (
     select r.job, max(r.started_at) as ok_at
     from public.job_runs r
     where r.ok
     group by r.job
   ),
   seneste as (
-    select distinct on (r.job) r.job, r.started_at, r.error, r.detail
+    select distinct on (r.job) r.job, r.started_at, r.finished_at, r.error, r.detail
     from public.job_runs r
     order by r.job, r.started_at desc
   )
@@ -1358,10 +1588,27 @@ begin
       where f.job = s.job
         and f.ok is distinct from true
         and (o.ok_at is null or f.started_at > o.ok_at)),
+    -- `coalesce` og ikke null: et job, hvis seneste kørsel er ældre end
+    -- vinduet, har målt NUL kørsler i det. Det er et tal og ikke en manglende
+    -- måling — tavsheden fanges af `last_run_at`.
+    coalesce(v.t_antal, 0),
+    coalesce(v.t_fejl, 0),
+    coalesce(v.d_antal, 0),
+    coalesce(v.d_fejl, 0),
+    -- …og her IKKE `coalesce`. En varighed, der ikke findes, er umålt, ikke
+    -- nul; se den røde blok i filens hoved. Den seneste kørsel kan ligge uden
+    -- for døgnvinduet og har alligevel en varighed, så den regnes af sin egen
+    -- række frem for af `vindue`.
+    (extract(epoch from (s.finished_at - s.started_at)) * 1000)::integer,
+    v.t_p50,
+    v.t_max,
+    v.d_p50,
+    v.d_max,
     s.error,
     s.detail
   from seneste s
   left join seneste_ok o on o.job = s.job
+  left join vindue v on v.jobnavn = s.job
   order by s.job;
 end;
 $$;
@@ -3126,10 +3373,62 @@ begin
   -- her, og det gjorde det ikke. Nu gør det, og begrundelsen er blevet sand.
   --
   -- VÆRNET LIGGER I MOTOREN OG IKKE HOS KALDERNE, fordi en regel, hver kalder
-  -- skal huske, er en regel, den femte kalder glemmer. Prisen er et kald, der
-  -- returnerer med det samme, når triggeren allerede har spurgt — et `exists` mod
-  -- et indekseret prædikat, målt i mikrosekunder.
+  -- skal huske, er en regel, den femte kalder glemmer.
   --
+  -- 🔴 SPØRGSMÅLET ER SIDEN A39 IKKE LÆNGERE BOOLSK (august 2026). `G92`s
+  -- begrundelse ovenfor står ord for ord ved magt — værnet bor her og kun her —
+  -- men `match_day_complete()` var GLOBAL: den krævede, at hver eneste kamp på
+  -- dagen havde resultat, uanset turnering og uanset konkurrence. En bruger, hvis
+  -- konkurrencer kun rører Superliga, ventede derfor på La Ligas kamp kl. 22:45,
+  -- og ved en udsat eller uindberettet kamp ventede hun for evigt.
+  --
+  -- Det, der ændrer sig, er ikke HVOR reglen bor, men hvad den spørger om: ikke
+  -- "er hele dagen færdig?" men "for HVEM er dagen færdig?". Svaret er en MÆNGDE
+  -- og ikke et ja/nej — derfor ét opslag for alle brugere frem for ét pr. bruger.
+  -- Afgrænsningen selv står i `public.user_day_scope()` (`#68`), og den er ALLE
+  -- dagens kampe i mine konkurrencer, ikke kun dem jeg har tippet: kortet bærer
+  -- stillingen og mini'en, og de flytter sig, når modstanderne får point.
+  --
+  -- `match_day_complete()` lever videre uden ændring. Den er stadig produktets
+  -- ærlige globale begreb, den er grantet til `authenticated`, og
+  -- story_engine_v2_backfill.sql og _measure.sql spørger den. Efter i dag er den
+  -- bare ikke længere motorens spørgsmål.
+  drop table if exists _sd_ready;
+  create temporary table _sd_ready as
+  select u.user_id, u.n_matches from public.users_with_complete_day(p_day) u;
+  create unique index on _sd_ready (user_id);
+
+  -- ---------- FRYSNINGEN: et udgivet kort skrives ikke om, fordi dagen voksede ----------
+  -- Den personlige kampdag åbner et hul, den globale lukkede ved konstruktion:
+  -- min dag kan VOKSE, efter mit kort er skrevet. Tre veje derhen, og alle tre
+  -- er menneskehandlinger — jeg opretter en konkurrence (lovligt indtil en time
+  -- før kickoff), jeg melder mig ind i en, eller en anden melder sig ind i min.
+  -- Efterfyldningen `api/_backfill.js` er derimod IKKE en vej ind: den håndhæver
+  -- "en runde, der er gået i gang, vokser aldrig".
+  --
+  -- Kortet fryses, fordi det VAR sandt, da det blev skrevet. Det er samme
+  -- semantik, overskriften allerede bærer ("Stillingen efter kampdag 03.08"):
+  -- kortet er et snapshot, STILLING-fanen er live, og de to må gerne sige noget
+  -- forskelligt, så længe kortet daterer sig selv. Alternativet — at skrive om —
+  -- ville lade en afvisning genopstå og nulstille ulæst-prikken, hver gang nogen
+  -- oprettede en konkurrence om aftenen.
+  --
+  -- `<` OG IKKE `<>`, og retningen er ikke en detalje: kun en VOKSENDE dag
+  -- fryser. Bliver dagen mindre — jeg melder mig ud, eller en kamp udsættes ud af
+  -- dagen — skal kortet skrives om, ellers ville et frosset kort på en dag, der
+  -- ikke længere findes, stå for evigt. Frysningen skal være selvhelbredende.
+  --
+  -- `coalesce(..., r.n_matches)` gør et kort UDEN nøglen (skrevet før A39, eller
+  -- af v2) til "ens" og dermed til noget, der skrives om én gang og derefter
+  -- bærer nøglen. Alternativet ville fryse hvert eksisterende kort for evigt på
+  -- et tal, der ikke findes.
+  delete from _sd_ready r
+  using public.stories s
+  where s.period = 'day' and s.day_key = p_day
+    and s.user_id = r.user_id
+    and s.news_value is not null
+    and coalesce((s.payload ->> 'day_scope_matches')::int, r.n_matches) < r.n_matches;
+
   -- UDGANGEN STÅR FØR SLETNINGEN, af samme grund som udgangen ovenfor: stod den
   -- efter, ville et kald midt på kampdagen tømme dagen og returnere uden at
   -- skrive noget tilbage.
@@ -3137,16 +3436,28 @@ begin
   -- DEN ER IKKE EN TREDJE KORT-UDGANG. Advarslen i filens hoved — "en TREDJE
   -- udgang herfra ville bryde det" — handler om de to UDGIVENDE grene, som
   -- frontendens `priority < 180` hviler på. En udgang, der intet skriver, rører
-  -- ikke den invariant, lige så lidt som sidste-dag-udgangen gør det.
-  if not public.match_day_complete(p_day) then
+  -- ikke den invariant, lige så lidt som sidste-dag-udgangen gør det. Påstand 14
+  -- i sql/tests/story_engine_daily.sql er stedet, det ville blive opdaget.
+  if not exists (select 1 from _sd_ready) then
+    drop table if exists _sd_ready;
     return;
   end if;
 
-  -- Idempotens: KUN dagens dag-kort. `period = 'day'` er ikke pynt — uden det
-  -- ville en gen-kørsel slette rundens afsluttende kort. Symmetrisk sletter
-  -- generate_stories() kun `period = 'round'`. Den farligste linje i v2 er
-  -- lige så farlig i v3.
-  delete from public.stories where period = 'day' and day_key = p_day;
+  -- 🔴 IDEMPOTENSEN ER FLYTTET TIL BUNDEN OG BLEVET ET FORLIG (A39). v2 og v3
+  -- slettede her dagens rækker med `delete … where period = 'day' and day_key =
+  -- p_day` — "den farligste linje" — og skrev dem igen. Den linje kan ikke blive
+  -- stående efter A39, og der er to grunde, hvor den anden er den alvorlige:
+  --
+  --   1) Sletningen var GLOBAL over dagen. Kørte motoren kl. 22, fordi bruger B's
+  --      dag netop blev færdig, ville den slette det kort, bruger A fik kl. 16.
+  --   2) Motoren kører nu ved HVERT resultat, der gør nogens dag færdig — fire-
+  --      fem gange på en stor lørdag frem for én. En bruger, hvis tal ikke har
+  --      flyttet sig siden kl. 16, ville få nyt `id`, nyt `created_at` og et tabt
+  --      `dismissed_at` ved hver af dem. Frysningen fanger det IKKE: hendes dag
+  --      voksede jo ikke.
+  --
+  -- Se forliget nederst i funktionen. Her står kun, at der bevidst ikke slettes
+  -- noget på dette sted længere.
 
   -- ---------- fakta (uændret fra v2) ----------
   drop table if exists _sd_pts;
@@ -3572,12 +3883,44 @@ begin
   -- der DELER KONKURRENCE med hovedpersonen — designreglen håndhævet af joinet
   -- og ikke af en betingelse. En global kandidat (STREAK_STATUS) når via
   -- enhver delt konkurrence, og duplikaterne kollapses nedenfor med max().
+  --
+  -- 🔴 A39-FILTERET HØRER HER OG IKKE I `_sd_scored`. `_sd_reach` er stedet,
+  -- hvor en kandidat bliver til en MODTAGER, og reglen "kun brugere, hvis egen
+  -- dag er færdig" er en regel om modtagere. Lagt her ligger den i JOINET —
+  -- samme form som konkurrence-afgrænsningen lige nedenfor — og nærhed, scoring
+  -- og udvælgelse arbejder med et mindre sæt på enhver delvis dag, hvilket er
+  -- dét, acceptkriterie 10 skal bruge.
+  --
+  -- ⚠️ FILTRENE ER INDBYRDES REDUNDANTE, OG DET SKAL STÅ HER FREM FOR AT BLIVE
+  -- OPDAGET. `_sd_ready` joines fem steder: her (to gange), i hver af de tre
+  -- udgivende grene. Mutationsforsøg viser, at ingen af dem er individuelt
+  -- påviselig — fjernes ét, når resultatet stadig frem via de øvrige; fjernes
+  -- alle fem, får hver eneste bruger et kort, og påstand 18c fanger det.
+  --
+  -- Redundansen er ikke sløseri, for hvert join har et ærinde mere: dette
+  -- sparer arbejdet, de tre i grenene henter samtidig `n_matches` til
+  -- frysningen, og no_tips-grenens er den eneste vej, fordi den slet ikke
+  -- passerer `_sd_reach`. Men følgen er, at en test IKKE kan opdage, at ét af
+  -- dem forsvinder. Fjerner du et join her, så fjern også det, der læser
+  -- `rd.n_matches` — ellers står reglen halvt håndhævet, og intet siger fra.
+  --
+  -- Bemærk, at fakta-tabellerne ovenfor (`_sd_pts`, `_sd_after`, `_sd_before`,
+  -- `_sd_size`, …) med vilje IKKE er afgrænset. De bærer stillingen, og
+  -- stillingen i MIN konkurrence afhænger af modstandernes point, ikke af hvis
+  -- dag der er færdig. Afgrænsningen sker på modtagerkredsen, ikke på
+  -- datagrundlaget — og fordi den gør det, er den sammenhængende: er jeg i
+  -- `_sd_ready`, har alle kampe i alle MINE konkurrencer resultat, så `_sd_after`
+  -- for netop dem er regnet på en færdig dag. Mini-stillingen og `_sd_rival`
+  -- læser kun gennem `via_competition`, som pr. konstruktion er en konkurrence,
+  -- jeg deler med hovedpersonen, altså en af mine, altså en færdig. Intet kort
+  -- kan komme til at bære et halvt regnet tal.
   drop table if exists _sd_reach;
   create temporary table _sd_reach (cid bigint, user_id uuid, via_competition uuid);
 
   insert into _sd_reach (cid, user_id, via_competition)
   select c.cid, c.subject_id, c.competition_id
   from _sd_cand c
+  join _sd_ready rd on rd.user_id = c.subject_id
   where c.headline3 is null;
 
   insert into _sd_reach (cid, user_id, via_competition)
@@ -3585,6 +3928,7 @@ begin
   from _sd_cand c
   join public.competition_participants cs on cs.user_id = c.subject_id
   join public.competition_participants cp on cp.competition_id = cs.competition_id
+  join _sd_ready rd on rd.user_id = cp.user_id
   where c.headline3 is not null
     and (c.competition_id is null or cs.competition_id = c.competition_id);
 
@@ -3790,21 +4134,43 @@ begin
   -- skal give SAMME række (acceptkriterie 7), så motoren udelader mini, og
   -- kapringen fjerner den. Det er også dét, `DayCard.jsx` har beskrevet hele
   -- tiden: en milepæl er global og har ingen stilling at stå i.
-  insert into public.stories
-    (round_key, day_key, period, user_id, competition_id, rule, priority,
-     league_size, news_value, payload, headline, body)
-  select v_round_text, p_day, 'day', w.user_id, w.competition_id, w.rule, w.priority,
+  -- 🔴 DE TRE GRENE SKRIVER I `_sd_out` OG IKKE DIREKTE I `public.stories` (A39).
+  -- Rækkerne bygges færdige her og forliges med det, der allerede står, nederst
+  -- i funktionen. Grenenes indhold, betingelser og antal er ordret uændrede —
+  -- `priority < 180 ⟺ news_value >= v_threshold` er stadig sandt, og påstand 14
+  -- måler det.
+  --
+  -- `day_scope_matches` er frysningens tal: hvor mange af dagens kampe kortet
+  -- blev regnet på. Det kommer fra `_sd_ready`, altså fra samme udtryk som
+  -- modtagerkredsen — kom de to fra hver sit sted, kunne de drive fra hinanden,
+  -- uden at nogen så det. Joinet mod `_sd_ready` er samtidig en påstand: fandtes
+  -- modtageren ikke i modtagerkredsen, ville rækken ikke blive skrevet.
+  --
+  -- ⚠️ NØGLEN MÅ IKKE HEDDE `matches`. Den er optaget af no_tips-kortet nedenfor
+  -- med en anden betydning (antal kampe i ÉN konkurrence), og et sammenfald ville
+  -- gøre frysningen tavst forkert for netop de brugere, der intet tippede.
+  drop table if exists _sd_out;
+  create temporary table _sd_out (
+    user_id uuid, competition_id uuid, rule text, priority int,
+    league_size int, news_value int, payload jsonb, headline text, body text
+  );
+
+  insert into _sd_out
+    (user_id, competition_id, rule, priority, league_size, news_value, payload, headline, body)
+  select w.user_id, w.competition_id, w.rule, w.priority,
          w.league_size, w.news_value,
          w.payload || jsonb_build_object(
            'day', v_daylabel, 'day_key', p_day,
            'third', w.user_id <> w.subject_id,
            'winner_rule', w.rule,
+           'day_scope_matches', rd.n_matches,
            'runner_up_value', coalesce(up.news_value, 0))
            || case when w.rule <> 'MILESTONE' and mn.mini is not null
                    then jsonb_build_object('mini', mn.mini) else '{}'::jsonb end,
          case when w.user_id <> w.subject_id then w.headline3 else w.headline end,
          case when w.user_id <> w.subject_id then w.body3     else w.body     end
   from _sd_rank w
+  join _sd_ready rd on rd.user_id = w.user_id
   left join _sd_rank up on up.user_id = w.user_id and up.rn = 2
   left join _sd_mini mn on mn.competition_id = w.competition_id and mn.user_id = w.user_id
   where w.rn = 1 and w.news_value >= v_threshold;
@@ -3817,14 +4183,14 @@ begin
   --
   -- news_value bærer stadig den højeste kandidatscore, så en dag, der lå ét
   -- point under, kan kendes fra en dag, hvor intet skete.
-  insert into public.stories
-    (round_key, day_key, period, user_id, competition_id, rule, priority,
-     league_size, news_value, payload, headline, body)
-  select v_round_text, p_day, 'day', d.user_id, d.competition_id, 'DAY_RESULT', 180,
+  insert into _sd_out
+    (user_id, competition_id, rule, priority, league_size, news_value, payload, headline, body)
+  select d.user_id, d.competition_id, 'DAY_RESULT', 180,
          d.league_size, coalesce(best.news_value, 0),
          d.payload || jsonb_build_object(
            'day', v_daylabel, 'day_key', p_day, 'third', false,
            'winner_rule', coalesce(best.rule, 'DAY_RESULT'),
+           'day_scope_matches', rd.n_matches,
            'runner_up_value', 0)
            || case when mn.mini is not null
                    then jsonb_build_object('mini', mn.mini) else '{}'::jsonb end,
@@ -3835,6 +4201,7 @@ begin
     where s.rule = 'DAY_RESULT'
     order by s.user_id, s.league_size desc nulls last, s.competition_id asc
   ) d
+  join _sd_ready rd on rd.user_id = d.user_id
   left join lateral (
     select r.news_value, r.rule from _sd_rank r where r.user_id = d.user_id and r.rn = 1
   ) best on true
@@ -3846,14 +4213,20 @@ begin
   -- tip. De har ingen DAY_RESULT-kandidat og ville ellers stå helt uden kort —
   -- og et drama-kort om andre er udtrykkeligt det forkerte svar. De får dagens
   -- omfang og en fremadrettet slutning. Ingen emoji: dette er dæmpet tier.
-  insert into public.stories
-    (round_key, day_key, period, user_id, competition_id, rule, priority,
-     league_size, news_value, payload, headline, body)
-  select v_round_text, p_day, 'day', q.user_id, q.competition_id, 'DAY_RESULT', 180,
+  -- 🔴 A39-FILTERET SKAL GENTAGES HER, og det er den ene undtagelse fra "reglen
+  -- ligger i `_sd_reach`". Denne gren går slet ikke gennem `_sd_reach` eller
+  -- `_sd_scored` — den læser `competition_matches` direkte, fordi dens
+  -- modtagere pr. definition er dem, ingen kandidat nåede. Uden joinet ville den
+  -- udgive kort til brugere, hvis egen dag stadig spilles, og A39 ville være
+  -- lækket netop dér, hvor ingen kiggede.
+  insert into _sd_out
+    (user_id, competition_id, rule, priority, league_size, news_value, payload, headline, body)
+  select q.user_id, q.competition_id, 'DAY_RESULT', 180,
          q.league_size, 0,
          jsonb_build_object('variant', 'no_tips', 'matches', q.matches,
                             'league', q.league, 'day', v_daylabel, 'day_key', p_day,
                             'third', false, 'winner_rule', 'DAY_RESULT',
+                            'day_scope_matches', q.n_matches,
                             'runner_up_value', 0)
            || case when mn.mini is not null
                    then jsonb_build_object('mini', mn.mini) else '{}'::jsonb end,
@@ -3864,17 +4237,76 @@ begin
   from (
     select distinct on (cp.user_id)
       cp.user_id, cm.competition_id, c.name as league, sz.n as league_size,
+      rd.n_matches,
       count(*) over (partition by cp.user_id, cm.competition_id)::int as matches
     from public.competition_matches cm
     join public.matches m on m.id = cm.match_id
     join public.competition_participants cp on cp.competition_id = cm.competition_id
     join public.competitions c on c.id = cm.competition_id
     join _sd_size sz on sz.competition_id = cm.competition_id
+    join _sd_ready rd on rd.user_id = cp.user_id
     where m.match_day = p_day and m.home_score is not null and m.away_score is not null
       and not exists (select 1 from _sd_today t where t.user_id = cp.user_id)
     order by cp.user_id, sz.n desc, cm.competition_id asc
   ) q
   left join _sd_mini mn on mn.competition_id = q.competition_id and mn.user_id = q.user_id;
+
+  -- ---------- SKRIVNINGEN ER ET FORLIG OG IKKE EN GEN-SKRIVNING (A39) ----------
+  -- ÉT SLOT, påstået allerede her. Det unikke indeks `stories_day_slot_uniq` er
+  -- nettet; dette er påstanden om, at nettet aldrig skal bruges — og den fejler
+  -- i en temporær tabel frem for halvvejs inde i en skrivning til produktionen.
+  create unique index on _sd_out (user_id);
+
+  -- v2 og v3 slettede dagens rækker og skrev dem igen. Det var rigtigt, da
+  -- motoren kørte ÉN gang pr. dag. Efter A39 kører den, hver gang EN BRUGERS dag
+  -- bliver færdig — fire-fem gange på en stor lørdag — og en bruger, hvis tal
+  -- ikke har flyttet sig siden kl. 16, ville få nyt `id`, nyt `created_at` og et
+  -- tabt `dismissed_at` ved hver af dem. Det er `G129` gjort til hverdag, og det
+  -- er ulæst-prikken nulstillet tre gange på en aften — præcis det signal, spec
+  -- §5 findes for at gøre sjældent. Frysningen ovenfor fanger det ikke: dagen
+  -- voksede jo ikke.
+  --
+  -- 🔴 SLETNINGEN DRIVES AF `_sd_out` OG IKKE AF DAGEN, og det er dét, der gør
+  -- invarianten "en tidlig udgang må aldrig efterlade mindre, end den fandt"
+  -- STRUKTUREL frem for argumenteret: en række kan kun slettes, hvis der findes
+  -- en erstatning for netop den bruger. En bruger, hvis dag ikke er færdig, og en
+  -- bruger, hvis kort er frosset, står slet ikke i `_sd_out` og kan dermed ikke
+  -- røres. Den farligste linje i v2 er ikke længere farlig.
+  --
+  -- DÆKNINGSPÅSTANDEN, DER GØR DET SIKKERT: `_sd_ready ⊆ {brugere, der får en
+  -- række i _sd_out}`. Led for led — er jeg i `_sd_ready`, deltager jeg i mindst
+  -- én konkurrence med mindst én kamp i dag, og alle dens kampe har resultat.
+  -- Har jeg et scoret tip, har jeg en `_sd_today`-række og dermed en
+  -- DAY_RESULT-kandidat (grenens joins er alle garanterede: `_sd_size` har en
+  -- række for enhver konkurrence med deltagere, `_sd_after ⊇ _sd_today`, og
+  -- `competitions` er FK-garanteret) → jeg lander i gren 1 eller gren 2. Har jeg
+  -- intet scoret tip, falder jeg ud på den hårde regel og fanges af gren 3.
+  -- Bagstopperens klasse 2 hviler på netop denne påstand for at være endelig.
+  --
+  -- ⚠️ SLETNINGEN MÅ IKKE FILTRERE PÅ `news_value is not null`. Gjorde den det,
+  -- kunne en v2-række og en v3-række stå på samme `(user_id, day_key)` — det
+  -- unikke indeks tillader det, fordi dets `where` udelader v2 — og
+  -- `loadDayCard`s `order=day_key.desc&limit=1` ville vælge frit mellem dem.
+  delete from public.stories s
+  using _sd_out o
+  where s.period = 'day' and s.day_key = p_day
+    and s.user_id = o.user_id
+    and (s.rule, s.competition_id, s.priority, s.league_size, s.news_value,
+         s.headline, s.body, s.payload)
+        is distinct from
+        (o.rule, o.competition_id, o.priority, o.league_size, o.news_value,
+         o.headline, o.body, o.payload);
+
+  insert into public.stories
+    (round_key, day_key, period, user_id, competition_id, rule, priority,
+     league_size, news_value, payload, headline, body)
+  select v_round_text, p_day, 'day', o.user_id, o.competition_id, o.rule, o.priority,
+         o.league_size, o.news_value, o.payload, o.headline, o.body
+  from _sd_out o
+  where not exists (
+    select 1 from public.stories s
+    where s.period = 'day' and s.day_key = p_day and s.user_id = o.user_id
+  );
 
   drop table if exists _sd_pts;
   drop table if exists _sd_size;
@@ -3892,6 +4324,8 @@ begin
   drop table if exists _sd_scored;
   drop table if exists _sd_rank;
   drop table if exists _sd_mini;
+  drop table if exists _sd_ready;
+  drop table if exists _sd_out;
 end;
 $$;
 
@@ -4474,50 +4908,65 @@ declare
   d date;
   r date;
 begin
-  -- Dage med spillede kampe og uden ét eneste dag-kort.
-  --
-  -- GRACE-VINDUET GÆLDER IKKE LÆNGERE DAGENE (august 2026). Indtil da så løkken
-  -- kun på `match_day < v_today - p_grace`, altså dage ældre end to døgn, og det
-  -- var for langsomt: 7. august 2026 blev dagens kort aldrig skrevet af
-  -- triggeren, og bagstopperen ville først have taget dagen den 9. Imens stod
-  -- rundestoryen på Hjem med en påstand, stillingen modsagde — dagskortet er
-  -- dét, der afløser den, så et tabt dagskort er ikke bare et manglende kort.
-  --
-  -- Dagen er sin egen afgrænsning: `match_day_complete` inde i
-  -- generate_daily_stories kræver, at ALLE dagens kampe har resultat, så en dag,
-  -- der stadig spilles, kan pr. konstruktion ikke få et kort for tidligt. Der er
-  -- derfor intet at beskytte med en forsinkelse. Runde-løkken nedenfor beholder
-  -- sit vindue: en runde må ikke få sit afsluttende kort, mens den stadig kan få
-  -- flere resultater, og dét er en anden slags påstand.
-  --
-  -- Loftet er ikke pynt: køres bagstopperen første gang mod en database med
-  -- huller langt tilbage, må én kørsel ikke generere hundredvis af dage. De
-  -- ældste tages først (`order by 1`), så efterslæbet afvikles i takt.
-  --
-  -- DE TO SIDSTE BETINGELSER GØR LØKKEN SELVAFSLUTTENDE, og uden dem ville
-  -- fjernelsen af grace-vinduet være en fejl. Der findes nemlig dage, som ALDRIG
-  -- kan få et kort, og som derfor ville blive forsøgt igen ved hver eneste
-  -- kørsel — 48-96 gange i døgnet, for evigt, og de ville æde loftet, så de
-  -- rigtige huller aldrig kom til:
-  --   · rundens SIDSTE kampdag udgiver kun rundekortet (generate_daily_stories
-  --     returnerer straks). Betingelsen her er den nøjagtige negation af den
-  --     udgang, så de dage aldrig tilbydes.
-  --   · en dag, hvor ingen af kampene indgår i en konkurrence, har intet at lave
-  --     et kort ud af — appen synkroniserer syv turneringer, men konkurrencerne
-  --     dækker ikke dem alle.
   for d in
-    select m.match_day
-    from public.matches m
-    where m.home_score is not null and m.away_score is not null
-      and not exists (select 1 from public.stories s
-                      where s.period = 'day' and s.day_key = m.match_day)
-      and exists (select 1 from public.matches m2
-                  where m2.round_key = public.round_key_of_date(m.match_day)
-                    and m2.match_day > m.match_day)
-      and exists (select 1 from public.competition_matches cm
-                  join public.matches m3 on m3.id = cm.match_id
-                  where m3.match_day = m.match_day)
-    group by m.match_day
+    -- DE BILLIGE FORBETINGELSER FØRST, og `as materialized` er ikke stil: uden
+    -- den kan planlæggeren skubbe klasse 2's prædikat ned under aggregeringen og
+    -- køre `users_with_complete_day()` pr. KAMP i stedet for pr. DAG.
+    with kandidater as materialized (
+      select m.match_day as dag
+      from public.matches m
+      where m.home_score is not null and m.away_score is not null
+        -- Rundens SIDSTE kampdag udgiver kun rundekortet
+        -- (generate_daily_stories returnerer straks). Ordret negationen af den
+        -- udgang, så de dage aldrig tilbydes. UÆNDRET af A39: rundens sidste dag
+        -- er et RUNDE-begreb, og rundekortet er pr. runde og ikke pr. bruger.
+        and exists (select 1 from public.matches m2
+                    where m2.round_key = public.round_key_of_date(m.match_day)
+                      and m2.match_day > m.match_day)
+        -- En dag, hvor ingen af kampene indgår i en konkurrence, har intet at
+        -- lave et kort ud af — appen synkroniserer syv turneringer, men
+        -- konkurrencerne dækker ikke dem alle.
+        --
+        -- Betingelsen er efter A39 INDEHOLDT i klasse 2 nedenfor (ingen bruger
+        -- kan være klar på en dag uden konkurrence-kampe), men den bliver
+        -- stående som et BILLIGT FORFILTER, fordi den udelukker historiens golde
+        -- dage, før den dyre klasse overhovedet spørges.
+        and exists (select 1 from public.competition_matches cm
+                    join public.matches m3 on m3.id = cm.match_id
+                    where m3.match_day = m.match_day)
+      group by m.match_day
+    )
+    select k.dag from kandidater k
+    -- KLASSE 1 (uændret): dagen har slet intet kort. Den almindelige form for
+    -- hul, billig at spørge om — og den, der IKKE dræner for en dag, ingen kan
+    -- få et kort på. Se (ii) ovenfor.
+    where not exists (select 1 from public.stories s
+                      where s.period = 'day' and s.day_key = k.dag)
+    -- KLASSE 2 (ny, A39): dagen HAR v3-kort, men en bruger, hvis EGEN dag er
+    -- færdig, mangler sit. Det er præcis det hul, den personlige kampdag
+    -- producerer: bruger A fik sit kort kl. 16, bruger B's dag blev færdig kl.
+    -- 22, og ingen sætning på `matches` udløste et kald derimellem.
+    --
+    -- `exists (v3-kort på dagen)` afgrænser til v3-æraen — samme skel som
+    -- `stories_day_slot_uniq` og som `day_card_coverage`. Uden det ville hver
+    -- eneste v2-dag i historikken kvalificere sig ved den første kørsel efter
+    -- udrulningen og æde loftet i dagevis.
+    --
+    -- `>= current_date - 30` binder arbejdet for altid: v3-æraen vokser, og
+    -- "alle v3-dage" ville ellers blive et voksende pas ved hver kørsel — 32
+    -- gange i døgnet. Prisen er, at et hul ældre end tredive dage aldrig lukkes,
+    -- hvilket er nøjagtig samme grænse, `day_card_coverage` og `prune_job_runs`
+    -- allerede har sat.
+       or (k.dag >= current_date - 30
+           and exists (select 1 from public.stories s3
+                       where s3.period = 'day' and s3.day_key = k.dag
+                         and s3.news_value is not null)
+           and exists (
+             select 1 from public.users_with_complete_day(k.dag) u
+             where not exists (select 1 from public.stories s2
+                               where s2.period = 'day' and s2.day_key = k.dag
+                                 and s2.user_id = u.user_id
+                                 and s2.news_value is not null)))
     order by 1
     limit 20
   loop
@@ -4527,6 +4976,39 @@ begin
 
   -- Runder, hvis vindue er lukket (tirsdag + 7 dage) og som mangler
   -- afslutningskortet. round_key er date her og text i stories — derfor ::text.
+  --
+  -- LØKKEN HAR ET LOFT OG EN BETINGELSE (G90, 8. august 2026). Uden dem havde den
+  -- præcis det problem, `A38` lukkede for dagsløkken: en runde, der ALDRIG kan
+  -- producere en historie, mangler sit kort for evigt, kvalificerer sig derfor ved
+  -- hver eneste kørsel og bliver forsøgt 48-96 gange i døgnet. Prisen var spildt
+  -- arbejde og ikke forkerte data, men den var **ubegrænset**.
+  --
+  -- **LØKKEN ER IKKE SELVAFSLUTTENDE, og det skal stå her frem for at blive
+  -- antaget.** Betingelsen nedenfor er nødvendig og ikke tilstrækkelig: en runde
+  -- kan have et scoret tip og ALLIGEVEL ikke kunne give et kort — fx hvis
+  -- tipperen ikke deltager i en konkurrence, der dækker kampen, og ingen global
+  -- regel udløser. Den slags runde bliver stadig forsøgt ved hver kørsel.
+  -- Det blev opdaget af testens påstand 17e, som først antog, at efterslæbet
+  -- drænes, og det gør det ikke.
+  --
+  -- **Det, loftet gør, er at gøre prisen ENDELIG frem for ubegrænset**: højst 20
+  -- forsøg pr. kørsel uanset hvor mange golde runder der findes, og de ældste
+  -- først, så et rigtigt hul aldrig kan sulte bag dem. En ægte terminering ville
+  -- kræve, at et FORSØG blev husket — altså en tabel eller en kolonne — og det er
+  -- en større pris end den, der betales her.
+  --
+  -- **BETINGELSEN ER IKKE DEN SAMME SOM DAGSLØKKENS, og det er en fejl værd at
+  -- undgå.** Dagsløkken kræver, at dagen har kampe i en KONKURRENCE. Den regel
+  -- ville være forkert her: `SHARP` (80/85) og `MONTH_CHAMP` (10) læser
+  -- `round_standings`/`monthly_standings`, som bygger på `predictions` og
+  -- `leagues.is_official` — ikke på `competition_matches`. En runde uden
+  -- konkurrence-kampe kan altså stadig give et globalt kort, og en
+  -- konkurrence-betingelse ville have undertrykt det tavst.
+  --
+  -- Fællesnævneren for ALLE rundens regler — de globale, de konkurrence-nære og
+  -- det dæmpede tier — er, at de handler om nogens POINT. Findes der ikke ét
+  -- scoret tip i runden, kan ingen regel fyre, og runden kan aldrig få et kort.
+  -- Det er den betingelse, der står her, og den kan ikke undertrykke noget.
   for r in
     select distinct m.round_key
     from public.matches m
@@ -4534,7 +5016,13 @@ begin
       and m.home_score is not null and m.away_score is not null
       and not exists (select 1 from public.stories s
                       where s.period = 'round' and s.round_key = m.round_key::text)
+      and exists (select 1 from public.predictions pr
+                  join public.matches m2 on m2.id = pr.match_id
+                  where m2.round_key = m.round_key
+                    and m2.home_score is not null and m2.away_score is not null
+                    and pr.pred_home is not null and pr.pred_away is not null)
     order by 1
+    limit 20
   loop
     perform public.generate_stories(r::text);
     v_n := v_n + 1;
@@ -5144,6 +5632,7 @@ declare
   v_ok      boolean := true;
   v_err     text;
   v_n       int;
+  v_ready   int;   -- A39: antal brugere, hvis EGEN kampdag er færdig
   v_days    jsonb := '[]'::jsonb;
   v_rounds  jsonb := '[]'::jsonb;
 begin
@@ -5222,17 +5711,30 @@ begin
       -- DAGE FØRST og i kronologisk orden: en dags kort må ikke lande efter
       -- rundens afsluttende kort, og karusellen læses i samme retning.
       for v_day in (select distinct day_key from _se_story_days order by 1) loop
-        if public.match_day_complete(v_day) then
-          perform public.generate_daily_stories(v_day);
-          select count(*) into v_n
-            from public.stories where period = 'day' and day_key = v_day;
-          v_days := v_days || jsonb_build_object('day', v_day, 'complete', true, 'cards', v_n);
-        else
-          -- Den gren er værd at logge for sig: "dagen var ikke komplet" og
-          -- "dagen fejlede" ligner hinanden udefra (intet kort), men er to helt
-          -- forskellige problemer med hver sin rettelse.
-          v_days := v_days || jsonb_build_object('day', v_day, 'complete', false, 'cards', 0);
-        end if;
+        -- 🔴 INTET FORTJEK (A39, august 2026). Her stod
+        -- `if public.match_day_complete(v_day) then …`, og det kunne ikke blive
+        -- stående: prædikatet er GLOBALT, så det ville spærre triggerens vej ind
+        -- for enhver bruger, hvis egne konkurrencer var færdigspillet, og A39
+        -- ville ikke være leveret uanset hvad motoren gjorde.
+        --
+        -- Det kunne heller ikke bare gøres personligt HER. Så ville reglen ligge
+        -- to steder — ordret den tilstand, `G92` blev til for at afskaffe: en
+        -- regel, hver kalder skal huske, er den regel, den femte kalder glemmer.
+        -- Motoren spørger selv, og efter A39 er spørgsmålet ikke længere boolsk,
+        -- men "for HVEM er dagen færdig?". Det er ikke triggerens at stille.
+        perform public.generate_daily_stories(v_day);
+
+        -- SPORET OVERLEVER, MEN SKIFTER FORM. `complete` var et ja/nej om DAGEN
+        -- og har ingen sand værdi længere. `ready` er antallet af brugere, hvis
+        -- egen dag er færdig: nul betyder præcis dét, `complete: false` betød —
+        -- ingen kan få et kort endnu — mens en forskel mellem `ready` og `cards`
+        -- er frosne kort, altså en oplysning, det gamle boolske ikke kunne bære.
+        -- Grenen "dagen var ikke komplet" og grenen "dagen fejlede" kan stadig
+        -- skelnes, og det var hele grunden til at logge dem hver for sig.
+        select count(*) into v_ready from public.users_with_complete_day(v_day);
+        select count(*) into v_n
+          from public.stories where period = 'day' and day_key = v_day;
+        v_days := v_days || jsonb_build_object('day', v_day, 'ready', v_ready, 'cards', v_n);
       end loop;
 
       -- DEREFTER rundens afsluttende kort. Betingelsen er uændret fra v1 og ER
@@ -5532,6 +6034,39 @@ $$;
 
 
 --
+-- Name: user_day_scope(date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.user_day_scope(p_day date) RETURNS TABLE(user_id uuid, n_matches integer, n_open integer)
+    LANGUAGE sql STABLE
+    SET search_path TO 'public'
+    AS $$
+  with scope as (
+    select distinct
+           cp.user_id                                                as u_id,
+           m.id                                                      as match_id,
+           (m.home_score is null or m.away_score is null)            as is_open
+    from public.matches m
+    join public.competition_matches cm on cm.match_id = m.id
+    join public.competition_participants cp on cp.competition_id = cm.competition_id
+    where m.match_day = p_day
+  )
+  select s.u_id,
+         count(*)::int,
+         count(*) filter (where s.is_open)::int
+  from scope s
+  group by s.u_id;
+$$;
+
+
+--
+-- Name: FUNCTION user_day_scope(p_day date); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.user_day_scope(p_day date) IS 'A39: brugerens personlige kampdag. Antal af dagens kampe, som hendes konkurrencer dækker, og hvor mange af dem der mangler resultat. Afgrænsningen står KUN her.';
+
+
+--
 -- Name: username_available(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5543,6 +6078,27 @@ CREATE FUNCTION public.username_available(name text) RETURNS boolean
     select 1 from public.profiles where lower(display_name) = lower(trim(name))
   );
 $$;
+
+
+--
+-- Name: users_with_complete_day(date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.users_with_complete_day(p_day date) RETURNS TABLE(user_id uuid, n_matches integer)
+    LANGUAGE sql STABLE
+    SET search_path TO 'public'
+    AS $$
+  select s.user_id, s.n_matches
+  from public.user_day_scope(p_day) s
+  where s.n_open = 0;
+$$;
+
+
+--
+-- Name: FUNCTION users_with_complete_day(p_day date); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.users_with_complete_day(p_day date) IS 'A39: alle brugere, hvis egne konkurrencer er færdigspillet på p_day. Modtagerkredsen for dagskortet.';
 
 
 SET default_tablespace = '';
@@ -5741,7 +6297,7 @@ CREATE TABLE public.analytics_events (
     competition_id uuid,
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT analytics_events_name_check CHECK ((event_name = ANY (ARRAY['account_created'::text, 'login'::text, 'logout'::text, 'league_created'::text, 'league_joined'::text, 'league_invite_sent'::text, 'league_invite_accepted'::text, 'invite_landed'::text, 'competition_created'::text, 'competition_joined'::text, 'competition_opened'::text, 'prediction_started'::text, 'prediction_saved'::text, 'prediction_updated'::text, 'prediction_submitted'::text, 'opened_home'::text, 'opened_tip'::text, 'opened_league'::text, 'opened_standings'::text, 'opened_rating'::text, 'opened_career'::text, 'opened_story'::text, 'opened_championship'::text, 'story_viewed'::text, 'story_shared'::text, 'story_score_distribution'::text, 'story_frame_viewed'::text, 'milestone_cta_clicked'::text, 'push_opened'::text])))
+    CONSTRAINT analytics_events_name_check CHECK ((event_name = ANY (ARRAY['account_created'::text, 'login'::text, 'logout'::text, 'league_created'::text, 'league_joined'::text, 'league_invite_sent'::text, 'league_invite_accepted'::text, 'invite_landed'::text, 'competition_created'::text, 'competition_joined'::text, 'competition_opened'::text, 'prediction_started'::text, 'prediction_saved'::text, 'prediction_updated'::text, 'prediction_submitted'::text, 'opened_home'::text, 'opened_tip'::text, 'opened_league'::text, 'opened_standings'::text, 'opened_rating'::text, 'opened_career'::text, 'opened_story'::text, 'opened_championship'::text, 'story_viewed'::text, 'story_shared'::text, 'story_score_distribution'::text, 'story_frame_viewed'::text, 'milestone_cta_clicked'::text, 'standings_shared'::text, 'push_opened'::text])))
 );
 
 
@@ -6616,6 +7172,13 @@ CREATE INDEX client_errors_created_idx ON public.client_errors USING btree (crea
 
 
 --
+-- Name: competition_matches_match_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX competition_matches_match_idx ON public.competition_matches USING btree (match_id);
+
+
+--
 -- Name: competitions_group_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6725,6 +7288,13 @@ CREATE UNIQUE INDEX profiles_display_name_lower_idx ON public.profiles USING btr
 --
 
 CREATE INDEX push_subscriptions_user_idx ON public.push_subscriptions USING btree (user_id);
+
+
+--
+-- Name: stories_day_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX stories_day_idx ON public.stories USING btree (day_key) WHERE (period = 'day'::text);
 
 
 --
@@ -7237,7 +7807,7 @@ ALTER TABLE public.competitions ENABLE ROW LEVEL SECURITY;
 -- Name: competitions competitions_select_involved; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY competitions_select_involved ON public.competitions FOR SELECT TO authenticated USING (public.is_competition_visible(id));
+CREATE POLICY competitions_select_involved ON public.competitions FOR SELECT TO authenticated USING (((created_by = auth.uid()) OR public.is_competition_visible(id)));
 
 
 --
@@ -7661,6 +8231,15 @@ GRANT ALL ON FUNCTION public.admin_analytics_league_health(p_days integer) TO se
 REVOKE ALL ON FUNCTION public.admin_analytics_retention() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.admin_analytics_retention() TO authenticated;
 GRANT ALL ON FUNCTION public.admin_analytics_retention() TO service_role;
+
+
+--
+-- Name: FUNCTION admin_analytics_rounds(p_rounds integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.admin_analytics_rounds(p_rounds integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.admin_analytics_rounds(p_rounds integer) TO authenticated;
+GRANT ALL ON FUNCTION public.admin_analytics_rounds(p_rounds integer) TO service_role;
 
 
 --
@@ -8132,6 +8711,15 @@ GRANT ALL ON FUNCTION public.touch_prediction_updated_at() TO service_role;
 
 
 --
+-- Name: FUNCTION user_day_scope(p_day date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.user_day_scope(p_day date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.user_day_scope(p_day date) TO authenticated;
+GRANT ALL ON FUNCTION public.user_day_scope(p_day date) TO service_role;
+
+
+--
 -- Name: FUNCTION username_available(name text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8139,6 +8727,15 @@ REVOKE ALL ON FUNCTION public.username_available(name text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.username_available(name text) TO authenticated;
 GRANT ALL ON FUNCTION public.username_available(name text) TO service_role;
 GRANT ALL ON FUNCTION public.username_available(name text) TO anon;
+
+
+--
+-- Name: FUNCTION users_with_complete_day(p_day date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.users_with_complete_day(p_day date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.users_with_complete_day(p_day date) TO authenticated;
+GRANT ALL ON FUNCTION public.users_with_complete_day(p_day date) TO service_role;
 
 
 --
@@ -8499,5 +9096,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict CUKDHzJ7fvt7V08YnCHbMmTKA46MMMEc8NhS8r6nud8Z1XEqBfSLDjpkvrgAdFc
+\unrestrict egxlvuOjOq4I3MvpanE20uVfwca4VWZSi7TVXdLlmlkBXfUg3uzcYZ74is0Lr5Z
 
