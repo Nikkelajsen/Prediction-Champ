@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { currentRoundKey, roundKeyOfDate, nextRoundKey, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, showUncertain, UNCERTAIN_HORIZON_MS, isLocked, filterTippable, wasTippableAt, filterFromRoundStart, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
+import { currentRoundKey, roundKeyOfDate, nextRoundKey, outcome, POINTS, pointsFor, roundLabel, zonedDateKey, byKickoffThenTeams, groupIntoRounds, currentRoundIndex, formatKickoff, isLocked, filterTippable, wasTippableAt, filterFromRoundStart, lockAtOf, lockedRoundsOf, nextRoundTips, STAGE_LABELS, stageBadgeLabel, isPlayed, liveInfo, MODE_LABELS, modeLabel } from "./scoring.js";
 
 describe("outcome", () => {
   it("giver 1 ved hjemmesejr, X ved uafgjort, 2 ved udesejr", () => {
@@ -384,58 +384,6 @@ describe("formatKickoff", () => {
     expect(formatKickoff(iso, true)).not.toContain("kl.");
     // Datoen bliver stående — den ER kendt; det er kun tiden, der mangler.
     expect(formatKickoff(iso, true)).toBe(formatKickoff(iso).split(" kl. ")[0]);
-  });
-
-  // G85. Den svagere markør beholder klokkeslættet og siger, at det ikke er
-  // bekræftet — modsat `tbd`, som fjerner det. De to må ikke kunne forveksles:
-  // "kl. 16.00 (ikke bekræftet)" og "tor. 12.12" er to forskellige påstande.
-  it("beholder klokkeslættet, men siger fra, når det ikke er bekræftet", () => {
-    const iso = "2026-12-12T15:00:00Z";
-    // `now` skrives ud, så påstanden ikke holder op med at passe, når
-    // kalenderen indhenter december 2026 — horisonten i `G135` regner fra den.
-    const nu = Date.parse("2026-11-01T12:00:00Z");
-    expect(formatKickoff(iso, false, true, nu)).toContain(" kl. ");
-    expect(formatKickoff(iso, false, true, nu)).toContain("(ikke bekræftet)");
-    expect(formatKickoff(iso, false, false, nu)).not.toContain("bekræftet");
-  });
-
-  // G135. Rettelsen af 17. august 2026: tre ÆGTE Premier League-kampe fire dage
-  // ude stod med "(ikke bekræftet)", fordi 14:00 UTC — 15.00 i London,
-  // blackout-slottet — er både ligaens mest brugte klokkeslæt og
-  // football-data.orgs efterårsgæt. Inden for ti dage har en kamp en tid.
-  it("tier om bekræftelsen, når kampen ligger inden for ti dage", () => {
-    const nu = Date.parse("2026-08-18T12:00:00Z");
-    const naer = "2026-08-22T14:00:00Z"; // fire dage ude — skærmbilledets kamp
-    const fjern = "2026-11-21T15:00:00Z"; // tre måneder ude
-    expect(formatKickoff(naer, false, true, nu)).not.toContain("bekræftet");
-    expect(formatKickoff(naer, false, true, nu)).toBe(formatKickoff(naer, false, false, nu));
-    expect(formatKickoff(fjern, false, true, nu)).toContain("(ikke bekræftet)");
-  });
-
-  // Grænsen selv. En kamp præcis på horisonten er IKKE uden for den — `>` og
-  // ikke `>=` — så den ene time til hver side afgør sagen. Uden denne påstand
-  // kunne tallet skifte fortegn uden at nogen test sagde fra.
-  it("lægger grænsen præcis ved ti dage", () => {
-    const nu = Date.parse("2026-08-18T12:00:00Z");
-    const time = 3600 * 1000;
-    const paa = new Date(nu + UNCERTAIN_HORIZON_MS).toISOString();
-    const lige_over = new Date(nu + UNCERTAIN_HORIZON_MS + time).toISOString();
-    expect(showUncertain(paa, false, true, nu)).toBe(false);
-    expect(showUncertain(lige_over, false, true, nu)).toBe(true);
-  });
-
-  // `tbd` vinder fortsat, og horisonten ændrer ikke på det: en kamp uden tid har
-  // intet klokkeslæt at kalde ubekræftet, hvor langt ude den så ligger.
-  it("lader 'ingen tid' vinde over horisonten", () => {
-    const nu = Date.parse("2026-08-18T12:00:00Z");
-    expect(showUncertain("2027-01-09T00:00:00Z", true, true, nu)).toBe(false);
-    expect(showUncertain(null, false, true, nu)).toBe(false);
-  });
-
-  it("lader 'ingen tid' vinde over 'ikke bekræftet'", () => {
-    const iso = "2026-09-13T00:00:00Z";
-    expect(formatKickoff(iso, true, true)).toBe(formatKickoff(iso, true));
-    expect(formatKickoff(iso, true, true)).not.toContain("bekræftet");
   });
 
   it("giver tom streng uden kickoff, uanset flaget", () => {

@@ -407,12 +407,13 @@ football-data-turneringer stod uden klokkeslæt i fire døgn og blev fundet af e
 menneske, der undrede sig over en sortering. Sidste trin i heartbeat'en aflæser
 derfor `kickoff_tbd` pr. turnering og slår alarm, når **alle** en turnerings
 kampe inden for ti dage står uden tid — ikke ved en andel, som ville kræve en
-tærskel, vi ikke har data til at kalibrere. **Siden `G85` (8. august 2026)
-aflæser den også `kickoff_uncertain`** og melder `ALLE UBEKRAEFTEDE` på samme
-vilkår. Uden den halvdel var kontrollen grøn for præcis de tre turneringer,
-fejlen ramte: Premier League, Primera División og Serie A kan ikke få
-`kickoff_tbd` sat overhovedet, fordi leverandøren sender et opdigtet
-klokkeslæt frem for en pladsholder. Forespørgslen bor i
+tærskel, vi ikke har data til at kalibrere. *(Rettet 17. august 2026: fra `G85`
+(8. august 2026) aflæste trinnet også den indlærte markør `kickoff_uncertain`
+og meldte `ALLE UBEKRAEFTEDE` på samme vilkår. Markøren blev fjernet igen med
+hele sit maskineri — `#71`, se `docs/DECISIONS.md` — og kontrollen er herefter
+bevidst blind for de tre turneringer, der aldrig får en pladsholder: Premier
+League, Primera División og Serie A får et opdigtet klokkeslæt, som vises, som
+var det rigtigt, og som syncen selv retter, når det flyttes.)* Forespørgslen bor i
 [`sql/checks/kickoff_coverage.sql`](../sql/checks/kickoff_coverage.sql) frem for
 i workflowen, så CI kan køre præcis den samme regel mod en tom database.
 Trinnet ligger **sidst** med vilje: et fejlende trin springer resten af jobbet

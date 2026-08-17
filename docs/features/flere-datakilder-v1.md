@@ -389,6 +389,18 @@ tider, der har flyttet sig mellem to kørsler (mindst tre fra samme UTC-tid,
 **display-only** — låsen og deadline-påmindelserne er upåvirkede, modsat
 `kickoff_tbd`. Hele begrundelsen står i `sql/matches_kickoff_uncertain.sql`.
 
+> 🔴 **Rettet efter levering (17. august 2026): markøren er fjernet igen —
+> hele afsnittet ovenfor beskriver en mekanisme, der ikke længere findes.**
+> `G135` viste, at det indlærte klokkeslæt ER turneringens typiske anspilstid,
+> så gættet ramte netop de mest bekræftede kampe, og dominans-stramningen
+> (`#70`) genoprettede ikke tilliden. `#71 matches_kickoff_uncertain_drop.sql`
+> droppede kolonnerne, triggeren og funktionen; beslutningen og prisen — at
+> appen viser de tre turneringers opdigtede klokkeslæt uden forbehold, og at
+> `kickoff_coverage`-kontrollen igen er blind for dem — står i
+> `docs/DECISIONS.md`. Afsnittet er bevaret, fordi det er den bedste
+> beskrivelse af, hvad der blev forsøgt, og hvorfor det ikke kunne skrives i
+> providerlaget.
+
 > **Det, aflæsningen gjorde anderledes — og bedre.** Guiden nedenfor går gennem
 > `?dryRun=true`, altså gennem VORES normalisering. Aflæsningen gik uden om
 > appen, direkte mod `api.football-data.org/v4`, og læste `utcDate` som rå

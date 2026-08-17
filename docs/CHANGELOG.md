@@ -9,6 +9,28 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+17. august 2026 — "Ikke bekræftet"-markøren er fjernet helt: et klokkeslæt vises uden forbehold
+
+- **Fjernet (`#71 matches_kickoff_uncertain_drop.sql` + samme leverances kode):**
+  hele `kickoff_uncertain`-maskineriet — kolonnerne `kickoff_uncertain` og
+  `kickoff_prev_at`, triggeren, `refresh_kickoff_uncertain()`, syncens RPC-kald
+  (`uncertainMarked`/`uncertainError` i `job_runs.detail`), `"(ikke bekræftet)"`
+  og `~` i visningen, tegnforklaringen i dagsoverskriften, ti-dages-horisonten
+  (`showUncertain()`/`UNCERTAIN_HORIZON_MS`), `ALLE UBEKRAEFTEDE`-halvdelen af
+  `kickoff_coverage`-kontrollen og heartbeat-trinnets aflæsning af den samt
+  `sql/tests/kickoff_uncertain.sql` og CI-trinnet, der kørte den.
+- **Hvorfor:** besluttet af ejeren samme dag som `G135`-rettelsen (nedenfor) og
+  oven på den — gættet ramte netop de mest bekræftede kampe, og reglen er nu den
+  simple: har kampen et klokkeslæt, vises det uden forbehold (syncen retter det
+  selv, hvis leverandøren flytter det); har den ingen, viser `kickoff_tbd` kun
+  datoen. Begrundelse og pris i `docs/DECISIONS.md`. **`kickoff_tbd`, låsen og
+  deadline-logikken er urørt.**
+- 🔴 **Kørselsrækkefølgen er OMVENDT af `#49`s: merge/deploy FØRST, kør `#71` i
+  Supabase (produktion OG staging) BAGEFTER** — heartbeat'en læser ellers en
+  droppet kolonne og fejler med `42703` hvert 30. minut. Kør skema-eksporten
+  til sidst (den indhenter samtidig `#70`, som dumpet aldrig nåede at bære).
+  `#49` og `#70` står nu som 🛑 i `sql/README.md` og må aldrig gen-køres.
+
 17. august 2026 — "Tid ikke bekræftet" stod på de kampe, der var mest bekræftede (G135)
 
 - **Rettet (`#70 matches_kickoff_uncertain_round.sql`):** tre ÆGTE Premier

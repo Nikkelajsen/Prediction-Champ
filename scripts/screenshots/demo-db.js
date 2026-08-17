@@ -186,7 +186,6 @@ const KAMPE = RÅ_KAMPE.map(([hjemme, ude, hs, as_, kickoff, rundenøgle], i) =>
     live_minute: live ? 34 : null,
     live_updated_at: live ? new Date(NU - 40000).toISOString() : null,
     kickoff_tbd: false,
-    kickoff_uncertain: false,
   };
 });
 const kampVed = (hjemme, ude) =>

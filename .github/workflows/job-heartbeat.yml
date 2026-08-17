@@ -382,25 +382,18 @@ jobs:
           # forsvinder, når psql lukker. Der installeres intet i produktionen.
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -q -At -F'|' \
             -f sql/checks/kickoff_coverage.sql \
-            -c "select liga, provider, kommende, uden_tid, ubekraeftet, tilstand
+            -c "select liga, provider, kommende, uden_tid, tilstand
                   from kickoff_coverage
-                 order by (tilstand in ('ALLE UDEN TID','ALLE UBEKRAEFTEDE')) desc, liga" > kickoff.txt
+                 order by (tilstand = 'ALLE UDEN TID') desc, liga" > kickoff.txt
 
-          echo "Turnering | Leverandør | Kampe (10 dage) | Uden tid | Ubekræftet | Tilstand"
+          echo "Turnering | Leverandør | Kampe (10 dage) | Uden tid | Tilstand"
           echo "------------------------------------------------------------------------"
           fail=0
-          while IFS='|' read -r liga provider kommende uden ubekraeftet tilstand; do
+          while IFS='|' read -r liga provider kommende uden tilstand; do
             [ -z "$liga" ] && continue
-            printf '%-24s %-14s %-17s %-10s %-12s %s\n' "$liga" "$provider" "$kommende" "$uden" "$ubekraeftet" "$tilstand"
+            printf '%-24s %-14s %-17s %-10s %s\n' "$liga" "$provider" "$kommende" "$uden" "$tilstand"
             if [ "$tilstand" = "ALLE UDEN TID" ]; then
               echo "::error::$liga: alle $kommende kampe inden for ti dage står uden klokkeslæt. Kør 'Hent nu' i Admin → Kampe og se på ${provider}-aflæsningen i api/_providers/kickoff.js."
-              fail=1
-            fi
-            # G85: tiden ER der, men er turneringens indlærte pladsholder — og
-            # markeringen rydder sig selv, så snart leverandøren bekræfter. Står
-            # en hel turnering ti dage ude, kom bekræftelsen aldrig.
-            if [ "$tilstand" = "ALLE UBEKRAEFTEDE" ]; then
-              echo "::error::$liga: alle $kommende kampe inden for ti dage bærer et klokkeslæt, turneringen har lært at mistro. Se hvad den har lært (verifikation 4 i sql/matches_kickoff_uncertain.sql), og om ${provider} nogensinde bekræftede tiderne."
               fail=1
             fi
           done < kickoff.txt
@@ -412,7 +405,7 @@ jobs:
           fi
 
           if [ "$fail" -ne 0 ]; then
-            echo "::error::Mindst én turnering har mistet sine klokkeslæt eller står med ubekræftede — se sql/checks/kickoff_coverage.sql."
+            echo "::error::Mindst én turnering har mistet sine klokkeslæt — se sql/checks/kickoff_coverage.sql."
             exit 1
           fi
           echo "Klokkeslættene ser troværdige ud."
