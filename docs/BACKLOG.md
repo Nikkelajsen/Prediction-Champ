@@ -47,15 +47,13 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- analytics.test.js' liste over ⓘ-id'er, panelet slår op, vedligeholdes i hånden og mangler allerede story_viewable — kan den udledes af JSX'en?
-- generisk vagt for SELECT-policies, hvis prædikat kalder en funktion, der slår sin egen tabel op — de spærrer enhver skrivning med return=representation (G130, nu set to gange: #55 og #60)
-- de tre inserts i createCompetition() deler ingen transaktion, så en fejl på nr. 2 eller 3 efterlader en halv konkurrence uden deltager eller kampe
+*(Tom.)*
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 34 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -109,11 +107,15 @@ Tomt.
 
 ### Tier 4 — Datarisiko med en lunte
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G133` | `createCompetition()`s tre skrivninger deler ingen transaktion | Konkurrencen, deltageren og kampene skrives som tre adskilte PostgREST-kald (`src/lib/data/competitions.js`). Fejler nummer to eller tre, står der en konkurrence uden deltager eller uden kampe — og den retter sig aldrig selv: klienten viser den, stillingen er tom, og ingen kontrol leder efter den. Kuren findes allerede som mønster: `create_group()` (`#50`) er en `security definer`-RPC, der skriver ligaen OG ejerens medlemskab i én sætning, netop for at undgå den halve tilstand. **Lunten er kort, men findes:** `G130` fik hvert eneste forsøg til at fejle på skrivning ÉT, hvor der intet efterlades — havde fejlen ligget et kald senere, ville hver bruger have efterladt en halv konkurrence i fem dage. |
 
 ### Tier 5 — Robusthed og vedligehold
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G131` | Analytics-panelets ⓘ-liste i testen vedligeholdes i hånden og er allerede ufuldstændig | `analytics.test.js` bærer en håndskrevet liste over de ⓘ-id'er, panelet slår op, og `story_viewable` mangler allerede. Vagten er dermed svagere, end den ser ud: den kan kun fange et id, nogen huskede at skrive ind. Spørgsmålet, der skal afgøres først, er, om listen kan **udledes af JSX'en** frem for vedligeholdes — kan den, forsvinder gælden helt; kan den ikke, er en test, der lister sig selv, ikke meget bedre end ingen. |
 
 ### Tier 6 — Venter på en udløser
 
@@ -142,6 +144,7 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 | `A51` | Skal `og:title` følge sælgesætningen og blive fodbold-eksplicit? | Ejerens beslutning, eller næste gang `og:`-tagsene alligevel røres. **Rammer to filer**, fordi vagten binder dem sammen. |
 | `B32` | Fjern CL's "Fra ligafasen"-forbehold på hjemmesidens turneringsliste | Samme udløser som `B28`: CL's ligafase lodtrækkes hos football-data.org. |
 | `G123` | En generisk vagt for `drop function` + `revoke` i `sql/` | `G119` (14. august 2026) fravalgte en tekstlæsende kontrol, der kræver et `revoke execute … from public` efter hvert `drop function` i `sql/` — kun to forekomster fandtes, og en vagt over to koster mere at vedligeholde, end den kan fange. **Udløseren er en tredje forekomst:** bliver det tre, er det et mønster. |
+| `G132` | En generisk vagt for SELECT-policies, hvis prædikat kalder en funktion, der slår sin EGEN tabel op | **Når mønstret ses en anden gang.** `G130` (17. august 2026) kostede fem dages umulig konkurrence-oprettelse: `competitions_select_involved` kaldte `is_competition_visible(id)`, som forespørger `competitions` — og ved `INSERT … RETURNING`, som PostgREST altid sender, findes rækken endnu ikke i funktionens snapshot. En vagt kunne læse `pg_policies` og advare, når en SELECT-policys `qual` kalder en funktion, hvis krop nævner sin egen tabel. **Men den er set ÉN gang i denne præcise form**, og `G123` satte disciplinen: en vagt over ét tilfælde koster mere at vedligeholde, end den kan fange. Den brede klasse — *RETURNING er også en læsning* — er derimod set to gange (`#55` på kolonne-privilegier, `G130` på policies), og er allerede dækket af `DOCUMENTATION.md` §13 og af påstand 7e i `sql/tests/read_scope.sql`, som kræver et `returning *` for hver tabel, klienten skriver til. |
 | `G129` | Et afvist dagskort kan genopstå | **Når en bruger melder, at et kort, de afviste, er kommet igen.** `generate_daily_stories(p_day)` gen-indsætter en brugers række, når indholdet bliver et andet, og den nye række har et nyt `id`, som `dismissed_at` ikke fulgte med til. **`A39` (16. august 2026) lukkede den hyppige halvdel og efterlader kun to veje:** slet-og-indsæt blev til et FORLIG, der kun skriver, når rækken faktisk bliver forskellig, så en gen-kørsel uden ændringer — efter A39 den almindeligste kørsel overhovedet, fire-fem gange på en stor lørdag — rører intet. Tilbage står (a) en resultatrettelse bagud på præcis den dag, brugeren afviste, og (b) en ny deltager i ens konkurrence, som ændrer `league_size` og dermed kortets indhold. Frysningen dækker ikke (b): kampantallet er uændret. **Kanten er skrevet ned ved koden** (`src/lib/data/activity.js`, `dismissStory`) og er kendt frem for overset; det er dét, der gør den til en udløser-række og ikke til en fejl, der skal rettes nu. Kuren er en `dismissed`-liste pr. `(user_id, day_key)`, altså en tabel for to kanter, der nu begge er sjældne. |
 
 ### Tier 7 — Udadvendt og ubesluttet
@@ -205,6 +208,9 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G123 | **Ingen generisk vagt for `drop function` + `revoke` i `sql/`.** | `G119` (14. august 2026) fravalgte en tekstlæsende kontrol, der kræver `revoke execute … from public` efter hvert `drop function` — kun to forekomster fandtes, og en vagt over to koster mere at vedligeholde, end den kan fange. Flyttet til Tier 6: en tredje forekomst gør det til et mønster. | Lille, men ikke før udløseren |
 | G129 | **Et afvist dagskort kan genopstå.** `generate_daily_stories(p_day)` sletter og gen-indsætter dagens rækker ved en gen-kørsel; den nye række har et nyt `id`, og `dismissed_at` blev i graven sammen med den gamle. | Udløses kun af en gen-kørsel EFTER at dagen er gjort færdig — i praksis en resultatrettelse bagud på præcis den dag, brugeren afviste. **Kanten er kendt og står allerede skrevet ved koden** (`src/lib/data/activity.js`, `dismissStory`), tilføjet sammen med `I25` 15. august 2026, som var det, der gav dagskortet et Afvis-kryds overhovedet. Rækken findes, fordi begrundelsen ellers kun ville stå ét sted og aldrig blive taget op igen — ikke fordi den skal rettes nu. Kuren er en `dismissed`-liste pr. `(user_id, day_key)`, altså en tabel, en policy og en ekstra læsning i `loadDayCard` for en kant, ingen endnu har meldt. Flyttet til Tier 6 med den første melding som udløser. | Lille—mellem, men ikke før udløseren |
+| G131 | **Analytics-panelets ⓘ-liste i testen vedligeholdes i hånden.** `analytics.test.js` lister de ⓘ-id'er, panelet slår op, og `story_viewable` mangler allerede — vagten kan kun fange et id, nogen huskede at skrive ind. | En vagt, der er svagere end den ser ud, er værre end ingen: den giver tryghed uden dækning. Samme fejlklasse som `B8` og `G44` — en sund måling, der skjuler en syg. | Lille, hvis listen kan udledes af JSX'en; ellers er spørgsmålet, om testen er værd at beholde i sin nuværende form. |
+| G132 | **Ingen generisk vagt for SELECT-policies, der kalder en funktion, som slår deres egen tabel op.** Mønstret spærrer enhver skrivning med `Prefer: return=representation`. | `G130` gjorde oprettelse af en konkurrence umulig i fem dage, og fejlen var usynlig for enhver læsetest. En vagt over `pg_policies` kunne fange den ved migreringstid. | Mellem — kræver at vagten kan se ind i funktionskroppen (`pg_get_functiondef`) og skelne en selv-opslående funktion fra en harmløs. **Venter på en anden forekomst** (`G123`s disciplin). |
+| G133 | **`createCompetition()`s tre skrivninger deler ingen transaktion.** Konkurrencen, deltageren og kampene er tre adskilte PostgREST-kald. | Fejler nummer to eller tre, står der en halv konkurrence, som aldrig retter sig selv, og som ingen kontrol leder efter. | Mellem — kuren er en `security definer`-RPC efter `create_group()`s mønster (`#50`), som skriver alle tre i én sætning. |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
 
 ## Ideer
@@ -247,34 +253,32 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 16. august 2026 (tredivte kørsel) — Tier 5 kørt tom: de to delinger har en aflæsning nu
+### 17. august 2026 (enogtredivte kørsel) — indbakken tømt, og de tre linjer var alle gæld
 
-**Listen er 33 → 32** (`B37` lukket). **Tier 5 er tomt**, og dermed er Tier 1,
-2 og 5 alle tømt samme dag; kun Tier 6 (venter på en udløser) og Tier 7
-(udadvendt) bærer rækker.
+**Listen er 31 → 34.** Ingen rækker blev lukket; tre nye kom til, og alle tre er
+teknisk gæld, ikke ideer. To af dem faldt ud af `A39`- og `G130`-arbejdet og
+blev noteret undervejs frem for taget med i forbifarten.
 
-**Halvdelen krævede ingen SQL overhovedet, og det var værd at opdage FØR
-migreringen blev skrevet.** `admin_analytics_engagement` har hele tiden svaret
-`events` som en generisk optælling pr. hændelsesnavn, så både `standings_shared`
-og `story_shared` lå allerede i svaret — de manglede kun et sted at stå. To
-tiles i Engagement-sektionen aflæser dem nu, og de virker uden at røre
-databasen.
+**Tier 4 og Tier 5 bærer rækker igen** efter at have stået tomme siden 16.
+august. `G133` (`createCompetition()`s tre skrivninger uden transaktion) er
+datarisiko med en kort, men virkelig lunte: `G130` fik hvert eneste forsøg til
+at fejle på skrivning ÉT, hvor der intet efterlades. Havde den samme fejl ligget
+ét kald senere, ville hver bruger have efterladt en halv konkurrence i fem dage,
+og ingen kontrol leder efter dem.
 
-**Opdelingen krævede derimod SQL**, fordi den bor i `metadata.from`:
-`admin_analytics_engagement` svarer nu `shares` med fire flader — rundekort
-(`frame:ROUND_SUM`/`frame:RATING` OG de historiske rækker helt uden `from`),
-dagskort, milepæl og stilling. Ændringen står i `sql/analytics_dashboard.sql`
-(#17) og ikke i en ny migrering: filen er registreret som *"sikker og forventet
-at blive gen-kørt"*, og en kopi af to lange RPC'er ville være præcis den
-landmine, `sql/README.md` advarer mod ved `generate_stories()`.
+**`G132` blev en Tier 6-række og ikke en opgave, og det var den svære af de
+tre.** Fristelsen efter `G130` er at bygge vagten med det samme — en kontrol,
+der advarer, når en SELECT-policy kalder en funktion, som slår sin egen tabel
+op. Men mønstret er set **én** gang i den præcise form, og `G123` satte
+disciplinen for netop det: en vagt over ét tilfælde koster mere at vedligeholde,
+end den kan fange. Den brede klasse — *RETURNING er også en læsning* — er set to
+gange (`#55`, `G130`) og er allerede dækket to steder: `DOCUMENTATION.md` §13 og
+påstand 7e i `sql/tests/read_scope.sql`, som kræver et `returning *` for hver
+tabel, klienten skriver til. Udløseren er derfor en anden forekomst.
 
-**Rækken afdækkede en forurening, ingen havde ledt efter.** Karriereprofilens
-del-knap skriver milepælsnøglen som `rule`, og `MONTH_CHAMP` er BEVIDST både en
-milepælsnøgle og en story-regel (kommentaren står i `src/lib/milestones.js`).
-Milepæls-delinger blev derfor talt med i Story Engine-regeltabellens
-`Delt`-kolonne. De er nu filtreret fra dér og tælles som deres egen flade.
-
-**Umålt må ikke ligne nul.** Er RPC'en ikke gen-kørt, mangler `shares`, og
-panelet skriver "ikke målt endnu" frem for fire nuller — `G115`s regel en gang
-til. Vagten er `shareSurfaceRows()` med fire tests, og et tomt vindue svarer
-bevidst `{}` og ikke `null`, så "målt til nul" og "umålt" kan skelnes.
+**`G131` er den eneste, hvor spørgsmålet kommer før arbejdet.** `analytics.test.js`
+lister i hånden de ⓘ-id'er, panelet slår op, og `story_viewable` mangler
+allerede — så vagten kan kun fange et id, nogen huskede at skrive ind. Kan
+listen udledes af JSX'en, forsvinder gælden; kan den ikke, er spørgsmålet
+snarere, om testen er værd at beholde i sin nuværende form. Det er ikke afgjort,
+og rækken siger det.
