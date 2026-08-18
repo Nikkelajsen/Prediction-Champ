@@ -58,6 +58,18 @@ comment on column public.seasons.is_finished is
 --
 -- `mode_params ? 'stages'` markerer en håndafgrænset gammel konkurrence, som
 -- aldrig vokser, jf. api/_backfill.js.
+--
+-- EN PERIODE REGNES KUN SOM VOKSENDE, TIL DENS SLUTDATO ER PASSERET (17. august
+-- 2026). Sæson-gaten findes for konkurrencer, der venter på kampe, som ikke er
+-- skemalagt endnu — men en `time_range` kan kun optage kampe med kickoff INDEN
+-- FOR sit eget vindue (api/_backfill.js, `matchInRange`), og efterfyldningens
+-- regel 3 ("en runde, der er gået i gang, vokser aldrig") gør en kamp i et
+-- passeret vindue umulig at tilføje: dens runde er pr. definition begyndt.
+-- Dagen efter slutdatoen er der altså intet tilbage at vente på. Uden
+-- undtagelsen ventede en færdigspillet augustperiode i Superligaen på HELE
+-- sæsonen — i praksis til næste sommer — med pokal, vinderlinje og milepæle
+-- tilbageholdt. Derfor er der heller ingen karensperiode: undtagelsen hviler
+-- på en strukturel umulighed, ikke på at der er gået tid nok.
 create or replace view public.competition_status
 with (security_invoker = on) as
 with cm as (
@@ -74,7 +86,17 @@ agg as (
 growable as (
   select c.id as competition_id,
          (c.mode in ('full_season', 'team', 'time_range')
-          and not (c.mode_params ? 'stages')) as can_grow
+          and not (c.mode_params ? 'stages')
+          -- Perioden: passeret slutdato ⇒ vokser ikke længere (se ovenfor).
+          -- Datoerne er 'YYYY-MM-DD'-tekst, og sammenligningen sker som tekst —
+          -- samme form, efterfyldningen selv sammenligner i, og en skæv værdi
+          -- kan ikke vælte viewet, som en ::date-cast kunne. `<` og ikke `<=`:
+          -- på selve slutdatoen kan dagens kampe stadig komme til. Manglende
+          -- slutdato ⇒ coalesce false ⇒ stadig voksende — uvished skal trække
+          -- mod "ikke afsluttet", som i seasons_done nedenfor.
+          and not (c.mode = 'time_range' and coalesce(
+                (c.mode_params ->> 'end_date') < to_char(current_date, 'YYYY-MM-DD'),
+                false))) as can_grow
   from public.competitions c
 ),
 -- "Sæsonerne, den trækker fra" aflæses på konkurrencens EGNE kampe: den kan kun

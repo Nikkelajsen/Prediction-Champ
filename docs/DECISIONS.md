@@ -15,6 +15,46 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 17. august 2026 — Sæson-gaten slipper en periode, når dens slutdato er passeret
+
+**Beslutning:** `competition_status`' sæson-gate (`A28`) undtager nu
+`time_range`: en periode regnes kun som voksende, til dens `end_date` er
+passeret (`#41 season_end.sql`, gen-kørsel påkrævet). Dagen efter slutdatoen
+afsluttes en færdigspillet periode straks — pokal, vinderlinje, fejring og
+`COMP_*`-milepæle — uden at vente på, at sæsonen selv melder sig slut.
+`full_season` og `team` gates uændret, og resultat-kravet (alle kampe har
+facit) løsnes ikke.
+
+**Hvorfor.** Fundet af ejeren samme dag: "TEST – Superliga", en firerunders
+augustperiode, stod med 22/22 spillet og ingen vinder. Gaten så kun på mode —
+`time_range` står i `BACKFILLABLE_MODES`, altså "kan vokse", altså "vent på
+sæsonen" — men Superliga-sæsonen slutter først til sommer, så en periode midt
+i sæsonen ville have ventet i ti måneder på en kåring, dens deltagere kunne
+regne ud i hovedet den aften, sidste kamp blev spillet.
+
+**Hvorfor undtagelsen er sikker uden karensperiode.** Gaten findes for kampe,
+der ikke er skemalagt endnu. Men efterfyldningen (`api/_backfill.js`) kan kun
+optage en kamp i en periode, hvis kickoff-dagen ligger INDEN FOR
+`[start_date; end_date]` — og dens regel 3 ("en runde, der er gået i gang,
+vokser aldrig") gør en kamp i et passeret vindue umulig at tilføje, fordi dens
+runde pr. definition er begyndt. Undtagelsen hviler altså på en strukturel
+umulighed, ikke på at der er gået tid nok — derfor ingen 30-dages-ventil her.
+`<` og ikke `<=`: på selve slutdatoen kan dagens kampe stadig komme til.
+Uvished trækker stadig mod "ikke afsluttet": en periode uden `end_date` gates
+som før (samme princip som `seasons_done`s `coalesce(…, false)`), og
+sammenligningen sker som `'YYYY-MM-DD'`-tekst — samme form som
+efterfyldningens egen — så en skæv værdi ikke kan vælte viewet, som en
+`::date`-cast kunne.
+
+**Efterprøvet fra begge sider:** `sql/tests/competition_status.sql` fik
+påstand 12–12e — perioden med passeret slutdato afslutter, `full_season` på
+præcis de samme kampe gør ikke (modprøven mod en gate, der var faldet helt
+af), sidste-dagen og den slutdato-løse gates stadig, og en uspillet kamp
+spærrer fortsat. Mutationsprøven er kørt: med den gamle view-definition svarer
+"Periode, passeret" `false`, og påstand 12 vælter testen.
+
+---
+
 ## 17. august 2026 — "Ikke bekræftet"-markøren fjernes helt: et klokkeslæt vises uden forbehold
 
 **Beslutning:** `matches.kickoff_uncertain` og hele maskineriet bag den —

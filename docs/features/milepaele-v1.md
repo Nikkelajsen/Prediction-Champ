@@ -52,6 +52,8 @@ Fire af konkurrence-milepælene kræver, at en konkurrence er færdig, og **det 
 
 Viewet `competition_status` afgør det: alle kampe har resultat, **og** — for de modes, der kan vokse — er deres sæsoner færdigspillede. `mode_params ? 'stages'` markerer en håndafgrænset gammel konkurrence, som aldrig vokser.
 
+> **Rettet efter levering (17. august 2026):** en periode (`time_range`) regnes kun som voksende, til dens `end_date` er passeret — efterfyldningen kan ikke lægge en kamp ind i et passeret vindue, så gaten holdt en færdigspillet augustperiode åben til næste sommer med milepælene tilbageholdt. Undtagelsen bor i `sql/season_end.sql` og ændrer ikke milepælenes egen logik.
+
 Det er ny logik uden produktionshistorik, og den uddeler en permanent belønning. CI-testen "en voksende konkurrence med uafsluttet sæson meldes ikke færdig" er det, der holder den ærlig.
 
 ## 6. Frossen semantik

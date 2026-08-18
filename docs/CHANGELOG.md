@@ -9,6 +9,28 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+17. august 2026 — En færdigspillet periode kårer sin vinder uden at vente på sæsonen
+
+- **Rettet (`#41 season_end.sql`, gen-kørsel påkrævet):** sæson-gaten på
+  `competition_status` regner nu kun en periode (`time_range`) som voksende,
+  til dens `end_date` er passeret. Før ventede en færdigspillet periode på, at
+  HELE sæsonen meldte sig slut — "TEST – Superliga" (fire runder, august)
+  stod med 22/22 spillet og ingen pokal, og ville have ventet til næste
+  sommer. Nu afsluttes den dagen efter slutdatoen: pokal, vinderlinje,
+  fejring og `COMP_*`-milepæle, alt sammen fra samme `concluded`-svar.
+- **Hvorfor det er sikkert:** efterfyldningen kan kun optage kampe med kickoff
+  inden for periodens eget vindue, og dens regel 3 gør en kamp i et passeret
+  vindue umulig at tilføje — undtagelsen hviler på en strukturel umulighed,
+  ikke en karensperiode. `full_season`/`team` gates uændret, resultat-kravet
+  løsnes ikke, og en periode uden slutdato gates som før. Begrundelse og
+  grænsetilfælde i `docs/DECISIONS.md`.
+- **Efterprøvet:** `sql/tests/competition_status.sql` fik påstand 12–12e
+  (inkl. modprøven af, at `full_season` på de samme kampe stadig gates), og
+  mutationsprøven med den gamle view-definition vælter testen som forventet.
+  🔴 **Kør `#41` i Supabase (produktion OG staging) og skema-eksporten
+  bagefter** — indtil da gælder den gamle gate i produktionen. Kørslen er
+  uafhængig af deployet: klienten læser kun viewets uændrede kolonner.
+
 17. august 2026 — "Ikke bekræftet"-markøren er fjernet helt: et klokkeslæt vises uden forbehold
 
 - **Fjernet (`#71 matches_kickoff_uncertain_drop.sql` + samme leverances kode):**
