@@ -17,10 +17,13 @@ import ChangeName from "./profile/ChangeName.jsx";
 
 // Hvorfor kontakten er LÅST og ikke bare slukket. Teksterne er vejledninger,
 // ikke fejl: browseren ejer de tre tilstande, og appen kan ikke handle sig ud
-// af dem — særligt "denied" kan ikke genåbnes programmatisk.
+// af dem — særligt "denied" kan ikke genåbnes programmatisk. Vejene nævnes
+// KONKRET (18. august 2026): mobil-Chrome har ikke længere en hængelås ved
+// adressen, så "browserens indstillinger" alene efterlod en bruger uden et
+// næste tryk.
 const LÅST_FORKLARING = {
-  "needs-install": "Føj først appen til hjemmeskærmen (Del → Føj til hjemmeskærm), så kan notifikationer slås til.",
-  denied: "Du har blokeret notifikationer i browseren. Slå dem til i browserens eller telefonens indstillinger for denne side, og prøv igen.",
+  "needs-install": "Notifikationer virker først, når appen ligger på hjemmeskærmen: tryk på Del-ikonet i browseren, vælg “Føj til hjemmeskærm”, og åbn appen derfra.",
+  denied: "Du har blokeret notifikationer, og appen kan ikke spørge igen. I Chrome: menuen ⋮ → Indstillinger → Webstedsindstillinger → Notifikationer → tillad denne side. Ligger appen på hjemmeskærmen, styres det i telefonens egne indstillinger under Notifikationer → Leagly. Slå så kontakten til her igen.",
 };
 
 // Husets første switch — lokal, indtil en anden aftager findes. `role="switch"`
