@@ -25,7 +25,9 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A58` · `B40` · `G136` · `I26`.**
+**Næste ledige: `A58` · `B41` · `G136` · `I26`.**
+*(`B40` er brugt 18. august 2026 til Indstillinger-skærmen med push-kontakten —
+leveret direkte uden en backlog-række; se `CHANGELOG.md`/`DECISIONS.md`.)*
 *(G-tallet stod på `G130` til 17. august 2026 og var forældet: `G130` og `G134`
 var leveret, og `G131`–`G133` er rækker i denne fil. `G135` er brugt samme dag.
 Slå efter med `grep -rhoE "\bG1[0-9][0-9]\b" docs/ sql/ src/ api/ | sort -u | tail`

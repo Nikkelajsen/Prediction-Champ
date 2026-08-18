@@ -1,7 +1,7 @@
 // App-skallen: navigation mellem de fem faner og drill-in-skærmene, plus den
 // fælles indlæsning af ligaer og konkurrencer, alle faner bygger på.
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
-import { Home, ClipboardList, Users, Trophy, TrendingUp, Loader2, LogOut, Info, Settings, X, User } from "lucide-react";
+import { Home, ClipboardList, Users, Trophy, TrendingUp, Loader2, LogOut, Info, Settings, Wrench, X, User } from "lucide-react";
 import { db } from "../lib/supabase.js";
 import { acceptInvite, resolveCompetitionInvite, resolveLeagueInvite, stripInviteParam } from "../lib/data.js";
 import { logEvent } from "../lib/analytics.js";
@@ -22,6 +22,7 @@ import PredictionsScreen from "./PredictionsScreen.jsx";
 import CreateCompetitionScreen from "./CreateCompetitionScreen.jsx";
 import ProfileScreen from "./ProfileScreen.jsx";
 import HowItWorksScreen from "./HowItWorksScreen.jsx";
+import SettingsScreen from "./SettingsScreen.jsx";
 import LegalScreen from "./LegalScreen.jsx";
 import OnboardingFlow from "./OnboardingFlow.jsx";
 import InstallGuide, { isStandalone } from "./InstallGuide.jsx";
@@ -417,6 +418,7 @@ function MainApp({ session, profile, onProfileChanged, onLogout, inviteFromStora
   };
   const openAdmin = () => setScreen({ type: "admin" });
   const openHow = () => setScreen({ type: "how" });
+  const openSettings = () => setScreen({ type: "settings" });
   const openLegal = (doc = "privatliv") => setScreen({ type: "legal", doc });
 
   const tabs = [
@@ -475,9 +477,12 @@ function MainApp({ session, profile, onProfileChanged, onLogout, inviteFromStora
     );
   } else if (screen?.type === "profile") {
     body = <ProfileScreen token={token} viewerUserId={userId} profileUserId={screen.profileUserId}
-      onBack={() => setScreen(null)} openProfile={openProfile} onProfileChanged={onProfileChanged} />;
+      onBack={() => setScreen(null)} openProfile={openProfile} />;
   } else if (screen?.type === "how") {
     body = <HowItWorksScreen onBack={() => setScreen(null)} token={token} openLegal={openLegal} />;
+  } else if (screen?.type === "settings") {
+    body = <SettingsScreen token={token} userId={userId} profile={profile}
+      onProfileChanged={onProfileChanged} onBack={() => setScreen(null)} />;
   } else if (screen?.type === "legal") {
     // Tilbage fører til "Sådan virker det" og ikke til `null` som de øvrige
     // grene: man kom DERFRA, og der findes ingen fane at lande på. Uden det
@@ -514,19 +519,22 @@ function MainApp({ session, profile, onProfileChanged, onLogout, inviteFromStora
           paddingTop: "calc(14px + env(safe-area-inset-top, 0px))",
         }}>
           {/* 20 og ikke 15: bredden er ikke det, der binder — på en 320 px skærm
-              med admin-knappen fylder mærket 98 px og knapperne 107, så der er
-              stadig ~80 px luft. Det, der binder, er hierarkiet: sidens egen
-              overskrift er 30 (`H` i HjemTab), og mærket skal blive ved med at
-              være chrome frem for indhold. Over ~22 vejer "LEAGLY" lige så tungt
-              som "HEJ <navn>", og så konkurrerer brandbaren med siden.
+              med admin-knappen fylder mærket 98 px og de fem knapper ~139, så
+              der er stadig ~80 px luft. Det, der binder, er hierarkiet: sidens
+              egen overskrift er 30 (`H` i HjemTab), og mærket skal blive ved med
+              at være chrome frem for indhold. Over ~22 vejer "LEAGLY" lige så
+              tungt som "HEJ <navn>", og så konkurrerer brandbaren med siden.
               Ikonerne følger med fra 18 til 20 — ellers ser højresiden krympet
               ud ved siden af et større mærke. Log ud står 1 px under de andre
-              som før: glyffen fylder mere af sit felt. */}
+              som før: glyffen fylder mere af sit felt.
+              Tandhjulet er Indstillinger (B40) — admin fik skruenøglen i stedet,
+              fordi tandhjulet er det, alle brugere leder efter. */}
           <Wordmark size={20} />
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
             <button onClick={() => openProfile(userId)} aria-label="Min karriereprofil" style={iconBtn}><User size={20} /></button>
             <button onClick={openHow} aria-label="Sådan virker det" style={iconBtn}><Info size={20} /></button>
-            {isAdmin && <button onClick={openAdmin} aria-label="Admin" style={iconBtn}><Settings size={20} /></button>}
+            <button onClick={openSettings} aria-label="Indstillinger" style={iconBtn}><Settings size={20} /></button>
+            {isAdmin && <button onClick={openAdmin} aria-label="Admin" style={iconBtn}><Wrench size={20} /></button>}
             <button onClick={onLogout} aria-label="Log ud" style={iconBtn}><LogOut size={19} /></button>
           </div>
         </div>

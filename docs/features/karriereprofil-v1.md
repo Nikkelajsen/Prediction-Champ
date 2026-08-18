@@ -271,6 +271,13 @@ Leveret samlet efter en gennemgang af karrierestatistikken. Alle fem lå inden f
 
 ## 14. Skift af brugernavn bor her (rettelse efter levering, 10. august 2026)
 
+> **Flyttet igen 18. august 2026 (`B40`):** knappen bor nu på **Indstillinger**
+> (`SettingsScreen.jsx`, tandhjulet i topbaren) — skærmen, dette afsnit
+> forudsagde nederst ("bliver der en, er dette dens første beboer"), blev
+> bygget med push-kontakten som anledning. Komponenten er fortsat
+> `profile/ChangeName.jsx`, og prisen på rival-tælleren nedenfor gælder
+> uændret. Resten af afsnittet står som historik.
+
 `B29` gav skærmen én knap, spec'en ikke kendte: **Skift brugernavn**, i
 hovedkortet under ratingen og kun på ens egen profil (`isOwn`).
 

@@ -110,7 +110,7 @@ const PRIVATLIV = {
           punkter: [
             "Din session: en fornyelses-nøgle og din e-mail, så du forbliver logget ind. Den fjernes, når du logger ud.",
             "Hvornår appen sidst registrerede dig som aktiv, så den ikke gør det oftere end en gang i timen.",
-            "Om du er færdig med introduktionen, om du har skjult checklisten Kom godt i gang, om du har lukket kortet om notifikationer, og om du har lukket forslaget om at oprette en liga.",
+            "Om du er færdig med introduktionen, om du har skjult checklisten Kom godt i gang, om du har lukket kortet om notifikationer eller slået dem fra under Indstillinger, og om du har lukket forslaget om at oprette en liga.",
             "Om du har set vejledningen til at lægge appen på din hjemmeskærm, så den kun vises én gang.",
             "Hvilken turnering du sidst kiggede på i Championship.",
             "Hvilke af dine konkurrencer du allerede har set slutte, så fejringen af en afsluttet konkurrence kun vises én gang.",
