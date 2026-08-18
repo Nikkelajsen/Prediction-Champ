@@ -9,6 +9,30 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+18. august 2026 — Indstillinger: notifikationer kan nu også slås FRA (`B40`)
+
+- **Nyt: Indstillinger-skærm** (`src/screens/SettingsScreen.jsx`) bag et
+  tandhjul i topbaren ved siden af ⓘ. To kort: **Notifikationer** — en
+  kontakt, der slår push til og fra for denne enhed (den første brugerflade
+  til "fra"; før fandtes kun log ud og browserens egne indstillinger) — og
+  **Profil** med "Skift brugernavn", flyttet hertil fra karriereprofilen,
+  som `B29`-kommentaren i `ChangeName.jsx` selv forudsagde.
+- **Kontakten** drives af ny hook `usePushSetting` (`src/ui/usePushSetting.js`)
+  oven på de eksisterende `enablePush`/`disablePush` i `src/lib/push.js` — en
+  søster til `usePushOptIn`, ikke en udvidelse: opt-in-kortene skal fortsat
+  kun kende "spørg/spørg ikke", mens skærmen her viser hele billedet
+  (understøttes ikke / kræver hjemmeskærm på iOS / blokeret i browseren /
+  til / fra). Tilstandsafgørelsen er den rene funktion `derivePushStatus`,
+  unit-testet i `src/ui/usePushSetting.test.js`.
+- **"Fra" sætter samme "nej tak"-flag** (`pc_push_dismissed`) som
+  opt-in-kortets kryds, så kortet på Hjem ikke straks beder brugeren fortryde;
+  privatlivspolitikkens sætning om flaget er udvidet tilsvarende
+  (`src/lib/legal.js`).
+- **Admin-knappen bærer nu skruenøglen** (`Wrench`) — tandhjulet er det ikon,
+  alle brugere leder efter, så Indstillinger fik det. Kun admins mærker
+  skiftet.
+- **Skærmbillederne er taget om** (headeren har fået en fjerde knap).
+
 17. august 2026 — En færdigspillet periode kårer sin vinder uden at vente på sæsonen
 
 - **Rettet (`#41 season_end.sql`, gen-kørsel påkrævet):** sæson-gaten på

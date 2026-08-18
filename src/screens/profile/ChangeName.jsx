@@ -1,17 +1,11 @@
-// Skift af brugernavn (B29) — knappen og dialogen på ens EGEN karriereprofil.
+// Skift af brugernavn (B29) — knappen og dialogen.
 //
-// HVORFOR NETOP HER. Navnet stod indtil nu ét sted i appen, hvor det var
-// brugerens eget: øverst på karriereprofilen, i store bogstaver, med "(dig)" ved
-// siden af. Det er dér, man ser sit navn og dermed dér, man opdager, at det er
-// forkert — og en handling hører hjemme ved den oplysning, den ændrer. De to
-// andre kandidater var forkerte af hver sin grund: Hjem hilser med navnet, men
-// er en oversigt over kampe og stillinger, og "Sådan virker det" → privatliv er
-// vejen UD af produktet, ikke en indstillingsside.
-//
-// Der findes bevidst ikke en indstillingsskærm at lægge den på. Bliver der
-// nogensinde en (adgangskode, sprog, notifikationer ét sted), er dette den
-// første beboer — indtil da ville en skærm med ét punkt være en menu, man skal
-// lære at finde, for at gøre én ting.
+// Boede først på ens egen karriereprofil ("en handling hører hjemme ved den
+// oplysning, den ændrer" — der fandtes bevidst ingen indstillingsskærm).
+// Kommentaren her forudsagde dengang: "bliver der nogensinde en, er dette den
+// første beboer" — og det blev den (B40, august 2026), da Indstillinger kom
+// til med notifikations-kontakten som anledning. Filen ligger fortsat i
+// profile/ af hensyn til git-historikken; kun kaldstedet flyttede.
 import { useState, useId } from "react";
 import { Loader2, Pencil } from "lucide-react";
 import { C, btnGhost, fieldFull, muted } from "../../ui/theme.js";

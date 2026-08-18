@@ -40,6 +40,8 @@ const PING_KEY = "pc_last_ping";                  // aktivitets-ping, throttle
 const FLOW_KEY = "pc_onboarding_v1_flow";         // "done" | "skipped"
 const CARD_KEY = "pc_onboarding_v1_card";         // "1" = checklisten er skjult
 const COMPLETE_KEY = "pc_onboarding_v1_complete"; // "1" = færdig, spring proben over
+// Sat både af kortets kryds på Hjem og af "fra" på Indstillinger (B40): begge
+// er brugerens nej, og opt-in-kortet må ikke bede nogen fortryde det.
 const PUSH_DISMISS_KEY = "pc_push_dismissed";
 const NUDGE_KEY = "pc_liga_nudge_dismissed";
 const SEASON_LEAGUE_KEY = "pc_season_league";

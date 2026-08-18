@@ -15,6 +15,36 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 18. august 2026 — Indstillinger-skærmen findes nu, og push-fravalget er én samlet kontakt (`B40`)
+
+**Beslutning:** Appen har fået en Indstillinger-skærm (tandhjul i topbaren) med
+push-notifikationer som til/fra-kontakt og "Skift brugernavn" som anden beboer.
+Kontakten er **alt eller intet** — ingen pr.-type-valg (deadline, runderesultat
+osv.) og ingen databaseændringer: tilstanden er fortsat alene "har denne enhed
+en `push_subscriptions`-række". Et "fra" på Indstillinger sætter samme
+"nej tak"-flag (`pc_push_dismissed`) som opt-in-kortets kryds. Admin-knappen
+afgav tandhjulet og bærer nu skruenøglen.
+
+**Hvorfor.** Ejerens ønske: brugere skal løbende kunne slå notifikationer til
+og fra, og den flade fandtes ikke — kun opt-in (Hjem-kortet/checklisten) og de
+to omveje log ud og browserens indstillinger. Alt-eller-intet, fordi
+udsendelsen ingen præference-model har (afsnit 16), og en granularitet ville
+kræve kolonne + serverfiltrering for et behov, ingen har efterspurgt; formen
+kan udvides senere uden at kontakten skifter betydning. Dismiss-flaget ved
+"fra", fordi opt-in-kortet ellers ville stå på Hjem og bede brugeren fortryde
+et valg, de lige har truffet aktivt — et stærkere nej end at lukke et kort.
+"Skift brugernavn" flyttede med, fordi `B29` selv udpegede en kommende
+indstillingsskærm som knappens rette hjem ("dette er dens første beboer") —
+én-punkts-menuen, der talte imod dengang, er ikke længere én-punkts.
+Fuldskærm frem for dialog, fordi alle topbarens knapper åbner skærme; ét
+mønster. Kendt begrænsning uændret: abonnementet er pr. enhed, og det siger
+skærmen højt.
+
+**Bevidst uden for:** pr.-type-præferencer, e-mail-fallback, adgangskodeskift
+og sprogvalg på skærmen — de kan flytte ind senere.
+
+---
+
 ## 17. august 2026 — Sæson-gaten slipper en periode, når dens slutdato er passeret
 
 **Beslutning:** `competition_status`' sæson-gate (`A28`) undtager nu
