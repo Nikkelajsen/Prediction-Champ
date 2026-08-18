@@ -14,11 +14,17 @@ import {
 } from "../lib/push.js";
 import { writeUserFlag, PUSH_DISMISS_KEY } from "../lib/localFlags.js";
 
-// Ren, så rækkefølgen kan testes uden browser-API'er. Samme prioritering som
-// enablePush() selv fejler i: understøttelse → hjemmeskærm → tilladelse.
+// Ren, så rækkefølgen kan testes uden browser-API'er.
+//
+// Hjemmeskærm FØR understøttelse — bevidst omvendt af enablePush()s egen
+// fejlrækkefølge: i en iPhone-FANE er begge sande (fanen kan ikke push, og
+// appen mangler på hjemmeskærmen), og kun den ene er en handling, brugeren
+// kan udføre. "Understøttes ikke" var dér en blindgyde; set på en rigtig
+// enhed 18. august 2026. enablePush() kan beholde sin rækkefølge — kontakten
+// er låst i begge tilstande, så dens fejl kan ikke nås herfra.
 function derivePushStatus({ supported, needsInstall, permission, hasSubscription }) {
-  if (!supported) return "unsupported";
   if (needsInstall) return "needs-install";
+  if (!supported) return "unsupported";
   if (permission === "denied") return "denied";
   return hasSubscription ? "on" : "off";
 }
@@ -59,10 +65,14 @@ function usePushSetting(token, userId) {
       await enablePush(token, userId);
       setStatus("on");
     } catch (e) {
-      setError(e.message || "Noget gik galt — prøv igen.");
-      // Tilladelsen kan netop være blevet afvist i prompten — aflæs den igen,
-      // så kontakten låser med den rigtige forklaring frem for at friste igen.
-      if (isPushSupported() && Notification.permission === "denied") setStatus("denied");
+      // Afvist i selve prompten? Så låser kontakten med den fulde forklaring
+      // på skærmen — og KUN den: en rød fejl, der siger det samme, oveni er
+      // støj (set på en rigtig enhed 18. august 2026, hvor de to stod sammen).
+      if (isPushSupported() && Notification.permission === "denied") {
+        setStatus("denied");
+      } else {
+        setError(e.message || "Noget gik galt — prøv igen.");
+      }
     } finally { setBusy(false); }
   }
 

@@ -32,6 +32,14 @@ dokumentation skal kunne læses uden at læse historikken med.
   alle brugere leder efter, så Indstillinger fik det. Kun admins mærker
   skiftet.
 - **Skærmbillederne er taget om** (headeren har fået en fjerde knap).
+- **Justeret samme dag efter skærmbilleder fra rigtige enheder:** (1) en afvist
+  browser-prompt gav BÅDE den låste denied-forklaring og den røde fejl fra
+  `enablePush` — nu vises kun forklaringen; (2) i en iPhone-FANE (hvor push
+  slet ikke kan virke) vandt "understøttes ikke" over "føj til hjemmeskærmen"
+  i `derivePushStatus` — nu står installationen først, for den er det eneste,
+  brugeren kan gøre; (3) de låste teksters veje er gjort konkrete (mobil-Chrome
+  har ingen hængelås: ⋮ → Indstillinger → Webstedsindstillinger →
+  Notifikationer; installeret app: telefonens Notifikationer → Leagly).
 
 17. august 2026 — En færdigspillet periode kårer sin vinder uden at vente på sæsonen
 

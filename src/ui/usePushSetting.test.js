@@ -1,13 +1,19 @@
 import { describe, it, expect } from "vitest";
 import { derivePushStatus } from "./usePushSetting.js";
 
-// Prioriteringen er den samme, som enablePush() fejler i: understøttelse →
-// hjemmeskærm → tilladelse → abonnement. Testene her fryser den rækkefølge.
+// Prioriteringen: hjemmeskærm → understøttelse → tilladelse → abonnement.
+// Hjemmeskærm står FØRST med vilje — i en iPhone-fane er både "kan ikke" og
+// "mangler installation" sande, og kun installationen er en handling (se
+// kommentaren ved derivePushStatus). Testene her fryser den rækkefølge.
 describe("derivePushStatus", () => {
   const base = { supported: true, needsInstall: false, permission: "granted", hasSubscription: false };
 
-  it("uden browser-understøttelse er alt andet ligegyldigt", () => {
+  it("uden browser-understøttelse er resten ligegyldigt", () => {
     expect(derivePushStatus({ ...base, supported: false, hasSubscription: true })).toBe("unsupported");
+  });
+
+  it("iPhone-fanen: manglende installation vinder over manglende understøttelse", () => {
+    expect(derivePushStatus({ ...base, supported: false, needsInstall: true })).toBe("needs-install");
   });
 
   it("iOS uden hjemmeskærms-installation vinder over tilladelsen", () => {
