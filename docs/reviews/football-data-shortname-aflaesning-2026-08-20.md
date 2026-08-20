@@ -46,8 +46,18 @@ kickoff-aflæsningen gjaldt datoer, og der læses kun strenge.
 (`B28`/`B32`), og uden den har leverandøren ikke sæsonen 2026. Fejler kaldet,
 er dét svaret for CL — skriv det ind som sådan.
 
+> **Rettelse efter bestilling, samme dag.** Første udgave af opslaget satte
+> `$FD = $env:FOOTBALLDATA_TOKEN`, og ejerens kørsel fejlede på alle fem
+> turneringer med *"Objektreferencen er ikke indstillet til en forekomst af et
+> objekt"*. Årsagen var ikke kaldet, men tokenen: miljøvariablen findes i
+> Vercel og ikke på ejerens maskine, så `$FD` var tom — og Windows PowerShell
+> 5.1's `Invoke-WebRequest` svarer med netop dén intetsigende fejl, når en
+> header-værdi er `$null`. Opslaget spørger nu om tokenen og nægter at køre
+> med en tom, så fejlen ikke kan komme igen i den forklædning.
+
 ```powershell
-$FD = $env:FOOTBALLDATA_TOKEN   # eller sæt værdien direkte
+$FD = Read-Host "FOOTBALLDATA_TOKEN (kopiér værdien fra Vercel -> Settings -> Environment Variables)"
+if (-not $FD) { throw "Tom token - kald ikke API'et uden: PS 5.1 fejler ellers med en intetsigende 'Objektreference'-fejl." }
 foreach ($kode in "PD","PL","SA","BL1","CL") {
   try {
     $resp = Invoke-WebRequest -UseBasicParsing -Uri "https://api.football-data.org/v4/competitions/$kode/matches?season=2026" -Headers @{ "X-Auth-Token" = $FD }

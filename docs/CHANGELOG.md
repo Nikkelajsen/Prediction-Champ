@@ -28,6 +28,12 @@ dokumentation skal kunne læses uden at læse historikken med.
   produktion er ejerens arbejde; det, en session kan gøre billigere, er
   bestillingen. Rækkens hidtidige henvisning til kickoff-opslaget rakte ikke —
   det udtrækker `utcDate`/`status` og kan ikke svare på navnespørgsmålene.
+- **Justeret samme dag efter ejerens første kørsel:** alle fem kald fejlede med
+  *"Objektreferencen er ikke indstillet …"*, fordi opslaget hentede tokenen fra
+  `$env:FOOTBALLDATA_TOKEN` — som findes i Vercel og ikke på ejerens maskine —
+  og PS 5.1's `Invoke-WebRequest` giver netop dén fejl ved en tom header-værdi.
+  Opslaget spørger nu om tokenen (`Read-Host`) og nægter at køre med en tom;
+  rettelsen er markeret i dokumentet.
 - **Ingen kodeændringer og intet at køre i Supabase.** `B39` bliver stående i
   Tier 1, til svaret er skrevet ind.
 
