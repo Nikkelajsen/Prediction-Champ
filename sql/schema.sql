@@ -7,7 +7,7 @@
 -- bare arbejde, der forsvinder. Skal skemaet ændres, skrives en migrering i
 -- sql/ og køres i Supabases SQL-editor — se sql/README.md.
 --
--- Skemaet ændrede sig sidst: 2026-08-17
+-- Skemaet ændrede sig sidst: 2026-08-20
 --
 -- DATOEN ER FILENS HOLDBARHED, ikke dens kørselsstempel. Den står stille,
 -- når en eksport ikke fandt noget nyt, og siger dermed "skemaet er uændret
@@ -19,7 +19,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict dAbkoLBdSA0uFgEyMbeeolBhOfdWOEqa6IJ1L2eyJ522JeULadBmoIGpTIicLlS
+\restrict GTRxu14lQtMyMlsLg2gghSha0FpLfyOMh2tgzTWIgJCcnQNRZo2xEEPmeKoTUa8
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.11 (Ubuntu 17.11-1.pgdg24.04+2)
@@ -6346,7 +6346,7 @@ CREATE VIEW public.competition_status WITH (security_invoker='on') AS
           GROUP BY cm.competition_id
         ), growable AS (
          SELECT c.id AS competition_id,
-            ((c.mode = ANY (ARRAY['full_season'::text, 'team'::text, 'time_range'::text])) AND (NOT (c.mode_params ? 'stages'::text))) AS can_grow
+            ((c.mode = ANY (ARRAY['full_season'::text, 'team'::text, 'time_range'::text])) AND (NOT (c.mode_params ? 'stages'::text)) AND (NOT ((c.mode = 'time_range'::text) AND COALESCE(((c.mode_params ->> 'end_date'::text) < to_char((CURRENT_DATE)::timestamp with time zone, 'YYYY-MM-DD'::text)), false)))) AS can_grow
            FROM public.competitions c
         ), seasons_done AS (
          SELECT x.competition_id,
@@ -6757,7 +6757,8 @@ CREATE TABLE public.teams (
     league_id uuid NOT NULL,
     name text NOT NULL,
     api_team_id text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    short_name text
 );
 
 
@@ -8980,5 +8981,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict dAbkoLBdSA0uFgEyMbeeolBhOfdWOEqa6IJ1L2eyJ522JeULadBmoIGpTIicLlS
+\unrestrict GTRxu14lQtMyMlsLg2gghSha0FpLfyOMh2tgzTWIgJCcnQNRZo2xEEPmeKoTUa8
 

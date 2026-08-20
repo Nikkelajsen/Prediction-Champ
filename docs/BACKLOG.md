@@ -275,8 +275,9 @@ KUN tip-rækkerne** (stedet, pladsen er trang, og stedet, ejeren meldte); Hjem,
 stillinger og Story Engine beholder de fulde navne. Begrundelsen står i
 [`DECISIONS.md`](./DECISIONS.md).
 
-**Tilbage hos ejeren: kør `#72` i Supabase** (sikker når som helst, uafhængig af
-mergen) — feltet udfyldes af næste sync pr. turnering, og `shortNamesSet` i
-kørslens resumé viser antallet. CL svarede 404 undervejs — `B28`s udløser er
-efterprøvet og stadig ikke indtruffet, og CL-holdene får feltet ad samme vej,
-når terminslisten kommer.
+✅ **`#72` er kørt i produktionen senere samme dag** (ejeren, efter mergen af
+`#248`) — feltet udfyldes af næste sync pr. turnering, aflæseligt som
+`shortNamesSet` i Admin → Drift, og skema-eksporten er kørt på arbejdsgrenen
+bagefter. CL svarede 404 undervejs — `B28`s udløser er efterprøvet og stadig
+ikke indtruffet, og CL-holdene får feltet ad samme vej, når terminslisten
+kommer.
