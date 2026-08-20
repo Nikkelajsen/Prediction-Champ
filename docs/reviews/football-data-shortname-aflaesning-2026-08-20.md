@@ -1,8 +1,10 @@
 # Aflæsning: sender football-data.org et brugbart kort holdnavn? (`B39`)
 
-**Bestilt 20. august 2026 — endnu ikke aflæst.** Dette dokument er bestillingen:
-opslaget nedenfor køres af ejeren med `FOOTBALLDATA_TOKEN`, og svaret skrives
-ind i dette dokument, som derefter er aflæsningen. Formen er den samme som
+**Bestilt 20. august 2026 og aflæst af ejeren samme dag** — svaret står i
+[Svar](#svar-aflæst-20-august-2026-af-ejeren) nederst. Dokumentet blev skrevet
+som bestillingen: opslaget nedenfor køres af ejeren med `FOOTBALLDATA_TOKEN`,
+og svaret skrives ind i dette dokument, som derefter er aflæsningen — hvilket
+er sket. Formen er den samme som
 [kickoff-aflæsningen](./football-data-kickoff-aflaesning-2026-08-07.md), men
 opslaget er et andet: kickoff-opslaget udtrækker `utcDate`/`status` og kan ikke
 svare på ét af de tre spørgsmål her.
@@ -117,7 +119,41 @@ skærmene skal kunne det fra dag ét.
 
 ---
 
-## Svar
+## Svar (aflæst 20. august 2026 af ejeren)
 
-*(Ikke aflæst endnu. Udskriften og konklusionerne på de fire spørgsmål skrives
-her, når opslaget er kørt.)*
+Kørt med den rettede udgave af opslaget. Rimelighedstjekkene stemmer i alle
+fire turneringer — 380 kampe og 20 hold i PD/PL/SA, 306 kampe og 18 hold i
+BL1 — så udtrækket har fanget hele terminslisten hver gang.
+
+| Turnering | Kampe | Hold | Uden `shortName` | Identiske med `name` | Dubletter |
+|---|---|---|---|---|---|
+| Primera División (`PD`) | 380 | 20 | 0 | 1 (Sevilla FC) | ingen |
+| Premier League (`PL`) | 380 | 20 | 0 | 0 | ingen |
+| Serie A (`SA`) | 380 | 20 | 0 | 2 (Venezia FC, Como 1907) | ingen |
+| Bundesliga (`BL1`) | 306 | 18 | 0 | 2 (RB Leipzig, 1. FC Köln) | ingen |
+| Champions League (`CL`) | — | — | — | — | **404: sæsonen 2026 findes fortsat ikke** |
+
+**Spørgsmål 1 og 2: feltet findes for hvert af de 78 hold og er aldrig tomt.**
+Visningen behøver derfor ingen faldback pr. hold — og de fem "identiske" er
+ufarlige, for dér er feltet og faldbacken den samme streng.
+
+**Spørgsmål 3: ja, og netop for de navne, rækken kom af.** "Real Racing Club de
+Santander" → "Santander", "RCD Espanyol de Barcelona" → "Espanyol",
+"Real Sociedad de Fútbol" → "Real Sociedad", "Club Atlético de Madrid" →
+"Atleti". Bestillingens bekymring — at `shortName` bare ville være navnet uden
+præfiks ("FC Barcelona" → "Barcelona") — viste sig forkert i den interessante
+retning: leverandøren sender **kælenavne**, ikke afkortninger — "Barça",
+"Atleti", "M'gladbach", "HSV", "Inter". Det er de navne, en fodboldlæser selv
+siger, men det er en **tone** og ikke kun en længde, og det skal siges højt, når
+skærm-valget træffes. Den ene skævhed på 78 navne: PL's "Brighton & Hove Albion
+FC" bliver "Brighton Hove" (mistet "&"; "Brighton" ville være det naturlige).
+Den ændrer ikke svaret.
+
+**Spørgsmål 4: ingen dubletter i nogen turnering.**
+
+**Udfaldet er tabellens første række:** `B39` bygges som beskrevet — additiv
+kolonne, `teams.name` forbliver nøgle, Superligaen og Scotland viser fortsat
+`name` — og rækken er flyttet fra Tier 1 til Tier 3 i
+[`BACKLOG.md`](../BACKLOG.md). CL-kaldets 404 er samtidig en gratis
+gen-aflæsning af `B28`s udløser: sæsonen 2026 findes stadig ikke hos
+leverandøren pr. 20. august 2026, så den række venter rigtigt.

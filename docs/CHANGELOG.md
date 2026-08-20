@@ -9,6 +9,24 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+20. august 2026 — `B39` er aflæst: `shortName` kan bære visningen, og Tier 1 er tom igen
+
+- **Ejeren kørte bestillingen samme dag, den blev skrevet**, og svaret står nu i
+  [`docs/reviews/football-data-shortname-aflaesning-2026-08-20.md`](./reviews/football-data-shortname-aflaesning-2026-08-20.md):
+  `shortName` findes for alle 78 hold i PD/PL/SA/BL1 (380/380/380 kampe + 306 —
+  rimelighedstjekkene stemmer), er aldrig tomt, har ingen dubletter, og er
+  markant pænere for netop de lange spanske navne, rækken kom af ("Real Racing
+  Club de Santander" → "Santander").
+- **Fundet, bestillingen ikke forudså:** leverandøren sender **kælenavne**
+  ("Barça", "Atleti", "M'gladbach", "HSV"), ikke afkortninger — en tone og
+  ikke kun en længde, som skærm-valget skal tage stilling til, når kolonnen
+  bygges. Ene skævhed: "Brighton & Hove Albion FC" → "Brighton Hove".
+- **`B39` er flyttet Tier 1 → Tier 3 i `BACKLOG.md`** — næste skridt er kode
+  (additiv kolonne, `teams.name` forbliver nøgle; Superligaen/Scotland viser
+  fortsat `name`). CL svarede 404: sæsonen 2026 findes fortsat ikke, så `B28`s
+  udløser er efterprøvet og stadig ikke indtruffet.
+- **Ingen kodeændringer og intet at køre i Supabase.**
+
 20. august 2026 — Tier 1 kørt: `B39`s aflæsning ligger nu som en færdig bestilling
 
 - **Nyt: [`docs/reviews/football-data-shortname-aflaesning-2026-08-20.md`](./reviews/football-data-shortname-aflaesning-2026-08-20.md)**
