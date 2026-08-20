@@ -9,6 +9,28 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+20. august 2026 — Tier 1 kørt: `B39`s aflæsning ligger nu som en færdig bestilling
+
+- **Nyt: [`docs/reviews/football-data-shortname-aflaesning-2026-08-20.md`](./reviews/football-data-shortname-aflaesning-2026-08-20.md)**
+  — bestillingen på `B39`s aflæsning (sender football-data.org et brugbart kort
+  holdnavn?). Ét PowerShell-opslag over PD/PL/SA/BL1 + CL, som svarer på rækkens
+  tre spørgsmål (findes `shortName` for hvert hold, er det nogensinde tomt, er
+  det pænere for de lange spanske navne) plus en fjerde billig
+  (dublet-`shortName` inden for samme turnering), med rimelighedstjek på kamp-
+  og holdantal, en tabel over hvad hvert udfald afgør, og et Svar-afsnit til
+  udskriften. Opslaget rammer samme endpoint, syncen henter
+  (`/competitions/{kode}/matches`), ikke `/teams` — kolonnen skal udfyldes af
+  det svar, syncen faktisk får.
+- **Hvorfor kun en bestilling:** kaldet kan pr. konstruktion ikke laves fra
+  repoet, og det blev efterprøvet frem for antaget — miljøets proxy afviser
+  CONNECT mod `api.football-data.org` med 403, og `FOOTBALLDATA_TOKEN` findes
+  ikke i miljøet. `A32` (10. august 2026) står ved magt: aflæsninger i
+  produktion er ejerens arbejde; det, en session kan gøre billigere, er
+  bestillingen. Rækkens hidtidige henvisning til kickoff-opslaget rakte ikke —
+  det udtrækker `utcDate`/`status` og kan ikke svare på navnespørgsmålene.
+- **Ingen kodeændringer og intet at køre i Supabase.** `B39` bliver stående i
+  Tier 1, til svaret er skrevet ind.
+
 18. august 2026 — Indstillinger: notifikationer kan nu også slås FRA (`B40`)
 
 - **Nyt: Indstillinger-skærm** (`src/screens/SettingsScreen.jsx`) bag et
