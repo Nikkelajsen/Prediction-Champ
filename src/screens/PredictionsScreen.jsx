@@ -76,8 +76,14 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
         } else { setSeasonLeague({}); }
         const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]))];
         if (teamIds.length) {
-          const tms = await selectIn(token, "teams", "id", teamIds, "&select=id,name");
-          setTeamsById(Object.fromEntries(tms.map((t) => [t.id, t.name])));
+          // Tip-rækkerne er det ene sted, pladsen er trang, og derfor det ene
+          // sted, det korte holdnavn vises (B39): `short_name` er leverandørens
+          // eget visningsnavn ("Santander", "Espanyol") og findes kun for
+          // football-data-ligaerne — alle andre falder tilbage på det fulde navn,
+          // og det gør resten af appen med vilje også. `select=*` og ikke en
+          // kolonneliste, så skærmen tåler, at #72 endnu ikke er kørt.
+          const tms = await selectIn(token, "teams", "id", teamIds, "&select=*");
+          setTeamsById(Object.fromEntries(tms.map((t) => [t.id, t.short_name || t.name])));
         }
         const ap = await selectIn(token, "predictions", "match_id", ids, "&select=*");
         setAllPreds(ap);

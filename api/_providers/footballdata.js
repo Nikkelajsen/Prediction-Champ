@@ -106,7 +106,11 @@ function team(t) {
   // er homeTeam/awayTeam til stede, men med id og name = null. Kalderen springer
   // kampe uden begge hold over, præcis som den gør for Sportmonks.
   if (!t?.id || !t?.name) return null;
-  return { providerId: String(t.id), globalId: PREFIX + t.id, name: t.name };
+  // `shortName` (B39) er AFLÆST mod rigtige data 20. august 2026 — findes for
+  // alle hold i PD/PL/SA/BL1 og er aldrig tomt (docs/reviews/
+  // football-data-shortname-aflaesning-2026-08-20.md). `||` og ikke `??`, så en
+  // tom streng foldes til null: NULL er kontrakten for "intet kort navn".
+  return { providerId: String(t.id), globalId: PREFIX + t.id, name: t.name, shortName: t.shortName || null };
 }
 
 function normalize(m) {

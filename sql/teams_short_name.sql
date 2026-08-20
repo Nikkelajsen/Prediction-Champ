@@ -1,0 +1,32 @@
+-- Kort holdnavn til visningen (B39).
+-- Idempotent — kan køres igen når som helst (kør med "Run without RLS").
+--
+-- HVORFOR. Primera Divisións fulde navne ("Real Racing Club de Santander",
+-- "RCD Espanyol de Barcelona") fylder to linjer i en kamprække, og appen
+-- ombryder med vilje frem for at trunkere. football-data.org sender et kort
+-- visningsnavn (`shortName`) i det samme kampprogram-svar, syncen allerede
+-- henter — aflæst mod rigtige data 20. august 2026, IKKE kun læst i
+-- dokumentationen: feltet findes for alle 78 hold i PD/PL/SA/BL1, er aldrig
+-- tomt og har ingen dubletter inden for en turnering
+-- (docs/reviews/football-data-shortname-aflaesning-2026-08-20.md).
+--
+-- KOLONNEN ER ADDITIV, OG `name` FORBLIVER NØGLE. Holdmatchen i
+-- api/sync-matches.js kører på det normaliserede FULDE navn (unique
+-- `(league_id, name)`, `includes()`-fallback), og korte navne ville skabe
+-- netop de kollisioner, `ambiguousTeamNames()` fælder ("Real Sociedad" ⊂
+-- "Real Sociedad de Fútbol"). Ingen eksisterende kolonne røres.
+--
+-- NULL betyder "leverandøren har intet kort navn": Sportmonks-ligaerne
+-- (Superligaen, Scotland) har kun et tre-bogstavs badge (`short_code`, "FCK")
+-- og får derfor aldrig feltet sat — visningen falder tilbage på `name`.
+--
+-- Sikker at køre når som helst og uafhængigt af deployet, begge veje:
+-- den gamle kode nævner ikke kolonnen, og den nye SKRIVER den først, når
+-- læsningen af `teams` viser, at kolonnen findes (guard i api/sync-matches.js)
+-- — klienten læser med `select=*` og tåler begge tilstande. Ingen policy og
+-- ingen rettighed ændres; `teams` har tabel-grants, som dækker nye kolonner.
+--
+-- Udfyldes af næste sync-matches-kørsel (hver 12. time pr. turnering) — eller
+-- straks med et manuelt kald af /api/sync-matches pr. liga.
+
+alter table public.teams add column if not exists short_name text;

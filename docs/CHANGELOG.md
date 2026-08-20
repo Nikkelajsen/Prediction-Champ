@@ -9,6 +9,84 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+20. august 2026 — Kort holdnavn i tip-rækkerne (`B39`): "Santander" frem for "Real Racing Club de Santander"
+
+- **Ny migrering: [`#72 teams_short_name.sql`](../sql/teams_short_name.sql)** —
+  `teams.short_name` (additiv; `name` er urørt og forbliver holdmatchens
+  nøgle). Sikker at køre når som helst og uafhængigt af deployet, begge veje.
+  **Skal køres i Supabase; feltet udfyldes af næste `sync-matches`-kørsel**
+  pr. turnering (hver 12. time), og `shortNamesSet` i kørslens resumé viser
+  antallet.
+- **Providerne bærer feltet i den normaliserede form:** football-data.org
+  mapper `shortName` (tom streng foldes til null); Sportmonks sender med vilje
+  altid null — `short_code` ("FCK") er et badge, ikke et visningsnavn, så
+  Superligaen og Scotland viser fortsat det fulde navn.
+- **Syncens holdskrivning er udskilt som `planTeamWrites()`**
+  (`api/sync-matches.js`, samme begrundelse som `matchUpsertRow`/G56) med tre
+  regler oven på den uændrede matchning: feltet skrives kun, når kolonnen
+  findes i `teams`-svaret (guard — deploy før migrering lægger ikke syncen
+  ned), kun når leverandøren har et navn, og kun når værdien afviger; en gemt
+  værdi nulstilles aldrig. Id-link og kort navn lander i ÉN patch pr. række.
+  Dækket af seks nye `planTeamWrites`-tests plus provider-tests.
+- **Tip-skærmen viser `short_name || name`** (`PredictionsScreen.jsx`,
+  `select=*` så skærmen tåler en ukørt migrering) — **og kun den**: Hjem,
+  stillinger og Story Engine beholder de fulde navne. Skærm-valget og
+  kælenavns-tonen ("Barça", "Atleti") er en beslutning — se
+  [`DECISIONS.md`](./DECISIONS.md).
+- Grundlaget er ejerens aflæsning tidligere samme dag
+  ([`reviews/football-data-shortname-aflaesning-2026-08-20.md`](./reviews/football-data-shortname-aflaesning-2026-08-20.md)):
+  feltet findes for alle 78 hold i PD/PL/SA/BL1, aldrig tomt, ingen dubletter.
+  CL får feltet ad samme vej, når sæsonen 2026 oprettes (`B28`).
+- **Skærmbillederne er uændrede:** harnessens demo-data har intet
+  `short_name`, så Tip-skærmen falder tilbage på de fulde navne og renderer
+  som før.
+
+20. august 2026 — `B39` er aflæst: `shortName` kan bære visningen, og Tier 1 er tom igen
+
+- **Ejeren kørte bestillingen samme dag, den blev skrevet**, og svaret står nu i
+  [`docs/reviews/football-data-shortname-aflaesning-2026-08-20.md`](./reviews/football-data-shortname-aflaesning-2026-08-20.md):
+  `shortName` findes for alle 78 hold i PD/PL/SA/BL1 (380/380/380 kampe + 306 —
+  rimelighedstjekkene stemmer), er aldrig tomt, har ingen dubletter, og er
+  markant pænere for netop de lange spanske navne, rækken kom af ("Real Racing
+  Club de Santander" → "Santander").
+- **Fundet, bestillingen ikke forudså:** leverandøren sender **kælenavne**
+  ("Barça", "Atleti", "M'gladbach", "HSV"), ikke afkortninger — en tone og
+  ikke kun en længde, som skærm-valget skal tage stilling til, når kolonnen
+  bygges. Ene skævhed: "Brighton & Hove Albion FC" → "Brighton Hove".
+- **`B39` er flyttet Tier 1 → Tier 3 i `BACKLOG.md`** — næste skridt er kode
+  (additiv kolonne, `teams.name` forbliver nøgle; Superligaen/Scotland viser
+  fortsat `name`). CL svarede 404: sæsonen 2026 findes fortsat ikke, så `B28`s
+  udløser er efterprøvet og stadig ikke indtruffet.
+- **Ingen kodeændringer og intet at køre i Supabase.**
+
+20. august 2026 — Tier 1 kørt: `B39`s aflæsning ligger nu som en færdig bestilling
+
+- **Nyt: [`docs/reviews/football-data-shortname-aflaesning-2026-08-20.md`](./reviews/football-data-shortname-aflaesning-2026-08-20.md)**
+  — bestillingen på `B39`s aflæsning (sender football-data.org et brugbart kort
+  holdnavn?). Ét PowerShell-opslag over PD/PL/SA/BL1 + CL, som svarer på rækkens
+  tre spørgsmål (findes `shortName` for hvert hold, er det nogensinde tomt, er
+  det pænere for de lange spanske navne) plus en fjerde billig
+  (dublet-`shortName` inden for samme turnering), med rimelighedstjek på kamp-
+  og holdantal, en tabel over hvad hvert udfald afgør, og et Svar-afsnit til
+  udskriften. Opslaget rammer samme endpoint, syncen henter
+  (`/competitions/{kode}/matches`), ikke `/teams` — kolonnen skal udfyldes af
+  det svar, syncen faktisk får.
+- **Hvorfor kun en bestilling:** kaldet kan pr. konstruktion ikke laves fra
+  repoet, og det blev efterprøvet frem for antaget — miljøets proxy afviser
+  CONNECT mod `api.football-data.org` med 403, og `FOOTBALLDATA_TOKEN` findes
+  ikke i miljøet. `A32` (10. august 2026) står ved magt: aflæsninger i
+  produktion er ejerens arbejde; det, en session kan gøre billigere, er
+  bestillingen. Rækkens hidtidige henvisning til kickoff-opslaget rakte ikke —
+  det udtrækker `utcDate`/`status` og kan ikke svare på navnespørgsmålene.
+- **Justeret samme dag efter ejerens første kørsel:** alle fem kald fejlede med
+  *"Objektreferencen er ikke indstillet …"*, fordi opslaget hentede tokenen fra
+  `$env:FOOTBALLDATA_TOKEN` — som findes i Vercel og ikke på ejerens maskine —
+  og PS 5.1's `Invoke-WebRequest` giver netop dén fejl ved en tom header-værdi.
+  Opslaget spørger nu om tokenen (`Read-Host`) og nægter at køre med en tom;
+  rettelsen er markeret i dokumentet.
+- **Ingen kodeændringer og intet at køre i Supabase.** `B39` bliver stående i
+  Tier 1, til svaret er skrevet ind.
+
 18. august 2026 — Indstillinger: notifikationer kan nu også slås FRA (`B40`)
 
 - **Nyt: Indstillinger-skærm** (`src/screens/SettingsScreen.jsx`) bag et

@@ -59,7 +59,7 @@ eller en linje i "Forkastede ideer".
 
 ## Prioriteret rækkefølge
 
-Alle 35 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 34 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -101,9 +101,7 @@ produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
 gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
 køres på et minut.
 
-| # | Hvad | Note |
-|---|---|---|
-| `B39` | Kort holdnavn til visningen — **næste skridt er en aflæsning, ikke kode** | Sender football-data.org et kort holdnavn, findes det for HVERT hold, og er det faktisk pænere? Ét kald pr. turnering med `FOOTBALLDATA_TOKEN`, samme PowerShell-opslag som [kickoff-aflæsningen](./reviews/football-data-kickoff-aflaesning-2026-08-07.md). Egress til leverandøren er blokeret fra udviklingsmiljøet, så svaret kan pr. konstruktion ikke hentes i repoet — derfor Tier 1 og ikke Tier 3. Selve bygningen er lille og beskrevet under [Ubygget](#ubygget). |
+Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
@@ -133,7 +131,7 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 | # | Hvad | Udløser |
 |---|---|---|
 | `A46` | Udfyld `<app>` i `CRON.md`s ni kald med det faktiske værtsnavn | **Når hvert af de ni jobs har kørt én gang efter 13. august 2026** — langsomste skema er hver 12. time. Værtsnavnet skrives nu i `job_runs.detail` (`A46`, samme fremgangsmåde som `A11`), så aflæsningen er "Seneste resumé" på hvert jobkort i Admin → Drift og ikke ni jobs i cron-job.org. Opslaget står i [`CRON.md`](./CRON.md). |
-| `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. |
+| `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. **Efterprøvet 20. august 2026 via `B39`-aflæsningen: stadig 404.** |
 | `A44` | Skal den globale rating vise fulde visningsnavne til brugere, man ikke deler noget med? | **Udløseren er sprunget** (`B26`, 12. august 2026), men i modsætning til `A43` kan visningen ændres bagefter — prisen ved at vente er kun, at flere navne allerede er hentet. Faldt ud af `A43`: uanset hvor stram policyen på `profiles` bliver, publicerer Rating-fanen og Championship (`scope='ALL'`) hver bruger til enhver indlogget. Det er en produktbeslutning, ikke en adgangsregel — og den skal derfor stilles for sig. |
 | `A34` | Supabase Free → Pro? | **Når Usage-siden viser egress nær 5 GB/md, eller når fremmede udgør flertallet af de aktive** — de to falder formentlig sammen omkring 200–500 ugentligt aktive. |
 | `A33` | Er dagsmotorens variation tyndere, end regelantallet lover? | **Når vis-bare dagskort har visninger.** `G73` (5. august 2026) rettede MÅLINGEN og ikke synligheden: de 197 efterfyldte dagskort kan stadig ikke vises, de tælles bare ikke længere i nævneren. Fremadrettede dagskort skrives inde i deres egen runde og ER vis-bare, så udløseren kan nu aflæses direkte — vis-bar > 0 og vist > 0 for dagsreglerne i Analytics. `DAY_RESULT` alene er 123 af 280 historier (44 %). |
@@ -207,7 +205,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | B20 | **Personlige invite-links** (`invite_links` + `invited_by` på `group_members`/`competition_participants`) | Attributionen "hvem inviterede hvem" findes ikke i skemaet: `groups.invite_code` er én kode pr. liga og ikke pr. bruger, og ingen af medlemstabellerne gemmer afsenderen. Det er derfor, milepælen **"5/10 venner tilmeldt via dit link" ikke kunne bygges** — `milestones` tæller i stedet `LEAGUE_GREW_5/10`, altså hvor mange der kom med i en liga, man har oprettet, hvilket er en anden bedrift. Begrundelsen står ved koden begge steder (`sql/milestones.sql`, `src/lib/milestones.js`) og peger på denne række. **Ventetid er ikke gratis her, og det er rækkens vigtigste egenskab:** attribution kan kun registreres fremad, så en bedrift bygget på den kan først tælle fra udrulningsdagen — de brugere, der allerede er inviteret, tælles aldrig. Gater desuden `I6` (ambassadørprogram), som ikke kan måle noget uden. **`I7` (11. august 2026) rørte flowet uden at trække rækken ind** og er formet, så den kan sættes ind bagefter: `invite_preview()` og `api/invite-preview.js` tager begge en KODE, og en per-bruger-token kan gå ad samme vej. Se `DECISIONS.md` for hvorfor de to attributioner ikke er den samme ting. | Mellem |
 | B28 | **Gentag CL's kickoff-aflæsning, når ligafasen er lodtrukket** | Champions League var den ene af fem turneringer, [`docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md`](./reviews/football-data-kickoff-aflaesning-2026-08-07.md) ikke kunne dække — leverandøren havde pr. 1. august 2026 endnu ikke oprettet sæsonen 2026, fordi ligafasen ikke var lodtrukket (`B8`, lukket 1. august 2026). De fire aflæste turneringer delte sig i to: kun Bundesliga sender en ren midnats-pladsholder (`status: SCHEDULED` + `00:00`), de tre andre sender et opdigtet klokkeslæt for hver ufastsat kamp uden nogen markør at skelne på. Om CL ligner Bundesliga eller de tre andre, afgør om `kickoff_tbd` overhovedet kan sættes for turneringen (og dermed om `G84`s kontrol kan se den) — og er kun kendt, når svaret aflæses. | Lille (samme PowerShell-opslag, gentaget) |
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. Forespørgslen står i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). **Rækken har stået siden august 2026 med teksten "tilbage står at køre den" — og da den blev kørt 5. august 2026, kunne den ikke:** vinduet partitionerede på `(e.created_at < m.fra)`, som hverken står i `group by` eller er aggregeret, så PostgreSQL afviste den med `42803`. Perioden udledes nu i en CTE, efterprøvet mod PostgreSQL 16.13. **Anden kørsel samme dag afslørede, at kilden var forkert valgt:** hændelsesloggen svarede med tre oprettelser i alt, alle `random` — plausibelt nok ved ~20 testbrugere, men ubrugeligt, fordi `analytics_events` først findes fra 30. juli 2026, så "før mærkatet" var to døgn og ikke appens historik. `competitions.mode` + `created_at` bærer samme oplysning som **rigtige rækker over hele historikken**, og spec'ens §5F er byttet om, så tabellen er den primære kilde og hændelsen kontrollen. **Opslaget er kørt 5. august 2026, og svaret er "ikke endnu":** hele appens historik rummer **syv** konkurrencer — 6 før mærkatet (`time_range` 2, `random` 2, `full_season` 2) og **1** efter (`random`). Med n=1 i den ene periode kan ingen fordeling måles, hvilket er præcis rækkens eget første forbehold. Rækken er derfor flyttet til Tier 6 med en udløser, der kan aflæses med samme opslag: **tosifret `antal` i `efter`-perioden.** Det, der er leveret, er ikke svaret, men at spørgsmålet nu kan stilles — forespørgslen kunne hverken køre eller pege på den rigtige kilde, da rækken blev skrevet. | Lille (opslag) |
-| B39 | **Kort holdnavn til visningen** — `teams.short_name`, udfyldt fra leverandørens korte navn og brugt dér, hvor pladsen er trang | Meldt af ejeren 17. august 2026 sammen med `G135`: Primera Divisións navne er meget lange, og "Real Racing Club de Santander" eller "RCD Espanyol de Barcelona" fylder to linjer i en kamprække. Appen **ombryder frem for at trunkere** med vilje (`MatchRow.jsx`: "et afkortet holdnavn er skjult information"), så prisen er højde og ikke information — gevinsten er kosmetisk og rækken derfor ikke hastende. 🔴 **Blokeret af sin egen aflæsning i Tier 1, og det er en beslutning, ikke en forglemmelse:** football-data.org sender efter dokumentationen `shortName` og `tla` i det SAMME `/competitions/{kode}/matches`-svar, syncen allerede henter (altså nul ekstra kald) — men feltet er **ikke efterprøvet mod data**, og en uprøvet dokumentationslæsning var netop fejlen 2. august 2026 (`api/_providers/footballdata.js`: "det, der kunne efterprøves, holdt; det, der ikke kunne, gjorde ikke"). Aflæsningen skal svare på tre ting: findes feltet for HVERT hold, er det nogensinde tomt, og er det faktisk pænere for de spanske klubber (`shortName` for "FC Barcelona" er formentlig "Barcelona", altså ikke entydigt en forbedring). **Sportmonks løser det ikke:** de har `short_code` på deltageren, men det er tre bogstaver ("FCK") — et badge-format, ikke et visningsnavn, så Superligaen og Scotland ville skulle beholde `name`. 🔴 **Kolonnen skal være ADDITIV, og `teams.name` skal blive uændret:** navnet er bærende som nøgle — `teams_league_name_unique (league_id, name)`, syncen matcher hold på normaliseret navn med `includes()`-fallback (`api/sync-matches.js`), og `ambiguousTeamNames` (`B2`) fælder netop par, hvor det ene navn ligger inde i det andet. At omdøbe til korte navne ville skabe nye kollisioner af præcis den slags ("Real Sociedad" ⊂ "Real Sociedad de Fútbol"). | Lille efter aflæsningen: én kolonne, ét felt gennem `normalize()` og upserten, og et valg pr. skærm om hvilket navn der bruges. |
 | B32 | **Fjern Champions League's "Fra ligafasen"-forbehold på hjemmesidens turneringsliste** | `site/index.html`s turnerings-sektion (merget 13. august 2026) viser Champions League med mærkatet "Fra ligafasen", fordi ligafasen endnu ikke er lodtrukket (samme forudsætning som `B8`/`B28`). Mærkatet skal fjernes samtidig med, at `B28`s kickoff-aflæsning gentages for CL. | Lille — én linje, samme udløser som `B28` |
 
 ## Teknisk gæld
@@ -262,29 +259,24 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 17. august 2026 (toogtredivte kørsel) — indbakken tømt, og den ene linje var en bestilling
+### 20. august 2026 (femogtredivte kørsel) — `B39` bestilt, aflæst og BYGGET på én dag; Tier 1–3 er tomme
 
-**Listen er 34 → 35.** Én ny række, `B39` (kort holdnavn til visningen), meldt af
-ejeren sammen med `G135`. Ingen rækker blev lukket: `G135` var en fejlrettelse og
-har aldrig haft en backlog-række — den kom ind som et brugerspørgsmål og gik
-direkte i `DECISIONS.md` og `CHANGELOG.md`.
+**Listen er 35 → 34.** `B39` gik hele vejen i tre kørsler samme dag: bestillingen
+skrevet (kaldet kan pr. konstruktion ikke laves fra repoet — efterprøvet, proxy-403
+og ingen token), aflæst af ejeren (`shortName` findes for alle 78 hold i
+PD/PL/SA/BL1, aldrig tomt, ingen dubletter, kælenavne frem for afkortninger —
+[aflæsningen](./reviews/football-data-shortname-aflaesning-2026-08-20.md)), og
+bygget: `#72 teams_short_name.sql` (additiv kolonne, `name` forbliver nøgle),
+begge providere bærer `shortName` i den normaliserede form, syncens holdskrivning
+er udskilt som `planTeamWrites()` med en guard, der først skriver feltet, når
+læsningen viser, at kolonnen findes — så deploy og migrering er uafhængige, begge
+veje — og tip-skærmen viser `short_name || name`. **Valget pr. skærm faldt sådan:
+KUN tip-rækkerne** (stedet, pladsen er trang, og stedet, ejeren meldte); Hjem,
+stillinger og Story Engine beholder de fulde navne. Begrundelsen står i
+[`DECISIONS.md`](./DECISIONS.md).
 
-**`B39` blev en Tier 1-række og ikke en Tier 3-række, og det er hele pointen med
-den.** Fristelsen er at bygge kolonnen med det samme: football-data.org sender
-efter dokumentationen `shortName` i det samme svar, syncen allerede henter, så
-det ville koste nul ekstra kald og en halv times arbejde. Men feltet er **ikke
-efterprøvet mod data**, og det er præcis den fejlform, der kostede fire døgn
-2.–6. august 2026, hvor `kickoff_tbd` blev sat af en `status`-markør, der var
-læst i dokumentationen og aldrig set i et svar. Rækkens næste skridt er derfor et
-kald og ikke en migrering — og fordi egress til leverandøren er blokeret fra
-udviklingsmiljøet, kan det kald pr. konstruktion ikke laves i repoet. Det er
-definitionen på Tier 1.
-
-**Aflæsningen skal svare på tre ting og ikke ét.** Findes feltet for hvert hold,
-er det nogensinde tomt, og er det faktisk pænere? Det tredje er det, der let
-glemmes: `shortName` for "FC Barcelona" er formentlig "Barcelona", altså et tabt
-præfiks frem for et kortere navn. En aflæsning, der kun spørger "findes feltet",
-ville have svaret ja og efterladt beslutningen usvaret.
-
-**Tier 1 bærer en række igen** efter at have stået tom siden 13. august 2026.
-Tier 2 og Tier 3 er stadig tomme.
+**Tilbage hos ejeren: kør `#72` i Supabase** (sikker når som helst, uafhængig af
+mergen) — feltet udfyldes af næste sync pr. turnering, og `shortNamesSet` i
+kørslens resumé viser antallet. CL svarede 404 undervejs — `B28`s udløser er
+efterprøvet og stadig ikke indtruffet, og CL-holdene får feltet ad samme vej,
+når terminslisten kommer.

@@ -44,7 +44,23 @@ describe("normalize", () => {
       status: "finished",
       score: { home: 2, away: 1 },
     });
-    expect(n.home).toEqual({ providerId: "57", globalId: "fd:57", name: "Arsenal FC" });
+    expect(n.home).toEqual({ providerId: "57", globalId: "fd:57", name: "Arsenal FC", shortName: null });
+  });
+
+  // B39. Feltet er aflæst mod rigtige data 20. august 2026 (findes for alle
+  // hold i PD/PL/SA/BL1) — men mappingen må ikke FORUDSÆTTE det: et manglende
+  // eller tomt felt skal blive til null, som er kontrakten for "intet kort navn".
+  it("bærer leverandørens korte holdnavn med", () => {
+    const n = normalize(match({
+      homeTeam: { id: 87, name: "Real Racing Club de Santander", shortName: "Santander" },
+    }));
+    expect(n.home.shortName).toBe("Santander");
+    expect(n.home.name).toBe("Real Racing Club de Santander");
+  });
+
+  it("folder et tomt eller manglende kort navn til null", () => {
+    expect(normalize(match({ homeTeam: { id: 1, name: "A", shortName: "" } })).home.shortName).toBeNull();
+    expect(normalize(match({ homeTeam: { id: 1, name: "A" } })).home.shortName).toBeNull();
   });
 
   it("præfikser id'er, så de ikke kan kollidere med Sportmonks'", () => {

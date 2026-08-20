@@ -45,7 +45,9 @@ describe("normalize", () => {
       status: "finished",
       score: { home: 2, away: 1 },
     });
-    expect(n.home).toEqual({ providerId: "293", globalId: "293", name: "FC København" });
+    // `shortName` er altid null hos denne leverandør (B39): `short_code` er et
+    // tre-bogstavs badge, ikke et visningsnavn.
+    expect(n.home).toEqual({ providerId: "293", globalId: "293", name: "FC København", shortName: null });
     expect(n.away.name).toBe("Brøndby IF");
   });
 

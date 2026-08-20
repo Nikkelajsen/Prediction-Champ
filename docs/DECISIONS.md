@@ -15,6 +15,48 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 20. august 2026 — `B39`: det korte holdnavn vises KUN i tip-rækkerne, og skrivningen gater sig selv på kolonnens eksistens
+
+**Beslutning:** `teams.short_name` (`#72 teams_short_name.sql`) udfyldes af
+syncen fra football-data.orgs `shortName` og vises i **tip-skærmens kamprækker
+og ingen andre steder**. Hjem, stillinger, opret-flowet og Story Engine
+beholder de fulde navne. Sportmonks-ligaerne får aldrig feltet (deres
+`short_code` er et tre-bogstavs badge), og en gemt værdi nulstilles aldrig af
+en leverandør, der holder op med at sende feltet.
+
+**Hvorfor kun tip-rækkerne.** Rækken kom af ét konkret problem: Primera
+Divisións fulde navne fylder to linjer i en kamprække, hvor seks kolonner deler
+pladsen, og appen ombryder med vilje frem for at trunkere. Det er det ene sted,
+prisen betales — alle andre visninger har plads til det fulde navn, og det
+fulde navn ER informationen. At rulle kælenavnene bredt ud ville desuden gøre
+tonevalget (næste afsnit) til hele appens tone på én gang; ét sted kan
+revideres billigt, hvis det skurrer.
+
+**Tonen er accepteret med åbne øjne.** Aflæsningen 20. august 2026
+([`reviews/football-data-shortname-aflaesning-2026-08-20.md`](./reviews/football-data-shortname-aflaesning-2026-08-20.md))
+viste, at leverandøren sender **kælenavne** ("Barça", "Atleti", "M'gladbach",
+"HSV"), ikke afkortninger. Det er de navne, en fodboldlæser selv siger, og i en
+kamprække er det en styrke; skævheden "Brighton Hove" (mistet "&") er én på 78
+og accepteret. Skurrer tonen i praksis, er kuren at ændre visningsvalget i
+`PredictionsScreen.jsx` — ikke at røre data.
+
+**Skrivningen gater sig selv, så migrering og deploy er uafhængige — begge
+veje.** Syncen læser `teams` med `select=*` og skriver kun `short_name`, når
+nøglen faktisk var med i svaret (`harShortName` → `planTeamWrites()`,
+`api/sync-matches.js`). Uden guarden ville en skrivning, der nævner kolonnen,
+svare 400 i vinduet mellem deploy og `#72` — og syncen ville være nede, til
+migreringen var kørt. Prisen er én bevidst kant: en HELT NY turnerings
+allerførste sync har nul rækker at aflæse, svarer forsigtigt nej og lader næste
+kørsel patche de korte navne på plads. Klienten bærer samme uafhængighed med
+`select=*` og `short_name || name`. Derfor findes der ingen `UDRULNING-B39.md`:
+hver mellemtilstand er gyldig.
+
+**Holdmatchen er urørt, og det er halvdelen af beslutningen.** `teams.name`
+forbliver nøglen (`teams_league_name_unique`, normaliseret navnematch med
+`includes()`-fallback) — korte navne ville skabe netop de kollisioner,
+`ambiguousTeamNames()` fælder ("Real Sociedad" ⊂ "Real Sociedad de Fútbol").
+Kolonnen er ren visning.
+
 ## 18. august 2026 — Indstillinger-skærmen findes nu, og push-fravalget er én samlet kontakt (`B40`)
 
 **Beslutning:** Appen har fået en Indstillinger-skærm (tandhjul i topbaren) med
