@@ -166,6 +166,55 @@ export function ambiguousTeamNames(teams) {
   return { nye, kendte };
 }
 
+// Planen for holdskrivningerne: hvilke hold oprettes, og hvilke rækker patches.
+// Ren funktion af (vores hold, leverandørens hold) — udskilt af handleren af
+// samme grund som matchUpsertRow (G56): det er den eneste måde, reglerne kan
+// testes på uden et HTTP-mock-apparat.
+//
+// Matchningen er UÆNDRET fra før udskillelsen: først leverandørens id
+// (api_team_id), så det normaliserede navn med `includes()`-fallback. Nyt er
+// kun `short_name` (B39):
+//
+//   · `harShortName` er svaret på, om kolonnen overhovedet FINDES — aflæst af
+//     kalderen på de rækker, `teams`-læsningen gav. Uden guarden ville en
+//     skrivning, der nævner kolonnen, svare 400 i vinduet mellem deploy og
+//     `#72 teams_short_name.sql` — og syncen ville være nede, til migreringen
+//     var kørt. Med den er de to uafhængige, begge veje.
+//   · Der skrives kun, når leverandøren HAR et kort navn (Sportmonks sender
+//     null, se _providers/sportmonks.js), og kun når værdien faktisk afviger —
+//     en gen-kørsel uden ændringer patcher ingenting.
+//   · En eksisterende værdi nulstilles ALDRIG: holder leverandøren op med at
+//     sende feltet, beholder rækken det sidst kendte frem for at miste det.
+export function planTeamWrites({ teams, providerTeams, leagueId, harShortName }) {
+  const findByName = (providerName) => {
+    const n = normalizeTeamName(providerName);
+    return teams.find((t) => normalizeTeamName(t.name) === n)
+      || teams.find((t) => normalizeTeamName(t.name).includes(n) || n.includes(normalizeTeamName(t.name)));
+  };
+  const newTeams = [];
+  const patches = new Map();
+  const globalIdToOurId = new Map();
+  const addPatch = (id, felt) => patches.set(id, { ...(patches.get(id) || {}), ...felt });
+
+  for (const [globalId, { name, shortName }] of providerTeams) {
+    const byApiId = teams.find((t) => t.api_team_id === globalId);
+    const found = byApiId || findByName(name);
+    if (found) {
+      globalIdToOurId.set(globalId, found.id);
+      if (!byApiId && found.api_team_id !== globalId) addPatch(found.id, { api_team_id: globalId });
+      if (harShortName && shortName && found.short_name !== shortName) addPatch(found.id, { short_name: shortName });
+      continue;
+    }
+    // `short_name` er med på HVER ny række (null, når leverandøren intet har),
+    // ikke kun på dem med en værdi: PostgREST kræver ens nøgler i en bulk-insert.
+    newTeams.push({
+      league_id: leagueId, name, api_team_id: globalId,
+      ...(harShortName ? { short_name: shortName ?? null } : {}),
+    });
+  }
+  return { newTeams, patches, globalIdToOurId };
+}
+
 // Én normaliseret kamp → én række i `matches`, klar til upserten.
 //
 // Ligger på modulniveau og ikke inde i løkken, fordi det er den ENESTE måde,
@@ -302,14 +351,12 @@ export default async function handler(req, res) {
     if (!seasons.length) throw new Error("Sæson ikke fundet i databasen for denne liga");
     const seasonId = seasons[0].id;
 
-    const teams = await sb(`/rest/v1/teams?league_id=eq.${leagueId}&select=id,name,api_team_id`);
-
-    const normalize = normalizeTeamName;
-    function findByName(providerName) {
-      const n = normalize(providerName);
-      return teams.find((t) => normalize(t.name) === n)
-        || teams.find((t) => normalize(t.name).includes(n) || n.includes(normalize(t.name)));
-    }
+    // `select=*` og ikke en kolonneliste — samme regel som `leagues` ovenfor:
+    // koden deployes ved push, mens `#72 teams_short_name.sql` køres manuelt.
+    // En navngiven kolonne, der endnu ikke findes, ville give 400 og lægge
+    // syncen ned i vinduet mellem deploy og migrering; med `*` mangler feltet
+    // bare, og guarden (`harShortName` nedenfor) lader så være med at skrive det.
+    const teams = await sb(`/rest/v1/teams?league_id=eq.${leagueId}&select=*`);
 
     // Leverandørens sæson-id: brug det gemte, hvis vi har det — ellers slå det
     // op ud fra sæsonnavnet (fx "2026/2027") og gem det på vores season-række,
@@ -400,27 +447,16 @@ export default async function handler(req, res) {
     const providerTeams = new Map();
     for (const fx of fixtures) {
       for (const t of [fx.home, fx.away]) {
-        if (t) providerTeams.set(t.globalId, t.name);
+        if (t) providerTeams.set(t.globalId, { name: t.name, shortName: t.shortName ?? null });
       }
     }
 
-    const newTeams = [];
-    const linkUpdates = [];
-    const globalIdToOurId = new Map();
-
-    for (const [globalId, name] of providerTeams) {
-      const byApiId = teams.find((t) => t.api_team_id === globalId);
-      if (byApiId) { globalIdToOurId.set(globalId, byApiId.id); continue; }
-
-      const byName = findByName(name);
-      if (byName) {
-        globalIdToOurId.set(globalId, byName.id);
-        if (byName.api_team_id !== globalId) linkUpdates.push({ id: byName.id, api_team_id: globalId });
-        continue;
-      }
-
-      newTeams.push({ league_id: leagueId, name, api_team_id: globalId });
-    }
+    // Findes `short_name`-kolonnen? Aflæst af rækkerne frem for antaget: før
+    // `#72` er kørt, mangler nøglen i svaret, og så skrives feltet ikke — se
+    // planTeamWrites(). En NY turnerings allerførste sync (nul rækker at aflæse)
+    // svarer forsigtigt nej og lader NÆSTE kørsel patche navnene på plads.
+    const harShortName = teams.length > 0 && "short_name" in teams[0];
+    const { newTeams, patches, globalIdToOurId } = planTeamWrites({ teams, providerTeams, leagueId, harShortName });
 
     if (newTeams.length) {
       const inserted = await sb(`/rest/v1/teams`, {
@@ -432,9 +468,11 @@ export default async function handler(req, res) {
       // turneringen ville have manglet sine hold.
       for (const row of inserted) globalIdToOurId.set(String(row.api_team_id), row.id);
     }
-    for (const upd of linkUpdates) {
-      await sb(`/rest/v1/teams?id=eq.${upd.id}`, {
-        method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ api_team_id: upd.api_team_id }),
+    // Én PATCH pr. række, uanset om den bærer et id-link, et kort navn eller
+    // begge — planTeamWrites() har allerede lagt felterne sammen pr. hold.
+    for (const [id, patch] of patches) {
+      await sb(`/rest/v1/teams?id=eq.${id}`, {
+        method: "PATCH", prefer: "return=minimal", body: JSON.stringify(patch),
       });
     }
 
@@ -443,6 +481,12 @@ export default async function handler(req, res) {
     // NÆSTE kørsels findByName() vil slå op i, og dermed den, tvetydigheden
     // ville ramme. Se ambiguousTeamNames() ovenfor for hvorfor den findes.
     const tvetydigeHold = ambiguousTeamNames([...teams, ...newTeams]);
+
+    // B39-tællingen til kørslens resumé: korte navne skrevet i denne kørsel —
+    // både patches på eksisterende rækker og nyoprettede hold med en værdi.
+    const shortNamesSet =
+      [...patches.values()].filter((p) => "short_name" in p).length +
+      newTeams.filter((t) => t.short_name).length;
 
     let toUpsert = [];
     const unmatched = new Set();
@@ -519,6 +563,11 @@ export default async function handler(req, res) {
       synced: toUpsert.length,
       totalFixtures: fixtures.length,
       teamsCreated: newTeams.length,
+      // B39: hvor mange hold fik skrevet et kort navn i denne kørsel. Kun til
+      // stede, når der ER skrevet nogen — tallet er stort i kørslen efter #72,
+      // nul derefter, og et tal, der bliver ved med at være der, betyder, at
+      // leverandøren ændrer navne (eller at skrivningen ikke lander).
+      ...(shortNamesSet ? { shortNamesSet } : {}),
       // Leverandørens eget forbrugstal, når den rapporterer et (A15).
       ...(providerMeta.rateLimit ? { rateLimit: providerMeta.rateLimit } : {}),
       // Kun til stede, når der ER noget at kigge på: et felt, der står tomt ved

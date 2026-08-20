@@ -153,7 +153,8 @@ Den ændrer ikke svaret.
 
 **Udfaldet er tabellens første række:** `B39` bygges som beskrevet — additiv
 kolonne, `teams.name` forbliver nøgle, Superligaen og Scotland viser fortsat
-`name` — og rækken er flyttet fra Tier 1 til Tier 3 i
-[`BACKLOG.md`](../BACKLOG.md). CL-kaldets 404 er samtidig en gratis
-gen-aflæsning af `B28`s udløser: sæsonen 2026 findes stadig ikke hos
-leverandøren pr. 20. august 2026, så den række venter rigtigt.
+`name`. *(Bygget senere samme dag: `#72 teams_short_name.sql`, `planTeamWrites()`
+i syncen og visningen i tip-rækkerne — se `CHANGELOG.md` og `DECISIONS.md`,
+20. august 2026.)* CL-kaldets 404 er samtidig en gratis gen-aflæsning af `B28`s
+udløser: sæsonen 2026 findes stadig ikke hos leverandøren pr. 20. august 2026,
+så den række venter rigtigt.

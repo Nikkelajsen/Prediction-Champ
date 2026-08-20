@@ -11,7 +11,7 @@
 // eneste kamp), og en for smal gør Champions League rød i seks uger for noget
 // forventeligt. Begge fejl ender samme sted — at ingen kigger på driftsloggen.
 import { describe, it, expect } from "vitest";
-import { seasonFetchVerdict, ambiguousTeamNames, GODKENDTE_HOLDPAR, normalizeTeamName, matchUpsertRow, readSeasonMeta } from "./sync-matches.js";
+import { seasonFetchVerdict, ambiguousTeamNames, GODKENDTE_HOLDPAR, normalizeTeamName, matchUpsertRow, planTeamWrites, readSeasonMeta } from "./sync-matches.js";
 
 const fejl = new Error("football-data.org: 404 {\"message\":\"The resource you are looking for does not exist.\"}");
 
@@ -251,6 +251,96 @@ describe("matchUpsertRow", () => {
       home_score: null, away_score: null, status: "scheduled",
       stage_name: "REGULAR_SEASON", api_fixture_id: "fd:1",
     });
+  });
+});
+
+// Samme snit som matchUpsertRow, den anden skrivning: hvilke hold oprettes,
+// og hvilke rækker patches. Udskilt sammen med B39, hvor `short_name` kom til —
+// og hvor guarden `harShortName` er dét, der holder syncen oppe i vinduet
+// mellem deploy og `#72 teams_short_name.sql`.
+describe("planTeamWrites", () => {
+  const LIGA = "L1";
+  const rk = (over = {}) => ({ id: "T1", name: "Real Racing Club de Santander", api_team_id: "fd:87", short_name: null, ...over });
+  const pt = (entries) => new Map(entries);
+
+  it("matcher uændret: id først, så normaliseret navn — og opretter resten", () => {
+    const teams = [rk(), rk({ id: "T2", name: "Valencia CF", api_team_id: null })];
+    const { newTeams, patches, globalIdToOurId } = planTeamWrites({
+      teams, leagueId: LIGA, harShortName: false,
+      providerTeams: pt([
+        ["fd:87", { name: "Racing Santander", shortName: "Santander" }],   // via api_team_id
+        ["fd:95", { name: "Valencia CF", shortName: "Valencia" }],         // via navn → id-link patches
+        ["fd:81", { name: "FC Barcelona", shortName: "Barça" }],           // ny
+      ]),
+    });
+    expect(globalIdToOurId.get("fd:87")).toBe("T1");
+    expect(globalIdToOurId.get("fd:95")).toBe("T2");
+    expect(patches.get("T2")).toEqual({ api_team_id: "fd:95" });
+    expect(newTeams).toEqual([{ league_id: LIGA, name: "FC Barcelona", api_team_id: "fd:81" }]);
+  });
+
+  // Guardens hele pointe: før #72 er kørt, må INGEN skrivning nævne kolonnen —
+  // hverken en insert eller en patch — ellers svarer PostgREST 400, og syncen
+  // er nede, til migreringen er kørt.
+  it("nævner aldrig short_name, når kolonnen ikke findes", () => {
+    const { newTeams, patches } = planTeamWrites({
+      teams: [rk()], leagueId: LIGA, harShortName: false,
+      providerTeams: pt([
+        ["fd:87", { name: "Real Racing Club de Santander", shortName: "Santander" }],
+        ["fd:81", { name: "FC Barcelona", shortName: "Barça" }],
+      ]),
+    });
+    expect(newTeams.every((t) => !("short_name" in t))).toBe(true);
+    expect(patches.size).toBe(0);
+  });
+
+  it("patcher det korte navn på en eksisterende række — men kun når det afviger", () => {
+    const teams = [rk(), rk({ id: "T2", name: "Valencia CF", api_team_id: "fd:95", short_name: "Valencia" })];
+    const { patches } = planTeamWrites({
+      teams, leagueId: LIGA, harShortName: true,
+      providerTeams: pt([
+        ["fd:87", { name: "Real Racing Club de Santander", shortName: "Santander" }],
+        ["fd:95", { name: "Valencia CF", shortName: "Valencia" }],   // allerede rigtig → intet
+      ]),
+    });
+    expect(patches.get("T1")).toEqual({ short_name: "Santander" });
+    expect(patches.has("T2")).toBe(false);
+  });
+
+  // Sportmonks sender null (badge-formatet er ikke et visningsnavn), og en
+  // leverandør, der HOLDER OP med at sende feltet, må ikke slette det, vi har.
+  it("nulstiller aldrig et gemt kort navn", () => {
+    const teams = [rk({ short_name: "Santander" })];
+    const { patches } = planTeamWrites({
+      teams, leagueId: LIGA, harShortName: true,
+      providerTeams: pt([["fd:87", { name: "Real Racing Club de Santander", shortName: null }]]),
+    });
+    expect(patches.size).toBe(0);
+  });
+
+  it("lægger id-link og kort navn i ÉN patch, når begge mangler", () => {
+    const teams = [rk({ api_team_id: null })];
+    const { patches } = planTeamWrites({
+      teams, leagueId: LIGA, harShortName: true,
+      providerTeams: pt([["fd:87", { name: "Real Racing Club de Santander", shortName: "Santander" }]]),
+    });
+    expect(patches.get("T1")).toEqual({ api_team_id: "fd:87", short_name: "Santander" });
+  });
+
+  // PostgREST kræver ens nøgler i en bulk-insert, så feltet skal med på HVER ny
+  // række — som null, når leverandøren intet kort navn har.
+  it("giver nye rækker ens nøgler: short_name er med, også som null", () => {
+    const { newTeams } = planTeamWrites({
+      teams: [], leagueId: LIGA, harShortName: true,
+      providerTeams: pt([
+        ["fd:81", { name: "FC Barcelona", shortName: "Barça" }],
+        ["293", { name: "FC København", shortName: null }],
+      ]),
+    });
+    expect(newTeams).toEqual([
+      { league_id: LIGA, name: "FC Barcelona", api_team_id: "fd:81", short_name: "Barça" },
+      { league_id: LIGA, name: "FC København", api_team_id: "293", short_name: null },
+    ]);
   });
 });
 

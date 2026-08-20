@@ -9,6 +9,38 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+20. august 2026 — Kort holdnavn i tip-rækkerne (`B39`): "Santander" frem for "Real Racing Club de Santander"
+
+- **Ny migrering: [`#72 teams_short_name.sql`](../sql/teams_short_name.sql)** —
+  `teams.short_name` (additiv; `name` er urørt og forbliver holdmatchens
+  nøgle). Sikker at køre når som helst og uafhængigt af deployet, begge veje.
+  **Skal køres i Supabase; feltet udfyldes af næste `sync-matches`-kørsel**
+  pr. turnering (hver 12. time), og `shortNamesSet` i kørslens resumé viser
+  antallet.
+- **Providerne bærer feltet i den normaliserede form:** football-data.org
+  mapper `shortName` (tom streng foldes til null); Sportmonks sender med vilje
+  altid null — `short_code` ("FCK") er et badge, ikke et visningsnavn, så
+  Superligaen og Scotland viser fortsat det fulde navn.
+- **Syncens holdskrivning er udskilt som `planTeamWrites()`**
+  (`api/sync-matches.js`, samme begrundelse som `matchUpsertRow`/G56) med tre
+  regler oven på den uændrede matchning: feltet skrives kun, når kolonnen
+  findes i `teams`-svaret (guard — deploy før migrering lægger ikke syncen
+  ned), kun når leverandøren har et navn, og kun når værdien afviger; en gemt
+  værdi nulstilles aldrig. Id-link og kort navn lander i ÉN patch pr. række.
+  Dækket af seks nye `planTeamWrites`-tests plus provider-tests.
+- **Tip-skærmen viser `short_name || name`** (`PredictionsScreen.jsx`,
+  `select=*` så skærmen tåler en ukørt migrering) — **og kun den**: Hjem,
+  stillinger og Story Engine beholder de fulde navne. Skærm-valget og
+  kælenavns-tonen ("Barça", "Atleti") er en beslutning — se
+  [`DECISIONS.md`](./DECISIONS.md).
+- Grundlaget er ejerens aflæsning tidligere samme dag
+  ([`reviews/football-data-shortname-aflaesning-2026-08-20.md`](./reviews/football-data-shortname-aflaesning-2026-08-20.md)):
+  feltet findes for alle 78 hold i PD/PL/SA/BL1, aldrig tomt, ingen dubletter.
+  CL får feltet ad samme vej, når sæsonen 2026 oprettes (`B28`).
+- **Skærmbillederne er uændrede:** harnessens demo-data har intet
+  `short_name`, så Tip-skærmen falder tilbage på de fulde navne og renderer
+  som før.
+
 20. august 2026 — `B39` er aflæst: `shortName` kan bære visningen, og Tier 1 er tom igen
 
 - **Ejeren kørte bestillingen samme dag, den blev skrevet**, og svaret står nu i

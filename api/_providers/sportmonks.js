@@ -219,7 +219,10 @@ function kickoffTbdOf(fx) {
 function participant(fx, location) {
   const p = (fx.participants || []).find((x) => x?.meta?.location === location);
   if (!p?.id || !p?.name) return null;
-  return { providerId: String(p.id), globalId: String(p.id), name: p.name };
+  // `shortName` er med vilje altid null her (B39): Sportmonks' `short_code` er
+  // tre bogstaver ("FCK") — et badge-format, ikke et visningsnavn — så
+  // Superligaen og Scotland viser det fulde `name`, og syncen lader kolonnen stå.
+  return { providerId: String(p.id), globalId: String(p.id), name: p.name, shortName: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +234,7 @@ function participant(fx, location) {
 //     kickoffAt   string    | null
 //     kickoffTbd  boolean            klokkeslættet i kickoffAt er en PLADSHOLDER
 //     stageName   string    | null   (rå, engelsk — oversættes i src/lib/scoring.js)
-//     home/away   { providerId, globalId, name } | null
+//     home/away   { providerId, globalId, name, shortName } | null
 //     status      "scheduled" | "live" | "finished"
 //     score       { home: number|null, away: number|null }   aktuel stilling
 //     liveState   string | null   rå state-navn til matches.live_state
