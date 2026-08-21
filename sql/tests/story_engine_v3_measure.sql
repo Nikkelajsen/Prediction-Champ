@@ -112,6 +112,47 @@ order by s.day_key
 limit 4;
 
 -- ---------------------------------------------------------------------------
+-- Stime-fixturen (blok 3 · `G143`)
+-- ---------------------------------------------------------------------------
+-- Bruger 1 får fem kampe i træk med point, som slutter på den dag, hun i forvejen
+-- har et `DAY_TOP`-kort (`current_date - 17`, altså d = 3 i rotationen ovenfor),
+-- og derefter én kamp UDEN point dagen efter.
+--
+-- Fixturen er skruet sammen for at ramme de to tilstande, blokken findes for:
+--   · stimen var kandidat på en dag, hvor en ANDEN regel vandt — reglen er
+--     domineret og ikke uden anledning, og
+--   · stimen brød en SENERE dag, altså 💤-grenens blinde vinkel (`G144`).
+-- Uden begge dele kan blokken kun bevise, at den kan tælle til nul.
+--
+-- Triggerne på `matches` slås fra: de kalder `recompute_ratings()` og dermed
+-- historie-motoren, som ville skrive sine egne kort ind i det, testen tæller.
+alter table public.matches disable trigger all;
+
+insert into public.leagues (id, name, is_official)
+values ('99999999-0000-4000-8000-000000000001', 'Stimeligaen', true);
+insert into public.seasons (id, league_id, name)
+values ('99999999-0000-4000-8000-000000000002', '99999999-0000-4000-8000-000000000001', '25/26');
+insert into public.teams (id, league_id, name) values
+  ('99999999-0000-4000-8000-000000000003', '99999999-0000-4000-8000-000000000001', 'Hjemme'),
+  ('99999999-0000-4000-8000-000000000004', '99999999-0000-4000-8000-000000000001', 'Ude');
+
+-- Seks kampe: fem på dagene −21 … −17 og én på −16. Alle ender 2-0.
+insert into public.matches (id, season_id, home_team_id, away_team_id, kickoff_at, home_score, away_score)
+select ('99999999-0000-4000-8000-0000000001' || lpad(i::text, 2, '0'))::uuid,
+       '99999999-0000-4000-8000-000000000002',
+       '99999999-0000-4000-8000-000000000003', '99999999-0000-4000-8000-000000000004',
+       (current_date - 21 + i)::timestamptz + interval '18 hours', 2, 0
+from generate_series(0, 5) i;
+
+-- De fem første tips rammer udfaldet (1 point), det sjette gør ikke (0 point).
+insert into public.predictions (user_id, match_id, pred_home, pred_away)
+select '00000000-0000-4000-8000-000000000001',
+       ('99999999-0000-4000-8000-0000000001' || lpad(i::text, 2, '0'))::uuid,
+       case when i < 5 then 2 else 0 end,
+       case when i < 5 then 0 else 2 end
+from generate_series(0, 5) i;
+
+-- ---------------------------------------------------------------------------
 -- Aflæsningen selv
 -- ---------------------------------------------------------------------------
 \ir ../story_engine_v3_measure.sql
@@ -189,8 +230,8 @@ begin
   if pg_temp.v(38) <> '25.5 %' then
     raise exception 'tærskel 55 skal springe til 25,5 %%, fik %', pg_temp.v(38);
   end if;
-  if pg_temp.v(102) not like 'fra 74.5 % (tærskel 38) til 25.5 % (tærskel 55)%' then
-    raise exception 'håndtagets rækkevidde: fik %', pg_temp.v(102);
+  if pg_temp.v(202) not like 'fra 74.5 % (tærskel 38) til 25.5 % (tærskel 55)%' then
+    raise exception 'håndtagets rækkevidde: fik %', pg_temp.v(202);
   end if;
 
   -- 4b) Fordelingen skåret ved reglernes gulve
@@ -233,9 +274,32 @@ begin
     raise exception 'regeltællingen: fik %', pg_temp.d(79);
   end if;
 
+  -- 10) G143: stimen fandtes, var kandidat, og TABTE. Uden denne påstand kan
+  --     blokken kun bevise, at den kan tælle til nul.
+  if pg_temp.v(100) <> '1' or pg_temp.v(102) <> '5 kampe' then
+    raise exception 'stime: forventede 1 femer-stime på 5 kampe, fik %/%',
+      pg_temp.v(100), pg_temp.v(102);
+  end if;
+  if pg_temp.v(103) <> '1' or pg_temp.v(104) <> '0' or pg_temp.v(105) <> '1' then
+    raise exception 'stime: forventede kandidat=1, vandt=0, tabte=1, fik %/%/%',
+      pg_temp.v(103), pg_temp.v(104), pg_temp.v(105);
+  end if;
+  -- 48 = 28 + 0 (stime-bonus for len 5) + 20. Kortet, hun fik, var DAY_TOP på 54.
+  if pg_temp.v(106) <> '6 point' then
+    raise exception 'stime: afstanden op til vinderen skulle være 54 − 48 = 6, fik %', pg_temp.v(106);
+  end if;
+  -- 💤-grenens blinde vinkel: stimen brød dagen EFTER, så intet kort blev skrevet.
+  if pg_temp.v(107) <> '1' or pg_temp.v(108) <> '0' then
+    raise exception 'stime: forventede brud en SENERE dag (1) og ingen samme dag (0), fik %/%',
+      pg_temp.v(107), pg_temp.v(108);
+  end if;
+  if pg_temp.v(203) <> 'DOMINERET — den var kandidat og tabte' then
+    raise exception 'G143-dommen: fik %', pg_temp.v(203);
+  end if;
+
   -- Dommene til sidst
-  if pg_temp.v(100) not like 'JA — 4 visninger%' or pg_temp.v(101) <> 'JA' then
-    raise exception 'begge rækker skal kunne besvares, fik %/%', pg_temp.v(100), pg_temp.v(101);
+  if pg_temp.v(200) not like 'JA — 4 visninger%' or pg_temp.v(201) <> 'JA' then
+    raise exception 'begge rækker skal kunne besvares, fik %/%', pg_temp.v(200), pg_temp.v(201);
   end if;
 end $$;
 

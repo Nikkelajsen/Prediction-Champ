@@ -15,6 +15,50 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `G143` besvaret: stimen er ikke død kode, den er systematisk domineret
+
+**Svaret:** `STREAK_STATUS` virker. Rækken spurgte, om reglen var død kode eller
+bare uden anledning — samme spørgsmålsform som `G72` — og svaret er **ingen af
+delene helt**. Reglen udløser, vinder og når både hovedpersonen og en
+fan-out-modtager; den taber bare altid, når noget andet sker samme dag.
+
+**Beviset er kørt og ligger i repoet.** Motoren er kaldt mod en fixture med en
+levende stime, og kortet blev skrevet: `🔥 6 kampe i træk med point` til
+hovedpersonen og tredjepersons-varianten til en modtager i samme konkurrence.
+`competition_id = null` er altså ikke en blokering — `_sd_reach`s
+fan-out-gren har `(c.competition_id is null or …)` netop for det. Påstanden bor
+nu i `sql/tests/story_engine_daily.sql` blok 22, som er den **første** kørsel af
+reglen nogensinde: testens egen blok 16 sagde allerede, at fixturen aldrig fyrede
+den, og produktionen havde nul sejre.
+
+**Hvorfor den alligevel aldrig har vundet: `competition_id = null` koster
+størrelsesleddet.** `_sd_mag` er nøglet på `(competition_id, user_id)`, så
+joinet rammer ingen række for en kandidat uden konkurrence, og `move_pts` og
+`over_pts` falder til nul. `STREAK_STATUS` får derfor KUN stime-bonussen som
+størrelsesbidrag og scorer 48–60. `DAY_TOP` (34), `CONTRARIAN` (32) og `DUEL`
+(30) får den **samme** bonus plus flytning og over-snit oven i en højere
+grundvægt — deres score er punkt for punkt større. Målt i fixturen: `DAY_TOP` 72
+mod stimens 60, samme bruger, samme dag, samme stime.
+
+Med `DAY_TOP` + `CONTRARIAN` som 69 % af alle sejre i produktionen kan stimen
+altså kun vinde på en dag, hvor ingen af de tre udløste. Nul sejre i 100
+bruger-dage er dermed **overbestemt**: anledningen er snæver (stimen skal slutte
+på præcis den dag, der får et kort), og selv da taber den som regel.
+
+**Hvorfor det ikke bliver rettet her.** At give stimen sit størrelsesled kræver,
+at den får en konkurrence at være stor i — og den er global med vilje. At hæve
+grundvægten er den anden vej, men det er præcis `A58`s spørgsmål, og det skal
+besvares på en fordeling og ikke på én regel ad gangen. Fundet er derfor ført
+ind i `A58`s kontekst frem for at blive en rettelse i forbifarten.
+
+**Én ting ER en fejl og fik sin egen række.** Reglens kommentar lover, at den
+fyrer *"når stimen blev forlænget i dag eller brudt i dag"*. Den anden halvdel
+holder næsten aldrig: `_sd_streak` vælger `where hit and ended_day = p_day`, så
+en stime, der brød dagen EFTER sit sidste hit, har `ended_day` = i går og
+udløser ingenting. 💤-teksten *"Din stime stoppede ved N"* kan kun nås, når
+bruddet ligger på samme kampdag som sidste hit. Efterprøvet: nul rækker på
+brud-dagen. `G144`.
+
 ## 21. august 2026 — `A33` besvaret: variationen ER der, men to regler bærer oplevelsen
 
 **Svaret:** nej, dagsmotorens variation er ikke tyndere, end regelantallet

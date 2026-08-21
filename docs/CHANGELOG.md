@@ -9,6 +9,57 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 (tredje kørsel) — `G143`: stimen er ikke død kode, den er systematisk domineret
+
+**Rækken spurgte, om `STREAK_STATUS` var død kode eller bare uden anledning** —
+samme spørgsmålsform som `G72`. Svaret er ingen af delene helt.
+
+**Reglen virker, og beviset ligger nu i repoet.** Motoren er kaldt mod en fixture
+med en levende stime, og kortet blev skrevet: `🔥 6 kampe i træk med point` til
+hovedpersonen og tredjepersons-varianten til en modtager i samme konkurrence.
+`competition_id = null` blokerer altså ikke — `_sd_reach`s fan-out-gren har
+`(c.competition_id is null or …)` netop for det. **Det er reglens første kørsel
+nogensinde:** testens egen blok 16 sagde allerede, at fixturen aldrig fyrede den,
+og produktionen havde nul sejre. Nu er den blok 22 i
+`sql/tests/story_engine_daily.sql`.
+
+**Hvorfor den alligevel aldrig har vundet.** `_sd_mag` er nøglet på
+`(competition_id, user_id)`, så joinet rammer ingen række for en kandidat uden
+konkurrence: `move_pts` og `over_pts` falder til nul, og `STREAK_STATUS` får KUN
+stime-bonussen som størrelsesbidrag — 48–60. `DAY_TOP` (34), `CONTRARIAN` (32) og
+`DUEL` (30) får den **samme** bonus plus flytning og over-snit oven i en højere
+grundvægt, så deres score er punkt for punkt større. Målt i fixturen: `DAY_TOP`
+**72** mod stimens **60**, samme bruger, samme dag, samme stime. Med `DAY_TOP` +
+`CONTRARIAN` som 69 % af sejrene kan stimen kun vinde på en dag, hvor ingen af de
+tre udløste — så nul sejre i 100 bruger-dage er overbestemt.
+
+**Ordet "udløst" var upræcist, og det er værd at holde fast i.** Blok 2 i
+aflæsningen grupperer på `winner_rule`, og en taber efterlader intet spor —
+`runner_up_value` gemmer et tal, ikke en regel. "Har aldrig udløst" og "har
+aldrig vundet" ser ens ud i den tabel.
+
+**Én ting ER en fejl og fik sin egen række.** Reglens kommentar lover, at den
+fyrer *"når stimen blev forlænget i dag eller brudt i dag"*. Anden halvdel holder
+næsten aldrig: `_sd_streak` vælger `where hit and ended_day = p_day`, så en stime,
+der brød dagen EFTER sit sidste hit, udløser ingenting. Teksten *"Din stime
+stoppede ved N"* kan kun nås ved et brud på samme kampdag som sidste hit.
+Efterprøvet: nul rækker på brud-dagen. `G144` — og påstanden står som blok 22c,
+der skal **vendes om**, når rækken lukkes.
+
+**Aflæsningsfilen har fået en blok 3**, så den næste kørsel også svarer på, hvor
+tit stimen havde anledningen og hvad der vandt i stedet: femer-stimer i
+historikken, hvor mange der sluttede på en dag med et kort, hvad brugeren fik i
+stedet, afstanden op til vinderen, og hvor mange stimer der brød en senere dag
+(💤-grenens blinde vinkel). Dommen regnes ud i sidste blok.
+
+Fire mutationer prøvet mod de nye påstande — stimen slået fra, grundvægten hævet
+så den slår `DAY_TOP`, stime-bonussen nulstillet, og nævneren i blok 3 —
+alle fanget. Backloggen er 35 → 35: `G143` slettet, `G144` tilføjet, og
+domineringsfundet ført ind i `A58`s kontekst frem for rettet i forbifarten.
+Ingen migrering; `#47` er urørt. Se [`DECISIONS.md`](./DECISIONS.md).
+
+---
+
 21. august 2026 (anden kørsel) — `A33` er besvaret: variationen er der, men to regler bærer oplevelsen
 
 **Ejeren kørte aflæsningen samme dag, den blev bestilt**, og svaret ligger i

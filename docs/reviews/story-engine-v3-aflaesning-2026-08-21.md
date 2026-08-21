@@ -125,11 +125,21 @@ nyeste `day_key`, så de kunne pr. konstruktion ikke nås. Det er `G73`s klasse 
 gang til — produktionen tæller som skrevet, og halvdelen kunne aldrig ses.
 Ført videre som `G142`.
 
-**`STREAK_STATUS` har aldrig udløst.** Den er den eneste af de otte dagsregler
-uden en eneste forekomst, og den er samtidig den, hvis gulv (28 + 20 = 48) sidder
-lige over tærsklen — udløser den, udgiver den altid. Samme spørgsmålsform som
-`G72` (kåringsreglerne): død kode eller bare uden anledning? Ført videre som
-`G143`.
+**`STREAK_STATUS` har aldrig VUNDET** — og bemærk ordet. Tabellen i afsnit 2
+grupperer på `winner_rule`, og en taber efterlader intet spor: `runner_up_value`
+gemmer et tal, ikke en regel. "Har aldrig udløst" og "har aldrig vundet" ser
+ens ud herfra.
+
+Det blev ført videre som `G143` og **besvaret samme dag**: reglen virker —
+motoren er kørt mod en fixture med en levende stime, og kortet blev skrevet til
+både hovedpersonen og en fan-out-modtager. Men den er **systematisk domineret**.
+`STREAK_STATUS` har `competition_id = null`, så `_sd_mag`-joinet (flytning +
+over gennemsnittet) rammer ingen række, og den får kun stime-bonussen som
+størrelsesbidrag: 48–60. `DAY_TOP` (34), `CONTRARIAN` (32) og `DUEL` (30) får
+den samme bonus plus flytning og over-snit oven i en højere grundvægt og slår
+den derfor altid — målt til 72 mod 60. Med `DAY_TOP` + `CONTRARIAN` som 69 % af
+sejrene kan stimen kun vinde på en dag, hvor ingen af de tre udløste.
+Se [`DECISIONS.md`](../DECISIONS.md); fundet er ført ind i `A58`.
 
 ## 6. Forbehold
 

@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A59` · `B42` · `G144` · `I26`.**
+**Næste ledige: `A59` · `B42` · `G145` · `I26`.**
 *(`B40` er brugt 18. august 2026 til Indstillinger-skærmen med push-kontakten —
 leveret direkte uden en backlog-række; se `CHANGELOG.md`/`DECISIONS.md`. `B41`
 er brugt 21. august 2026 til Tier 1-bestillingen af `#73`.)*
@@ -102,9 +102,7 @@ produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
 gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
 køres på et minut.
 
-| # | Hvad | Note |
-|---|---|---|
-| `G143` | `STREAK_STATUS` har aldrig udløst én eneste gang | Den eneste af de otte dagsregler uden en forekomst i v3-æraen (`A33`-aflæsningen, 21. august 2026). **Samme spørgsmålsform som `G72`:** død kode eller bare uden anledning? Reglen kræver en stime på mindst fem kampe med point i træk, som **slutter** på netop den dag, og som stadig lever. Ét opslag afgør det — findes der overhovedet en femer-stime i `predictions` × `matches`? Er svaret nul, er reglen uafprøvet og ikke død, og så er den rigtige handling en note i analytics-spec'ens §5D ligesom `G72` fik. Er svaret positivt, er der en fejl i reglens `ended_day`- eller `alive`-betingelse, og den er værd at finde: reglens gulv (28 + 20 = 48) ligger over tærsklen, så udløser den, udgiver den altid |
+Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
@@ -124,6 +122,7 @@ Tomt.
 
 | # | Hvad | Note |
 |---|---|---|
+| `G144` | 💤-grenen i `STREAK_STATUS` er næsten unåelig | Reglens egen kommentar lover, at den fyrer *"når stimen blev forlænget i dag **eller brudt i dag**"*. Anden halvdel holder næsten aldrig: `_sd_streak` vælger `where hit and ended_day = p_day`, altså en række af HITS, hvis sidste kamp ligger på dagen. Brød stimen dagen EFTER, er `ended_day` = i går, og der skrives intet. Teksten *"Din stime stoppede ved N"* kan derfor kun nås, når bruddet ligger på SAMME kampdag som sidste hit. **Efterprøvet 21. august 2026:** nul rækker på brud-dagen, og påstanden står som blok 22c i `sql/tests/story_engine_daily.sql` — den skal **vendes om**, når rækken lukkes. Kuren er at lade `_sd_streak` også vælge den seneste hit-række, hvis NÆSTE scorede kamp ligger på `p_day`; `alive` er allerede det flag, teksten skelner på. Prisen er en gen-kørsel af `#47 story_engine_v3.sql` i produktionen, så den hører sammen med den næste ændring af dagsmotoren frem for alene. Fundet ved `G143` |
 | `G140` | "Vis hele stillingen" er et `<p>` med `onClick` | Fladen kan hverken nås med tastaturet eller trykkes af skærmbilled-harnessen, som kun kan klikke på knapper — så den ene vej til din egen række i en stilling på 25 er lukket for tastaturbrugere OG usynlig for `npm run screenshots`. Rettelsen er at gøre den til en `button` med den styling, den allerede har. Fundet ved `A44`-eftersynet 21. august 2026 |
 | `G142` | Halvdelen af v3-dagskortene kan pr. konstruktion aldrig vises | 50 af 100 kort havde et vindue på nul minutter ved `A33`-aflæsningen 21. august 2026: et kort med en større `day_key` fandtes for samme bruger allerede i det øjeblik, de blev skrevet, og `loadDayCard` henter altid den nyeste. Bagstopperens dagsløkke skriver flere dages kort i samme kørsel, så det ældste er dødt i fødslen. **Det er ikke oplagt en fejl** — man vil næppe vise tre dages gamle kort efter hinanden — men det gør hvert eneste "genereret"-tal misvisende (`G73`s klasse), og det bruger motorens dyreste arbejde på rækker, ingen kan nå. To veje: lad dagsløkken springe en dag over, der allerede er afløst, eller behold rækkerne som analysedata og hold dem ude af tællingerne. Spørgsmålet skal besvares FØR `G141`, som ellers retter en nævner, der stadig tæller døde kort |
 | `G139` | Hjem og konkurrence-boardet henter hele den globale ratingtabel | `loadRatingBoard` henter **hver** brugers rating OG hvert profilnavn — Hjem bruger svaret til ét kort: din egen rating, din placering og antallet (`ratingSnapshot`). `loadRatingMap` gør det samme i `BoardScreen` for at sætte et ratingtal ved otte deltagere. Begge kald vokser med brugerbasen og lander i `A34`s egress-loft, længe før nogen mærker dem i skærmen. Kuren er billig og kræver ingen migrering: egen række plus en `count=exact` på `rating=gt.<din>` til Hjem, og `user_id=in.(deltagerne)` på boardet. Fundet ved `A44`-aflæsningen 21. august 2026. |
@@ -193,7 +192,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 |---|---|---|---|
 | A34 | **Hvornår skiftes Supabase Free ud med Pro?** | Free-planens tre lofter bider i denne rækkefølge: **egress (5 GB/md)** først — appen er REST-fetch-tung, så et sted mellem 200 og 500 ugentligt aktive nærmer forbruget sig loftet; **database (500 MB)** langt senere (tips-rækker er små; `analytics_events` var den hurtigst voksende tabel og har siden `G77`, 7. august 2026, et loft på 18 måneder, så væksten er nu bundet frem for åben); og **backup-vilkåret** er kvalitativt: 24 timers datatab (afsnit 22) er valgt til venner, og når fremmede udgør flertallet, er Pro's backups prisen værd. Aflæses på Supabase-dashboardets Usage-side — én gang om måneden, ikke oftere. Vercel Hobby er IKKE samme spørgsmål: dens tunge trafik skalerer med turneringer, ikke brugere, og skiftet dér udløses af kommercialisering (vilkårene), ikke af brugertal. | Egress nær loftet, eller fremmede i flertal blandt de aktive. |
 | A35 | **Er publiceringstærsklen på 45 den rigtige?** | Story Engine v3 udgiver dagens kort med ulæst-markering, når nyhedsværdien når 45, og som dæmpet `DAY_RESULT` under. **Aflæst 21. august 2026, men på fire kampdage af de ti, rækken kræver** ([`reviews/story-engine-v3-aflaesning-2026-08-21.md`](./reviews/story-engine-v3-aflaesning-2026-08-21.md)). Det, aflæsningen alligevel afgjorde: **tærsklen er et svagt instrument, og nu er det målt.** Hele spændet fra 38 til 55 flytter andelen 16 point (56,0 % → 40,0 %), fordi 75 af 100 kort ligger uden for enhver tærskels rækkevidde — 35 på nul (ingen tips) og 40 på 54+. Tærsklen kan kun nogensinde afgøre 25 % af bruger-dagene; grundvægtene afgør resten. **Og den nuværende andel ser kun rigtig ud på grund af nævneren:** 50,0 % af alle bruger-dage er midt i målet 40–60 %, men 76,9 % af motorens egen valgmængde er over rækkens "over 70 % ⇒ for lav". Forskellen ER de 35 tips-påmindelser. Bliver brugerne mere aktive, bevæger det levede tal sig mod 76,9 %, uden at nogen har rørt en tærskel — *en tærskel, der ser rigtig ud, fordi en tredjedel af bruger-dagene er tomme, er ikke kalibreret, den er heldig.* Spørgsmålet er dermed **omformuleret**: det handler ikke længere om 45, men om `DAY_TOP`s og `CONTRARIAN`s grundvægte, og det er `A58`. | **Mindst ti kampdage** (fire nået 21. august 2026). De to uger var den forkerte halvdel af uret: kampdagene kommer ~2–3 om ugen. Samme opslag, kørt igen. |
-| A58 | **Er `DAY_TOP` + `CONTRARIAN` = 87 % af det sete den rigtige fordeling?** | Efterfølgeren til `A33`, som blev besvaret 21. august 2026. Aflæsningen aflivede rækkens formodning — `DAY_RESULT` er 12,3 % af motorens reelle valg mod v2's 44 %, og syv af otte dagsregler har udløst — men fandt spejlbilledet: af 168 visninger er `DAY_TOP` og `CONTRARIAN` tilsammen **86,9 %**. Mekanikken er den samme som v2's ankerproblem, bare flyttet opad: de to har de højeste grundvægte efter `MILESTONE` (34 og 32) og er to af de tre regler, der **fan-outer**, så de producerer flere kandidater pr. dag end nogen anden. **Det er ikke oplagt forkert.** "Dagens højeste" og "du var den eneste, der troede på det" ER de mest fortællende ting, der sker på en kampdag, og en jævn fordeling over otte regler ville betyde, at `SO_CLOSE` fyldte lige så meget som `DAY_TOP`. Spørgsmålet er, om 87 % er koncentration eller redaktion — og det er en produktvurdering, ikke en måling. Håndtaget er grundvægtene og ikke tærsklen (`A35`). | **Mindst ti kampdage** — samme udløser og samme opslag som `A35`, og de to tages sammen. Fire kampdage kan ikke skelne en regel, der udløser ofte, fra en, der tilfældigvis udløste. |
+| A58 | **Er `DAY_TOP` + `CONTRARIAN` = 87 % af det sete den rigtige fordeling?** | Efterfølgeren til `A33`, som blev besvaret 21. august 2026. Aflæsningen aflivede rækkens formodning — `DAY_RESULT` er 12,3 % af motorens reelle valg mod v2's 44 %, og syv af otte dagsregler har udløst — men fandt spejlbilledet: af 168 visninger er `DAY_TOP` og `CONTRARIAN` tilsammen **86,9 %**. Mekanikken er den samme som v2's ankerproblem, bare flyttet opad: de to har de højeste grundvægte efter `MILESTONE` (34 og 32) og er to af de tre regler, der **fan-outer**, så de producerer flere kandidater pr. dag end nogen anden. **Det er ikke oplagt forkert.** "Dagens højeste" og "du var den eneste, der troede på det" ER de mest fortællende ting, der sker på en kampdag, og en jævn fordeling over otte regler ville betyde, at `SO_CLOSE` fyldte lige så meget som `DAY_TOP`. Spørgsmålet er, om 87 % er koncentration eller redaktion — og det er en produktvurdering, ikke en måling. Håndtaget er grundvægtene og ikke tærsklen (`A35`). 🔶 **`G143` (21. august 2026) leverede den anden ende af samme fordeling:** `STREAK_STATUS` har `competition_id = null`, så `_sd_mag`-joinet rammer ingen række, og den får KUN stime-bonussen som størrelsesbidrag — 48–60 mod `DAY_TOP`s 54–84. De tre tungeste regler slår den derfor **altid**, når de udløser for samme bruger samme dag (målt: 72 mod 60). Spørgsmålet er dermed ikke kun, om `DAY_TOP` og `CONTRARIAN` fylder for meget, men om størrelsesleddet er skævt fordelt: en global regel kan pr. konstruktion ikke være stor. | **Mindst ti kampdage** — samme udløser og samme opslag som `A35`, og de to tages sammen. Fire kampdage kan ikke skelne en regel, der udløser ofte, fra en, der tilfældigvis udløste. |
 | A42 | **Skal en rigtig browser have en plads i CI?** | Testopsætningen er **bevidst uden jsdom** — komponenter renderes med `renderToStaticMarkup`, og logikken lever i rene moduler, der kan efterprøves uden DOM. Valget er begrundet flere steder (`DECISIONS.md` 30. juli 2026, `features/onboarding-v1.md`) og har holdt: det er dét, der har drevet udskillelsen af `data/invites.js`, `data/createSources.js` og `onboarding.js`. **`Modal`-fokusfejlen (11. august 2026) er den første, det ikke rakte til.** Fejlen ramte hvert tekstfelt i hver dialog — man kunne skrive ét tegn, hvorefter fokus sprang til `dialog` — og den kan pr. definition ikke ses uden en browser, fordi den er en fokusflytning og ikke en returværdi. Den blev efterprøvet i en engangs-Chromium (playwright-core, ~40 linjer), som **ikke ligger i repoet**; beviset findes derfor kun i `CHANGELOG.md`, og en regression ville ikke blive fanget. **Prisen ved at sige ja** er en tung devDependency, en browser-download i CI og en ny slags test, som er langsommere og mere flaksende end resten — mod en kodebase med én forfatter og 500+ hurtige tests. **Prisen ved at sige nej** er, at fokus-, scroll- og layoutfejl kun opdages af brugere. Et mellemsvar findes: en enkelt smoke-test bag et separat script, som ikke kører ved hver PR. | **Næste gang en fejl kun kan ses i en rigtig browser.** Én forekomst er et tilfælde; to er en fejlklasse, og først da kan spørgsmålet besvares med data frem for med en formodning. |
 | A14 | **Skal hele kodebasen gennemformateres med Prettier?** | `npm run format` findes, men `format:check` er bevidst ikke et CI-trin. En fuld gennemformatering ville omskrive ~6.700 linjer ved `printWidth: 140` (~14.000 ved standard 80) på tværs af ~126 filer (86 uden testfiler; genmålt august 2026). Prisen er hele repoets `git blame`; gevinsten er konsistens i en kodebase med én forfatter og en i forvejen ensartet håndstil. Beslutningen er **udskudt, ikke truffet** — se [`DECISIONS.md`](./DECISIONS.md), 30. juli 2026. | Næste gang der alligevel røres bredt i frontenden — ellers aldrig. |
 | A23 | **Skal appen have en router?** | Navigation er i dag to `useState` i `MainApp.jsx` (`tab` + `screen`), og deep links læses ved boot og strippes straks via `history.replaceState` (`App.jsx:104`, `MainApp.jsx:215,239`). Følgen er ingen tilbage-knap, ingen browser-historik og ingen delbare URL'er til interne skærme — mærkbart for en PWA, hvor telefonens tilbage-gestus forventes at virke. Men det er et arkitekturvalg, ikke en fejl: afhængighedsfattigheden er bevidst (fire runtime-deps, ingen router, `docs/reviews/2026-08-app-review.md` §7), og en router omskriver hele navigations-tilstandsmaskinen inkl. begge deep-link-join-flows, som ingen test dækker. | Når tilbage-knappen enten koster brugere (kan aflæses i analytics) eller en feature kræver ægte delbare interne URL'er — `I12`s offentlige ligaside er den første, der ville. |
@@ -260,39 +259,30 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (toogfyrretyvende kørsel) — `A33` er besvaret, `A35` mangler seks kampdage
+### 21. august 2026 (treogfyrretyvende kørsel) — `G143` er besvaret: stimen er domineret, ikke død
 
-**Listen er 31 → 35.** `A33` er slettet (besvaret), indbakkens to linjer er
-blevet `G140` og `G141`, og aflæsningen efterlod tre nye: `G142`, `G143` og
-`A58`. **Tier 1 og Tier 2 er fyldt igen af leverancen selv** — samme mønster som
-`B23` og `B19`.
+**Listen er 35 → 35:** `G143` er slettet, `G144` tilføjet, og Tier 1 er tom igen.
 
-**Ejeren kørte `sql/story_engine_v3_measure.sql`, og nævneren var det halve
-arbejde.** Rå gav den 100 bruger-dage med `DAY_RESULT` som vinder på 43 —
-mistænkeligt tæt på v2's 44 %, som var hele `A33`s anledning. Men **35 af de 43
-er tips-påmindelser**: brugeren havde ikke ét scoret tip den dag, så der fandtes
-ingen kandidater at vælge imellem. På motorens reelle valgmængde, 65 bruger-dage,
-er `DAY_RESULT` **12,3 %**, og syv af otte dagsregler har udløst. Rækkens
-formodning holder ikke.
+**Reglen virker.** Motoren er kaldt mod en fixture med en levende stime, og
+kortet blev skrevet — til både hovedpersonen og en fan-out-modtager.
+`competition_id = null` blokerer ikke: `_sd_reach`s fan-out-gren har
+`(c.competition_id is null or …)` netop for det. Det er reglens **første kørsel
+nogensinde**; testens egen blok 16 sagde allerede, at fixturen aldrig fyrede den.
 
-**Spejlbilledet gør.** Af 168 visninger er `DAY_TOP` + `CONTRARIAN` **86,9 %** —
-de to med de højeste grundvægte efter `MILESTONE`, og to af de tre, der
-fan-outer. Ankerproblemet er ikke fjernet, det er flyttet opad. Ført videre som
-`A58`, fordi det er en produktvurdering og ikke en måling.
+**Men den taber altid.** `_sd_mag` er nøglet på `(competition_id, user_id)`, så
+joinet rammer ingen række for en kandidat uden konkurrence: `STREAK_STATUS` får
+KUN stime-bonussen som størrelsesbidrag (48–60), mens `DAY_TOP`, `CONTRARIAN` og
+`DUEL` får den samme bonus plus flytning og over-snit oven i en højere
+grundvægt. Målt: 72 mod 60, samme bruger, samme dag, samme stime.
 
-**`A35` kunne ikke besvares: fire kampdage af de ti.** Udløserens to halvdele
-løber ikke i samme takt — de to uger var gået for længst, kampdagene kommer ~2–3
-om ugen. Aflæsningen målte til gengæld tærsklens svaghed: hele spændet 38→55
-flytter andelen 16 point, fordi 75 af 100 kort ligger uden for enhver tærskels
-rækkevidde. Og den nuværende andel ser kun rigtig ud på grund af nævneren: 50,0 %
-af alle bruger-dage, men **76,9 %** af valgmængden.
+**Læren:** *"har aldrig udløst" og "har aldrig vundet" ser ens ud i en tabel, der
+grupperer på vinderen. `runner_up_value` gemmer et tal, ikke en regel — og det
+tal var hele forskellen mellem død kode og en regel, der bare bliver slået.*
 
-**Læren:** *et forhold har to led, og det er næsten altid nævneren, der er
-forkert. `DAY_RESULT` 43 % og `DAY_RESULT` 12,3 % er det samme datasæt.*
+**Fundet er ført ind i `A58`s kontekst frem for rettet.** At give stimen sit
+størrelsesled kræver en konkurrence at være stor i, og den er global med vilje;
+at hæve grundvægten er præcis `A58`s spørgsmål og skal besvares på en fordeling.
 
-**Scorerum-aflæsningen fra samme dag holdt punkt for punkt** mod virkeligheden —
-`COLLECTIVE_MISS` stod på præcis 44 i alle fire forekomster, `DAY_RESULT` nåede
-aldrig over 28, `SO_CLOSE` lå på gulvet 38. Det er værd at gemme: regnestykket
-kunne stilles op, før dataene fandtes, og det pegede rigtigt.
-
-Ingen kode, ingen SQL, ingen migrering — kun dokumentation.
+`G144` er den ene ting, der ER en fejl: 💤-grenen kan kun nås ved et brud på
+samme kampdag som sidste hit. Fire mutationer prøvet mod de nye påstande, alle
+fanget. Ingen migrering.

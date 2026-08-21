@@ -79,7 +79,7 @@
 -- Fra terminal virker den samme fil:
 --   psql "$SUPABASE_DB_URL" -f sql/story_engine_v3_measure.sql
 --
--- Handlingsgrænserne står i blok 3, og filen regner selv dommen ud.
+-- Handlingsgrænserne står i sidste blok, og filen regner selv dommen ud.
 --
 -- ---------------------------------------------------------------------------
 -- KØRT FØRSTE GANG 21. AUGUST 2026 — HVAD DEN AFGJORDE, OG HVAD DEN IKKE KUNNE
@@ -397,24 +397,139 @@ from _vist v
 group by v.winner_rule;
 
 -- ===========================================================================
--- BLOK 3 · Dommen
+-- BLOK 3 · G143 · stimen, der aldrig vandt
+-- ===========================================================================
+-- `STREAK_STATUS` er den eneste af de otte dagsregler uden en eneste SEJR i
+-- v3-æraen. Blok 2's tabel kan ikke skelne "har aldrig udløst" fra "har aldrig
+-- vundet": den grupperer på `winner_rule`, og en taber efterlader intet spor —
+-- `runner_up_value` gemmer et TAL, ikke en regel.
+--
+-- DET ER AFGJORT I REPOET, AT REGLEN VIRKER (21. august 2026). Motoren er kørt
+-- mod en fixture med en levende stime, og kortet blev skrevet — til både
+-- hovedpersonen og en fan-out-modtager. Reglen er altså ikke død kode.
+--
+-- DET, DER IKKE KAN AFGØRES I REPOET, er hvor tit den har HAFT anledningen. Og
+-- den er snæver af to grunde:
+--   · stimen skal slutte på præcis den dag, der får et kort, og
+--   · reglen er STRUKTURELT DOMINERET. `STREAK_STATUS` har `competition_id =
+--     null`, så `_sd_mag`-joinet (flytning + over gennemsnittet) rammer ingen
+--     række, og den får KUN stime-bonussen som størrelsesbidrag. `DAY_TOP` (34),
+--     `CONTRARIAN` (32) og `DUEL` (30) får den samme bonus PLUS flytning og
+--     over-snit, og deres grundvægt er højere. De slår den derfor ALTID, når de
+--     udløser for samme bruger samme dag — målt til 72 mod 60 i en fixture.
+-- Med `DAY_TOP` + `CONTRARIAN` som 69 % af alle sejre kan stimen kun vinde på
+-- en dag, hvor ingen af de tre udløste.
+--
+-- Denne blok måler netop den forskel: fandtes stimen, og hvad fik brugeren i
+-- stedet? Den regner stimerne med motorens EGEN definition (`_sd_streak`), bare
+-- uden `ended_day = p_day`, så alle stimer i historikken kommer med.
+drop table if exists _stime;
+create temporary table _stime as
+with hist as (
+  select pr.user_id, m.kickoff_at, m.match_day, m.id as match_id,
+         (public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) >= 1) as hit
+  from public.predictions pr
+  join public.matches m on m.id = pr.match_id
+  join public.seasons s on s.id = m.season_id
+  join public.leagues l on l.id = s.league_id and l.is_official
+  where m.home_score is not null and m.away_score is not null
+    and pr.pred_home is not null and pr.pred_away is not null
+),
+grp as (
+  select *,
+    row_number() over (partition by user_id order by kickoff_at, match_id)
+    - row_number() over (partition by user_id, hit order by kickoff_at, match_id) as g
+  from hist
+),
+runs as (
+  select user_id, hit, g, count(*)::int as len,
+         max(match_day) as ended_day,
+         max(kickoff_at) as run_last
+  from grp group by user_id, hit, g
+)
+select r.user_id, r.len, r.ended_day, r.run_last,
+       -- Hvad stimen VILLE have scoret for hovedpersonen: 28 + stime-bonus + 20.
+       (28 + least(12, 2 * greatest(0, r.len - 5)) + 20)::int          as stime_score,
+       -- Den næste scorede kamp efter stimen — den, der brød den.
+       (select min(h.match_day) from hist h
+         where h.user_id = r.user_id and h.kickoff_at > r.run_last)    as brudt_dag,
+       -- Hvad brugeren faktisk fik den dag, stimen sluttede.
+       (select st.rule from public.stories st
+         where st.period = 'day' and st.user_id = r.user_id
+           and st.day_key = r.ended_day and st.news_value is not null) as fik_regel,
+       (select st.news_value from public.stories st
+         where st.period = 'day' and st.user_id = r.user_id
+           and st.day_key = r.ended_day and st.news_value is not null) as fik_score
+from runs r
+where r.hit and r.len >= 5;
+
+insert into _maal values
+  (100, '3 · G143 · stimen', 'femer-stimer i hele historikken',
+   (select count(*)::text from _stime),
+   case when (select count(*) from _stime) = 0
+        then 'NUL ⇒ reglen er uafprøvet og ikke død — samme svar som G72'
+        else 'reglen har haft anledninger; se nedenfor hvad der vandt i stedet' end),
+
+  (101, '3 · G143 · stimen', 'brugere med mindst én femer-stime',
+   (select count(distinct user_id)::text from _stime), ''),
+
+  (102, '3 · G143 · stimen', 'længste stime',
+   coalesce((select max(len)::text || ' kampe' from _stime), '—'), ''),
+
+  (103, '3 · G143 · stimen', 'stimer, der sluttede på en dag med et v3-dagskort',
+   (select (count(*) filter (where fik_regel is not null))::text from _stime),
+   'DET er de dage, reglen var kandidat på'),
+
+  (104, '3 · G143 · stimen', 'heraf: kortet blev STREAK_STATUS (reglen vandt)',
+   (select (count(*) filter (where fik_regel = 'STREAK_STATUS'))::text from _stime), ''),
+
+  (105, '3 · G143 · stimen', 'heraf: en anden regel vandt, selv om stimen var kandidat',
+   (select (count(*) filter (where fik_regel is not null and fik_regel <> 'STREAK_STATUS'))::text
+      from _stime),
+   'højt tal ⇒ reglen er ikke uden anledning, den er domineret'),
+
+  (106, '3 · G143 · stimen', 'største afstand op til vinderen på sådan en dag',
+   coalesce((select (max(fik_score - stime_score))::text || ' point'
+             from _stime where fik_regel is not null and fik_regel <> 'STREAK_STATUS'), '—'),
+   'stimens egen score er 28 + stime-bonus + 20, altså 48–60'),
+
+  (107, '3 · G143 · stimen', 'stimer, der brød en SENERE dag (💤-grenens blinde vinkel)',
+   (select (count(*) filter (where brudt_dag is not null and brudt_dag > ended_day))::text
+      from _stime),
+   'de her fik ALDRIG et "stimen stoppede"-kort — se G144'),
+
+  (108, '3 · G143 · stimen', 'stimer, der brød SAMME dag (💤-grenen kan se dem)',
+   (select (count(*) filter (where brudt_dag = ended_day))::text from _stime), '');
+
+-- ===========================================================================
+-- BLOK 4 · Dommen
 -- ===========================================================================
 insert into _maal values
-  (100, '3 · Dom', 'A33 kan besvares',
+  (200, '4 · Dom', 'A33 kan besvares',
    case when (select count(*) from _vist) = 0
         then 'NEJ — ingen dagskort er set endnu'
         else 'JA — ' || (select count(*) from _vist)::text || ' visninger fordelt på ' ||
              (select count(distinct winner_rule) from _vist)::text || ' regler' end,
    'udløseren er "vis-bar > 0 OG vist > 0"'),
 
-  (101, '3 · Dom', 'A35 kan besvares',
+  (201, '4 · Dom', 'A35 kan besvares',
    case when (select count(distinct day_key) from _kort) < 10
              or (select current_date - min(day_key) from _kort) < 14
         then 'NEJ — udløseren (to uger OG ti kampdage) er ikke opfyldt'
         else 'JA' end,
    'grundlaget er stories.news_value og er tabsfrit'),
 
-  (102, '3 · Dom', 'Håndtagets rækkevidde',
+  (203, '4 · Dom', 'G143 · hvorfor stimen aldrig vandt',
+   case when (select count(*) from _stime) = 0
+          then 'ingen femer-stime i historikken — uden anledning'
+        when (select count(*) filter (where fik_regel is not null) from _stime) = 0
+          then 'stimer findes, men ingen sluttede på en dag med et kort'
+        when (select count(*) filter (where fik_regel is not null and fik_regel <> 'STREAK_STATUS') from _stime) > 0
+          then 'DOMINERET — den var kandidat og tabte'
+        else 'reglen har vundet' end,
+   'reglen ER afprøvet og virker; se blok 3'),
+
+  (202, '4 · Dom', 'Håndtagets rækkevidde',
    coalesce((select 'fra ' || round(100.0 * count(*) filter (where news_value >= 38)
                                     / nullif(count(*), 0), 1)::text ||
                     ' % (tærskel 38) til ' ||
