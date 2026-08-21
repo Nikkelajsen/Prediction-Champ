@@ -9,6 +9,63 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 — `A33` og `A35`: scorerummet regnet ud, aflæsningen bestilt
+
+**De to backlog-rækker er ét spørgsmål, ikke to.** `A35` spørger, om
+publiceringstærsklen på 45 er rigtig; `A33`, om dagsmotorens variation er
+tyndere, end regelantallet lover. Regner man motorens scorerum efter — de tal,
+den overhovedet KAN producere — falder de sammen: en kandidat scorer `grundvægt
++ størrelse + nærhed`, nærheden er 20 for hovedpersonen, og **45 ligger i hullet
+mellem `DAY_RESULT`s loft (8 + 12 + 20 = 40) og de fire tungeste reglers gulv
+(48, 50, 52, 54)**. Andelen af kampdage med ulæst-markering ER derfor andelen,
+hvor en anden regel end dagens facit vandt — hvilket er `A33`s spørgsmål.
+
+**Følgen er, at tærsklen for hovedpersonen næsten ikke er en tærskel.** Fem af
+otte regler er afgjort af deres grundvægt alene: `DAY_RESULT` kan aldrig udgive,
+og `STREAK_STATUS`, `DUEL`, `CONTRARIAN`, `DAY_TOP` og `MILESTONE` udgiver
+altid. Kun `SO_CLOSE` (kræver 7 størrelsespoint) og `COLLECTIVE_MISS` (kræver 1)
+afgøres faktisk af tallet. **Den binder til gengæld i fan-out-laget**, hvor fem
+af ni (regel × nærhed)-kombinationer afgøres af 45 — det er altså i kortene om
+ANDRE, at tærsklen arbejder. Regnestykket, med gulve og lofter for hver regel,
+står i [`reviews/story-engine-v3-scorerum-2026-08-21.md`](./reviews/story-engine-v3-scorerum-2026-08-21.md).
+
+**Det ændrer, hvad beslutningen kan handle om.** Ligger den målte andel uden for
+målet på 40–60 %, er svaret sjældent "flyt tærsklen fem point": håndtaget er
+ujævnt, og 41–47 flytter for hovedpersonen ingenting. Enten flyttes tærsklen
+forbi et gulv — en stor, synlig ændring, hvor en hel regel holder op med at være
+nyhed — eller også flyttes GRUNDVÆGTEN for den regel, der fylder for meget.
+Grundvægten siger noget om reglen; tærsklen siger kun noget om, hvor stregen
+tilfældigvis blev sat.
+
+**Den anden halvdel kræver rækker, og den er bestilt som ét paste**
+(`sql/story_engine_v3_measure.sql`). Filen er **read-only** — ingen
+`insert`/`update`/`delete`/`drop` mod `public`, kun temporære tabeller, som
+lever i den session, der læser den, altså samme form som `sql/checks/`. Den
+svarer i én tabel: om udløseren holder (to uger, ti kampdage, vis-bar > 0,
+vist > 0), `A35`s andel globalt og pr. aktiv bruger med handlingsgrænserne
+regnet ud, andelen ved **otte** forskellige tærskler, fordelingen af
+`news_value` skåret ved reglernes gulve, og `A33`s variation målt tre steder:
+fordelingen over valgte regler, gentagelsen fra kampdag til kampdag, og andelen
+af en brugers kort, der bærer hendes hyppigste regel.
+
+**Vis-bar er regnet for v3 og ikke lånt fra analytics-tavlen.** Tavlens
+`viewable` (`created_at < round_key + 7 dage`) er karusellens begreb fra v2;
+v3's `loadDayCard` henter den nyeste `day_key` og viser den kun under 48 timer
+gammel. Et v3-korts vindue er derfor fra `created_at` til det tidligste af 48
+timer og det øjeblik, en nyere `day_key` blev skrevet — og et kort med et vindue
+på nul minutter hører hverken til i en visningsrate eller i en fordeling over
+det, brugerne har oplevet. At tavlen stadig regner med v2-reglen for
+`period = 'day'` er noteret i backloggens indbakke frem for rettet her.
+
+**Filen er efterprøvet mod det rigtige skema** — PostgreSQL 16.13 med
+produktionsskemaet fra `sql/tests/_schema.mjs` — på et syntetisk datasæt, hvis
+facit var regnet i hånden først, plus kanten, hvor bagstopperens dagsløkke
+skriver to kort i samme sætning og det ældste aldrig kunne nå en skærm. Ingen
+migrering, ingen frontend-ændring. Backloggen er 31 → 31: begge rækker bliver
+stående, til opslaget er kørt.
+
+---
+
 21. august 2026 — `A44` afgjort: navnene bliver, og stillingen åbner, hvor du selv står
 
 **Backloggen er 31 → 31** — `A44` er slettet, og indbakkens ene linje er blevet
