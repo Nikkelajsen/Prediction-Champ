@@ -7,7 +7,7 @@
 -- bare arbejde, der forsvinder. Skal skemaet ændres, skrives en migrering i
 -- sql/ og køres i Supabases SQL-editor — se sql/README.md.
 --
--- Skemaet ændrede sig sidst: 2026-08-20
+-- Skemaet ændrede sig sidst: 2026-08-21
 --
 -- DATOEN ER FILENS HOLDBARHED, ikke dens kørselsstempel. Den står stille,
 -- når en eksport ikke fandt noget nyt, og siger dermed "skemaet er uændret
@@ -19,7 +19,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict GTRxu14lQtMyMlsLg2gghSha0FpLfyOMh2tgzTWIgJCcnQNRZo2xEEPmeKoTUa8
+\restrict 1OFxF9Lg1Zff27ribAStDeuTRU2ezZu7fQHTmBvghipCH6naNg7W70FZBT43wA5
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.11 (Ubuntu 17.11-1.pgdg24.04+2)
@@ -2542,7 +2542,7 @@ begin
   -- officielle ligaer), så frame 2 ikke kan nævne en kamp, frame 1 ikke talte.
   drop table if exists _bf_tips;
   create temporary table _bf_tips as
-  select pr.user_id, th.name as home, ta.name as away,
+  select pr.user_id, coalesce(nullif(th.short_name, ''), th.name) as home, coalesce(nullif(ta.short_name, ''), ta.name) as away,
          m.home_score || '-' || m.away_score as score,
          pr.pred_home || '-' || pr.pred_away as guess,
          public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) as pts,
@@ -3656,10 +3656,10 @@ begin
   from (
     select p.competition_id, p.match_id, p.user_id, p.pts,
            m.home_score as hs, m.away_score as away_s,
-           th.name as home, ta.name as away,
+           coalesce(nullif(th.short_name, ''), th.name) as home, coalesce(nullif(ta.short_name, ''), ta.name) as away,
            (m.home_score = m.away_score) as is_draw,
-           case when m.home_score > m.away_score then th.name
-                when m.home_score < m.away_score then ta.name
+           case when m.home_score > m.away_score then coalesce(nullif(th.short_name, ''), th.name)
+                when m.home_score < m.away_score then coalesce(nullif(ta.short_name, ''), ta.name)
                 else 'uafgjort' end as pick,
            -- SKALAR SUBQUERY, ikke `count(*) over (partition by ...)`:
            -- vinduesfunktioner beregnes EFTER where-klausulen, og da den
@@ -3693,12 +3693,12 @@ begin
   insert into _sd_cand (subject_id, competition_id, rule, priority, base, league_size, payload, headline, body)
   select distinct on (p.competition_id, p.user_id)
     p.user_id, p.competition_id, 'COLLECTIVE_MISS', 125, 24, sz.n,
-    jsonb_build_object('home', th.name, 'away', ta.name,
+    jsonb_build_object('home', coalesce(nullif(th.short_name, ''), th.name), 'away', coalesce(nullif(ta.short_name, ''), ta.name),
                        'score', m.home_score || '-' || m.away_score,
                        'n', (select count(*) from _sd_pts q
                              where q.competition_id = p.competition_id and q.match_id = p.match_id),
                        'league', c.name),
-    '🙈 Ingen ramte ' || th.name || '–' || ta.name,
+    '🙈 Ingen ramte ' || coalesce(nullif(th.short_name, ''), th.name) || '–' || coalesce(nullif(ta.short_name, ''), ta.name),
     (select count(*) from _sd_pts q
      where q.competition_id = p.competition_id and q.match_id = p.match_id) ||
       ' tippede kampen i ' || c.name || '. Den endte ' ||
@@ -8981,5 +8981,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict GTRxu14lQtMyMlsLg2gghSha0FpLfyOMh2tgzTWIgJCcnQNRZo2xEEPmeKoTUa8
+\unrestrict 1OFxF9Lg1Zff27ribAStDeuTRU2ezZu7fQHTmBvghipCH6naNg7W70FZBT43wA5
 
