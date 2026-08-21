@@ -954,6 +954,21 @@ jobs:
           psql -h localhost -U postgres -d groupcounts -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d groupcounts -v ON_ERROR_STOP=1 -b -f sql/tests/group_counts.sql
 
+      # Championship-fanens to vælgere (G146). Den bærende påstand er en
+      # ÆKVIVALENS og ikke en liste: måneds-viewet gentager `monthly_standings`'
+      # egen rækkekilde for at slippe uden om stillingens vinduesfunktioner, og
+      # gentagelsen er kun forsvarlig, så længe en maskine måler, at de to er
+      # den samme mængde — i begge retninger. Runde-viewet måles tilsvarende mod
+      # det to-trins opslag, klienten selv lavede, i hvert eneste scope.
+      - name: Test af Championship-vælgerne
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database champsel;'
+          psql -h localhost -U postgres -d champsel -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d champsel -v ON_ERROR_STOP=1 -b -f sql/tests/championship_selectors.sql
+
       # Karriereprofilens indbyrdes opgør (G107). Funktionen havde ingen
       # SQL-test overhovedet indtil 14. august 2026. Den bærende påstand er
       # invarianten fra spec'ens testcase 41: `rivals`-posten om en person og

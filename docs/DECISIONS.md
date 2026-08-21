@@ -15,6 +15,79 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — Tier 4 og Tier 5: `G147` og `G146`, og hvornår en fan-out er billigere end et view
+
+**Beslutning:** De to sidste forekomster af det tavse rækkeloft uden for
+`data/standings.js` er lukket — men med **hver sin kur**, og valget mellem dem
+er beslutningen her.
+
+- **`G147` (guidens turneringsliste)** afgjorde, om en turnering har kampe
+  tilbage at tippe, ved at hente én række pr. USPILLET KAMP. Kuren er ét
+  afgrænset opslag (`limit=1`) pr. turnering, kørt samtidig.
+- **`G146` (Championship-fanens to vælgere)** hentede hele grundmængden for at
+  bygge et `Set` med et par snese værdier. Kuren er to `distinct`-views,
+  `sql/championship_selectors.sql` (`#74`).
+
+**Begrundelse for forskellen, og den er `G106`s regel læst præcist.** Reglen
+lyder: vokser antallet med noget, brugeren kan forøge, hører aggregeringen
+hjemme i databasen. Det afgørende ord er *antallet af KALD*, ikke antallet af
+rækker:
+
+- I guiden er fan-out'en **bundet** — ét kald pr. turnering, altså det samme
+  loft, som sæson-opslaget to linjer over allerede er bundet af. En fan-out, der
+  ikke vokser, er ikke en fan-out; det er en løkke over en kendt liste, og den
+  koster ingen migrering, ingen udrulningsrækkefølge og ingen ny flade.
+- I Championship er der **intet at binde til**: antallet af runder er ikke kendt
+  på forhånd, og et kald pr. runde ville være præcis den fan-out, `#62
+  group_counts.sql` valgte fra. Der er et view det rigtige svar.
+
+**Backlog-rækkens eget forslag blev fravalgt begge steder — og det er
+tilsigtet.** `G147` foreslog `db.count()`; men `hasUpcoming` er et ja/nej, og
+det billigste svar på et ja/nej er `limit=1`. Svaret stod allerede fem linjer
+længere oppe i samme fil: `loadHasPrediction` gør nøjagtig det, med nøjagtig den
+begrundelse. `G146` foreslog `docs/UDRULNING-A43.md`s todelte form; men den form
+findes til to migreringer, hvor den ene SMALNER noget. Her er der én, og den er
+rent additiv — det nærmeste fortilfælde er `#62`, som havde nøjagtig samme
+enkeltrettede afhængighed (klienten læser et view, der skal findes først), og
+den fik en linje i sit hoved frem for et dokument. **Kuren i en backlog-række er
+et forslag, ikke en specifikation** (`G139`, samme dag).
+
+**Aflæsningen (`A32`) blev ikke bestilt for sig, men lagt ind i migreringen.**
+Rækken bad om et opslag i produktion, der skulle sige, hvor stort spildet var,
+og om listerne allerede HAVDE været over de 1000 rækker. Det første er ikke
+længere et spørgsmål — kuren er den samme, uanset tallet — og det andet er
+historik uden en handling, efter at `G145` gjorde læsningerne korrekte. Begge
+dele svares nu af verifikationsblok 4 i `sql/championship_selectors.sql`, som
+ejeren alligevel har åben i det øjeblik, migreringen køres. **En bestilling, der
+kan rides med på en, der allerede skal afsted, er ikke en bestilling.**
+
+**Måneds-viewet GENTAGER `monthly_standings`' rækkekilde, og det er et bevidst
+bytte.** `select distinct scope, month from monthly_standings` ville aldrig
+kunne drive fra stillingen, men ville tvinge databasen gennem hele aggregeringen
+— inklusive `rank() over (…)`-vinduet, der tæller rundesejre — for at nå frem
+til et dusin strenge. Prisen for gentagelsen er drift, og drift er dét, en
+maskine kan vogte: `sql/tests/championship_selectors.sql` stiller ækvivalensen
+som en påstand i BEGGE retninger, så ethvert indgreb i `monthly_standings`
+fælder testen i CI frem for i en dropdown. Fire mutationer efterprøvet, alle
+fanget.
+
+**Runde-viewet står på `matches` og ikke på `round_standings`.** Det er den ene
+sted, hvor de to lignede hinanden nok til at bytte om ved et uheld:
+`round_standings` findes kun, hvor nogen har tippet, mens vælgeren skal kunne
+vise en runde, der er spillet færdig uden et eneste gæt (`loadRoundBoard` tæller
+selv kampene til fremdriften). Byttet ville have været en ÆNDRING af, hvad
+brugeren kan se, forklædt som en optimering — og det er nu en påstand for sig.
+
+**`ChampionshipTab` fik et værn, den manglede i forvejen.** `setLoading(false)`
+lå kun på den lykkelige sti, så et hvilket som helst afbrud i månedslisten
+efterlod fanen ladende for evigt. Det gjaldt også før denne ændring, men
+migreringens rækkefølge-regel gør fejlen mulig på en ny måde, og en
+rækkefølge-regel, hvis pris er en skærm, der hænger, er en dårlig
+rækkefølge-regel. Faldet er den indeværende måned og en tom runde-vælger —
+altså præcis det, en tom liste allerede gav.
+
+---
+
 ## 21. august 2026 — `G145`: de globale lister læses sidevis, og reglen er `sbAll`s
 
 **Beslutning:** Hver læsning i `src/lib/data/standings.js`, hvis længde vokser

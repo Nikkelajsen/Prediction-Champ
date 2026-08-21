@@ -9,6 +9,73 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 (ottende kørsel) — Tier 4 og Tier 5: `G147` og `G146`
+
+**De to sidste forekomster af det tavse rækkeloft er lukket — med hver sin
+kur.** `G145` (samme dag) rettede `data/standings.js` og skrev de to rækker ned,
+den blotlagde. Her tages de begge, og forskellen på kurerne er selve pointen.
+
+**`G147`: guiden kunne præsentere en turnering som utipbar.**
+`loadStarterTournaments` afgjorde, om en turnering har kampe tilbage, ved at
+hente ÉN RÆKKE PR. USPILLET KAMP for alle turneringer i ét kald og bygge et
+`Set`. Ved sæsonstart med fem officielle turneringer er det ~1.900 rækker —
+over PostgRESTs tavse loft — og en turnering, hvis kampe faldt uden for de
+første 1000, ville da stå i guiden som en, man ikke kan tippe. Det er
+"· 0 kampe"-fælden (§13) i ONBOARDING, altså den skærm, hvor en fejl koster
+mest.
+
+Kuren er ét afgrænset opslag (`limit=1`) pr. turnering, kørt samtidig — ikke
+`db.count()`, som rækken foreslog: `hasUpcoming` er et ja/nej, og svaret stod
+allerede fem linjer længere oppe i samme fil (`loadHasPrediction`, med ordret
+den samme begrundelse). Fan-out'en er bundet af antallet af turneringer, altså
+det loft, sæson-opslaget to linjer over allerede var bundet af. Samme fils
+sæson-opslag læses nu sidevis, så en turnering, hvis nyeste sæson lander bag
+loftet, ikke kan forsvinde ud af guiden.
+
+**`G146`: Championship-fanens to vælgere hentede tusindvis af rækker for at
+fylde en dropdown.** Runde-vælgeren én række pr. SPILLET KAMP, måneds-vælgeren
+én pr. bruger PR. MÅNED. `G145` gjorde dem korrekte, ikke billige, og prisen
+betales hver gang fanen åbnes, vokser med kampe og brugere og tælles i `A34`s
+egress-budget. Ny migrering **`#74 championship_selectors.sql`** giver to
+`distinct`-views, `championship_rounds(scope, round_key)` og
+`championship_months(scope, month)`, begge `security_invoker`; `scope` har
+ordret den betydning, `round_standings` allerede giver ordet.
+
+🔴 **`#74` skal køres i Supabase FØR mergen** — den nye klient læser viewene, og
+et opslag mod et view, der ikke findes, svarer `404`. Samme enkeltrettede
+afhængighed som `#62 group_counts.sql`, og derfor samme form: en linje i filens
+hoved og et punkt i tjeklisten, ikke et udrulningsdokument (den todelte form i
+`UDRULNING-A43.md` findes til to migreringer, hvor den ene smalner noget).
+Byttes rækkefølgen alligevel om, koster det tomme vælgere og ikke en skærm, der
+hænger: `ChampionshipTab` fangede før ingen fejl fra de to lister og lod
+`setLoading(false)` stå på den lykkelige sti alene — fanen kunne altså blive
+ladende for evigt ved et hvilket som helst afbrud. Den falder nu tilbage til den
+indeværende måned og en tom runde-vælger.
+
+**To valg i viewene, som begge kunne have været en tavs adfærdsændring:**
+
+- **Runde-viewet står på `matches`, ikke på `round_standings`.** Stillingen
+  findes kun, hvor nogen har tippet; vælgeren skal kunne vise en runde, der er
+  spillet færdig uden et eneste gæt. Det er nu en påstand for sig.
+- **Måneds-viewet gentager `monthly_standings`' rækkekilde** frem for at læse
+  stillingen, som ville tvinge databasen gennem hele aggregeringen — inklusive
+  rundesejrs-vinduet — for at nå frem til et dusin strenge. Gentagelsen kan
+  drive, og drift er dét, en maskine kan vogte: den nye SQL-test stiller
+  ækvivalensen i BEGGE retninger, så ethvert indgreb i `monthly_standings`
+  fælder CI frem for en dropdown. Fire mutationer efterprøvet, alle fanget.
+
+**Aflæsningen (`A32`) blev ikke bestilt for sig.** Rækken bad om et opslag i
+produktion først; det er lagt ind som verifikationsblok 4 i migreringen, som
+ejeren alligevel har åben i det øjeblik, SQL'en køres. Blokken svarer på begge
+halvdele: hvor stort spildet var, og om listerne HAR været afkortet før `G145`.
+
+1583 tests (netto ti nye), 46 SQL-tests i CI (én ny), lint på loftet (7 advarsler),
+grønt build. Skærmbillederne er byte-identiske — efterprøvet med en modprøve,
+hvor de to nye views svarede tomt i attrap-databasen: da flyttede
+`championship.png` sig.
+
+---
+
 21. august 2026 (syvende kørsel) — `G145`: de globale lister læses sidevis
 
 **Otte upaginerede opslag i `src/lib/data/standings.js` kunne tavst vise for

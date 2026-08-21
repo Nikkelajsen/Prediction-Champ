@@ -54,16 +54,23 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
     loadRatingMap(token).then(setRatingMap).catch(() => setRatingMap(new Map()));
   }, [token]);
 
+  // Vælgerens liste kommer fra `championship_months` (`#74`). Fejler den, må
+  // fanen ikke blive stående i sin spinner: `setLoading(false)` lå før kun på
+  // den lykkelige sti, så et hvilket som helst afbrud — en tabt forbindelse
+  // eller et view, der endnu ikke er oprettet i Supabase — efterlod skærmen
+  // ladende for evigt. Faldet er den indeværende måned, altså præcis det, en
+  // tom liste allerede gav.
   useEffect(() => {
     (async () => {
       setLoading(true);
       setRows(null);
-      const ms = await loadMonthsAvailable(token, monthScope);
+      let ms;
+      try { ms = await loadMonthsAvailable(token, monthScope); } catch { ms = []; }
       const list = ms.length ? ms : [currentMonthKey()];
       setMonths(list);
       const chosen = list.includes(month) ? month : list[0];
       setMonth(chosen);
-      setRows(await loadMonthlyBoard(token, chosen, monthScope));
+      try { setRows(await loadMonthlyBoard(token, chosen, monthScope)); } catch { setRows([]); }
       setLoading(false);
     })();
   }, [monthScope]); // eslint-disable-line
@@ -85,13 +92,18 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
     let cancelled = false;
     (async () => {
       setRoundBoard(null);
-      const rs = await loadRoundsAvailable(token, roundScope);
+      // Samme værn som måneds-effekten ovenfor: en fejlet liste giver en tom
+      // vælger og et tomt kort, ikke et kort, der aldrig bliver færdigt.
+      let rs;
+      try { rs = await loadRoundsAvailable(token, roundScope); } catch { rs = []; }
       if (cancelled) return;
       setRounds(rs);
       if (rs.length) {
         setRoundKey(rs[0]);
-        const b = await loadRoundBoard(token, rs[0], roundScope);
-        if (!cancelled) setRoundBoard(b);
+        try {
+          const b = await loadRoundBoard(token, rs[0], roundScope);
+          if (!cancelled) setRoundBoard(b);
+        } catch { if (!cancelled) setRoundBoard({ rows: [], totalMatches: 0, playedMatches: 0, isComplete: false }); }
       } else {
         setRoundBoard({ rows: [], totalMatches: 0, playedMatches: 0, isComplete: false });
       }
@@ -99,14 +111,18 @@ function ChampionshipTab({ token, userId, leagues = [], openProfile }) {
     return () => { cancelled = true; };
   }, [token, roundScope]);
 
+  // De to skift har samme værn som effekterne ovenfor og af samme grund: begge
+  // sætter først kortet til `null` (spinner) og fylder det derefter. Fejler
+  // opslaget, ville spinderen blive stående, indtil brugeren forlod fanen.
   async function changeMonth(m) {
     setMonth(m); setRows(null);
-    setRows(await loadMonthlyBoard(token, m, monthScope));
+    try { setRows(await loadMonthlyBoard(token, m, monthScope)); } catch { setRows([]); }
   }
 
   async function changeRound(k) {
     setRoundKey(k); setRoundBoard(null);
-    setRoundBoard(await loadRoundBoard(token, k, roundScope));
+    try { setRoundBoard(await loadRoundBoard(token, k, roundScope)); }
+    catch { setRoundBoard({ rows: [], totalMatches: 0, playedMatches: 0, isComplete: false }); }
   }
 
   function changeSeasonLeague(id) {

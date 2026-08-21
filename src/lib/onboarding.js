@@ -13,6 +13,7 @@
 // læse/skrive-helpers bor i src/lib/localFlags.js — flagene skal bære et
 // bruger-id, ellers arver den næste konto på samme telefon svarene.
 import { db } from "./supabase.js";
+import { selectAll } from "./data/paged.js";
 import { loadMyGroups, createGroup, createCompetition } from "./data.js";
 
 // ---------- den rene tilstandsmaskine ----------
@@ -114,18 +115,37 @@ async function loadStarterTournaments(token, leagues) {
   const ids = (leagues || []).map((l) => l.id);
   if (!ids.length) return [];
 
-  const seasons = await db.select(token, "seasons", `league_id=in.(${ids.join(",")})&select=id,league_id&order=start_date.desc`);
+  // Sæsonerne vokser med hvert år, appen findes (turneringer × sæsoner), så
+  // listen læses sidevis — samme begrundelse som `scopeSeasonIds` i
+  // `data/standings.js`. `order=` skal slutte entydigt, ellers kan den samme
+  // række komme med på to sider: `start_date` alene er ikke en nøgle.
+  const seasons = await selectAll(token, "seasons", `league_id=in.(${ids.join(",")})&select=id,league_id&order=start_date.desc,id.asc`);
   const newest = {};
   for (const s of seasons) if (!newest[s.league_id]) newest[s.league_id] = s;
-  const seasonIds = Object.values(newest).map((s) => s.id);
-  if (!seasonIds.length) return [];
+  const starters = leagues.filter((l) => newest[l.id]);
+  if (!starters.length) return [];
 
-  const rows = await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&home_score=is.null&select=season_id`);
-  const withUpcoming = new Set(rows.map((r) => r.season_id));
+  // `hasUpcoming` er et JA/NEJ, og det billigste svar på et ja/nej er ét kald
+  // pr. sæson med `limit=1` — nøjagtig samme greb som `loadHasPrediction`
+  // ovenfor, og af samme grund: vi skal ikke vide hvor mange, kun om der er
+  // nogen.
+  //
+  // 🔴 **Den gamle vej var ét kald, men hentede ÉN RÆKKE PR. USPILLET KAMP**
+  // (`season_id=in.(…)&home_score=is.null&select=season_id`). Ved sæsonstart med
+  // fem officielle turneringer er det ~1.900 rækker, og PostgREST klipper tavst
+  // ved projektets `db-max-rows` (`G145`, `data/paged.js`). En turnering, hvis
+  // kampe faldt uden for de første 1000, ville da blive præsenteret som en, man
+  // ikke kan tippe — "· 0 kampe"-fælden (§13) inde i GUIDEN, altså den skærm,
+  // hvor en fejl koster mest.
+  //
+  // Fan-out'en er bundet af antallet af turneringer — præcis det samme loft,
+  // som `seasons`-opslaget lige over allerede er bundet af, og dermed ikke et
+  // nyt. Et `db.count()` pr. sæson ville også være bundet, men det tæller hele
+  // mængden for at svare på et spørgsmål, ét eneste `limit=1` afgør.
+  const upcoming = await Promise.all(starters.map((l) =>
+    db.select(token, "matches", `season_id=eq.${newest[l.id].id}&home_score=is.null&select=id&limit=1`)));
 
-  return leagues
-    .filter((l) => newest[l.id])
-    .map((l) => ({ id: l.id, name: l.name, seasonId: newest[l.id].id, hasUpcoming: withUpcoming.has(newest[l.id].id) }));
+  return starters.map((l, i) => ({ id: l.id, name: l.name, seasonId: newest[l.id].id, hasUpcoming: upcoming[i].length > 0 }));
 }
 
 // ---------- ét-tryks start ----------

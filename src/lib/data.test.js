@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("./supabase.js", () => ({ db: { select: vi.fn(), count: vi.fn(), del: vi.fn(), insert: vi.fn() }, restFetch: vi.fn() }));
 import { db, restFetch } from "./supabase.js";
 import { currentRoundKey, nextRoundKey } from "./scoring.js";
-import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadRoundsAvailable, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadDayCard, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data.js";
+import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadRoundsAvailable, loadMonthsAvailable, loadSeasonBoard, fmtCountdown, monthName, currentMonthKey, loadLatestStory, loadDayCard, loadCareerProfile, loadCareerMilestones, loadMyGroups, loadGroupDetail, joinCompetition, leaveCompetition, leaveGroup, moveCompetitionToGroup, createCompetition, joinByInviteCode, inviteCodeFrom } from "./data.js";
 
 // mock-svar pr. tabel/view. En værdi må være en funktion, når svaret afhænger
 // af selve forespørgslen (fx et filter, testen vil holde loaderen op på).
@@ -161,39 +161,73 @@ describe("loadRoundBoard (round_standings-view)", () => {
 });
 
 describe("loadRoundsAvailable (runde-dropdownen)", () => {
-  it("giver runder med spillede kampe, nyeste først", async () => {
-    mockTables({
-      ...OFFICIAL,
-      matches: [{ round_key: "2026-07-07" }, { round_key: "2026-07-14" }, { round_key: "2026-07-07" }],
-    });
-    expect(await loadRoundsAvailable("token")).toEqual(["2026-07-14", "2026-07-07"]);
-  });
-
-  it("spørger kun efter sæsoner under officielle turneringer", async () => {
+  // `G146`: listen kommer FÆRDIG fra `championship_rounds` (`#74`). Vælgeren
+  // hentede før én række pr. SPILLET KAMP for at bygge et `Set` med et par
+  // snese værdier; nu læses de værdier, dropdownen faktisk viser.
+  it("giver runderne, nyeste først, i ét opslag", async () => {
     const queries = [];
     mockTables({
-      leagues: [{ id: "L1" }, { id: "L2" }],
-      seasons: [{ id: "s1" }, { id: "s2" }],
-      matches: (q) => { queries.push(q); return []; },
+      championship_rounds: (q) => {
+        queries.push(q);
+        return siden([{ round_key: "2026-07-14" }, { round_key: "2026-07-07" }], q);
+      },
     });
-    await loadRoundsAvailable("token");
-    expect(queries[0]).toContain("season_id=in.(s1,s2)");
+    expect(await loadRoundsAvailable("token")).toEqual(["2026-07-14", "2026-07-07"]);
+    // Ingen `leagues`- og ingen `seasons`-rundtur mere: viewet bærer selv
+    // scopet, og det er den samme `scope`-kolonne, `round_standings` bruger.
+    expect(queries[0]).toContain("scope=eq.ALL");
+    expect(queries[0]).toContain("order=round_key.desc");
   });
 
-  it("giver ingen runder, når ingen turnering er officiel", async () => {
-    mockTables({ leagues: [] });
+  it("giver ingen runder, når viewet svarer tomt", async () => {
+    mockTables({ championship_rounds: [] });
     expect(await loadRoundsAvailable("token")).toEqual([]);
   });
 
   it("begrænser runderne til den valgte turnering", async () => {
     const seen = [];
     mockTables({
-      leagues: (q) => { seen.push(q); return siden([{ id: "L2" }], q); },
-      seasons: [{ id: "s2" }],
-      matches: [{ round_key: "2026-07-14" }],
+      championship_rounds: (q) => { seen.push(q); return siden([{ round_key: "2026-07-14" }], q); },
     });
     expect(await loadRoundsAvailable("token", "L2")).toEqual(["2026-07-14"]);
-    expect(seen[0]).toContain("id=eq.L2");
+    expect(seen[0]).toContain("scope=eq.L2");
+  });
+
+  it("læses sidevis — listen vokser med hver sæson, appen findes", async () => {
+    // Kort i dag, men ikke bundet: `selectAll` stopper først ved en TOM side.
+    // En attrap, der svarede med hele listen igen ved hvert `offset`, ville
+    // hente i det uendelige — så påstanden er også, at kaldet ER pagineret.
+    const runder = Array.from({ length: 1200 }, (_, i) => ({ round_key: `runde-${String(i).padStart(4, "0")}` }));
+    mockTables({ championship_rounds: (q) => siden(runder, q).slice(0, LOFT) });
+    const ud = await loadRoundsAvailable("token");
+    expect(ud).toHaveLength(1200);
+  });
+});
+
+describe("loadMonthsAvailable (måneds-dropdownen)", () => {
+  // Samme flytning som runde-vælgeren: én række pr. bruger PR. MÅNED blev til
+  // én række pr. måned (`championship_months`).
+  it("giver månederne, nyeste først, i ét opslag", async () => {
+    const queries = [];
+    mockTables({
+      championship_months: (q) => {
+        queries.push(q);
+        return siden([{ month: "2026-08" }, { month: "2026-07" }], q);
+      },
+    });
+    expect(await loadMonthsAvailable("token")).toEqual(["2026-08", "2026-07"]);
+    expect(queries[0]).toContain("scope=eq.ALL");
+    expect(queries[0]).toContain("order=month.desc");
+    // Ingen `user_id` i sorteringen mere — der er kun én række pr. måned, så
+    // `month` ER den entydige nøgle, sidevis læsning kræver.
+    expect(queries[0]).not.toContain("user_id");
+  });
+
+  it("begrænser månederne til den valgte turnering", async () => {
+    const seen = [];
+    mockTables({ championship_months: (q) => { seen.push(q); return siden([{ month: "2026-08" }], q); } });
+    expect(await loadMonthsAvailable("token", "L2")).toEqual(["2026-08"]);
+    expect(seen[0]).toContain("scope=eq.L2");
   });
 });
 
@@ -249,14 +283,13 @@ describe("G145: Championship-listerne er længere end ét svar", () => {
     home_score: 1, away_score: 0,
   }));
 
-  it("runde-vælgeren mangler ingen runder, når kampene er flere end loftet", async () => {
-    mockTables({ ...OFFICIAL, matches: medLoft(KAMPE) });
-    const runder = await loadRoundsAvailable("token");
-    expect(runder).toHaveLength(40);
-    expect(runder[0]).toBe("runde-39"); // nyeste først — og den lå bag loftet
-  });
-
-  it("modprøve: uden sidevis læsning var de sidste runder faldet ud i tavshed", async () => {
+  // 🔴 **Modprøven, og den er grunden til, at `G146` blev bygget.** Sådan så
+  // runde-vælgerens opslag ud indtil 21. august 2026: én række pr. spillet
+  // kamp, klippet TAVST ved loftet. Selv med sidevis læsning (`G145`) var det
+  // 2.400 rækker for at svare med fyrre — og uden den faldt de nyeste runder
+  // ud, altså netop dem, nogen ville vælge. `championship_rounds` (`#74`)
+  // svarer i dag med de fyrre.
+  it("modprøve: den gamle vej hentede 2.400 rækker og tabte de nyeste runder", async () => {
     const ét = medLoft(KAMPE)("season_id=in.(s1)&select=round_key&order=id.asc");
     const runder = [...new Set(ét.map((r) => r.round_key))];
     expect(runder).toHaveLength(17); // 1000 kampe rækker til 17 af de 40 runder
