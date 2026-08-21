@@ -15,6 +15,74 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `G145`: de globale lister læses sidevis, og reglen er `sbAll`s
+
+**Beslutning:** Hver læsning i `src/lib/data/standings.js`, hvis længde vokser
+med brugere, runder eller kampe, går gennem `selectAll()` i en ny
+`src/lib/data/paged.js`. `db.select` må kun stå tilbage med et bevidst `limit=`,
+og det er en vagt i `standings.test.js` og ikke en aftale.
+
+**Begrundelse.** Supabase klipper hvert svar ved `db-max-rows` og siger det
+ikke. En afkortet liste er derfor ikke en fejl, men et forkert facit, der ser
+rigtigt ud — en runde, der mangler i vælgeren, en spiller under nr. 1000, der
+ikke kan finde sig selv. `G139` flyttede Hjems fire TAL ned i databasen; det
+løste ikke listerne, og de er den anden halvdel af den samme fælde.
+
+**Kuren er ikke opfundet her — den er arvet.** `sbAll()` i `api/_shared.js` er
+skrevet mod nøjagtig den samme fælde efter `G51`, bare på jobbenes side af
+`fetch`. `selectAll` er dens tvilling og bærer dens to regler ordret:
+
+- **`order=` er påkrævet.** Uden en total orden må databasen selv vælge
+  rækkefølgen inden for ens rækker, og så kan den samme række komme med på to
+  sider, mens en anden slipper forbi begge — præcis den fejl, hjælperen findes
+  for at fjerne.
+- **Der stoppes ved en TOM side og ikke ved en kort side.** Er projektets
+  `db-max-rows` mindre end sidestørrelsen, er "kortere end bestilt" sandt for
+  hver eneste FULDE side. En kur, der stoppede dér, ville være den tavse
+  afkortning en gang til, nu gemt inde i kuren. Loftet kan ikke aflæses fra
+  repoet, så det må ikke antages — og `offset` er af samme grund antallet af
+  rækker, vi har fået, ikke sidetal gange sidestørrelse.
+
+**Den første udgave af rettelsen antog loftet og var forkert.** Den valgte
+sidestørrelsen 500 "med luft under de 1000" og stoppede ved den første korte
+side. Argumentet var chunked.js' — et loft med luft — men det passer ikke her:
+`LOFT`en i `chunked.js` er en grænse for noget, VI bygger (URL'ens længde),
+mens `db-max-rows` er en indstilling i et projekt, repoet ikke kan læse. **Det
+var `sbAll`s eget hoved, der rettede den**, og lærepengen er `G140`s en gang
+til: svaret lå allerede i repoet, i den anden halvdel af koden.
+
+**Prisen er accepteret bevidst:** ét ekstra kald pr. opslag, nemlig den tomme
+side, der beviser, at der ikke var mere. Alternativet var at læse totalen af
+`Content-Range` på første side, men det kræver svarets HEADERE og dermed en
+transport uden om `db.select` — og dermed den lagdeling, `chunked.js` hviler
+på: at hver test, der mocker `supabase.js`, stadig fanger kaldet. En rundtur er
+den billigere af de to.
+
+**Vagten er en attrap, der kan lyve som serveren.** Testenes fake-PostgREST
+klipper nu ved 1000 rækker uden at sige det, og fixturen er 2400 ratede brugere
+og 2400 spillede kampe. Uden det træk kunne hverken kur eller fejl ses: begge
+dele ser rigtige ud på fem rækker. Modprøven står som en påstand for sig — ét
+enkelt `db.select` på den samme attrap giver 1000 rækker og ingen fejl. Syv
+mutationer efterprøvet, alle fanget.
+
+**`selectAll` blev IKKE delt med `api/_shared.js`.** De to kalder hver sin
+transport (`db.select` med brugerens token mod `sb()` med service-nøglen), og et
+fælles lag skulle tage en side-henter som argument for at kunne bruges begge
+steder — mere maskineri end de fyrre linjer, det ville spare. Reglen er
+til gengæld ÉN, og den står ét sted: `DOCUMENTATION.md` §13, hvor begge
+hjælpere nu peger hen.
+
+**Det, der ikke blev lavet om, og hvorfor.** De to vælgere
+(`loadMonthsAvailable`, `loadRoundsAvailable`) henter fortsat tusindvis af
+rækker for at bygge et `Set` med tredive værdier. Det er nu korrekt, men dyrt,
+og kuren er et `distinct`-view eller en RPC — altså en migrering, der skal køres
+i Supabase, og et to-trins-udrul (`docs/UDRULNING-A43.md`s mønster). Den slags
+skal ikke lægges oven i en rettelse, der kan leveres uden at røre databasen.
+Rækken er `G146`, og dens første skridt er en aflæsning i produktion (`A32`),
+som også svarer på, om nogen af listerne ER over loftet i dag.
+
+---
+
 ## 21. august 2026 — `G139`: Hjems rating-kort tæller i databasen, og placeringen skal stemme med ranglisten
 
 **Beslutning:** Hjem henter ikke længere `loadRatingBoard()`. Kortet slår sin

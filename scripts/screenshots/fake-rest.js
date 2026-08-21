@@ -12,7 +12,7 @@
 //
 // Prisen er, at attrappen skal kunne det stykke PostgREST, appen bruger. Det er
 // mindre, end det lyder: seks operatorer (`eq`, `in`, `is`, `not.is`, `gte`,
-// `lte`/`lt`), `select`, `order` og `limit`. Listen er ikke gættet — den er
+// `lte`/`lt`), `select`, `order`, `limit` og `offset`. Listen er ikke gættet — den er
 // talt op i `src/` med `grep`, og en forespørgsel, der bruger noget andet,
 // KASTER nedenfor frem for at svare tomt. Et tomt svar ville blive til en tom
 // skærm, og en tom skærm i en PNG ser ud som et designvalg.
@@ -117,6 +117,14 @@ function slåOp(tabel, søgning) {
   }
   rækker = sortér(rækker, params.get("order"));
   const antal = rækker.length;
+  // `offset` FØR `limit`, og begge som PostgREST: appen læser sidevis siden
+  // `G145`, og en attrap, der ignorerede `offset`, ville svare med den samme
+  // første side igen og igen — altså dubletter, hvor serveren giver næste side.
+  // Demo-databasen er lille nok til at rummes i én side i dag, og det er netop
+  // derfor, det skal stå her: fejlen ville først vise sig den dag, datasættet
+  // voksede.
+  const offset = Number(params.get("offset"));
+  if (Number.isFinite(offset) && params.get("offset") !== null) rækker = rækker.slice(offset);
   const limit = Number(params.get("limit"));
   if (Number.isFinite(limit) && params.get("limit") !== null) rækker = rækker.slice(0, limit);
   return { rækker: projicér(rækker, params.get("select")), antal };
