@@ -9,6 +9,40 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 — `G138`: Drift kender nu det job, ingen har planlagt
+
+**Backloggen er 32 → 31, og Tier 2 er tomt.** `story-engine` stod i
+Admin → Drift som et *uventet* job med en tekst, der gættede på to forklaringer,
+der begge er forkerte: rækken skrives af **matches-triggeren**
+(`sql/rating_trigger_optimization.sql`) og ikke af cron-job.org, hvilket også er
+grunden til, at dens resumé hverken har `host` eller `authVia`.
+
+**Rettelsen er en kategori og ikke en tekst.** `src/lib/ops.js` har fået
+`TRIGGER_JOBS` ved siden af `BASE_JOBS` og de turnerings-udledte jobs, og
+`story-engine` står nu i den **forventede** liste. Det er hele forskellen: et
+forventet job vises også, når det aldrig har skrevet en række — og netop dét var
+`A38`s tilstand, hvor v3's dagsmotor aldrig havde skrevet noget i produktion,
+uden at stilheden kunne aflæses noget sted. Kortet siger nu, hvor rækken kommer
+fra, og "Ingen kørsler" peger på migreringen eller på den stilhed frem for på en
+konto, hvor der intet er at finde.
+
+**Tavshed måles fortsat ikke — men af den rigtige grund.** `stilhedMs` er
+`null`, fordi triggeren fyrer på en hændelse og ikke efter et ur: en uge uden
+resultater og en trigger, der er holdt op med at fyre, ser ens ud. Fejlserie,
+fejlrate og varighed måles uændret. Til gengæld dømmes jobbet ikke længere mod
+cron-job.orgs vindue på 30 sekunder (`G114`) — den grænse tilhører en kalder,
+det ikke har.
+
+**`unexpected` er igen kun det, ordet siger:** en række, ingen kan gøre rede for
+— et cron-job, der peger på en slettet liga, eller historik fra før `G44`.
+
+Fire nye tests i `src/lib/ops.test.js`. `docs/CRON.md` (registeret siger nu
+højt, at rækken ikke er et planlagt job), `DOCUMENTATION.md` §17 og
+`features/story-engine-v3.md` §13 er rettet med. Intet skal køres i Supabase.
+Se [`DECISIONS.md`](./DECISIONS.md).
+
+---
+
 21. august 2026 — `A46` er lukket: alle ni cron-jobs står på `prediction-champ.vercel.app`
 
 **Backloggen er 32 → 32, og `docs/CRON.md` har ikke længere en pladsholder i

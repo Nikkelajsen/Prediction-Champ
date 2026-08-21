@@ -34,7 +34,42 @@ const SYNC_MATCHES_KADENCE = "hver 12. time";
 // To hele intervaller plus to timers luft, så ét sprunget interval ikke larmer.
 const SYNC_MATCHES_SILENCE_MS = 26 * 60 * 60 * 1000;
 
-// Den forventede jobliste: de to faste plus ét kampprogram-job pr. turnering.
+// ---- den tredje kategori: jobbet, ingen har planlagt (G138) ----
+//
+// `story-engine` er ikke et cron-job. Rækken skrives af MATCHES-TRIGGEREN i
+// `sql/rating_trigger_optimization.sql`, uden for guardens subtransaktion, hver
+// gang historie-porten kører. Den kom til med `A38` (august 2026), fordi v3's
+// dagsmotor aldrig havde skrevet noget i produktion, og stilheden ikke kunne
+// aflæses noget sted.
+//
+// Indtil `G138` stod den som `unexpected: true` — alt uden for `expectedJobs()`
+// gjorde det — og kortet gættede derfor på de to forklaringer, `G44` efterlod:
+// et cron-job, der peger på en liga, som ikke findes, eller en gammel
+// `sync-matches`-række. Begge er forkerte for et job, der ikke er planlagt
+// nogen steder, og prisen var, at den ene tekst, der skal fortælle en admin, at
+// noget er galt, fortalte det om et job, hvor intet var galt.
+//
+// KADENCEN ER EN HÆNDELSE OG IKKE ET UR: triggeren fyrer, når en kamp får et
+// resultat. Derfor `stilhedMs: null` — en uge uden resultater og en trigger,
+// der er holdt op med at fyre, ser ens ud, og en gættet grænse ville være en
+// forventning, ingen har udtrykt. Fejl kan stadig måles; det er kun tavsheden,
+// der ikke kan.
+//
+// Jobbet står i den FORVENTEDE liste og ikke kun blandt rækkerne, af samme
+// grund som de to faste: en trigger, der aldrig har skrevet, har ingen række at
+// vise — og netop dét var `A38`s tilstand.
+const TRIGGER_JOBS = [
+  {
+    job: "story-engine",
+    label: "Story Engine",
+    kadence: "ved hvert resultat",
+    stilhedMs: null,
+    triggered: true,
+  },
+];
+
+// Den forventede jobliste: de to faste, det trigger-skrevne og ét
+// kampprogram-job pr. turnering.
 //
 // Listen UDLEDES af `leagues` og er ikke skrevet ned (G44). Det er hele
 // forskellen: skrevet ned ville den forældes, hver gang en turnering kom til —
@@ -47,6 +82,7 @@ const SYNC_MATCHES_SILENCE_MS = 26 * 60 * 60 * 1000;
 function expectedJobs(leagues) {
   return [
     ...BASE_JOBS,
+    ...TRIGGER_JOBS,
     ...(leagues || []).map((l) => ({
       job: `sync-matches:${l.id}`,
       label: `Kampprogram · ${l.name}`,
@@ -254,6 +290,12 @@ function varigheder(p50, max) {
 // en liga, som ikke findes; en turnering, der er slettet, mens jobbet kører
 // videre; og — lige efter G44 — de gamle `sync-matches`-rækker fra dengang alle
 // turneringer delte ét navn. De aldrer selv ud med prune_job_runs().
+//
+// Alle tre er CRON-jobs, og teksten på kortet siger det. Derfor står
+// `story-engine` i TRIGGER_JOBS ovenfor og ikke her (G138): den er hverken
+// uventet eller planlagt, og et gæt om cron-job.org er forkert om den hver
+// gang. `unexpected` er efter dette igen kun det, ordet siger — en række,
+// ingen kan gøre rede for.
 function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
   const byJob = new Map((rows || []).map((r) => [r.job, r]));
   const spec = expectedJobs(leagues);
@@ -280,13 +322,18 @@ function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
     const dayMs = varigheder(r?.day_p50_ms, r?.day_max_ms);
     const lastMs = r?.last_duration_ms == null ? null : Number(r.last_duration_ms);
     const slowMs = [hourMs.max, dayMs.max].filter((x) => x !== null);
-    const nearCallerLimit = slowMs.some((x) => x >= CALLER_WINDOW_MS * SLOW_RATIO);
+    // Kun for de jobs, der HAR en kalder med et vindue (G138): de 30 sekunder
+    // er cron-job.orgs grænse, og et trigger-skrevet job kaldes ikke derfra.
+    // Varighedsrækkerne står der stadig — det er kun dommen om en fremmed
+    // grænse, der ikke gælder.
+    const nearCallerLimit = !s.triggered && slowMs.some((x) => x >= CALLER_WINDOW_MS * SLOW_RATIO);
 
     let state;
     if (lastRunAt === null) state = "ukendt";
-    // Et uventet job har ingen forventet kadence, så tavshed kan ikke måles —
-    // kun fejl. At give det en gættet grænse ville være at opfinde en
-    // forventning, ingen har udtrykt.
+    // Uden en `stilhedMs` kan tavshed ikke måles — kun fejl. Det gælder to
+    // slags jobs af hver sin grund: det UVENTEDE, hvis kadence ingen kender, og
+    // det TRIGGER-SKREVNE, som ingen kadence har (G138). At give nogen af dem
+    // en gættet grænse ville være at opfinde en forventning, ingen har udtrykt.
     else if (s.stilhedMs && silentFor > s.stilhedMs) state = "tavs";
     else if (failures >= 3) state = "fejler";
     // Raten kan gøre et job ustabilt, men ikke fejlende: `fejler` er den
@@ -384,4 +431,4 @@ function fmtSince(ms) {
   return `${Math.floor(t / 24)} d siden`;
 }
 
-export { BASE_JOBS, expectedJobs, loadJobHealth, loadClientErrors, loadSeasons, setSeasonFinished, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince, fmtRate, fmtVarighed, RATE_MIN_RUNS, RATE_THRESHOLD, CALLER_WINDOW_MS, SLOW_RATIO };
+export { BASE_JOBS, TRIGGER_JOBS, expectedJobs, loadJobHealth, loadClientErrors, loadSeasons, setSeasonFinished, mergeJobHealth, previewNotifications, summarizeOutbox, STATE_LABEL, fmtSince, fmtRate, fmtVarighed, RATE_MIN_RUNS, RATE_THRESHOLD, CALLER_WINDOW_MS, SLOW_RATIO };

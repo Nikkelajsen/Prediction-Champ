@@ -520,7 +520,12 @@ fordi de virker uanset årsagen:
   guarden**, fordi `begin … exception … end` er en subtransaktion; indenfor ville
   rækken blive rullet tilbage netop når der var noget at fortælle. Med sin egen
   guard, fordi et fejlende spor ikke må vælte det, det sporer. Kontrollen
-  `sql/checks/day_card_coverage.sql` aflæser resultatet.
+  `sql/checks/day_card_coverage.sql` aflæser resultatet. *(Tilføjet 21. august
+  2026, `G138`: rækken har nu sit eget kort i Admin → Drift som en tredje
+  kategori ved siden af cron-jobbene — den stod indtil da som et "uventet" job
+  med en tekst, der gættede på cron-job.org. Kortet måler ikke tavshed, fordi
+  triggeren fyrer på en hændelse og ikke efter et ur, men et tomt kort er netop
+  den stilhed, dette afsnit handler om.)*
 - **Bagstopperen dækker nu i går og i dag.** Dagsløkken i
   `generate_stories_catchup()` har mistet sit grace-vindue: dagen er sin egen
   afgrænsning, fordi `match_day_complete` kræver alle resultater. To nye

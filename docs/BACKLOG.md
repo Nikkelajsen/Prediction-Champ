@@ -60,7 +60,7 @@ eller en linje i "Forkastede ideer".
 
 ## Prioriteret rækkefølge
 
-Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -106,9 +106,7 @@ Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-| # | Hvad | Note |
-|---|---|---|
-| `G138` | Admin → Drift kalder `story-engine` et uventet job og gætter på to forklaringer, der begge er forkerte | **Set i produktion 21. august 2026** under `A46`-aflæsningen: kortet melder OK, men bærer teksten *"Jobbet har meldt sig, men svarer ikke til nogen turnering. Enten peger et cron-job på en liga, der ikke findes, eller også er det en gammel række fra dengang alle turneringer skrev samme jobnavn."* **Ingen af de to gæt passer.** `story-engine`-rækken skrives af **matches-triggeren** i [`sql/rating_trigger_optimization.sql`](../sql/rating_trigger_optimization.sql) (linje ~228) — altså fra databasen og ikke fra cron-job.org, hvilket også er grunden til, at dens resumé hverken har `host` eller `authVia`. Fejlen er en **antagelse i `mergeJobHealth()`**: alt, der ikke står i `expectedJobs()`, får `unexpected: true`, som er formet efter `G44`s forældede `sync-matches`-rækker. Kuren er at kende de trigger-skrevne jobs som en tredje kategori ved siden af `BASE_JOBS` og turneringerne — de har ingen kadence (de fyrer, når en kamp får et resultat), så tavshed kan stadig ikke måles, men teksten skal sige *det* frem for at pege på cron-job.org. **Prisen ved at lade den stå:** den ene tekst, der skal fortælle en admin, at noget er galt, fortæller det om et job, hvor intet er galt — og dækker samtidig over den dag, hvor et cron-job FAKTISK peger på en slettet liga. |
+Tomt.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -255,32 +253,32 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (niogtredivte kørsel) — `A46` er lukket: alle ni cron-jobs står på den gamle adresse
+### 21. august 2026 (fyrretyvende kørsel) — `G138` er bygget: Drift kender nu det job, ingen har planlagt
 
-**Listen er 32 → 32.** `A46` er slettet, og indbakkens ene linje er blevet
-`G138` i Tier 2 — ét ud, ét ind. Ejeren aflæste de ni jobkort i
-Admin → Drift samme dag, og svaret var entydigt: **alle ni cron-jobs kalder ind
-på `prediction-champ.vercel.app`.** `docs/CRON.md`s kaldkolonne er udfyldt, og
-pladsholderen `<app>` findes ikke længere i tabellen.
+**Listen er 32 → 31, og Tier 2 er tomt.** `G138` er lukket samme dag, den blev
+skrevet: Admin → Drift kaldte `story-engine` et *uventet* job og gættede på to
+forklaringer, der begge er forkerte — rækken skrives af **matches-triggeren**
+(`sql/rating_trigger_optimization.sql`) og ikke af cron-job.org.
 
-**Det, aflæsningen egentlig fortalte, er en tilstand og ikke ni adresser:**
-domæneflytningen (`I10`) har ikke rørt cron-laget. Det er ikke en fejl — `/api/`
-er med vilje undtaget fra redirectet, så jobbene rammer funktionen uanset hvad,
-og prisen er en ikke-kanonisk origin. Ført ind i `DOMAENE.md`s register, hvor
-rækken stod med `?`.
+**Rettelsen er en kategori og ikke en tekst.** `src/lib/ops.js` har fået
+`TRIGGER_JOBS` ved siden af `BASE_JOBS` og turneringerne, og `story-engine` står
+nu i den FORVENTEDE liste. Det er hele forskellen: et job, der forventes, vises
+også, når det aldrig har skrevet en række — og netop dét var `A38`s tilstand,
+hvor v3's dagsmotor aldrig havde skrevet noget i produktion, uden at stilheden
+kunne aflæses noget sted.
 
-**De fire sidste blev ikke udfyldt ved at slutte fra de fem første.** Fem ens
-værdier er et mønster og ikke en regel: hvert cron-job har sin egen URL, og
-flytningen tages ét job ad gangen. Alle ni er læst hver for sig.
+**Tavshed måles fortsat ikke — men nu af den rigtige grund.** Triggeren fyrer på
+en hændelse og ikke efter et ur, så `stilhedMs` er `null`: en uge uden resultater
+og en trigger, der er holdt op med at fyre, ser ens ud. Fejl, fejlrate og
+varighed måles som for alle andre. Til gengæld dømmes jobbet ikke længere mod
+cron-job.orgs vindue på 30 sekunder — den grænse tilhører en kalder, det ikke
+har.
 
-**Indbakken er tømt i samme ombæring:** fundet fra aflæsningen — `story-engine`
-står som et *uventet* job med to forklaringer, der begge er forkerte — har fået
-`G138` i Tier 2. Rækken er ikke bygget: den er en tekst- og kategorifejl i
-`mergeJobHealth()`, ikke en, aflæsningen krævede løst.
+**`unexpected` er igen kun det, ordet siger.** Efter rettelsen betyder mærkatet
+udelukkende en række, ingen kan gøre rede for — et cron-job, der peger på en
+slettet liga, eller historik fra før `G44`. **Læren:** *en tekst, der gætter,
+gætter ud fra den kategori, den er havnet i — så det er kategorien, der skal
+rettes, ikke sætningen.*
 
-**Undervejs blev bestillingen selv gjort billigere:** `host` er løftet ud af
-"Seneste resumé"s rå JSON og vises nu som signalrækken **"Kaldt på"** på hvert
-jobkort. Rækken bliver stående — den er den ene måde at se, at et job er sat op
-mod en anden adresse, end man tror. **Læren:** *at gemme svaret er ikke det
-samme som at kunne læse det.*
-
+Intet er kørt i Supabase; ændringen er ren frontend plus registeret i
+`docs/CRON.md`.
