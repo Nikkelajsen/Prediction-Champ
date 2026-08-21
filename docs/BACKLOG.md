@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A59` · `B42` · `G145` · `I26`.**
+**Næste ledige: `A59` · `B42` · `G146` · `I26`.**
 *(`B40` er brugt 18. august 2026 til Indstillinger-skærmen med push-kontakten —
 leveret direkte uden en backlog-række; se `CHANGELOG.md`/`DECISIONS.md`. `B41`
 er brugt 21. august 2026 til Tier 1-bestillingen af `#73`.)*
@@ -54,13 +54,13 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- Rating-fanen og Championships lister henter stadig hele tabellen uden værn mod PostgREST' tavse loft på 1000 rækker — samme fælde som G106, bare på de globale lister
+Tom.
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 30 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -114,7 +114,9 @@ Tomt.
 
 ### Tier 4 — Datarisiko med en lunte
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G145` | De globale lister har intet værn mod PostgREST' tavse loft på 1000 rækker | `G139` rettede Hjem og konkurrence-boardet, men fandt klassen: **otte `db.select` i `data/standings.js` alene læser upagineret lister, der vokser med brugere, runder eller kampe.** Loftet er tavst — svaret bliver bare kortere — så skaden er en skærm, der viser for lidt, uden en fejl noget sted. **De ordnede er de mildeste:** `loadRatingBoard`, `loadMonthlyBoard`, `loadRoundBoard` og `loadSeasonBoard` sender `order=`, så det er BUNDEN, der falder væk; champion og top er sikre, men en spiller under nr. 1000 kan ikke finde sig selv. **De uordnede er de skarpe:** `loadMonthsAvailable` (én række pr. bruger pr. måned), `loadRoundsAvailable` (**én række pr. spillet kamp**) og `loadRatingMap` uden en liste taber VILKÅRLIGE rækker — det ses som runder og måneder, der mangler i vælgerne, og som ratingtal, der mangler ved navne. `loadRatingHistory` uden et bruger-id er den nærmeste af alle: én række pr. bruger PR. RUNDE, sorteret `round_key.asc`, så afkortningen rammer netop de SENESTE runder — altså dem, formkurven på Rating-fanen er lavet af. **Ingen af dem er MÅLT:** om nogen allerede er over loftet, kan kun aflæses i produktion (`A32`), og `loadRoundsAvailable` er den, der skal spørges først — `select count(*) from matches m join seasons s on s.id = m.season_id join leagues l on l.id = s.league_id where l.is_official and m.home_score is not null`. Kuren findes allerede i repoet i to former: `db.count()` (`G106`, `G139`), når det er et TAL, der skal bruges, og et `distinct`-view eller en RPC, når det er en LISTE — `loadMonthsAvailable` og `loadRoundsAvailable` henter i dag tusindvis af rækker for at lave et `Set` i klienten. Fundet ved `G139` 21. august 2026 |
 
 ### Tier 5 — Robusthed og vedligehold
 
@@ -271,3 +273,11 @@ lukkede konti tæller ikke.
 farlig fejlmåde — et tal, der er næsten rigtigt. Derfor er vagten en
 ækvivalenstest mod ranglisten og ikke en liste af påstande; og skærmbilledet af
 Hjem er byte-identisk, hvilket er den samme påstand kørt gennem hele appen.*
+
+**Indbakken er ryddet i samme ombæring: én linje blev `G145` i Tier 4** —
+listen er derfor 30 → 31. `G139` rettede to kald og blotlagde en klasse: otte
+upaginerede `db.select` i den samme fil, mod lister der vokser. De uordnede af dem
+(`loadRoundsAvailable`, `loadMonthsAvailable`) taber vilkårlige rækker, og
+`loadRatingHistory` uden bruger-id taber de nyeste runder, fordi den sorterer
+stigende. Ingen af dem er målt — det kræver produktion (`A32`), og forespørgslen
+står i rækken.
