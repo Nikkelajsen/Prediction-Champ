@@ -204,13 +204,29 @@ async function loadMonthlyBoard(token, month, scope = ALL) {
   return assignRanks(rows.filter((r) => !closed.has(r.user_id)).map((r) => standingsRow(r, nameById)));
 }
 
+// De to vælgeres lister kommer FÆRDIGE fra databasen (`G146`,
+// `sql/championship_selectors.sql` = `#74`).
+//
+// Begge hentede før hele grundmængden for at bygge et `Set` med et par snese
+// værdier: måneds-vælgeren én række pr. bruger PR. MÅNED, runde-vælgeren én
+// række pr. SPILLET KAMP. `G145` gjorde de læsninger korrekte (sidevis), men
+// ikke billige — og prisen betales, hver gang Championship-fanen åbnes, den
+// vokser med brugere og kampe, og den tælles i `A34`s egress-budget. `G106`s
+// regel afgør resten: vokser antallet med noget, brugeren kan forøge, hører
+// aggregeringen hjemme i databasen.
+//
+// 🔴 **Viewene skal findes, før denne kode er i produktion.** Et opslag mod et
+// view, der ikke er oprettet endnu, svarer `404` — migreringen køres derfor i
+// Supabase FØR mergen, og `ChampionshipTab` fanger fejlen imens, så vinduet
+// koster en tom vælger og ikke en skærm, der hænger.
+//
+// `selectAll` og ikke `db.select`: listerne er korte i dag, men de vokser med
+// hver sæson, appen findes. `order=` er samtidig en TOTAL orden — `month` og
+// `round_key` er unikke inden for ét scope, fordi viewene er `distinct` — så
+// den sidevise læsning hverken taber eller gentager en værdi.
 async function loadMonthsAvailable(token, scope = ALL) {
-  // Én række pr. bruger PR. MÅNED, og svaret bruges kun til et `Set`. Læsningen
-  // er derfor både den mest udsatte for rækkeloftet og den mest spildte — kuren
-  // er et `distinct`-view og står som `G146` i backloggen. Indtil da: sidevis,
-  // altså korrekt men ikke billigt.
-  const rows = await selectAll(token, "monthly_standings", `scope=eq.${scope}&select=month&order=month.desc,user_id.asc`);
-  return [...new Set(rows.map((r) => r.month))].sort().reverse();
+  const rows = await selectAll(token, "championship_months", `scope=eq.${scope}&select=month&order=month.desc`);
+  return rows.map((r) => r.month);
 }
 
 // ---------- Rundechampionship: samlede point for én enkelt spillerunde (round_key) ----------
@@ -233,14 +249,13 @@ async function scopeSeasonIds(token, scope = ALL) {
   const seasons = await selectAll(token, "seasons", `league_id=in.(${leagues.map((l) => l.id).join(",")})&select=id&order=id.asc`);
   return seasons.map((s) => s.id);
 }
+// Samme flytning som `loadMonthsAvailable` ovenfor — se hovedet dér.
+// `championship_rounds` står på `matches` og ikke på `round_standings`: en
+// runde, der er spillet færdig uden et eneste tip, skal STADIG kunne vælges,
+// og `loadRoundBoard` nedenfor tæller selv kampene til fremdriften.
 async function loadRoundsAvailable(token, scope = ALL) {
-  const seasonIds = await scopeSeasonIds(token, scope);
-  if (!seasonIds.length) return [];
-  // Én række pr. SPILLET KAMP — den længste af alle læsningerne her, og også
-  // den, der kun skal bruges til et `Set` (`G146`). `id.asc` er den entydige
-  // nøgle; rækkefølgen af selve runderne laves i klienten lige nedenfor.
-  const rows = await selectAll(token, "matches", `season_id=in.(${seasonIds.join(",")})&home_score=not.is.null&select=round_key&order=id.asc`);
-  return [...new Set(rows.map((r) => r.round_key))].sort().reverse();
+  const rows = await selectAll(token, "championship_rounds", `scope=eq.${scope}&select=round_key&order=round_key.desc`);
+  return rows.map((r) => r.round_key);
 }
 async function loadRoundBoard(token, roundKey, scope = ALL) {
   const seasonIds = await scopeSeasonIds(token, scope);

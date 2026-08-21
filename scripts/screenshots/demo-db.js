@@ -329,6 +329,20 @@ const MÅNEDS_STILLING = SPILLERE.map((s) => ({
   }, 0),
 }));
 
+// De to Championship-vælgere svares siden `#74 championship_selectors.sql` af
+// hver sit `distinct`-view i stedet for af hele grundmængden (`G146`).
+// Listerne UDLEDES her af præcis de rækker, vælgerne læste før — de spillede
+// runder og månedsstillingens egne måneder — så attrappen ikke kan komme til
+// at vise en anden dropdown, end den rigtige database ville.
+const CHAMPIONSHIP_RUNDER = spilledeRunder.flatMap((nøgle) => [
+  { scope: "ALL", round_key: nøgle },
+  { scope: LIGA_ID, round_key: nøgle },
+]);
+const CHAMPIONSHIP_MÅNEDER = [...new Set(MÅNEDS_STILLING.map((r) => r.month))].flatMap((m) => [
+  { scope: "ALL", month: m },
+  { scope: LIGA_ID, month: m },
+]);
+
 // ---------------------------------------------------------------------------
 // Rating og ratinghistorik.
 //
@@ -439,6 +453,8 @@ const tabeller = {
   ratings: RATINGS,
   rating_history: RATING_HISTORIK,
   monthly_standings: MÅNEDS_STILLING,
+  championship_months: CHAMPIONSHIP_MÅNEDER,
+  championship_rounds: CHAMPIONSHIP_RUNDER,
   round_standings: RUNDE_STILLING,
   season_standings: SÆSON_STILLING,
   stories: [STORY],

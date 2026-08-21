@@ -60,7 +60,7 @@ Tom.
 
 ## Prioriteret rækkefølge
 
-Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 30 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -114,15 +114,11 @@ Tomt.
 
 ### Tier 4 — Datarisiko med en lunte
 
-| # | Hvad | Note |
-|---|---|---|
-| `G147` | Samme tavse rækkeloft uden for `data/standings.js` | `G145` lukkede de globale lister og efterlod klassen ét sted til: **`loadStarterTournaments` i `src/lib/onboarding.js` afgør, om en turnering har kampe tilbage at tippe, ved at hente ÉN RÆKKE PR. USPILLET KAMP** (`season_id=in.(…)&home_score=is.null&select=season_id`) og lave et `Set`. Ved sæsonstart med fem officielle turneringer er det ~1.900 rækker — over loftet — og udfaldet er `G106`s "· 0 kampe" en gang til, bare i guiden: en turnering, hvis kampe falder uden for de første 1000, præsenteres som en, man ikke kan tippe. **Det er onboarding, altså den skærm, hvor en fejl koster mest.** Kuren er ikke `selectAll` her, men `db.count()` pr. sæson (`G106`s regel: er antallet af kald BUNDET — én pr. turnering — er optællingen billigst) eller et view med et antal pr. sæson. Samme fil har et sæson-opslag uden loft to linjer over. **De øvrige forekomster er svagere og skal vurderes hver for sig**, ikke sweepes: `data/competitions.js` og `data/createSources.js` læser kampe pr. sæson (~380, men flere turneringer i ét kald), `MainApp.jsx` henter alle `leagues`, og `data/groups.js` læser medlems- og konkurrencelister pr. liga. Fundet ved `G145` 21. august 2026 |
+Tomt.
 
 ### Tier 5 — Robusthed og vedligehold
 
-| # | Hvad | Note |
-|---|---|---|
-| `G146` | De to Championship-vælgere henter tusindvis af rækker for at bygge et `Set` med tredive | `G145` gjorde dem KORREKTE — de læses sidevis og taber ikke længere runder eller måneder — men ikke billige. `loadRoundsAvailable` henter én række pr. SPILLET KAMP for at finde de distinkte `round_key`, og `loadMonthsAvailable` én række pr. bruger PR. MÅNED for at finde de distinkte `month`. Begge svarer med en liste på størrelse med en dropdown. **Prisen betales hver gang Championship-fanen åbnes**, den vokser med kampe og brugere, og den tælles i `A34`s egress-budget. Kuren står allerede i `G106`s regel: vokser antallet med noget, brugeren kan forøge, hører aggregeringen hjemme i databasen — her et `distinct`-view (som `#62 group_counts.sql`) eller en RPC. **Første skridt er dog en aflæsning og ikke en migrering** (`A32`, ejerens): `select count(*) from matches m join seasons s on s.id = m.season_id join leagues l on l.id = s.league_id where l.is_official and m.home_score is not null` — tallet siger både, hvor stort spildet er i dag, og om listerne allerede HAR været over de 1000 rækker, altså om nogen har set en vælger uden alle sine runder. **Et view er en migrering, der skal køres manuelt i Supabase**, og dermed et to-trins-udrul (`docs/UDRULNING-A43.md`s mønster): rækken skal tages, når der er plads til begge trin. Fundet ved `G145` 21. august 2026 |
+Tomt.
 
 ### Tier 6 — Venter på en udløser
 
@@ -255,24 +251,33 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (syvogfyrretyvende kørsel) — `G145`: de globale lister læses sidevis
+### 21. august 2026 (otteogfyrretyvende kørsel) — Tier 4 og Tier 5 kørt tomme: `G147` og `G146`
 
-**Listen er 31 → 32.** `G145` er leveret; to rækker, den blotlagde, er skrevet
-ned frem for taget med (`G146` i Tier 5, `G147` i Tier 4). Tier 1, 2, 3 og 5 er
-tomme på nær den ene nye række i Tier 5.
+**Listen er 32 → 30.** Begge tiers er tomme, og det er nu Tier 1, 2, 3, 4 og 5.
+Tilbage står Tier 6 (venter på en udløser) og Tier 7 (udadvendt og ubesluttet).
 
-**`G145`:** otte upaginerede `db.select` i `data/standings.js` kunne tavst vise
-for lidt — Supabase klipper ved `db-max-rows` og siger det ikke. Alle læsninger,
-hvis længde vokser, går nu gennem `selectAll()` i nye `data/paged.js`; `db.select`
-står kun tilbage med et bevidst `limit=`, og det er en vagt, der læser filens
-kildetekst, ikke en aftale.
+**`G147`:** guiden afgjorde, om en turnering har kampe tilbage, ved at hente én
+række pr. uspillet kamp — ~1.900 ved sæsonstart, altså over PostgRESTs tavse
+loft, og udfaldet var en turnering præsenteret som utipbar. Kuren er ét
+afgrænset opslag (`limit=1`) pr. turnering. **Ikke `db.count()`, som rækken
+foreslog:** `hasUpcoming` er et ja/nej, og svaret stod allerede fem linjer
+længere oppe i samme fil.
 
-**Læren, og den er `G140`s en gang til:** *svaret lå allerede i repoet.*
-`sbAll()` i `api/_shared.js` er skrevet mod den samme fælde på jobbenes side
-(`G51`), og den første udgave af rettelsen her antog et loft, `sbAll`s eget hoved
-forklarer, hvorfor man ikke må antage: der stoppes ved en TOM side og aldrig ved
-en kort, fordi et projekt med et lavere `db-max-rows` ville gøre hver fuld side
-til en "kort" side. Reglerne er nu ordret de samme på begge sider af `fetch`.
+**`G146`:** de to Championship-vælgere svares nu af `#74
+championship_selectors.sql` — to `distinct`-views frem for tusindvis af rækker.
+🔴 **Migreringen skal køres i Supabase FØR mergen** (samme enkeltrettede
+afhængighed som `#62`); tjeklisten i `DOCUMENTATION.md` §11 bærer punktet.
+
+**Læren, og den er reglens ordlyd læst præcist:** `G106` siger, at aggregeringen
+hører hjemme i databasen, når antallet vokser med noget, brugeren kan forøge.
+Det afgørende er antallet af **kald**, ikke af rækker — er fan-out'en bundet af
+en liste, vi allerede har (turneringerne), er en løkke billigere end en
+migrering; er der intet at binde til (antallet af runder), er et view svaret.
+De to rækker så ens ud og havde derfor forskellig kur.
+
+**Aflæsningen, `G146` bad om (`A32`), blev ikke bestilt for sig** — den er
+verifikationsblok 4 i migreringen, som ejeren alligevel har åben, når SQL'en
+køres. En bestilling, der kan ride med på en, der allerede skal afsted, er ikke
+en bestilling.
 
 **Indbakken var tom ved kørslens begyndelse og er det stadig.**
-
