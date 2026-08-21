@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A58` · `B42` · `G138` · `I26`.**
+**Næste ledige: `A58` · `B42` · `G139` · `I26`.**
 *(`B40` er brugt 18. august 2026 til Indstillinger-skærmen med push-kontakten —
 leveret direkte uden en backlog-række; se `CHANGELOG.md`/`DECISIONS.md`. `B41`
 er brugt 21. august 2026 til Tier 1-bestillingen af `#73`.)*
@@ -106,7 +106,9 @@ Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G138` | Admin → Drift kalder `story-engine` et uventet job og gætter på to forklaringer, der begge er forkerte | **Set i produktion 21. august 2026** under `A46`-aflæsningen: kortet melder OK, men bærer teksten *"Jobbet har meldt sig, men svarer ikke til nogen turnering. Enten peger et cron-job på en liga, der ikke findes, eller også er det en gammel række fra dengang alle turneringer skrev samme jobnavn."* **Ingen af de to gæt passer.** `story-engine`-rækken skrives af **matches-triggeren** i [`sql/rating_trigger_optimization.sql`](../sql/rating_trigger_optimization.sql) (linje ~228) — altså fra databasen og ikke fra cron-job.org, hvilket også er grunden til, at dens resumé hverken har `host` eller `authVia`. Fejlen er en **antagelse i `mergeJobHealth()`**: alt, der ikke står i `expectedJobs()`, får `unexpected: true`, som er formet efter `G44`s forældede `sync-matches`-rækker. Kuren er at kende de trigger-skrevne jobs som en tredje kategori ved siden af `BASE_JOBS` og turneringerne — de har ingen kadence (de fyrer, når en kamp får et resultat), så tavshed kan stadig ikke måles, men teksten skal sige *det* frem for at pege på cron-job.org. **Prisen ved at lade den stå:** den ene tekst, der skal fortælle en admin, at noget er galt, fortæller det om et job, hvor intet er galt — og dækker samtidig over den dag, hvor et cron-job FAKTISK peger på en slettet liga. |
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -127,7 +129,6 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 
 | # | Hvad | Udløser |
 |---|---|---|
-| `A46` | Udfyld `<app>` i `CRON.md`s ni kald med det faktiske værtsnavn | **Når hvert af de ni jobs har kørt én gang efter 13. august 2026** — langsomste skema er hver 12. time. Værtsnavnet skrives nu i `job_runs.detail` (`A46`, samme fremgangsmåde som `A11`), så aflæsningen er "Seneste resumé" på hvert jobkort i Admin → Drift og ikke ni jobs i cron-job.org. Opslaget står i [`CRON.md`](./CRON.md). |
 | `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. **Efterprøvet 20. august 2026 via `B39`-aflæsningen: stadig 404.** |
 | `A44` | Skal den globale rating vise fulde visningsnavne til brugere, man ikke deler noget med? | **Udløseren er sprunget** (`B26`, 12. august 2026), men i modsætning til `A43` kan visningen ændres bagefter — prisen ved at vente er kun, at flere navne allerede er hentet. Faldt ud af `A43`: uanset hvor stram policyen på `profiles` bliver, publicerer Rating-fanen og Championship (`scope='ALL'`) hver bruger til enhver indlogget. Det er en produktbeslutning, ikke en adgangsregel — og den skal derfor stilles for sig. |
 | `A34` | Supabase Free → Pro? | **Når Usage-siden viser egress nær 5 GB/md, eller når fremmede udgør flertallet af de aktive** — de to falder formentlig sammen omkring 200–500 ugentligt aktive. |
@@ -254,29 +255,32 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (otteogtredivte kørsel) — Tier 2, 4 og 5 kørt tomme: fire gæld-rækker leveret, én bestilling tilbage
+### 21. august 2026 (niogtredivte kørsel) — `A46` er lukket: alle ni cron-jobs står på den gamle adresse
 
-**Listen er 36 → 32.** Fire rækker leveret (`G136`, `G133`, `G131`, `G137`),
-og den ene nye — `B41`, ejerens bestilling af `#73 create_competition.sql`
-FØR merge — blev kørt i produktion og staging samme dag og er slettet igen.
-Tier 1–5 er dermed alle tomme.
+**Listen er 32 → 32.** `A46` er slettet, og indbakkens ene linje er blevet
+`G138` i Tier 2 — ét ud, ét ind. Ejeren aflæste de ni jobkort i
+Admin → Drift samme dag, og svaret var entydigt: **alle ni cron-jobs kalder ind
+på `prediction-champ.vercel.app`.** `docs/CRON.md`s kaldkolonne er udfyldt, og
+pladsholderen `<app>` findes ikke længere i tabellen.
 
-**`G136` (Tier 2):** `schema-export.yml`s `krop()` klipper nu også
-`\restrict`/`\unrestrict`-linjerne af før sammenligningen, så pg_dump 17's
-tilfældige token ikke længere kan åbne en falsk skema-drift-PR.
+**Det, aflæsningen egentlig fortalte, er en tilstand og ikke ni adresser:**
+domæneflytningen (`I10`) har ikke rørt cron-laget. Det er ikke en fejl — `/api/`
+er med vilje undtaget fra redirectet, så jobbene rammer funktionen uanset hvad,
+og prisen er en ikke-kanonisk origin. Ført ind i `DOMAENE.md`s register, hvor
+rækken stod med `?`.
 
-**`G133` (Tier 4):** konkurrence-oprettelsens tre skrivninger er ÉN
-transaktion — `create_competition()` (`#73`) efter `create_group()`s mønster,
-klienten kalder den, og `sql/tests/create_competition.sql` fremkalder begge
-vinduer i CI med den gamle vejs halve konkurrence som negativ kontrol.
+**De fire sidste blev ikke udfyldt ved at slutte fra de fem første.** Fem ens
+værdier er et mønster og ikke en regel: hvert cron-job har sin egen URL, og
+flytningen tages ét job ad gangen. Alle ni er læst hver for sig.
 
-**`G131` (Tier 5):** analytics-testens ⓘ-liste UDLEDES nu af JSX'en frem for at
-vedligeholdes — spørgsmålet i rækken faldt ud til "ja, den kan udledes", så
-gælden forsvandt helt. Udledningen fandt straks de to id'er, den håndskrevne
-liste manglede (`story_viewable`, `invite_funnel`), og ligheden kræves nu begge
-veje, så en død ordbogs-række også fanges.
+**Indbakken er tømt i samme ombæring:** fundet fra aflæsningen — `story-engine`
+står som et *uventet* job med to forklaringer, der begge er forkerte — har fået
+`G138` i Tier 2. Rækken er ikke bygget: den er en tekst- og kategorifejl i
+`mergeJobHealth()`, ikke en, aflæsningen krævede løst.
 
-**`G137` (Tier 5):** rundemodalens `groupIntoRounds(ms)` fik sit manglende
-navne-argument, så samtidige kampe sorterer som på Hjem og Tip; en test i
-`data.test.js` vender uuid'er og navne mod hinanden, så regressionen ikke kan
-komme tavst tilbage.
+**Undervejs blev bestillingen selv gjort billigere:** `host` er løftet ud af
+"Seneste resumé"s rå JSON og vises nu som signalrækken **"Kaldt på"** på hvert
+jobkort. Rækken bliver stående — den er den ene måde at se, at et job er sat op
+mod en anden adresse, end man tror. **Læren:** *at gemme svaret er ikke det
+samme som at kunne læse det.*
+

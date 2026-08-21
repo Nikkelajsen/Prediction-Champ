@@ -101,6 +101,15 @@ function JobCard({ j }) {
         <DurationRow label="Varighed (seneste)" ms={j.lastMs} />
         <DurationRow label="Varighed (1 t)" v={j.hourMs} />
         <DurationRow label="Varighed (24 t)" v={j.dayMs} />
+        {/* Hvilken adresse jobbet faktisk kalder ind på (A46). Står nederst,
+            fordi det er en OPSÆTNING og ikke et helbredssignal: de fem rækker
+            ovenfor skifter fra kørsel til kørsel, denne kun når nogen retter
+            jobbet i cron-job.org.
+
+            Rækken vises slet ikke, når værtsnavnet mangler — kørslen er da
+            skrevet af kode fra før 13. august 2026, og en manglende måling må
+            ikke kunne forveksles med en adresse. */}
+        {j.lastHost && <SignalRow label="Kaldt på" value={j.lastHost} />}
       </div>
 
       {/* Den diagnose, `G109` manglede ord for: jobbet VIRKER, men er ved at

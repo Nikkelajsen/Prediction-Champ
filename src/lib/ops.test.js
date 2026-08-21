@@ -354,6 +354,38 @@ describe("mergeJobHealth", () => {
     expect(j.lastDetail).toEqual({ written: 4 });
   });
 
+  // ---- værtsnavnet, registeret manglede (A46) ----
+  //
+  // `docs/CRON.md` skriver `https://<app>/api/…` i ni kald, og pladsholderen
+  // kunne ikke udfyldes fra repoet. Værdien har ligget i detaljen siden
+  // 13. august 2026; det, den manglede, var at være læsbar uden at folde et
+  // JSON-resumé ud pr. job.
+  it("løfter værtsnavnet ud af resuméet som sit eget signal", () => {
+    const j = mergeJobHealth(
+      [raek("sync-live", { last_detail: { written: 4, authVia: "header", host: "app.leagly.app" } })],
+      { now: NU }
+    ).find((x) => x.job === "sync-live");
+    expect(j.lastHost).toBe("app.leagly.app");
+  });
+
+  // Samme regel som raten og varigheden: en kørsel fra før `setHost()` har
+  // intet værtsnavn, og null skal blive null. Ellers ville et job, hvis
+  // seneste kørsel er gammel, låne den adresse, kortet tilfældigvis viste —
+  // og en udfyldt kolonne i registeret er værre end en tom, fordi man tror
+  // på den.
+  it("lader værtsnavnet være UMÅLT for en kørsel fra før 13. august 2026", () => {
+    const uden = mergeJobHealth([raek("sync-live", { last_detail: { written: 4 } })], { now: NU })
+      .find((x) => x.job === "sync-live");
+    expect(uden.lastHost).toBeNull();
+
+    const intet = mergeJobHealth([raek("sync-live")], { now: NU }).find((x) => x.job === "sync-live");
+    expect(intet.lastHost).toBeNull();
+
+    // Et job uden en eneste kørsel har heller ingen adresse at vise.
+    const aldrig = mergeJobHealth([], { now: NU }).find((x) => x.job === "sync-live");
+    expect(aldrig.lastHost).toBeNull();
+  });
+
   it("har en etiket til hver tilstand", () => {
     const states = new Set(
       [[], [raek("sync-live")], [raek("sync-live", { consecutive_failures: 4 })]].flatMap((rows) =>

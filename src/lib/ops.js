@@ -322,6 +322,17 @@ function mergeJobHealth(rows, { leagues = [], now = Date.now() } = {}) {
       okSilentFor: lastOkAt === null ? null : now - lastOkAt,
       lastError: r?.last_error ?? null,
       lastDetail: r?.last_detail ?? null,
+      // Værtsnavnet kørslen kaldte ind på (A46). Det HAR ligget i detaljen
+      // siden 13. august 2026, men kun som en linje i det rå JSON bag
+      // "Seneste resumé" — ni jobs betød ni udfoldninger og ni gennemlæsninger
+      // for at læse ét felt. Løftet ud som sit eget signal, så registerets
+      // `<app>` kan udfyldes ved at rulle ned ad siden én gang.
+      //
+      // Feltet bliver stående, når A46 er lukket: det er ikke en engangs-
+      // aflæsning, men den ene måde at se, at et job er sat op mod en anden
+      // adresse, end man tror — `/api/` er med vilje undtaget fra redirectet
+      // (docs/DOMAENE.md trin 6), så et fejlpeget job svarer 200 og tier.
+      lastHost: r?.last_detail?.host ?? null,
     };
   };
 

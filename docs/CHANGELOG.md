@@ -9,6 +9,90 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 — `A46` er lukket: alle ni cron-jobs står på `prediction-champ.vercel.app`
+
+**Backloggen er 32 → 32, og `docs/CRON.md` har ikke længere en pladsholder i
+kaldkolonnen.** `A46` er slettet, og indbakkens ene linje er blevet `G138` —
+ét ud, ét ind. Ejeren læste de ni jobkort i Admin → Drift samme dag, og svaret
+var entydigt: **alle ni cron-jobs kalder ind på den gamle adresse.** Alle ni bar
+`authVia: header`, altså cron-jobbet selv og ikke et manuelt "Hent nu" — så
+værdien er den, jobbet ER sat op med.
+
+**Det, aflæsningen egentlig fortalte, er en tilstand og ikke ni adresser:**
+domæneflytningen (`I10`) har ikke rørt cron-laget. Det er ikke en fejl og
+udløser ingen handling — `/api/` er med vilje undtaget fra redirectet, og
+undtagelsen er bevist (bevis 3b), så jobbene rammer funktionen uanset hvad.
+Prisen er en ikke-kanonisk origin. Ført ind i `DOMAENE.md`s register, hvor
+rækken stod med `?`.
+
+**De fire sidste blev ikke udfyldt ved at slutte fra de fem første.** Halvvejs
+gennem aflæsningen stod fem ens værdier; de sidste fire blev læst hver for sig
+alligevel. Hvert cron-job har sin egen URL, flytningen tages ét job ad gangen,
+og fem ens værdier er derfor et mønster og ikke en regel — registerets eget
+forord er den bindende regel: *et register, der er forkert, er værre end intet.*
+
+**Kolonnen er nu en påstand og ikke en pladsholder**, hvilket er en skærpelse:
+`<app>` kunne ikke blive forkert, `prediction-champ.vercel.app` kan.
+Vedligeholdelsespligten står ved kolonnen.
+
+**Fundet undervejs, triageret til `G138` i Tier 2 frem for rettet:**
+Admin → Drift kalder `story-engine` et *uventet* job og gætter på to
+forklaringer, der begge er forkerte — rækken skrives af matches-triggeren
+(`sql/rating_trigger_optimization.sql`), ikke af et cron-job, hvilket også er
+grunden til, at dens resumé hverken har `host` eller `authVia`. Fejlen er en
+antagelse i `mergeJobHealth()`: alt uden for `expectedJobs()` får
+`unexpected: true`, og teksten er formet efter `G44`s forældede
+`sync-matches`-rækker. (Den anden uventede række, `sync-matches` uden uuid, er
+derimod præcis det, kortet siger: historik fra før `G44`, som forsvinder, når
+`prune_job_runs` når den.)
+
+Intet skal køres i Supabase. Se [`DECISIONS.md`](./DECISIONS.md).
+
+---
+
+21. august 2026 — `A46`s bestilling: værtsnavnet er nu en RÆKKE på jobkortet, ikke en linje i et JSON-dump
+
+**`A46`s sidste skridt er at skrive ni værtsnavne ind i `docs/CRON.md`s
+kaldkolonne, og de ni værdier findes kun i produktion.** `A32` står ved magt —
+den aflæsning er ejerens — så rækken blev flyttet **Tier 6 → Tier 1** frem for
+lukket, fordi udløseren er sprunget: alle ni jobs har kørt siden `setHost()`
+blev udrullet 13. august, og det langsomste skema er hver 12. time. *(Ejeren
+kørte aflæsningen samme dag, og rækken er lukket — se indslaget ovenfor.)*
+
+**Det, der kunne leveres, var bestillingen — og halvdelen af den manglede.**
+13. august-indslaget nedenfor sluttede med, at Admin → Drift viste værtsnavnet
+*"uden en eneste UI-ændring, fordi jobkortets «Seneste resumé» i forvejen dumper
+detaljen som JSON"*. Sandt — men aflæsningen er **ni** jobs, og et rå
+JSON-resumé bag en `<details>` koster en udfoldning og en gennemlæsning hver
+gang. Bestillingen var altså stadig "åbn ni ting og skriv ni værdier af", bare
+inde i appen. `host` er derfor løftet ud som sin egen signalrække, **"Kaldt
+på"**, nederst på hvert jobkort ved siden af varighederne
+(`src/lib/ops.js` → `lastHost`, `src/screens/OpsPanel.jsx`). De ni værdier
+aflæses nu ved at rulle ned ad Drift-siden én gang.
+
+**Rækken vises kun, når værtsnavnet findes** — samme regel som fejlraten
+(`G115`) og varigheden (`G114`): en kørsel skrevet af kode fra før `setHost()`
+har ingen adresse, og en manglende måling må ikke kunne forveksles med en. Tre
+tests i `ops.test.js` holder de tre former fra hinanden (værdi, detalje uden
+`host`, ingen detalje) og dækker også et job uden en eneste kørsel.
+
+**Rækken bliver stående, når `<app>` er udfyldt.** Den er ikke en
+engangs-aflæsning: `/api/` er med vilje undtaget fra domæne-redirectet, så et
+job, der peger på den gamle adresse, svarer 200 og tier — værtsnavnet er den
+eneste måde at se det på, og flytningen tages ét job ad gangen.
+
+**Læren, der er værd at tage med videre.** `A11`-mønsteret — flyt spørgsmålet
+ind i appens egne data i stedet for at aflæse en fremmed brugerflade — er nu
+brugt fire gange (`A11`, `A46`, `G121` og dette). Skridtet, de tre første
+sprang over, er, at **at gemme svaret ikke er det samme som at kunne læse det**:
+`authVia`, fejlklasserne og varigheden skulle hver især læses én gang eller
+aggregeres i SQL, mens dette skal læses ni gange i en brugerflade. Er svaret
+per-job, hører det til som et felt på kortet — ikke som en linje i et dump.
+
+Intet skal køres i Supabase. Se [`DECISIONS.md`](./DECISIONS.md).
+
+---
+
 21. august 2026 — Tier 2, 4 og 5 kørt tomme: fire gæld-rækker leveret, og oprettelsen af en konkurrence blev ÉN skrivning
 
 **Backloggen er 36 → 33, og Tier 1–5 er alle tomme på nær Tier 1's ene
