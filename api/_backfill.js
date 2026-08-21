@@ -42,6 +42,20 @@
 //    Rundestarten regnes ud fra HELE sæsonens kampe og ikke kun konkurrencens
 //    egne — ellers kunne en konkurrence uden fredagskampen vokse, efter runden
 //    reelt var i gang.
+//
+//    OG UD FRA ALLE KONKURRENCENS TURNERINGER, ikke kun den, der synkroniseres
+//    (G8, august 2026). En runde er en KALENDERUGE (`round_key()` er rundens
+//    tirsdag, sql/rating_core.sql) og hører derfor ikke til én turnering: en
+//    konkurrence over Superligaen OG Premier League har begge ligaers kampe i
+//    samme runde. Kaldet er stadig pr. sæson — sync-matches synkroniserer én
+//    turnering ad gangen — så for en flerturnerings-konkurrence hentes de
+//    ØVRIGE turneringers kampe med alene for at regne rundens start. Uden det
+//    var reglen sand pr. turnering og falsk pr. konkurrence: Superligaens
+//    fredagskamp kunne have sat runden i gang, mens efterfyldningen så en
+//    urørt Premier League-runde og lagde en ny kamp ind under deltagerne.
+//    Præcis samme sætning som afsnittet ovenfor, ét niveau højere oppe — og
+//    den kunne ikke ses før, fordi ingen konkurrence har haft mere end én
+//    turnering (`G8`).
 
 import { sbAll } from "./_shared.js";
 
@@ -115,8 +129,9 @@ export function matchLockAtMs(m, lockLeadMs = LOCK_LEAD_MS) {
 // Rundens start bor efter B1 (august 2026) KUN her og i `analytics_round_locks`:
 // frontendens udgave (`buildRoundStartMap`) forsvandt sammen med det rullende
 // gætte-vindue, som var dens eneste bruger. Regel 3 er en anden regel med sin
-// egen begrundelse og beholder både sin runde-grain og sin scoping pr. turnering
-// — kaldet henter kun kampe for én `season_id` ad gangen.
+// egen begrundelse og beholder sin runde-grain — men IKKE en scoping pr.
+// turnering: kaldet henter stadig kandidaterne for én `season_id` ad gangen,
+// mens rundens start regnes over hele konkurrencens univers (G8).
 function earliestLockByRound(matches, lockLeadMs) {
   const map = new Map();
   for (const m of matches) {
@@ -151,10 +166,15 @@ function matchesRule(competition, m) {
 // `matches` er ALLE sæsonens kampe (ikke kun konkurrencens) — nødvendigt, fordi
 // låsen regnes pr. runde over hele sæsonen. `existingIds` er de kampe,
 // konkurrencen allerede har.
-export function matchesToBackfill({ competition, matches, existingIds, nowMs, lockLeadMs = LOCK_LEAD_MS }) {
+//
+// `otherSeasonMatches` er kampene fra konkurrencens ØVRIGE turneringer og tæller
+// KUN med i rundens start (regel 3), aldrig som kandidater — kandidaterne kommer
+// fra `matches`, fordi det er den sæson, kaldet gælder. Tom for en konkurrence
+// med én turnering, som er hver eneste af dem, der findes i dag (`G8`).
+export function matchesToBackfill({ competition, matches, existingIds, nowMs, lockLeadMs = LOCK_LEAD_MS, otherSeasonMatches = [] }) {
   if (!BACKFILLABLE_MODES.includes(competition.mode)) return [];
   if (competition.mode_params?.stages) return []; // afgrænset i hånden — regel 2
-  const earliest = earliestLockByRound(matches, lockLeadMs);
+  const earliest = earliestLockByRound(otherSeasonMatches.length ? matches.concat(otherSeasonMatches) : matches, lockLeadMs);
   const have = existingIds instanceof Set ? existingIds : new Set(existingIds || []);
   return matches
     .filter((m) => !have.has(m.id))
@@ -175,7 +195,7 @@ export function matchesToBackfill({ competition, matches, existingIds, nowMs, lo
 export async function backfillCompetitionMatches(sb, seasonId, { now = Date.now() } = {}) {
   try {
     const modes = BACKFILLABLE_MODES.join(",");
-    // Alle tre opslag pagineres (G51): Supabase klipper tavst ved db-max-rows,
+    // Alle opslagene pagineres (G51): Supabase klipper tavst ved db-max-rows,
     // og `links` skalerer som konkurrencer × sæsonens kampe — tre "hel sæson"-
     // konkurrencer i samme turnering er over 1000 rækker. En afkortet
     // `links`-liste ville få allerede tilknyttede kampe til at se manglende ud;
@@ -205,14 +225,49 @@ export async function backfillCompetitionMatches(sb, seasonId, { now = Date.now(
       byComp.get(l.competition_id).add(l.match_id);
     }
 
+    // Regel 3 måler på runden, og en runde er en kalenderuge på tværs af
+    // turneringer — så en flerturnerings-konkurrence skal have sine ØVRIGE
+    // turneringers kampe med, før rundens start kan afgøres (G8). De hentes i
+    // ÉT opslag for alle de sæsoner, de relevante konkurrencer nævner, og kun
+    // med de felter, låsen og grupperingen kræver: rækkerne er ikke kandidater.
+    //
+    // Opslaget udgår helt, når ingen relevant konkurrence har mere end én
+    // turnering — altså i dag hver eneste kørsel, fordi `mode_params.tournaments`
+    // aldrig er blevet skrevet i produktion (`G8`). Den dag den første oprettes,
+    // koster efterfyldningen ét opslag mere pr. sæson-sync.
+    const extraSeasonIds = new Set();
+    for (const c of relevant) {
+      for (const t of c.mode_params?.tournaments || []) {
+        if (t?.season_id && t.season_id !== seasonId) extraSeasonIds.add(t.season_id);
+      }
+    }
+    const otherBySeason = new Map();
+    if (extraSeasonIds.size) {
+      const others = await sbAll(
+        sb,
+        `/rest/v1/matches?season_id=in.(${[...extraSeasonIds].join(",")})&select=id,season_id,round_key,kickoff_at,kickoff_tbd`,
+        { order: "id.asc" }
+      );
+      for (const m of others || []) {
+        if (!otherBySeason.has(m.season_id)) otherBySeason.set(m.season_id, []);
+        otherBySeason.get(m.season_id).push(m);
+      }
+    }
+
     const rows = [];
     let touched = 0;
     for (const c of relevant) {
+      const otherSeasonMatches = extraSeasonIds.size
+        ? (c.mode_params?.tournaments || [])
+            .filter((t) => t?.season_id && t.season_id !== seasonId)
+            .flatMap((t) => otherBySeason.get(t.season_id) || [])
+        : [];
       const missing = matchesToBackfill({
         competition: c,
         matches,
         existingIds: byComp.get(c.id) || new Set(),
         nowMs: now,
+        otherSeasonMatches,
       });
       if (missing.length) touched++;
       for (const matchId of missing) rows.push({ competition_id: c.id, match_id: matchId });

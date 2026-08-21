@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A59` · `B42` · `G148` · `I26`.**
+**Næste ledige: `A59` · `B42` · `G149` · `I26`.**
 *(`B40` er brugt 18. august 2026 til Indstillinger-skærmen med push-kontakten —
 leveret direkte uden en backlog-række; se `CHANGELOG.md`/`DECISIONS.md`. `B41`
 er brugt 21. august 2026 til Tier 1-bestillingen af `#73`.)*
@@ -60,7 +60,7 @@ Tom.
 
 ## Prioriteret rækkefølge
 
-Alle 30 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -114,7 +114,9 @@ Tomt.
 
 ### Tier 4 — Datarisiko med en lunte
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G148` | Efterfyldningen lægger den runde tilbage, opretteren valgte fra | Fundet ved siden af `G8` 21. august 2026. "Start ved næste runde" er et valg i oprettelsen, men det **gemmes ikke i rækken** — så efterfyldningen, der kun kender mode og `mode_params`, føjer indeværende runde til igen ved næste sync, så længe runden endnu ikke er låst. Rammer enhver `full_season`/`team`-konkurrence oprettet med "næste runde", mens indeværende stadig var åben. Kuren er at skrive startrunden i `mode_params` og lade regel 3 respektere den — en rækkeform-ændring, altså en beslutning og ikke en rettelse i forbifarten. |
 
 ### Tier 5 — Robusthed og vedligehold
 
@@ -131,7 +133,7 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 | `A34` | Supabase Free → Pro? | **Når Usage-siden viser egress nær 5 GB/md, eller når fremmede udgør flertallet af de aktive** — de to falder formentlig sammen omkring 200–500 ugentligt aktive. |
 | `A35` | Er Story Engine v3's publiceringstærskel på 45 den rigtige? | **Mindst ti kampdage — fire er nået 21. august 2026.** De to uger er gået, men de to halvdele af udløseren løber ikke i samme takt: kampdage med dagskort kommer ~2–3 om ugen, så ti er 3–4 uger ude. Aflæsningen samme dag ([`reviews/story-engine-v3-aflaesning-2026-08-21.md`](./reviews/story-engine-v3-aflaesning-2026-08-21.md)) viste 50,0 % af alle bruger-dage med ulæst-markering — men **76,9 % af motorens egen valgmængde**, altså over rækkens egen "over 70 % ⇒ for lav". Forskellen er de 35 af 100 bruger-dage, hvor brugeren ikke havde ét tip. Kør `sql/story_engine_v3_measure.sql` igen, når kampdagene er der. |
 | `A58` | Er `DAY_TOP` + `CONTRARIAN` = 87 % af det sete den rigtige fordeling? | **Mindst ti kampdage** — samme udløser og samme opslag som `A35`, og de tages sammen. Efterfølgeren til `A33`, som blev besvaret 21. august 2026. |
-| `G8` | Multi-turnerings-`full_season` er stadig uafprøvet mod rigtige data | Den første konkurrence med `mode_params.tournaments` — aflæst tom igen 5. august 2026. |
+| `G8` | Multi-turnerings-`full_season` er stadig uafprøvet mod rigtige data | Den første konkurrence med `mode_params.tournaments` — aflæst tom igen 5. august 2026. **Skrumpet 21. august 2026:** stiens ene serverside-forskel er gennemgået og RETTET (efterfyldningens regel 3 målte runden pr. turnering, ikke pr. konkurrence), og skriver og læser er bundet sammen af `multi_turnering.test.js`. Tilbage er præcis dét, rækken hedder: ingen rigtige data. Efterses i Admin → Drift, når den første kommer. |
 | `A23` | Skal appen have en router? | Når tilbage-knappen koster brugere, eller `I12` kræver delbare interne URL'er. |
 | `G1` | `MainApp.jsx` (~582) er den sidste store skærmfil | `A23`. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67, `HjemTab` 672 → 411, `ProfileScreen` 480 → 241, `CreateCompetitionScreen` 444 → 394 — og det, der er tilbage i `MainApp`, **ER** navigations-tilstandsmaskinen plus render-træet, altså præcis `A23`s emne. Rækken er dermed ikke længere et stykke oprydning, men en afventning: en router omskriver det, der er tilbage, og en opdeling først ville skulle laves om. |
 | `A14` | Fuld Prettier-gennemformatering | Næste gang der alligevel røres bredt i frontenden — ellers aldrig. |
@@ -209,7 +211,8 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | G123 | **Ingen generisk vagt for `drop function` + `revoke` i `sql/`.** | `G119` (14. august 2026) fravalgte en tekstlæsende kontrol, der kræver `revoke execute … from public` efter hvert `drop function` — kun to forekomster fandtes, og en vagt over to koster mere at vedligeholde, end den kan fange. Flyttet til Tier 6: en tredje forekomst gør det til et mønster. | Lille, men ikke før udløseren |
 | G129 | **Et afvist dagskort kan genopstå.** `generate_daily_stories(p_day)` sletter og gen-indsætter dagens rækker ved en gen-kørsel; den nye række har et nyt `id`, og `dismissed_at` blev i graven sammen med den gamle. | Udløses kun af en gen-kørsel EFTER at dagen er gjort færdig — i praksis en resultatrettelse bagud på præcis den dag, brugeren afviste. **Kanten er kendt og står allerede skrevet ved koden** (`src/lib/data/activity.js`, `dismissStory`), tilføjet sammen med `I25` 15. august 2026, som var det, der gav dagskortet et Afvis-kryds overhovedet. Rækken findes, fordi begrundelsen ellers kun ville stå ét sted og aldrig blive taget op igen — ikke fordi den skal rettes nu. Kuren er en `dismissed`-liste pr. `(user_id, day_key)`, altså en tabel, en policy og en ekstra læsning i `loadDayCard` for en kant, ingen endnu har meldt. Flyttet til Tier 6 med den første melding som udløser. | Lille—mellem, men ikke før udløseren |
 | G132 | **Ingen generisk vagt for SELECT-policies, der kalder en funktion, som slår deres egen tabel op.** Mønstret spærrer enhver skrivning med `Prefer: return=representation`. | `G130` gjorde oprettelse af en konkurrence umulig i fem dage, og fejlen var usynlig for enhver læsetest. En vagt over `pg_policies` kunne fange den ved migreringstid. | Mellem — kræver at vagten kan se ind i funktionskroppen (`pg_get_functiondef`) og skelne en selv-opslående funktion fra en harmløs. **Venter på en anden forekomst** (`G123`s disciplin). |
-| G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
+| G148 | **Efterfyldningen lægger den runde tilbage, opretteren valgte fra.** "Start ved næste runde" filtrerer indeværende runde væk ved oprettelsen (`filterFromRoundStart`, `src/lib/scoring.js`), men valget skrives ikke i rækken — hverken som kolonne eller i `mode_params`. | Efterfyldningen kender kun mode og `mode_params` og kan derfor ikke se, at runden blev valgt fra: er den endnu ikke låst, føjes dens kampe til ved næste `sync-matches`, typisk inden for tolv timer. Det er præcis den situation, chippen findes til — brugeren vælger "næste runde", FORDI indeværende stadig er åben — så fejlen rammer valget hver gang, det bruges efter hensigten, og den er tavs: konkurrencen får bare flere kampe, end den blev oprettet med. Fundet ved siden af `G8` 21. august 2026. | Lille-mellem (rækkeform + regel) |
+| G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. **Kørt 21. august 2026, og ventetiden er brugt frem for båret:** stien er læst igennem ende til ende, og den ENE forskel, kun en flerturnerings-konkurrence møder på serversiden, var forkert — efterfyldningens regel 3 regnede rundens start pr. TURNERING, fordi kaldet sker med én `season_id` ad gangen, mens en runde er en kalenderuge på tværs af turneringer. Rettet, og en ny søm-test (`multi_turnering.test.js`) giver den RIGTIGE skrivers række til den RIGTIGE læser, så de to ender ikke længere kun ligner hinanden i to håndskrevne fixtures. **Resten af stien holdt:** `competition_status` udleder sæsonerne af konkurrencens egne kampe, `round_key` er turnerings-uafhængig, og læse-stierne går gennem `competition_matches` og rører aldrig `league_id`. Rækken bliver stående med sin udløser uændret: intet af dette er rigtige data. | Lille (eftersyn, når udløseren kommer) |
 
 ## Ideer
 
@@ -251,33 +254,30 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (otteogfyrretyvende kørsel) — Tier 4 og Tier 5 kørt tomme: `G147` og `G146`
+### 21. august 2026 (niogfyrretyvende kørsel) — `G8` kørt: stien læst, regel 3 rettet, rækken bliver stående
 
-**Listen er 32 → 30.** Begge tiers er tomme, og det er nu Tier 1, 2, 3, 4 og 5.
-Tilbage står Tier 6 (venter på en udløser) og Tier 7 (udadvendt og ubesluttet).
+**Listen er 30 → 31.** `G8` er en Tier 6-række og bliver dér: dens udløser — den
+første konkurrence med `mode_params.tournaments` — er stadig ikke sprunget. Det
+nye punkt er `G148`, som blev fundet ved siden af.
 
-**`G147`:** guiden afgjorde, om en turnering har kampe tilbage, ved at hente én
-række pr. uspillet kamp — ~1.900 ved sæsonstart, altså over PostgRESTs tavse
-loft, og udfaldet var en turnering præsenteret som utipbar. Kuren er ét
-afgrænset opslag (`limit=1`) pr. turnering. **Ikke `db.count()`, som rækken
-foreslog:** `hasUpcoming` er et ja/nej, og svaret stod allerede fem linjer
-længere oppe i samme fil.
+**Hvad kørslen afgjorde om Tier 6 selv:** en udløser siger, hvornår en række kan
+BESVARES, ikke hvornår den kan SKRUMPES. `G8`s frygt har to kilder — at koden er
+forkert, og at rigtige data viser noget, ingen har tænkt på — og kun den anden
+kræver ventetid.
 
-**`G146`:** de to Championship-vælgere svares nu af `#74
-championship_selectors.sql` — to `distinct`-views frem for tusindvis af rækker.
-🔴 **Migreringen skal køres i Supabase FØR mergen** (samme enkeltrettede
-afhængighed som `#62`); tjeklisten i `DOCUMENTATION.md` §11 bærer punktet.
+**Fejlen, gennemgangen fandt:** efterfyldningens regel 3 regnede rundens start
+pr. TURNERING, fordi kaldet sker med én `season_id` ad gangen. En runde er en
+kalenderuge og hører ikke til én turnering, så for en flerturnerings-konkurrence
+var reglen sand pr. turnering og falsk pr. konkurrence. Rettet; kandidaterne er
+stadig pr. sæson.
 
-**Læren, og den er reglens ordlyd læst præcist:** `G106` siger, at aggregeringen
-hører hjemme i databasen, når antallet vokser med noget, brugeren kan forøge.
-Det afgørende er antallet af **kald**, ikke af rækker — er fan-out'en bundet af
-en liste, vi allerede har (turneringerne), er en løkke billigere end en
-migrering; er der intet at binde til (antallet af runder), er et view svaret.
-De to rækker så ens ud og havde derfor forskellig kur.
+**Sømmen mellem skriver (`src/`) og læser (`api/`) er bundet** af
+`multi_turnering.test.js`. Begge ender var dækket i forvejen — hver med sin egen
+håndskrevne række, hvilket ikke er en aftale.
 
-**Aflæsningen, `G146` bad om (`A32`), blev ikke bestilt for sig** — den er
-verifikationsblok 4 i migreringen, som ejeren alligevel har åben, når SQL'en
-køres. En bestilling, der kan ride med på en, der allerede skal afsted, er ikke
-en bestilling.
+**`G148` (Tier 4):** "Start ved næste runde" gemmes ikke i rækken, så
+efterfyldningen lægger den valgte-fra runde tilbage ved næste sync. Kuren er en
+rækkeform-ændring, altså en beslutning — derfor en række og ikke en rettelse i
+forbifarten.
 
 **Indbakken var tom ved kørslens begyndelse og er det stadig.**

@@ -15,6 +15,62 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `G8`: en Tier 6-række, hvis ventetid kunne bruges, og hvad regel 3 måler på
+
+**Beslutning:** `G8` (multi-turnerings-`full_season` er uafprøvet mod rigtige
+data) **bliver stående i Tier 6 med sin udløser uændret**, men stien er
+gennemgået, og den ene fejl, gennemgangen fandt, er rettet: efterfyldningens
+regel 3 regner nu rundens start over **alle konkurrencens turneringer** og ikke
+kun den, der synkroniseres.
+
+**Begrundelse, og den er delt i to.**
+
+**1. Hvad en udløser-række tillader.** Tier 6's regel er, at rækkerne kun røres,
+når udløseren indtræffer, og `G8`s udløser — den første konkurrence med
+`mode_params.tournaments` — er ikke sprunget (aflæst tom 31. juli og igen
+5. august 2026). Men udløseren siger, hvornår rækken kan **besvares**, ikke
+hvornår den kan **skrumpes**. Rækkens frygt er ordret *"fejler den, fejler den
+tavst i et hjørne, ingen har haft brug for endnu"*, og den frygt har to kilder:
+at koden er forkert, og at rigtige data kunne vise noget, ingen har tænkt på. Den
+første kan læses i repoet; den anden kan kun ventes på. Ventetiden er derfor
+brugt på den første.
+
+**2. Hvad regel 3 måler på — og hvorfor den var forkert.** Reglen ("en runde, der
+er gået i gang, vokser aldrig") er skrevet for at beskytte deltagere, der
+allerede har tippet og set stillingen. Den blev implementeret pr. `season_id`,
+fordi kaldet sker pr. sæson — `sync-matches` synkroniserer én turnering ad
+gangen. **Men runden er en kalenderuge** (`round_key()`, `sql/rating_core.sql`)
+og er dermed et begreb på konkurrencens niveau, ikke turneringens. For en
+konkurrence over to turneringer var reglen derfor sand pr. turnering og falsk
+pr. konkurrence: den ene ligas kamp kunne sætte runden i gang, mens
+efterfyldningen lagde en ny kamp ind i den anden.
+
+Filen sagde det allerede selv, ét niveau nede: *"rundestarten regnes ud fra HELE
+sæsonens kampe og ikke kun konkurrencens egne — ellers kunne en konkurrence uden
+fredagskampen vokse, efter runden reelt var i gang."* Den samme sætning gælder
+et niveau højere oppe, og det er den, der manglede. **Kandidaterne bliver
+derimod pr. sæson** — de andre turneringers kampe kommer med, når deres egen
+sæson synkroniseres — så det, der udvides, er kun målingen af rundens start.
+
+**Prisen er ét opslag pr. sæson-sync, og kun når nogen har oprettet en
+flerturnerings-konkurrence.** I dag udgår det helt, hvilket er samme egenskab som
+`G8` selv: koden findes, men ingen række udløser den.
+
+**Og en beslutning om, hvordan sådan en sti testes.** Skriveren bor i `src/`,
+læseren i `api/`, og `api/` importerer med vilje ikke fra `src/`. Begge ender var
+dækket, men hver med sin **håndskrevne** række, og to fixtures, der ligner
+hinanden, er ikke en aftale — en omdøbning i den ene ende lader begge tests
+bestå. `multi_turnering.test.js` giver derfor den rigtige skrivers række direkte
+til den rigtige læser. Det er samme greb som `saelgesaetning.test.js` (`G97`) og
+`seo.test.js`: en regel, der kun findes som en sætning i to filer, holder præcis
+så længe, som den næste, der redigerer, husker den.
+
+**Hvad beslutningen IKKE dækker.** Ingen af dette er rigtige data. Rækken lukkes
+først, når den første flerturnerings-konkurrence er oprettet og efterset i
+Admin → Drift — `A32` står ved magt.
+
+---
+
 ## 21. august 2026 — Tier 4 og Tier 5: `G147` og `G146`, og hvornår en fan-out er billigere end et view
 
 **Beslutning:** De to sidste forekomster af det tavse rækkeloft uden for
