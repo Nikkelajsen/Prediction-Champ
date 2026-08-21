@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A58` · `B42` · `G138` · `I26`.**
+**Næste ledige: `A58` · `B42` · `G139` · `I26`.**
 *(`B40` er brugt 18. august 2026 til Indstillinger-skærmen med push-kontakten —
 leveret direkte uden en backlog-række; se `CHANGELOG.md`/`DECISIONS.md`. `B41`
 er brugt 21. august 2026 til Tier 1-bestillingen af `#73`.)*
@@ -54,13 +54,13 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- Admin → Drift kalder `story-engine` et uventet job og gætter på to forklaringer, der begge er forkerte — rækken skrives af matches-triggeren (`sql/rating_trigger_optimization.sql`), ikke af et cron-job
+*(Tom.)*
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -106,7 +106,9 @@ Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G138` | Admin → Drift kalder `story-engine` et uventet job og gætter på to forklaringer, der begge er forkerte | **Set i produktion 21. august 2026** under `A46`-aflæsningen: kortet melder OK, men bærer teksten *"Jobbet har meldt sig, men svarer ikke til nogen turnering. Enten peger et cron-job på en liga, der ikke findes, eller også er det en gammel række fra dengang alle turneringer skrev samme jobnavn."* **Ingen af de to gæt passer.** `story-engine`-rækken skrives af **matches-triggeren** i [`sql/rating_trigger_optimization.sql`](../sql/rating_trigger_optimization.sql) (linje ~228) — altså fra databasen og ikke fra cron-job.org, hvilket også er grunden til, at dens resumé hverken har `host` eller `authVia`. Fejlen er en **antagelse i `mergeJobHealth()`**: alt, der ikke står i `expectedJobs()`, får `unexpected: true`, som er formet efter `G44`s forældede `sync-matches`-rækker. Kuren er at kende de trigger-skrevne jobs som en tredje kategori ved siden af `BASE_JOBS` og turneringerne — de har ingen kadence (de fyrer, når en kamp får et resultat), så tavshed kan stadig ikke måles, men teksten skal sige *det* frem for at pege på cron-job.org. **Prisen ved at lade den stå:** den ene tekst, der skal fortælle en admin, at noget er galt, fortæller det om et job, hvor intet er galt — og dækker samtidig over den dag, hvor et cron-job FAKTISK peger på en slettet liga. |
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -255,7 +257,8 @@ kan se, hvad der lige er sket, uden at læse hele listen.
 
 ### 21. august 2026 (niogtredivte kørsel) — `A46` er lukket: alle ni cron-jobs står på den gamle adresse
 
-**Listen er 32 → 31.** `A46` er slettet. Ejeren aflæste de ni jobkort i
+**Listen er 32 → 32.** `A46` er slettet, og indbakkens ene linje er blevet
+`G138` i Tier 2 — ét ud, ét ind. Ejeren aflæste de ni jobkort i
 Admin → Drift samme dag, og svaret var entydigt: **alle ni cron-jobs kalder ind
 på `prediction-champ.vercel.app`.** `docs/CRON.md`s kaldkolonne er udfyldt, og
 pladsholderen `<app>` findes ikke længere i tabellen.
@@ -269,6 +272,11 @@ rækken stod med `?`.
 **De fire sidste blev ikke udfyldt ved at slutte fra de fem første.** Fem ens
 værdier er et mønster og ikke en regel: hvert cron-job har sin egen URL, og
 flytningen tages ét job ad gangen. Alle ni er læst hver for sig.
+
+**Indbakken er tømt i samme ombæring:** fundet fra aflæsningen — `story-engine`
+står som et *uventet* job med to forklaringer, der begge er forkerte — har fået
+`G138` i Tier 2. Rækken er ikke bygget: den er en tekst- og kategorifejl i
+`mergeJobHealth()`, ikke en, aflæsningen krævede løst.
 
 **Undervejs blev bestillingen selv gjort billigere:** `host` er løftet ud af
 "Seneste resumé"s rå JSON og vises nu som signalrækken **"Kaldt på"** på hvert

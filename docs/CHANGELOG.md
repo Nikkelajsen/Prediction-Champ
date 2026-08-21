@@ -11,8 +11,9 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 21. august 2026 — `A46` er lukket: alle ni cron-jobs står på `prediction-champ.vercel.app`
 
-**Backloggen er 32 → 31, og `docs/CRON.md` har ikke længere en pladsholder i
-kaldkolonnen.** Ejeren læste de ni jobkort i Admin → Drift samme dag, og svaret
+**Backloggen er 32 → 32, og `docs/CRON.md` har ikke længere en pladsholder i
+kaldkolonnen.** `A46` er slettet, og indbakkens ene linje er blevet `G138` —
+ét ud, ét ind. Ejeren læste de ni jobkort i Admin → Drift samme dag, og svaret
 var entydigt: **alle ni cron-jobs kalder ind på den gamle adresse.** Alle ni bar
 `authVia: header`, altså cron-jobbet selv og ikke et manuelt "Hent nu" — så
 værdien er den, jobbet ER sat op med.
@@ -34,12 +35,16 @@ forord er den bindende regel: *et register, der er forkert, er værre end intet.
 `<app>` kunne ikke blive forkert, `prediction-champ.vercel.app` kan.
 Vedligeholdelsespligten står ved kolonnen.
 
-**Fundet undervejs, noteret i backloggens indbakke frem for rettet:**
+**Fundet undervejs, triageret til `G138` i Tier 2 frem for rettet:**
 Admin → Drift kalder `story-engine` et *uventet* job og gætter på to
 forklaringer, der begge er forkerte — rækken skrives af matches-triggeren
-(`sql/rating_trigger_optimization.sql`), ikke af et cron-job. (Den anden
-uventede række, `sync-matches` uden uuid, er derimod præcis det, kortet siger:
-historik fra før `G44`, som forsvinder, når `prune_job_runs` når den.)
+(`sql/rating_trigger_optimization.sql`), ikke af et cron-job, hvilket også er
+grunden til, at dens resumé hverken har `host` eller `authVia`. Fejlen er en
+antagelse i `mergeJobHealth()`: alt uden for `expectedJobs()` får
+`unexpected: true`, og teksten er formet efter `G44`s forældede
+`sync-matches`-rækker. (Den anden uventede række, `sync-matches` uden uuid, er
+derimod præcis det, kortet siger: historik fra før `G44`, som forsvinder, når
+`prune_job_runs` når den.)
 
 Intet skal køres i Supabase. Se [`DECISIONS.md`](./DECISIONS.md).
 
