@@ -17,6 +17,7 @@ import { roundStatus } from "./predictions/roundStatus.js";
 import { RoundHeader } from "./predictions/RoundHeader.jsx";
 import { MatchRow, TeamNames, ROW_COLS, ROW_GAP } from "./predictions/MatchRow.jsx";
 import { selectIn } from "../lib/data/chunked.js";
+import { TEAM_SELECT, teamLabelMap } from "../lib/teams.js";
 
 // errIds bærer BESKEDEN og ikke bare `true`: efter G24 kan en række fejle på to
 // måder, og "Kunne ikke slette" på et fejlet gem ville pege brugeren det forkerte
@@ -76,14 +77,11 @@ function PredictionsScreen({ token, userId, competitions, leagues = [], initialF
         } else { setSeasonLeague({}); }
         const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]))];
         if (teamIds.length) {
-          // Tip-rækkerne er det ene sted, pladsen er trang, og derfor det ene
-          // sted, det korte holdnavn vises (B39): `short_name` er leverandørens
-          // eget visningsnavn ("Santander", "Espanyol") og findes kun for
-          // football-data-ligaerne — alle andre falder tilbage på det fulde navn,
-          // og det gør resten af appen med vilje også. `select=*` og ikke en
-          // kolonneliste, så skærmen tåler, at #72 endnu ikke er kørt.
-          const tms = await selectIn(token, "teams", "id", teamIds, "&select=*");
-          setTeamsById(Object.fromEntries(tms.map((t) => [t.id, t.short_name || t.name])));
+          // Kort holdnavn, hvor der er ét (`B39`). Reglen og hvorfor opslaget er
+          // bredt bor i `lib/teams.js` — den gjaldt indtil 21. august 2026 kun
+          // denne skærm og gælder nu hele appen.
+          const tms = await selectIn(token, "teams", "id", teamIds, `&select=${TEAM_SELECT}`);
+          setTeamsById(Object.fromEntries(teamLabelMap(tms)));
         }
         const ap = await selectIn(token, "predictions", "match_id", ids, "&select=*");
         setAllPreds(ap);

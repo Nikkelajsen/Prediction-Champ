@@ -5,6 +5,7 @@ import { db } from "../../lib/supabase.js";
 import { currentRoundIndex, formatKickoff, groupIntoRounds } from "../../lib/scoring.js";
 import { C, muted } from "../../ui/theme.js";
 import { Card, RoundPager, ScoreInput } from "../../ui/components.jsx";
+import { teamLabelMap } from "../../lib/teams.js";
 
 function ResultsPanel({ token, leagues }) {
   const [leagueId, setLeagueId] = useState(leagues[0]?.id || "");
@@ -12,7 +13,9 @@ function ResultsPanel({ token, leagues }) {
   const [matches, setMatches] = useState([]);
   const [roundIndex, setRoundIndex] = useState(0);
 
-  const teamsById = useMemo(() => Object.fromEntries(teams.map((t) => [t.id, t.name])), [teams]);
+  // Kort holdnavn, hvor der er ét (`B39`) — samme regel som resten af appen,
+  // så en kamp hedder det samme i Admin som på Tip.
+  const teamsById = useMemo(() => Object.fromEntries(teamLabelMap(teams)), [teams]);
   const rounds = useMemo(() => groupIntoRounds(matches), [matches]);
   const round = rounds[roundIndex];
 

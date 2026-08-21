@@ -87,7 +87,9 @@ create table public.seasons (
 create table public.teams (
   id uuid primary key default gen_random_uuid(),
   league_id uuid references public.leagues(id) on delete cascade,
-  name text not null
+  name text not null,
+  -- `B39` (#72): motoren skriver det korte navn i historierne, hvor der er ét.
+  short_name text
 );
 create table public.matches (
   id uuid primary key default gen_random_uuid(),

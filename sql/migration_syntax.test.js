@@ -184,3 +184,41 @@ describe("dagskortets tekster står i datid (G89)", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Vagt 4: dagsmotoren skriver det KORTE holdnavn (B39, 21. august 2026)
+//
+// Samme form og samme begrundelse som vagt 3 ovenfor: reglen står seks steder i
+// `story_engine_v3.sql`, og en påstand mod `stories` ville kun kunne se de tre
+// af otte regler, fixturen faktisk udgiver. COLLECTIVE_MISS — den ene, hvis
+// OVERSKRIFT bærer to holdnavne — er netop en af de fem, den ikke fyrer, så en
+// række-påstand ville være grøn, uanset hvad der stod i den.
+//
+// Vagten er tosidet af samme grund som vagt 3: den forbyder det bare `th.name`
+// OG kræver, at `coalesce`-formen faktisk står der. Uden den anden halvdel ville
+// et navn, nogen slettede helt, være grønt.
+describe("dagskortets holdnavne er de korte (B39)", () => {
+  const DAGSMOTOR = "story_engine_v3.sql";
+  // De fire steder, `teams` joines ind i en tekst eller en payload. `th`/`ta` er
+  // filens egne aliasser for hjemme- og udehold.
+  const KORT = "coalesce(nullif(th.short_name, ''), th.name)";
+  const KORT_UDE = "coalesce(nullif(ta.short_name, ''), ta.name)";
+
+  const kilde = () => readFileSync(join(SQL_DIR, DAGSMOTOR), "utf8").replace(/--[^\n]*/g, "");
+
+  it.each(["th.name", "ta.name"])("intet bart %s står tilbage", (bart) => {
+    const src = kilde();
+    // Forekomsterne INDE i coalesce-formen er de lovlige — de tælles ud, så det,
+    // der er tilbage, er præcis de bare opslag.
+    const alle = src.split(bart).length - 1;
+    const lovlige = src.split(`, ${bart})`).length - 1;
+    expect(alle - lovlige,
+      `${bart} står bart ${alle - lovlige} sted(er) — holdet ville hedde sit fulde navn i en historie (B39)`).toBe(0);
+  });
+
+  it("den korte form er den, der faktisk skrives", () => {
+    const src = kilde();
+    expect(src, `"${KORT}" mangler — vagten ovenfor ville være grøn, hvis navnet blev slettet helt`).toContain(KORT);
+    expect(src, `"${KORT_UDE}" mangler`).toContain(KORT_UDE);
+  });
+});

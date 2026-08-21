@@ -9,6 +9,44 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 — Kort holdnavn overalt, og reglen bor ét sted (`B39`)
+
+- **Ejerens melding efter at have set `#248` i drift:** navnene er rigtige på
+  tip-skærmen og lange alle andre steder. Det korte navn gælder nu **hver
+  visning af et holdnavn** — beslutningen og hvorfor afgrænsningen blev prøvet
+  først står i `docs/DECISIONS.md`.
+- **Ny: `src/lib/teams.js`** — `teamLabel()`, `teamLabelMap()` og `TEAM_SELECT`.
+  Reglen (`short_name` når der er ét, ellers `name`) OG opslagets kolonner ét
+  sted, frem for otte kopier af `t.short_name || t.name`; begge fejlformer, en
+  kopi kan have, ser ud som "det hold har ikke noget kort navn".
+- **Otte visninger flyttet over:** Hjems deadline-kort og rundeliste
+  (`data/home.js`), stillingens rundemodal (`data/competitionState.js`),
+  opret-flowets kampvælger og favorithold-liste (`data/createSources.js`),
+  Admin → Kampe og Admin → Resultater, og tip-skærmen, som nu bruger den fælles
+  regel i stedet for sit eget udtryk.
+- **Hjem var det sted, det betød mest** — og det stod ikke i gårsdagens
+  beslutning: rundelisten **trunkerer** med ellipse, altså gør præcis det,
+  tip-rækken nægter at gøre. Præmissen "alle andre visninger har plads" holdt
+  ikke.
+- **Favorithold-listen sorterer nu efter det, der vises** (`_label`). Med
+  serverens `order=name` og kort navn på skærmen ville "Atleti" stå midt i
+  C'erne, hvor "Club Atlético de Madrid" hører hjemme.
+- **Story Engine skriver kort navn i historierne** (`story_engine_v3.sql`, seks
+  steder). 🔴 **Filen skal gen-køres i Supabase** — den er idempotent og rører
+  ingen rækker, men **teksten er frossen ved skrivningen**, så kort navn gælder
+  fremad: kort, der allerede står, beholder de lange navne.
+- **Vagten er kilde-læsende** (`sql/migration_syntax.test.js`, vagt 4) og ikke en
+  påstand mod `stories` — af samme grund som vagt 3 (`G89`): fixturen fyrer tre
+  af otte dagsregler, og COLLECTIVE_MISS, den ene hvis overskrift bærer to
+  holdnavne, er ikke en af dem. Vagten er mutations-efterprøvet.
+- **`TEAM_SELECT` er `*` og navngiver ingen kolonner** — en navngiven kolonne,
+  der ikke findes, er en 400, og en staging-database uden `#72` ville da vise
+  hvid skærm på hver skærm med en kamp på. Nu en påstand frem for en vane.
+- **Efterprøvet:** 1514 tests (11 nye), lint uden fejl, grønt build, og alle 19
+  SQL-tests fra CI kørt mod en rigtig PostgreSQL 16.13. **Set i den kørende app**
+  med demo-data, hvor hvert holds `name` var gjort langt: Hjem viste de korte.
+  Skærmbillederne er uændrede (demo-holdene hedder allerede "Arsenal").
+
 20. august 2026 — Kort holdnavn i tip-rækkerne (`B39`): "Santander" frem for "Real Racing Club de Santander"
 
 - **Ny migrering: [`#72 teams_short_name.sql`](../sql/teams_short_name.sql)** —

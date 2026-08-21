@@ -2,6 +2,9 @@
 // pr.-liga-rækker uden logo/land, så navn + liganavn er hele den tilgængelige
 // identitet — derfor én grupperet dropdown (optgroup pr. turnering) som
 // tilføj-flade og de valgte hold som chips med liganavn.
+//
+// `_label` og ikke `name`: kort holdnavn, hvor der er ét (`B39`). Feltet er
+// sat af `loadTeamsByLeague()`, som sorterer listen efter netop det.
 import { C, chip } from "../../ui/theme.js";
 import RoundStartChoice from "./RoundStartChoice.jsx";
 
@@ -35,7 +38,7 @@ function TeamFields({ leagues, teamsByLeague, seasonByLeague, selected, onAdd, o
               <optgroup key={l.id} label={l.name}>
                 {teams.map((t) => (
                   <option key={t.id} value={t.id} disabled={selected.some((s) => s.teamId === t.id)}>
-                    {t.name}
+                    {t._label}
                   </option>
                 ))}
               </optgroup>

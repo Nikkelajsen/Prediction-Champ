@@ -162,7 +162,10 @@ function CreateCompetitionScreen({ token, userId, leagues, initialGroupId = null
     const season = team && seasonByLeague[team.league_id];
     if (!team || !season) return;
     setTeamSel((prev) => (prev.some((t) => t.teamId === teamId) ? prev
-      : [...prev, { teamId: team.id, leagueId: team.league_id, seasonId: season.id, name: team.name }]));
+      // `_label` er holdets navn PÅ SKÆRMEN (`B39`) — chippen skal hedde det
+      // samme som den linje, den blev valgt fra. Kun `teamId` gemmes på
+      // konkurrencen; navnet her forlader aldrig skærmen.
+      : [...prev, { teamId: team.id, leagueId: team.league_id, seasonId: season.id, name: team._label }]));
   }
 
   // Puljen af kommende kampe. Quick League skal kunne se flere runder frem, så

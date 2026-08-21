@@ -8,6 +8,7 @@ import { apiFetch } from "../../lib/api.js";
 import { currentRoundIndex, formatKickoff, groupIntoRounds } from "../../lib/scoring.js";
 import { C, btnGold, font, muted } from "../../ui/theme.js";
 import { Card, RoundPager } from "../../ui/components.jsx";
+import { teamLabelMap } from "../../lib/teams.js";
 
 function MatchesPanel({ token, leagues, reloadLeagues }) {
   const [leagueId, setLeagueId] = useState(leagues[0]?.id || "");
@@ -18,7 +19,9 @@ function MatchesPanel({ token, leagues, reloadLeagues }) {
   const [syncResult, setSyncResult] = useState(null);
 
   const league = leagues.find((l) => l.id === leagueId) || null;
-  const teamsById = useMemo(() => Object.fromEntries(teams.map((t) => [t.id, t.name])), [teams]);
+  // Kort holdnavn, hvor der er ét (`B39`) — samme regel som resten af appen,
+  // så en kamp hedder det samme i Admin som på Tip.
+  const teamsById = useMemo(() => Object.fromEntries(teamLabelMap(teams)), [teams]);
   const rounds = useMemo(() => groupIntoRounds(matches), [matches]);
 
   useEffect(() => { if (!leagueId && leagues.length) setLeagueId(leagues[0].id); }, [leagues]); // eslint-disable-line

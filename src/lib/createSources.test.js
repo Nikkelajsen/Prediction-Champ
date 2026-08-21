@@ -83,6 +83,34 @@ describe("loadTeamsByLeague", () => {
   });
 });
 
+describe("loadTeamsByLeague", () => {
+  // `B39`: dropdownen viser det korte navn, og listen skal derfor sortere efter
+  // DET og ikke efter `name`. Uden sorteringen ville "Atleti" stå, hvor "Club
+  // Atlético de Madrid" hører hjemme — altså midt i C'erne i en liste, man
+  // leder i. Det er den eneste af de otte visninger, hvor navnet er andet end
+  // tekst på en linje, og derfor den eneste, der har sin egen påstand.
+  it("grupperer pr. turnering og sorterer efter det navn, der VISES", async () => {
+    mockTables({ teams: [
+      { id: "t1", league_id: "l1", name: "Club Atlético de Madrid", short_name: "Atleti" },
+      { id: "t2", league_id: "l1", name: "Athletic Club", short_name: "Athletic" },
+      { id: "t3", league_id: "l2", name: "Odense BK" },
+    ] });
+    const byLeague = await loadTeamsByLeague("t", LIGAER);
+    expect(byLeague.l1.map((t) => t._label)).toEqual(["Athletic", "Atleti"]);
+    expect(byLeague.l2.map((t) => t._label)).toEqual(["Odense BK"]);
+  });
+
+  // Opslaget må ikke navngive `short_name`: en kolonne, der ikke findes i en
+  // database uden `#72`, er en 400 — og så er hele opret-flowet nede dér.
+  it("beder om alle kolonner frem for at navngive short_name", async () => {
+    let q = null;
+    mockTables({ teams: (query) => { q = query; return []; } });
+    await loadTeamsByLeague("t", LIGAER);
+    expect(q).toContain("select=*");
+    expect(q).not.toContain("short_name");
+  });
+});
+
 describe("loadUpcomingMatches", () => {
   const SÆSONER = { l1: { id: "s1", league_id: "l1" }, l2: { id: "s2", league_id: "l2" } };
   const kamp = (n, season = "s1") => ({ id: `m${n}`, season_id: season, home_team_id: "a", away_team_id: "b" });
