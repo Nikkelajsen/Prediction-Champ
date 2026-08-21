@@ -15,6 +15,88 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `A44` afgjort: tavlen viser fortsat fulde visningsnavne, og modalen åbner, hvor du selv står
+
+**Beslutning:** den globale rating og Championship bliver ved med at vise fulde
+visningsnavne til alle indloggede — også til brugere, man ikke deler liga eller
+konkurrence med. `A44` lukkes uden en maskering. Til gengæld er dét, aflæsningen
+egentlig fandt, bygget samme dag: **fuld-stillings-modalen åbner på den side,
+brugeren selv står på**, med genvejene "Top 20" og "Min placering" øverst.
+
+**Begrundelsen for at lade navnene stå.** Navnene er selvvalgte og
+case-insensitivt unikke (`username_available`), altså allerede pseudonymer;
+privatlivspolitikken siger det højt to steder (*"Brugernavnet er synligt for alle
+andre brugere"*, `src/lib/legal.js`), og den siger det som en **vejledning**, før
+navnet vælges. Og en titel, der hedder Månedens Champion, skal kunne navngive sin
+vinder: en tavle, hvor de fleste rækker er tal, er ikke en afgrænsning af
+tavlen — det er en afskaffelse af dét, den findes for. De tre veje, rækken selv
+skitserede (behold · top-N plus `#42` · et alias uden for egne ligaer), er
+dermed afgjort til den første.
+
+**Hvad beslutningen IKKE dækker, og som derfor skal stå her.** Listen af
+visningsnavne er fortsat hentbar for enhver med en konto — `A43` lukkede
+kolonnerne på `profiles`, ikke rækkerne, netop fordi en rækkepolicy ville tømme
+hver eneste stilling. Kun en server-side-afgrænsning (tavlerne gennem
+`security definer`-funktioner + en rækkepolicy) kunne ændre det, og det er
+præcis den vej, `A43` fravalgte. Beslutningen her er altså om **visningen** og
+ikke om adgangen; den kan omgøres, hvis brugerbasen en dag gør spørgsmålet et
+andet.
+
+**Den ufravigelige regel fra juli 2026 står uændret.** *En historie må kun nævne
+personer, modtageren deler konkurrence med* — den regel, der også forkastede
+`rating_history.rnk` som rivalkilde i karriereprofilen (30. juli 2026) — gælder
+Story Engine og karriereprofilen. De globale tavler er den **bevidste**
+undtagelse, og de er det, fordi en global titel er noget andet end en historie:
+historien fortæller om DIG og skal derfor kende din kreds; tavlen kårer én
+vinder blandt alle og kan kun gøre det ved at nævne hende. Aflæsningen af `A44`
+fandt spændingen mellem de to, og beslutningen er at navngive den frem for at
+fjerne den.
+
+**Det, aflæsningen fandt i stedet, var et navigationsproblem.** Kortet viser top
+5. Er du nr. 25, er modalen den eneste vej til din egen række — og den startede
+på side 1, hvorefter du skulle bladre dig frem uden at vide hvorhen. Det er ikke
+et privatlivsspørgsmål, men det er dét, en lang tavle faktisk koster en bruger,
+og det er billigt at rette: modalen kender både stillingen og brugeren.
+
+**Siden regnes af INDEKSET og ikke af `rank`.** De to tal er ikke det samme:
+`assignRanks` giver ægte lige spillere den samme placering, så en delt placering
+hen over sidegrænsen ville — regnet på `rank` — sende brugeren til den forrige
+side, hvor hendes egen række ikke står. Reglen bor i `pageOfUser()` med sin egen
+test, og netop den kant er testens fjerde påstand.
+
+**To designvalg, som er husets og ikke nye.** Genvejene står **over** tabellen,
+fordi modalen nu åbner midt i listen: en genvej under tyve rækker er en genvej,
+man skal scrolle efter. Og de **deaktiveres** frem for at forsvinde (samme
+mønster som pageren og `RoundPager`), så rækken ikke skifter højde, mens man
+bladrer — med én undtagelse: "Min placering" udelades helt for en bruger uden en
+række i stillingen, for en knap, der aldrig kan gøre noget, er ikke en
+deaktiveret knap, men støj.
+
+**Kortet bliver ved med at vise top 5 — og kun top 5.** Ejeren bekræftede
+grænsen samme dag, ændringen blev bygget: der hægtes ingen egen række på kortet,
+og der står ingen "du er nr. 25"-linje under de fem. Kortet svarer på *hvem
+fører*; modalen svarer på *hvor står jeg*, og først når man har trykket sig ind.
+Fristelsen til at flytte det ene svar op i det andet vil komme igen — derfor står
+grænsen skrevet her og i `DOCUMENTATION.md` §7 frem for kun i koden.
+
+**Efterprøvet i en rigtig browser, ikke kun i tests.** Harnessen (`I24`) blev
+kørt med `SPILLERE` midlertidigt hævet fra seks til 45, hvor Mikkel lander som
+nr. 25 i både måneds-, sæson- og ratingstillingen: modalen åbnede på side 2 med
+hans række markeret og "Min placering" slukket, et tryk på "Top 20" gav side 1
+med den modsatte tilstand, og Championship-kortet viste fortsat fem rækker uden
+ham. Ændringen i `demo-db.js` blev **ikke** committet — de fire skærmbilleder i
+`public/screenshots/` skydes fra netop de seks spillere. **`A42`s udløser er
+ikke sprunget:** dette var en efterprøvning og ikke en fejl, der kun kunne ses i
+en browser, så tælleren står stadig på én forekomst (`Modal`-fokusfejlen).
+
+**Ingen SQL, ingen migrering, ingen ændring i dataloaderne.** Ændringen ligger i
+`src/screens/championship/StandingsTable.jsx` alene og har tre aftagere:
+Championshippets runde-, måneds- og sæsonkort. Skærmbillederne tages ikke om —
+`scripts/screenshots/boot.js` klikker kun fanen, og modalen er aldrig med i
+`championship.png`. 13 nye tests. Se [`CHANGELOG.md`](./CHANGELOG.md).
+
+---
+
 ## 21. august 2026 — `G138`: et trigger-skrevet job er en tredje kategori, ikke en uventet række
 
 **Beslutning:** `src/lib/ops.js` får `TRIGGER_JOBS` ved siden af `BASE_JOBS` og

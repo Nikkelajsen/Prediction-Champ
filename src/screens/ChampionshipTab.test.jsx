@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 // 2026). Skærmen selv eksporterer dem ikke længere — testen skal ramme dér,
 // hvor koden bor, ikke gennem en gennemgangsluge, der kan blive stående som
 // den eneste bruger.
-import { StandingsTable, Champions } from "./championship/StandingsTable.jsx";
+import { StandingsTable, Champions, FullStandingsModal, pageOfUser } from "./championship/StandingsTable.jsx";
 import { CardHead } from "./championship/CardHead.jsx";
 import { pickSeasonLeague, boardTitle, scopeNote } from "./championship/scope.js";
 import { assignRanks, sortStandings } from "../lib/standings.js";
@@ -215,5 +215,92 @@ describe("scopeNote (hvad tæller med i Championship)", () => {
   it("tier uden officielle turneringer — der er ingen stilling at forklare", () => {
     expect(scopeNote([], [skotland])).toBeNull();
     expect(scopeNote(undefined, undefined)).toBeNull();
+  });
+});
+
+// Modalen er den eneste vej til sin egen række, når man ikke er i top 5 — og
+// den startede altid på side 1, så en spiller som nr. 25 skulle bladre sig frem
+// i blinde. Testene her holder på tre ting: startsiden er ens egen, den regnes
+// af INDEKSET og ikke af placeringen, og de to genveje findes kun, når der er
+// noget at genveje til.
+const langStilling = () => board(Array.from({ length: 45 }, (_, i) =>
+  row(`u${i + 1}`, `Spiller-${String(i + 1).padStart(2, "0")}`, { total: 100 - i })));
+
+describe("pageOfUser (hvilken side står man selv på)", () => {
+  const rows = langStilling();
+
+  it("holder de tyve første på side 0 og lægger den enogtyvende på side 1", () => {
+    expect(pageOfUser(rows, "u1")).toBe(0);
+    expect(pageOfUser(rows, "u20")).toBe(0);
+    expect(pageOfUser(rows, "u21")).toBe(1);
+  });
+
+  it("lander nr. 25 på side 2 — altså indeks 24 og side 1 nulindekseret", () => {
+    expect(pageOfUser(rows, "u25")).toBe(1);
+  });
+
+  it("giver null — og ikke 0 — for en bruger uden en række i stillingen", () => {
+    expect(pageOfUser(rows, "ukendt")).toBeNull();
+    expect(pageOfUser([], "u1")).toBeNull();
+  });
+
+  // Kernen i valget: `rank` og indeks er ikke det samme tal. To spillere deler
+  // her placering 20 hen over sidegrænsen, så den anden af dem har rank 20 men
+  // indeks 20 — regnet på placeringen ville hun blive sendt til side 1, hvor
+  // hendes egen række ikke står.
+  it("regner på indekset og ikke på placeringen, når en delt placering krydser sidegrænsen", () => {
+    const delt = board(Array.from({ length: 25 }, (_, i) =>
+      row(`v${String(i + 1).padStart(2, "0")}`, `Lige-${i + 1}`, { total: i === 20 ? 100 - 19 : 100 - i })));
+    expect(delt[20].userId).toBe("v21");
+    expect(delt[20].rank).toBe(20); // placeringen ville pege på side 0
+    expect(pageOfUser(delt, "v21")).toBe(1); // indekset peger på den rigtige
+  });
+});
+
+describe("FullStandingsModal (åbner, hvor du selv står)", () => {
+  const knap = (html, label) =>
+    html.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`))?.[0] ?? null;
+  const modal = (rows, userId) => renderToStaticMarkup(
+    <FullStandingsModal title="Månedschampionship" rows={rows} userId={userId}
+      isComplete={false} onClose={() => {}} />,
+  );
+
+  it("åbner på brugerens egen side og viser hendes række", () => {
+    const html = modal(langStilling(), "u25");
+    expect(html).toContain("Side 2 af 3");
+    expect(html).toContain("Spiller-25");
+    expect(html).not.toContain("Spiller-01");
+  });
+
+  it("åbner på side 1, når brugeren ikke står i stillingen", () => {
+    const html = modal(langStilling(), "ukendt");
+    expect(html).toContain("Side 1 af 3");
+    expect(html).toContain("Spiller-01");
+  });
+
+  it("tilbyder vejen til toppen, men ikke tilbage til en selv, når man allerede er der", () => {
+    const html = modal(langStilling(), "u25");
+    expect(knap(html, "Gå til top 20")).not.toMatch(/disabled/);
+    expect(knap(html, "Gå til din egen placering")).toMatch(/disabled/);
+  });
+
+  it("deaktiverer top-genvejen på side 1 frem for at fjerne den", () => {
+    const html = modal(langStilling(), "u5");
+    expect(knap(html, "Gå til top 20")).toMatch(/disabled/);
+  });
+
+  // En knap, der aldrig kan gøre noget, er ikke en deaktiveret knap — den er
+  // støj. Står man ikke i stillingen, er der ingen egen placering at hoppe til.
+  it("udelader 'Min placering' helt for en bruger uden en række", () => {
+    expect(knap(modal(langStilling(), "ukendt"), "Gå til din egen placering")).toBeNull();
+  });
+
+  it("viser ingen af delene, når hele stillingen er på én side", () => {
+    const kort = board(Array.from({ length: 12 }, (_, i) =>
+      row(`k${i + 1}`, `Kort-${i + 1}`, { total: 50 - i })));
+    const html = modal(kort, "k9");
+    expect(knap(html, "Gå til top 20")).toBeNull();
+    expect(knap(html, "Gå til din egen placering")).toBeNull();
+    expect(html).not.toContain("Side 1 af 1");
   });
 });

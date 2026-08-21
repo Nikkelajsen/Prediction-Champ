@@ -64,15 +64,65 @@ export function StandingsTable({ rows, userId, isComplete, ratingMap, openProfil
   );
 }
 
+// Sidestørrelsen står ét sted, fordi den bruges to: den skærer listen op, OG
+// den navngiver genvejsknappen ("Top 20"). Var tallet skrevet to gange, kunne
+// knappen love noget andet, end side 1 viser.
+const PER_PAGE = 20;
+
+// Hvilken side står brugeren selv på? `null`, hvis hun ikke er i stillingen.
+//
+// 🔴 INDEKSET AFGØR SIDEN — IKKE `rank`. De to er ikke det samme tal:
+// `assignRanks` (src/lib/standings.js) giver ægte lige spillere den SAMME
+// placering, så tre delte 1.-pladser efterfølges af nr. 4 med indeks 3. Regnede
+// vi siden ud af `rank`, ville en stilling med meget lighed — netop den, hvor
+// listen er lang og genvejen betyder mest — lande en side ved siden af.
+//
+// `null` og ikke 0: "hun står ikke i stillingen" er et andet svar end "hun står
+// på første side", og modalen skal kunne skelne dem. En bruger uden point i
+// måneden har ingen række, og så er der ingen egen placering at hoppe til.
+export function pageOfUser(rows, userId, perPage = PER_PAGE) {
+  const i = rows.findIndex((r) => r.userId === userId);
+  return i < 0 ? null : Math.floor(i / perPage);
+}
+
 // Fuld stilling i modal med paginering (maks. 20 pr. side).
+//
+// MODALEN ÅBNER, HVOR MAN SELV STÅR (21. august 2026). Kortet viser top 5, så
+// er man nr. 25, var modalen den eneste vej til sin egen række — og den startede
+// på side 1, hvorefter man skulle bladre sig frem i blinde. Startsiden er nu
+// ens egen, og de to genveje ovenover fører den anden vej: "Top 20" til
+// stillingens top, "Min placering" tilbage til en selv.
 function FullStandingsModal({ title, rows, userId, isComplete, ratingMap, onClose, openProfile }) {
-  const [page, setPage] = useState(0);
-  const perPage = 20;
+  const minSide = pageOfUser(rows, userId);
+  // Startværdien er nok, og der er hverken en effekt eller en synkronisering:
+  // modalen monteres ved hver åbning (`{full && <FullStandingsModal …>}` i
+  // ChampionshipTab), så den kender sin egen bruger fra første render.
+  const [page, setPage] = useState(minSide ?? 0);
+  const perPage = PER_PAGE;
   const pages = Math.max(1, Math.ceil(rows.length / perPage));
   const start = page * perPage;
   const slice = rows.slice(start, start + perPage);
   return (
     <Modal title={title} onClose={onClose}>
+      {/* Genvejene står ØVERST og ikke nede ved bladre-knapperne: åbner modalen
+          på side 2, ville en genvej under tabellen ligge tyve rækker nede — man
+          skulle scrolle for at komme til toppen. Knapperne DISABLES frem for at
+          forsvinde (samme mønster som pageren nedenfor og `RoundPager`), så
+          rækken ikke skifter højde, mens man bladrer. */}
+      {pages > 1 && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <button type="button" aria-label={`Gå til top ${perPage}`}
+            style={{ ...pagerBtn(page > 0), fontSize: 13 }} disabled={page <= 0}
+            onClick={() => setPage(0)}>Top {perPage}</button>
+          {/* Kun når der ER en egen placering at hoppe til. En knap, der aldrig
+              kan gøre noget, er ikke en deaktiveret knap — den er støj. */}
+          {minSide !== null && (
+            <button type="button" aria-label="Gå til din egen placering"
+              style={{ ...pagerBtn(page !== minSide), fontSize: 13 }} disabled={page === minSide}
+              onClick={() => setPage(minSide)}>Min placering</button>
+          )}
+        </div>
+      )}
       <StandingsTable rows={slice} userId={userId} isComplete={isComplete} ratingMap={ratingMap} openProfile={openProfile} />
       {pages > 1 && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>

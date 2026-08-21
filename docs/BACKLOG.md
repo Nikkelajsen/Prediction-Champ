@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A58` · `B42` · `G139` · `I26`.**
+**Næste ledige: `A58` · `B42` · `G140` · `I26`.**
 *(`B40` er brugt 18. august 2026 til Indstillinger-skærmen med push-kontakten —
 leveret direkte uden en backlog-række; se `CHANGELOG.md`/`DECISIONS.md`. `B41`
 er brugt 21. august 2026 til Tier 1-bestillingen af `#73`.)*
@@ -54,7 +54,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(Tom.)*
+- "Vis hele stillingen" er et <p> med onClick og kan derfor hverken nås med tastaturet eller trykkes af skærmbilled-harnessen, som kun kan klikke på knapper
 
 ---
 
@@ -118,7 +118,9 @@ Tomt.
 
 ### Tier 5 — Robusthed og vedligehold
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G139` | Hjem og konkurrence-boardet henter hele den globale ratingtabel | `loadRatingBoard` henter **hver** brugers rating OG hvert profilnavn — Hjem bruger svaret til ét kort: din egen rating, din placering og antallet (`ratingSnapshot`). `loadRatingMap` gør det samme i `BoardScreen` for at sætte et ratingtal ved otte deltagere. Begge kald vokser med brugerbasen og lander i `A34`s egress-loft, længe før nogen mærker dem i skærmen. Kuren er billig og kræver ingen migrering: egen række plus en `count=exact` på `rating=gt.<din>` til Hjem, og `user_id=in.(deltagerne)` på boardet. Fundet ved `A44`-aflæsningen 21. august 2026. |
 
 ### Tier 6 — Venter på en udløser
 
@@ -128,7 +130,6 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 | # | Hvad | Udløser |
 |---|---|---|
 | `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. **Efterprøvet 20. august 2026 via `B39`-aflæsningen: stadig 404.** |
-| `A44` | Skal den globale rating vise fulde visningsnavne til brugere, man ikke deler noget med? | **Udløseren er sprunget** (`B26`, 12. august 2026), men i modsætning til `A43` kan visningen ændres bagefter — prisen ved at vente er kun, at flere navne allerede er hentet. Faldt ud af `A43`: uanset hvor stram policyen på `profiles` bliver, publicerer Rating-fanen og Championship (`scope='ALL'`) hver bruger til enhver indlogget. Det er en produktbeslutning, ikke en adgangsregel — og den skal derfor stilles for sig. |
 | `A34` | Supabase Free → Pro? | **Når Usage-siden viser egress nær 5 GB/md, eller når fremmede udgør flertallet af de aktive** — de to falder formentlig sammen omkring 200–500 ugentligt aktive. |
 | `A33` | Er dagsmotorens variation tyndere, end regelantallet lover? | **Når vis-bare dagskort har visninger.** `G73` (5. august 2026) rettede MÅLINGEN og ikke synligheden: de 197 efterfyldte dagskort kan stadig ikke vises, de tælles bare ikke længere i nævneren. Fremadrettede dagskort skrives inde i deres egen runde og ER vis-bare, så udløseren kan nu aflæses direkte — vis-bar > 0 og vist > 0 for dagsreglerne i Analytics. `DAY_RESULT` alene er 123 af 280 historier (44 %). |
 | `A35` | Er Story Engine v3's publiceringstærskel på 45 den rigtige? | **To uger med v3 i drift og mindst ti kampdage.** Bygget 7. august 2026, så uret er startet. Måles på `stories.news_value`, som gemmes på alle rækker — også de dæmpede — netop for at kunne svare bagudrettet. Mål: 40–60 % af kampdagene med ulæst-markering. |
@@ -188,7 +189,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | A35 | **Er publiceringstærsklen på 45 den rigtige?** | Story Engine v3 udgiver dagens kort med ulæst-markering, når nyhedsværdien når 45, og som dæmpet `DAY_RESULT` under. Tallet er udledt af grundvægtene (max for `DAY_RESULT` alene er 40), ikke af data — samme slags kvalificerede gæt som v1's A4-tærskler var, og de blev kalibreret på live-data. `story_score_distribution` logger vinderregel, `news_value` og runner-up, så fordelingen kan aflæses uden ny instrumentering. | **Efter to uger med v3 i drift og mindst ti kampdage.** Målet er 40–60 % af kampdagene med ulæst-markering for en aktiv bruger. Over 70 % ⇒ tærsklen er for lav, og v3 har genskabt v2's problem i ny indpakning. Under 25 % ⇒ Hjem er stille igen, og v2's oprindelige problem er tilbage. |
 | A33 | **Er dagsmotorens variation tyndere, end regelantallet lover?** | Story Engine v2 lagde syv dagsregler til, men `DAY_RESULT` alene står for 123 af 280 historier (44 %), og de næste to (`DUEL` 35, `COLLECTIVE_MISS` 19) er tilsammen mindre end halvdelen af den. En motor, der er markedsført på bredde og leverer det samme kort hver anden gang, er en anden oplevelse end tabellen antyder. **Spørgsmålet kan ikke stilles endnu:** ingen af de 197 dagskort er nogensinde blevet vist (`G73`), så der findes ingen, der har oplevet ensformigheden. Måske er 44 % helt rigtigt — "dagens facit" er også den mest almindelige ting at fortælle om en kampdag. **Delvist håndteret af v3 (7. august 2026):** `DAY_RESULT`s 44 % var en konstruktionsfølge — laveste prioritet, udløses altid — og v3 fjerner årsagen ved at give den grundvægt 8, hvilket gør den til fald-tilbage frem for anker. Spørgsmålet om, hvorvidt de øvrige seks regler faktisk varierer, er **ikke** besvaret og skal aflæses på ny fordeling. | Når dagskort faktisk bliver set, altså efter `G73`. |
 | A42 | **Skal en rigtig browser have en plads i CI?** | Testopsætningen er **bevidst uden jsdom** — komponenter renderes med `renderToStaticMarkup`, og logikken lever i rene moduler, der kan efterprøves uden DOM. Valget er begrundet flere steder (`DECISIONS.md` 30. juli 2026, `features/onboarding-v1.md`) og har holdt: det er dét, der har drevet udskillelsen af `data/invites.js`, `data/createSources.js` og `onboarding.js`. **`Modal`-fokusfejlen (11. august 2026) er den første, det ikke rakte til.** Fejlen ramte hvert tekstfelt i hver dialog — man kunne skrive ét tegn, hvorefter fokus sprang til `dialog` — og den kan pr. definition ikke ses uden en browser, fordi den er en fokusflytning og ikke en returværdi. Den blev efterprøvet i en engangs-Chromium (playwright-core, ~40 linjer), som **ikke ligger i repoet**; beviset findes derfor kun i `CHANGELOG.md`, og en regression ville ikke blive fanget. **Prisen ved at sige ja** er en tung devDependency, en browser-download i CI og en ny slags test, som er langsommere og mere flaksende end resten — mod en kodebase med én forfatter og 500+ hurtige tests. **Prisen ved at sige nej** er, at fokus-, scroll- og layoutfejl kun opdages af brugere. Et mellemsvar findes: en enkelt smoke-test bag et separat script, som ikke kører ved hver PR. | **Næste gang en fejl kun kan ses i en rigtig browser.** Én forekomst er et tilfælde; to er en fejlklasse, og først da kan spørgsmålet besvares med data frem for med en formodning. |
-| A44 | **Skal den globale rating vise fulde visningsnavne til brugere, man ikke deler noget med?** | **Faldt ud af `A43` 12. august 2026 og er dens ærlige rest.** Rating-fanen og Championship læser `monthly_standings`/`round_standings`/`season_standings` med `scope='ALL'` og viser dermed hver bruger til enhver indlogget. Følgen er, at listen af visningsnavne er offentlig for enhver med en konto **uanset hvor stram policyen på `profiles` bliver** — en RLS-stramning kan ikke ændre det og bør ikke forsøge, fordi den så ville modsige UI'et. Spørgsmålet er derfor ikke, om navnene kan hentes, men om de skal VISES: i det kontrollerede felt er en global tavle med enogtyve kendte navne hele pointen; når fremmede kan oprette konti, er den samme tavle en komplet brugerliste, som ét skærmbillede leverer. **Tre veje:** behold (den globale titel — Månedens Champ, sæsonchampionshippet — giver kun mening, hvis den er global); vis top-N plus egen placering og navngiv resten som `#42` (afgrænser mængden uden at fjerne titlen); eller lad brugeren stå under et navn, der kun gælder uden for egne ligaer (koster en kolonne og en filtrering i hver eneste stilling). **Navnene er selvvalgte og case-insensitivt unikke** (`username_available`), altså allerede pseudonymer — hvilket er argumentet for at lade dem stå. | **Udløseren er sprunget** — `B26` blev kørt 12. august 2026, så oprettelsen er åben for fremmede. Men i modsætning til `A43`, som delte den udløser og blev afgjort samme dag, er denne ikke uigenkaldelig: visningen kan ændres bagefter, og prisen ved at vente er kun, at flere navne allerede er hentet. |
 | A14 | **Skal hele kodebasen gennemformateres med Prettier?** | `npm run format` findes, men `format:check` er bevidst ikke et CI-trin. En fuld gennemformatering ville omskrive ~6.700 linjer ved `printWidth: 140` (~14.000 ved standard 80) på tværs af ~126 filer (86 uden testfiler; genmålt august 2026). Prisen er hele repoets `git blame`; gevinsten er konsistens i en kodebase med én forfatter og en i forvejen ensartet håndstil. Beslutningen er **udskudt, ikke truffet** — se [`DECISIONS.md`](./DECISIONS.md), 30. juli 2026. | Næste gang der alligevel røres bredt i frontenden — ellers aldrig. |
 | A23 | **Skal appen have en router?** | Navigation er i dag to `useState` i `MainApp.jsx` (`tab` + `screen`), og deep links læses ved boot og strippes straks via `history.replaceState` (`App.jsx:104`, `MainApp.jsx:215,239`). Følgen er ingen tilbage-knap, ingen browser-historik og ingen delbare URL'er til interne skærme — mærkbart for en PWA, hvor telefonens tilbage-gestus forventes at virke. Men det er et arkitekturvalg, ikke en fejl: afhængighedsfattigheden er bevidst (fire runtime-deps, ingen router, `docs/reviews/2026-08-app-review.md` §7), og en router omskriver hele navigations-tilstandsmaskinen inkl. begge deep-link-join-flows, som ingen test dækker. | Når tilbage-knappen enten koster brugere (kan aflæses i analytics) eller en feature kræver ægte delbare interne URL'er — `I12`s offentlige ligaside er den første, der ville. |
 | A51 | **Skal `og:title` følge sælgesætningen og blive fodbold-eksplicit?** | `B30` gjorde sælgesætningen fodbold-eksplicit 13. august 2026, men lod OVERSKRIFTEN stå: `index.html`s `og:title` er fortsat *"Leagly — gæt resultater mod dine venner"*. Den blev holdt uden for rækken med vilje frem for taget med i forbifarten — den er en **anden** dublet med sine egne to aftagere (`og:title` i `index.html` og `GENEREL_TITEL` i `api/invite-preview.js`), bundet sammen af vagtens syvende påstand. **Argumentet for at ændre den:** i et delt link er titlen den største tekst, og den siger nu noget mindre præcist end beskrivelsen lige under. **Argumentet imod:** titlen står ALDRIG alene — den vises sammen med `og:description`, som siger "fodboldkampe" to linjer nede, og med `og:image`. En titel, der gentager ordet, bruger sin korte plads på noget, læseren allerede får. Titlen bærer i dag produktnavnet plus én ting produktet gør, hvilket er den opgave, en titel har. **Prisen ved at ændre er to linjer**; prisen ved at lade være er en asymmetri, der kun ses, hvis man læser de to tags efter hinanden. **Hjemmesidens egen `<title>`** (*"Slå dine venner. Uge efter uge."*) er bevidst en tredje ordlyd og måles ikke af vagten — den skal ikke trækkes ind. | **Ejerens beslutning**, eller næste gang `og:`-tagsene alligevel røres. Ingen ekstern udløser. |
@@ -211,6 +211,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | G123 | **Ingen generisk vagt for `drop function` + `revoke` i `sql/`.** | `G119` (14. august 2026) fravalgte en tekstlæsende kontrol, der kræver `revoke execute … from public` efter hvert `drop function` — kun to forekomster fandtes, og en vagt over to koster mere at vedligeholde, end den kan fange. Flyttet til Tier 6: en tredje forekomst gør det til et mønster. | Lille, men ikke før udløseren |
 | G129 | **Et afvist dagskort kan genopstå.** `generate_daily_stories(p_day)` sletter og gen-indsætter dagens rækker ved en gen-kørsel; den nye række har et nyt `id`, og `dismissed_at` blev i graven sammen med den gamle. | Udløses kun af en gen-kørsel EFTER at dagen er gjort færdig — i praksis en resultatrettelse bagud på præcis den dag, brugeren afviste. **Kanten er kendt og står allerede skrevet ved koden** (`src/lib/data/activity.js`, `dismissStory`), tilføjet sammen med `I25` 15. august 2026, som var det, der gav dagskortet et Afvis-kryds overhovedet. Rækken findes, fordi begrundelsen ellers kun ville stå ét sted og aldrig blive taget op igen — ikke fordi den skal rettes nu. Kuren er en `dismissed`-liste pr. `(user_id, day_key)`, altså en tabel, en policy og en ekstra læsning i `loadDayCard` for en kant, ingen endnu har meldt. Flyttet til Tier 6 med den første melding som udløser. | Lille—mellem, men ikke før udløseren |
 | G132 | **Ingen generisk vagt for SELECT-policies, der kalder en funktion, som slår deres egen tabel op.** Mønstret spærrer enhver skrivning med `Prefer: return=representation`. | `G130` gjorde oprettelse af en konkurrence umulig i fem dage, og fejlen var usynlig for enhver læsetest. En vagt over `pg_policies` kunne fange den ved migreringstid. | Mellem — kræver at vagten kan se ind i funktionskroppen (`pg_get_functiondef`) og skelne en selv-opslående funktion fra en harmløs. **Venter på en anden forekomst** (`G123`s disciplin). |
+| G139 | **Hjem og konkurrence-boardet henter hele den globale ratingtabel.** `loadRatingBoard` (`src/lib/data/standings.js`) henter hver brugers rating og hvert profilnavn; Hjem bruger svaret til ét kort — egen rating, egen placering og antallet (`ratingSnapshot` i `src/lib/data/home.js`). `loadRatingMap` gør det samme i `BoardScreen` for at sætte et ratingtal ved otte deltagere. | Prisen er usynlig i dag og vokser lineært med brugerbasen: appen er REST-fetch-tung, og `A34`s første loft er egress. Rækken er ikke en fejl, men det billigste sted at bremse væksten, når den kommer. | Lille — egen række plus `count=exact` på `rating=gt.<din>` til Hjem, `user_id=in.(deltagerne)` på boardet. Ingen migrering. |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
 
 ## Ideer
@@ -253,32 +254,38 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (fyrretyvende kørsel) — `G138` er bygget: Drift kender nu det job, ingen har planlagt
+### 21. august 2026 (enogfyrretyvende kørsel) — `A44` er afgjort, og stillingen åbner, hvor du selv står
 
-**Listen er 32 → 31, og Tier 2 er tomt.** `G138` er lukket samme dag, den blev
-skrevet: Admin → Drift kaldte `story-engine` et *uventet* job og gættede på to
-forklaringer, der begge er forkerte — rækken skrives af **matches-triggeren**
-(`sql/rating_trigger_optimization.sql`) og ikke af cron-job.org.
+**Listen er 31 → 31:** `A44` er slettet, og indbakkens ene linje er blevet
+`G139` (Tier 5). Rækken spurgte, om den globale rating skal vise fulde
+visningsnavne til brugere, man ikke deler noget med. **Ejerens svar er nej til
+maskering:** navnene er selvvalgte, case-insensitivt unikke pseudonymer,
+politikken siger det allerede højt, og en titel, der hedder Månedens Champion,
+skal kunne navngive sin vinder.
 
-**Rettelsen er en kategori og ikke en tekst.** `src/lib/ops.js` har fået
-`TRIGGER_JOBS` ved siden af `BASE_JOBS` og turneringerne, og `story-engine` står
-nu i den FORVENTEDE liste. Det er hele forskellen: et job, der forventes, vises
-også, når det aldrig har skrevet en række — og netop dét var `A38`s tilstand,
-hvor v3's dagsmotor aldrig havde skrevet noget i produktion, uden at stilheden
-kunne aflæses noget sted.
+**Aflæsningen fandt to ting, rækken ikke selv vidste.** Produktet har en
+ufravigelig regel i modsat retning — *en historie må kun nævne personer,
+modtageren deler konkurrence med* (juli 2026) — og de globale tavler er den
+bevidste undtagelse; spændingen er nu navngivet i `DECISIONS.md` frem for
+uskreven. Og fladerne er fire og ikke to: Rating-fanen (upagineret),
+Championshippets tre kort, hvert navn som tryk-flade til karriereprofilen, og
+Hjem, som henter hele tavlen for at vise ét tal. Den sidste blev `G139`.
 
-**Tavshed måles fortsat ikke — men nu af den rigtige grund.** Triggeren fyrer på
-en hændelse og ikke efter et ur, så `stilhedMs` er `null`: en uge uden resultater
-og en trigger, der er holdt op med at fyre, ser ens ud. Fejl, fejlrate og
-varighed måles som for alle andre. Til gengæld dømmes jobbet ikke længere mod
-cron-job.orgs vindue på 30 sekunder — den grænse tilhører en kalder, det ikke
-har.
+**Det, der blev bygget, er ikke privatliv, men navigation.** Kortet viser top 5,
+så er du nr. 25, er fuld-stillings-modalen den eneste vej til din egen række — og
+den startede altid på side 1. Modalen åbner nu på **din egen side**, med
+genvejene "Top 20" og "Min placering" øverst. Siden regnes af rækkens **indeks**
+og ikke af `rank`: ved delt placering hen over sidegrænsen ville placeringen
+sende brugeren til den forrige side, hvor hendes egen række ikke står.
 
-**`unexpected` er igen kun det, ordet siger.** Efter rettelsen betyder mærkatet
-udelukkende en række, ingen kan gøre rede for — et cron-job, der peger på en
-slettet liga, eller historik fra før `G44`. **Læren:** *en tekst, der gætter,
-gætter ud fra den kategori, den er havnet i — så det er kategorien, der skal
-rettes, ikke sætningen.*
+**Læren:** *et spørgsmål om, hvad en liste må VISE, er tit også et spørgsmål om,
+hvordan man finder sig selv i den — og det andet er billigere at svare på.*
 
-Intet er kørt i Supabase; ændringen er ren frontend plus registeret i
-`docs/CRON.md`.
+Ingen SQL, ingen migrering. 13 nye tests (1534 i alt); `DOCUMENTATION.md` §7 er
+rettet med, og skærmbillederne er uændrede.
+
+**Efterprøvet i en rigtig browser bagefter:** harnessen kørt med 45 spillere
+(midlertidigt og ikke committet), hvor modalen åbnede på side 2 med brugerens
+egen række markeret, og kortet fortsat viste fem rækker uden hende. Ejeren
+bekræftede samme grænse: kortet er top 5, og egen placering hører til bag
+klikket. Indbakken har fået den ene linje, eftersynet efterlod.
