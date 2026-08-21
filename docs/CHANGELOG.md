@@ -9,6 +9,44 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 — `A44` afgjort: navnene bliver, og stillingen åbner, hvor du selv står
+
+**Backloggen er 31 → 31** — `A44` er slettet, og indbakkens ene linje er blevet
+`G139`. Spørgsmålet var, om den globale rating skal vise fulde visningsnavne til
+brugere, man ikke deler noget med. **Svaret er ja, uændret:** navnene er
+selvvalgte, case-insensitivt unikke pseudonymer, privatlivspolitikken siger det
+allerede højt, og en titel, der hedder Månedens Champion, skal kunne navngive sin
+vinder. Ingen maskering, intet alias, ingen `#42`-rækker.
+
+**Det, aflæsningen fandt i stedet, var et navigationsproblem — og dét er
+bygget.** Kortet viser top 5, så er du nr. 25, er "Vis hele stillingen" den
+eneste vej til din egen række. Modalen startede altid på side 1, og derfra skulle
+du bladre dig frem i blinde. **Modalen åbner nu på den side, du selv står på**,
+og har to genveje øverst: **"Top 20"** (side 1) og **"Min placering"** (tilbage
+til dig selv).
+
+**Siden regnes af rækkens indeks og ikke af `rank`.** De to tal er ikke ens:
+`assignRanks` giver ægte lige spillere den samme placering, så en delt placering
+hen over sidegrænsen ville — regnet på `rank` — sende brugeren til den forrige
+side, hvor hendes egen række ikke står. Reglen bor i `pageOfUser()` og har sin
+egen test.
+
+**Genvejene står over tabellen og deaktiveres frem for at forsvinde** — det
+første, fordi modalen nu åbner midt i listen og en genvej under tyve rækker skal
+scrolles frem; det andet, fordi rækken ellers skifter højde, mens man bladrer
+(samme mønster som pageren og `RoundPager`). Undtagelsen er "Min placering", som
+udelades **helt** for en bruger uden en række i stillingen: en knap, der aldrig
+kan gøre noget, er ikke en deaktiveret knap, men støj.
+
+Alt ligger i `src/screens/championship/StandingsTable.jsx` og har tre aftagere
+(Championshippets runde-, måneds- og sæsonkort). Ingen SQL, ingen migrering,
+ingen ændring i dataloaderne. 13 nye tests (1534 i alt). `DOCUMENTATION.md` §7 er
+rettet med. Skærmbillederne tages **ikke** om — `scripts/screenshots/boot.js`
+klikker kun fanen, og modalen er aldrig med i `championship.png`.
+Se [`DECISIONS.md`](./DECISIONS.md).
+
+---
+
 21. august 2026 — `G138`: Drift kender nu det job, ingen har planlagt
 
 **Backloggen er 32 → 31, og Tier 2 er tomt.** `story-engine` stod i
