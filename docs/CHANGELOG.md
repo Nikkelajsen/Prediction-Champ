@@ -9,6 +9,49 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 — `A46`: værtsnavnet er nu en RÆKKE på jobkortet, ikke en linje i et JSON-dump
+
+**Backloggen er 32 → 32, og det er rækkens egen pointe.** `A46`s sidste skridt
+er at skrive ni værtsnavne ind i `docs/CRON.md`s kaldkolonne, og de ni værdier
+findes kun i produktion. `A32` står ved magt — den aflæsning er ejerens — så
+rækken lukkes ikke; den er flyttet **Tier 6 → Tier 1**, fordi udløseren er
+sprunget: alle ni jobs har kørt siden `setHost()` blev udrullet 13. august, og
+det langsomste skema er hver 12. time.
+
+**Det, der kunne leveres, var bestillingen — og halvdelen af den manglede.**
+13. august-indslaget nedenfor sluttede med, at Admin → Drift viste værtsnavnet
+*"uden en eneste UI-ændring, fordi jobkortets «Seneste resumé» i forvejen dumper
+detaljen som JSON"*. Sandt — men aflæsningen er **ni** jobs, og et rå
+JSON-resumé bag en `<details>` koster en udfoldning og en gennemlæsning hver
+gang. Bestillingen var altså stadig "åbn ni ting og skriv ni værdier af", bare
+inde i appen. `host` er derfor løftet ud som sin egen signalrække, **"Kaldt
+på"**, nederst på hvert jobkort ved siden af varighederne
+(`src/lib/ops.js` → `lastHost`, `src/screens/OpsPanel.jsx`). De ni værdier
+aflæses nu ved at rulle ned ad Drift-siden én gang.
+
+**Rækken vises kun, når værtsnavnet findes** — samme regel som fejlraten
+(`G115`) og varigheden (`G114`): en kørsel skrevet af kode fra før `setHost()`
+har ingen adresse, og en manglende måling må ikke kunne forveksles med en. Tre
+tests i `ops.test.js` holder de tre former fra hinanden (værdi, detalje uden
+`host`, ingen detalje) og dækker også et job uden en eneste kørsel.
+
+**Rækken bliver stående, når `<app>` er udfyldt.** Den er ikke en
+engangs-aflæsning: `/api/` er med vilje undtaget fra domæne-redirectet, så et
+job, der peger på den gamle adresse, svarer 200 og tier — værtsnavnet er den
+eneste måde at se det på, og flytningen tages ét job ad gangen.
+
+**Læren, der er værd at tage med videre.** `A11`-mønsteret — flyt spørgsmålet
+ind i appens egne data i stedet for at aflæse en fremmed brugerflade — er nu
+brugt fire gange (`A11`, `A46`, `G121` og dette). Skridtet, de tre første
+sprang over, er, at **at gemme svaret ikke er det samme som at kunne læse det**:
+`authVia`, fejlklasserne og varigheden skulle hver især læses én gang eller
+aggregeres i SQL, mens dette skal læses ni gange i en brugerflade. Er svaret
+per-job, hører det til som et felt på kortet — ikke som en linje i et dump.
+
+Intet skal køres i Supabase. Se [`DECISIONS.md`](./DECISIONS.md).
+
+---
+
 21. august 2026 — Tier 2, 4 og 5 kørt tomme: fire gæld-rækker leveret, og oprettelsen af en konkurrence blev ÉN skrivning
 
 **Backloggen er 36 → 33, og Tier 1–5 er alle tomme på nær Tier 1's ene

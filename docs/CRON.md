@@ -41,7 +41,8 @@ Bemærk at job 6–10 ikke sender `&smSeason=`: `api_season_id` er sat direkte i
 domæneflytningen (`I10`) kan den være enten den gamle `.vercel.app`-adresse
 eller `app.leagly.app`, og `/api/` er med vilje undtaget fra redirectet, så
 begge svarer 200. Fra 13. august 2026 skriver hver kørsel sit værtsnavn i
-`job_runs.detail` — se [`<app>` i tabellen](#app-i-tabellen-samme-fremgangsmåde-brugt-igen-a46)
+`job_runs.detail`, og fra 21. august 2026 står det som rækken **"Kaldt på"** på
+hvert jobkort i Admin → Drift — se [`<app>` i tabellen](#app-i-tabellen-samme-fremgangsmåde-brugt-igen-a46)
 nedenfor for opslaget og for, hvordan kolonnen udfyldes.
 
 **Kampprogram-jobbene hedder ikke længere det samme i driftsloggen.** Hver
@@ -203,8 +204,23 @@ select job,
 > ligger den efter udrulningen, er der noget galt; ligger den før, er rækken
 > historik. Samme vindue på 14 dage og samme begrundelse som ovenfor.
 
-**Uden SQL:** hvert jobkort i **Admin → Drift** viser sin egen "Seneste resumé",
-og `host` står nu i den. De ni værdier er dermed ét skærmbillede væk.
+**Uden SQL:** hvert jobkort i **Admin → Drift** har siden 21. august 2026 en
+række, der hedder **"Kaldt på"**, og den bærer værtsnavnet. De ni værdier
+aflæses dermed ved at rulle ned ad siden én gang.
+
+> **Rækken kom til, fordi halvdelen af leverancen manglede.** Fra 13. august
+> stod `host` i "Seneste resumé", som dumper hele detaljen som rå JSON bag en
+> `<details>` — værdien VAR der, men ni jobs betød ni udfoldninger og ni
+> gennemlæsninger for at læse ét felt. Det er den samme lære som ovenfor, et
+> skridt længere fremme: **at gemme svaret er ikke det samme som at kunne læse
+> det.** Rækken vises kun, når værtsnavnet findes; mangler det, er kørslen
+> skrevet af kode fra før `setHost()`, og en manglende måling må ikke kunne
+> forveksles med en adresse.
+
+Rækken bliver stående, når `<app>` er udfyldt. Den er ikke en engangs-aflæsning,
+men den ene måde at se, at et job er sat op mod en anden adresse, end man tror:
+`/api/` er med vilje undtaget fra redirectet, så et fejlpeget job svarer 200 og
+tier.
 
 **Udfyld tabellens kaldkolonne, når svaret er læst** — erstat `<app>` med den
 faktiske adresse, job for job. Er et job stadig på den gamle adresse, er det

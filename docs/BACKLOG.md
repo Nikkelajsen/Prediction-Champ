@@ -102,7 +102,9 @@ produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
 gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
 køres på et minut.
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `A46` | Udfyld `<app>` i `CRON.md`s ni kald med det faktiske værtsnavn | **Udløseren er sprunget 21. august 2026** — de ni jobs har alle kørt siden 13. august (langsomste skema er hver 12. time), så rækken er flyttet hertil fra Tier 6. **Bestillingen er ét kig:** Admin → Drift, rul ned ad de ni jobkort og skriv rækken **"Kaldt på"** af. Den blev løftet ud af "Seneste resumé"s rå JSON samme dag — værdien har ligget der siden 13. august, men kostede ni udfoldninger at læse. SQL-udgaven af samme opslag og reglen for, hvordan kolonnen udfyldes, står i [`CRON.md`](./CRON.md). **Er et job stadig på den gamle adresse, er det ikke en fejl** — `/api/` er undtaget fra redirectet, og flytningen tages ét job ad gangen ([`DOMAENE.md`](./DOMAENE.md)). |
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
@@ -127,7 +129,6 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 
 | # | Hvad | Udløser |
 |---|---|---|
-| `A46` | Udfyld `<app>` i `CRON.md`s ni kald med det faktiske værtsnavn | **Når hvert af de ni jobs har kørt én gang efter 13. august 2026** — langsomste skema er hver 12. time. Værtsnavnet skrives nu i `job_runs.detail` (`A46`, samme fremgangsmåde som `A11`), så aflæsningen er "Seneste resumé" på hvert jobkort i Admin → Drift og ikke ni jobs i cron-job.org. Opslaget står i [`CRON.md`](./CRON.md). |
 | `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. **Efterprøvet 20. august 2026 via `B39`-aflæsningen: stadig 404.** |
 | `A44` | Skal den globale rating vise fulde visningsnavne til brugere, man ikke deler noget med? | **Udløseren er sprunget** (`B26`, 12. august 2026), men i modsætning til `A43` kan visningen ændres bagefter — prisen ved at vente er kun, at flere navne allerede er hentet. Faldt ud af `A43`: uanset hvor stram policyen på `profiles` bliver, publicerer Rating-fanen og Championship (`scope='ALL'`) hver bruger til enhver indlogget. Det er en produktbeslutning, ikke en adgangsregel — og den skal derfor stilles for sig. |
 | `A34` | Supabase Free → Pro? | **Når Usage-siden viser egress nær 5 GB/md, eller når fremmede udgør flertallet af de aktive** — de to falder formentlig sammen omkring 200–500 ugentligt aktive. |
@@ -254,29 +255,23 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (otteogtredivte kørsel) — Tier 2, 4 og 5 kørt tomme: fire gæld-rækker leveret, én bestilling tilbage
+### 21. august 2026 (niogtredivte kørsel) — `A46`s udløser er sprunget, og halvdelen af leverancen manglede
 
-**Listen er 36 → 32.** Fire rækker leveret (`G136`, `G133`, `G131`, `G137`),
-og den ene nye — `B41`, ejerens bestilling af `#73 create_competition.sql`
-FØR merge — blev kørt i produktion og staging samme dag og er slettet igen.
-Tier 1–5 er dermed alle tomme.
+**Listen er 32 → 32.** Ingen række er lukket, og det er rækkens egen pointe:
+`A46`s sidste skridt ER en aflæsning i produktion, og den er ejerens (`A32`).
+Rækken er flyttet **Tier 6 → Tier 1**, fordi udløseren er sprunget — de ni jobs
+har alle kørt siden 13. august, hvor `setHost()` blev udrullet.
 
-**`G136` (Tier 2):** `schema-export.yml`s `krop()` klipper nu også
-`\restrict`/`\unrestrict`-linjerne af før sammenligningen, så pg_dump 17's
-tilfældige token ikke længere kan åbne en falsk skema-drift-PR.
+**Det, der kunne gøres, var bestillingen — igen.** 13. august sluttede `A46`
+med, at værtsnavnet nu skrives i `job_runs.detail`, og at Admin → Drift viste
+det *"uden en eneste UI-ændring, fordi jobkortets «Seneste resumé» i forvejen
+dumper detaljen som JSON"*. Det var sandt og alligevel en halv leverance: rå
+JSON bag en `<details>` betyder ni udfoldninger og ni gennemlæsninger for at
+læse ét felt ni gange. Værtsnavnet er derfor løftet ud som sin egen række,
+**"Kaldt på"**, ved siden af varighederne — de ni værdier aflæses nu ved at
+rulle ned ad siden én gang.
 
-**`G133` (Tier 4):** konkurrence-oprettelsens tre skrivninger er ÉN
-transaktion — `create_competition()` (`#73`) efter `create_group()`s mønster,
-klienten kalder den, og `sql/tests/create_competition.sql` fremkalder begge
-vinduer i CI med den gamle vejs halve konkurrence som negativ kontrol.
-
-**`G131` (Tier 5):** analytics-testens ⓘ-liste UDLEDES nu af JSX'en frem for at
-vedligeholdes — spørgsmålet i rækken faldt ud til "ja, den kan udledes", så
-gælden forsvandt helt. Udledningen fandt straks de to id'er, den håndskrevne
-liste manglede (`story_viewable`, `invite_funnel`), og ligheden kræves nu begge
-veje, så en død ordbogs-række også fanges.
-
-**`G137` (Tier 5):** rundemodalens `groupIntoRounds(ms)` fik sit manglende
-navne-argument, så samtidige kampe sorterer som på Hjem og Tip; en test i
-`data.test.js` vender uuid'er og navne mod hinanden, så regressionen ikke kan
-komme tavst tilbage.
+**Læren, som er værd at tage med:** *at gemme svaret er ikke det samme som at
+kunne læse det.* `A11`-mønsteret (flyt spørgsmålet ind i appens egne data) har
+et skridt mere, som de tre tidligere anvendelser sprang over, fordi de hver især
+kun skulle læses én gang.

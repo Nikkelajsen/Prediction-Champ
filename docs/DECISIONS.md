@@ -15,6 +15,40 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `A46`: værtsnavnet får sin egen række, og rækken bliver stående
+
+**Beslutning:** `host` løftes ud af "Seneste resumé"s rå JSON og vises som
+signalrækken **"Kaldt på"** på hvert jobkort i Admin → Drift. Rækken **fjernes
+ikke igen**, når `CRON.md`s `<app>` er udfyldt. `A46` selv lukkes ikke — den
+flyttes fra Tier 6 til Tier 1, fordi det, der er tilbage, er en aflæsning i
+produktion.
+
+**Begrundelse — at gemme svaret er ikke det samme som at kunne læse det.**
+Beslutningen 13. august (nedenfor) sluttede med, at Admin → Drift viste
+værtsnavnet *"uden en eneste UI-ændring"*, fordi jobkortet i forvejen dumper
+detaljen som JSON. Det var rigtigt og alligevel kun det halve: aflæsningen er
+**ni** jobs, og et rå JSON-resumé bag en `<details>` koster en udfoldning og en
+gennemlæsning hver gang. Bestillingen var altså stadig "åbn ni ting og skriv ni
+værdier af" — bare inde i appen i stedet for hos cron-job.org. `A11`s mønster
+har et skridt mere end de tre tidligere anvendelser opdagede, og grunden til, at
+det ikke blev opdaget før, er, at `authVia`, varigheden og fejlklasserne hver
+især skulle læses **én** gang eller aggregeres i SQL.
+
+**Hvorfor rækken bliver stående efter A46.** Den er ikke en engangs-aflæsning.
+`/api/` er med vilje undtaget fra redirectet (`DOMAENE.md` trin 6), så et job,
+der peger på den gamle adresse, svarer 200 og tier — værtsnavnet er den eneste
+måde at se det på, og flytningen tages ét job ad gangen. Rækken står nederst
+blandt signalerne, fordi den er en **opsætning** og ikke et helbredssignal: de
+øvrige rækker skifter fra kørsel til kørsel, denne kun når nogen retter jobbet.
+
+**Hvorfor `A46` ikke lukkes.** Kolonnen kan ikke udfyldes fra repoet, og `A32`
+står ved magt: aflæsninger i produktion er ejerens arbejde, og der bygges ingen
+vej udenom. At skrive `app.leagly.app` i de ni kald ud fra, hvad man *går ud
+fra*, ville være at gøre registeret usandt — og filens egen advarsel siger, at
+et forkert register er værre end intet, fordi man tror på det. **Rækken er
+flyttet til Tier 1 frem for at blive i Tier 6:** udløseren ER sprunget, så det
+er ikke længere ventetid, det er en bestilling.
+
 ## 21. august 2026 — `G133`: skrivningen flyttes til én RPC — udvælgelsen bliver i klienten, og policies smalnes ikke
 
 **Beslutning:** `create_competition()` (`#73`) tager de FÆRDIGE værdier — navn,
