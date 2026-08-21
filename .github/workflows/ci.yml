@@ -523,6 +523,23 @@ jobs:
           psql -h localhost -U postgres -d creategrouptest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d creategrouptest -v ON_ERROR_STOP=1 -b -f sql/tests/create_group.sql
 
+      # Oprettelsen af en konkurrence er ÉN skrivning (G133) — samme form som
+      # liga-oprettelsen ovenfor, bare med TO vinduer: deltagerrækken og
+      # kampene. Begge fremkaldes med en spærre, og den negative kontrol viser
+      # den gamle vejs halve konkurrence ved siden af, så den positive påstand
+      # beviser noget.
+      #
+      # Mod det rigtige skema af samme grund som create_group: funktionen er
+      # `security definer` og forbigår de tre insert-policies, den afløser.
+      - name: Test af konkurrence-oprettelsen
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database createcomptest;'
+          psql -h localhost -U postgres -d createcomptest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d createcomptest -v ON_ERROR_STOP=1 -b -f sql/tests/create_competition.sql
+
       # Læsefladen (A43): kolonne-grants på `profiles` og deltagerpolicyen.
       #
       # Mod det rigtige skema, fordi hele rækken er samspillet mellem

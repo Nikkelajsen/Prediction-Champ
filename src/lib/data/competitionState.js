@@ -39,7 +39,11 @@ async function computeCompetitionState(token, competitionId, { signal } = {}) {
   const teamName = teamLabelMap(teams);
   ms.forEach((m) => { m._home = teamName.get(m.home_team_id); m._away = teamName.get(m.away_team_id); });
 
-  const rounds = groupIntoRounds(ms);
+  // Navnefunktionen er med (G137): to kampe med IDENTISK kickoff (en runde
+  // spillet samtidig) sorterer ellers efter holdets uuid her og efter navn på
+  // Hjem og Tip — samme runde i to rækkefølger, alt efter hvilken skærm man
+  // ser den fra. Rundemodalen læser `allRounds` direkte, så ordenen ER visning.
+  const rounds = groupIntoRounds(ms, (id) => teamName.get(id));
 
   // Hver deltager starter på 0 i den konkurrence, hun melder sig til (`A53`).
   //

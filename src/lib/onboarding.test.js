@@ -106,28 +106,30 @@ describe("loadHasPrediction", () => {
 });
 
 describe("createStarterLeague", () => {
-  // Ligaen skrives af RPC'en `create_group()` siden `G95` og ikke længere med et
-  // `db.insert` i "groups" — begge rækker (ligaen og opretterens admin-række)
-  // bor nu i ét statement på serveren. Attrappen svarer derfor på RPC'en, og
-  // `group_members` optræder ikke længere i `db.insert`-loggen. Det er ikke en
-  // svækkelse af testene nedenfor: den rækkefølge, de vogter, er den mellem
-  // LIGAEN og deltager-rækken, og den kan stadig aflæses.
+  // BEGGE skrivninger er RPC'er nu: ligaen skrives af `create_group()` (`G95`),
+  // og konkurrencen — med deltagerrække og kampe — af `create_competition()`
+  // (`G133`). Attrappen svarer derfor på de to RPC'er, og `db.insert` optræder
+  // slet ikke længere i flowet. Det er ikke en svækkelse af testene nedenfor:
+  // den rækkefølge, de vogter, er den mellem LIGAEN og deltager-rækken, og
+  // deltager-rækken bor nu inde i `create_competition()`-kaldet, så dets plads
+  // i rækkefølgen ER dens.
   //
-  // `calls` samler begge slags kald i den rækkefølge, de sker, så påstanden om
-  // rækkefølge kan stilles på tværs af de to kaldeveje.
+  // `calls` samler kaldene i den rækkefølge, de sker, så påstanden om
+  // rækkefølge kan stilles.
   let calls;
   function setup({ seasons = [{ id: "S1" }], matches = [{ id: "m1", round_key: "2026-08-11", home_score: null, stage_name: null }] } = {}) {
     calls = [];
     db.select.mockImplementation(async (token, table) => (table === "seasons" ? seasons : matches));
     restFetch.mockImplementation(async (path, opts) => {
-      if (!path.endsWith("/rpc/create_group")) return undefined; // logEvent m.fl.
-      calls.push("create_group");
-      return { id: "g1", name: opts.body.p_name, invite_code: "abc12345" };
-    });
-    db.insert.mockImplementation(async (token, table, rows) => {
-      calls.push(table);
-      if (table === "competitions") return [{ id: "c1", ...rows[0] }];
-      return undefined;
+      if (path.endsWith("/rpc/create_group")) {
+        calls.push("create_group");
+        return { id: "g1", name: opts.body.p_name, invite_code: "abc12345" };
+      }
+      if (path.endsWith("/rpc/create_competition")) {
+        calls.push("create_competition");
+        return { id: "c1", name: opts.body.p_name, group_id: opts.body.p_group_id };
+      }
+      return undefined; // logEvent m.fl.
     });
   }
 
@@ -140,8 +142,8 @@ describe("createStarterLeague", () => {
     expect(res.group.id).toBe("g1");
     expect(res.matchCount).toBe(1);
     // Den ufravigelige regel: onboarding efterlader aldrig en liga-løs konkurrence.
-    const compRow = db.insert.mock.calls.find((c) => c[1] === "competitions")[2][0];
-    expect(compRow.group_id).toBe("g1");
+    const compKald = restFetch.mock.calls.find((c) => String(c[0]).endsWith("/rpc/create_competition"));
+    expect(compKald[1].body.p_group_id).toBe("g1");
   });
 
   it("skriver ligaen (med admin-rækken) FØR deltager-rækken (ellers kolliderer A8-triggeren)", async () => {
@@ -149,11 +151,12 @@ describe("createStarterLeague", () => {
 
     await createStarterLeague("token", "u1", { groupName: "X", competitionName: "Y", leagueId: "L1" });
 
-    // `create_group()` skriver admin-rækken inde i sig selv, så dens plads i
-    // rækkefølgen ER admin-rækkens plads. Sker den efter deltager-rækken, når
-    // A8-triggeren at lave en `member`-række først, og admin-insertet kolliderer
-    // med den — nu inde i en funktion, hvor hele oprettelsen så ruller tilbage.
-    expect(calls.indexOf("create_group")).toBeLessThan(calls.indexOf("competition_participants"));
+    // `create_group()` skriver admin-rækken inde i sig selv, og
+    // `create_competition()` skriver deltager-rækken inde i sig selv (G133) —
+    // de to kalds rækkefølge ER rækkernes. Kommer deltager-rækken først, når
+    // A8-triggeren at lave en `member`-række, og admin-insertet kolliderer med
+    // den — inde i en funktion, hvor hele oprettelsen så ruller tilbage.
+    expect(calls.indexOf("create_group")).toBeLessThan(calls.indexOf("create_competition"));
     expect(calls[0]).toBe("create_group");
   });
 

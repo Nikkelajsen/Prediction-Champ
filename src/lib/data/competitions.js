@@ -75,6 +75,27 @@ function startingMatches(ms, startRound) {
   return filterFromRoundStart(filterTippable(ms), { start: startRound, currentKey: currentRoundKey() });
 }
 
+// Skrivningen: konkurrencen, opretteren som deltager og kampene i ÉN sætning.
+//
+// `create_competition()` (`#73 create_competition.sql`, G133) er en `security
+// definer`-RPC efter `create_group()`s mønster (`#57`). Indtil august 2026 var
+// det tre adskilte PostgREST-kald — tre transaktioner — og fejlede nummer to
+// eller tre, stod der en konkurrence uden deltager eller uden kampe: synlig i
+// klienten, tom i stillingen, og ingen kontrol ledte efter den. Nu ruller alt
+// tilbage sammen. Funktionen sætter selv `created_by` (`auth.uid()`); der er
+// med vilje intet bruger-id at sende med. Udvælgelsen af kampene bliver HER —
+// RPC'en tager de færdige værdier og udfører kun skrivningen.
+async function insertCompetition(token, { name, groupId, leagueId = null, seasonId = null, mode, modeParams = {}, matchIds = [] }) {
+  return restFetch(`/rest/v1/rpc/create_competition`, {
+    method: "POST", token,
+    body: {
+      p_name: name, p_group_id: groupId || null,
+      p_league_id: leagueId, p_season_id: seasonId,
+      p_mode: mode, p_mode_params: modeParams, p_match_ids: matchIds,
+    },
+  });
+}
+
 async function createCompetition(token, userId, spec) {
   const {
     name, groupId = null, mode = "full_season",
@@ -109,7 +130,9 @@ async function createCompetition(token, userId, spec) {
   // pointregel i opret-kaldet, og en læser kunne med rette spørge, hvad der
   // ville ske, hvis den var en anden. Svaret var "ingenting", og det er den
   // slags sætning, koden ikke skal have brug for.
-  const base = { name, group_id: groupId || null, created_by: userId };
+  //
+  // `userId` sendes heller ikke længere med i skrivningen (G133): RPC'en sætter
+  // `created_by` og deltagerrækken af `auth.uid()`, som tokenet allerede bærer.
   // Kårings-tilvalget spredes ind i mode_params i ALLE grene — men kun når det
   // er valgt, så en konkurrence uden tilvalg har præcis samme rækkeform som før.
   const awardsParams = awards ? { awards: true } : {};
@@ -132,17 +155,14 @@ async function createCompetition(token, userId, spec) {
     const only = picked[0];
     // Én turnering: bevar den bundne form (league_id/season_id sat).
     // Flere: liga-løs som custom/random (null), turneringerne gemt i mode_params.
-    const [competition] = await db.insert(token, "competitions", [{
-      ...base,
-      league_id: multi ? null : only.league_id,
-      season_id: multi ? null : only.season_id,
+    const competition = await insertCompetition(token, {
+      name, groupId,
+      leagueId: multi ? null : only.league_id,
+      seasonId: multi ? null : only.season_id,
       mode: "full_season",
-      mode_params: multi ? { tournaments: picked, ...awardsParams } : { ...awardsParams },
-    }]);
-    await db.insert(token, "competition_participants", [{ competition_id: competition.id, user_id: userId }]);
-    if (ids.length) {
-      await db.insert(token, "competition_matches", ids.map((id) => ({ competition_id: competition.id, match_id: id })));
-    }
+      modeParams: multi ? { tournaments: picked, ...awardsParams } : { ...awardsParams },
+      matchIds: ids,
+    });
     logEvent(token, "competition_created", { competitionId: competition.id, groupId, metadata: { mode: "full_season", match_count: ids.length } });
     return { competition, matchCount: ids.length };
   }
@@ -174,23 +194,20 @@ async function createCompetition(token, userId, spec) {
       ms = startingMatches(ms, startRound);
       for (const m of ms) ids.push(m.id);
     }
-    const [competition] = await db.insert(token, "competitions", [{
-      ...base,
-      league_id: single ? sel[0].leagueId : null,
-      season_id: single ? sel[0].seasonId : null,
+    const competition = await insertCompetition(token, {
+      name, groupId,
+      leagueId: single ? sel[0].leagueId : null,
+      seasonId: single ? sel[0].seasonId : null,
       mode: "team",
-      mode_params: single
+      modeParams: single
         ? { team_id: sel[0].teamId, ...awardsParams }
         : {
             team_ids: sel.map((t) => t.teamId),
             tournaments: [...bySeason].map(([sid, e]) => ({ league_id: e.leagueId, season_id: sid })),
             ...awardsParams,
           },
-    }]);
-    await db.insert(token, "competition_participants", [{ competition_id: competition.id, user_id: userId }]);
-    if (ids.length) {
-      await db.insert(token, "competition_matches", ids.map((id) => ({ competition_id: competition.id, match_id: id })));
-    }
+      matchIds: ids,
+    });
     logEvent(token, "competition_created", { competitionId: competition.id, groupId, metadata: { mode: "team", match_count: ids.length } });
     return { competition, matchCount: ids.length };
   }
@@ -222,16 +239,12 @@ async function createCompetition(token, userId, spec) {
       for (const m of ms) ids.push(m.id);
       picked.push({ league_id: t.leagueId, season_id: t.seasonId });
     }
-    const [competition] = await db.insert(token, "competitions", [{
-      ...base,
-      league_id: null, season_id: null,
+    const competition = await insertCompetition(token, {
+      name, groupId,
       mode: "time_range",
-      mode_params: { start_date: startDate, end_date: endDate, tournaments: picked, ...awardsParams },
-    }]);
-    await db.insert(token, "competition_participants", [{ competition_id: competition.id, user_id: userId }]);
-    if (ids.length) {
-      await db.insert(token, "competition_matches", ids.map((id) => ({ competition_id: competition.id, match_id: id })));
-    }
+      modeParams: { start_date: startDate, end_date: endDate, tournaments: picked, ...awardsParams },
+      matchIds: ids,
+    });
     logEvent(token, "competition_created", { competitionId: competition.id, groupId, metadata: { mode: "time_range", match_count: ids.length, tournaments: picked.length } });
     return { competition, matchCount: ids.length };
   }
@@ -242,27 +255,22 @@ async function createCompetition(token, userId, spec) {
   if (!crossLeague && (!leagueId || !seasonId)) throw new Error("Ingen turnering med et kampprogram — vælg en anden turnering.");
   if (crossLeague && !matchIds.length) throw new Error(mode === "custom" ? "Vælg mindst én kamp" : "Ingen kommende kampe i de valgte turneringer");
 
-  const [competition] = await db.insert(token, "competitions", [{
-    ...base,
-    league_id: crossLeague ? null : leagueId,
-    season_id: crossLeague ? null : seasonId,
-    mode,
-    mode_params:
-      mode === "team" ? { team_id: teamId, ...awardsParams }
-      : mode === "time_range" ? { start_date: startDate, end_date: endDate, ...awardsParams }
-      // `rounds` skrives kun når > 1 (Quick League), så gamle Quick Pick-rækker
-      // og nye har samme form — og `modeLabel` kan skelne alene på feltet.
-      : mode === "random" ? { count: Number(randomCount) || 6, ...(Number(rounds) > 1 ? { rounds: Number(rounds) } : {}), ...awardsParams }
-      : { ...awardsParams },
-  }]);
-  await db.insert(token, "competition_participants", [{ competition_id: competition.id, user_id: userId }]);
+  const modeParams =
+    mode === "team" ? { team_id: teamId, ...awardsParams }
+    : mode === "time_range" ? { start_date: startDate, end_date: endDate, ...awardsParams }
+    // `rounds` skrives kun når > 1 (Quick League), så gamle Quick Pick-rækker
+    // og nye har samme form — og `modeLabel` kan skelne alene på feltet.
+    : mode === "random" ? { count: Number(randomCount) || 6, ...(Number(rounds) > 1 ? { rounds: Number(rounds) } : {}), ...awardsParams }
+    : { ...awardsParams };
 
   if (crossLeague) {
-    await db.insert(token, "competition_matches", matchIds.map((id) => ({ competition_id: competition.id, match_id: id })));
+    const competition = await insertCompetition(token, { name, groupId, mode, modeParams, matchIds });
     logEvent(token, "competition_created", { competitionId: competition.id, groupId, metadata: { mode, match_count: matchIds.length } });
     return { competition, matchCount: matchIds.length };
   }
 
+  // Kampene findes FØR skrivningen (G133): udvælgelsen afhænger ikke af
+  // konkurrence-rækken, og RPC'en skal have hele listen i samme kald.
   let query = `season_id=eq.${seasonId}&select=id,round_key,home_score,kickoff_at,kickoff_tbd`;
   if (mode === "team" && teamId) query += `&or=(home_team_id.eq.${teamId},away_team_id.eq.${teamId})`;
   if (mode === "time_range" && startDate && endDate) query += `&kickoff_at=gte.${startDate}&kickoff_at=lte.${endDate}T23:59:59`;
@@ -271,9 +279,10 @@ async function createCompetition(token, userId, spec) {
   // `time_range` med én turnering. Kun den første har et startrunde-valg —
   // periodens ligger i dens datoer.
   matched = mode === "team" ? startingMatches(matched, startRound) : filterTippable(matched);
-  if (matched.length) {
-    await db.insert(token, "competition_matches", matched.map((m) => ({ competition_id: competition.id, match_id: m.id })));
-  }
+  const competition = await insertCompetition(token, {
+    name, groupId, leagueId, seasonId, mode, modeParams,
+    matchIds: matched.map((m) => m.id),
+  });
   logEvent(token, "competition_created", { competitionId: competition.id, groupId, metadata: { mode, match_count: matched.length } });
   return { competition, matchCount: matched.length };
 }

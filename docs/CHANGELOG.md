@@ -9,6 +9,52 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 — Tier 2, 4 og 5 kørt tomme: fire gæld-rækker leveret, og oprettelsen af en konkurrence blev ÉN skrivning
+
+**Backloggen er 36 → 33, og Tier 1–5 er alle tomme på nær Tier 1's ene
+bestilling** (`B41`: kør `#73` før merge). De fire leverancer:
+
+- **`G136` — skema-eksportens kropssammenligning klipper nu `\restrict` af.**
+  pg_dump 17 skriver et nyt tilfældigt token ved hvert dump, og tokenet ligger
+  inde i den "krop", `schema-export.yml` sammenligner (`G112`) — to eksporter
+  mod en uændret database så derfor "ændrede" ud, og cron-vejen ville åbne en
+  falsk skema-drift-PR hver mandag. `krop()` fjerner nu også de to linjer;
+  efterprøvet mod det rigtige dump med et simuleret token-skifte, som nu giver
+  nul diff.
+- **`G133` — `createCompetition()`s tre skrivninger er ÉN transaktion.** Ny
+  migrering [`#73 create_competition.sql`](../sql/create_competition.sql):
+  en `security definer`-RPC efter `create_group()`s mønster (`#57`), som
+  skriver konkurrencen, opretterens deltagerrække og kampene i samme sætning —
+  fejler én, ruller de andre med, så en halv konkurrence (uden deltager eller
+  uden kampe) ikke længere kan opstå. Klienten kalder RPC'en i alle fem modes;
+  udvælgelsen af kampe bliver i klienten, og på den generiske sti er
+  kampopslaget flyttet FØR skrivningen. `created_by` sendes ikke længere med —
+  funktionen tager `auth.uid()`, så der ikke findes et bruger-id at forfalske.
+  Dækket af `sql/tests/create_competition.sql` i CI mod det rigtige skema:
+  begge vinduer fremkaldes med en spærre, den gamle vejs halve konkurrence
+  vises som negativ kontrol, og et opdigtet kamp-id fælder hele kaldet på
+  fremmednøglen. 🔴 **`#73` skal køres i Supabase (produktion og staging), FØR
+  denne ændring udrulles** — den nye klient kalder kun RPC'en. Bestillingen
+  står som `B41` i backloggens Tier 1.
+- **`G131` — analytics-testens ⓘ-liste udledes nu af JSX'en.** Rækkens eget
+  spørgsmål ("kan listen udledes?") faldt ud til ja, så gælden forsvandt helt:
+  `analytics.test.js` læser `<M id="…">`-kaldene ud af `src/screens/` og
+  kræver, at mængden er PRÆCIS lig måle-ordbogens nøgler — begge veje, så både
+  et ⓘ uden ordbogs-række og en død ordbogs-række fanges. Udledningen fandt
+  straks de to id'er, den håndskrevne liste manglede (`story_viewable`,
+  `invite_funnel` — 44 kaldesteder mod listens 42). Et dynamisk `<M id={…}>`
+  afvises, så vagten ikke kan gøres blind.
+- **`G137` — rundemodalen sorterer samtidige kampe som Hjem og Tip.**
+  `computeCompetitionState()` kalder nu `groupIntoRounds()` MED
+  navnefunktionen (`teamName`-mappet stod tre linjer over kaldet), så to kampe
+  med identisk kickoff ikke længere sorterer efter holdets uuid i stillingens
+  rundemodal og efter navn alle andre steder. Ny test vender uuid'er og navne
+  mod hinanden, så det manglende argument ikke kan komme tavst tilbage.
+
+**Verificeret:** 1517 tests (3 nye), lint uændret på loftet (7 advarsler),
+grønt build, og `create_competition`-testen kørt mod en rigtig PostgreSQL
+16.13 med produktionsskemaet.
+
 21. august 2026 — Kort holdnavn overalt, og reglen bor ét sted (`B39`)
 
 - **Ejerens melding efter at have set `#248` i drift:** navnene er rigtige på

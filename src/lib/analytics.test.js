@@ -498,19 +498,25 @@ describe("måle-ordbogen — hvert nøgletal skal kunne forklare sig selv", () =
     expect(metricInfo(undefined)).toBeNull();
   });
 
-  it("alle id'er, AnalyticsPanel slår op, findes i ordbogen", () => {
-    const used = [
-      "completion_rate", "completion_trend", "active_users", "active_groups", "active_competitions",
-      "deadline_miss_rate", "rounds_completed", "completion_by_week", "completion_by_month",
-      "rounds_completed_by_week", "event_views", "league_views", "push_open_rate", "session_time",
-      "league_state", "league_breadth", "league_pulse", "league_completion", "league_concentration",
-      "league_activity", "league_retention", "league_last_activity", "league_competitions",
-      "league_story_views", "user_retention", "league_retention_agg", "user_cohorts",
-      "push_effect", "push_lead_time", "funnel", "funnel_path", "funnel_stalled", "funnel_time",
-      "story_rules", "story_never", "story_coverage", "share_surfaces",
-      "round_players", "round_participation", "round_new_players", "round_visitors", "round_trend",
-    ];
-    for (const id of used) expect(metricInfo(id), id).not.toBeNull();
+  // Id'erne UDLEDES af JSX'en frem for at vedligeholdes i hånden (G131). Den
+  // håndskrevne liste, der stod her, manglede allerede `story_viewable` og
+  // `invite_funnel` — en vagt, der kun kender de id'er, nogen huskede at skrive
+  // ind, giver tryghed uden dækning. Samme princip som story-katalogets vagt
+  // nederst i filen: kilden læses, listen skrives aldrig.
+  //
+  // Ligheden kræves BEGGE veje, fordi de to fejl er lige tavse: et ⓘ uden
+  // ordbogs-række forsvinder bare fra skærmen (metricInfo → null), og en
+  // ordbogs-række uden kaldested er dødt indhold, ingen læser korrektur på.
+  it("panelets ⓘ-id'er og måle-ordbogen er præcis samme mængde", () => {
+    const dir = new URL("../screens/", import.meta.url);
+    const files = readdirSync(dir, { recursive: true }).filter((f) => f.endsWith(".jsx") && !f.includes(".test."));
+    const sources = files.map((f) => [f, readFileSync(new URL(f, dir), "utf8")]);
+    // Et dynamisk id (`<M id={…}`) kan ikke udledes statisk og ville gøre
+    // vagten blind for netop det kaldested — så det må ikke kunne snige sig ind.
+    for (const [f, src] of sources) expect(src.includes("<M id={"), `${f}: <M id={…}> kan ikke udledes`).toBe(false);
+    const used = [...new Set(sources.flatMap(([, src]) => [...src.matchAll(/<M id="([^"]+)"/g)].map((m) => m[1])))];
+    expect(used.length).toBeGreaterThan(0); // regexen fandt faktisk kaldesteder
+    expect(used.sort()).toEqual(Object.keys(METRICS).sort());
   });
 
   it("de tal, der er et gulv og ikke et facit, siger det i forbeholdet", () => {
