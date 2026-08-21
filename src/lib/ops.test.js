@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   BASE_JOBS,
+  TRIGGER_JOBS,
   expectedJobs,
   mergeJobHealth,
   summarizeOutbox,
@@ -41,7 +42,7 @@ const SKOTLAND_JOB = "sync-matches:22222222-2222-2222-2222-222222222222";
 describe("expectedJobs", () => {
   it("giver ét kampprogram-job pr. turnering oven i de faste", () => {
     const ud = expectedJobs(LIGAER);
-    expect(ud).toHaveLength(BASE_JOBS.length + LIGAER.length);
+    expect(ud).toHaveLength(BASE_JOBS.length + TRIGGER_JOBS.length + LIGAER.length);
     expect(ud.map((j) => j.job)).toContain(SUPERLIGA_JOB);
     expect(ud.find((j) => j.job === SKOTLAND_JOB).label).toContain("Scotland Premiership");
   });
@@ -56,8 +57,20 @@ describe("expectedJobs", () => {
   });
 
   it("tåler ingen turneringer", () => {
-    expect(expectedJobs([]).map((j) => j.job)).toEqual(BASE_JOBS.map((j) => j.job));
-    expect(expectedJobs(undefined)).toHaveLength(BASE_JOBS.length);
+    expect(expectedJobs([]).map((j) => j.job)).toEqual(
+      [...BASE_JOBS, ...TRIGGER_JOBS].map((j) => j.job)
+    );
+    expect(expectedJobs(undefined)).toHaveLength(BASE_JOBS.length + TRIGGER_JOBS.length);
+  });
+
+  // Den tredje kategori (G138). Den er forventet uden at være planlagt: ingen
+  // kadence, fordi triggeren fyrer på en hændelse og ikke efter et ur — og
+  // derfor ingen tavshedsgrænse at måle imod.
+  it("forventer det trigger-skrevne job uden at give det en kadence", () => {
+    const j = expectedJobs(LIGAER).find((x) => x.job === "story-engine");
+    expect(j).toBeTruthy();
+    expect(j.triggered).toBe(true);
+    expect(j.stilhedMs).toBeNull();
   });
 });
 
@@ -343,6 +356,57 @@ describe("mergeJobHealth", () => {
       leagues: LIGAER, now: NU,
     }).find((j) => j.job === "sync-matches");
     expect(daarligt.state).toBe("fejler");
+  });
+
+  // ---- den tredje kategori (G138) ----
+  //
+  // `story-engine` skrives af matches-triggeren og ikke af cron-job.org. Den
+  // stod indtil 21. august 2026 som `unexpected`, fordi alt uden for
+  // `expectedJobs()` gjorde det — og fik dermed den ene tekst, der skal melde
+  // noget galt, om et job, hvor intet var galt.
+  it("kalder ikke det trigger-skrevne job uventet", () => {
+    const out = mergeJobHealth([raek("story-engine")], { leagues: LIGAER, now: NU });
+    expect(out).toHaveLength(expectedJobs(LIGAER).length);
+    const j = out.find((x) => x.job === "story-engine");
+    expect(j.unexpected).toBeFalsy();
+    expect(j.triggered).toBe(true);
+    expect(j.state).toBe("ok");
+  });
+
+  // Triggeren fyrer på en hændelse. En uge uden resultater og en trigger, der
+  // er holdt op med at fyre, ser derfor ens ud — tavshed kan ikke måles, fejl
+  // kan. Samme regel som for de uventede rækker, af den modsatte grund.
+  it("kalder aldrig det trigger-skrevne job tavst, men melder dets fejl", () => {
+    const stille = mergeJobHealth([raek("story-engine", { last_run_at: forSiden(300 * TIME) })], {
+      leagues: LIGAER, now: NU,
+    }).find((j) => j.job === "story-engine");
+    expect(stille.state).toBe("ok");
+
+    const daarligt = mergeJobHealth([raek("story-engine", { consecutive_failures: 3 })], {
+      leagues: LIGAER, now: NU,
+    }).find((j) => j.job === "story-engine");
+    expect(daarligt.state).toBe("fejler");
+  });
+
+  // Hele grunden til, at jobbet står i den FORVENTEDE liste: en trigger, der
+  // aldrig har skrevet, har ingen række at vise. Det var `A38`s tilstand —
+  // v3's dagsmotor havde aldrig skrevet noget i produktion, og stilheden kunne
+  // ikke aflæses noget sted.
+  it("viser det trigger-skrevne job, også når triggeren aldrig har skrevet", () => {
+    const j = mergeJobHealth([], { leagues: LIGAER, now: NU }).find((x) => x.job === "story-engine");
+    expect(j).toBeTruthy();
+    expect(j.state).toBe("ukendt");
+  });
+
+  // De 30 sekunder er cron-job.orgs vindue, og et trigger-skrevet job kaldes
+  // ikke derfra. Varighederne vises stadig — det er dommen om en fremmed
+  // grænse, der ikke gælder.
+  it("måler ikke det trigger-skrevne job mod kalderens vindue", () => {
+    const j = mergeJobHealth([raek("story-engine", { hour_p50_ms: 2_000, hour_max_ms: CALLER_WINDOW_MS })], {
+      leagues: LIGAER, now: NU,
+    }).find((x) => x.job === "story-engine");
+    expect(j.hourMs.max).toBe(CALLER_WINDOW_MS);
+    expect(j.nearCallerLimit).toBe(false);
   });
 
   it("fører fejltekst og resumé med videre", () => {

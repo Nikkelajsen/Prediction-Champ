@@ -135,10 +135,41 @@ function JobCard({ j }) {
         </p>
       )}
 
+      {/* "Ingen kørsler" betyder ikke det samme for de to slags jobs, og indtil
+          G138 sagde kortet cron-job.org til dem begge. For et trigger-skrevet
+          job er der intet at finde dér — tomheden er enten en migrering, der
+          ikke er kørt, eller den stilhed, `A38` ikke kunne aflæse. */}
       {j.state === "ukendt" && (
         <p style={{ ...muted, fontSize: 11, marginTop: 8, marginBottom: 0 }}>
-          Jobbet har aldrig meldt sig. Enten er <code>sql/job_runs.sql</code> ikke kørt endnu, eller
-          også findes jobbet ikke i cron-job.org — se <code>docs/CRON.md</code>.
+          {j.triggered ? (
+            <>
+              Triggeren har aldrig skrevet en række. Enten er{" "}
+              <code>sql/rating_trigger_optimization.sql</code> ikke kørt endnu, eller også har ingen
+              kamp fået et resultat siden. Det var netop den stilhed, <code>A38</code> ikke kunne
+              aflæse noget sted.
+            </>
+          ) : (
+            <>
+              Jobbet har aldrig meldt sig. Enten er <code>sql/job_runs.sql</code> ikke kørt endnu,
+              eller også findes jobbet ikke i cron-job.org — se <code>docs/CRON.md</code>.
+            </>
+          )}
+        </p>
+      )}
+
+      {/* Den tredje kategori (G138). Kortet stod indtil da med den uventede
+          rækkes tekst og gættede på to forklaringer, der begge er forkerte:
+          rækken kommer fra databasen og ikke fra cron-job.org.
+
+          Tier, når jobbet ikke har kørt: teksten ovenfor siger da det samme
+          bedre, og to afsnit om samme forhold læses som to forhold. */}
+      {j.triggered && j.state !== "ukendt" && (
+        <p style={{ ...muted, fontSize: 11, marginTop: 8, marginBottom: 0 }}>
+          Jobbet er ikke planlagt: rækken skrives af matches-triggeren i{" "}
+          <code>sql/rating_trigger_optimization.sql</code>, hver gang en kamp får et resultat — der
+          er intet at finde i cron-job.org, og derfor står hverken adresse eller autorisation i
+          resuméet. Tavshed kan ikke måles her: en uge uden resultater ser ud som en trigger, der
+          er holdt op med at fyre. Fejl kan.
         </p>
       )}
 
@@ -514,7 +545,9 @@ function OpsPanel({ token, leagues }) {
       <p style={{ ...muted, fontSize: 12, margin: 0 }}>
         Jobbene kører på cron-job.org uden for appen. Registeret over dem står i{" "}
         <code>docs/CRON.md</code>. Et job, der er blevet deaktiveret, skriver ingen rækker — derfor
-        vises "Tavs" ud fra hvor længe siden det sidst meldte sig, ikke ud fra en fejl.
+        vises "Tavs" ud fra hvor længe siden det sidst meldte sig, ikke ud fra en fejl. Ét kort er
+        undtagelsen: <code>story-engine</code> er ikke planlagt nogen steder, men skrives af
+        matches-triggeren i databasen ved hvert resultat — se kortets egen note.
       </p>
 
       {err && <p style={{ color: C.red, fontSize: 12, margin: 0 }}>{err}</p>}

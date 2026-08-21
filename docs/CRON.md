@@ -367,6 +367,21 @@ indeholder varighed, om det gik godt, jobbets eget resumé og fejlteksten.
 Aflæses i **Admin → Drift**. Tørre kørsler (`?dryRun=true`) logges bevidst
 ikke — de laver ikke noget arbejde, og ville ellers nulstille fejlserien.
 
+> **Én række i `job_runs` kommer ikke fra et planlagt job, og den står ikke i
+> tabellen ovenfor: `story-engine` (`G138`, 21. august 2026).** Den skrives af
+> **matches-triggeren** (`sql/rating_trigger_optimization.sql`) hver gang
+> historie-porten kører, altså fra databasen og ikke fra cron-job.org — derfor
+> har dens resumé hverken `host` eller `authVia`, og derfor er der intet job at
+> finde eller flytte i den konto. Admin → Drift kender den siden `G138` som en
+> **tredje kategori** ved siden af de to faste og turneringerne (`TRIGGER_JOBS`
+> i `src/lib/ops.js`); indtil da stod den som *uventet* med en tekst, der
+> gættede på et cron-job, som pegede på en slettet liga. **Den har ingen
+> kadence** — triggeren fyrer på en hændelse — så tavshed kan ikke måles og
+> måles ikke: en uge uden resultater og en trigger, der er holdt op med at
+> fyre, ser ens ud. Fejl og fejlrate måles som for alle andre. Af samme grund
+> står den heller ikke i `job-heartbeat.yml`s tavshedsliste, og det er med
+> vilje.
+
 > **Kortet måler både en fejlSERIE og en fejlRATE (`G115`, 14. august 2026).**
 > `consecutive_failures` nulstilles af enhver succes, og det gør den blind for
 > det mønster, den skulle fange: et job, der kører hvert minut og fejler to ud

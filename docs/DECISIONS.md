@@ -15,6 +15,57 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `G138`: et trigger-skrevet job er en tredje kategori, ikke en uventet række
+
+**Beslutning:** `src/lib/ops.js` får `TRIGGER_JOBS` ved siden af `BASE_JOBS` og
+de turnerings-udledte jobs, og `story-engine` står derefter i den **forventede**
+jobliste. Mærkatet `unexpected` er derefter forbeholdt rækker, ingen kan gøre
+rede for.
+
+**Fejlen var ikke en sætning, men den kategori, sætningen blev valgt ud fra.**
+Admin → Drift bar teksten *"Jobbet har meldt sig, men svarer ikke til nogen
+turnering. Enten peger et cron-job på en liga, der ikke findes, eller også er det
+en gammel række fra dengang alle turneringer skrev samme jobnavn."* Begge gæt er
+forkerte om `story-engine`: rækken skrives af **matches-triggeren** i
+`sql/rating_trigger_optimization.sql`, altså fra databasen. Det er også grunden
+til, at dens resumé hverken har `host` eller `authVia` — der er ingen kalder at
+have en adresse fra. Teksten var formet efter `G44`s forældede
+`sync-matches`-rækker og var korrekt for dem; den blev forkert, fordi
+`mergeJobHealth()` puttede alt uden for `expectedJobs()` i samme spand.
+
+**Hvorfor jobbet står i den FORVENTEDE liste og ikke bare får sin egen tekst
+blandt rækkerne.** Fletningen går ud fra forventningen, netop så et job uden en
+eneste kørsel stadig vises. `story-engine` er det job, hvor den egenskab betyder
+mest: `A38` (august 2026) var præcis den tilstand — v3's dagsmotor havde aldrig
+skrevet en række i produktion, og stilheden kunne ikke aflæses noget sted.
+Rækken blev til for at gøre den stilhed synlig, og et kort, der kun findes, når
+triggeren allerede har skrevet, ville have samme blinde vinkel som før.
+
+**Hvorfor tavsheden stadig ikke måles — men nu af den rigtige grund.**
+`stilhedMs` er `null`, fordi triggeren fyrer på en **hændelse** og ikke efter et
+ur: en uge uden resultater og en trigger, der er holdt op med at fyre, ser ens
+ud. En gættet grænse ville være en forventning, ingen har udtrykt — samme regel
+som for de uventede rækker, men af den modsatte grund: her ved vi, hvad jobbet
+er. Fejlserien, fejlraten og varigheden måles uændret. Af samme grund står
+jobbet heller ikke i `job-heartbeat.yml`s tavshedsliste, og det er med vilje.
+
+**Én ting mere holdt op med at gælde:** kortets advarsel om cron-job.orgs vindue
+på 30 sekunder (`G114`) dømmes ikke længere over et trigger-skrevet job.
+Grænsen tilhører en **kalder**, og triggeren har ingen. Varighedsrækkerne står
+der uændret — det er dommen, der er fjernet, ikke målingen.
+
+**Den generelle regel:** *en tekst, der gætter, gætter ud fra den kategori, den
+er havnet i.* Retter man sætningen frem for kategorien, får man en tekst, der er
+sand for netop det tilfælde, nogen så — og som gætter lige så forkert på det
+næste. Prisen ved at lade fejlen stå var større end kosmetik: den ene tekst, der
+skal fortælle en admin, at noget er galt, fortalte det om et job, hvor intet var
+galt, og dækkede samtidig over den dag, hvor et cron-job FAKTISK peger på en
+slettet liga.
+
+Intet skal køres i Supabase. Se [`CHANGELOG.md`](./CHANGELOG.md).
+
+---
+
 ## 21. august 2026 — `A46` er lukket: alle ni cron-jobs står på den gamle adresse
 
 **Beslutning:** `docs/CRON.md`s kaldkolonne udfyldes med
