@@ -7,7 +7,7 @@
 -- bare arbejde, der forsvinder. Skal skemaet ændres, skrives en migrering i
 -- sql/ og køres i Supabases SQL-editor — se sql/README.md.
 --
--- Skemaet ændrede sig sidst: 2026-08-20
+-- Skemaet ændrede sig sidst: 2026-08-21
 --
 -- DATOEN ER FILENS HOLDBARHED, ikke dens kørselsstempel. Den står stille,
 -- når en eksport ikke fandt noget nyt, og siger dermed "skemaet er uændret
@@ -19,7 +19,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict GTRxu14lQtMyMlsLg2gghSha0FpLfyOMh2tgzTWIgJCcnQNRZo2xEEPmeKoTUa8
+\restrict aE2OjGrmhDN53iDqyohNKgNiy28ixmOmQM0EZJGmt7l5qpBt3auqI7emNjna0fZ
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.11 (Ubuntu 17.11-1.pgdg24.04+2)
@@ -8981,5 +8981,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict GTRxu14lQtMyMlsLg2gghSha0FpLfyOMh2tgzTWIgJCcnQNRZo2xEEPmeKoTUa8
+\unrestrict aE2OjGrmhDN53iDqyohNKgNiy28ixmOmQM0EZJGmt7l5qpBt3auqI7emNjna0fZ
 
