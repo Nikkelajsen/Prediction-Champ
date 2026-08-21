@@ -54,13 +54,13 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(Tom.)*
+- Admin → Drift kalder `story-engine` et uventet job og gætter på to forklaringer, der begge er forkerte — rækken skrives af matches-triggeren (`sql/rating_trigger_optimization.sql`), ikke af et cron-job
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -102,9 +102,7 @@ produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
 gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
 køres på et minut.
 
-| # | Hvad | Note |
-|---|---|---|
-| `A46` | Udfyld `<app>` i `CRON.md`s ni kald med det faktiske værtsnavn | **Udløseren er sprunget 21. august 2026** — de ni jobs har alle kørt siden 13. august (langsomste skema er hver 12. time), så rækken er flyttet hertil fra Tier 6. **Bestillingen er ét kig:** Admin → Drift, rul ned ad de ni jobkort og skriv rækken **"Kaldt på"** af. Den blev løftet ud af "Seneste resumé"s rå JSON samme dag — værdien har ligget der siden 13. august, men kostede ni udfoldninger at læse. SQL-udgaven af samme opslag og reglen for, hvordan kolonnen udfyldes, står i [`CRON.md`](./CRON.md). **Er et job stadig på den gamle adresse, er det ikke en fejl** — `/api/` er undtaget fra redirectet, og flytningen tages ét job ad gangen ([`DOMAENE.md`](./DOMAENE.md)). |
+Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
@@ -255,23 +253,26 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (niogtredivte kørsel) — `A46`s udløser er sprunget, og halvdelen af leverancen manglede
+### 21. august 2026 (niogtredivte kørsel) — `A46` er lukket: alle ni cron-jobs står på den gamle adresse
 
-**Listen er 32 → 32.** Ingen række er lukket, og det er rækkens egen pointe:
-`A46`s sidste skridt ER en aflæsning i produktion, og den er ejerens (`A32`).
-Rækken er flyttet **Tier 6 → Tier 1**, fordi udløseren er sprunget — de ni jobs
-har alle kørt siden 13. august, hvor `setHost()` blev udrullet.
+**Listen er 32 → 31.** `A46` er slettet. Ejeren aflæste de ni jobkort i
+Admin → Drift samme dag, og svaret var entydigt: **alle ni cron-jobs kalder ind
+på `prediction-champ.vercel.app`.** `docs/CRON.md`s kaldkolonne er udfyldt, og
+pladsholderen `<app>` findes ikke længere i tabellen.
 
-**Det, der kunne gøres, var bestillingen — igen.** 13. august sluttede `A46`
-med, at værtsnavnet nu skrives i `job_runs.detail`, og at Admin → Drift viste
-det *"uden en eneste UI-ændring, fordi jobkortets «Seneste resumé» i forvejen
-dumper detaljen som JSON"*. Det var sandt og alligevel en halv leverance: rå
-JSON bag en `<details>` betyder ni udfoldninger og ni gennemlæsninger for at
-læse ét felt ni gange. Værtsnavnet er derfor løftet ud som sin egen række,
-**"Kaldt på"**, ved siden af varighederne — de ni værdier aflæses nu ved at
-rulle ned ad siden én gang.
+**Det, aflæsningen egentlig fortalte, er en tilstand og ikke ni adresser:**
+domæneflytningen (`I10`) har ikke rørt cron-laget. Det er ikke en fejl — `/api/`
+er med vilje undtaget fra redirectet, så jobbene rammer funktionen uanset hvad,
+og prisen er en ikke-kanonisk origin. Ført ind i `DOMAENE.md`s register, hvor
+rækken stod med `?`.
 
-**Læren, som er værd at tage med:** *at gemme svaret er ikke det samme som at
-kunne læse det.* `A11`-mønsteret (flyt spørgsmålet ind i appens egne data) har
-et skridt mere, som de tre tidligere anvendelser sprang over, fordi de hver især
-kun skulle læses én gang.
+**De fire sidste blev ikke udfyldt ved at slutte fra de fem første.** Fem ens
+værdier er et mønster og ikke en regel: hvert cron-job har sin egen URL, og
+flytningen tages ét job ad gangen. Alle ni er læst hver for sig.
+
+**Undervejs blev bestillingen selv gjort billigere:** `host` er løftet ud af
+"Seneste resumé"s rå JSON og vises nu som signalrækken **"Kaldt på"** på hvert
+jobkort. Rækken bliver stående — den er den ene måde at se, at et job er sat op
+mod en anden adresse, end man tror. **Læren:** *at gemme svaret er ikke det
+samme som at kunne læse det.*
+

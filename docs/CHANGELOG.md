@@ -9,14 +9,50 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
-21. august 2026 — `A46`: værtsnavnet er nu en RÆKKE på jobkortet, ikke en linje i et JSON-dump
+21. august 2026 — `A46` er lukket: alle ni cron-jobs står på `prediction-champ.vercel.app`
 
-**Backloggen er 32 → 32, og det er rækkens egen pointe.** `A46`s sidste skridt
-er at skrive ni værtsnavne ind i `docs/CRON.md`s kaldkolonne, og de ni værdier
-findes kun i produktion. `A32` står ved magt — den aflæsning er ejerens — så
-rækken lukkes ikke; den er flyttet **Tier 6 → Tier 1**, fordi udløseren er
-sprunget: alle ni jobs har kørt siden `setHost()` blev udrullet 13. august, og
-det langsomste skema er hver 12. time.
+**Backloggen er 32 → 31, og `docs/CRON.md` har ikke længere en pladsholder i
+kaldkolonnen.** Ejeren læste de ni jobkort i Admin → Drift samme dag, og svaret
+var entydigt: **alle ni cron-jobs kalder ind på den gamle adresse.** Alle ni bar
+`authVia: header`, altså cron-jobbet selv og ikke et manuelt "Hent nu" — så
+værdien er den, jobbet ER sat op med.
+
+**Det, aflæsningen egentlig fortalte, er en tilstand og ikke ni adresser:**
+domæneflytningen (`I10`) har ikke rørt cron-laget. Det er ikke en fejl og
+udløser ingen handling — `/api/` er med vilje undtaget fra redirectet, og
+undtagelsen er bevist (bevis 3b), så jobbene rammer funktionen uanset hvad.
+Prisen er en ikke-kanonisk origin. Ført ind i `DOMAENE.md`s register, hvor
+rækken stod med `?`.
+
+**De fire sidste blev ikke udfyldt ved at slutte fra de fem første.** Halvvejs
+gennem aflæsningen stod fem ens værdier; de sidste fire blev læst hver for sig
+alligevel. Hvert cron-job har sin egen URL, flytningen tages ét job ad gangen,
+og fem ens værdier er derfor et mønster og ikke en regel — registerets eget
+forord er den bindende regel: *et register, der er forkert, er værre end intet.*
+
+**Kolonnen er nu en påstand og ikke en pladsholder**, hvilket er en skærpelse:
+`<app>` kunne ikke blive forkert, `prediction-champ.vercel.app` kan.
+Vedligeholdelsespligten står ved kolonnen.
+
+**Fundet undervejs, noteret i backloggens indbakke frem for rettet:**
+Admin → Drift kalder `story-engine` et *uventet* job og gætter på to
+forklaringer, der begge er forkerte — rækken skrives af matches-triggeren
+(`sql/rating_trigger_optimization.sql`), ikke af et cron-job. (Den anden
+uventede række, `sync-matches` uden uuid, er derimod præcis det, kortet siger:
+historik fra før `G44`, som forsvinder, når `prune_job_runs` når den.)
+
+Intet skal køres i Supabase. Se [`DECISIONS.md`](./DECISIONS.md).
+
+---
+
+21. august 2026 — `A46`s bestilling: værtsnavnet er nu en RÆKKE på jobkortet, ikke en linje i et JSON-dump
+
+**`A46`s sidste skridt er at skrive ni værtsnavne ind i `docs/CRON.md`s
+kaldkolonne, og de ni værdier findes kun i produktion.** `A32` står ved magt —
+den aflæsning er ejerens — så rækken blev flyttet **Tier 6 → Tier 1** frem for
+lukket, fordi udløseren er sprunget: alle ni jobs har kørt siden `setHost()`
+blev udrullet 13. august, og det langsomste skema er hver 12. time. *(Ejeren
+kørte aflæsningen samme dag, og rækken er lukket — se indslaget ovenfor.)*
 
 **Det, der kunne leveres, var bestillingen — og halvdelen af den manglede.**
 13. august-indslaget nedenfor sluttede med, at Admin → Drift viste værtsnavnet

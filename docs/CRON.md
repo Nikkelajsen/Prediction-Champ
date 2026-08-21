@@ -37,13 +37,19 @@ de minutter, der allerede er taget.
 Bemærk at job 6–10 ikke sender `&smSeason=`: `api_season_id` er sat direkte i
 `sql/tournament_footballdata.sql`, så navne-opslaget aldrig bliver nødvendigt.
 
-**`<app>` i kaldkolonnen er en pladsholder, der nu kan slås op.** Efter
-domæneflytningen (`I10`) kan den være enten den gamle `.vercel.app`-adresse
-eller `app.leagly.app`, og `/api/` er med vilje undtaget fra redirectet, så
-begge svarer 200. Fra 13. august 2026 skriver hver kørsel sit værtsnavn i
-`job_runs.detail`, og fra 21. august 2026 står det som rækken **"Kaldt på"** på
-hvert jobkort i Admin → Drift — se [`<app>` i tabellen](#app-i-tabellen-samme-fremgangsmåde-brugt-igen-a46)
-nedenfor for opslaget og for, hvordan kolonnen udfyldes.
+**✓ `<app>` er udfyldt 21. august 2026 og står ikke længere i kaldkolonnen
+(`A46`).** Alle ni cron-jobs kalder ind på **`prediction-champ.vercel.app`** —
+den gamle adresse. **Ikke ét job er flyttet til `app.leagly.app`**, og det er
+ikke en fejl: `/api/` er med vilje undtaget fra redirectet, så jobbene rammer
+funktionen uanset hvad, og flytningen tages ét job ad gangen
+([`DOMAENE.md`](./DOMAENE.md)). Værdien kom ikke fra cron-job.org, men fra
+jobbenes egne kørsler — se [`<app>` i tabellen](#app-i-tabellen-samme-fremgangsmåde-brugt-igen-a46)
+nedenfor for aflæsningen og for, hvad der skal ske, hvis et job flyttes.
+
+> **Kolonnen skal rettes, hvis et job flyttes.** Den er nu en påstand om
+> virkeligheden og ikke en pladsholder, og filens forord gælder den: et register,
+> der er forkert, er værre end intet. Aflæsningen koster ét kig i Admin → Drift
+> og kan gentages når som helst.
 
 **Kampprogram-jobbene hedder ikke længere det samme i driftsloggen.** Hver
 kørsel af `sync-matches` skriver `sync-matches:<liga-uuid>` i `job_runs` (G44,
@@ -58,21 +64,21 @@ kommer af `leagueId`, som jobbene allerede sender.
 
 | # | Job | Hvor | Skema | Kald | Hemmelighed sendes som | Sidst verificeret |
 |---|---|---|---|---|---|---|
-| 1 | Kampprogram + endelige resultater Superliga | cron-job.org | hver 12. time, ved **minut 00** | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | `x-sync-secret` ✓ | 3. august 2026 — kørsel aflæst på cron-job.org (12:00, næste 00:00), lykkedes |
-| 2 | Live-resultater | cron-job.org | hvert minut | `GET https://<app>/api/sync-live` | `x-sync-secret` ✓ | **Timeout er 30 s og kan ikke hæves** (maksimum på planen, aflæst 14. august 2026) — det er den yderste grænse, og `G117` bygger inden for den; se rækkefølge-reglen nederst i filen. `Notify after` sat fra 1 til 3 fejl samme dag. Kørslerne 14. august er aflæst minut for minut i `job_runs` og bar `authVia: header` hele vejen, altså cron-jobbet selv; værtsnavnet er stadig `prediction-champ.vercel.app` (flytningen til `app.leagly.app` tages ét job ad gangen, [`DOMAENE.md`](./DOMAENE.md)) |
-| 3 | Push-notifikationer **+ kåringer, historie-bagstopper, milepæle og milepæls-kort** | cron-job.org | hver 15.–30. minut, **hele døgnet** — men beskeder sendes kun i vinduet **08–22 dansk tid** (`SEND_WINDOW` i `api/send-notifications.js`); kørsler udenfor logges med `sent: 0` og er no-ops med vilje | `GET https://<app>/api/send-notifications` (valgfrit `&hours=`, klippes til 1–24, standard 3; `&force=true` omgår sendevinduet — kun til manuel test; `&action=vapidKey` svarer med den **offentlige** VAPID-nøgle og ligger med vilje FØR auth-tjekket) | `x-sync-secret` ✓ | — |
+| 1 | Kampprogram + endelige resultater Superliga | cron-job.org | hver 12. time, ved **minut 00** | `GET https://prediction-champ.vercel.app/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | `x-sync-secret` ✓ | 3. august 2026 — kørsel aflæst på cron-job.org (12:00, næste 00:00), lykkedes. **21. august 2026 — `host` aflæst i jobbets eget resumé (`A46`): `prediction-champ.vercel.app`**, altså stadig den gamle adresse |
+| 2 | Live-resultater | cron-job.org | hvert minut | `GET https://prediction-champ.vercel.app/api/sync-live` | `x-sync-secret` ✓ | **Timeout er 30 s og kan ikke hæves** (maksimum på planen, aflæst 14. august 2026) — det er den yderste grænse, og `G117` bygger inden for den; se rækkefølge-reglen nederst i filen. `Notify after` sat fra 1 til 3 fejl samme dag. Kørslerne 14. august er aflæst minut for minut i `job_runs` og bar `authVia: header` hele vejen, altså cron-jobbet selv; værtsnavnet er stadig `prediction-champ.vercel.app` (flytningen til `app.leagly.app` tages ét job ad gangen, [`DOMAENE.md`](./DOMAENE.md)). **✓ Værtsnavnet er bekræftet 21. august 2026 af `host` i jobbets eget resumé (`A46`)** — kaldkolonnen er udfyldt |
+| 3 | Push-notifikationer **+ kåringer, historie-bagstopper, milepæle og milepæls-kort** | cron-job.org | hver 15.–30. minut, **hele døgnet** — men beskeder sendes kun i vinduet **08–22 dansk tid** (`SEND_WINDOW` i `api/send-notifications.js`); kørsler udenfor logges med `sent: 0` og er no-ops med vilje | `GET https://prediction-champ.vercel.app/api/send-notifications` (valgfrit `&hours=`, klippes til 1–24, standard 3; `&force=true` omgår sendevinduet — kun til manuel test; `&action=vapidKey` svarer med den **offentlige** VAPID-nøgle og ligger med vilje FØR auth-tjekket) | `x-sync-secret` ✓ | **21. august 2026 — `host` aflæst i jobbets eget resumé (`A46`): `prediction-champ.vercel.app`.** Kolonnen stod tom indtil da |
 
 > **Job 2 er også bagstopperen for et tabt resultat (`G122`, 15. august 2026).** Live-syncens vindue går 6 timer tilbage, og en kamp, der er ældre end det og stadig står uden endeligt resultat, var indtil da usynlig for jobbet — den ventede på næste kampprogram-kørsel, op til 12 timer. I **minut 41** af hver time fejer kørslen derfor også efter kampe i `[nu − 36 t; nu − 6 t]` uden resultat, med et loft på 40 kampe. **Der er ikke oprettet et job for det**, og skemaet i tabellen er uændret: fejningen er ét ekstra udsagn i et job, der i forvejen kører hvert minut — samme afvejning som `prune_analytics_events` i heartbeat'en. **Minuttallet er valgt efter tabellen ovenfor:** 00, 05, 11, 15, 17, 23 og 29 er optaget af kampprogram-jobbene, og advarslen om ikke at lægge et nyt football-data-kald oven i et taget minut gælder også et kald, der kommer indefra. Fejningen laver højst ét kald pr. leverandør, altså 24 i døgnet i værste fald frem for de 1.440, et ugatet opslag ville koste. Aflæses som `staleChecked`/`staleRescued` i Admin → Drift; det sidste er kun til stede, når bagstopperen faktisk fangede noget, og **et tal, der vedvarende står over nul, er et hul i live-syncen, ikke en succes.**
 
 > **Job 3 gør mere end at sende beskeder.** Ud over kåringerne (`B11`, august 2026) kalder det siden Story Engine v2 også `generate_stories_catchup()` og `award_milestones(null)` som `service_role` — og siden v3 desuden `apply_milestone_stories()`. Begge er der af samme grund som kåringerne: matches-triggeren kan **per konstruktion** ikke se dem. Bagstopperen dækker en dag, hvis sidste kamp aldrig får et resultat, og en runde med en udsat kamp uden ny dato — i begge tilfælde skrives der intet til `matches`, så der er ingen trigger at fyre. Milepælene har tre familier, der slet ikke er kampdrevne (oprettede ligaer/konkurrencer, deltagne sæsoner, afsluttede konkurrencer). Alle tre kald er idempotente og springes over ved `dryRun`, fordi en forhåndsvisning er en læsning og ikke må uddele en permanent milepæl. **`apply_milestone_stories()` SKAL køre efter `award_milestones()`, og rækkefølgen i kaldelisten er derfor bindende.** Efter v3 får milepæle ikke deres eget kort, men kaprer dagens ene slot. Skriveren af milepæle er dette job, mens dagens kort skrives af matches-triggeren — så normaltilfældet er, at milepælen uddeles *efter* at kortet er udgivet, og uden dette kald ville den aldrig nå Hjem. Kaldet **erstatter** kortet (det lægger aldrig et til) og rører kun kort under 48 timer gamle; er kortet ældre, er det alligevel usynligt for brugeren, og milepælen fanges af frame 5 i den kommende rundestory. **Der er ikke oprettet et nyt job** — de fire er lagt i et job, der i forvejen kører hyppigt nok.
 
 | 4 | Skema-eksport | GitHub Actions | `0 6 * * 1` (mandag 06:00 UTC) + manuelt | `.github/workflows/schema-export.yml` | — (bruger repo-secret `SUPABASE_DB_URL`) | 30. juli 2026. **Jobbet committer ikke længere til `main` (12. august 2026):** den ugentlige kørsel dispatches pr. definition på standardgrenen, og dumpet landede derfor i produktionsgrenen uden at have været gennem CI — tre gange har det gjort CI rød bagefter. Kørslen skubber nu til `chore/schema-export` og åbner en pull request; en manuel dispatch på en arbejdsgren committer stadig direkte. **Følgen for dette register: jobbet kan nu efterlade en åben PR, og dét er dets måde at melde skema-drift på.** Se `sql/README.md` → Vej 3 |
-| 5 | Kampprogram + endelige resultater Scotland | cron-job.org | hver 12. time, ved **minut 15** | `GET https://<app>/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | `x-sync-secret` ✓ | **2. august 2026 — kørsel aflæst i Admin → Drift: 198 af 198 kampe, tom `unmatched`, ingen fejl.** Bemærk at netop den kørsel har `authVia: admin-token`, altså et manuelt "Hent nu": den beviser, at *syncen* virker for Scotland, ikke at cron-jobbet selv kalder ind. Kolonnen til venstre stod derfor med `?` indtil `A11`-opslaget 5. august 2026, som viste otte `header`-kørsler for netop dette job — altså at cron-jobbet selv kalder ind. Samme opslag gav minuttallet (15), som manglede. `&smSeason=` i kaldet er reelt dødvægt: `sql/tournament_scotland_premiership.sql` satte `api_season_id` direkte, og parameteren læses kun, når id'et mangler — harmløs, men ikke påkrævet |
-| 6 | Kampprogram + endelige resultater Premier League | cron-job.org | hver 12. time, ved **minut 05** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` ✓ | 31. juli 2026 (oprettet; første planlagte kørsel 01:05) |
-| 7 | Kampprogram + endelige resultater Champions League | cron-job.org | hver 12. time, ved **minut 17** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` ✓ | **3. august 2026 — minuttal aflæst på cron-job.org (kørsel 16:17, næste 00:17): registret sagde minut 11, virkeligheden er 17.** 31. juli 2026 (oprettet; første planlagte kørsel 01:17. **`B8` er afgjort 1. august 2026:** football-data.org har endnu ikke oprettet sæsonen 2026 — deres aktuelle er 2025 — så jobbet henter 0 kampe og melder sig **gennemført** med forklaringen i `emptySeason`, indtil ligafasen er lodtrukket) |
-| 8 | Kampprogram + endelige resultater Bundesliga | cron-job.org | hver 12. time, ved **minut 23** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` ✓ | **3. august 2026 — minuttal aflæst på cron-job.org (kørsel 16:23, næste 00:23): registret sagde minut 17, virkeligheden er 23.** 31. juli 2026 (oprettet; første planlagte kørsel 01:23) |
-| 9 | Kampprogram + endelige resultater Serie A | cron-job.org | hver 12. time, ved **minut 11** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` ✓ | **3. august 2026 — minuttal aflæst på cron-job.org (kørsel 16:11, næste 00:11): registret sagde minut 23, virkeligheden er 11.** 31. juli 2026 (oprettet; første planlagte kørsel 01:11) |
-| 10 | Kampprogram + endelige resultater Primera División | cron-job.org | hver 12. time, ved **minut 29** | `GET https://<app>/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` ✓ | **31. juli 2026 — kørt planlagt kl. 00:29, lykkedes (4,31 s)** |
+| 5 | Kampprogram + endelige resultater Scotland | cron-job.org | hver 12. time, ved **minut 15** | `GET https://prediction-champ.vercel.app/api/sync-matches?leagueId=<uuid>&smSeason=<navn>` | `x-sync-secret` ✓ | **2. august 2026 — kørsel aflæst i Admin → Drift: 198 af 198 kampe, tom `unmatched`, ingen fejl.** Bemærk at netop den kørsel har `authVia: admin-token`, altså et manuelt "Hent nu": den beviser, at *syncen* virker for Scotland, ikke at cron-jobbet selv kalder ind. Kolonnen til venstre stod derfor med `?` indtil `A11`-opslaget 5. august 2026, som viste otte `header`-kørsler for netop dette job — altså at cron-jobbet selv kalder ind. Samme opslag gav minuttallet (15), som manglede. `&smSeason=` i kaldet er reelt dødvægt: `sql/tournament_scotland_premiership.sql` satte `api_season_id` direkte, og parameteren læses kun, når id'et mangler — harmløs, men ikke påkrævet. **21. august 2026 — `host` aflæst i jobbets eget resumé (`A46`): `prediction-champ.vercel.app`**, altså stadig den gamle adresse |
+| 6 | Kampprogram + endelige resultater Premier League | cron-job.org | hver 12. time, ved **minut 05** | `GET https://prediction-champ.vercel.app/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` ✓ | 31. juli 2026 (oprettet; første planlagte kørsel 01:05) **21. august 2026 — `host` aflæst i jobbets eget resumé (`A46`): `prediction-champ.vercel.app`**, altså stadig den gamle adresse |
+| 7 | Kampprogram + endelige resultater Champions League | cron-job.org | hver 12. time, ved **minut 17** | `GET https://prediction-champ.vercel.app/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` ✓ | **3. august 2026 — minuttal aflæst på cron-job.org (kørsel 16:17, næste 00:17): registret sagde minut 11, virkeligheden er 17.** 31. juli 2026 (oprettet; første planlagte kørsel 01:17. **`B8` er afgjort 1. august 2026:** football-data.org har endnu ikke oprettet sæsonen 2026 — deres aktuelle er 2025 — så jobbet henter 0 kampe og melder sig **gennemført** med forklaringen i `emptySeason`, indtil ligafasen er lodtrukket) **21. august 2026 — `host` aflæst i jobbets eget resumé (`A46`): `prediction-champ.vercel.app`**, altså stadig den gamle adresse |
+| 8 | Kampprogram + endelige resultater Bundesliga | cron-job.org | hver 12. time, ved **minut 23** | `GET https://prediction-champ.vercel.app/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` ✓ | **3. august 2026 — minuttal aflæst på cron-job.org (kørsel 16:23, næste 00:23): registret sagde minut 17, virkeligheden er 23.** 31. juli 2026 (oprettet; første planlagte kørsel 01:23) **21. august 2026 — `host` aflæst i jobbets eget resumé (`A46`): `prediction-champ.vercel.app`**, altså stadig den gamle adresse |
+| 9 | Kampprogram + endelige resultater Serie A | cron-job.org | hver 12. time, ved **minut 11** | `GET https://prediction-champ.vercel.app/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` ✓ | **3. august 2026 — minuttal aflæst på cron-job.org (kørsel 16:11, næste 00:11): registret sagde minut 23, virkeligheden er 11.** 31. juli 2026 (oprettet; første planlagte kørsel 01:11). **21. august 2026 — `host` aflæst i jobbets eget resumé (`A46`): `prediction-champ.vercel.app`**, altså stadig den gamle adresse |
+| 10 | Kampprogram + endelige resultater Primera División | cron-job.org | hver 12. time, ved **minut 29** | `GET https://prediction-champ.vercel.app/api/sync-matches?leagueId=<uuid>` | `x-sync-secret` ✓ | **31. juli 2026 — kørt planlagt kl. 00:29, lykkedes (4,31 s)**. **21. august 2026 — `host` aflæst i jobbets eget resumé (`A46`): `prediction-champ.vercel.app`**, altså stadig den gamle adresse |
 | 11 | Datasikkerhedskopi | GitHub Actions | `0 3 * * *` (dagligt 03:00 UTC) + manuelt | `.github/workflows/data-backup.yml` | — (repo-secrets `SUPABASE_DB_URL` + `BACKUP_PASSPHRASE`) | 2. august 2026 (oprettet) |
 
 > **Job 3 skriver også, og ikke kun til `notification_log` (3. august 2026, `B11`).** Hver kørsel kalder `award_competition_periods()` som `service_role` for hver konkurrence med `mode_params.awards`, FØR den læser kåringerne. Funktionen er lazy og blev indtil da kun trigget af en klient, der åbnede boardet, så en kåring — og dermed Story Engines kort for den — kunne mangle, til nogen tilfældigvis kiggede. Kaldet er idempotent (`on conflict do nothing`), og `&dryRun=true` springer det over, fordi forhåndsvisningen er en læsning. Det betyder også, at et stoppet job 3 ikke længere kun koster beskeder: kåringerne skrives da først, når nogen åbner boardet.
@@ -168,16 +174,19 @@ allerede havde i hånden.
 Vejen står også i **Admin → Drift** under "Seneste resumé" på hvert jobkort, hvis
 man kun vil have et hurtigt kig.
 
-### `<app>` i tabellen: samme fremgangsmåde, brugt igen (`A46`)
+### `<app>` i tabellen: samme fremgangsmåde, brugt igen (`A46`) — ✓ afsluttet
 
-**Kaldkolonnen ovenfor skriver `https://<app>/api/…`, og pladsholderen har
+**Kaldkolonnen ovenfor skrev `https://<app>/api/…`, og pladsholderen havde
 aldrig haft en værdi i repoet.** Den blev aktuel med domæneflytningen (`I10`,
-12.–13. august 2026): `<app>` kan i dag være enten den gamle
-`.vercel.app`-adresse eller `app.leagly.app`, og de to kan ikke skelnes udefra,
-fordi **`/api/` med vilje er undtaget fra redirectet**
-([`DOMAENE.md`](./DOMAENE.md) trin 6). Et job på den gamle adresse svarer altså
-fortsat 200 — bare uden den nye adresses egen CSP, og uden at registeret siger
-det.
+12.–13. august 2026): `<app>` kunne være enten den gamle `.vercel.app`-adresse
+eller `app.leagly.app`, og de to kan ikke skelnes udefra, fordi **`/api/` med
+vilje er undtaget fra redirectet** ([`DOMAENE.md`](./DOMAENE.md) trin 6). Et job
+på den gamle adresse svarer altså fortsat 200 — bare uden den nye adresses egen
+CSP, og uden at registeret sagde det.
+
+**Svaret blev læst 21. august 2026: alle ni står på `prediction-champ.vercel.app`,
+og kolonnen er udfyldt.** Afsnittet her bliver stående, fordi opslaget er
+gentageligt og skal bruges igen, hver gang et job flyttes.
 
 Spørgsmålet lignede endnu en aflæsning i cron-job.org: åbn ni jobs, skriv ni
 URL'er af. **Men det er præcis `A11`s fejlklasse igen** — svaret lå i kaldet, det
@@ -226,6 +235,25 @@ tier.
 faktiske adresse, job for job. Er et job stadig på den gamle adresse, er det
 ikke en fejl, der skal hastes: undtagelsen `(?!api/)` beskytter det, og
 [`DOMAENE.md`](./DOMAENE.md) siger, at flytningen tages ét job ad gangen.
+
+### ✓ Aflæst 21. august 2026 — alle ni, samme svar
+
+**Alle ni cron-jobs kalder ind på `prediction-champ.vercel.app`.** Aflæst i
+Admin → Drift, job for job, og ført ind i kaldkolonnen ovenfor. Alle ni bar
+`authVia: header`, altså cron-jobbet selv og ikke et manuelt "Hent nu" — så
+værdien er den, jobbet ER sat op med, og ikke den, en admin tilfældigvis sad på.
+
+**Ingen af dem er ni gange det samme svar på ét spørgsmål.** Hvert cron-job har
+sin egen URL i cron-job.org, og flytningen tages ét job ad gangen — derfor er
+alle ni læst hver for sig, og derfor blev de fire sidste ikke udfyldt ved at
+slutte fra de fem første. Det ville have været nøjagtig den fejl, filens forord
+advarer mod: *"et register, der er forkert, er værre end intet register, fordi
+man tror på det."*
+
+**Det, aflæsningen egentlig fortalte, er en tilstand og ikke en adresse:**
+domæneflytningen (`I10`) har ikke rørt cron-laget. Ni jobs står på den gamle
+adresse, og de virker, fordi `/api/` er undtaget fra redirectet. Prisen er en
+ikke-kanonisk origin og intet andet — se [`DOMAENE.md`](./DOMAENE.md).
 
 ### Leverandørens egne nedbrud: tæl fejlteksterne (`G121`)
 

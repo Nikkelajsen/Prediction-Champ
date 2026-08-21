@@ -15,6 +15,41 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `A46` er lukket: alle ni cron-jobs står på den gamle adresse
+
+**Beslutning:** `docs/CRON.md`s kaldkolonne udfyldes med
+`prediction-champ.vercel.app` for alle ni jobs, og der gøres **intet** ved, at
+ingen af dem er flyttet til `app.leagly.app`.
+
+**Aflæsningen.** Ejeren læste de ni jobkort i Admin → Drift 21. august 2026.
+Svaret var det samme ni gange, og alle ni bar `authVia: header` — altså
+cron-jobbet selv og ikke et manuelt "Hent nu", hvilket er forskellen på "den
+adresse, jobbet ER sat op med" og "den adresse, en admin tilfældigvis sad på".
+
+**De fire sidste blev ikke udfyldt ved at slutte fra de fem første.** Halvvejs
+gennem aflæsningen stod fem ens værdier, og fristelsen til at skrive de sidste
+fire af var reel. Den blev afvist: hvert cron-job har sin egen URL i
+cron-job.org, flytningen tages ét job ad gangen (`DOMAENE.md`), og fem ens
+værdier er derfor et **mønster** og ikke en regel. Registerets eget forord er
+den bindende regel her — *et register, der er forkert, er værre end intet
+register, fordi man tror på det.*
+
+**Hvorfor der ikke skal flyttes noget.** Aflæsningen fortalte reelt en tilstand
+og ikke ni adresser: domæneflytningen (`I10`) har ikke rørt cron-laget. Det er
+ikke en fejl. `/api/` er med vilje undtaget fra redirectet, og undtagelsen er
+bevist (bevis 3b: `/api/sync-live` på den gamle adresse svarer 401 og ikke 308),
+så jobbene rammer funktionen uanset hvilken adresse de er sat op med. Prisen er
+en ikke-kanonisk origin — ikke et brud. En flytning ville være ni redigeringer i
+en tredjeparts brugerflade for at fjerne et kosmetisk vilkår, og hvert af de ni
+skridt kan skrive en URL forkert. **Værdien af at flytte er lavere end risikoen
+ved at gøre det**, så det gøres ikke; sker det alligevel en dag, skal
+kaldkolonnen rettes i samme ombæring.
+
+**Kolonnen er nu en påstand og ikke en pladsholder.** Det er en reel skærpelse:
+`<app>` kunne ikke blive forkert, men `prediction-champ.vercel.app` kan.
+Vedligeholdelsespligten er skrevet ind ved kolonnen, og aflæsningen koster ét
+kig i Admin → Drift.
+
 ## 21. august 2026 — `A46`: værtsnavnet får sin egen række, og rækken bliver stående
 
 **Beslutning:** `host` løftes ud af "Seneste resumé"s rå JSON og vises som
@@ -41,9 +76,11 @@ måde at se det på, og flytningen tages ét job ad gangen. Rækken står neders
 blandt signalerne, fordi den er en **opsætning** og ikke et helbredssignal: de
 øvrige rækker skifter fra kørsel til kørsel, denne kun når nogen retter jobbet.
 
-**Hvorfor `A46` ikke lukkes.** Kolonnen kan ikke udfyldes fra repoet, og `A32`
-står ved magt: aflæsninger i produktion er ejerens arbejde, og der bygges ingen
-vej udenom. At skrive `app.leagly.app` i de ni kald ud fra, hvad man *går ud
+**Hvorfor `A46` ikke lukkes** *(overhalet samme dag: ejeren kørte aflæsningen,
+og rækken er lukket — se posten ovenfor. Afsnittet står, fordi begrundelsen for
+ikke at gætte er den samme, og fordi den blev prøvet af halvvejs gennem
+aflæsningen.)* Kolonnen kan ikke udfyldes fra repoet, og `A32` står ved magt:
+aflæsninger i produktion er ejerens arbejde, og der bygges ingen vej udenom. At skrive `app.leagly.app` i de ni kald ud fra, hvad man *går ud
 fra*, ville være at gøre registeret usandt — og filens egen advarsel siger, at
 et forkert register er værre end intet, fordi man tror på det. **Rækken er
 flyttet til Tier 1 frem for at blive i Tier 6:** udløseren ER sprunget, så det
