@@ -15,6 +15,82 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `G142`: de døde dagskort bliver stående i tabellen og holdes ude af nævneren
+
+**Beslutning:** bagstopperens dagsløkke ændres IKKE. Et v3-dagskort, der var
+afløst i det øjeblik det blev skrevet, bliver stående i `stories` som
+analysedata og holdes i stedet ude af `viewable` i `admin_analytics_stories`
+(`G141`, samme dag).
+
+**Begrundelse.** `A33`-aflæsningen fandt, at 50 af 100 v3-dagskort havde et
+vindue på nul minutter: `generate_stories_catchup()` tager op til tyve dage i én
+kørsel, ældste først, og `loadDayCard` henter altid den nyeste `day_key`, så alt
+andet end den sidste dag er dødt i fødslen. De to veje var (a) at lade dagsløkken
+springe en allerede afløst dag over og (b) at beholde rækkerne og rette
+tællingerne.
+
+**(a) fjerner kort, brugeren kunne have set.** Vinduet er en *model* af
+`loadDayCard` og ikke en observation: forespørgslen filtrerer `dismissed_at is
+null`, så afviser brugeren det nyeste kort, kommer det næstnyeste frem, hvis det
+stadig er friskt. Tallet 50 er derfor et **loft** over problemet — og en motor,
+der springer dagen over på et loft, betaler med rigtige kort.
+
+**Rækkerne har to andre aftagere.** `sql/checks/day_card_coverage.sql` spørger,
+om en færdigspillet kampdag fik sit kort; `sql/story_engine_v3_measure.sql`
+regner hele aflæsningen på dem. Et hul i historikken ville gøre begge blinde for
+at spare et arbejde, der allerede er bundet: løkken har et loft på tyve dage, og
+`>= current_date - 30` binder v3-æraen for altid.
+
+**Det er samme svar som `#48` gav v2's 197 efterfyldte kort:** behold dem som
+analysedata, hold dem ude af nævneren, og lad forskellen mellem `generated` og
+`viewable` være selve oplysningen. Prisen er, at motorens dyreste arbejde
+fortsat bruges på rækker, ingen kan nå — og den er valgt, fordi alternativet
+koster noget, en bruger kan mærke.
+
+**Følgen for næste gang:** ændres dagsløkken alligevel en dag, er det `viewable`
+og ikke `generated`, der skal blive ved med at være rigtig. Reglen bor ét sted
+(`_vindue` i aflæsningen, ordret kopieret ind i RPC'en) og har en vagt i
+`sql/tests/analytics_story_viewable.sql`.
+
+---
+
+## 21. august 2026 — `G141`: vis-bar har to regler, fordi fladen har to
+
+**Beslutning:** `admin_analytics_stories`' `viewable` måler et v3-dagskort
+(`period = 'day'` og `news_value is not null`) på dets eget vindue —
+`created_at` → det tidligste af 48 timer og næste `day_key` for samme bruger —
+og alt andet på karusellens `created_at < round_key + 7 dage`. Æra-skellet er
+`news_value`, ikke `period`.
+
+**Begrundelse.** `G73` satte nævneren 5. august 2026 for at holde v2's
+efterfyldning ude af raterne, og reglen var rigtig for den flade, der fandtes:
+karusellen på Hjem hentede den nuværende rundes kort. **v3 fjernede karusellen**
+og rørte ikke reglen. Fra den dag målte nævneren en flade, appen ikke har mere —
+og den er nævner under BÅDE visnings- og afvisningsraten. Det er `G73`s egen
+fejlklasse, denne gang forårsaget af en ændring et helt andet sted end i tavlen.
+
+**v2's dagskort beholder den gamle regel, og det er ikke en undtagelse, men
+pointen.** De 197 efterfyldte kort *levede* i karusellen; for dem er
+`round_key + 7 dage` fortsat den rigtige model. En regel pr. flade er svaret,
+ikke en regel pr. periode.
+
+**Udtrykket er ordret kopieret fra `sql/story_engine_v3_measure.sql`**, inklusive
+48-timers loftet, som ikke kan flytte et boolesk svar. Et led, der fjernes, fordi
+det tilfældigvis er ligegyldigt lige nu, er præcis den slags stille afvigelse,
+rækken her kom af — og de to steder skal kunne diffes linje for linje.
+
+**Vagten er skrevet, så den ikke kan bestå på en harmløs fixture:** testen kræver
+af sig selv, at skemadumpets GAMLE RPC svarer forkert på de to rækker,
+rettelsen handler om, før migreringen læses. Fem mutationer er efterprøvet mod
+PostgreSQL 16 og alle fanget.
+
+**Tavlens brødtekst og måle-ordbogen er rettet i samme ombæring.** En nævner,
+der er rigtig, og en forklaring, der beskriver karusellen i nutid, er stadig en
+tavle, man ikke kan læse — og det er den slags drift, der gjorde reglen forkert
+til at begynde med.
+
+---
+
 ## 21. august 2026 — `G144`: stimekortet fortæller nu også, når stimen brød — og det længste løb vinder
 
 **Beslutning:** `STREAK_STATUS` udgives fremover også på den dag, stimen BLEV

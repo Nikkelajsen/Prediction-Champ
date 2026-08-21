@@ -303,9 +303,9 @@ const METRICS = {
   story_viewable: {
     title: "Kunne vises",
     what: "De genererede historier, der overhovedet kunne nå en skærm — og dermed nævneren under alle procenterne i tabellen.",
-    how: "Karusellen på Hjem henter kun kort fra den NUVÆRENDE runde (`round_key = <nuværende>`). Et kort tæller derfor som vis-bart, hvis det blev skrevet, før dets egen runde var forbi — altså før midnat dansk tid på tirsdagen efter rundenøglen.",
-    source: "public.stories: created_at sammenholdt med round_key + 7 dage.",
-    caveat: "Målingen kom af `G73` (august 2026), hvor 197 af 280 historier var efterfyldte dagskort med nul visninger: med `genereret` som nævner målte visningsraten efterfyldningen og ikke brugerne. To ting gør et kort ikke-vis-bart, og kun den ene er en engangsudgift — v2's efterfyldning af historikken, og et runde-kort hvis runde først blev spillet færdig efter den var forbi (en udsat kamp). Den anden kan ske igen.",
+    how: "To regler, fordi fladen har to. RUNDEKORTENE (og v2's dagskort) levede i karusellen på Hjem, som kun hentede den NUVÆRENDE runde: de er vis-bare, hvis de blev skrevet før midnat dansk tid på tirsdagen efter rundenøglen. Et v3-DAGSKORT vises ét ad gangen — Hjem henter den nyeste `day_key` og viser den kun under 48 timer gammel — så dets vindue går fra `created_at` og frem til det tidligste af 48 timer og det øjeblik, et kort med en nyere `day_key` blev skrevet til samme bruger. Er vinduet nul minutter, kunne kortet aldrig nå en skærm.",
+    source: "public.stories: created_at sammenholdt med round_key + 7 dage — og for v3-dagskortene (`news_value is not null`) med næste `day_key` for samme bruger.",
+    caveat: "Målingen kom af `G73` (august 2026), hvor 197 af 280 historier var efterfyldte dagskort med nul visninger: med `genereret` som nævner målte visningsraten efterfyldningen og ikke brugerne. Den blev SELV forældet af v3 (`G141`, 21. august 2026), som fjernede karusellen uden at røre reglen — halvdelen af de hundrede v3-dagskort havde et vindue på nul minutter, fordi bagstopperens dagsløkke skriver flere dages kort i samme kørsel. Vinduet er en MODEL af, hvad Hjem henter, ikke en observation: et afvist nyere kort ville lade et ældre komme frem, så tallet er et loft over problemet. De døde kort bliver stående i tabellen som analysedata (`G142`) og holdes ude af nævneren, ikke ude af motoren.",
   },
   story_never: {
     title: "Regler der aldrig udløser",

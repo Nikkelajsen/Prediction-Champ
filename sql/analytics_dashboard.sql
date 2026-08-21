@@ -1143,6 +1143,33 @@ grant execute on function public.admin_analytics_funnel(int) to authenticated;
 -- runde-kort, hvis runde først blev spillet færdig efter den var forbi (en
 -- udsat kamp). Begge er kort, ingen har kunnet se.
 --
+-- VIS-BAR HAR TO REGLER EFTER v3 (G141, 21. august 2026), og det er fordi
+-- fladen fik to. Reglen ovenfor er KARUSELLENS, og karusellen findes ikke mere:
+-- v3's `loadDayCard` (src/lib/data/activity.js) henter den NYESTE `day_key` og
+-- viser den kun, hvis rækken er under 48 timer gammel (`DAY_CARD_MAX_AGE_MS`).
+-- Et v3-dagskorts vindue går derfor fra `created_at` og frem til det TIDLIGSTE
+-- af (a) 48 timer og (b) det øjeblik, et kort med en nyere `day_key` blev
+-- skrevet til samme bruger. Er vinduet nul minutter, kunne kortet aldrig nå en
+-- skærm.
+--
+-- Uden det skel målte `viewable` for `period = 'day'` en flade, der var væk —
+-- altså `G73`s egen rettelse, forældet af v3 — og den er nævner under BÅDE
+-- visnings- og afvisningsraten. `A33`-aflæsningen 21. august 2026 satte tal på:
+-- HALVDELEN af de hundrede v3-dagskort havde et vindue på nul minutter.
+--
+-- ÆRA-SKELLET ER `news_value is not null` og ikke `period = 'day'` alene. v2's
+-- 197 efterfyldte dagskort (#48) LEVEDE i karusellen, så for dem er reglen
+-- ovenfor stadig den rigtige; kun v3-rækkerne skal måles på vinduet. Samme skel
+-- som `stories_day_slot_uniq` og `sql/checks/day_card_coverage.sql`.
+--
+-- DE DØDE KORT BLIVER STÅENDE I TABELLEN (G142, afgjort 21. august 2026). De
+-- holdes ude af nævneren, ikke ude af motoren: vinduet er en MODEL af
+-- `loadDayCard` og ikke en observation — et afvist nyere kort lader et ældre
+-- komme frem — så en motor, der sprang dagen over, ville fjerne kort, brugeren
+-- kunne have set. Rækkerne er desuden selve grundlaget for aflæsningen og for
+-- `day_card_coverage`. Forskellen mellem `generated` og `viewable` er, som i
+-- `G73`, selve oplysningen.
+--
 -- `generated` beholdes uændret ved siden af — den er sand og skal blive ved med
 -- at være det: kortet BLEV genereret. Det er kun raterne, der har skiftet
 -- nævner, og forskellen mellem de to tal er selv oplysningen.
@@ -1166,12 +1193,51 @@ begin
   gen as (
     select s.rule,
       count(*)                                              as generated,
-      -- Kunne kortet OVERHOVEDET nå en skærm? Se hovedkommentaren ovenfor.
-      -- `round_key` er tekst ('YYYY-MM-DD', rundens tirsdag), så +7 giver
-      -- tirsdagen efter, og zonen er dansk ligesom i public.round_key().
-      count(*) filter (where s.created_at
-        < ((s.round_key::date + 7)::timestamp at time zone 'Europe/Copenhagen'))
-                                                            as viewable,
+      -- Kunne kortet OVERHOVEDET nå en skærm? Se hovedkommentaren ovenfor —
+      -- fladen har to regler, og rækken måles på sin egen.
+      count(*) filter (where
+        case when s.period = 'day' and s.news_value is not null then
+          -- v3-DAGSKORTET: vinduet, kortet var det nyeste i. Udtrykket er
+          -- ORDRET `_vindue` i sql/story_engine_v3_measure.sql, så tavlen og
+          -- aflæsningen ikke kan svare hver sit på det samme spørgsmål.
+          --
+          -- Ingen betingelse på efterfølgerens `created_at`, og det er ikke en
+          -- forglemmelse: `loadDayCard` henter den nyeste `day_key` uanset
+          -- hvornår rækkerne blev skrevet, så et kort holder op med at være det
+          -- nyeste i samme sekund, en større `day_key` findes — også når de to
+          -- blev skrevet i samme sætning, som bagstopperens dagsløkke gør det.
+          -- `greatest(0, …)` fanger den omvendte rækkefølge: en resultatrettelse,
+          -- der skriver en GAMMEL dag om, efter en nyere allerede stod.
+          --
+          -- Efterfølgeren slås op i HELE tabellen og ikke i vinduet: den kan
+          -- være skrevet før `t0` og alligevel have dræbt kortet.
+          -- `stories_day_slot_uniq` (user_id, day_key) dækker opslaget præcist.
+          --
+          -- 48-TIMERS LOFTET KAN IKKE FLYTTE SVARET HER, og det står med
+          -- alligevel. Et vindue, der kappes ved 48 timer, er stadig større end
+          -- nul, så leddet er inaktivt i en boolean — men udtrykket skal kunne
+          -- diffes linje for linje mod aflæsningens, og et led, der fjernes,
+          -- fordi det tilfældigvis er ligegyldigt lige nu, er præcis den slags
+          -- stille afvigelse, som `G141` selv kom af. Af samme grund har det
+          -- ingen vagt i sql/tests/analytics_story_viewable.sql: der findes
+          -- ingen fixture, det kan gøre en forskel på.
+          greatest(0, extract(epoch from
+            least(s.created_at + interval '48 hours',
+                  coalesce((select min(n.created_at)
+                              from public.stories n
+                             where n.user_id = s.user_id
+                               and n.period = 'day'
+                               and n.news_value is not null
+                               and n.day_key > s.day_key),
+                           'infinity'::timestamptz))
+            - s.created_at) / 60)::int > 0
+        else
+          -- KARUSELLEN: rundekortene og v2's dagskort. `round_key` er tekst
+          -- ('YYYY-MM-DD', rundens tirsdag), så +7 giver tirsdagen efter, og
+          -- zonen er dansk ligesom i public.round_key().
+          s.created_at
+            < ((s.round_key::date + 7)::timestamp at time zone 'Europe/Copenhagen')
+        end)                                                as viewable,
       count(distinct s.user_id)                             as users,
       count(*) filter (where s.dismissed_at is not null)    as dismissed,
       round(avg(s.priority), 1)                             as avg_priority,

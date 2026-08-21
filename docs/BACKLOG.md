@@ -60,7 +60,7 @@ Tom.
 
 ## Prioriteret rækkefølge
 
-Alle 34 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -106,9 +106,7 @@ Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-| # | Hvad | Note |
-|---|---|---|
-| `G141` | Analytics-tavlens `viewable` regner dagskort efter KARUSELLENS regel | `admin_analytics_stories` måler vis-bar som `created_at < round_key + 7 dage` — v2's karrusel, som hentede den nuværende rundes kort. v3 har ingen karrusel: `loadDayCard` henter den nyeste `day_key` og viser den kun under 48 timer gammel. Tallet er derfor forkert for `period = 'day'`, og det er nævneren under BÅDE visnings- og afvisningsraten, altså `G73`s egen rettelse, der er blevet forældet af v3. Den rigtige regel står allerede skrevet og efterprøvet i `sql/story_engine_v3_measure.sql` (vinduet fra `created_at` til det tidligste af 48 timer og næste `day_key`) — rettelsen er at flytte den ind i RPC'en for `period = 'day'` og lade runde-kortene beholde den gamle. Fundet ved `A33`-aflæsningen 21. august 2026 |
+Tomt.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -123,7 +121,6 @@ Tomt.
 | # | Hvad | Note |
 |---|---|---|
 | `G140` | "Vis hele stillingen" er et `<p>` med `onClick` | Fladen kan hverken nås med tastaturet eller trykkes af skærmbilled-harnessen, som kun kan klikke på knapper — så den ene vej til din egen række i en stilling på 25 er lukket for tastaturbrugere OG usynlig for `npm run screenshots`. Rettelsen er at gøre den til en `button` med den styling, den allerede har. Fundet ved `A44`-eftersynet 21. august 2026 |
-| `G142` | Halvdelen af v3-dagskortene kan pr. konstruktion aldrig vises | 50 af 100 kort havde et vindue på nul minutter ved `A33`-aflæsningen 21. august 2026: et kort med en større `day_key` fandtes for samme bruger allerede i det øjeblik, de blev skrevet, og `loadDayCard` henter altid den nyeste. Bagstopperens dagsløkke skriver flere dages kort i samme kørsel, så det ældste er dødt i fødslen. **Det er ikke oplagt en fejl** — man vil næppe vise tre dages gamle kort efter hinanden — men det gør hvert eneste "genereret"-tal misvisende (`G73`s klasse), og det bruger motorens dyreste arbejde på rækker, ingen kan nå. To veje: lad dagsløkken springe en dag over, der allerede er afløst, eller behold rækkerne som analysedata og hold dem ude af tællingerne. Spørgsmålet skal besvares FØR `G141`, som ellers retter en nævner, der stadig tæller døde kort |
 | `G139` | Hjem og konkurrence-boardet henter hele den globale ratingtabel | `loadRatingBoard` henter **hver** brugers rating OG hvert profilnavn — Hjem bruger svaret til ét kort: din egen rating, din placering og antallet (`ratingSnapshot`). `loadRatingMap` gør det samme i `BoardScreen` for at sætte et ratingtal ved otte deltagere. Begge kald vokser med brugerbasen og lander i `A34`s egress-loft, længe før nogen mærker dem i skærmen. Kuren er billig og kræver ingen migrering: egen række plus en `count=exact` på `rating=gt.<din>` til Hjem, og `user_id=in.(deltagerne)` på boardet. Fundet ved `A44`-aflæsningen 21. august 2026. |
 
 ### Tier 6 — Venter på en udløser
@@ -258,21 +255,24 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (fireogfyrretyvende kørsel) — `G144` bygget: stimen kan sige, at den brød
+### 21. august 2026 (femogfyrretyvende kørsel) — Tier 2 kørt tom: `G141` rettet, `G142` afgjort
 
-**Listen er 35 → 34.** Halvdelen af `STREAK_STATUS` var uskrevet: 💤-teksten
-kunne kun rammes ved et brud på SAMME kampdag som sidste hit. Rettelsen er én
-gren mere i `_sd_streak` (`or naeste_dag = p_day`); `alive` behøvede ingen
-ændring.
+**Listen er 34 → 32.** Tier 1–4 er alle tomme; Tier 5 bærer `G140` og `G139`.
 
-**To valg er målt frem for antaget**, og begge tal står i koden: `max(next_day)`
-koster 6 % på dagsmotoren mod `array_agg(… desc)[1]`'s 17 % og giver det samme;
-og `distinct on (user_id)` ændrer ikke ét kort i dag — mutationen slipper
-igennem — men holder den form, `_sd_scored`s join på brugeren alene forudsætter.
+**`G141`:** analytics-tavlens `viewable` målte dagskortene på karusellens regel
+— den flade, v3 fjernede. Hver række måles nu på sin egen: v3-dagskortene på
+deres vindue (`created_at` → det tidligste af 48 timer og næste `day_key` for
+samme bruger), rundekortene og v2's dagskort på karusellen som før. Udtrykket er
+**ordret** `_vindue` fra `sql/story_engine_v3_measure.sql`.
 
-**Læren:** *en tekst, ingen har set, er ikke leveret. `STREAK_STATUS` havde to
-grene i koden, én i virkeligheden, og forskellen kunne kun ses ved at KØRE
-motoren — ingen gennemlæsning fangede den på fjorten dage.*
+**`G142` blev afgjort og ikke bygget:** de døde kort bliver stående som
+analysedata og holdes ude af nævneren. Vinduet er en *model* af `loadDayCard` —
+et afvist nyere kort lader et ældre komme frem — så tallet 50 er et loft, og en
+dagsløkke, der sprang dagen over, ville betale med rigtige kort.
 
-🔴 **`#47 story_engine_v3.sql` skal gen-køres i Supabase.** Kun funktionen, ingen
-rækker, ingen frontend-ændring at merge sammen med.
+**Læren:** *en nævner måler den flade, den blev skrevet til. Fjernes fladen,
+bliver nævneren forkert uden at nogen rører den — og reglen står i tavlen, som
+ligger længst væk fra den ændring, der gjorde den forkert.*
+
+🔴 **`#17 analytics_dashboard.sql` skal gen-køres i Supabase.** Kun funktionen,
+ingen rækker, ingen frontend-ændring at merge sammen med.

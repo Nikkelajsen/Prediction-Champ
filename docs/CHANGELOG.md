@@ -9,6 +9,57 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 (femte kørsel) — Tier 2 kørt tom: `G141` rettet, `G142` afgjort
+
+**Analytics-tavlens `viewable` regnede dagskortene efter en flade, der ikke
+findes.** `G73` gav regeltabellen sin nævner 5. august: et kort, der blev skrevet
+efter dets egen runde var forbi, kunne aldrig nå karusellen på Hjem, og
+`created_at < round_key + 7 dage` holdt v2's efterfyldning ude af raterne. Story
+Engine v3 **fjernede karusellen** — `loadDayCard` henter den nyeste `day_key` og
+viser den kun under 48 timer gammel — og reglen blev stående og målte fra den dag
+noget andet, end den sagde. Det er `G73`s egen rettelse, forældet af en ændring et
+helt andet sted.
+
+**Rettelsen er, at fladen har to regler, og hver række måles på sin egen.** Et
+v3-dagskort er vis-bart, hvis dets vindue er større end nul minutter: fra
+`created_at` og frem til det tidligste af 48 timer og det øjeblik, et kort med en
+nyere `day_key` blev skrevet til samme bruger. Udtrykket er **ordret** `_vindue` i
+`sql/story_engine_v3_measure.sql`, så tavlen og aflæsningen ikke kan svare hver
+sit på det samme spørgsmål. Æra-skellet er `news_value is not null`: rundekortene
+og v2's dagskort levede i karusellen og beholder den gamle regel uændret.
+
+**`G142` er afgjort frem for bygget: de døde kort bliver stående.**
+`A33`-aflæsningen viste, at halvdelen af de hundrede v3-dagskort havde et vindue
+på nul minutter — bagstopperens dagsløkke skriver flere dages kort i samme
+kørsel, så det ældste er dødt i fødslen. De to veje var at lade løkken springe
+dagen over eller at holde rækkerne ude af tællingerne. **Vinduet er en model af
+`loadDayCard` og ikke en observation:** et afvist nyere kort lader et ældre komme
+frem, så en motor, der sprang dagen over, ville fjerne kort, brugeren kunne have
+set. Rækkerne er desuden grundlaget for aflæsningen og for
+`checks/day_card_coverage.sql`. Samme svar som `#48` gav v2's 197 efterfyldte
+kort: behold dem som analysedata, hold dem ude af nævneren.
+
+**Tavlens egen forklaring løj med.** Måle-ordbogens `story_viewable` og
+sektionens brødtekst beskrev karusellen i nutid ("karusellen henter kun den
+runde"), og tomtallet sagde *"alle nåede karusellen"*. Alle tre er rettet i samme
+ombæring — en nævner, der er rigtig, og en tekst, der forklarer den forkert, er
+stadig en tavle, man ikke kan læse.
+
+**Ny SQL-test: `sql/tests/analytics_story_viewable.sql`** (femogfyrre SQL-tests i
+CI). Den kræver af sig selv, at fixturen viser fejlen mod skemadumpets GAMLE RPC,
+**før** migreringen læses — uden det trin kunne resten bestå på en harmløs
+fixture. Efterprøvet med fem mutationer mod PostgreSQL 16: æra-filtret droppet i
+efterfølger-opslaget, brugerfiltret droppet, `greatest(0, …)` fjernet,
+v3-reglen brugt på rundekortene, og æra-skellet erstattet af `period` alene —
+alle fem fanget. 1536 tests, lint på loftet (7 advarsler), grønt build.
+
+🔴 **`#17 analytics_dashboard.sql` skal gen-køres i Supabase.** Kun funktionen,
+ingen rækker, ingen frontend-ændring at merge sammen med — svarets form er
+uændret. Synlig følge ved kørslen: `viewable_total` og regeltabellens visnings-
+og afvisningsrater flytter sig for dagskortene.
+
+---
+
 21. august 2026 (fjerde kørsel) — `G144`: stimekortet kan endelig sige, at stimen brød
 
 **Halvdelen af `STREAK_STATUS` var uskrevet.** Reglen har fra første dag haft to
