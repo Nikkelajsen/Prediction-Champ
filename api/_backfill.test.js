@@ -4,7 +4,7 @@
 // vokser.
 
 import { describe, it, expect } from "vitest";
-import { matchesToBackfill, matchLockAtMs, coversSeason, LOCK_LEAD_MS } from "./_backfill.js";
+import { matchesToBackfill, matchLockAtMs, coversSeason, backfillCompetitionMatches, LOCK_LEAD_MS } from "./_backfill.js";
 
 const NOW = Date.parse("2026-08-10T12:00:00Z");
 const iso = (ms) => new Date(ms).toISOString();
@@ -41,6 +41,36 @@ describe("matchesToBackfill", () => {
     // Konkurrencen har m1 i forvejen; m2 må stadig ikke tilføjes, fordi det er
     // m1's kickoff, der sætter runden i gang.
     expect(run(fullSeason, ["m1"])).not.toContain("m2");
+  });
+
+  // Samme sætning, ét niveau højere oppe (G8): en runde er en KALENDERUGE, så
+  // for en konkurrence over flere turneringer sætter den FØRSTE kamp i ugen
+  // runden i gang — også når den ligger i den anden turnering, altså i den
+  // sæson, kaldet ikke gælder. Uden `otherSeasonMatches` var reglen sand pr.
+  // turnering og falsk pr. konkurrence.
+  describe("flere turneringer (G8)", () => {
+    const multi = {
+      id: "c2", mode: "full_season", season_id: null,
+      mode_params: { tournaments: [{ league_id: "L1", season_id: "S1" }, { league_id: "L2", season_id: "S2" }] },
+    };
+    // Den synkroniserede sæsons kandidat ligger en uge ude — helt åben, hvis man
+    // kun ser på dens egen turnering.
+    const egne = [{ id: "b1", round_key: OPEN_ROUND, kickoff_at: iso(NOW + 7 * 24 * 60 * 60 * 1000), home_score: null }];
+    // Den anden turnerings kamp i SAMME runde begynder om 30 minutter.
+    const andres = [{ id: "x1", round_key: OPEN_ROUND, kickoff_at: iso(NOW + 30 * 60 * 1000), home_score: null }];
+
+    it("lader runden være, når den anden turnering allerede har sat den i gang", () => {
+      expect(matchesToBackfill({ competition: multi, matches: egne, existingIds: [], nowMs: NOW })).toEqual(["b1"]);
+      expect(matchesToBackfill({ competition: multi, matches: egne, existingIds: [], nowMs: NOW, otherSeasonMatches: andres })).toEqual([]);
+    });
+
+    it("gør aldrig den anden turnerings kampe til kandidater", () => {
+      // Den anden turnerings runde er åben, og kampen ville derfor bestå hver
+      // eneste filter — den må alligevel ikke tilføjes her, for kaldet gælder
+      // sæsonen i `matches`, og kampen kommer med, når DENS sæson synkroniseres.
+      const åbne = [{ id: "x2", round_key: OPEN_ROUND, kickoff_at: iso(NOW + 9 * 24 * 60 * 60 * 1000), home_score: null }];
+      expect(matchesToBackfill({ competition: multi, matches: egne, existingIds: [], nowMs: NOW, otherSeasonMatches: åbne })).toEqual(["b1"]);
+    });
   });
 
   it("åbner runden, så snart dens start er mere end en time væk", () => {
@@ -181,5 +211,86 @@ describe("coversSeason", () => {
 
   it("tåler et tomt mode_params", () => {
     expect(coversSeason({ season_id: null, mode_params: {} }, "S1")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Selve kørslen: hvilke opslag den laver, og hvad den skriver.
+//
+// De tre regler ovenfor er rene funktioner og testes for sig. Det, der IKKE kan
+// ses dér, er ledningsføringen — og for en flerturnerings-konkurrence er netop
+// den ny (`G8`): kaldet gælder én sæson, men rundens start skal regnes over
+// konkurrencens øvrige turneringer, som derfor skal HENTES.
+describe("backfillCompetitionMatches", () => {
+  // En attrap-`sb`, der svarer som PostgREST og respekterer `sbAll`s paginering
+  // (tom side = færdig). Den gemmer hvert kald, så testen kan holde kørslen op
+  // på, hvilke opslag den faktisk lavede — ikke bare på resultatet.
+  function attrap({ competitions, links = [], matchesBySeason }) {
+    const kald = [];
+    const sb = async (path, opts) => {
+      kald.push({ path, opts });
+      if (opts?.method) return null; // skrivningen
+      const offset = Number(/offset=(\d+)/.exec(path)?.[1] || 0);
+      const side = (rows) => rows.slice(offset);
+      if (path.startsWith("/rest/v1/competitions")) return side(competitions);
+      if (path.startsWith("/rest/v1/competition_matches")) return side(links);
+      const eq = /season_id=eq\.([^&]+)/.exec(path);
+      if (eq) return side(matchesBySeason[eq[1]] || []);
+      const inl = /season_id=in\.\(([^)]+)\)/.exec(path);
+      if (inl) return side(inl[1].split(",").flatMap((id) => matchesBySeason[id] || []));
+      throw new Error(`uventet opslag: ${path}`);
+    };
+    return { sb, kald };
+  }
+
+  const multi = {
+    id: "c1", mode: "full_season", season_id: null,
+    mode_params: { tournaments: [{ league_id: "L1", season_id: "S1" }, { league_id: "L2", season_id: "S2" }] },
+  };
+  // S2 synkroniseres, og dens runde er åben. S1 er den anden turnering.
+  const s2Åben = [{ id: "s2-ny", season_id: "S2", round_key: OPEN_ROUND, kickoff_at: iso(NOW + 7 * 24 * 60 * 60 * 1000), home_score: null }];
+
+  it("henter den anden turnerings kampe og lader runden være, når den er gået i gang dér", async () => {
+    const { sb, kald } = attrap({
+      competitions: [multi],
+      matchesBySeason: {
+        S2: s2Åben,
+        S1: [{ id: "s1-1", season_id: "S1", round_key: OPEN_ROUND, kickoff_at: iso(NOW + 30 * 60 * 1000), home_score: null }],
+      },
+    });
+    const res = await backfillCompetitionMatches(sb, "S2", { now: NOW });
+
+    expect(res).toEqual({ added: 0, competitions: 0 });
+    expect(kald.some((k) => k.path.includes("season_id=in.(S1)"))).toBe(true);
+    expect(kald.some((k) => k.opts?.method === "POST")).toBe(false);
+  });
+
+  it("tilføjer kampen, når den anden turnerings runde heller ikke er begyndt", async () => {
+    const { sb, kald } = attrap({
+      competitions: [multi],
+      matchesBySeason: {
+        S2: s2Åben,
+        S1: [{ id: "s1-1", season_id: "S1", round_key: OPEN_ROUND, kickoff_at: iso(NOW + 6 * 24 * 60 * 60 * 1000), home_score: null }],
+      },
+    });
+    const res = await backfillCompetitionMatches(sb, "S2", { now: NOW });
+
+    expect(res).toEqual({ added: 1, competitions: 1 });
+    const skrivning = kald.find((k) => k.opts?.method === "POST");
+    expect(JSON.parse(skrivning.opts.body)).toEqual([{ competition_id: "c1", match_id: "s2-ny" }]);
+  });
+
+  // Prisen for reglen må ikke betales af dem, der ikke har brug for den — og i
+  // dag er det alle: `mode_params.tournaments` er aldrig blevet skrevet i
+  // produktion, hvilket ER `G8`.
+  it("laver ingen ekstra opslag, når ingen konkurrence har mere end én turnering", async () => {
+    const { sb, kald } = attrap({
+      competitions: [{ id: "c2", mode: "full_season", season_id: "S2", mode_params: {} }],
+      matchesBySeason: { S2: s2Åben },
+    });
+    const res = await backfillCompetitionMatches(sb, "S2", { now: NOW });
+
+    expect(res.added).toBe(1);
+    expect(kald.some((k) => k.path.includes("season_id=in."))).toBe(false);
   });
 });

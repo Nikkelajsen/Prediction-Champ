@@ -9,6 +9,62 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 (niende kørsel) — `G8`: flerturnerings-stien er læst igennem, og regel 3 var forkert
+
+**`G8` er en Tier 6-række, der venter på den første rigtige
+multi-turneringskonkurrence. Ventetiden er brugt frem for båret:** stien er
+gennemgået ende til ende, og den ENE forskel, kun en flerturnerings-konkurrence
+møder på serversiden, holdt ikke.
+
+**Fejlen.** Efterfyldningens regel 3 — *"en runde, der er gået i gang, vokser
+aldrig"* — regnede rundens start pr. TURNERING.
+`backfillCompetitionMatches(sb, seasonId)` kaldes med én sæson ad gangen, fordi
+`sync-matches` synkroniserer én turnering ad gangen, og rundens tidligste lås
+blev derfor regnet af netop den sæsons kampe. Men en runde er en **kalenderuge**
+(`round_key()` er rundens tirsdag), og den hører ikke til én turnering: en
+konkurrence over Superligaen OG Premier League har begge ligaers kampe i samme
+runde. Superligaens fredagskamp kunne altså have sat runden i gang, mens
+efterfyldningen så en urørt Premier League-runde og lagde en ny kamp ind under
+deltagerne — præcis den situation, regel 3 findes for at forhindre.
+
+Det er samme sætning som den, der allerede stod i filen (*"rundestarten regnes
+ud fra HELE sæsonens kampe og ikke kun konkurrencens egne"*), bare ét niveau
+højere oppe. Den kunne ikke ses før, fordi ingen konkurrence har haft mere end
+én turnering, hvilket ER `G8`.
+
+**Rettelsen.** `matchesToBackfill()` tager nu `otherSeasonMatches`, som KUN
+tæller med i rundens start og aldrig som kandidater — kandidaterne kommer
+fortsat fra den sæson, kaldet gælder. `backfillCompetitionMatches()` henter dem
+i ét opslag for alle de sæsoner, de relevante konkurrencer nævner, og med kun de
+felter, låsen regnes af. **Opslaget udgår helt**, når ingen relevant konkurrence
+har mere end én turnering — altså i dag hver eneste kørsel.
+
+**Sømmen mellem skriver og læser er bundet.** Ny `multi_turnering.test.js`:
+`createCompetition()` skriver rækken, og rækken går DIREKTE videre til
+`coversSeason()` og `matchesToBackfill()`. Begge ender var dækket i forvejen, men
+hver af dem med sin egen håndskrevne fixture — to rækker, der ligner hinanden, er
+ikke en aftale, og en omdøbning af `league_id` i den ene ende ville lade begge
+tests bestå. Efterprøvet med præcis den mutation: to påstande falder.
+
+**Og selve kørslen har nu sine egne tests.** `backfillCompetitionMatches()` var ikke dækket af noget — kun de rene funktioner under den var — og det er dér, den nye ledningsføring bor: at de øvrige turneringers kampe HENTES, at de kun tæller i rundens start, og at opslaget udgår, når ingen konkurrence har mere end én turnering. Tre tests mod en attrap-`sb`, der svarer som PostgREST og respekterer `sbAll`s paginering; mutation efterprøvet.
+
+**Resten af stien holdt**, og det er værd at skrive ned: `competition_status`
+udleder sæsonerne af konkurrencens EGNE kampe (`sql/season_end.sql`), `round_key`
+er turnerings-uafhængig, rundechampionship og rating er det i forvejen, og
+læse-stierne går gennem `competition_matches` og rører aldrig `league_id`. Den
+liga-løse rækkeform har desuden kørt i produktion hele tiden via `custom` og
+`random` (`A16`).
+
+**Fundet ved siden af, noteret som `G148` frem for rettet her:** "Start ved næste
+runde" gemmes ikke i rækken, så efterfyldningen kan ikke se, at runden blev
+valgt fra — den lægger den tilbage ved næste sync, hvis den endnu ikke er låst.
+Kuren er en rækkeform-ændring og dermed en beslutning, ikke en rettelse i
+forbifarten.
+
+**`G8` bliver stående i Tier 6 med sin udløser uændret.** Intet af dette er
+rigtige data; rækken er skrumpet, ikke lukket. 1592 tests (9 nye), lint på
+loftet, grønt build. Intet skal køres i Supabase.
+
 21. august 2026 (ottende kørsel) — Tier 4 og Tier 5: `G147` og `G146`
 
 **De to sidste forekomster af det tavse rækkeloft er lukket — med hver sin
