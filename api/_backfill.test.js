@@ -80,6 +80,31 @@ describe("matchesToBackfill", () => {
     expect(ids).toContain("m1");
   });
 
+  // Regel 4 (G148). Opretteren valgte indeværende runde fra, mens den stadig
+  // var åben — og netop dét vindue er regel 3's blinde plet: så længe rundens
+  // første kamp ikke har låst, siger regel 3 ja til hver eneste af dens kampe.
+  // Uden `from_round` fik konkurrencen derfor den fravalgte runde tilbage ved
+  // næste sync, typisk inden for tolv timer.
+  describe("startrunden (G148)", () => {
+    const fravalgt = { ...fullSeason, mode_params: { from_round: OPEN_ROUND } };
+
+    it("spærrer den fravalgte runde, mens den stadig er helt åben", () => {
+      // Tidspunktet er seks dage før NOW, så INGEN runde er gået i gang endnu.
+      // Det er hele pointen: i det vindue siger regel 3 ja til hver eneste kamp,
+      // og en test kørt senere ville ikke kunne skelne de to regler fra
+      // hinanden — regel 3 spærrer da for den fravalgte runde helt af sig selv.
+      const nowMs = NOW - 6 * 24 * 60 * 60 * 1000;
+      expect(matchesToBackfill({ competition: fullSeason, matches, existingIds: [], nowMs }))
+        .toEqual(["m1", "m2", "m3", "m4"]);
+      expect(matchesToBackfill({ competition: fravalgt, matches, existingIds: [], nowMs }))
+        .toEqual(["m3", "m4"]);
+    });
+
+    it("lader en konkurrence uden feltet være uændret", () => {
+      expect(run({ ...fullSeason, mode_params: {} })).toEqual(run(fullSeason));
+    });
+  });
+
   // Regel 2: mærkatet. Gamle konkurrencer, der blev afgrænset til bestemte
   // faser, står urørte — det er dét, der gør, at der ikke skal en overgangs-
   // regel eller en dato til.

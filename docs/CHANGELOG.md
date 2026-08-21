@@ -9,6 +9,52 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 (tiende kørsel) — `G148`: startrunden står nu i rækken, og efterfyldningen respekterer den
+
+**"Start ved næste runde" var et filter uden hukommelse.** Valget skar
+indeværende runde væk ved oprettelsen og blev ikke gemt nogen steder.
+Efterfyldningen (`api/_backfill.js`) kender kun `mode` og `mode_params`, så den
+kunne ikke se, at runden var valgt fra, og lagde dens kampe tilbage ved næste
+`sync-matches` — typisk inden for tolv timer.
+
+**Fejlen ramte valget hver gang, det blev brugt efter hensigten.** Man vælger
+"næste runde", FORDI indeværende stadig er åben; er den låst, klemmer skærmen
+selv valget. Og netop dér er efterfyldningens regel 3 ("en runde, der er gået i
+gang, vokser aldrig") blind: så længe rundens første kamp ikke har låst, siger
+den ja til hver eneste af rundens kampe. Symptomet var tavst — konkurrencen fik
+bare flere kampe, end den blev oprettet med.
+
+**Rettelsen er ét felt og én regel.** `mode_params.from_round` bærer den FØRSTE
+TILLADTE rundenøgle og skrives kun ved "næste runde" — samme disciplin som
+`rounds` ved Quick Pick, så en konkurrence uden fravalg har uændret rækkeform.
+Efterfyldningen har fået **regel 4**: en konkurrence vokser aldrig bagud forbi
+sin egen startrunde. Rækker fra før feltet har det ikke og opfører sig som
+hidtil — ingen overgangsregel, samme form som `stages`-mærkatet i regel 2.
+
+**Alle tre skrive-grene med et startrunde-valg dækkes:** Sæson (én og flere
+turneringer), Favorithold i den nye `teams`-form og Favorithold i legacy-formen
+med ét `teamId`. Perioden er holdt udenfor med vilje: dens svar ligger i
+startdatoen, og to kontroller om det samme kan modsige hinanden. De tre
+`random`-typer behøver intet felt — håndplukkede lister efterfyldes aldrig
+(regel 1).
+
+**Kuren blev en anden end backlog-rækkens egen forslag om at udlede bunden.**
+At tage konkurrencens tidligste egen kamp som bund kræver ingen rækkeform-
+ændring og ville virke bagud på gamle rækker — men den over-spærrer: et hold med
+spredte kampe kan få en ny kamp skemalagt mellem oprettelsen og sin første kamp,
+og den ville blive afvist, selv om ingen har valgt den fra. En udledt bund måler,
+hvornår konkurrencen tilfældigvis begynder; et gemt valg måler, hvad opretteren
+bad om.
+
+**Testen for regel 4 er kørt seks dage tidligere end resten af filen** — i det
+vindue, hvor ingen runde er gået i gang, og hvor regel 3 og regel 4 dermed kan
+skelnes fra hinanden. Sømmen mellem skriver og læser bevogtes af samme fil som
+`G8`s (`multi_turnering.test.js`): den rigtige skrivers række går direkte til
+`matchesToBackfill()`. Begge mutationer efterprøvet — feltet fjernet i læseren,
+feltet omdøbt i skriveren.
+
+1599 tests (7 nye), lint på loftet, grønt build. Intet skal køres i Supabase.
+
 21. august 2026 (niende kørsel) — `G8`: flerturnerings-stien er læst igennem, og regel 3 var forkert
 
 **`G8` er en Tier 6-række, der venter på den første rigtige

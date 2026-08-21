@@ -82,6 +82,16 @@ kupon (`B6` — et foreslået navn blev bare beholdt).
 >    (`MAX_MATCHES_PER_ROUND` = 50), og udbuddet er oplysning — for Quick League
 >    spændet over de valgte runder ("4–38 kampe pr. runde").
 >
+> **Rettet igen efter levering (21. august 2026, `G148`).** Punkt 1 ovenfor er
+> sandt om oprettelsen og var usandt om resten af konkurrencens liv: valget
+> filtrerede kampene og blev IKKE gemt. Efterfyldningen (`api/_backfill.js`)
+> kender kun `mode` og `mode_params`, så den kunne ikke se, at indeværende runde
+> var valgt fra, og lagde rundens kampe tilbage ved næste sync — så længe runden
+> endnu ikke var låst, hvilket er præcis den situation, chippen findes til.
+> Valget skrives nu som `mode_params.from_round` (den første tilladte
+> rundenøgle) på Sæson og Favorithold. De tre `random`-kort behøver intet felt,
+> fordi håndplukkede lister aldrig efterfyldes.
+>
 > Custom/periode oversætter valget til sin **startdato** i stedet for at
 > filtrere en pulje, og chippen er dér afledt af datoen: to kontroller, der
 > begge kunne bestemme starten, ville kunne modsige hinanden. Turneringsvalget

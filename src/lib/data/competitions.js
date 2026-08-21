@@ -2,7 +2,7 @@
 // eksisterende: invitationskode og flytning til en liga.
 
 import { db, restFetch } from "../supabase.js";
-import { filterTippable, filterFromRoundStart, currentRoundKey } from "../scoring.js";
+import { filterTippable, filterFromRoundStart, currentRoundKey, nextRoundKey } from "../scoring.js";
 import { logEvent } from "../analytics.js";
 import { inviteLookup, acceptInvite } from "./groups.js";
 
@@ -47,7 +47,10 @@ import { inviteLookup, acceptInvite } from "./groups.js";
 //                         skal konkurrencen begynde i den runde, der er i gang,
 //                         eller vente på den næste? `time_range` har sit eget
 //                         svar i startdatoen, og `custom`/`random` er allerede
-//                         filtreret i klienten, når de når hertil
+//                         filtreret i klienten, når de når hertil. "next" gemmes
+//                         som `mode_params.from_round` (G148), fordi
+//                         efterfyldningen ellers lægger den fravalgte runde
+//                         tilbage — se `fromRoundParams()`
 //
 // Returnerer `matchCount`, så kalderen kan se, at en konkurrence blev tom —
 // fx en sæson, der er spillet færdig (`filterTippable` giver da et tomt sæt).
@@ -73,6 +76,31 @@ import { inviteLookup, acceptInvite } from "./groups.js";
 // kunne modsige hinanden.
 function startingMatches(ms, startRound) {
   return filterFromRoundStart(filterTippable(ms), { start: startRound, currentKey: currentRoundKey() });
+}
+
+// Startrunde-valget skal STÅ I RÆKKEN, når det fravælger noget (`G148`).
+//
+// Valget var indtil nu kun et filter i oprettelsen, og rækken bar ingen spor af
+// det. Efterfyldningen (`api/_backfill.js`) kender kun `mode` og `mode_params`
+// og kunne derfor ikke se, at indeværende runde var valgt fra — den lagde
+// rundens kampe tilbage ved næste sync, så længe runden endnu ikke var låst.
+// Og det er præcis den situation, chippen findes til: man vælger "næste runde",
+// FORDI indeværende stadig er åben. Fejlen ramte altså valget hver gang, det
+// blev brugt efter hensigten, og den var tavs — konkurrencen fik bare flere
+// kampe, end den blev oprettet med.
+//
+// Feltet er den FØRSTE TILLADTE rundenøgle og ikke den fravalgte, så
+// efterfyldningen kan sammenligne med `>=`. Nøglen er en 'YYYY-MM-DD'-tekst
+// (rundens tirsdag), og sammenligningen sker som tekst — samme form som
+// periodens datoer i `mode_params`.
+//
+// Det skrives KUN ved "next", af samme grund som `rounds` kun skrives ved > 1:
+// en konkurrence uden fravalg har præcis samme rækkeform som før. Ved "current"
+// er der heller intet at beskytte — det, `filterTippable` skar væk, var LÅSTE
+// kampe, og en låst kamp betyder, at runden er gået i gang, hvilket regel 3
+// allerede spærrer for.
+function fromRoundParams(startRound) {
+  return startRound === "next" ? { from_round: nextRoundKey(currentRoundKey()) } : {};
 }
 
 // Skrivningen: konkurrencen, opretteren som deltager og kampene i ÉN sætning.
@@ -160,7 +188,9 @@ async function createCompetition(token, userId, spec) {
       leagueId: multi ? null : only.league_id,
       seasonId: multi ? null : only.season_id,
       mode: "full_season",
-      modeParams: multi ? { tournaments: picked, ...awardsParams } : { ...awardsParams },
+      modeParams: multi
+        ? { tournaments: picked, ...fromRoundParams(startRound), ...awardsParams }
+        : { ...fromRoundParams(startRound), ...awardsParams },
       matchIds: ids,
     });
     logEvent(token, "competition_created", { competitionId: competition.id, groupId, metadata: { mode: "full_season", match_count: ids.length } });
@@ -200,10 +230,11 @@ async function createCompetition(token, userId, spec) {
       seasonId: single ? sel[0].seasonId : null,
       mode: "team",
       modeParams: single
-        ? { team_id: sel[0].teamId, ...awardsParams }
+        ? { team_id: sel[0].teamId, ...fromRoundParams(startRound), ...awardsParams }
         : {
             team_ids: sel.map((t) => t.teamId),
             tournaments: [...bySeason].map(([sid, e]) => ({ league_id: e.leagueId, season_id: sid })),
+            ...fromRoundParams(startRound),
             ...awardsParams,
           },
       matchIds: ids,
@@ -256,7 +287,7 @@ async function createCompetition(token, userId, spec) {
   if (crossLeague && !matchIds.length) throw new Error(mode === "custom" ? "Vælg mindst én kamp" : "Ingen kommende kampe i de valgte turneringer");
 
   const modeParams =
-    mode === "team" ? { team_id: teamId, ...awardsParams }
+    mode === "team" ? { team_id: teamId, ...fromRoundParams(startRound), ...awardsParams }
     : mode === "time_range" ? { start_date: startDate, end_date: endDate, ...awardsParams }
     // `rounds` skrives kun når > 1 (Quick League), så gamle Quick Pick-rækker
     // og nye har samme form — og `modeLabel` kan skelne alene på feltet.

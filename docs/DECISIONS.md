@@ -15,6 +15,43 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `G148`: et valg, der ikke står i rækken, findes ikke for serveren
+
+**Beslutning:** Startrunde-valget gemmes som `mode_params.from_round` (den
+første tilladte rundenøgle, kun skrevet ved "næste runde"), og efterfyldningen
+har fået **regel 4**: en konkurrence vokser aldrig bagud forbi sin egen
+startrunde.
+
+**Begrundelse.** Valget filtrerede kampene ved oprettelsen og efterlod intet
+spor i rækken. Efterfyldningen kender kun `mode` og `mode_params` og kunne
+derfor ikke skelne *en runde, ingen havde valgt,* fra *en runde, nogen havde
+valgt fra* — så den lagde den tilbage. Det er samme klasse som `G8`s fund samme
+dag: en regel, der er sand ét sted og falsk et andet, fordi det andet sted ikke
+har adgang til den oplysning, reglen hviler på.
+
+**Hvorfor det ikke kunne løses inde i regel 3.** Regel 3 spærrer for en runde,
+tiden har sat i gang. Fravalget træffes, mens runden STADIG er åben — det er
+hele grunden til, at chippen findes — så i præcis det vindue, hvor fravalget
+betyder noget, siger regel 3 ja. De to regler ligner hinanden og har hver sin
+begrundelse, og de skal derfor stå som to.
+
+**Den fravalgte kur, og hvorfor.** Bunden kunne UDLEDES af konkurrencens egne
+kampe: dens tidligste materialiserede runde. Det kræver ingen rækkeform-ændring
+og ville virke bagud på eksisterende rækker — to rigtige fordele. Den blev
+alligevel fravalgt, fordi den **over-spærrer**: et Favorithold med spredte kampe
+kan få en ny kamp skemalagt mellem oprettelsen og holdets første kamp, og en
+udledt bund ville afvise den, selv om ingen har valgt den fra. Forskellen er
+principiel og ikke kosmetisk — *en udledt bund måler, hvornår konkurrencen
+tilfældigvis begynder; et gemt valg måler, hvad opretteren bad om* — og
+efterfyldningen har allerede én regel (nummer 2, `stages`-mærkatet), der hviler
+på et felt frem for på en udledning.
+
+**Prisen** er ét felt mere i `mode_params`, skrevet kun når det afgrænser noget,
+og de gamle rækker beholder den gamle adfærd. Det er samme disciplin som
+`rounds` ved Quick Pick: en form, der kun ændrer sig, når indholdet gør.
+
+---
+
 ## 21. august 2026 — `G8`: en Tier 6-række, hvis ventetid kunne bruges, og hvad regel 3 måler på
 
 **Beslutning:** `G8` (multi-turnerings-`full_season` er uafprøvet mod rigtige
