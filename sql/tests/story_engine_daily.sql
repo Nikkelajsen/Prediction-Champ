@@ -1359,4 +1359,218 @@ begin
   end if;
 end $$;
 
+-- ---------- 22. STREAK_STATUS: reglen, der aldrig havde kørt (G143) ----------
+-- **DEN ENESTE AF DE OTTE DAGSREGLER UDEN ÉN ENESTE KØRSEL — hverken i
+-- produktionen eller her.** Blok 16 ovenfor siger det selv om sin egen fixture:
+-- "fixturen udgiver kun DAY_RESULT, DAY_TOP og MILESTONE, så DUEL, SO_CLOSE,
+-- CONTRARIAN, COLLECTIVE_MISS og STREAK_STATUS kunne stå i nutid uden at én
+-- påstand blev rød". `A33`-aflæsningen 21. august 2026 gjorde den observation
+-- til et spørgsmål: død kode eller bare uden anledning?
+--
+-- **Svaret er: ikke død — men systematisk domineret**, og begge halvdele skal
+-- være påstande, ellers kan den næste ændring flytte dem uden at nogen ser det.
+--
+-- Fixturen bor i sin EGEN konkurrence og sin egen liga, fordi den kræver noget,
+-- ingen af de andre blokke har: en ubrudt række kampe med point for den samme
+-- bruger. Lægges den oven på fixturen ovenfor, ændrer den de dage, blok 1-21
+-- måler på.
+--
+-- 22a) Reglen udløser og VINDER, når intet andet sker den dag — og den når både
+--      hovedpersonen og en fan-out-modtager. Det er beviset for, at den ikke er
+--      død kode.
+-- 22b) **Den taber ALTID til `DAY_TOP` for samme bruger samme dag**, og det er
+--      ikke en tilfældighed i tallene, men en konstruktion: `STREAK_STATUS` har
+--      `competition_id = null`, så `_sd_mag`-joinet (flytning + over
+--      gennemsnittet) rammer ingen række, og den får KUN stime-bonussen som
+--      størrelsesbidrag. `DAY_TOP` får den SAMME bonus plus flytning og
+--      over-snit — og har 6 points højere grundvægt. Dens score er dermed
+--      punkt for punkt større.
+do $$
+declare
+  s1 uuid := 'ddddddd1-0000-4000-8000-000000000001';
+  s2 uuid := 'ddddddd2-0000-4000-8000-000000000002';
+  s3 uuid := 'ddddddd3-0000-4000-8000-000000000003';
+  s4 uuid := 'ddddddd4-0000-4000-8000-000000000004';
+  s5 uuid := 'ddddddd5-0000-4000-8000-000000000005';
+  lg uuid; sn uuid; ta uuid; tb uuid; cp uuid; cp2 uuid; cp3 uuid; mid uuid;
+  d date; i int; j int;
+  v_rule text; v_nv int; v_toer int; v_third boolean; v_head text;
+begin
+  insert into auth.users (id) values (s1), (s2), (s3);
+  insert into public.profiles (id, display_name) values (s1,'Stine'), (s2,'Steen'), (s3,'Sara');
+  insert into public.leagues (name) values ('Stimeligaen') returning id into lg;
+  insert into public.seasons (league_id, name) values (lg, '25/26') returning id into sn;
+  insert into public.teams (league_id, name) values (lg, 'SH') returning id into ta;
+  insert into public.teams (league_id, name) values (lg, 'SU') returning id into tb;
+  insert into public.competitions (name, mode) values ('Stimekonkurrencen','custom') returning id into cp;
+  insert into public.competition_participants (competition_id, user_id) values (cp,s1),(cp,s2),(cp,s3);
+
+  -- TO kampe pr. dag i seks dage (2026-04-07 … 2026-04-12). To er `DAY_TOP`s
+  -- eget krav (`matches >= 2`), og uden dem kan 22b ikke stilles.
+  -- Alle kampe ender 2-0; alle tre rammer udfaldet hver gang, så alle tre har en
+  -- levende stime, og ingen skiller sig ud på point.
+  for i in 0..5 loop
+    d := date '2026-04-07' + i;
+    for j in 1..2 loop
+      insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at, home_score, away_score)
+        values (sn, ta, tb, d::timestamptz + interval '17 hours' + (j || ' hours')::interval, 2, 0)
+        returning id into mid;
+      insert into public.competition_matches (competition_id, match_id) values (cp, mid);
+      insert into public.predictions (user_id, match_id, pred_home, pred_away) values (s1, mid, 3, 0);
+      insert into public.predictions (user_id, match_id, pred_home, pred_away) values (s2, mid, 4, 0);
+      insert into public.predictions (user_id, match_id, pred_home, pred_away) values (s3, mid, 5, 0);
+    end loop;
+  end loop;
+  -- En kamp UDEN resultat dagen efter, så 2026-04-12 ikke er rundens sidste
+  -- kampdag — ellers udgiver motoren kun rundekortet og skriver intet dagskort.
+  insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at)
+    values (sn, ta, tb, (date '2026-04-13')::timestamptz + interval '18 hours');
+
+  perform public.generate_daily_stories(date '2026-04-12');
+
+  -- 22a) Hovedpersonen får stimekortet, og reglen er dermed ikke død kode.
+  select rule, news_value into v_rule, v_nv
+    from public.stories where period = 'day' and day_key = '2026-04-12' and user_id = s1;
+  if v_rule is distinct from 'STREAK_STATUS' then
+    raise exception 'FEJL 22a: stimen vandt ikke på en dag, hvor intet andet skete — fik %', coalesce(v_rule,'INTET KORT');
+  end if;
+  -- 28 (grundvægt) + 12 (stime-bonus, klippet ved 12) + 20 (nærhed) = 60.
+  -- Ændres ét af de tre tal, er det HER det skal ses.
+  if v_nv <> 60 then
+    raise exception 'FEJL 22a2: stimekortets news_value skulle være 28 + 12 + 20 = 60, fik %', v_nv;
+  end if;
+  if not exists (select 1 from public.stories
+                  where period = 'day' and day_key = '2026-04-12' and user_id = s2
+                    and rule = 'STREAK_STATUS') then
+    raise exception 'FEJL 22a3: stimen nåede ikke en fan-out-modtager — competition_id er null, og _sd_reach skal alligevel finde vejen';
+  end if;
+
+  -- 22b) Nu gøres Stine alene om dagens højeste: hendes tips den 12. bliver
+  -- PRÆCISE (3 point), de andres bliver ved med at være udfaldet (1 point).
+  -- Stimen er uændret levende — det eneste, der ændrer sig, er, at DAY_TOP nu
+  -- også har en kandidat.
+  update public.predictions p set pred_home = 2, pred_away = 0
+    from public.matches m
+   where m.id = p.match_id and m.match_day = date '2026-04-12' and p.user_id = s1;
+
+  perform public.generate_daily_stories(date '2026-04-12');
+
+  select rule, news_value, (payload ->> 'runner_up_value')::int, (payload ->> 'third')::boolean
+    into v_rule, v_nv, v_toer, v_third
+    from public.stories where period = 'day' and day_key = '2026-04-12' and user_id = s1;
+  if v_rule is distinct from 'DAY_TOP' then
+    raise exception 'FEJL 22b: DAY_TOP skal slå stimen for samme bruger samme dag — fik %', coalesce(v_rule,'INTET KORT');
+  end if;
+  if v_toer is distinct from 60 then
+    raise exception 'FEJL 22b2: stimen skulle stå som toer med 60, fik % — er den slet ikke kandidat, måler 22b ingenting', v_toer;
+  end if;
+  if v_nv <= v_toer then
+    raise exception 'FEJL 22b3: DAY_TOP (%) skal være strengt større end stimen (%)', v_nv, v_toer;
+  end if;
+
+  -- 22c) 💤-GRENEN, RETTET AF `G144`. Reglens kommentar lover, at den fyrer,
+  -- "når stimen blev forlænget i dag ELLER BRUDT I DAG". Indtil 21. august 2026
+  -- filtrerede `_sd_streak` kun på `ended_day = p_day`, så en stime, der brød
+  -- dagen EFTER sit sidste hit, havde `ended_day` = i går og udløste ingenting.
+  -- **Denne påstand stod vendt om, indtil rettelsen kom** — den krævede, at
+  -- brugeren IKKE fik et kort. Nu kræver den det modsatte.
+  --
+  -- 🔴 TO TING I OPSTILLINGEN ER IKKE FRIE VALG, og begge kostede en rød kørsel:
+  --   · **Bruddet ligger den 14., ikke den 13.** Den 13. april er en MANDAG,
+  --     altså rundens sidste kampdag, hvor motoren returnerer straks og kun
+  --     udgiver rundekortet. Første forsøg lagde bruddet dér og fik "INTET KORT"
+  --     — af den rigtige grund, i den forkerte test.
+  --   · **Signe står ALENE i sin konkurrence.** Anden forsøg gav `DUEL`
+  --     (grundvægt 30) frem for stimen (28): en bruger, der misser mens naboen
+  --     rammer, flytter afstanden i stillingen, og duellen slår stimen. Det er
+  --     `G143`s dominans-fund i praksis — og præcis derfor skal 💤-grenen prøves
+  --     et sted, hvor ingen anden regel kan udløse. Uden nabo har `DUEL` ingen
+  --     `rival_id`, og `DAY_TOP` (n >= 3), `CONTRARIAN` og `COLLECTIVE_MISS`
+  --     (>= 4 tippere) kan heller ikke.
+  --
+  -- Stimehistorikken er GLOBAL og kommer fra kampene ovenfor; Signe behøver
+  -- ikke at være med i deres konkurrence for at have en stime.
+  insert into auth.users (id) values (s5);
+  insert into public.profiles (id, display_name) values (s5, 'Signe');
+  insert into public.competitions (name, mode) values ('Signes egen','custom') returning id into cp2;
+  insert into public.competition_participants (competition_id, user_id) values (cp2, s5);
+  insert into public.predictions (user_id, match_id, pred_home, pred_away)
+  select s5, m.id, 3, 0 from public.matches m
+   where m.match_day between date '2026-04-07' and date '2026-04-12';
+
+  -- To kampe den 14. (tirsdag, altså første dag i næste runde). Signe misser
+  -- begge, så stimen på 12 brød i dag.
+  for i in 1..2 loop
+    insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at, home_score, away_score)
+      values (sn, ta, tb, (date '2026-04-14')::timestamptz + interval '17 hours' + (i || ' hours')::interval, 2, 0)
+      returning id into mid;
+    insert into public.competition_matches (competition_id, match_id) values (cp2, mid);
+    insert into public.predictions (user_id, match_id, pred_home, pred_away) values (s5, mid, 0, 2);
+  end loop;
+  -- Uden resultat: gør den 14. til en ikke-sidste kampdag i sin runde.
+  insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at)
+    values (sn, ta, tb, (date '2026-04-15')::timestamptz + interval '18 hours');
+
+  perform public.generate_daily_stories(date '2026-04-14');
+
+  select rule, news_value, headline into v_rule, v_nv, v_head
+    from public.stories where period = 'day' and day_key = '2026-04-14' and user_id = s5;
+  if v_rule is distinct from 'STREAK_STATUS' then
+    raise exception 'FEJL 22c: stimen brød i dag og skal give et kort — fik %', coalesce(v_rule,'INTET KORT');
+  end if;
+  if v_head not like '💤%' or v_head not like '%stoppede ved 12%' then
+    raise exception 'FEJL 22c2: kortet skal være 💤-varianten for en stime på 12 — fik "%"', v_head;
+  end if;
+  -- 28 + 12 (stime-bonus, klippet) + 20. Bruddet ændrer ikke scoren, kun teksten.
+  if v_nv <> 60 then
+    raise exception 'FEJL 22c3: news_value skulle være 60, fik %', v_nv;
+  end if;
+
+  -- 22d) BEGGE GRENE SANDE SAMME DAG, og hvorfor `distinct on (user_id)` er et
+  -- krav. Sander misser dagens FØRSTE kamp — det bryder hans løb på 12 — og
+  -- rammer så fem i træk senere samme dag. Både et brudt og et levende løb
+  -- slutter altså den 15.
+  --
+  -- `_sd_scored` joiner `_sd_streak` på `st.user_id = c.subject_id`, altså på
+  -- brugeren ALENE. To rækker ville gange HVER eneste kandidat for ham — også
+  -- DAY_RESULTs. Påstanden er derfor både, at han får ét kort, og at det er det
+  -- LÆNGSTE løbs: en stime på tolv, der brød, er større nyhed end en ny på fem.
+  -- Han står alene i sin konkurrence af samme grund som Signe.
+  insert into auth.users (id) values (s4);
+  insert into public.profiles (id, display_name) values (s4, 'Sander');
+  insert into public.competitions (name, mode) values ('Sanders egen','custom') returning id into cp3;
+  insert into public.competition_participants (competition_id, user_id) values (cp3, s4);
+  insert into public.predictions (user_id, match_id, pred_home, pred_away)
+  select s4, m.id, 3, 0 from public.matches m
+   where m.match_day between date '2026-04-07' and date '2026-04-12';
+
+  -- Seks kampe den 15.: den første misser han, de fem næste rammer han.
+  for i in 1..6 loop
+    insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at, home_score, away_score)
+      values (sn, ta, tb, (date '2026-04-15')::timestamptz + interval '10 hours' + (i || ' hours')::interval, 2, 0)
+      returning id into mid;
+    insert into public.competition_matches (competition_id, match_id) values (cp3, mid);
+    insert into public.predictions (user_id, match_id, pred_home, pred_away)
+      values (s4, mid, case when i = 1 then 0 else 3 end, case when i = 1 then 2 else 0 end);
+  end loop;
+  -- Gør den 15. til en ikke-sidste kampdag i sin runde.
+  insert into public.matches (season_id, home_team_id, away_team_id, kickoff_at)
+    values (sn, ta, tb, (date '2026-04-16')::timestamptz + interval '18 hours');
+
+  perform public.generate_daily_stories(date '2026-04-15');
+
+  if (select count(*) from public.stories
+       where period = 'day' and day_key = '2026-04-15' and user_id = s4) <> 1 then
+    raise exception 'FEJL 22d: Sander skal have præcis ét kort — to _sd_streak-rækker ganger hver kandidat';
+  end if;
+  select rule, news_value, headline into v_rule, v_nv, v_head
+    from public.stories where period = 'day' and day_key = '2026-04-15' and user_id = s4;
+  if v_rule is distinct from 'STREAK_STATUS' or v_head not like '%stoppede ved 12%' then
+    raise exception 'FEJL 22d2: det LÆNGSTE løb skal vinde (12, brudt) — fik % / "%"', v_rule, coalesce(v_head,'—');
+  end if;
+  if v_nv <> 60 then
+    raise exception 'FEJL 22d3: news_value skulle være 28 + 12 + 20 = 60, fik %', v_nv;
+  end if;
+end $$;
+
 \echo 'story_engine_daily: alle påstande holdt'

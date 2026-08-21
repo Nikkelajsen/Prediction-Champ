@@ -9,6 +9,233 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 (fjerde kørsel) — `G144`: stimekortet kan endelig sige, at stimen brød
+
+**Halvdelen af `STREAK_STATUS` var uskrevet.** Reglen har fra første dag haft to
+tekster — 🔥 for den levende stime og 💤 *"Din stime stoppede ved N"* — men
+`_sd_streak` valgte `where hit and len >= 5 and ended_day = p_day`, altså en
+række af HITS, hvis sidste kamp ligger på dagen. Brød stimen dagen EFTER sit
+sidste hit, var `ended_day` = i går, og der blev ikke skrevet noget. 💤-varianten
+kunne kun rammes ved et brud på SAMME kampdag som sidste hit — og det
+almindelige brud, en ny kampdag hvor det går galt, var netop det, den ikke kunne
+se.
+
+**Rettelsen er én gren mere:** `or naeste_dag = p_day`. `alive` behøvede ingen
+ændring — et brudt løb har pr. definition en senere kamp, så `run_last <
+last_kick`, og flaget var allerede falsk. Det er teksten, der skelner.
+
+**To valg er målt frem for antaget, og begge tal står i koden.**
+`naeste_dag` er `max(next_day)` og ikke det oplagte `(array_agg(next_day order by
+… desc))[1]`: "sidste værdi"-udtrykket koster **17 %** på dagsmotoren i
+skaleringsforsøget (205 mod 175 ms), mens `max` koster **6 %** (186 ms) og giver
+det samme, fordi `match_day` er monoton i `kickoff_at`. Motoren kører synkront
+inde i den sætning, der afslutter en kamp, så forskellen er ikke akademisk.
+
+**`distinct on (user_id)` kom til — og ændrer ikke ét kort i dag.** Med to grene
+kan der findes to løb pr. bruger pr. dag: misser man dagens første kamp og rammer
+så fem i træk senere samme dag, slutter både et brudt og et levende løb i dag.
+`_sd_scored` joiner `_sd_streak` på brugeren alene, så to rækker ville gange hver
+kandidat — men både størrelsesleddet og `_sd_rank` tager maksimum, så udfaldet
+bliver det samme. **Mutationen slipper gennem hele testen, og det står i koden**,
+så den næste ikke bruger en eftermiddag på at bevise det. Linjen bliver for
+prisens skyld (dobbelte rækker koster i triggerens sætning) og for formens
+(`G130` kostede fem dage på en antagelse, der kun holdt ved et tilfælde).
+**Det længste løb vinder:** at en stime på tolv brød i dag er en større historie
+end at en ny er nået til fem.
+
+**Reglen havde aldrig kørt — hverken i produktionen eller i en test.** Den har nu
+blok 22 i `sql/tests/story_engine_daily.sql` med begge grene, fan-out og det
+dobbelte løb. **To ting i opstillingen kostede hver sin røde kørsel og står som
+kommentarer**, fordi de er lette at falde i igen: bruddet må ikke ligge på
+rundens sidste kampdag (mandag), hvor motoren kun udgiver rundekortet, og
+brugeren skal stå ALENE i sin konkurrence — ellers vinder `DUEL` (grundvægt 30)
+over stimen (28), hvilket er `G143`s dominans-fund i praksis. Fire mutationer
+prøvet, tre fanget; den fjerde er `distinct on`, som pr. konstruktion ikke kan
+ses.
+
+✅ **`sql/story_engine_v3.sql` (#47) er gen-kørt i Supabase 21. august 2026.** Kun
+funktionen ændres; ingen rækker røres, ingen anden fil skal med, og der er **ingen
+frontend-ændring at merge sammen med** — teksten har ligget i motoren hele tiden.
+Kørslen aflæses med `select pg_get_functiondef('public.generate_daily_stories(date)'::regprocedure)
+like '%naeste_dag%';` — filen har selv lærepengen om, at en gen-kørsel ikke giver
+nogen kvittering, man kan se på.
+Adfærdsændring ved kørsel: en bruger, hvis stime på 5+ brød i dag, kan nu få
+stimekortet i stedet for dagens facit. Backloggen er 35 → 34. Spec'ens §13.11 og
+[`DECISIONS.md`](./DECISIONS.md) bærer resten.
+
+---
+
+21. august 2026 (tredje kørsel) — `G143`: stimen er ikke død kode, den er systematisk domineret
+
+**Rækken spurgte, om `STREAK_STATUS` var død kode eller bare uden anledning** —
+samme spørgsmålsform som `G72`. Svaret er ingen af delene helt.
+
+**Reglen virker, og beviset ligger nu i repoet.** Motoren er kaldt mod en fixture
+med en levende stime, og kortet blev skrevet: `🔥 6 kampe i træk med point` til
+hovedpersonen og tredjepersons-varianten til en modtager i samme konkurrence.
+`competition_id = null` blokerer altså ikke — `_sd_reach`s fan-out-gren har
+`(c.competition_id is null or …)` netop for det. **Det er reglens første kørsel
+nogensinde:** testens egen blok 16 sagde allerede, at fixturen aldrig fyrede den,
+og produktionen havde nul sejre. Nu er den blok 22 i
+`sql/tests/story_engine_daily.sql`.
+
+**Hvorfor den alligevel aldrig har vundet.** `_sd_mag` er nøglet på
+`(competition_id, user_id)`, så joinet rammer ingen række for en kandidat uden
+konkurrence: `move_pts` og `over_pts` falder til nul, og `STREAK_STATUS` får KUN
+stime-bonussen som størrelsesbidrag — 48–60. `DAY_TOP` (34), `CONTRARIAN` (32) og
+`DUEL` (30) får den **samme** bonus plus flytning og over-snit oven i en højere
+grundvægt, så deres score er punkt for punkt større. Målt i fixturen: `DAY_TOP`
+**72** mod stimens **60**, samme bruger, samme dag, samme stime. Med `DAY_TOP` +
+`CONTRARIAN` som 69 % af sejrene kan stimen kun vinde på en dag, hvor ingen af de
+tre udløste — så nul sejre i 100 bruger-dage er overbestemt.
+
+**Ordet "udløst" var upræcist, og det er værd at holde fast i.** Blok 2 i
+aflæsningen grupperer på `winner_rule`, og en taber efterlader intet spor —
+`runner_up_value` gemmer et tal, ikke en regel. "Har aldrig udløst" og "har
+aldrig vundet" ser ens ud i den tabel.
+
+**Én ting ER en fejl og fik sin egen række.** Reglens kommentar lover, at den
+fyrer *"når stimen blev forlænget i dag eller brudt i dag"*. Anden halvdel holder
+næsten aldrig: `_sd_streak` vælger `where hit and ended_day = p_day`, så en stime,
+der brød dagen EFTER sit sidste hit, udløser ingenting. Teksten *"Din stime
+stoppede ved N"* kan kun nås ved et brud på samme kampdag som sidste hit.
+Efterprøvet: nul rækker på brud-dagen. `G144` — og påstanden står som blok 22c,
+der skal **vendes om**, når rækken lukkes.
+
+**Aflæsningsfilen har fået en blok 3**, så den næste kørsel også svarer på, hvor
+tit stimen havde anledningen og hvad der vandt i stedet: femer-stimer i
+historikken, hvor mange der sluttede på en dag med et kort, hvad brugeren fik i
+stedet, afstanden op til vinderen, og hvor mange stimer der brød en senere dag
+(💤-grenens blinde vinkel). Dommen regnes ud i sidste blok.
+
+Fire mutationer prøvet mod de nye påstande — stimen slået fra, grundvægten hævet
+så den slår `DAY_TOP`, stime-bonussen nulstillet, og nævneren i blok 3 —
+alle fanget. Backloggen er 35 → 35: `G143` slettet, `G144` tilføjet, og
+domineringsfundet ført ind i `A58`s kontekst frem for rettet i forbifarten.
+Ingen migrering; `#47` er urørt. Se [`DECISIONS.md`](./DECISIONS.md).
+
+---
+
+21. august 2026 (anden kørsel) — `A33` er besvaret: variationen er der, men to regler bærer oplevelsen
+
+**Ejeren kørte aflæsningen samme dag, den blev bestilt**, og svaret ligger i
+[`reviews/story-engine-v3-aflaesning-2026-08-21.md`](./reviews/story-engine-v3-aflaesning-2026-08-21.md).
+Grundlag: 100 bruger-dage, 25 brugere, 4 kampdage, 50 vis-bare kort, 168
+visninger fordelt på 12 brugere.
+
+**Nævneren var det halve arbejde.** Rå gav aflæsningen `DAY_RESULT` som vinder på
+43 af 100 — mistænkeligt tæt på v2's 44 %, som var hele rækkens anledning. Men
+**35 af de 43 er tips-påmindelser**: brugeren havde ikke ét scoret tip den dag,
+så der fandtes ingen kandidater at vælge imellem. En tips-påmindelse er ikke
+motoren, der vælger dagens facit; den er motoren, der ikke har noget at vælge.
+På den reelle valgmængde — 65 bruger-dage — er `DAY_RESULT` **12,3 %**.
+
+**Det er præcis, hvad v3 satte sig for**, og `A33` er dermed besvaret med nej:
+variationen er ikke tyndere, end regelantallet lover. Syv af otte dagsregler har
+udløst. `DAY_TOP` 43,1 % · `CONTRARIAN` 26,2 % · `DAY_RESULT` 12,3 % ·
+`DUEL` 7,7 % · `COLLECTIVE_MISS` 6,2 % · `MILESTONE` 3,1 % · `SO_CLOSE` 1,5 %.
+
+**Men spejlbilledet holder.** Af de 168 visninger er `DAY_TOP` og `CONTRARIAN`
+tilsammen **86,9 %**. Bekymringen var "dagens facit hver anden gang";
+virkeligheden er "dagens højeste eller kontrarianen næsten altid" — og mekanikken
+er den samme som i v2: de to har de højeste grundvægte efter `MILESTONE` (34 og
+32) og er to af de tre regler, der fan-outer. Ankerproblemet er ikke fjernet, det
+er flyttet opad. Ført videre som `A58`, fordi det er en produktvurdering og ikke
+en måling: "dagens højeste" og "du var den eneste" ER de mest fortællende ting,
+der sker på en kampdag.
+
+**`A35` kunne ikke besvares — fire kampdage af de ti**, rækken kræver.
+Udløserens to halvdele løber ikke i samme takt: de to uger var gået, men
+kampdage med dagskort kommer ~2–3 om ugen, så ti er 3–4 uger ude. Rækkens
+`Afgøres`-felt er rettet til at sige det.
+
+**Det, aflæsningen alligevel afgjorde om tærsklen:** den er et svagt instrument,
+og nu er det målt. Hele spændet fra 38 til 55 flytter andelen **16 point**
+(56,0 % → 40,0 %), fordi 75 af 100 kort ligger uden for enhver tærskels
+rækkevidde — 35 på nul og 40 på 54 eller derover. **Og den nuværende andel ser
+kun rigtig ud på grund af nævneren:** 50,0 % af alle bruger-dage er midt i målet
+40–60 %, men 76,9 % af motorens egen valgmængde er over rækkens eget "over 70 %
+⇒ for lav". Forskellen ER de 35 tips-påmindelser. En tærskel, der ser rigtig ud,
+fordi en tredjedel af bruger-dagene er tomme, er ikke kalibreret — den er heldig.
+
+**Scorerum-aflæsningen fra samme morgen holdt punkt for punkt.**
+`COLLECTIVE_MISS` stod på præcis 44 i alle fire forekomster — det bevidste ene
+point under tærsklen, målt i netop det tilfælde, reglen er skrevet til.
+`DAY_RESULT` nåede aldrig over 28 og altså ikke engang sit eget loft på 40:
+dens `over_pts` var nul hver gang, så fald-tilbagen rammer dem, dagen ikke gik
+godt for. `SO_CLOSE` lå på gulvet 38, `CONTRARIAN`s laveste var 36 (fan-out til
+en fremmed), og `MILESTONE` stod fast på 120.
+
+**To fund, ingen havde bedt om.** Halvdelen af alle v3-dagskort — 50 af 100 —
+havde et vindue på nul minutter: et kort med en større `day_key` fandtes for
+samme bruger allerede i det øjeblik, de blev skrevet, så de kunne pr.
+konstruktion ikke nås (`G142`). Og `STREAK_STATUS` har aldrig udløst én eneste
+gang (`G143`) — samme spørgsmålsform som `G72`.
+
+Backloggen er 31 → 35: `A33` slettet, indbakkens to linjer blevet `G140` og
+`G141`, og aflæsningen efterlod `G142`, `G143` og `A58`. Tier 1 og Tier 2 er
+fyldt igen af leverancen selv. Ingen kode, ingen SQL, ingen migrering.
+Se [`DECISIONS.md`](./DECISIONS.md).
+
+---
+
+21. august 2026 — `A33` og `A35`: scorerummet regnet ud, aflæsningen bestilt
+
+**De to backlog-rækker er ét spørgsmål, ikke to.** `A35` spørger, om
+publiceringstærsklen på 45 er rigtig; `A33`, om dagsmotorens variation er
+tyndere, end regelantallet lover. Regner man motorens scorerum efter — de tal,
+den overhovedet KAN producere — falder de sammen: en kandidat scorer `grundvægt
++ størrelse + nærhed`, nærheden er 20 for hovedpersonen, og **45 ligger i hullet
+mellem `DAY_RESULT`s loft (8 + 12 + 20 = 40) og de fire tungeste reglers gulv
+(48, 50, 52, 54)**. Andelen af kampdage med ulæst-markering ER derfor andelen,
+hvor en anden regel end dagens facit vandt — hvilket er `A33`s spørgsmål.
+
+**Følgen er, at tærsklen for hovedpersonen næsten ikke er en tærskel.** Fem af
+otte regler er afgjort af deres grundvægt alene: `DAY_RESULT` kan aldrig udgive,
+og `STREAK_STATUS`, `DUEL`, `CONTRARIAN`, `DAY_TOP` og `MILESTONE` udgiver
+altid. Kun `SO_CLOSE` (kræver 7 størrelsespoint) og `COLLECTIVE_MISS` (kræver 1)
+afgøres faktisk af tallet. **Den binder til gengæld i fan-out-laget**, hvor fem
+af ni (regel × nærhed)-kombinationer afgøres af 45 — det er altså i kortene om
+ANDRE, at tærsklen arbejder. Regnestykket, med gulve og lofter for hver regel,
+står i [`reviews/story-engine-v3-scorerum-2026-08-21.md`](./reviews/story-engine-v3-scorerum-2026-08-21.md).
+
+**Det ændrer, hvad beslutningen kan handle om.** Ligger den målte andel uden for
+målet på 40–60 %, er svaret sjældent "flyt tærsklen fem point": håndtaget er
+ujævnt, og 41–47 flytter for hovedpersonen ingenting. Enten flyttes tærsklen
+forbi et gulv — en stor, synlig ændring, hvor en hel regel holder op med at være
+nyhed — eller også flyttes GRUNDVÆGTEN for den regel, der fylder for meget.
+Grundvægten siger noget om reglen; tærsklen siger kun noget om, hvor stregen
+tilfældigvis blev sat.
+
+**Den anden halvdel kræver rækker, og den er bestilt som ét paste**
+(`sql/story_engine_v3_measure.sql`). Filen er **read-only** — ingen
+`insert`/`update`/`delete`/`drop` mod `public`, kun temporære tabeller, som
+lever i den session, der læser den, altså samme form som `sql/checks/`. Den
+svarer i én tabel: om udløseren holder (to uger, ti kampdage, vis-bar > 0,
+vist > 0), `A35`s andel globalt og pr. aktiv bruger med handlingsgrænserne
+regnet ud, andelen ved **otte** forskellige tærskler, fordelingen af
+`news_value` skåret ved reglernes gulve, og `A33`s variation målt tre steder:
+fordelingen over valgte regler, gentagelsen fra kampdag til kampdag, og andelen
+af en brugers kort, der bærer hendes hyppigste regel.
+
+**Vis-bar er regnet for v3 og ikke lånt fra analytics-tavlen.** Tavlens
+`viewable` (`created_at < round_key + 7 dage`) er karusellens begreb fra v2;
+v3's `loadDayCard` henter den nyeste `day_key` og viser den kun under 48 timer
+gammel. Et v3-korts vindue er derfor fra `created_at` til det tidligste af 48
+timer og det øjeblik, en nyere `day_key` blev skrevet — og et kort med et vindue
+på nul minutter hører hverken til i en visningsrate eller i en fordeling over
+det, brugerne har oplevet. At tavlen stadig regner med v2-reglen for
+`period = 'day'` er noteret i backloggens indbakke frem for rettet her.
+
+**Filen er efterprøvet mod det rigtige skema** — PostgreSQL 16.13 med
+produktionsskemaet fra `sql/tests/_schema.mjs` — på et syntetisk datasæt, hvis
+facit var regnet i hånden først, plus kanten, hvor bagstopperens dagsløkke
+skriver to kort i samme sætning og det ældste aldrig kunne nå en skærm. Ingen
+migrering, ingen frontend-ændring. Backloggen er 31 → 31: begge rækker bliver
+stående, til opslaget er kørt.
+
+---
+
 21. august 2026 — `A44` afgjort: navnene bliver, og stillingen åbner, hvor du selv står
 
 **Backloggen er 31 → 31** — `A44` er slettet, og indbakkens ene linje er blevet

@@ -15,6 +15,132 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `G144`: stimekortet fortæller nu også, når stimen brød — og det længste løb vinder
+
+**Beslutning:** `STREAK_STATUS` udgives fremover også på den dag, stimen BLEV
+BRUDT, og ikke kun på dagen for dens sidste hit. Findes der to løb for samme
+bruger samme dag — ét brudt og ét levende — **vinder det længste**.
+
+**Hvorfor det ikke bare var en fejlrettelse.** Reglens kommentar har hele tiden
+lovet, at den fyrer *"når stimen blev forlænget i dag eller brudt i dag"*, men
+`_sd_streak` valgte `where hit and ended_day = p_day` — en række af HITS, hvis
+sidste kamp ligger på dagen. Brød stimen dagen efter, var `ended_day` = i går, og
+der blev ikke skrevet noget. 💤-teksten *"Din stime stoppede ved N"* var derfor i
+praksis uskrevet, og det almindelige brud — en ny kampdag, hvor det går galt —
+var netop det, den ikke kunne se. `alive` behøvede ingen ændring: et brudt løb
+har pr. definition en senere kamp, så flaget var allerede falsk.
+
+**Det længste løb vinder, og det er en produktregel og ikke en teknikalitet.**
+Misser man dagens første kamp — det bryder det gamle løb — og rammer så fem i
+træk senere samme dag, findes både et brudt og et levende løb. At en stime på
+tolv brød i dag er en større historie end at en ny er nået til fem, og det
+længste løb bærer samtidig det største stime-bidrag til størrelsesleddet. Valget
+er dermed det samme, som resten af motoren ville have truffet på nyhedsværdi.
+
+**To valg er MÅLT frem for antaget**, og begge står i koden med tallene:
+`max(next_day)` frem for det oplagte `array_agg(… order by … desc)[1]` koster
+6 % mod 17 % på dagsmotoren og giver det samme, fordi `match_day` er monoton i
+`kickoff_at`; og `distinct on (user_id)` ændrer ikke ét kort i dag, men holder
+den form, `_sd_scored`s join på brugeren alene forudsætter. Dagsmotoren kører
+synkront inde i den sætning, der afslutter en kamp, så forskellen er ikke
+akademisk.
+
+**Prisen er sagt højt:** ~6 % på dagsmotoren, betalt for at gøre halvdelen af en
+regel nåelig. Og `#47 story_engine_v3.sql` skal gen-køres i produktionen —
+funktionen alene, ingen rækker, ingen frontend-ændring, fordi teksten har ligget
+i motoren hele tiden.
+
+## 21. august 2026 — `G143` besvaret: stimen er ikke død kode, den er systematisk domineret
+
+**Svaret:** `STREAK_STATUS` virker. Rækken spurgte, om reglen var død kode eller
+bare uden anledning — samme spørgsmålsform som `G72` — og svaret er **ingen af
+delene helt**. Reglen udløser, vinder og når både hovedpersonen og en
+fan-out-modtager; den taber bare altid, når noget andet sker samme dag.
+
+**Beviset er kørt og ligger i repoet.** Motoren er kaldt mod en fixture med en
+levende stime, og kortet blev skrevet: `🔥 6 kampe i træk med point` til
+hovedpersonen og tredjepersons-varianten til en modtager i samme konkurrence.
+`competition_id = null` er altså ikke en blokering — `_sd_reach`s
+fan-out-gren har `(c.competition_id is null or …)` netop for det. Påstanden bor
+nu i `sql/tests/story_engine_daily.sql` blok 22, som er den **første** kørsel af
+reglen nogensinde: testens egen blok 16 sagde allerede, at fixturen aldrig fyrede
+den, og produktionen havde nul sejre.
+
+**Hvorfor den alligevel aldrig har vundet: `competition_id = null` koster
+størrelsesleddet.** `_sd_mag` er nøglet på `(competition_id, user_id)`, så
+joinet rammer ingen række for en kandidat uden konkurrence, og `move_pts` og
+`over_pts` falder til nul. `STREAK_STATUS` får derfor KUN stime-bonussen som
+størrelsesbidrag og scorer 48–60. `DAY_TOP` (34), `CONTRARIAN` (32) og `DUEL`
+(30) får den **samme** bonus plus flytning og over-snit oven i en højere
+grundvægt — deres score er punkt for punkt større. Målt i fixturen: `DAY_TOP` 72
+mod stimens 60, samme bruger, samme dag, samme stime.
+
+Med `DAY_TOP` + `CONTRARIAN` som 69 % af alle sejre i produktionen kan stimen
+altså kun vinde på en dag, hvor ingen af de tre udløste. Nul sejre i 100
+bruger-dage er dermed **overbestemt**: anledningen er snæver (stimen skal slutte
+på præcis den dag, der får et kort), og selv da taber den som regel.
+
+**Hvorfor det ikke bliver rettet her.** At give stimen sit størrelsesled kræver,
+at den får en konkurrence at være stor i — og den er global med vilje. At hæve
+grundvægten er den anden vej, men det er præcis `A58`s spørgsmål, og det skal
+besvares på en fordeling og ikke på én regel ad gangen. Fundet er derfor ført
+ind i `A58`s kontekst frem for at blive en rettelse i forbifarten.
+
+**Én ting ER en fejl og fik sin egen række.** Reglens kommentar lover, at den
+fyrer *"når stimen blev forlænget i dag eller brudt i dag"*. Den anden halvdel
+holder næsten aldrig: `_sd_streak` vælger `where hit and ended_day = p_day`, så
+en stime, der brød dagen EFTER sit sidste hit, har `ended_day` = i går og
+udløser ingenting. 💤-teksten *"Din stime stoppede ved N"* kan kun nås, når
+bruddet ligger på samme kampdag som sidste hit. Efterprøvet: nul rækker på
+brud-dagen. `G144`.
+
+## 21. august 2026 — `A33` besvaret: variationen ER der, men to regler bærer oplevelsen
+
+**Svaret:** nej, dagsmotorens variation er ikke tyndere, end regelantallet
+lover. Rækken lukkes som besvaret — ikke af en produktbeslutning, men af en
+aflæsning ([`reviews/story-engine-v3-aflaesning-2026-08-21.md`](./reviews/story-engine-v3-aflaesning-2026-08-21.md)).
+Udløseren var opfyldt: 50 vis-bare dagskort og 168 visninger fordelt på 12
+brugere.
+
+**Nævneren var det halve arbejde.** Aflæsningen gav 100 bruger-dage, hvoraf
+`DAY_RESULT` vandt 43 — mistænkeligt tæt på v2's 44 %, som var hele rækkens
+anledning. Men **35 af de 43 er tips-påmindelser**: brugeren havde ikke ét
+scoret tip den dag, så der fandtes ingen kandidater at vælge imellem. En
+tips-påmindelse er ikke motoren, der vælger dagens facit; den er motoren, der
+ikke har noget at vælge. Målt på den reelle valgmængde — 65 bruger-dage — er
+`DAY_RESULT` **12,3 %**.
+
+Det er præcis, hvad v3 satte sig for. `DAY_RESULT`s 44 % i v2 var en
+konstruktionsfølge (laveste prioritet, udløste altid), og v3 fjernede årsagen
+ved at give den grundvægt 8. **Syv af otte dagsregler har udløst**, så bredden er
+reel og ikke en tabel-effekt. Rækkens formodning — *"en motor markedsført på
+bredde, der leverer det samme kort hver anden gang"* — holder ikke.
+
+**Men spejlbilledet gør.** Af de 168 visninger er `DAY_TOP` og `CONTRARIAN`
+tilsammen **86,9 %**. Bekymringen var "dagens facit hver anden gang"; virkeligheden
+er "dagens højeste eller kontrarianen næsten altid". Og mekanikken bag er den
+samme som i v2: de to har de højeste grundvægte efter `MILESTONE` (34 og 32) og
+er to af de tre regler, der fan-outer, så de producerer flere kandidater pr. dag
+end nogen anden. **Ankerproblemet er ikke fjernet, det er flyttet opad.**
+
+**Hvorfor det bliver et nyt spørgsmål og ikke en genåbning af dette.** `A33`
+spurgte, om bredden var en illusion. Det er den ikke — motoren bruger sine
+regler. Det nye spørgsmål er, om den rigtige fordeling er jævn: to regler, der
+fylder 87 %, kan lige så godt være det rigtige svar, fordi "dagens højeste" og
+"du var den eneste" ER de mest fortællende ting, der sker på en kampdag. Det er
+en produktvurdering, ikke en måling, og den kræver flere kampdage. `A58`.
+
+**Prisen for at lukke nu, med fire kampdage.** Fordelingen kan flytte sig. Det,
+der ikke kan flytte sig, er den strukturelle påstand, rækken blev skrevet på:
+`DAY_RESULT` kan pr. konstruktion ikke vinde en dag, hvor noget skete, fordi dens
+loft (8 + 12 + 20 = 40) ligger under tærsklen. Den påstand er nu efterprøvet — 43
+af 43 `DAY_RESULT`-kort lå på 28 eller derunder — og den er uafhængig af
+stikprøvens størrelse. Rækken kan derfor lukkes på det, den spurgte om.
+
+**To fund, rækken ikke bad om, blev ført videre frem for skrevet ind her:**
+halvdelen af alle v3-dagskort havde et vindue på nul minutter og kunne aldrig nås
+(`G142`), og `STREAK_STATUS` har aldrig udløst én eneste gang (`G143`).
+
 ## 21. august 2026 — `A44` afgjort: tavlen viser fortsat fulde visningsnavne, og modalen åbner, hvor du selv står
 
 **Beslutning:** den globale rating og Championship bliver ved med at vise fulde

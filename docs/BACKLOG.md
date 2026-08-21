@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A58` · `B42` · `G140` · `I26`.**
+**Næste ledige: `A59` · `B42` · `G145` · `I26`.**
 *(`B40` er brugt 18. august 2026 til Indstillinger-skærmen med push-kontakten —
 leveret direkte uden en backlog-række; se `CHANGELOG.md`/`DECISIONS.md`. `B41`
 er brugt 21. august 2026 til Tier 1-bestillingen af `#73`.)*
@@ -54,13 +54,13 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-- "Vis hele stillingen" er et <p> med onClick og kan derfor hverken nås med tastaturet eller trykkes af skærmbilled-harnessen, som kun kan klikke på knapper
+Tom.
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 34 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -106,7 +106,9 @@ Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G141` | Analytics-tavlens `viewable` regner dagskort efter KARUSELLENS regel | `admin_analytics_stories` måler vis-bar som `created_at < round_key + 7 dage` — v2's karrusel, som hentede den nuværende rundes kort. v3 har ingen karrusel: `loadDayCard` henter den nyeste `day_key` og viser den kun under 48 timer gammel. Tallet er derfor forkert for `period = 'day'`, og det er nævneren under BÅDE visnings- og afvisningsraten, altså `G73`s egen rettelse, der er blevet forældet af v3. Den rigtige regel står allerede skrevet og efterprøvet i `sql/story_engine_v3_measure.sql` (vinduet fra `created_at` til det tidligste af 48 timer og næste `day_key`) — rettelsen er at flytte den ind i RPC'en for `period = 'day'` og lade runde-kortene beholde den gamle. Fundet ved `A33`-aflæsningen 21. august 2026 |
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -120,6 +122,8 @@ Tomt.
 
 | # | Hvad | Note |
 |---|---|---|
+| `G140` | "Vis hele stillingen" er et `<p>` med `onClick` | Fladen kan hverken nås med tastaturet eller trykkes af skærmbilled-harnessen, som kun kan klikke på knapper — så den ene vej til din egen række i en stilling på 25 er lukket for tastaturbrugere OG usynlig for `npm run screenshots`. Rettelsen er at gøre den til en `button` med den styling, den allerede har. Fundet ved `A44`-eftersynet 21. august 2026 |
+| `G142` | Halvdelen af v3-dagskortene kan pr. konstruktion aldrig vises | 50 af 100 kort havde et vindue på nul minutter ved `A33`-aflæsningen 21. august 2026: et kort med en større `day_key` fandtes for samme bruger allerede i det øjeblik, de blev skrevet, og `loadDayCard` henter altid den nyeste. Bagstopperens dagsløkke skriver flere dages kort i samme kørsel, så det ældste er dødt i fødslen. **Det er ikke oplagt en fejl** — man vil næppe vise tre dages gamle kort efter hinanden — men det gør hvert eneste "genereret"-tal misvisende (`G73`s klasse), og det bruger motorens dyreste arbejde på rækker, ingen kan nå. To veje: lad dagsløkken springe en dag over, der allerede er afløst, eller behold rækkerne som analysedata og hold dem ude af tællingerne. Spørgsmålet skal besvares FØR `G141`, som ellers retter en nævner, der stadig tæller døde kort |
 | `G139` | Hjem og konkurrence-boardet henter hele den globale ratingtabel | `loadRatingBoard` henter **hver** brugers rating OG hvert profilnavn — Hjem bruger svaret til ét kort: din egen rating, din placering og antallet (`ratingSnapshot`). `loadRatingMap` gør det samme i `BoardScreen` for at sætte et ratingtal ved otte deltagere. Begge kald vokser med brugerbasen og lander i `A34`s egress-loft, længe før nogen mærker dem i skærmen. Kuren er billig og kræver ingen migrering: egen række plus en `count=exact` på `rating=gt.<din>` til Hjem, og `user_id=in.(deltagerne)` på boardet. Fundet ved `A44`-aflæsningen 21. august 2026. |
 
 ### Tier 6 — Venter på en udløser
@@ -131,8 +135,8 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 |---|---|---|
 | `B28` | Gentag CL's kickoff-aflæsning i `docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md` | Champions Leagues ligafase er lodtrukket hos football-data.org, så sæsonen 2026 findes hos leverandøren. **Efterprøvet 20. august 2026 via `B39`-aflæsningen: stadig 404.** |
 | `A34` | Supabase Free → Pro? | **Når Usage-siden viser egress nær 5 GB/md, eller når fremmede udgør flertallet af de aktive** — de to falder formentlig sammen omkring 200–500 ugentligt aktive. |
-| `A33` | Er dagsmotorens variation tyndere, end regelantallet lover? | **Når vis-bare dagskort har visninger.** `G73` (5. august 2026) rettede MÅLINGEN og ikke synligheden: de 197 efterfyldte dagskort kan stadig ikke vises, de tælles bare ikke længere i nævneren. Fremadrettede dagskort skrives inde i deres egen runde og ER vis-bare, så udløseren kan nu aflæses direkte — vis-bar > 0 og vist > 0 for dagsreglerne i Analytics. `DAY_RESULT` alene er 123 af 280 historier (44 %). |
-| `A35` | Er Story Engine v3's publiceringstærskel på 45 den rigtige? | **To uger med v3 i drift og mindst ti kampdage.** Bygget 7. august 2026, så uret er startet. Måles på `stories.news_value`, som gemmes på alle rækker — også de dæmpede — netop for at kunne svare bagudrettet. Mål: 40–60 % af kampdagene med ulæst-markering. |
+| `A35` | Er Story Engine v3's publiceringstærskel på 45 den rigtige? | **Mindst ti kampdage — fire er nået 21. august 2026.** De to uger er gået, men de to halvdele af udløseren løber ikke i samme takt: kampdage med dagskort kommer ~2–3 om ugen, så ti er 3–4 uger ude. Aflæsningen samme dag ([`reviews/story-engine-v3-aflaesning-2026-08-21.md`](./reviews/story-engine-v3-aflaesning-2026-08-21.md)) viste 50,0 % af alle bruger-dage med ulæst-markering — men **76,9 % af motorens egen valgmængde**, altså over rækkens egen "over 70 % ⇒ for lav". Forskellen er de 35 af 100 bruger-dage, hvor brugeren ikke havde ét tip. Kør `sql/story_engine_v3_measure.sql` igen, når kampdagene er der. |
+| `A58` | Er `DAY_TOP` + `CONTRARIAN` = 87 % af det sete den rigtige fordeling? | **Mindst ti kampdage** — samme udløser og samme opslag som `A35`, og de tages sammen. Efterfølgeren til `A33`, som blev besvaret 21. august 2026. |
 | `G8` | Multi-turnerings-`full_season` er stadig uafprøvet mod rigtige data | Den første konkurrence med `mode_params.tournaments` — aflæst tom igen 5. august 2026. |
 | `A23` | Skal appen have en router? | Når tilbage-knappen koster brugere, eller `I12` kræver delbare interne URL'er. |
 | `G1` | `MainApp.jsx` (~582) er den sidste store skærmfil | `A23`. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67, `HjemTab` 672 → 411, `ProfileScreen` 480 → 241, `CreateCompetitionScreen` 444 → 394 — og det, der er tilbage i `MainApp`, **ER** navigations-tilstandsmaskinen plus render-træet, altså præcis `A23`s emne. Rækken er dermed ikke længere et stykke oprydning, men en afventning: en router omskriver det, der er tilbage, og en opdeling først ville skulle laves om. |
@@ -186,8 +190,8 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | # | Spørgsmål | Kontekst | Afgøres |
 |---|---|---|---|
 | A34 | **Hvornår skiftes Supabase Free ud med Pro?** | Free-planens tre lofter bider i denne rækkefølge: **egress (5 GB/md)** først — appen er REST-fetch-tung, så et sted mellem 200 og 500 ugentligt aktive nærmer forbruget sig loftet; **database (500 MB)** langt senere (tips-rækker er små; `analytics_events` var den hurtigst voksende tabel og har siden `G77`, 7. august 2026, et loft på 18 måneder, så væksten er nu bundet frem for åben); og **backup-vilkåret** er kvalitativt: 24 timers datatab (afsnit 22) er valgt til venner, og når fremmede udgør flertallet, er Pro's backups prisen værd. Aflæses på Supabase-dashboardets Usage-side — én gang om måneden, ikke oftere. Vercel Hobby er IKKE samme spørgsmål: dens tunge trafik skalerer med turneringer, ikke brugere, og skiftet dér udløses af kommercialisering (vilkårene), ikke af brugertal. | Egress nær loftet, eller fremmede i flertal blandt de aktive. |
-| A35 | **Er publiceringstærsklen på 45 den rigtige?** | Story Engine v3 udgiver dagens kort med ulæst-markering, når nyhedsværdien når 45, og som dæmpet `DAY_RESULT` under. Tallet er udledt af grundvægtene (max for `DAY_RESULT` alene er 40), ikke af data — samme slags kvalificerede gæt som v1's A4-tærskler var, og de blev kalibreret på live-data. `story_score_distribution` logger vinderregel, `news_value` og runner-up, så fordelingen kan aflæses uden ny instrumentering. | **Efter to uger med v3 i drift og mindst ti kampdage.** Målet er 40–60 % af kampdagene med ulæst-markering for en aktiv bruger. Over 70 % ⇒ tærsklen er for lav, og v3 har genskabt v2's problem i ny indpakning. Under 25 % ⇒ Hjem er stille igen, og v2's oprindelige problem er tilbage. |
-| A33 | **Er dagsmotorens variation tyndere, end regelantallet lover?** | Story Engine v2 lagde syv dagsregler til, men `DAY_RESULT` alene står for 123 af 280 historier (44 %), og de næste to (`DUEL` 35, `COLLECTIVE_MISS` 19) er tilsammen mindre end halvdelen af den. En motor, der er markedsført på bredde og leverer det samme kort hver anden gang, er en anden oplevelse end tabellen antyder. **Spørgsmålet kan ikke stilles endnu:** ingen af de 197 dagskort er nogensinde blevet vist (`G73`), så der findes ingen, der har oplevet ensformigheden. Måske er 44 % helt rigtigt — "dagens facit" er også den mest almindelige ting at fortælle om en kampdag. **Delvist håndteret af v3 (7. august 2026):** `DAY_RESULT`s 44 % var en konstruktionsfølge — laveste prioritet, udløses altid — og v3 fjerner årsagen ved at give den grundvægt 8, hvilket gør den til fald-tilbage frem for anker. Spørgsmålet om, hvorvidt de øvrige seks regler faktisk varierer, er **ikke** besvaret og skal aflæses på ny fordeling. | Når dagskort faktisk bliver set, altså efter `G73`. |
+| A35 | **Er publiceringstærsklen på 45 den rigtige?** | Story Engine v3 udgiver dagens kort med ulæst-markering, når nyhedsværdien når 45, og som dæmpet `DAY_RESULT` under. **Aflæst 21. august 2026, men på fire kampdage af de ti, rækken kræver** ([`reviews/story-engine-v3-aflaesning-2026-08-21.md`](./reviews/story-engine-v3-aflaesning-2026-08-21.md)). Det, aflæsningen alligevel afgjorde: **tærsklen er et svagt instrument, og nu er det målt.** Hele spændet fra 38 til 55 flytter andelen 16 point (56,0 % → 40,0 %), fordi 75 af 100 kort ligger uden for enhver tærskels rækkevidde — 35 på nul (ingen tips) og 40 på 54+. Tærsklen kan kun nogensinde afgøre 25 % af bruger-dagene; grundvægtene afgør resten. **Og den nuværende andel ser kun rigtig ud på grund af nævneren:** 50,0 % af alle bruger-dage er midt i målet 40–60 %, men 76,9 % af motorens egen valgmængde er over rækkens "over 70 % ⇒ for lav". Forskellen ER de 35 tips-påmindelser. Bliver brugerne mere aktive, bevæger det levede tal sig mod 76,9 %, uden at nogen har rørt en tærskel — *en tærskel, der ser rigtig ud, fordi en tredjedel af bruger-dagene er tomme, er ikke kalibreret, den er heldig.* Spørgsmålet er dermed **omformuleret**: det handler ikke længere om 45, men om `DAY_TOP`s og `CONTRARIAN`s grundvægte, og det er `A58`. | **Mindst ti kampdage** (fire nået 21. august 2026). De to uger var den forkerte halvdel af uret: kampdagene kommer ~2–3 om ugen. Samme opslag, kørt igen. |
+| A58 | **Er `DAY_TOP` + `CONTRARIAN` = 87 % af det sete den rigtige fordeling?** | Efterfølgeren til `A33`, som blev besvaret 21. august 2026. Aflæsningen aflivede rækkens formodning — `DAY_RESULT` er 12,3 % af motorens reelle valg mod v2's 44 %, og syv af otte dagsregler har udløst — men fandt spejlbilledet: af 168 visninger er `DAY_TOP` og `CONTRARIAN` tilsammen **86,9 %**. Mekanikken er den samme som v2's ankerproblem, bare flyttet opad: de to har de højeste grundvægte efter `MILESTONE` (34 og 32) og er to af de tre regler, der **fan-outer**, så de producerer flere kandidater pr. dag end nogen anden. **Det er ikke oplagt forkert.** "Dagens højeste" og "du var den eneste, der troede på det" ER de mest fortællende ting, der sker på en kampdag, og en jævn fordeling over otte regler ville betyde, at `SO_CLOSE` fyldte lige så meget som `DAY_TOP`. Spørgsmålet er, om 87 % er koncentration eller redaktion — og det er en produktvurdering, ikke en måling. Håndtaget er grundvægtene og ikke tærsklen (`A35`). 🔶 **`G143` (21. august 2026) leverede den anden ende af samme fordeling:** `STREAK_STATUS` har `competition_id = null`, så `_sd_mag`-joinet rammer ingen række, og den får KUN stime-bonussen som størrelsesbidrag — 48–60 mod `DAY_TOP`s 54–84. De tre tungeste regler slår den derfor **altid**, når de udløser for samme bruger samme dag (målt: 72 mod 60). Spørgsmålet er dermed ikke kun, om `DAY_TOP` og `CONTRARIAN` fylder for meget, men om størrelsesleddet er skævt fordelt: en global regel kan pr. konstruktion ikke være stor. | **Mindst ti kampdage** — samme udløser og samme opslag som `A35`, og de to tages sammen. Fire kampdage kan ikke skelne en regel, der udløser ofte, fra en, der tilfældigvis udløste. |
 | A42 | **Skal en rigtig browser have en plads i CI?** | Testopsætningen er **bevidst uden jsdom** — komponenter renderes med `renderToStaticMarkup`, og logikken lever i rene moduler, der kan efterprøves uden DOM. Valget er begrundet flere steder (`DECISIONS.md` 30. juli 2026, `features/onboarding-v1.md`) og har holdt: det er dét, der har drevet udskillelsen af `data/invites.js`, `data/createSources.js` og `onboarding.js`. **`Modal`-fokusfejlen (11. august 2026) er den første, det ikke rakte til.** Fejlen ramte hvert tekstfelt i hver dialog — man kunne skrive ét tegn, hvorefter fokus sprang til `dialog` — og den kan pr. definition ikke ses uden en browser, fordi den er en fokusflytning og ikke en returværdi. Den blev efterprøvet i en engangs-Chromium (playwright-core, ~40 linjer), som **ikke ligger i repoet**; beviset findes derfor kun i `CHANGELOG.md`, og en regression ville ikke blive fanget. **Prisen ved at sige ja** er en tung devDependency, en browser-download i CI og en ny slags test, som er langsommere og mere flaksende end resten — mod en kodebase med én forfatter og 500+ hurtige tests. **Prisen ved at sige nej** er, at fokus-, scroll- og layoutfejl kun opdages af brugere. Et mellemsvar findes: en enkelt smoke-test bag et separat script, som ikke kører ved hver PR. | **Næste gang en fejl kun kan ses i en rigtig browser.** Én forekomst er et tilfælde; to er en fejlklasse, og først da kan spørgsmålet besvares med data frem for med en formodning. |
 | A14 | **Skal hele kodebasen gennemformateres med Prettier?** | `npm run format` findes, men `format:check` er bevidst ikke et CI-trin. En fuld gennemformatering ville omskrive ~6.700 linjer ved `printWidth: 140` (~14.000 ved standard 80) på tværs af ~126 filer (86 uden testfiler; genmålt august 2026). Prisen er hele repoets `git blame`; gevinsten er konsistens i en kodebase med én forfatter og en i forvejen ensartet håndstil. Beslutningen er **udskudt, ikke truffet** — se [`DECISIONS.md`](./DECISIONS.md), 30. juli 2026. | Næste gang der alligevel røres bredt i frontenden — ellers aldrig. |
 | A23 | **Skal appen have en router?** | Navigation er i dag to `useState` i `MainApp.jsx` (`tab` + `screen`), og deep links læses ved boot og strippes straks via `history.replaceState` (`App.jsx:104`, `MainApp.jsx:215,239`). Følgen er ingen tilbage-knap, ingen browser-historik og ingen delbare URL'er til interne skærme — mærkbart for en PWA, hvor telefonens tilbage-gestus forventes at virke. Men det er et arkitekturvalg, ikke en fejl: afhængighedsfattigheden er bevidst (fire runtime-deps, ingen router, `docs/reviews/2026-08-app-review.md` §7), og en router omskriver hele navigations-tilstandsmaskinen inkl. begge deep-link-join-flows, som ingen test dækker. | Når tilbage-knappen enten koster brugere (kan aflæses i analytics) eller en feature kræver ægte delbare interne URL'er — `I12`s offentlige ligaside er den første, der ville. |
@@ -254,38 +258,21 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (enogfyrretyvende kørsel) — `A44` er afgjort, og stillingen åbner, hvor du selv står
+### 21. august 2026 (fireogfyrretyvende kørsel) — `G144` bygget: stimen kan sige, at den brød
 
-**Listen er 31 → 31:** `A44` er slettet, og indbakkens ene linje er blevet
-`G139` (Tier 5). Rækken spurgte, om den globale rating skal vise fulde
-visningsnavne til brugere, man ikke deler noget med. **Ejerens svar er nej til
-maskering:** navnene er selvvalgte, case-insensitivt unikke pseudonymer,
-politikken siger det allerede højt, og en titel, der hedder Månedens Champion,
-skal kunne navngive sin vinder.
+**Listen er 35 → 34.** Halvdelen af `STREAK_STATUS` var uskrevet: 💤-teksten
+kunne kun rammes ved et brud på SAMME kampdag som sidste hit. Rettelsen er én
+gren mere i `_sd_streak` (`or naeste_dag = p_day`); `alive` behøvede ingen
+ændring.
 
-**Aflæsningen fandt to ting, rækken ikke selv vidste.** Produktet har en
-ufravigelig regel i modsat retning — *en historie må kun nævne personer,
-modtageren deler konkurrence med* (juli 2026) — og de globale tavler er den
-bevidste undtagelse; spændingen er nu navngivet i `DECISIONS.md` frem for
-uskreven. Og fladerne er fire og ikke to: Rating-fanen (upagineret),
-Championshippets tre kort, hvert navn som tryk-flade til karriereprofilen, og
-Hjem, som henter hele tavlen for at vise ét tal. Den sidste blev `G139`.
+**To valg er målt frem for antaget**, og begge tal står i koden: `max(next_day)`
+koster 6 % på dagsmotoren mod `array_agg(… desc)[1]`'s 17 % og giver det samme;
+og `distinct on (user_id)` ændrer ikke ét kort i dag — mutationen slipper
+igennem — men holder den form, `_sd_scored`s join på brugeren alene forudsætter.
 
-**Det, der blev bygget, er ikke privatliv, men navigation.** Kortet viser top 5,
-så er du nr. 25, er fuld-stillings-modalen den eneste vej til din egen række — og
-den startede altid på side 1. Modalen åbner nu på **din egen side**, med
-genvejene "Top 20" og "Min placering" øverst. Siden regnes af rækkens **indeks**
-og ikke af `rank`: ved delt placering hen over sidegrænsen ville placeringen
-sende brugeren til den forrige side, hvor hendes egen række ikke står.
+**Læren:** *en tekst, ingen har set, er ikke leveret. `STREAK_STATUS` havde to
+grene i koden, én i virkeligheden, og forskellen kunne kun ses ved at KØRE
+motoren — ingen gennemlæsning fangede den på fjorten dage.*
 
-**Læren:** *et spørgsmål om, hvad en liste må VISE, er tit også et spørgsmål om,
-hvordan man finder sig selv i den — og det andet er billigere at svare på.*
-
-Ingen SQL, ingen migrering. 13 nye tests (1534 i alt); `DOCUMENTATION.md` §7 er
-rettet med, og skærmbillederne er uændrede.
-
-**Efterprøvet i en rigtig browser bagefter:** harnessen kørt med 45 spillere
-(midlertidigt og ikke committet), hvor modalen åbnede på side 2 med brugerens
-egen række markeret, og kortet fortsat viste fem rækker uden hende. Ejeren
-bekræftede samme grænse: kortet er top 5, og egen placering hører til bag
-klikket. Indbakken har fået den ene linje, eftersynet efterlod.
+🔴 **`#47 story_engine_v3.sql` skal gen-køres i Supabase.** Kun funktionen, ingen
+rækker, ingen frontend-ændring at merge sammen med.

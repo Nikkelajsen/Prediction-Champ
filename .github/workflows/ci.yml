@@ -797,6 +797,23 @@ jobs:
           psql -h localhost -U postgres -d daycardtest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d daycardtest -v ON_ERROR_STOP=1 -b -f sql/tests/day_card_coverage.sql
 
+      # Aflæsningen bag `A33`/`A35` (`sql/story_engine_v3_measure.sql`). Trinnet
+      # findes, fordi `A32` gjorde produktionsaflæsninger til ejerens arbejde:
+      # en forespørgsel, der fejler i SQL-editoren, koster en hel omgang af
+      # netop den ressource, beslutningen erklærede for dyr. Fixturens facit er
+      # regnet i hånden, og filen køres TO gange i samme session — anden kørsel
+      # er både påstanden om vis-bar-reglen og beviset for, at den er trygt
+      # gen-kørbar.
+      - name: Test af aflæsningen for Story Engine v3
+        env:
+          PGPASSWORD: postgres
+        working-directory: sql/tests
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database v3maaltest;'
+          psql -h localhost -U postgres -d v3maaltest -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d v3maaltest -v ON_ERROR_STOP=1 -b -f story_engine_v3_measure.sql
+
       # Læsepolicyen på competition_matches (G94). Kører mod det RIGTIGE skema,
       # og her er der ikke noget valg: en påstand om en RLS-policy kan kun
       # stilles, hvis de andre policies er der — `G91` betalte for den lære — og
