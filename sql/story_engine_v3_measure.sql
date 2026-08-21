@@ -80,6 +80,25 @@
 --   psql "$SUPABASE_DB_URL" -f sql/story_engine_v3_measure.sql
 --
 -- Handlingsgrænserne står i blok 3, og filen regner selv dommen ud.
+--
+-- ---------------------------------------------------------------------------
+-- KØRT FØRSTE GANG 21. AUGUST 2026 — HVAD DEN AFGJORDE, OG HVAD DEN IKKE KUNNE
+--
+-- 100 bruger-dage · 25 brugere · 4 kampdage · 50 vis-bare · 168 visninger.
+-- Tallene og det, de afgjorde, står i
+-- `docs/reviews/story-engine-v3-aflaesning-2026-08-21.md`.
+--
+-- **`A33` blev besvaret og er lukket.** Nævneren var det halve arbejde: rå gav
+-- aflæsningen `DAY_RESULT` 43 af 100, men 35 af dem er tips-påmindelser uden
+-- kandidater at vælge imellem. På den reelle valgmængde (65) er dagens facit
+-- 12,3 % mod v2's 44 %. **Læs derfor ALTID række 20 og 21 sammen, og række 61+
+-- mod række 14** — et forhold har to led, og det er nævneren, der overrasker.
+--
+-- **`A35` kunne IKKE besvares:** fire kampdage af de ti. Udløserens to halvdele
+-- løber ikke i samme takt — de to uger var gået for længst, mens kampdage med
+-- dagskort kommer ~2–3 om ugen. **Filen skal køres igen**, og den svarer da også
+-- på `A58` (er `DAY_TOP` + `CONTRARIAN` = 87 % af det sete den rigtige
+-- fordeling?), som kom af den første kørsel.
 -- ===========================================================================
 
 drop table if exists _maal;
@@ -216,11 +235,25 @@ insert into _maal values
        else 'uden for målet, men inden for handlingsgrænserne'
      end from _kort), '—')),
 
+  -- RÆKKE 21 BÆRER SAMME DOM SOM RÆKKE 20, og det er ikke pynt. Aflæsningen
+  -- 21. august 2026 gav 50,0 % på række 20 (midt i målet) og 76,9 % her (over
+  -- "for lav") — samme datasæt, to nævnere, to modsatte domme. Forskellen ER
+  -- tips-påmindelserne, og de skrumper, hvis brugerne bliver mere aktive. Uden
+  -- dommen på begge linjer skal den forskel opdages på ny hver gang.
   (21, '1 · A35 · tærsklen', 'samme, uden tips-påmindelser (motorens egen valgmængde)',
    coalesce((select round(100.0 * count(*) filter (where news_value >= 45)
                          / nullif(count(*), 0), 1)::text || ' %'
              from _kort where not no_tips), '—'),
-   ''),
+   coalesce((select case
+       when count(*) = 0 then 'intet grundlag'
+       when 100.0 * count(*) filter (where news_value >= 45) / count(*) > 70
+         then 'OVER 70 % ⇒ tærsklen er for lav, når brugeren FAKTISK tipper'
+       when 100.0 * count(*) filter (where news_value >= 45) / count(*) < 25
+         then 'UNDER 25 % ⇒ Hjem er stille igen'
+       when 100.0 * count(*) filter (where news_value >= 45) / count(*) between 40 and 60
+         then 'i målet 40–60 %'
+       else 'uden for målet, men inden for handlingsgrænserne'
+     end from _kort where not no_tips), '—')),
 
   (22, '1 · A35 · tærsklen', 'aktive brugere (mindst 5 kampdage — færre kan ikke måle en andel)',
    (select count(*)::text from (

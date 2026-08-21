@@ -117,8 +117,19 @@ fordelingen over VALGTE regler (motorens bredde), gentagelsen fra kampdag til
 kampdag (den oplevede bredde) og andelen af en brugers kort, der bærer hendes
 hyppigste regel (den samlede oplevelse over tid).
 
-## 6. Hvad dette dokument IKKE svarer på
+## 6. Efterprøvet mod produktionen samme dag
+
+Aflæsningen blev kørt 21. august 2026, og **hver forudsigelse i afsnit 2 og 3
+holdt**: `COLLECTIVE_MISS` stod på præcis 44 i alle fire forekomster,
+`DAY_RESULT` nåede aldrig over 28, `SO_CLOSE`s ene kort stod på gulvet 38, og
+`CONTRARIAN`s laveste var 36 — fan-out-gulvet for en modtager, der hverken er
+hovedpersonen eller en rival. Tærsklens svaghed blev også målt: hele spændet fra
+38 til 55 flytter andelen 16 point, fordi 75 af 100 kort ligger uden for enhver
+tærskels rækkevidde. Tallene og det, de afgjorde, står i
+[`story-engine-v3-aflaesning-2026-08-21.md`](./story-engine-v3-aflaesning-2026-08-21.md).
+
+## 7. Hvad dette dokument IKKE svarer på
 
 Alt det, der kræver rækker. Om reglerne udløser, hvor ofte, for hvem, og om
 nogen har set kortene. Scorerummet siger, hvad motoren KAN; kun produktionen
-siger, hvad den GØR. Bestillingen ligger klar, og den er ét paste.
+siger, hvad den GØR — og den blev spurgt samme dag; se afsnit 6.

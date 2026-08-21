@@ -9,6 +9,69 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 (anden kørsel) — `A33` er besvaret: variationen er der, men to regler bærer oplevelsen
+
+**Ejeren kørte aflæsningen samme dag, den blev bestilt**, og svaret ligger i
+[`reviews/story-engine-v3-aflaesning-2026-08-21.md`](./reviews/story-engine-v3-aflaesning-2026-08-21.md).
+Grundlag: 100 bruger-dage, 25 brugere, 4 kampdage, 50 vis-bare kort, 168
+visninger fordelt på 12 brugere.
+
+**Nævneren var det halve arbejde.** Rå gav aflæsningen `DAY_RESULT` som vinder på
+43 af 100 — mistænkeligt tæt på v2's 44 %, som var hele rækkens anledning. Men
+**35 af de 43 er tips-påmindelser**: brugeren havde ikke ét scoret tip den dag,
+så der fandtes ingen kandidater at vælge imellem. En tips-påmindelse er ikke
+motoren, der vælger dagens facit; den er motoren, der ikke har noget at vælge.
+På den reelle valgmængde — 65 bruger-dage — er `DAY_RESULT` **12,3 %**.
+
+**Det er præcis, hvad v3 satte sig for**, og `A33` er dermed besvaret med nej:
+variationen er ikke tyndere, end regelantallet lover. Syv af otte dagsregler har
+udløst. `DAY_TOP` 43,1 % · `CONTRARIAN` 26,2 % · `DAY_RESULT` 12,3 % ·
+`DUEL` 7,7 % · `COLLECTIVE_MISS` 6,2 % · `MILESTONE` 3,1 % · `SO_CLOSE` 1,5 %.
+
+**Men spejlbilledet holder.** Af de 168 visninger er `DAY_TOP` og `CONTRARIAN`
+tilsammen **86,9 %**. Bekymringen var "dagens facit hver anden gang";
+virkeligheden er "dagens højeste eller kontrarianen næsten altid" — og mekanikken
+er den samme som i v2: de to har de højeste grundvægte efter `MILESTONE` (34 og
+32) og er to af de tre regler, der fan-outer. Ankerproblemet er ikke fjernet, det
+er flyttet opad. Ført videre som `A58`, fordi det er en produktvurdering og ikke
+en måling: "dagens højeste" og "du var den eneste" ER de mest fortællende ting,
+der sker på en kampdag.
+
+**`A35` kunne ikke besvares — fire kampdage af de ti**, rækken kræver.
+Udløserens to halvdele løber ikke i samme takt: de to uger var gået, men
+kampdage med dagskort kommer ~2–3 om ugen, så ti er 3–4 uger ude. Rækkens
+`Afgøres`-felt er rettet til at sige det.
+
+**Det, aflæsningen alligevel afgjorde om tærsklen:** den er et svagt instrument,
+og nu er det målt. Hele spændet fra 38 til 55 flytter andelen **16 point**
+(56,0 % → 40,0 %), fordi 75 af 100 kort ligger uden for enhver tærskels
+rækkevidde — 35 på nul og 40 på 54 eller derover. **Og den nuværende andel ser
+kun rigtig ud på grund af nævneren:** 50,0 % af alle bruger-dage er midt i målet
+40–60 %, men 76,9 % af motorens egen valgmængde er over rækkens eget "over 70 %
+⇒ for lav". Forskellen ER de 35 tips-påmindelser. En tærskel, der ser rigtig ud,
+fordi en tredjedel af bruger-dagene er tomme, er ikke kalibreret — den er heldig.
+
+**Scorerum-aflæsningen fra samme morgen holdt punkt for punkt.**
+`COLLECTIVE_MISS` stod på præcis 44 i alle fire forekomster — det bevidste ene
+point under tærsklen, målt i netop det tilfælde, reglen er skrevet til.
+`DAY_RESULT` nåede aldrig over 28 og altså ikke engang sit eget loft på 40:
+dens `over_pts` var nul hver gang, så fald-tilbagen rammer dem, dagen ikke gik
+godt for. `SO_CLOSE` lå på gulvet 38, `CONTRARIAN`s laveste var 36 (fan-out til
+en fremmed), og `MILESTONE` stod fast på 120.
+
+**To fund, ingen havde bedt om.** Halvdelen af alle v3-dagskort — 50 af 100 —
+havde et vindue på nul minutter: et kort med en større `day_key` fandtes for
+samme bruger allerede i det øjeblik, de blev skrevet, så de kunne pr.
+konstruktion ikke nås (`G142`). Og `STREAK_STATUS` har aldrig udløst én eneste
+gang (`G143`) — samme spørgsmålsform som `G72`.
+
+Backloggen er 31 → 35: `A33` slettet, indbakkens to linjer blevet `G140` og
+`G141`, og aflæsningen efterlod `G142`, `G143` og `A58`. Tier 1 og Tier 2 er
+fyldt igen af leverancen selv. Ingen kode, ingen SQL, ingen migrering.
+Se [`DECISIONS.md`](./DECISIONS.md).
+
+---
+
 21. august 2026 — `A33` og `A35`: scorerummet regnet ud, aflæsningen bestilt
 
 **De to backlog-rækker er ét spørgsmål, ikke to.** `A35` spørger, om

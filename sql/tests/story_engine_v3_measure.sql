@@ -281,4 +281,73 @@ begin
   end if;
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- Påstand 9 · to nævnere, to modsatte domme
+-- ---------------------------------------------------------------------------
+-- DEN VIGTIGSTE PÅSTAND I FILEN, og den kom af den første rigtige kørsel
+-- (21. august 2026). Aflæsningen gav 50,0 % på række 20 — midt i målet 40–60 %
+-- — og 76,9 % på række 21, altså over rækkens eget "over 70 % ⇒ tærsklen er for
+-- lav". Samme datasæt, to nævnere, to modsatte domme, og hele forskellen er de
+-- bruger-dage, hvor brugeren ikke havde ét scoret tip.
+--
+-- Uden denne påstand er de to linjer kun testet på en fixture UDEN
+-- tips-påmindelser, hvor de pr. konstruktion er ens — altså netop ikke testet.
+--
+-- Ti brugere, ti kampdage hver: seks kort over tærsklen og fire
+-- tips-påmindelser. Dagene ligger uden for de andres, så ingen af påstandene
+-- ovenfor kan blive ramt af dem.
+insert into auth.users (id, email)
+select ('00000000-0000-4000-8000-0000000000' || lpad(u::text, 2, '0'))::uuid,
+       'u' || u || '@test.local'
+from generate_series(6, 15) u;
+insert into public.profiles (id, display_name)
+select ('00000000-0000-4000-8000-0000000000' || lpad(u::text, 2, '0'))::uuid, 'Bruger ' || u
+from generate_series(6, 15) u;
+
+insert into public.stories
+  (round_key, user_id, rule, priority, league_size, news_value,
+   payload, headline, body, period, day_key, created_at)
+select
+  to_char(current_date - 41, 'YYYY-MM-DD'),
+  ('00000000-0000-4000-8000-0000000000' || lpad(u::text, 2, '0'))::uuid,
+  case when d < 6 then 'CONTRARIAN' else 'DAY_RESULT' end,
+  case when d < 6 then 120 else 180 end,
+  8,
+  case when d < 6 then 58 else 0 end,
+  case when d < 6
+       then jsonb_build_object('winner_rule', 'CONTRARIAN', 'runner_up_value', 0, 'third', false)
+       else jsonb_build_object('winner_rule', 'DAY_RESULT', 'runner_up_value', 0, 'third', false,
+                               'variant', 'no_tips') end,
+  'overskrift', 'brødtekst', 'day', (current_date - 40 + d),
+  (current_date - 40 + d)::timestamptz + interval '22 hours'
+from generate_series(6, 15) u
+cross join generate_series(0, 9) d;
+
+\ir ../story_engine_v3_measure.sql
+
+do $$
+begin
+  -- 154 = 54 fra ovenstående + 100 nye. 40 af dem er tips-påmindelser.
+  if pg_temp.v(13) <> '154' or pg_temp.v(14) <> '40' then
+    raise exception 'tredje kørsel: forventede 154 bruger-dage / 40 tips-påmindelser, fik %/%',
+      pg_temp.v(13), pg_temp.v(14);
+  end if;
+  -- 87 af 154 = 56,5 % — i målet.
+  if pg_temp.v(20) <> '56.5 %' or pg_temp.d(20) <> 'i målet 40–60 % ⇒ 45 holder' then
+    raise exception 'række 20 skulle være 56,5 %% og "i målet", fik %/%', pg_temp.v(20), pg_temp.d(20);
+  end if;
+  -- 87 af 114 = 76,3 % — den MODSATTE dom, på samme datasæt.
+  if pg_temp.v(21) <> '76.3 %' then
+    raise exception 'række 21 skulle være 76,3 %%, fik %', pg_temp.v(21);
+  end if;
+  if pg_temp.d(21) <> 'OVER 70 % ⇒ tærsklen er for lav, når brugeren FAKTISK tipper' then
+    raise exception 'række 21 skulle dømme "for lav" dér, hvor række 20 siger "i målet" — fik %',
+      pg_temp.d(21);
+  end if;
+  -- Og fordelingens nul-bånd skal kende de fyrre igen.
+  if pg_temp.v(40) not like '40 · %' then
+    raise exception 'fordelingens 0-bånd skulle rumme de 40 tips-påmindelser, fik %', pg_temp.v(40);
+  end if;
+end $$;
+
 select 'story_engine_v3_measure: alle påstande holder' as resultat;

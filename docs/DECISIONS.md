@@ -15,6 +15,53 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `A33` besvaret: variationen ER der, men to regler bærer oplevelsen
+
+**Svaret:** nej, dagsmotorens variation er ikke tyndere, end regelantallet
+lover. Rækken lukkes som besvaret — ikke af en produktbeslutning, men af en
+aflæsning ([`reviews/story-engine-v3-aflaesning-2026-08-21.md`](./reviews/story-engine-v3-aflaesning-2026-08-21.md)).
+Udløseren var opfyldt: 50 vis-bare dagskort og 168 visninger fordelt på 12
+brugere.
+
+**Nævneren var det halve arbejde.** Aflæsningen gav 100 bruger-dage, hvoraf
+`DAY_RESULT` vandt 43 — mistænkeligt tæt på v2's 44 %, som var hele rækkens
+anledning. Men **35 af de 43 er tips-påmindelser**: brugeren havde ikke ét
+scoret tip den dag, så der fandtes ingen kandidater at vælge imellem. En
+tips-påmindelse er ikke motoren, der vælger dagens facit; den er motoren, der
+ikke har noget at vælge. Målt på den reelle valgmængde — 65 bruger-dage — er
+`DAY_RESULT` **12,3 %**.
+
+Det er præcis, hvad v3 satte sig for. `DAY_RESULT`s 44 % i v2 var en
+konstruktionsfølge (laveste prioritet, udløste altid), og v3 fjernede årsagen
+ved at give den grundvægt 8. **Syv af otte dagsregler har udløst**, så bredden er
+reel og ikke en tabel-effekt. Rækkens formodning — *"en motor markedsført på
+bredde, der leverer det samme kort hver anden gang"* — holder ikke.
+
+**Men spejlbilledet gør.** Af de 168 visninger er `DAY_TOP` og `CONTRARIAN`
+tilsammen **86,9 %**. Bekymringen var "dagens facit hver anden gang"; virkeligheden
+er "dagens højeste eller kontrarianen næsten altid". Og mekanikken bag er den
+samme som i v2: de to har de højeste grundvægte efter `MILESTONE` (34 og 32) og
+er to af de tre regler, der fan-outer, så de producerer flere kandidater pr. dag
+end nogen anden. **Ankerproblemet er ikke fjernet, det er flyttet opad.**
+
+**Hvorfor det bliver et nyt spørgsmål og ikke en genåbning af dette.** `A33`
+spurgte, om bredden var en illusion. Det er den ikke — motoren bruger sine
+regler. Det nye spørgsmål er, om den rigtige fordeling er jævn: to regler, der
+fylder 87 %, kan lige så godt være det rigtige svar, fordi "dagens højeste" og
+"du var den eneste" ER de mest fortællende ting, der sker på en kampdag. Det er
+en produktvurdering, ikke en måling, og den kræver flere kampdage. `A58`.
+
+**Prisen for at lukke nu, med fire kampdage.** Fordelingen kan flytte sig. Det,
+der ikke kan flytte sig, er den strukturelle påstand, rækken blev skrevet på:
+`DAY_RESULT` kan pr. konstruktion ikke vinde en dag, hvor noget skete, fordi dens
+loft (8 + 12 + 20 = 40) ligger under tærsklen. Den påstand er nu efterprøvet — 43
+af 43 `DAY_RESULT`-kort lå på 28 eller derunder — og den er uafhængig af
+stikprøvens størrelse. Rækken kan derfor lukkes på det, den spurgte om.
+
+**To fund, rækken ikke bad om, blev ført videre frem for skrevet ind her:**
+halvdelen af alle v3-dagskort havde et vindue på nul minutter og kunne aldrig nås
+(`G142`), og `STREAK_STATUS` har aldrig udløst én eneste gang (`G143`).
+
 ## 21. august 2026 — `A44` afgjort: tavlen viser fortsat fulde visningsnavne, og modalen åbner, hvor du selv står
 
 **Beslutning:** den globale rating og Championship bliver ved med at vise fulde
