@@ -6,6 +6,7 @@ import { db } from "../supabase.js";
 import { assignRanks } from "../standings.js";
 import { TIEBREAK_ORDER, TIEBREAK_ORDER_ROUND } from "./_shared.js";
 import { selectIn } from "./chunked.js";
+import { selectAll } from "./paged.js";
 
 // ---------- lukkede konti på de GLOBALE lister ----------
 //
@@ -39,7 +40,11 @@ function profileIndex(profiles) {
 async function loadRatingBoard(token) {
   // user_id.asc er den stabile sidste nøgle — ratings er numeric, så to ens tal er
   // sjældne, men når de sker, skal ranglisten ikke bytte om mellem to hentninger.
-  const ratings = await db.select(token, "ratings", `scope=eq.ALL&select=user_id,rating,rounds_played,provisional&order=rating.desc,user_id.asc`);
+  // Den er samtidig den entydige nøgle, `selectAll` kræver: ranglisten vokser
+  // med brugerbasen, og et `order=` gør ikke en afkortning ufarlig — det flytter
+  // den bare ned i BUNDEN, hvor en spiller under nr. 1000 ikke kan finde sig
+  // selv (`G145`).
+  const ratings = await selectAll(token, "ratings", `scope=eq.ALL&select=user_id,rating,rounds_played,provisional&order=rating.desc,user_id.asc`);
   if (!ratings.length) return [];
   const ids = ratings.map((r) => r.user_id);
   const profiles = await selectIn(token, "profiles", "id", ids, `&select=${PROFILE_SELECT}`);
@@ -85,8 +90,13 @@ async function loadRatingBoard(token) {
 // gyldige tilstand som før, ikke en fejl.
 async function loadRatingSnapshot(token, userId) {
   const [mine, lukkede] = await Promise.all([
-    db.select(token, "ratings", `user_id=eq.${userId}&scope=eq.ALL&select=rating,provisional`),
-    db.select(token, "profiles", `anonymized_at=not.is.null&select=id`),
+    // Én bruger, én række — et bevidst afgrænset opslag, og `limit=1` siger det
+    // også til den, der læser koden (`G145`).
+    db.select(token, "ratings", `user_id=eq.${userId}&scope=eq.ALL&select=rating,provisional&limit=1`),
+    // Lukkede konti er derimod en liste uden et loft: den vokser, så længe
+    // appen findes, og den skal være HEL — en manglende lukket konto ville
+    // lægge en plads til både min placering og antallet.
+    selectAll(token, "profiles", `anonymized_at=not.is.null&select=id&order=id.asc`),
   ]);
   const me = mine?.[0];
   if (!me) return { none: true };
@@ -120,7 +130,7 @@ async function loadRatingSnapshot(token, userId) {
 async function loadRatingMap(token, userIds = null) {
   const ratings = userIds
     ? await selectIn(token, "ratings", "user_id", userIds, `&scope=eq.ALL&select=user_id,rating,provisional`)
-    : await db.select(token, "ratings", `scope=eq.ALL&select=user_id,rating,provisional`);
+    : await selectAll(token, "ratings", `scope=eq.ALL&select=user_id,rating,provisional&order=user_id.asc`);
   return new Map(ratings.map((r) => [r.user_id, { rating: Math.round(Number(r.rating)), provisional: r.provisional }]));
 }
 
@@ -137,8 +147,8 @@ async function loadRatingMap(token, userIds = null) {
 // en formkurve pr. bruger på hele ranglisten.
 async function loadRatingHistory(token, userId = null) {
   try {
-    const rows = await db.select(token, "rating_history",
-      `scope=eq.ALL${userId ? `&user_id=eq.${userId}` : ""}&select=user_id,round_key,delta&order=round_key.asc`);
+    const rows = await selectAll(token, "rating_history",
+      `scope=eq.ALL${userId ? `&user_id=eq.${userId}` : ""}&select=user_id,round_key,delta&order=round_key.asc,user_id.asc`);
     if (!rows || !rows.length) return new Map();
     const byUser = {};
     for (const r of rows) { (byUser[r.user_id] ||= []).push(r); }
@@ -185,7 +195,7 @@ function standingsRow(r, nameById) {
 const ALL = "ALL";
 
 async function loadMonthlyBoard(token, month, scope = ALL) {
-  const rows = await db.select(token, "monthly_standings",
+  const rows = await selectAll(token, "monthly_standings",
     `month=eq.${month}&scope=eq.${scope}&select=user_id,total_points,matches,exact_count,outcome_count,round_wins,avg_goal_error&order=${TIEBREAK_ORDER}`);
   if (!rows.length) return [];
   const ids = rows.map((r) => r.user_id);
@@ -195,7 +205,11 @@ async function loadMonthlyBoard(token, month, scope = ALL) {
 }
 
 async function loadMonthsAvailable(token, scope = ALL) {
-  const rows = await db.select(token, "monthly_standings", `scope=eq.${scope}&select=month`);
+  // Én række pr. bruger PR. MÅNED, og svaret bruges kun til et `Set`. Læsningen
+  // er derfor både den mest udsatte for rækkeloftet og den mest spildte — kuren
+  // er et `distinct`-view og står som `G146` i backloggen. Indtil da: sidevis,
+  // altså korrekt men ikke billigt.
+  const rows = await selectAll(token, "monthly_standings", `scope=eq.${scope}&select=month&order=month.desc,user_id.asc`);
   return [...new Set(rows.map((r) => r.month))].sort().reverse();
 }
 
@@ -213,24 +227,28 @@ async function loadMonthsAvailable(token, scope = ALL) {
 // loadStarterTournaments i src/lib/onboarding.js.
 async function scopeSeasonIds(token, scope = ALL) {
   const filter = scope === ALL ? `is_official=is.true` : `id=eq.${scope}`;
-  const leagues = await db.select(token, "leagues", `${filter}&select=id`);
+  const leagues = await selectAll(token, "leagues", `${filter}&select=id&order=id.asc`);
   if (!leagues.length) return [];
-  const seasons = await db.select(token, "seasons", `league_id=in.(${leagues.map((l) => l.id).join(",")})&select=id`);
+  // Sæsonerne vokser med hvert år, appen findes: turneringer × sæsoner.
+  const seasons = await selectAll(token, "seasons", `league_id=in.(${leagues.map((l) => l.id).join(",")})&select=id&order=id.asc`);
   return seasons.map((s) => s.id);
 }
 async function loadRoundsAvailable(token, scope = ALL) {
   const seasonIds = await scopeSeasonIds(token, scope);
   if (!seasonIds.length) return [];
-  const rows = await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&home_score=not.is.null&select=round_key`);
+  // Én række pr. SPILLET KAMP — den længste af alle læsningerne her, og også
+  // den, der kun skal bruges til et `Set` (`G146`). `id.asc` er den entydige
+  // nøgle; rækkefølgen af selve runderne laves i klienten lige nedenfor.
+  const rows = await selectAll(token, "matches", `season_id=in.(${seasonIds.join(",")})&home_score=not.is.null&select=round_key&order=id.asc`);
   return [...new Set(rows.map((r) => r.round_key))].sort().reverse();
 }
 async function loadRoundBoard(token, roundKey, scope = ALL) {
   const seasonIds = await scopeSeasonIds(token, scope);
   const ms = seasonIds.length
-    ? await db.select(token, "matches", `season_id=in.(${seasonIds.join(",")})&round_key=eq.${roundKey}&select=id,home_score,away_score`)
+    ? await selectAll(token, "matches", `season_id=in.(${seasonIds.join(",")})&round_key=eq.${roundKey}&select=id,home_score,away_score&order=id.asc`)
     : [];
   if (!ms.length) return { rows: [], totalMatches: 0, playedMatches: 0, isComplete: false };
-  const board = await db.select(token, "round_standings",
+  const board = await selectAll(token, "round_standings",
     `round_key=eq.${roundKey}&scope=eq.${scope}&select=user_id,total_points,matches,exact_count,outcome_count,avg_goal_error&order=${TIEBREAK_ORDER_ROUND}`);
   const ids = board.map((r) => r.user_id);
   const profiles = await selectIn(token, "profiles", "id", ids, `&select=${PROFILE_SELECT}`);
@@ -249,9 +267,9 @@ async function loadSeasonBoard(token, leagueId) {
   const seasons = await db.select(token, "seasons", `league_id=eq.${leagueId}&select=id,name,start_date&order=start_date.desc&limit=1`);
   if (!seasons.length) return null;
   const season = seasons[0];
-  const ms = await db.select(token, "matches", `season_id=eq.${season.id}&select=id,home_score,away_score`);
+  const ms = await selectAll(token, "matches", `season_id=eq.${season.id}&select=id,home_score,away_score&order=id.asc`);
   if (!ms.length) return { season, rows: [], totalMatches: 0, playedMatches: 0, isComplete: false };
-  const board = await db.select(token, "season_standings",
+  const board = await selectAll(token, "season_standings",
     `season_id=eq.${season.id}&select=user_id,total_points,matches,exact_count,outcome_count,round_wins,avg_goal_error&order=${TIEBREAK_ORDER}`);
   const ids = board.map((r) => r.user_id);
   const profiles = await selectIn(token, "profiles", "id", ids, `&select=${PROFILE_SELECT}`);

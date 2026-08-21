@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A59` · `B42` · `G146` · `I26`.**
+**Næste ledige: `A59` · `B42` · `G148` · `I26`.**
 *(`B40` er brugt 18. august 2026 til Indstillinger-skærmen med push-kontakten —
 leveret direkte uden en backlog-række; se `CHANGELOG.md`/`DECISIONS.md`. `B41`
 er brugt 21. august 2026 til Tier 1-bestillingen af `#73`.)*
@@ -60,7 +60,7 @@ Tom.
 
 ## Prioriteret rækkefølge
 
-Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -116,11 +116,13 @@ Tomt.
 
 | # | Hvad | Note |
 |---|---|---|
-| `G145` | De globale lister har intet værn mod PostgREST' tavse loft på 1000 rækker | `G139` rettede Hjem og konkurrence-boardet, men fandt klassen: **otte `db.select` i `data/standings.js` alene læser upagineret lister, der vokser med brugere, runder eller kampe.** Loftet er tavst — svaret bliver bare kortere — så skaden er en skærm, der viser for lidt, uden en fejl noget sted. **De ordnede er de mildeste:** `loadRatingBoard`, `loadMonthlyBoard`, `loadRoundBoard` og `loadSeasonBoard` sender `order=`, så det er BUNDEN, der falder væk; champion og top er sikre, men en spiller under nr. 1000 kan ikke finde sig selv. **De uordnede er de skarpe:** `loadMonthsAvailable` (én række pr. bruger pr. måned), `loadRoundsAvailable` (**én række pr. spillet kamp**) og `loadRatingMap` uden en liste taber VILKÅRLIGE rækker — det ses som runder og måneder, der mangler i vælgerne, og som ratingtal, der mangler ved navne. `loadRatingHistory` uden et bruger-id er den nærmeste af alle: én række pr. bruger PR. RUNDE, sorteret `round_key.asc`, så afkortningen rammer netop de SENESTE runder — altså dem, formkurven på Rating-fanen er lavet af. **Ingen af dem er MÅLT:** om nogen allerede er over loftet, kan kun aflæses i produktion (`A32`), og `loadRoundsAvailable` er den, der skal spørges først — `select count(*) from matches m join seasons s on s.id = m.season_id join leagues l on l.id = s.league_id where l.is_official and m.home_score is not null`. Kuren findes allerede i repoet i to former: `db.count()` (`G106`, `G139`), når det er et TAL, der skal bruges, og et `distinct`-view eller en RPC, når det er en LISTE — `loadMonthsAvailable` og `loadRoundsAvailable` henter i dag tusindvis af rækker for at lave et `Set` i klienten. Fundet ved `G139` 21. august 2026 |
+| `G147` | Samme tavse rækkeloft uden for `data/standings.js` | `G145` lukkede de globale lister og efterlod klassen ét sted til: **`loadStarterTournaments` i `src/lib/onboarding.js` afgør, om en turnering har kampe tilbage at tippe, ved at hente ÉN RÆKKE PR. USPILLET KAMP** (`season_id=in.(…)&home_score=is.null&select=season_id`) og lave et `Set`. Ved sæsonstart med fem officielle turneringer er det ~1.900 rækker — over loftet — og udfaldet er `G106`s "· 0 kampe" en gang til, bare i guiden: en turnering, hvis kampe falder uden for de første 1000, præsenteres som en, man ikke kan tippe. **Det er onboarding, altså den skærm, hvor en fejl koster mest.** Kuren er ikke `selectAll` her, men `db.count()` pr. sæson (`G106`s regel: er antallet af kald BUNDET — én pr. turnering — er optællingen billigst) eller et view med et antal pr. sæson. Samme fil har et sæson-opslag uden loft to linjer over. **De øvrige forekomster er svagere og skal vurderes hver for sig**, ikke sweepes: `data/competitions.js` og `data/createSources.js` læser kampe pr. sæson (~380, men flere turneringer i ét kald), `MainApp.jsx` henter alle `leagues`, og `data/groups.js` læser medlems- og konkurrencelister pr. liga. Fundet ved `G145` 21. august 2026 |
 
 ### Tier 5 — Robusthed og vedligehold
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G146` | De to Championship-vælgere henter tusindvis af rækker for at bygge et `Set` med tredive | `G145` gjorde dem KORREKTE — de læses sidevis og taber ikke længere runder eller måneder — men ikke billige. `loadRoundsAvailable` henter én række pr. SPILLET KAMP for at finde de distinkte `round_key`, og `loadMonthsAvailable` én række pr. bruger PR. MÅNED for at finde de distinkte `month`. Begge svarer med en liste på størrelse med en dropdown. **Prisen betales hver gang Championship-fanen åbnes**, den vokser med kampe og brugere, og den tælles i `A34`s egress-budget. Kuren står allerede i `G106`s regel: vokser antallet med noget, brugeren kan forøge, hører aggregeringen hjemme i databasen — her et `distinct`-view (som `#62 group_counts.sql`) eller en RPC. **Første skridt er dog en aflæsning og ikke en migrering** (`A32`, ejerens): `select count(*) from matches m join seasons s on s.id = m.season_id join leagues l on l.id = s.league_id where l.is_official and m.home_score is not null` — tallet siger både, hvor stort spildet er i dag, og om listerne allerede HAR været over de 1000 rækker, altså om nogen har set en vælger uden alle sine runder. **Et view er en migrering, der skal køres manuelt i Supabase**, og dermed et to-trins-udrul (`docs/UDRULNING-A43.md`s mønster): rækken skal tages, når der er plads til begge trin. Fundet ved `G145` 21. august 2026 |
 
 ### Tier 6 — Venter på en udløser
 
@@ -253,31 +255,24 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (seksogfyrretyvende kørsel) — Tier 5 kørt tom: `G140` og `G139`
+### 21. august 2026 (syvogfyrretyvende kørsel) — `G145`: de globale lister læses sidevis
 
-**Listen er 32 → 30. Tier 1–5 er alle tomme.**
+**Listen er 31 → 32.** `G145` er leveret; to rækker, den blotlagde, er skrevet
+ned frem for taget med (`G146` i Tier 5, `G147` i Tier 4). Tier 1, 2, 3 og 5 er
+tomme på nær den ene nye række i Tier 5.
 
-**`G140`:** de tre "vis mere"-flader var `<p onClick>` — hverken tastatur,
-skærmlæser eller skærmbilled-harnessen kunne nå dem. `Auth.jsx` havde svaret
-liggende i sin egen lokale kopi siden `G28`; den er nu `TekstLink` i
-`ui/components.jsx`, og alle fire steder bruger den.
+**`G145`:** otte upaginerede `db.select` i `data/standings.js` kunne tavst vise
+for lidt — Supabase klipper ved `db-max-rows` og siger det ikke. Alle læsninger,
+hvis længde vokser, går nu gennem `selectAll()` i nye `data/paged.js`; `db.select`
+står kun tilbage med et bevidst `limit=`, og det er en vagt, der læser filens
+kildetekst, ikke en aftale.
 
-**`G139`:** Hjem hentede hele den globale ratingtabel for at vise fire tal.
-Kortet slår nu sin egen række op og lader databasen TÆLLE resten
-(`count=exact`), og formkurven hentes kun for én bruger. `BoardScreen` henter kun
-konkurrencens deltagere. To ting skulle med, og begge er lette at tabe: delt
-placering afgøres på den AFRUNDEDE rating (`gte.<min + 0.5>`, ikke `gt.<rå>`), og
-lukkede konti tæller ikke.
+**Læren, og den er `G140`s en gang til:** *svaret lå allerede i repoet.*
+`sbAll()` i `api/_shared.js` er skrevet mod den samme fælde på jobbenes side
+(`G51`), og den første udgave af rettelsen her antog et loft, `sbAll`s eget hoved
+forklarer, hvorfor man ikke må antage: der stoppes ved en TOM side og aldrig ved
+en kort, fordi et projekt med et lavere `db-max-rows` ville gøre hver fuld side
+til en "kort" side. Reglerne er nu ordret de samme på begge sider af `fetch`.
 
-**Læren:** *en flytning af en udregning fra klienten til databasen har præcis én
-farlig fejlmåde — et tal, der er næsten rigtigt. Derfor er vagten en
-ækvivalenstest mod ranglisten og ikke en liste af påstande; og skærmbilledet af
-Hjem er byte-identisk, hvilket er den samme påstand kørt gennem hele appen.*
+**Indbakken var tom ved kørslens begyndelse og er det stadig.**
 
-**Indbakken er ryddet i samme ombæring: én linje blev `G145` i Tier 4** —
-listen er derfor 30 → 31. `G139` rettede to kald og blotlagde en klasse: otte
-upaginerede `db.select` i den samme fil, mod lister der vokser. De uordnede af dem
-(`loadRoundsAvailable`, `loadMonthsAvailable`) taber vilkårlige rækker, og
-`loadRatingHistory` uden bruger-id taber de nyeste runder, fordi den sorterer
-stigende. Ingen af dem er målt — det kræver produktion (`A32`), og forespørgslen
-står i rækken.

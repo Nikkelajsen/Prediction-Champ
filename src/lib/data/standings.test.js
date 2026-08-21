@@ -31,7 +31,14 @@ import { loadRatingBoard, loadRatingSnapshot, loadRatingMap, loadRatingHistory }
 // Den er med vilje dum: den kender `eq.`, `in.(…)`, `gte.` og `not.is.null` og
 // intet andet, så et kald, der begynder at bruge noget femte, fejler synligt
 // frem for at få et forkert svar.
+//
+// **Den kan ét træk mere siden `G145`: det tavse rækkeloft.** Et `db.select`
+// svarer aldrig med mere end `LOFT` rækker og siger ikke, at der var mere —
+// præcis som Supabase. `db.count` tæller derimod hele mængden, som
+// `Content-Range` gør. Uden det træk kunne fixturen ikke skelne en kur fra en
+// fejl: begge dele ville se rigtige ud på fem rækker.
 // ---------------------------------------------------------------------------
+const LOFT = 1000;
 function parseFiltre(query) {
   const ud = {};
   for (const del of query.split("&").filter(Boolean)) {
@@ -52,22 +59,47 @@ function passer(række, kolonne, udtryk) {
   throw new Error(`attrappen kender ikke filteret "${kolonne}=${udtryk}"`);
 }
 
-function installér({ ratings, profiles }) {
-  const tabeller = { ratings, profiles, rating_history: [] };
+// `order=` som PostgREST forstår det: `kolonne.asc,kolonne.desc,…`. Sorteringen
+// skal være TOTAL og ikke omtrentlig — sidevis læsning hviler på, at to
+// forespørgsler ser den samme rækkefølge.
+function sortér(rows, order) {
+  if (!order) return rows;
+  const nøgler = order.split(",").map((d) => {
+    const [kolonne, retning = "asc"] = d.split(".");
+    return { kolonne, tegn: retning === "desc" ? -1 : 1 };
+  });
+  return [...rows].sort((a, b) => {
+    for (const { kolonne, tegn } of nøgler) {
+      const x = a[kolonne], y = b[kolonne];
+      if (x === y) continue;
+      const tal = Number(x), tal2 = Number(y);
+      const forskel = Number.isFinite(tal) && Number.isFinite(tal2) ? tal - tal2 : (x < y ? -1 : 1);
+      if (forskel) return tegn * (forskel < 0 ? -1 : 1);
+    }
+    return 0;
+  });
+}
+
+function installér({ ratings, profiles, rating_history = [] }) {
+  const tabeller = { ratings, profiles, rating_history };
   const filtrér = (tabel, query) => {
     const f = parseFiltre(query);
     let rows = tabeller[tabel];
     if (!rows) throw new Error(`attrappen kender ikke tabellen "${tabel}"`);
     for (const [kolonne, udtryk] of Object.entries(f)) {
-      if (kolonne === "select" || kolonne === "order" || kolonne === "limit") continue;
+      if (kolonne === "select" || kolonne === "order" || kolonne === "limit" || kolonne === "offset") continue;
       rows = rows.filter((r) => passer(r, kolonne, udtryk));
     }
-    if (f.order === "rating.desc,user_id.asc") {
-      rows = [...rows].sort((a, b) => Number(b.rating) - Number(a.rating) || (a.user_id < b.user_id ? -1 : 1));
-    }
-    return rows;
+    return sortér(rows, f.order);
   };
-  db.select.mockImplementation(async (_t, tabel, query) => filtrér(tabel, query).map((r) => ({ ...r })));
+  // Loftet ligger her og ikke i `filtrér`, fordi det er en egenskab ved SVARET
+  // og ikke ved forespørgslen: `db.count` ser hele mængden.
+  db.select.mockImplementation(async (_t, tabel, query) => {
+    const f = parseFiltre(query);
+    const fra = Number(f.offset || 0);
+    const antal = Math.min(Number(f.limit || LOFT), LOFT);
+    return filtrér(tabel, query).slice(fra, fra + antal).map((r) => ({ ...r }));
+  });
   db.count.mockImplementation(async (_t, tabel, query) => filtrér(tabel, query).length);
 }
 
@@ -184,5 +216,118 @@ describe("loadRatingHistory (G139)", () => {
   it("henter alle brugere uden et id — Rating-fanen viser en formkurve pr. række", async () => {
     await loadRatingHistory("t");
     expect(db.select.mock.calls[0][2]).not.toContain("user_id=eq.");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// `G145` — det tavse rækkeloft
+//
+// `G139` flyttede Hjems fire tal ned i databasen, men LISTERNE blev stående:
+// ranglisten, ratingkortet og formkurven læste stadig hele tabeller i ét
+// `db.select`. Loftet på 1000 rækker er tavst — svaret bliver bare kortere — så
+// en app med tusind ratede brugere ville have vist en rangliste, der stopper
+// midt i sig selv, en placering regnet på den afkortede liste og en formkurve
+// af de FORKERTE runder, uden en fejl noget sted.
+//
+// Fixturen herunder er den samme som ovenfor, bare stor nok til at krydse
+// loftet. Påstanden er den samme: Hjem og ranglisten skal sige det samme tal —
+// nu også for en spiller, der står under nr. 1000.
+// ---------------------------------------------------------------------------
+const STORE_RATINGS = Array.from({ length: 2400 }, (_, i) => ({
+  user_id: `u${String(i).padStart(4, "0")}`,
+  scope: "ALL",
+  rating: 3000 - i, // entydige, hele tal: placeringen er indeks + 1
+  rounds_played: 9,
+  provisional: false,
+}));
+const LUKKEDE_INDEKS = [100, 700, 1300];
+const STORE_PROFILES = STORE_RATINGS.map((r, i) => ({
+  id: r.user_id,
+  display_name: `Spiller ${i}`,
+  anonymized_at: LUKKEDE_INDEKS.includes(i) ? "2026-08-01T00:00:00Z" : null,
+}));
+
+describe("G145: lister længere end serverens loft", () => {
+  beforeEach(() => { installér({ ratings: STORE_RATINGS, profiles: STORE_PROFILES }); });
+
+  // Modprøven først, så det står fast, at fixturen faktisk stiller fælden op:
+  // ét `db.select` på den samme attrap giver 1000 rækker og ingen fejl.
+  it("modprøve: ét enkelt opslag ville have givet 1000 rækker og set rigtigt ud", async () => {
+    const ét = await db.select("t", "ratings", "scope=eq.ALL&select=user_id&order=rating.desc,user_id.asc");
+    expect(ét).toHaveLength(1000);
+    expect(STORE_RATINGS.length).toBeGreaterThan(1000);
+  });
+
+  it("ranglisten bærer hver eneste spiller — også dem under nr. 1000", async () => {
+    const board = await loadRatingBoard("t");
+    expect(board).toHaveLength(STORE_RATINGS.length - LUKKEDE_INDEKS.length);
+    expect(board[board.length - 1].userId).toBe("u2399");
+    // Placeringerne lukker sig om de lukkede konti hele vejen ned.
+    expect(board[board.length - 1].rank).toBe(board.length);
+  });
+
+  // DEN BÆRENDE PÅSTAND, nu hvor listen er for lang til ét svar: kortet på Hjem
+  // og ranglisten skal give det samme for en spiller langt nede.
+  it("Hjem og ranglisten giver samme placering og antal for en spiller under nr. 1000", async () => {
+    const board = await loadRatingBoard("t");
+    const mig = board.find((r) => r.userId === "u1500");
+    const snap = await loadRatingSnapshot("t", "u1500");
+    expect(snap.rank).toBeGreaterThan(1000); // fixturen krydser loftet
+    expect(snap).toEqual({ rating: mig.rating, rank: mig.rank, total: board.length, provisional: mig.provisional });
+  });
+
+  // Lukkede konti trækkes fra i BEGGE ender af en liste, der er hentet sidevis.
+  it("trækker de lukkede konti fra, uanset hvilken side de lå på", async () => {
+    const board = await loadRatingBoard("t");
+    expect(board.some((r) => LUKKEDE_INDEKS.map((i) => STORE_RATINGS[i].user_id).includes(r.userId))).toBe(false);
+    const snap = await loadRatingSnapshot("t", "u2399");
+    expect(snap.total).toBe(board.length);
+  });
+
+  it("ratingtallene ved navnene mangler ikke for de sidste brugere", async () => {
+    const map = await loadRatingMap("t");
+    expect(map.size).toBe(STORE_RATINGS.length);
+    expect(map.get("u2399").rating).toBe(3000 - 2399);
+  });
+
+  // Formkurven er den nærmeste af alle: `rating_history` er én række pr. bruger
+  // PR. RUNDE og sorteres stigende, så en afkortning ville ramme netop de
+  // SENESTE runder — dem, prikkerne og bevægelsen er lavet af.
+  it("formkurven er af de nyeste runder og ikke af dem, der lå først i tabellen", async () => {
+    const historik = [];
+    for (const runde of ["2026-07-07", "2026-07-14", "2026-07-21"]) {
+      for (const r of STORE_RATINGS) {
+        historik.push({ user_id: r.user_id, scope: "ALL", round_key: runde, delta: runde === "2026-07-21" ? 9 : -9 });
+      }
+    }
+    installér({ ratings: STORE_RATINGS, profiles: STORE_PROFILES, rating_history: historik });
+    const hist = await loadRatingHistory("t");
+    expect(hist.size).toBe(STORE_RATINGS.length);
+    // Sidste runde gav +9 til alle: bevægelsen skal være den, og den sidste
+    // prik skal være grøn. Med ét afkortet svar ville de tre nyeste runder for
+    // alle andre end de første ~333 brugere slet ikke være kommet med.
+    const min = hist.get("u2399");
+    expect(min.move).toBe(9);
+    expect(min.form).toEqual([0, 0, 2]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Den strukturelle vagt. Påstandene ovenfor holder de kald, der FINDES, men
+// et nyt `db.select` i filen ville komme ind uden en test — og fejlen er tavs,
+// så ingen ville opdage den. Reglen er derfor på filen og ikke på kaldet:
+// enten er læsningen bevidst afgrænset (`limit=`), eller også går den gennem
+// `selectAll`/`selectIn`, der selv holder styr på længden.
+// ---------------------------------------------------------------------------
+import { readFileSync } from "node:fs";
+
+describe("G145: ingen ubegrænsede opslag i standings.js", () => {
+  it("hvert db.select i filen er bevidst afgrænset med limit=", () => {
+    const kilde = readFileSync(new URL("./standings.js", import.meta.url), "utf8");
+    const kald = [...kilde.matchAll(/db\.select\(([^;]*?)\);/gs)].map((m) => m[1]);
+    expect(kald.length).toBeGreaterThan(0); // regexen skal stadig finde noget
+    for (const k of kald) {
+      expect(k, `et db.select uden limit=: ${k.trim()}`).toContain("limit=");
+    }
   });
 });

@@ -9,6 +9,68 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 (syvende kørsel) — `G145`: de globale lister læses sidevis
+
+**Otte upaginerede opslag i `src/lib/data/standings.js` kunne tavst vise for
+lidt.** Supabase klipper hvert svar ved projektets `db-max-rows` (1000 som
+standard) og siger det ikke: svaret er 200 med en kortere liste. `db.select`
+kaster kun ved ikke-2xx og kan derfor ikke se forskel på "det var alt" og "her er
+de første 1000". `G139` rettede Hjems fire TAL; listerne blev stående.
+
+Skaden ville aldrig have været en skærm, der gik i stykker, men en, der så rigtig
+ud: en runde, der mangler i Championship-vælgeren; et ratingtal, der mangler ved
+et navn; en spiller under nr. 1000, der ikke kan finde sig selv på ranglisten. De
+uordnede opslag var de skarpeste (`loadMonthsAvailable`, `loadRoundsAvailable`,
+`loadRatingMap`), fordi de taber VILKÅRLIGE rækker — og `loadRatingHistory` uden
+et bruger-id var værst af alle: én række pr. bruger PR. RUNDE, sorteret
+`round_key.asc`, så afkortningen ville ramme netop de SENESTE runder, altså dem
+formkurven er lavet af.
+
+**Svaret fandtes allerede — på serversiden.** `sbAll()` i `api/_shared.js` er
+skrevet mod den samme fælde efter `G51` (en falsk "runden er slut"-notifikation).
+Ny `src/lib/data/paged.js` er dens tvilling i klienten, og de to regler er arvet
+ordret frem for genopfundet:
+
+- **`order=` er påkrævet.** PostgRESTs rækkefølge er udefineret uden den, så to
+  sider ville både tabe og gentage rækker. Manglen kaster — det er en
+  programmeringsfejl, ikke en driftsfejl.
+- **Der stoppes ved en TOM side, aldrig ved en kort.** Er `db-max-rows` mindre
+  end sidestørrelsen, er "kortere end bestilt" sandt for hver eneste fulde side,
+  og så havde vi bygget den samme tavse afkortning igen — nu inde i kuren.
+  Loftet kan ikke aflæses fra repoet. `offset` er derfor også antallet af
+  rækker, vi HAR fået, og ikke sidetal gange sidestørrelse.
+
+Prisen er ét ekstra kald pr. opslag (den tomme side). Alternativet — totalen fra
+`Content-Range` på første side — kræver adgang til svarets headere og dermed en
+transport uden om `db.select`; det ville koste den lagdeling, `chunked.js`
+hviler på, for at spare en rundtur på et kald, der tegner en hel skærm.
+
+**Alle læsninger i filen går nu den vej**, inklusive de to, `G139` selv
+efterlod (`profiles` med lukkede konti, og `scopeSeasonIds`' to opslag).
+`db.select` bruges kun med et bevidst `limit=` — og **det er en vagt og ikke en
+vane**: en påstand i `standings.test.js` læser filens kildetekst og kræver et
+`limit=` i hvert `db.select`, der står tilbage. Uden den ville det næste
+uafgrænsede opslag komme ind uden en test, og fejlen er jo tavs.
+
+Attrapperne i testene har fået det ene træk, de manglede, for at kunne vise
+fejlen: de klipper nu svaret ved 1000 rækker og siger det ikke. Fixturen er 2400
+ratede brugere og 2400 spillede kampe, og påstanden er den samme som `G139`s —
+Hjem og ranglisten skal give det samme tal, nu også for en spiller på plads
+1498. `scripts/screenshots/fake-rest.js` kender nu `offset`, så harnessen ikke
+svarer med den samme første side igen.
+
+**Uden for opgaven, noteret frem for rettet:** klassen findes også i
+`onboarding.js`, hvor `loadStarterTournaments` tæller kampe uden resultat ved at
+hente én række pr. kamp (`G147`), og de to vælgere henter stadig tusindvis af
+rækker for at bygge et `Set`, hvor et `distinct`-view ville svare med tredive
+(`G146`).
+
+1573 tests (22 nye), lint på loftet (7 advarsler), grønt build. Skærmbillederne
+er byte-identiske — efterprøvet med en modprøve, hvor `selectAll` svarede tomt:
+da flyttede `hjem.png` og `championship.png` sig. Ingen SQL, ingen migrering.
+
+---
+
 21. august 2026 (sjette kørsel) — Tier 5 kørt tom: `G140` og `G139`
 
 **`G140`: tre "vis mere"-flader var ikke betjeninger.** "Vis hele stillingen",

@@ -8,11 +8,22 @@ import { computeCompetitionState, computeHomeTips, loadRoundBoard, loadRoundsAva
 
 // mock-svar pr. tabel/view. En værdi må være en funktion, når svaret afhænger
 // af selve forespørgslen (fx et filter, testen vil holde loaderen op på).
+//
+// `limit`/`offset` respekteres for en fast liste (`G145`). Appen læser sidevis
+// og stopper først ved en TOM side, så en attrap, der svarede med hele listen
+// igen ved hver `offset`, ville hente i det uendelige. En funktionsværdi står
+// selv for sit svar — se `medLoft` længere nede.
+function siden(rows, query) {
+  const f = Object.fromEntries(query.split("&").filter(Boolean).map((d) => [d.slice(0, d.indexOf("=")), d.slice(d.indexOf("=") + 1)]));
+  if (f.offset === undefined && f.limit === undefined) return rows;
+  const fra = Number(f.offset || 0);
+  return rows.slice(fra, f.limit === undefined ? undefined : fra + Number(f.limit));
+}
 function mockTables(tables) {
   db.select.mockImplementation(async (token, table, query) => {
     if (!(table in tables)) throw new Error(`uventet tabel i test: ${table}`);
     const rows = tables[table];
-    return typeof rows === "function" ? rows(query) : rows;
+    return typeof rows === "function" ? rows(query) : siden(rows, query);
   });
 }
 
@@ -76,7 +87,7 @@ describe("loadRoundBoard (round_standings-view)", () => {
     mockTables({
       leagues: [{ id: "L1" }],
       seasons: [{ id: "s1" }],
-      matches: (q) => { queries.push(q); return [{ id: "m1", home_score: 2, away_score: 0 }]; },
+      matches: (q) => { queries.push(q); return siden([{ id: "m1", home_score: 2, away_score: 0 }], q); },
       round_standings: [],
       profiles: [],
     });
@@ -121,7 +132,7 @@ describe("loadRoundBoard (round_standings-view)", () => {
   it("henter den samlede stilling som standard", async () => {
     const queries = { leagues: [], round_standings: [] };
     mockTables({
-      leagues: (q) => { queries.leagues.push(q); return [{ id: "L1" }]; },
+      leagues: (q) => { queries.leagues.push(q); return siden([{ id: "L1" }], q); },
       seasons: [{ id: "s1" }],
       matches: [{ id: "m1", home_score: 1, away_score: 1 }],
       round_standings: (q) => { queries.round_standings.push(q); return []; },
@@ -135,7 +146,7 @@ describe("loadRoundBoard (round_standings-view)", () => {
   it("henter én turnerings stilling, når der gives et scope", async () => {
     const queries = { leagues: [], round_standings: [] };
     mockTables({
-      leagues: (q) => { queries.leagues.push(q); return [{ id: "L2" }]; },
+      leagues: (q) => { queries.leagues.push(q); return siden([{ id: "L2" }], q); },
       seasons: [{ id: "s2" }],
       matches: [{ id: "m1", home_score: 1, away_score: 1 }],
       round_standings: (q) => { queries.round_standings.push(q); return []; },
@@ -177,7 +188,7 @@ describe("loadRoundsAvailable (runde-dropdownen)", () => {
   it("begrænser runderne til den valgte turnering", async () => {
     const seen = [];
     mockTables({
-      leagues: (q) => { seen.push(q); return [{ id: "L2" }]; },
+      leagues: (q) => { seen.push(q); return siden([{ id: "L2" }], q); },
       seasons: [{ id: "s2" }],
       matches: [{ round_key: "2026-07-14" }],
     });
@@ -209,6 +220,64 @@ describe("loadSeasonBoard (season_standings-view)", () => {
     expect(board.playedMatches).toBe(2);
     expect(board.totalMatches).toBe(3);
     expect(board.isComplete).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// `G145` — Championship-fanens egne lister og det tavse rækkeloft.
+//
+// Runde-vælgeren fyldes af ÉN RÆKKE PR. SPILLET KAMP, og sæsonstillingen
+// læses uden et loft. Blev svaret klippet ved 1000, ville en runde mangle i
+// vælgeren og en spiller mangle i bunden af stillingen — uden en fejl noget
+// sted. `medLoft` er en attrap, der opfører sig som PostgREST: den svarer
+// aldrig med mere, end der er plads til, og siger ikke, at der var mere.
+// ---------------------------------------------------------------------------
+const LOFT = 1000;
+function medLoft(rows) {
+  // `siden` deler op efter forespørgslen; loftet klipper oveni og TAVST, som
+  // Supabase gør — det er hele forskellen på en attrap, der kan vise fejlen,
+  // og en, der ikke kan.
+  return (query) => siden(rows, query).slice(0, LOFT);
+}
+
+describe("G145: Championship-listerne er længere end ét svar", () => {
+  // 2.400 spillede kampe fordelt på 40 runder — en sæson på fem turneringer er
+  // i den størrelsesorden. De nyeste runder ligger sidst i tabellen.
+  const KAMPE = Array.from({ length: 2400 }, (_, i) => ({
+    id: `m${String(i).padStart(4, "0")}`,
+    round_key: `runde-${String(Math.floor(i / 60)).padStart(2, "0")}`,
+    home_score: 1, away_score: 0,
+  }));
+
+  it("runde-vælgeren mangler ingen runder, når kampene er flere end loftet", async () => {
+    mockTables({ ...OFFICIAL, matches: medLoft(KAMPE) });
+    const runder = await loadRoundsAvailable("token");
+    expect(runder).toHaveLength(40);
+    expect(runder[0]).toBe("runde-39"); // nyeste først — og den lå bag loftet
+  });
+
+  it("modprøve: uden sidevis læsning var de sidste runder faldet ud i tavshed", async () => {
+    const ét = medLoft(KAMPE)("season_id=in.(s1)&select=round_key&order=id.asc");
+    const runder = [...new Set(ét.map((r) => r.round_key))];
+    expect(runder).toHaveLength(17); // 1000 kampe rækker til 17 af de 40 runder
+    expect(runder).not.toContain("runde-39");
+  });
+
+  it("sæsonstillingen taber ikke sin bund", async () => {
+    const board = Array.from({ length: 1500 }, (_, i) => ({
+      user_id: `u${String(i).padStart(4, "0")}`,
+      total_points: 1500 - i, matches: 10, exact_count: 0, outcome_count: 0, round_wins: 0, avg_goal_error: "1.0000",
+    }));
+    mockTables({
+      seasons: [{ id: "s1", name: "2026/2027", start_date: "2026-07-01" }],
+      matches: medLoft(KAMPE),
+      season_standings: medLoft(board),
+      profiles: board.map((r) => ({ id: r.user_id, display_name: r.user_id, anonymized_at: null })),
+    });
+    const ud = await loadSeasonBoard("token", "liga-1");
+    expect(ud.rows).toHaveLength(1500);
+    expect(ud.rows[ud.rows.length - 1].rank).toBe(1500);
+    expect(ud.totalMatches).toBe(KAMPE.length); // fremdriften tæller alle kampe
   });
 });
 
