@@ -38,6 +38,18 @@ scrolles frem; det andet, fordi rækken ellers skifter højde, mens man bladrer
 udelades **helt** for en bruger uden en række i stillingen: en knap, der aldrig
 kan gøre noget, er ikke en deaktiveret knap, men støj.
 
+**Kortet er urørt og viser fortsat top 5 — og kun top 5.** Ingen egen række
+hægtes på, og der står ingen "du er nr. 25"-linje under de fem: kortet svarer på
+*hvem fører*, modalen på *hvor står jeg*. Grænsen er bekræftet af ejeren samme
+dag og skrevet ind i `DOCUMENTATION.md` §7, så den ikke kan drive.
+
+**Efterprøvet i en rigtig browser.** Harnessen blev kørt med `SPILLERE`
+midlertidigt hævet fra seks til 45 (Mikkel som nr. 25): modalen åbnede på side 2
+med hans række markeret og "Min placering" slukket, "Top 20" gav side 1 med den
+modsatte tilstand, og Championship-kortet viste fortsat fem rækker uden ham.
+`demo-db.js` er **ikke** ændret i repoet — de fire skærmbilleder skydes fra netop
+de seks spillere.
+
 Alt ligger i `src/screens/championship/StandingsTable.jsx` og har tre aftagere
 (Championshippets runde-, måneds- og sæsonkort). Ingen SQL, ingen migrering,
 ingen ændring i dataloaderne. 13 nye tests (1534 i alt). `DOCUMENTATION.md` §7 er

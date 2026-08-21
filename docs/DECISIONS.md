@@ -72,6 +72,23 @@ bladrer — med én undtagelse: "Min placering" udelades helt for en bruger uden
 række i stillingen, for en knap, der aldrig kan gøre noget, er ikke en
 deaktiveret knap, men støj.
 
+**Kortet bliver ved med at vise top 5 — og kun top 5.** Ejeren bekræftede
+grænsen samme dag, ændringen blev bygget: der hægtes ingen egen række på kortet,
+og der står ingen "du er nr. 25"-linje under de fem. Kortet svarer på *hvem
+fører*; modalen svarer på *hvor står jeg*, og først når man har trykket sig ind.
+Fristelsen til at flytte det ene svar op i det andet vil komme igen — derfor står
+grænsen skrevet her og i `DOCUMENTATION.md` §7 frem for kun i koden.
+
+**Efterprøvet i en rigtig browser, ikke kun i tests.** Harnessen (`I24`) blev
+kørt med `SPILLERE` midlertidigt hævet fra seks til 45, hvor Mikkel lander som
+nr. 25 i både måneds-, sæson- og ratingstillingen: modalen åbnede på side 2 med
+hans række markeret og "Min placering" slukket, et tryk på "Top 20" gav side 1
+med den modsatte tilstand, og Championship-kortet viste fortsat fem rækker uden
+ham. Ændringen i `demo-db.js` blev **ikke** committet — de fire skærmbilleder i
+`public/screenshots/` skydes fra netop de seks spillere. **`A42`s udløser er
+ikke sprunget:** dette var en efterprøvning og ikke en fejl, der kun kunne ses i
+en browser, så tælleren står stadig på én forekomst (`Modal`-fokusfejlen).
+
 **Ingen SQL, ingen migrering, ingen ændring i dataloaderne.** Ændringen ligger i
 `src/screens/championship/StandingsTable.jsx` alene og har tre aftagere:
 Championshippets runde-, måneds- og sæsonkort. Skærmbillederne tages ikke om —

@@ -54,7 +54,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(Tom.)*
+- "Vis hele stillingen" er et <p> med onClick og kan derfor hverken nås med tastaturet eller trykkes af skærmbilled-harnessen, som kun kan klikke på knapper
 
 ---
 
@@ -283,3 +283,9 @@ hvordan man finder sig selv i den — og det andet er billigere at svare på.*
 
 Ingen SQL, ingen migrering. 13 nye tests (1534 i alt); `DOCUMENTATION.md` §7 er
 rettet med, og skærmbillederne er uændrede.
+
+**Efterprøvet i en rigtig browser bagefter:** harnessen kørt med 45 spillere
+(midlertidigt og ikke committet), hvor modalen åbnede på side 2 med brugerens
+egen række markeret, og kortet fortsat viste fem rækker uden hende. Ejeren
+bekræftede samme grænse: kortet er top 5, og egen placering hører til bag
+klikket. Indbakken har fået den ene linje, eftersynet efterlod.
