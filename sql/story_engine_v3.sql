@@ -367,19 +367,88 @@ begin
   grp as (
     select *,
       row_number() over (partition by user_id order by kickoff_at, match_id)
-      - row_number() over (partition by user_id, hit order by kickoff_at, match_id) as g
+      - row_number() over (partition by user_id, hit order by kickoff_at, match_id) as g,
+      -- Dagen for brugerens NÆSTE scorede kamp. På løbets sidste række er den
+      -- dagen, løbet blev brudt — se `broke_day` nedenfor (`G144`). Den deler
+      -- vinduesspecifikation med den første `row_number` ovenfor og lægger sig
+      -- derfor i den SAMME `WindowAgg`: planen har to vinduesknuder både før og
+      -- efter linjen (efterprøvet med `explain`), så den koster ingen ekstra
+      -- sortering i den sætning, der afslutter en kamp.
+      lead(match_day) over (partition by user_id order by kickoff_at, match_id) as next_day
     from hist
   ),
   runs as (
     select user_id, hit, g, count(*)::int as len,
            max(match_day) as ended_day,
            max(kickoff_at) as run_last,
-           max(max(kickoff_at)) over (partition by user_id) as last_kick
+           max(max(kickoff_at)) over (partition by user_id) as last_kick,
+           -- BRUD-DAGEN, altså `next_day` på løbets SIDSTE række. `max` frem for
+           -- et "sidste værdi"-udtryk, og det er MÅLT og ikke antaget: den
+           -- oplagte formulering, `(array_agg(next_day order by kickoff_at
+           -- desc, match_id desc))[1]`, koster 17 % på dagsmotoren i
+           -- `sql/tests/story_engine_scale.sql` (205 mod 175 ms), mens `max`
+           -- koster 6 % (186 ms). Dagsmotoren kører synkront inde i den sætning,
+           -- der afslutter en kamp, så forskellen er ikke akademisk
+           -- (acceptkriterie 10).
+           --
+           -- `max` GIVER DET SAMME, og hvorfor er værd at skrive ned: `match_day`
+           -- er monoton i `kickoff_at`, så `next_day` er ikke-aftagende inden
+           -- for løbet, og den sidste række bærer derfor den største værdi.
+           --
+           -- ⚠️ ÉN UNDTAGELSE, og den er ufarlig: er løbet brugerens SENESTE,
+           -- er sidste rækkes `next_day` null, `max` springer den over, og
+           -- resultatet bliver `ended_day` i stedet for null. Prædikatet
+           -- nedenfor bliver dermed `ended_day = p_day` en gang til — som første
+           -- gren allerede dækker. Kolonnen hedder derfor `naeste_dag` og ikke
+           -- `broke_day`: den ER dagen efter løbet, undtagen for det sidste løb,
+           -- hvor den er løbets egen sidste dag.
+           max(next_day) as naeste_dag
     from grp group by user_id, hit, g
   )
-  select user_id, len, (run_last = last_kick) as alive
-  from runs
-  where hit and len >= 5 and ended_day = p_day;
+  -- `G144` (21. august 2026): ANDEN GREN TILFØJET — `or naeste_dag = p_day`.
+  --
+  -- Indtil da stod her kun `ended_day = p_day`, altså "løbets sidste HIT ligger
+  -- på dagen". Reglens egen overskrift lovede noget bredere — den fyrer, "når
+  -- stimen blev forlænget i dag ELLER BRUDT I DAG" — og anden halvdel holdt
+  -- næsten aldrig: brød stimen dagen EFTER sit sidste hit, var `ended_day` = i
+  -- går, og der blev ikke skrevet noget. 💤-teksten "Din stime stoppede ved N"
+  -- kunne derfor kun nås, når bruddet lå på SAMME kampdag som sidste hit.
+  -- Efterprøvet ved `G143`: nul rækker på brud-dagen.
+  --
+  -- `alive` behøvede ingen ændring og er selve grunden til, at rettelsen er så
+  -- lille: et løb, der blev brudt, har pr. definition en senere kamp, så
+  -- `run_last < last_kick`, og flaget er allerede falsk. Teksten skelner på det.
+  --
+  -- `distinct on (user_id)` HOLDER TABELLENS FORM, og den form er en antagelse
+  -- længere nede: `_sd_scored` joiner `left join _sd_streak st on st.user_id =
+  -- c.subject_id`, altså på brugeren ALENE. Indtil `G144` kunne der kun findes
+  -- ét løb pr. bruger pr. dag, og antagelsen holdt af sig selv. Med den anden
+  -- gren kan der findes to: misser man dagens første kamp — det bryder det gamle
+  -- løb — og rammer så fem i træk senere samme dag, slutter både et brudt og et
+  -- levende løb i dag. På en stor lørdag med ti kampe er det ikke en kuriositet.
+  --
+  -- ⚠️ AT FJERNE LINJEN ÆNDRER IKKE ÉT KORT I DAG, og det skal stå her, så den
+  -- næste ikke bruger en eftermiddag på at bevise det. To rækker ville gange
+  -- HVER kandidat for den bruger, men både størrelsesleddet og `_sd_rank` tager
+  -- MAKSIMUM, så udfaldet bliver det samme som "længste løb vinder" nedenfor.
+  -- Efterprøvet: mutationen slipper gennem hele `sql/tests/story_engine_daily.sql`.
+  -- Linjen bliver alligevel, og af to grunde, der ikke er adfærd: dobbelte rækker
+  -- i `_sd_scored` koster inde i den sætning, der afslutter en kamp
+  -- (acceptkriterie 10), og en antagelse, der kun holder ved et tilfælde i to
+  -- andre udtryk, er præcis den slags, `G130` kostede fem dage.
+  --
+  -- DET LÆNGSTE LØB VINDER. Det bærer det største stime-bidrag til
+  -- størrelsesleddet, og det er den største historie: at en stime på tolv brød i
+  -- dag er mere værd at fortælle end at en ny er nået til fem. `alive` afgør kun
+  -- ved lige længde, og `ended_day` sidst, så to kørsler giver samme række
+  -- (acceptkriterie 7) — dét er testet (22d).
+  select distinct on (user_id) user_id, len, alive
+  from (
+    select user_id, len, (run_last = last_kick) as alive, ended_day
+    from runs
+    where hit and len >= 5 and (ended_day = p_day or naeste_dag = p_day)
+  ) k
+  order by user_id, len desc, alive desc, ended_day desc;
   create index on _sd_streak (user_id);
 
   -- ---------- kandidater ----------
@@ -563,7 +632,9 @@ begin
 
   -- ======== 140 · Stime-status (global, grundvægt 28, FAN-OUT) ========
   -- Fyrer KUN, når stimen blev forlænget i dag eller brudt i dag. Uden den
-  -- betingelse ville den udløses hver eneste dag, stimen lever.
+  -- betingelse ville den udløses hver eneste dag, stimen lever. **Begge grene
+  -- er nåelige siden `G144`** — indtil da kunne 💤-varianten kun rammes af et
+  -- brud på samme kampdag som sidste hit, og teksten stod reelt ubrugt.
   -- competition_id er null: stimen er global, og fan-out sker via enhver delt
   -- konkurrence (se _sd_reach).
   insert into _sd_cand (subject_id, competition_id, rule, priority, base, league_size, payload, headline, body, headline3, body3)

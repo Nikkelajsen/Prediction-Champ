@@ -9,6 +9,59 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 (fjerde kørsel) — `G144`: stimekortet kan endelig sige, at stimen brød
+
+**Halvdelen af `STREAK_STATUS` var uskrevet.** Reglen har fra første dag haft to
+tekster — 🔥 for den levende stime og 💤 *"Din stime stoppede ved N"* — men
+`_sd_streak` valgte `where hit and len >= 5 and ended_day = p_day`, altså en
+række af HITS, hvis sidste kamp ligger på dagen. Brød stimen dagen EFTER sit
+sidste hit, var `ended_day` = i går, og der blev ikke skrevet noget. 💤-varianten
+kunne kun rammes ved et brud på SAMME kampdag som sidste hit — og det
+almindelige brud, en ny kampdag hvor det går galt, var netop det, den ikke kunne
+se.
+
+**Rettelsen er én gren mere:** `or naeste_dag = p_day`. `alive` behøvede ingen
+ændring — et brudt løb har pr. definition en senere kamp, så `run_last <
+last_kick`, og flaget var allerede falsk. Det er teksten, der skelner.
+
+**To valg er målt frem for antaget, og begge tal står i koden.**
+`naeste_dag` er `max(next_day)` og ikke det oplagte `(array_agg(next_day order by
+… desc))[1]`: "sidste værdi"-udtrykket koster **17 %** på dagsmotoren i
+skaleringsforsøget (205 mod 175 ms), mens `max` koster **6 %** (186 ms) og giver
+det samme, fordi `match_day` er monoton i `kickoff_at`. Motoren kører synkront
+inde i den sætning, der afslutter en kamp, så forskellen er ikke akademisk.
+
+**`distinct on (user_id)` kom til — og ændrer ikke ét kort i dag.** Med to grene
+kan der findes to løb pr. bruger pr. dag: misser man dagens første kamp og rammer
+så fem i træk senere samme dag, slutter både et brudt og et levende løb i dag.
+`_sd_scored` joiner `_sd_streak` på brugeren alene, så to rækker ville gange hver
+kandidat — men både størrelsesleddet og `_sd_rank` tager maksimum, så udfaldet
+bliver det samme. **Mutationen slipper gennem hele testen, og det står i koden**,
+så den næste ikke bruger en eftermiddag på at bevise det. Linjen bliver for
+prisens skyld (dobbelte rækker koster i triggerens sætning) og for formens
+(`G130` kostede fem dage på en antagelse, der kun holdt ved et tilfælde).
+**Det længste løb vinder:** at en stime på tolv brød i dag er en større historie
+end at en ny er nået til fem.
+
+**Reglen havde aldrig kørt — hverken i produktionen eller i en test.** Den har nu
+blok 22 i `sql/tests/story_engine_daily.sql` med begge grene, fan-out og det
+dobbelte løb. **To ting i opstillingen kostede hver sin røde kørsel og står som
+kommentarer**, fordi de er lette at falde i igen: bruddet må ikke ligge på
+rundens sidste kampdag (mandag), hvor motoren kun udgiver rundekortet, og
+brugeren skal stå ALENE i sin konkurrence — ellers vinder `DUEL` (grundvægt 30)
+over stimen (28), hvilket er `G143`s dominans-fund i praksis. Fire mutationer
+prøvet, tre fanget; den fjerde er `distinct on`, som pr. konstruktion ikke kan
+ses.
+
+🔴 **`sql/story_engine_v3.sql` (#47) skal gen-køres i Supabase.** Kun funktionen
+ændres; ingen rækker røres, ingen anden fil skal med, og der er **ingen
+frontend-ændring at merge sammen med** — teksten har ligget i motoren hele tiden.
+Adfærdsændring ved kørsel: en bruger, hvis stime på 5+ brød i dag, kan nu få
+stimekortet i stedet for dagens facit. Backloggen er 35 → 34. Spec'ens §13.11 og
+[`DECISIONS.md`](./DECISIONS.md) bærer resten.
+
+---
+
 21. august 2026 (tredje kørsel) — `G143`: stimen er ikke død kode, den er systematisk domineret
 
 **Rækken spurgte, om `STREAK_STATUS` var død kode eller bare uden anledning** —

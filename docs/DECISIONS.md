@@ -15,6 +15,41 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `G144`: stimekortet fortæller nu også, når stimen brød — og det længste løb vinder
+
+**Beslutning:** `STREAK_STATUS` udgives fremover også på den dag, stimen BLEV
+BRUDT, og ikke kun på dagen for dens sidste hit. Findes der to løb for samme
+bruger samme dag — ét brudt og ét levende — **vinder det længste**.
+
+**Hvorfor det ikke bare var en fejlrettelse.** Reglens kommentar har hele tiden
+lovet, at den fyrer *"når stimen blev forlænget i dag eller brudt i dag"*, men
+`_sd_streak` valgte `where hit and ended_day = p_day` — en række af HITS, hvis
+sidste kamp ligger på dagen. Brød stimen dagen efter, var `ended_day` = i går, og
+der blev ikke skrevet noget. 💤-teksten *"Din stime stoppede ved N"* var derfor i
+praksis uskrevet, og det almindelige brud — en ny kampdag, hvor det går galt —
+var netop det, den ikke kunne se. `alive` behøvede ingen ændring: et brudt løb
+har pr. definition en senere kamp, så flaget var allerede falsk.
+
+**Det længste løb vinder, og det er en produktregel og ikke en teknikalitet.**
+Misser man dagens første kamp — det bryder det gamle løb — og rammer så fem i
+træk senere samme dag, findes både et brudt og et levende løb. At en stime på
+tolv brød i dag er en større historie end at en ny er nået til fem, og det
+længste løb bærer samtidig det største stime-bidrag til størrelsesleddet. Valget
+er dermed det samme, som resten af motoren ville have truffet på nyhedsværdi.
+
+**To valg er MÅLT frem for antaget**, og begge står i koden med tallene:
+`max(next_day)` frem for det oplagte `array_agg(… order by … desc)[1]` koster
+6 % mod 17 % på dagsmotoren og giver det samme, fordi `match_day` er monoton i
+`kickoff_at`; og `distinct on (user_id)` ændrer ikke ét kort i dag, men holder
+den form, `_sd_scored`s join på brugeren alene forudsætter. Dagsmotoren kører
+synkront inde i den sætning, der afslutter en kamp, så forskellen er ikke
+akademisk.
+
+**Prisen er sagt højt:** ~6 % på dagsmotoren, betalt for at gøre halvdelen af en
+regel nåelig. Og `#47 story_engine_v3.sql` skal gen-køres i produktionen —
+funktionen alene, ingen rækker, ingen frontend-ændring, fordi teksten har ligget
+i motoren hele tiden.
+
 ## 21. august 2026 — `G143` besvaret: stimen er ikke død kode, den er systematisk domineret
 
 **Svaret:** `STREAK_STATUS` virker. Rækken spurgte, om reglen var død kode eller

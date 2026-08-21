@@ -670,3 +670,45 @@ ville den have været rød for evigt om noget, der var rigtigt — og den, der s
 fortælle, om ændringen virkede, var netop den, ændringen brød. Ved samme
 lejlighed viste det sig, at kontrollen blev læst af **ingen** planlagt kørsel;
 den har nu et trin i `job-heartbeat.yml`.
+
+### 13.11 Halvdelen af `STREAK_STATUS` var uskrevet (`G144`, 21. august 2026)
+
+Spec §4 giver `STREAK_STATUS` bemærkningen *"stimen lever eller brød"*, og reglens
+kode har fra første dag haft to tekster: 🔥 for den levende og 💤 *"Din stime
+stoppede ved N"* for den brudte. **Den anden var i praksis uskrevet.**
+
+`_sd_streak` valgte `where hit and len >= 5 and ended_day = p_day`, altså en
+række af HITS, hvis sidste kamp ligger på dagen. Brød stimen dagen EFTER sit
+sidste hit — det almindelige tilfælde — var `ended_day` = i går, og der blev ikke
+skrevet noget. 💤-varianten kunne kun rammes, når bruddet lå på SAMME kampdag som
+sidste hit. Fundet ved `G143`s aflæsning og efterprøvet: nul rækker på brud-dagen.
+
+**Rettelsen er én gren mere:** `or naeste_dag = p_day`, hvor `naeste_dag` er
+`lead(match_day)` på løbets sidste række. `alive` behøvede ingen ændring —
+et brudt løb har pr. definition en senere kamp, så `run_last < last_kick`, og
+flaget var allerede falsk. Det er teksten, der skelner.
+
+**To ting blev anderledes, end den oplagte løsning ville have givet:**
+
+- **`max(next_day)` frem for `(array_agg(next_day order by … desc))[1]`.** Det
+  oplagte "sidste værdi"-udtryk koster 17 % på dagsmotoren i skaleringsforsøget
+  (205 mod 175 ms); `max` koster 6 % (186 ms) og giver det samme, fordi
+  `match_day` er monoton i `kickoff_at`. Målt, ikke antaget — motoren kører
+  synkront inde i den sætning, der afslutter en kamp.
+- **`distinct on (user_id)` kom til.** Med to grene kan der findes to løb pr.
+  bruger pr. dag: misser man dagens første kamp og rammer så fem i træk senere
+  samme dag, slutter både et brudt og et levende løb i dag. `_sd_scored` joiner
+  `_sd_streak` på brugeren alene, så tabellens form er en antagelse. **Det
+  længste løb vinder** — det bærer det største stime-bidrag og er den største
+  historie. ⚠️ At fjerne linjen ændrer ikke ét kort i dag (både størrelsesleddet
+  og `_sd_rank` tager maksimum); den bliver for formens og prisens skyld, og
+  begrundelsen står i koden, så den ikke skal genfindes.
+
+**Acceptkriterie 10:** forholdet til `recompute_ratings()` stiger med ~6 % på
+dagsmotorens del. Det er den pris, der betales for at gøre halvdelen af en regel
+nåelig.
+
+**Reglen havde aldrig kørt — hverken i produktionen eller i en test.** Testens
+egen blok 16 sagde det om sin egen fixture. Den har nu blok 22 i
+`sql/tests/story_engine_daily.sql`, med begge grene, fan-out og det dobbelte løb.
+Se `DECISIONS.md` (`G143`, `G144`).

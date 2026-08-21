@@ -60,7 +60,7 @@ Tom.
 
 ## Prioriteret rækkefølge
 
-Alle 35 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 34 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -122,7 +122,6 @@ Tomt.
 
 | # | Hvad | Note |
 |---|---|---|
-| `G144` | 💤-grenen i `STREAK_STATUS` er næsten unåelig | Reglens egen kommentar lover, at den fyrer *"når stimen blev forlænget i dag **eller brudt i dag**"*. Anden halvdel holder næsten aldrig: `_sd_streak` vælger `where hit and ended_day = p_day`, altså en række af HITS, hvis sidste kamp ligger på dagen. Brød stimen dagen EFTER, er `ended_day` = i går, og der skrives intet. Teksten *"Din stime stoppede ved N"* kan derfor kun nås, når bruddet ligger på SAMME kampdag som sidste hit. **Efterprøvet 21. august 2026:** nul rækker på brud-dagen, og påstanden står som blok 22c i `sql/tests/story_engine_daily.sql` — den skal **vendes om**, når rækken lukkes. Kuren er at lade `_sd_streak` også vælge den seneste hit-række, hvis NÆSTE scorede kamp ligger på `p_day`; `alive` er allerede det flag, teksten skelner på. Prisen er en gen-kørsel af `#47 story_engine_v3.sql` i produktionen, så den hører sammen med den næste ændring af dagsmotoren frem for alene. Fundet ved `G143` |
 | `G140` | "Vis hele stillingen" er et `<p>` med `onClick` | Fladen kan hverken nås med tastaturet eller trykkes af skærmbilled-harnessen, som kun kan klikke på knapper — så den ene vej til din egen række i en stilling på 25 er lukket for tastaturbrugere OG usynlig for `npm run screenshots`. Rettelsen er at gøre den til en `button` med den styling, den allerede har. Fundet ved `A44`-eftersynet 21. august 2026 |
 | `G142` | Halvdelen af v3-dagskortene kan pr. konstruktion aldrig vises | 50 af 100 kort havde et vindue på nul minutter ved `A33`-aflæsningen 21. august 2026: et kort med en større `day_key` fandtes for samme bruger allerede i det øjeblik, de blev skrevet, og `loadDayCard` henter altid den nyeste. Bagstopperens dagsløkke skriver flere dages kort i samme kørsel, så det ældste er dødt i fødslen. **Det er ikke oplagt en fejl** — man vil næppe vise tre dages gamle kort efter hinanden — men det gør hvert eneste "genereret"-tal misvisende (`G73`s klasse), og det bruger motorens dyreste arbejde på rækker, ingen kan nå. To veje: lad dagsløkken springe en dag over, der allerede er afløst, eller behold rækkerne som analysedata og hold dem ude af tællingerne. Spørgsmålet skal besvares FØR `G141`, som ellers retter en nævner, der stadig tæller døde kort |
 | `G139` | Hjem og konkurrence-boardet henter hele den globale ratingtabel | `loadRatingBoard` henter **hver** brugers rating OG hvert profilnavn — Hjem bruger svaret til ét kort: din egen rating, din placering og antallet (`ratingSnapshot`). `loadRatingMap` gør det samme i `BoardScreen` for at sætte et ratingtal ved otte deltagere. Begge kald vokser med brugerbasen og lander i `A34`s egress-loft, længe før nogen mærker dem i skærmen. Kuren er billig og kræver ingen migrering: egen række plus en `count=exact` på `rating=gt.<din>` til Hjem, og `user_id=in.(deltagerne)` på boardet. Fundet ved `A44`-aflæsningen 21. august 2026. |
@@ -259,30 +258,21 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (treogfyrretyvende kørsel) — `G143` er besvaret: stimen er domineret, ikke død
+### 21. august 2026 (fireogfyrretyvende kørsel) — `G144` bygget: stimen kan sige, at den brød
 
-**Listen er 35 → 35:** `G143` er slettet, `G144` tilføjet, og Tier 1 er tom igen.
+**Listen er 35 → 34.** Halvdelen af `STREAK_STATUS` var uskrevet: 💤-teksten
+kunne kun rammes ved et brud på SAMME kampdag som sidste hit. Rettelsen er én
+gren mere i `_sd_streak` (`or naeste_dag = p_day`); `alive` behøvede ingen
+ændring.
 
-**Reglen virker.** Motoren er kaldt mod en fixture med en levende stime, og
-kortet blev skrevet — til både hovedpersonen og en fan-out-modtager.
-`competition_id = null` blokerer ikke: `_sd_reach`s fan-out-gren har
-`(c.competition_id is null or …)` netop for det. Det er reglens **første kørsel
-nogensinde**; testens egen blok 16 sagde allerede, at fixturen aldrig fyrede den.
+**To valg er målt frem for antaget**, og begge tal står i koden: `max(next_day)`
+koster 6 % på dagsmotoren mod `array_agg(… desc)[1]`'s 17 % og giver det samme;
+og `distinct on (user_id)` ændrer ikke ét kort i dag — mutationen slipper
+igennem — men holder den form, `_sd_scored`s join på brugeren alene forudsætter.
 
-**Men den taber altid.** `_sd_mag` er nøglet på `(competition_id, user_id)`, så
-joinet rammer ingen række for en kandidat uden konkurrence: `STREAK_STATUS` får
-KUN stime-bonussen som størrelsesbidrag (48–60), mens `DAY_TOP`, `CONTRARIAN` og
-`DUEL` får den samme bonus plus flytning og over-snit oven i en højere
-grundvægt. Målt: 72 mod 60, samme bruger, samme dag, samme stime.
+**Læren:** *en tekst, ingen har set, er ikke leveret. `STREAK_STATUS` havde to
+grene i koden, én i virkeligheden, og forskellen kunne kun ses ved at KØRE
+motoren — ingen gennemlæsning fangede den på fjorten dage.*
 
-**Læren:** *"har aldrig udløst" og "har aldrig vundet" ser ens ud i en tabel, der
-grupperer på vinderen. `runner_up_value` gemmer et tal, ikke en regel — og det
-tal var hele forskellen mellem død kode og en regel, der bare bliver slået.*
-
-**Fundet er ført ind i `A58`s kontekst frem for rettet.** At give stimen sit
-størrelsesled kræver en konkurrence at være stor i, og den er global med vilje;
-at hæve grundvægten er præcis `A58`s spørgsmål og skal besvares på en fordeling.
-
-`G144` er den ene ting, der ER en fejl: 💤-grenen kan kun nås ved et brud på
-samme kampdag som sidste hit. Fire mutationer prøvet mod de nye påstande, alle
-fanget. Ingen migrering.
+🔴 **`#47 story_engine_v3.sql` skal gen-køres i Supabase.** Kun funktionen, ingen
+rækker, ingen frontend-ændring at merge sammen med.
