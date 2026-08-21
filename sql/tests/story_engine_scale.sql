@@ -53,7 +53,8 @@ create table public.seasons (
   league_id uuid not null references public.leagues(id) on delete cascade, name text);
 create table public.teams (
   id uuid primary key default gen_random_uuid(),
-  league_id uuid references public.leagues(id) on delete cascade, name text not null);
+  league_id uuid references public.leagues(id) on delete cascade, name text not null,
+  short_name text);  -- B39 (#72)
 create table public.matches (
   id uuid primary key default gen_random_uuid(),
   season_id uuid not null references public.seasons(id) on delete cascade,

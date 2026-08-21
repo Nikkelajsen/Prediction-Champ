@@ -15,7 +15,77 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `B39`: det korte holdnavn gælder HELE appen, og reglen bor ét sted
+
+**Beslutning (produktejeren):** det korte holdnavn vises **overalt, hvor et
+holdnavn står** — Hjem, stillingens rundemodal, opret-flowet, Admin og Story
+Engine, ikke kun tip-rækkerne. **Gårsdagens afgrænsning til tip-rækkerne er
+dermed ophævet** (se entryen nedenfor, som står uændret som historik).
+
+**Hvorfor den blev ophævet dagen efter.** Gårsdagens begrundelse var, at
+tip-rækken er det ene sted, prisen betales, og at ét sted kan revideres billigt,
+hvis tonen skurrer. Ejeren så resultatet i den kørende app og svarede på det
+spørgsmål, afgrænsningen efterlod åbent: tonen skurrer ikke — det gør
+**forskellen**. Når Tip siger "Hull City – Man United" og Hjem, Admin og
+stillingen siger "Hull City AFC – Manchester United FC" om den samme kamp, er
+kælenavnet ikke længere et kort navn, men et andet navn. Konsistens er her
+argumentet, ikke plads.
+
+**Præmissen holdt heller ikke.** "Alle andre visninger har plads til det fulde
+navn" var forkert på det sted, det betød mest: Hjems rundeliste sætter
+`textOverflow: "ellipsis"` og **trunkerer** — altså gør præcis det, tip-rækken
+nægter at gøre, fordi et afkortet holdnavn er skjult information. Hjem var det
+sted i appen, hvor et langt navn kostede information og ikke bare højde, og det
+stod ikke i beslutningen.
+
+**Reglen bor ét sted, og det er den egentlige leverance.** Otte kopier af
+`t.short_name || t.name` var den nærliggende vej og er forkert på to måder, der
+begge ser ud som "det hold har ikke noget kort navn": et sted, der glemmes,
+viser tavst det lange navn, og et sted, der beder om `select=id,name`, gør det
+samme UDEN at fejle. `teamLabel()`/`teamLabelMap()`/`TEAM_SELECT`
+(`src/lib/teams.js`) er derfor regel OG opslag ét sted.
+
+**`TEAM_SELECT` er `*` og navngiver med vilje ingen kolonner.** En navngiven
+kolonne, der ikke findes, er en 400 fra PostgREST — og `short_name` findes kun i
+en database, hvor `#72` er kørt. Produktionen har kørt den; staging og et preview
+mod staging behøver ikke at have gjort det, og så ville hver skærm med en kamp
+på være hvid dér. Det er samme uafhængighed mellem migrering og deploy, som
+`planTeamWrites()` giver skrivesiden, og den er nu en påstand i `teams.test.js`
+frem for en vane.
+
+**Favorithold-listen sorterer efter det, der VISES.** Rækkefølgen kom fra
+serverens `order=name`; med kort navn på skærmen ville "Atleti" stå midt i
+C'erne, hvor "Club Atlético de Madrid" hører hjemme. En liste, man skal finde et
+hold i, må sortere efter sin egen tekst — derfor `_label` på rækken og en
+sortering i `loadTeamsByLeague()`.
+
+**Story Engine skriver kort navn, men kun fremad, og det er en kant værd at
+kende.** Historiernes tekst er FROSSEN ved skrivningen, så de kort, der allerede
+står, beholder de lange navne, til dagen skrives forfra. Reglen er skrevet ud
+seks steder i `story_engine_v3.sql` frem for at bo i en `public.team_label()`-
+funktion: en ny funktion i `public` skal bære sin egen `revoke execute … from
+public` (`#56`) og vogtes af to kontroller, og det er for meget maskineri om seks
+kald i én fil — samme afvejning, som `G123` traf. Prisen er, at kilden og appen
+kan drive fra hinanden, og den betales af en **kilde-læsende vagt** i
+`sql/migration_syntax.test.js` (vagt 4): en påstand mod `stories` ville kun kunne
+se de tre af otte dagsregler, fixturen faktisk fyrer — og COLLECTIVE_MISS, den
+ene hvis OVERSKRIFT bærer to holdnavne, er netop en af de fem, den ikke fyrer.
+Samme lære og samme form som vagt 3 (`G89`).
+
+**Holdmatchen er stadig urørt.** `teams.name` er fortsat nøglen
+(`teams_league_name_unique`, normaliseret navnematch med `includes()`-fallback).
+Kolonnen er ren visning, og det var halvdelen af gårsdagens beslutning — den
+halvdel står ved magt.
+
+---
+
 ## 20. august 2026 — `B39`: det korte holdnavn vises KUN i tip-rækkerne, og skrivningen gater sig selv på kolonnens eksistens
+
+> 🔶 **Første halvdel er OPHÆVET 21. august 2026** — det korte navn gælder nu
+> hele appen, ikke kun tip-rækkerne (se entryen ovenfor). Anden halvdel — at
+> skrivningen gater sig selv, og at `teams.name` forbliver nøglen — står ved
+> magt. Entryen bliver stående uændret: den er begrundelsen for, hvorfor
+> afgrænsningen blev prøvet først.
 
 **Beslutning:** `teams.short_name` (`#72 teams_short_name.sql`) udfyldes af
 syncen fra football-data.orgs `shortName` og vises i **tip-skærmens kamprækker

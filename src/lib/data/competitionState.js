@@ -7,6 +7,7 @@ import { groupIntoRounds, POINTS, pointsFor, wasTippableAt } from "../scoring.js
 import { assignRanks, avgGoalError, compareStandings, sortStandings } from "../standings.js";
 import { roundRow, without } from "./_shared.js";
 import { selectIn } from "./chunked.js";
+import { TEAM_SELECT, teamLabelMap } from "../teams.js";
 
 // Henter deltagere + kampe + forudsigelser for én konkurrence og beregner
 // stilling + status.
@@ -34,8 +35,8 @@ async function computeCompetitionState(token, competitionId, { signal } = {}) {
   const preds = await selectIn(token, "predictions", "match_id", matchIds, "&select=*", o);
 
   const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]).filter(Boolean))];
-  const teams = await selectIn(token, "teams", "id", teamIds, "&select=id,name", o);
-  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  const teams = await selectIn(token, "teams", "id", teamIds, `&select=${TEAM_SELECT}`, o);
+  const teamName = teamLabelMap(teams);
   ms.forEach((m) => { m._home = teamName.get(m.home_team_id); m._away = teamName.get(m.away_team_id); });
 
   const rounds = groupIntoRounds(ms);

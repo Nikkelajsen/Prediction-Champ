@@ -27,6 +27,7 @@
 // sin `useState` — den beholder altså sit eget flow, mens opslagene flytter ud.
 import { db } from "../supabase.js";
 import { currentRoundKey } from "../scoring.js";
+import { TEAM_SELECT, teamLabel, teamLabelMap } from "../teams.js";
 
 // Nyeste sæson pr. turnering: `{ [leagueId]: season }`.
 //
@@ -66,9 +67,15 @@ async function loadTeamsByLeague(token, leagues) {
   const leagueIds = leagues.map((l) => l.id);
   if (!leagueIds.length) return {};
   const tms = await db.select(token, "teams",
-    `league_id=in.(${leagueIds.join(",")})&select=id,league_id,name&order=name`);
+    `league_id=in.(${leagueIds.join(",")})&select=${TEAM_SELECT}`);
   const byLeague = {};
-  for (const t of tms) (byLeague[t.league_id] ||= []).push(t);
+  // `_label` sættes HER og ikke i dropdownen, fordi den også er sorteringsnøglen
+  // (`B39`). Rækkefølgen kom før fra serverens `order=name`; med kort navn på
+  // skærmen ville den have set tilfældig ud — "Atleti" ville stå under C, hvor
+  // "Club Atlético de Madrid" hører hjemme. En liste, man skal kunne finde et
+  // hold i, må sortere efter det, der faktisk står i den.
+  for (const t of tms) (byLeague[t.league_id] ||= []).push({ ...t, _label: teamLabel(t) });
+  for (const rows of Object.values(byLeague)) rows.sort((a, b) => a._label.localeCompare(b._label, "da"));
   return byLeague;
 }
 
@@ -99,12 +106,12 @@ async function loadUpcomingMatches(token, seasonByLeague, leagues, { limit, hori
 
   const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]))];
   const tms = teamIds.length
-    ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=id,name`)
+    ? await db.select(token, "teams", `id=in.(${teamIds.join(",")})&select=${TEAM_SELECT}`)
     : [];
 
   return {
     truncated,
-    teams: Object.fromEntries(tms.map((t) => [t.id, t.name])),
+    teams: Object.fromEntries(teamLabelMap(tms)),
     matches: ms.map((m) => ({
       ...m,
       _leagueId: seasonToLeague[m.season_id],

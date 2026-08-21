@@ -4,6 +4,21 @@
 -- BAGEFTER sql/story_engine.sql (runde-motoren kalder nu build_round_frames)
 -- og sql/analytics_events.sql (tre nye eventnavne). Idempotent.
 --
+-- 🔴 KRÆVER OGSÅ `#72 teams_short_name.sql` (21. august 2026). Filen læser
+-- `teams.short_name`, så på en database uden den kolonne fejler den med `42703`.
+-- Rækkefølgen er kun et krav ÉN vej og kun første gang: #72 tilføjer en kolonne
+-- og rører intet andet.
+--
+-- HOLDNAVNE I HISTORIERNE ER DE KORTE (`B39`, 21. august 2026):
+-- `coalesce(nullif(short_name, ''), name)` — nøjagtig samme regel som appens
+-- `teamLabel()` i `src/lib/teams.js`, hvor begrundelsen står. Den er skrevet ud
+-- seks steder her frem for at bo i en `public.team_label()`-funktion: en ny
+-- funktion i `public` skal bære sin egen `revoke execute … from public` (#56) og
+-- vogtes af to kontroller, og det er for meget maskineri om seks kald i én fil
+-- (samme afvejning som `G123`). **Teksten er FROSSEN ved skrivningen** — kort
+-- navn gælder derfor kort fra gen-kørslen, ikke bagud: de kort, der allerede
+-- står, beholder de lange navne, til dagen skrives forfra.
+--
 -- ---------------------------------------------------------------------------
 -- Hvad v3 ændrer
 --
@@ -451,10 +466,10 @@ begin
   from (
     select p.competition_id, p.match_id, p.user_id, p.pts,
            m.home_score as hs, m.away_score as away_s,
-           th.name as home, ta.name as away,
+           coalesce(nullif(th.short_name, ''), th.name) as home, coalesce(nullif(ta.short_name, ''), ta.name) as away,
            (m.home_score = m.away_score) as is_draw,
-           case when m.home_score > m.away_score then th.name
-                when m.home_score < m.away_score then ta.name
+           case when m.home_score > m.away_score then coalesce(nullif(th.short_name, ''), th.name)
+                when m.home_score < m.away_score then coalesce(nullif(ta.short_name, ''), ta.name)
                 else 'uafgjort' end as pick,
            -- SKALAR SUBQUERY, ikke `count(*) over (partition by ...)`:
            -- vinduesfunktioner beregnes EFTER where-klausulen, og da den
@@ -488,12 +503,12 @@ begin
   insert into _sd_cand (subject_id, competition_id, rule, priority, base, league_size, payload, headline, body)
   select distinct on (p.competition_id, p.user_id)
     p.user_id, p.competition_id, 'COLLECTIVE_MISS', 125, 24, sz.n,
-    jsonb_build_object('home', th.name, 'away', ta.name,
+    jsonb_build_object('home', coalesce(nullif(th.short_name, ''), th.name), 'away', coalesce(nullif(ta.short_name, ''), ta.name),
                        'score', m.home_score || '-' || m.away_score,
                        'n', (select count(*) from _sd_pts q
                              where q.competition_id = p.competition_id and q.match_id = p.match_id),
                        'league', c.name),
-    '🙈 Ingen ramte ' || th.name || '–' || ta.name,
+    '🙈 Ingen ramte ' || coalesce(nullif(th.short_name, ''), th.name) || '–' || coalesce(nullif(ta.short_name, ''), ta.name),
     (select count(*) from _sd_pts q
      where q.competition_id = p.competition_id and q.match_id = p.match_id) ||
       ' tippede kampen i ' || c.name || '. Den endte ' ||
@@ -1187,7 +1202,7 @@ begin
   -- officielle ligaer), så frame 2 ikke kan nævne en kamp, frame 1 ikke talte.
   drop table if exists _bf_tips;
   create temporary table _bf_tips as
-  select pr.user_id, th.name as home, ta.name as away,
+  select pr.user_id, coalesce(nullif(th.short_name, ''), th.name) as home, coalesce(nullif(ta.short_name, ''), ta.name) as away,
          m.home_score || '-' || m.away_score as score,
          pr.pred_home || '-' || pr.pred_away as guess,
          public.pc_points(pr.pred_home, pr.pred_away, m.home_score, m.away_score) as pts,

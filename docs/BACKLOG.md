@@ -53,7 +53,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-*(Tom.)*
+- Stillingens rundemodal sorterer ens-tidsstemplede kampe efter holdets uuid, mens Hjem og Tip sorterer efter navn — samme runde kan stå i to rækkefølger. Rettelsen er ét argument til groupIntoRounds i competitionState.js.
 
 ---
 
@@ -259,25 +259,20 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 20. august 2026 (femogtredivte kørsel) — `B39` bestilt, aflæst og BYGGET på én dag; Tier 1–3 er tomme
+### 21. august 2026 (seksogtredivte kørsel) — det korte holdnavn rullet ud i hele appen, og indbakken bærer én linje
 
-**Listen er 35 → 34.** `B39` gik hele vejen i tre kørsler samme dag: bestillingen
-skrevet (kaldet kan pr. konstruktion ikke laves fra repoet — efterprøvet, proxy-403
-og ingen token), aflæst af ejeren (`shortName` findes for alle 78 hold i
-PD/PL/SA/BL1, aldrig tomt, ingen dubletter, kælenavne frem for afkortninger —
-[aflæsningen](./reviews/football-data-shortname-aflaesning-2026-08-20.md)), og
-bygget: `#72 teams_short_name.sql` (additiv kolonne, `name` forbliver nøgle),
-begge providere bærer `shortName` i den normaliserede form, syncens holdskrivning
-er udskilt som `planTeamWrites()` med en guard, der først skriver feltet, når
-læsningen viser, at kolonnen findes — så deploy og migrering er uafhængige, begge
-veje — og tip-skærmen viser `short_name || name`. **Valget pr. skærm faldt sådan:
-KUN tip-rækkerne** (stedet, pladsen er trang, og stedet, ejeren meldte); Hjem,
-stillinger og Story Engine beholder de fulde navne. Begrundelsen står i
-[`DECISIONS.md`](./DECISIONS.md).
+**Listen er uændret 34.** Ingen række åbnet eller lukket: udrulningen er
+`B39`s anden halvdel og hørte til gårsdagens allerede lukkede række. Ejeren så
+`#248` i drift og traf beslutningen, afgrænsningen selv lagde op til — kort navn
+**overalt**, ikke kun i tip-rækkerne. Reglen bor nu ét sted (`src/lib/teams.js`),
+otte visninger er flyttet over, og Story Engine skriver kort navn fremad.
+Begrundelsen, og hvorfor afgrænsningen blev prøvet først, står i
+[`DECISIONS.md`](./DECISIONS.md); det ophævede står som historik samme sted.
 
-✅ **`#72` er kørt i produktionen senere samme dag** (ejeren, efter mergen af
-`#248`) — feltet udfyldes af næste sync pr. turnering, aflæseligt som
-`shortNamesSet` i Admin → Drift, og skema-eksporten er kørt på arbejdsgrenen
-bagefter. CL svarede 404 undervejs — `B28`s udløser er efterprøvet og stadig
-ikke indtruffet, og CL-holdene får feltet ad samme vej, når terminslisten
-kommer.
+**Indbakken bærer én ny linje, og den er værd at kende formen på.** Under
+udrulningen viste `competitionState.js` sig at kalde `groupIntoRounds(ms)` uden
+navne-funktion, så stillingens rundemodal sorterer ens-tidsstemplede kampe efter
+holdets uuid, mens Hjem og Tip sorterer efter navn. Rettelsen er ét argument —
+og den blev **ikke** taget med: den ændrer en rækkefølge, ingen bad om, i en
+opgave om navne. Den er noteret frem for nævnt i svaret, hvilket er hele
+forskellen på en observation, der overlever sessionen, og en, der ikke gør.

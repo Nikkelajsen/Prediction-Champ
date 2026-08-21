@@ -7,6 +7,7 @@ import { APP_TZ, byKickoffThenTeams, currentRoundIndex, groupIntoRounds, lockAtO
 import { computeCompetitionState } from "./competitionState.js";
 import { loadMonthlyBoard } from "./standings.js";
 import { selectIn } from "./chunked.js";
+import { TEAM_SELECT, teamLabelMap } from "../teams.js";
 
 // ---------- Hjem: næste deadline + manglende tips på tværs af brugerens konkurrencer ----------
 async function computeHomeTips(token, userId, competitions) {
@@ -17,8 +18,11 @@ async function computeHomeTips(token, userId, competitions) {
   if (!ids.length) return { hasComps: true, noMatches: true };
   const ms = await selectIn(token, "matches", "id", ids, "&select=*&order=kickoff_at", { sortBy: "kickoff_at" });
   const teamIds = [...new Set(ms.flatMap((m) => [m.home_team_id, m.away_team_id]).filter(Boolean))];
-  const teams = await selectIn(token, "teams", "id", teamIds, "&select=id,name");
-  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  const teams = await selectIn(token, "teams", "id", teamIds, `&select=${TEAM_SELECT}`);
+  // Kort holdnavn, hvor der er ét (`B39`). Deadline-kortets tre navne står på én
+  // linje, og rundelisten nedenfor TRUNKERER med ellipse — Hjem er dermed det
+  // sted, hvor et langt navn koster information, ikke bare højde.
+  const teamName = teamLabelMap(teams);
   const preds = await selectIn(token, "predictions", "match_id", ids, `&user_id=eq.${userId}&select=match_id,pred_home,pred_away`);
   const predByMatch = new Map(preds.map((p) => [p.match_id, p]));
 
@@ -93,8 +97,8 @@ async function computeCurrentRound(token, userId, competitions) {
   if (!round || !round.matches.length) return null;
 
   const teamIds = [...new Set(round.matches.flatMap((m) => [m.home_team_id, m.away_team_id]).filter(Boolean))];
-  const teams = await selectIn(token, "teams", "id", teamIds, "&select=id,name");
-  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  const teams = await selectIn(token, "teams", "id", teamIds, `&select=${TEAM_SELECT}`);
+  const teamName = teamLabelMap(teams);
   // Sorteringen sker HER og ikke i groupIntoRounds ovenfor: holdnavnene slås op
   // ud fra rundens kampe, så de findes først, når runden er valgt. Uden den ville
   // en runde med ens tidsstempler ligge i vilkårlig orden på Hjem.
