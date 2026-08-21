@@ -53,6 +53,7 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
+- Skema-eksportens datolinje lover at stå stille, når intet ændrede sig, men pg_dump 17 skriver et tilfældigt \restrict-token i hver kørsel, så enhver eksport giver en diff og rykker datoen. Set 21. august 2026 på en eksport, hvor kun token og dato ændrede sig.
 - Stillingens rundemodal sorterer ens-tidsstemplede kampe efter holdets uuid, mens Hjem og Tip sorterer efter navn — samme runde kan stå i to rækkefølger. Rettelsen er ét argument til groupIntoRounds i competitionState.js.
 
 ---
