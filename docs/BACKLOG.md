@@ -60,7 +60,7 @@ Tom.
 
 ## Prioriteret rækkefølge
 
-Alle 30 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 29 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -152,18 +152,15 @@ Røres kun, når udløseren i deres `Afgøres`-felt indtræffer.
 
 Vækst, ikke fastholdelse. Produktbogens kapitel 3 sætter dem bevidst efter alt
 ovenstående, og de står i rækkefølge efter, hvad der gater hvad, ikke efter
-værdi. **Én undtagelse fra "ingen af dem er besluttet":** `I10` er AFGJORT
-12. august 2026 — `leagly.app` til hjemmesiden, `app.leagly.app` til appen, og
-Vercel-projektet omdøbes ikke ([`DECISIONS.md`](./DECISIONS.md), runbog i
-[`DOMAENE.md`](./DOMAENE.md)). `B21` er dermed skrumpet til de navne og links,
-der følger med, og de to køres stadig samlet, fordi det er den samme flytning.
-*(Den anden undtagelse var `B25`, som stod øverst her indtil 9. august 2026,
-hvor den blev leveret — se [`MAIL.md`](./MAIL.md).)*
+værdi. **Ingen af dem er besluttet.** *(To rækker var undtagelsen og er begge
+væk: `B25` blev leveret 9. august 2026 — se [`MAIL.md`](./MAIL.md) — og `I10`
+21. august 2026, hvor trin 8's tre sidste beviser bestod; runbogen bliver
+stående som instruktion i [`DOMAENE.md`](./DOMAENE.md). `B21` står tilbage som
+den halvdel af flytningen, der aldrig var teknisk: ét navneskifte på GitHub.)*
 
 | # | Hvad | Bemærkning |
 |---|---|---|
-| `I10` | Domænet peget på hjemmesiden OG appen | **Skrumpet 9. august 2026 (`B25`), afgjort 12. august 2026, repoets del skrevet 13. august 2026.** E-mail-halvdelen er lukket, formen er valgt (`leagly.app` → hjemmesiden, `app.leagly.app` → appen, ingen omdøbning af projektet), og **trin 6 + 7 ligger nu som kode: redirect i `vercel.json`, 23 CTA'er + README flyttet, to faldbacks rettet.** ✅ **Trin 1 og 3–7 er kørt 13. august 2026, og `#196` er merget og udrullet.** Bevis 1, 3b og 4 er bestået: den gamle adresse svarer 308 mod `app.leagly.app`, `/api/` gør ikke, og en modtaget nulstillingsmail bærer `redirect_to=https://app.leagly.app/` i kilden. **Tilbage: resten af trin 8** (det gamle `?liga=`-link hele vejen, et login, `og:url`) og `B21`s GitHub-omdøbning. ✅ **Trin 2 er kørt 14. august 2026** — hjemmesidens Vercel-projekt er oprettet, og `leagly.app` er live. ✅ **Bevis 6 og 7 er bestået senere samme dag** (12:51–12:52 UTC): CSP'en fra `site/vercel.json` svarer ord for ord, og `www` svarer 308 mod apex. Tilbage af trin 8 er dermed kun appens egne aflæsninger nævnt ovenfor (`?liga=`-linket, et login, `og:url`). Runbog i [`DOMAENE.md`](./DOMAENE.md). CSP'en skal IKKE røres (to origins deler ikke headere). |
-| `B21` | Omdøb GitHub-repoet | **Tekstdelen er leveret 13. august 2026 sammen med `I10`s trin 7** — de 23 CTA'er og README'ens live-link peger nu på `app.leagly.app`, altså netop ikke skiftet to gange. **Vercel-omdøbningen udgik 12. august 2026.** Tilbage er ét skridt: omdøb GitHub-repoet til `Leagly` (GitHub redirigerer selv gamle links og remotes). `docs/RESTORE.md` rettes IKKE — den navngiver backup-filer, der faktisk hedder det gamle. |
+| `B21` | Omdøb GitHub-repoet | **Står alene siden 21. august 2026**, hvor `I10` blev lukket — og gater intet. **Tekstdelen er leveret 13. august 2026 sammen med `I10`s trin 7** — de 23 CTA'er og README'ens live-link peger nu på `app.leagly.app`, altså netop ikke skiftet to gange. **Vercel-omdøbningen udgik 12. august 2026.** Tilbage er ét skridt: omdøb GitHub-repoet til `Leagly` (GitHub redirigerer selv gamle links og remotes). `docs/RESTORE.md` rettes IKKE — den navngiver backup-filer, der faktisk hedder det gamle. |
 | `I9` | SEO | 🔶 **Repoets halvdel er leveret 15. august 2026 sammen med `B34`** — runbog, register, beviser og fejlfinding i [`SEO.md`](./SEO.md), vagt i `seo.test.js`. **Tilbage er kun ejerens fem trin i Search Console** (domæne-ejendom, sitemap, indeksering af forsiden, kontrol af at appen holdes ude, og Bing valgfrit). Rækken bliver i dette tier og ikke i Tier 1: den er *vækst* og ikke en aflæsning, produktet venter på, og produktbogens kapitel 3 sætter vækst efter fastholdelse — også når adgangen tilfældigvis ligger uden for repoet. |
 | `I21` | OG-billede med ligaens eget navn | Den dyre udgave af `I17` (leveret 13. august 2026): et billede pr. liga kræver skriftgengivelse på serveren, hvor `I7`s løsning lod `og:title` bære ordlyden og billedet være statisk. |
 | `B20` | Personlige invite-links (attribution) | Står nu alene: `I7` gennemgik flowet 11. august 2026 og **blotlagde præcis den mekanik, rækken beskriver** — afsenderens navn kunne kun komme i den tekst, afsenderen selv sender, og det dynamiske link-preview må sige "Kom med i ligaen X" frem for "Nikolaj har inviteret dig", fordi modtagersiden ikke kender afsenderen. `invite_preview()` er formet, så `B20` kun skal tilføje ét felt i svaret. Over `I6`, som ikke kan måle en ambassadør uden den. **Tieret ét sted, hvor ventetid koster:** attributionen kan først tælle fra udrulningsdagen. |
@@ -195,7 +192,7 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 
 | # | Hvad | Hvorfor / hvad den venter på | Omfang |
 |---|---|---|---|
-| B21 | **Omdøb GitHub-repoet** | Navneskiftet 4. august 2026 gik gennem app, manifest, ikoner, tekster og dokumentation, men stoppede ved projektnavnene — **med vilje**, fordi et skifte af Vercel-projektet ændrer `.vercel.app`-adressen og dermed knækker hvert link, der peger på den. **`I10`s beslutning 12. august 2026 fjernede rækkens farligste halvdel** (Vercel-projektet omdøbes IKKE), og **tekstdelen er leveret 13. august 2026** som `I10`s trin 7: de 23 CTA'er i `site/` (4+5+6+4+4) og README'ens live-link peger nu på `app.leagly.app`. At de blev flyttet i samme ombæring som redirectet var hele pointen — ellers var de samme 23 links skiftet to gange. **Tilbage er ét skridt uden for repoet:** omdøb GitHub-repoet til `Leagly`; GitHub redirigerer selv gamle links og remotes. `docs/RESTORE.md`s omtale skal IKKE rettes: den navngiver backup-filer, der faktisk hedder det gamle. | Lille — ét dashboard-skridt |
+| B21 | **Omdøb GitHub-repoet** | Navneskiftet 4. august 2026 gik gennem app, manifest, ikoner, tekster og dokumentation, men stoppede ved projektnavnene — **med vilje**, fordi et skifte af Vercel-projektet ændrer `.vercel.app`-adressen og dermed knækker hvert link, der peger på den. **`I10`s beslutning 12. august 2026 fjernede rækkens farligste halvdel** (Vercel-projektet omdøbes IKKE), og **tekstdelen er leveret 13. august 2026** som `I10`s trin 7: de 23 CTA'er i `site/` (4+5+6+4+4) og README'ens live-link peger nu på `app.leagly.app`. At de blev flyttet i samme ombæring som redirectet var hele pointen — ellers var de samme 23 links skiftet to gange. **Tilbage er ét skridt uden for repoet:** omdøb GitHub-repoet til `Leagly`; GitHub redirigerer selv gamle links og remotes. `docs/RESTORE.md`s omtale skal IKKE rettes: den navngiver backup-filer, der faktisk hedder det gamle. **Rækken står alene siden 21. august 2026**, hvor `I10` blev lukket, og den gater intet: adressen, brugerne deler, er `app.leagly.app` uanset hvad repoet hedder. | Lille — ét dashboard-skridt |
 | B20 | **Personlige invite-links** (`invite_links` + `invited_by` på `group_members`/`competition_participants`) | Attributionen "hvem inviterede hvem" findes ikke i skemaet: `groups.invite_code` er én kode pr. liga og ikke pr. bruger, og ingen af medlemstabellerne gemmer afsenderen. Det er derfor, milepælen **"5/10 venner tilmeldt via dit link" ikke kunne bygges** — `milestones` tæller i stedet `LEAGUE_GREW_5/10`, altså hvor mange der kom med i en liga, man har oprettet, hvilket er en anden bedrift. Begrundelsen står ved koden begge steder (`sql/milestones.sql`, `src/lib/milestones.js`) og peger på denne række. **Ventetid er ikke gratis her, og det er rækkens vigtigste egenskab:** attribution kan kun registreres fremad, så en bedrift bygget på den kan først tælle fra udrulningsdagen — de brugere, der allerede er inviteret, tælles aldrig. Gater desuden `I6` (ambassadørprogram), som ikke kan måle noget uden. **`I7` (11. august 2026) rørte flowet uden at trække rækken ind** og er formet, så den kan sættes ind bagefter: `invite_preview()` og `api/invite-preview.js` tager begge en KODE, og en per-bruger-token kan gå ad samme vej. Se `DECISIONS.md` for hvorfor de to attributioner ikke er den samme ting. | Mellem |
 | B28 | **Gentag CL's kickoff-aflæsning, når ligafasen er lodtrukket** | Champions League var den ene af fem turneringer, [`docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md`](./reviews/football-data-kickoff-aflaesning-2026-08-07.md) ikke kunne dække — leverandøren havde pr. 1. august 2026 endnu ikke oprettet sæsonen 2026, fordi ligafasen ikke var lodtrukket (`B8`, lukket 1. august 2026). De fire aflæste turneringer delte sig i to: kun Bundesliga sender en ren midnats-pladsholder (`status: SCHEDULED` + `00:00`), de tre andre sender et opdigtet klokkeslæt for hver ufastsat kamp uden nogen markør at skelne på. Om CL ligner Bundesliga eller de tre andre, afgør om `kickoff_tbd` overhovedet kan sættes for turneringen (og dermed om `G84`s kontrol kan se den) — og er kun kendt, når svaret aflæses. | Lille (samme PowerShell-opslag, gentaget) |
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. Forespørgslen står i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). **Rækken har stået siden august 2026 med teksten "tilbage står at køre den" — og da den blev kørt 5. august 2026, kunne den ikke:** vinduet partitionerede på `(e.created_at < m.fra)`, som hverken står i `group by` eller er aggregeret, så PostgreSQL afviste den med `42803`. Perioden udledes nu i en CTE, efterprøvet mod PostgreSQL 16.13. **Anden kørsel samme dag afslørede, at kilden var forkert valgt:** hændelsesloggen svarede med tre oprettelser i alt, alle `random` — plausibelt nok ved ~20 testbrugere, men ubrugeligt, fordi `analytics_events` først findes fra 30. juli 2026, så "før mærkatet" var to døgn og ikke appens historik. `competitions.mode` + `created_at` bærer samme oplysning som **rigtige rækker over hele historikken**, og spec'ens §5F er byttet om, så tabellen er den primære kilde og hændelsen kontrollen. **Opslaget er kørt 5. august 2026, og svaret er "ikke endnu":** hele appens historik rummer **syv** konkurrencer — 6 før mærkatet (`time_range` 2, `random` 2, `full_season` 2) og **1** efter (`random`). Med n=1 i den ene periode kan ingen fordeling måles, hvilket er præcis rækkens eget første forbehold. Rækken er derfor flyttet til Tier 6 med en udløser, der kan aflæses med samme opslag: **tosifret `antal` i `efter`-perioden.** Det, der er leveret, er ikke svaret, men at spørgsmålet nu kan stilles — forespørgslen kunne hverken køre eller pege på den rigtige kilde, da rækken blev skrevet. | Lille (opslag) |
@@ -223,7 +220,6 @@ idé bliver til en `B`- eller `A`-række, når den er værd at tage stilling til
 | I3 | **Alarm ved tilstandsskifte i en liga** | Naturlig følge af `I2`: en liga, der skifter til rød, er interessant i det øjeblik det sker, ikke næste gang nogen åbner admin. | Afhænger af `I2` |
 | I6 | **Ambassadørprogram ved oprettelse af ligaer/konkurrencer** (evt. med synligt deltagerantal) | Vækstkanal, der bygger på strukturen, der allerede findes (ligaer/konkurrencer), men ingen mekanik eller incitament er designet endnu. | Ny |
 | I9 | **SEO for hjemmesiden** | **Repoets halvdel er lukket 15. august 2026** med `B34`: `og:locale` og `og:image:alt` på alle fem sider, `site/404.html`, cache på `/css/`, appens `noindex`-header og `public/robots.txt` — plus [`SEO.md`](./SEO.md), som samler registeret, ejerens trin, seks beviser og fejlfindingen ét sted, og `seo.test.js`, som vogter dem. Tilbage står de fem trin i Search Console, som kræver en Google-konto. | Ejerens tur — repoet er klar |
-| I10 | **Domænet peget på hjemmesiden og appen** | **Halvt leveret 9. august 2026 (`B25`), formen afgjort 12. august 2026.** E-mail-halvdelen er væk: `kontakt@leagly.app` står i `src/lib/legal.js` og `site/om.html`, og pladsholderne `[NAVN]`/`[KONTAKT-E-MAIL]` er udfyldt. Den anden halvdel er nu besluttet frem for åben: **`leagly.app` → hjemmesiden, `app.leagly.app` → appen**, begge på Vercel, projektet omdøbes ikke, og de gamle `.vercel.app`-adresser redirigeres permanent. Begrundelsen står i [`DECISIONS.md`](./DECISIONS.md) (kort: invitationslinks bygges af `window.location.origin`, så det er appens adresse, brugerne deler). **CSP'en skal ikke justeres** — to origins deler ikke headere, og `site/` er selvbærende. **Repoets del er skrevet 13. august 2026:** redirect af de to gamle `.vercel.app`-værtsnavne i `vercel.json` (trin 6), `B21`s 23 CTA'er + README (trin 7) og to faldback-adresser i `vite.config.js`/`api/invite-preview.js`. **`/api/` er med vilje undtaget fra redirectet**, så de ni cron-jobs ikke skal flyttes samtidig — begrundelsen står ved reglen i [`DOMAENE.md`](./DOMAENE.md). ✅ **Trin 1 og 3–7 er kørt 13. august 2026:** domænet er oprettet og svarer, Supabases Site URL er flyttet og testet, Turnstile-værtsnavnet er **udvidet** (ikke skiftet), og `#196` er merget og udrullet. **Bevis 1 og 3b er bestået** — den gamle adresse svarer 308 mod `app.leagly.app`, og `/api/sync-live` svarer 401 og ikke 308, med appens egen CSP-header på, altså helt frem til funktionen. **Bevis 4 er bestået 13. august 2026:** en modtaget nulstillingsmail bærer `redirect_to=https://app.leagly.app/` i kilden, og det felt bygger Supabase af Site URL — altså er trin 4 nu bevist og ikke kun meldt. **Tilbage: resten af trin 8**, hvor beviserne afgør, om de øvrige meldte dashboard-trin faktisk virkede — det gamle `?liga=`-link hele vejen, et login på den nye adresse og `og:url`. | Trin 2 er kørt 14. august 2026 (`I8` leveret), og bevis 6 + 7 bestod samme dag — kun trin 8's sidste aflæsninger står tilbage |
 | I11 | **LinkedIn-side**, hvis der satses på indtægt via virksomheder | Betinget af en B2B-retning, der ikke er besluttet endnu. | Betinget af B2B-retning |
 | I12 | **Offentlig side pr. liga** (fx `predictionhub.app/league/padel-legends`: antal sæsoner, medlemmer, mestre, statistik — ikke tips, kun historik) | Bygger videre på liga-laget (§18) som en delbar, offentlig facade for hver liga. Kræver stillingtagen til, hvad der må vises uden login. | Ny |
 | I15 | **Weekly Mix** — automatikken: et job, der opretter ugens kupon af sig selv | **Indholdet er leveret 1. august 2026 (A22):** opret-galleriet har et "Ugens kupon"-kort — `random`, én runde frem, alle turneringer, navnet genereret — så en bruger leverer kuponen manuelt med to tryk. **Tilbage står KUN gentagelsen**, og dens to ubesluttede punkter: (1) **hvem skriver?** — enhver konkurrence skrives i dag af sin egen opretter, og RLS kræver `created_by = auth.uid()`, så et ugentligt job skal køre som `service_role` (mønsteret findes nu: `award_competition_periods()` tillader allerede `service_role`); (2) **"mest interessante kampe"** — der findes hverken odds eller tabelstilling i basen, så et automatisk udvalg bliver heuristik, hvilket støder på kap. 1's *"odds og avanceret analyse må aldrig overskygge det sociale formål"* — den leverede kupon undgår spørgsmålet ved at trække tilfældigt. Weekly Mix ville desuden være et **andet** ugentligt begreb ved siden af den globale spillerunde (som **er** produktets ugentlige tvær-turneringsbegreb) — det er dét, der skal begrundes. | Afventer efterspørgsel. **Målingen, der var betingelsen, viste sig ikke at kunne laves (5. august 2026):** `mode = 'random'` dækker både galleriets Ugens kupon-kort og en håndlavet Quick Pick, og `mode_params` skiller dem ikke — `rounds` skrives kun ved > 1 runde, hvilket begge kan have. Skal kortets brug måles, kræver det en ny hændelse eller et felt, altså instrumentering og ikke et opslag |
@@ -251,30 +247,27 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (halvtredsindstyvende kørsel) — `G148` leveret: startrunden står nu i rækken
+### 21. august 2026 (enoghalvtredsindstyvende kørsel) — `I10` lukket: domæneflytningens sidste tre beviser bestod
 
-**Listen er 31 → 30, og Tier 1–5 er tomme igen.** Tilbage står Tier 6 (venter
-på en udløser) og Tier 7 (udadvendt og ubesluttet).
+**Listen er 30 → 29.** `I10` er slettet fra Tier 7 og fra ideoversigten; `B21`
+bliver stående og står nu alene.
 
-**Fejlen:** "Start ved næste runde" filtrerede kampene ved oprettelsen og blev
-ikke gemt nogen steder. Efterfyldningen kender kun `mode` og `mode_params`, så
-den lagde den fravalgte runde tilbage ved næste sync — så længe runden endnu
-ikke var låst, hvilket ER den situation, valget findes til.
+**Der blev ikke bygget noget.** Rækken har ligget færdig som kode siden
+13. august 2026 — det, der udestod, var tre AFLÆSNINGER, som kun kan tages uden
+for repoet: at et gammelt `?liga=`-link overlever redirectet med koden i behold
+(bevis 2), at et login lykkes på `app.leagly.app` (bevis 3), og at `og:url` i
+kilden siger den nye adresse (bevis 5). Ejeren kørte trin 8, og alle tre bestod.
 
-**Kuren blev en anden end rækkens egen, og forskellen er værd at have:** rækken
-foreslog at gemme startrunden, og det er dét, der er gjort
-(`mode_params.from_round`, den første tilladte rundenøgle, kun skrevet ved
-"næste runde"). Overvejet og fravalgt blev at UDLEDE bunden af konkurrencens
-egne kampe — ingen rækkeform-ændring, og den ville virke bagud på gamle rækker
-— men den over-spærrer: et hold med spredte kampe kan få en ny kamp skemalagt
-mellem oprettelsen og sin første kamp, og den ville da blive afvist, selv om
-ingen har valgt den fra. En udledt bund måler, hvornår konkurrencen tilfældigvis
-begynder; et gemt valg måler, hvad opretteren bad om.
+**Rækken kunne ikke lukkes herfra, og det er værd at vide hvorfor.** Udgående
+HTTPS er spærret i arbejdsmiljøet: både `curl -I https://app.leagly.app/` og et
+WebFetch svarer `EGRESS_BLOCKED`. Selv bevis 5, som er en ren maskinaflæsning,
+måtte derfor gå gennem ejeren. Det er samme mønster som Tier 1's rækker — svaret
+ligger uden for repoet — og det er grunden til, at `I10` blev liggende i tre
+uger med koden færdig.
 
-**Reglen er nummer 4 i efterfyldningen og ikke en udvidelse af regel 3.** De to
-løser hver sit: regel 3 spærrer for en runde, TIDEN har sat i gang, regel 4 for
-en runde, OPRETTEREN har valgt fra. Testen for den er derfor kørt seks dage
-tidligere end resten af filen — i det vindue, hvor regel 3 siger ja til alt, og
-hvor de to regler dermed kan skelnes fra hinanden.
+**De tre er meldt bestået uden en citeret aflæsning.** Bevis 1, 3b, 4, 6 og 7
+står med svaret ord for ord i [`DOMAENE.md`](./DOMAENE.md); de tre nye gør ikke.
+Forskellen er skrevet ind ved trin 8 frem for at blive glattet ud, fordi den
+afgør, hvad man skal gøre først, hvis et af symptomerne dukker op igen.
 
 **Indbakken var tom ved kørslens begyndelse og er det stadig.**

@@ -9,6 +9,67 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 (ellevte kørsel) — `I10` er lukket: domæneflytningens sidste tre beviser bestod
+
+**Ingen kode er ændret.** `I10`s repo-halvdel har ligget udrullet siden
+13. august 2026 (`#196`); det, der udestod, var tre aflæsninger, som kun kan
+tages uden for repoet. Ejeren kørte [`DOMAENE.md`](./DOMAENE.md)s trin 8, og
+alle tre bestod. Dermed er alle otte beviser i runbogen bestået, og flytningen
+til `app.leagly.app` er færdig.
+
+**De tre, der manglede, var appens egne aflæsninger.** *Bevis 2:* et gammelt
+invitationslink — `prediction-champ.vercel.app/?liga=<kode>` — lander på
+`app.leagly.app/?liga=<kode>` **med koden i behold**, og previewet tegnes
+stadig. *Bevis 3:* et rigtigt login lykkes på den nye adresse. *Bevis 5:*
+`og:url` i kilden siger `app.leagly.app`.
+
+**Bevis 2 er det eneste af de otte, der ikke kan snydes.** Redirectets 308
+(bevis 1, bestået 13. august) måler, at den gamle adresse peger det rigtige
+sted hen — men siger intet om, hvorvidt query-strengen overlever turen. Var
+`?liga=<kode>` faldet på gulvet, ville hvert invitationslink, der er delt før
+flytningen, være dødt: tavst, uden en fejl nogen steder, og først synligt for
+modtageren, som lander på en forside uden liga.
+
+**Bevis 3 opgraderer trin 5 fra "meldt" til "bevist".** Turnstile-værtsnavnet
+blev tilføjet 13. august, men en widget, der tegnes, beviser ikke, at
+værtsnavnet accepteres — det er netop den fejl, hvis symptom er, at ingen kan
+logge ind. Et gennemført login kan derimod ikke ske uden Cloudflares accept.
+Rækken i [`OPRETTELSE.md`](./OPRETTELSE.md)s register står nu som bevist, og
+det gamle værtsnavn bliver stående, som runbogen foreskriver: en udvidelse, ikke
+et skifte.
+
+**Bevis 5 måler udfaldet og ikke mekanismen.** `og:url` stemples ind ved build
+fra `VERCEL_PROJECT_PRODUCTION_URL` (`vite.config.js`), så den *burde* følge med
+af sig selv — men faldbacken i samme fil er `https://app.leagly.app`, altså
+præcis den streng, aflæsningen leder efter. Et grønt bevis 5 kan derfor ikke
+skelne "variablen bar det custom domæne" fra "variablen var tom, og faldbacken
+reddede den". Tagget ER rigtigt, og det er dét, delingen bruger; men næste
+flytning kan ikke læne sig på aflæsningen — faldbacken skal rettes i hånden,
+uanset hvad der stod her. Byggeloggens `[leagly] OG-adresse: …` er den linje,
+der kan skelne de to.
+
+**Rækken kunne ikke lukkes fra repoet, og det er grunden til, den lå tre uger
+med koden færdig.** Udgående HTTPS er spærret i arbejdsmiljøet: både
+`curl -I https://app.leagly.app/` og et WebFetch svarer `EGRESS_BLOCKED`. Selv
+bevis 5, der er en ren maskinaflæsning af en HTML-kilde, måtte derfor gå gennem
+ejeren — samme mønster som backloggens Tier 1, hvor svaret ligger uden for
+repoet.
+
+**De tre er meldt bestået uden en citeret aflæsning**, hvor bevis 1, 3b, 4, 6 og
+7 står med svaret ord for ord. Forskellen er skrevet ind ved trin 8 frem for
+glattet ud: den afgør, hvad man mistænker først, hvis et af symptomerne dukker
+op igen — aflæsningen, ikke koden.
+
+**Tilbage af flytningen står kun `B21`s GitHub-omdøbning** til `Leagly`, ét
+skridt uden for repoet, som ikke gater noget: adressen, brugerne deler, er
+`app.leagly.app` uanset hvad repoet hedder. `docs/RESTORE.md` rettes ikke — den
+navngiver backup-filer, der faktisk hedder det gamle.
+
+**Runbogen bliver stående som instruktion og ikke som historik**, i samme form
+som [`MAIL.md`](./MAIL.md) og [`OPRETTELSE.md`](./OPRETTELSE.md): flytter appens
+adresse sig en dag til, er det de samme otte beviser i den samme rækkefølge.
+Backloggen er 30 → 29. Intet skal køres i Supabase.
+
 21. august 2026 (tiende kørsel) — `G148`: startrunden står nu i rækken, og efterfyldningen respekterer den
 
 **"Start ved næste runde" var et filter uden hukommelse.** Valget skar

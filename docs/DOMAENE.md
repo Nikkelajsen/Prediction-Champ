@@ -26,11 +26,18 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 >
 > **Trin 6 og 7 er udrullet samme dag, og bevis 1 + 3b er bestået** — redirectet
 > svarer 308 mod `app.leagly.app`, og `/api/` gør ikke. **Bevis 4 er bestået
-> 13. august 2026** på en modtaget nulstillingsmail. **Tilbage: resten af
-> trin 8 og `B21`s GitHub-omdøbning.** De beviser er ikke en formalitet: de fire
-> dashboard-trin er meldt udført, og ingen af dem er efterprøvet af andet end
-> den, der udførte dem. **Trin 2 og dermed `leagly.app` er ikke længere gated:
-> `I8`s copy er godkendt 13. august 2026, og trinnet kan køres.**
+> 13. august 2026** på en modtaget nulstillingsmail.
+
+> ✅ **`I10` er LUKKET 21. august 2026 — trin 8 er kørt, og alle otte beviser er
+> bestået.** De sidste tre var appens egne aflæsninger: `?liga=` hele vejen
+> (bevis 2), et login på den nye adresse (bevis 3) og `og:url` (bevis 5).
+> **Tilbage af flytningen står kun `B21`s GitHub-omdøbning** — ét skridt uden
+> for repoet, som ikke gater noget.
+>
+> **Runbogen bliver stående som instruktion og ikke som historik.** Beviserne er
+> skrevet, så de kan køres igen: flytter appens adresse sig en dag til, er det
+> de samme otte kontroller i den samme rækkefølge — og "Når noget ændrer sig"
+> nederst er listen over, hvad der skal følge med.
 
 ---
 
@@ -41,19 +48,22 @@ hjemmesidens URL. Alt bliver på Vercel. **Vercel-projektet omdøbes ikke.**
 | Domæne | `leagly.app` | 9. august 2026 — i brug til mail (`B25`) |
 | Registrar | ? | ? |
 | Hjemmesiden (`site/`) | `leagly.app` + `www.leagly.app` → apex | ✅ **14. august 2026 — LIVE og fuldt bevist.** Vercel-projektet er oprettet (root directory `site`); `A50`, bevis 6 og bevis 7 er alle bestået samme dag. `leagly.app` svarer 200 med CSP'en fra `site/vercel.json` ord for ord, `www` svarer 308 mod apex, og fontene bærer `immutable`. **Ét led kommer IKKE fra vores fil:** `Strict-Transport-Security: max-age=63072000` sættes af Vercel selv — led ikke efter den i `site/vercel.json` |
-| Appen | `app.leagly.app` | **13. august 2026 — oprettet og svarer, meldt af ejeren** (trin 1 + 3). Ikke aflæst herfra: udgående HTTPS er spærret i arbejdsmiljøet, så adressen er aldrig blevet spurgt af en maskine. Beviserne nedenfor er stadig det, der afgør det |
+| Appen | `app.leagly.app` | ✅ **21. august 2026 — BEVIST.** Oprettet og meldt 13. august (trin 1 + 3), og afgjort 21. august af trin 8: et gammelt `?liga=`-link lander på adressen med koden i behold (bevis 2), et rigtigt login lykkes (bevis 3), og `og:url` i kilden siger `app.leagly.app` (bevis 5). **Stadig ikke aflæst herfra:** udgående HTTPS er spærret i arbejdsmiljøet — `curl` og WebFetch mod adressen svarer `EGRESS_BLOCKED` — så hver af de tre er ejerens aflæsning og ikke en maskines |
 | Gamle appadresser | `prediction-champ.vercel.app`, `prediction-champ-predictor-champ.vercel.app` | **13. august 2026 — redirect udrullet og BEVIST** for den første: 308 med `Location: https://app.leagly.app/` (bevis 1). Den anden er ikke spurgt. **Listen er ikke aflæst i Vercel → Domains, og det bliver den ikke** (`A47`, afgjort 13. august 2026): de to ER Vercels standardsæt for et team-projekt, og projektet er aldrig omdøbt. Findes der mod forventning en tredje, dør intet — adressen serverer samme deployment og redirigerer bare ikke; rettelsen er da én regel mere her |
 | Cron-jobbenes værtsnavn | **`prediction-champ.vercel.app` — alle ni jobs, aflæst 21. august 2026 (`A46`)** | ✅ **Besvaret.** Spørgsmålet blev flyttet ind i appen 13. august 2026: hver kørsel skriver sit værtsnavn i `job_runs.detail`, og 21. august blev de ni værdier aflæst i Admin → Drift — job for job, ikke ved at slutte fra det første. **Domæneflytningen har ikke rørt cron-laget:** ingen af de ni er flyttet til `app.leagly.app`. Det er ikke en fejl, og der er ingen hastende handling — undtagelsen, der beskytter jobbene, er bevist (bevis 3b: `/api/sync-live` på den gamle adresse svarer 401 og ikke 308), så de rammer funktionen uanset hvilken adresse de er sat op med. Prisen er en ikke-kanonisk origin. Flyttes et job, skal `docs/CRON.md`s kaldkolonne rettes i samme ombæring |
 | Vercel-projektnavn (appen) | **Uændret** (bevidst — se `DECISIONS.md`) | 12. august 2026 |
 | Vercel-projekt #2 (hjemmesiden) | `leagly_site` — root directory `site`, domænerne `leagly.app` + `www.leagly.app`. Begge projekter bygger ved hvert push til `main` (se `DOCUMENTATION.md` §11) | 14. august 2026 |
 | GitHub-repo | `Nikkelajsen/Prediction-Champ` | ? — omdøbes med `B21` |
 | Supabase Site URL | `https://app.leagly.app` — se [`MAIL.md`](./MAIL.md) trin 3.2 | **13. august 2026 — flyttet, testet OG bevist** (trin 4 + bevis 4). Ikke længere kun meldt: `redirect_to=https://app.leagly.app/` er aflæst i kilden på en modtaget nulstillingsmail, og det felt bygger Supabase af Site URL |
-| Turnstile-værtsnavne | Se [`OPRETTELSE.md`](./OPRETTELSE.md)s register | **13. august 2026 — `app.leagly.app` tilføjet, meldt af ejeren** (trin 5). Det gamle værtsnavn står stadig, som trinnet foreskriver. Bevis 3 (et rigtigt login på den nye adresse) er det, der afgør det |
+| Turnstile-værtsnavne | Se [`OPRETTELSE.md`](./OPRETTELSE.md)s register | ✅ **21. august 2026 — BEVIST.** `app.leagly.app` blev tilføjet 13. august (trin 5, meldt), og bevis 3 — et rigtigt login på den nye adresse — bestod 21. august. Det gamle værtsnavn står stadig, som trinnet foreskriver: **en udvidelse, ikke et skifte**, og det bliver stående, indtil redirectet har stået i noget tid |
 
 **`?` betyder "aldrig kørt"**, ikke "kørt og bestået". **"Meldt af ejeren"
 betyder heller ikke "bestået"** — det betyder, at handlingen er udført, mens
-beviset for, at den virkede, stadig udestår. De to falder først sammen i
-trin 8.
+beviset for, at den virkede, stadig udestår. De to faldt sammen i trin 8, kørt
+21. august 2026: hver af de fire dashboard-handlinger (trin 1, 3, 4, 5) har nu
+et bevis ved siden af sig, og ingen række herover står længere som "meldt".
+**To `?` bliver stående med vilje** — registraren og GitHub-repoets omdøbning
+(`B21`); ingen af dem gater noget.
 
 ---
 
@@ -216,10 +226,21 @@ De 23 CTA'er kunne rettes uden risiko før flytningen, fordi `site/` ligger uden
 for Vite-buildet og aldrig når et deploy (trin 2 var endnu ikke udført, da de
 blev rettet).
 
-### Trin 8 — kør de eksisterende beviser igen
+### Trin 8 — kør de eksisterende beviser igen ✅ *21. august 2026*
 
 [`MAIL.md`](./MAIL.md)s fire kontroller og [`OPRETTELSE.md`](./OPRETTELSE.md)s
 beviser er skrevet som instruktion netop til denne situation. Kør dem.
+
+**Kørt 21. august 2026, og de tre udestående beviser bestod** — bevis 2
+(`?liga=` hele vejen), bevis 3 (login på den nye adresse) og bevis 5 (`og:url`).
+Dermed er alle otte beviser i listen nedenfor bestået, og **`I10` er lukket**;
+tilbage af flytningen står kun `B21`s GitHub-omdøbning, som ikke gater noget.
+
+> **De tre er meldt bestået af ejeren uden en citeret aflæsning**, og det er en
+> svagere kvittering end bevis 1, 3b, 4, 6 og 7, hvor svaret står ord for ord
+> ovenfor. Det er ikke til at lave om bagud — men det er værd at vide, hvis et
+> af de tre symptomer dukker op igen: så er det aflæsningen, der skal køres
+> forfra, ikke koden, der skal mistænkes først.
 
 ---
 
@@ -250,12 +271,21 @@ link og ikke en konfiguration, der ser rigtig ud.
    → `location: https://app.leagly.app/`.
    **Bestået 13. august 2026, 14:57 UTC:** `HTTP/1.1 308 Permanent Redirect`,
    `Location: https://app.leagly.app/`, `Server: Vercel`.
-2. **Et gammelt invitationslink virker stadig.** Åbn
+2. ✅ **Et gammelt invitationslink virker stadig.** Åbn
    `https://prediction-champ.vercel.app/?liga=<kode>` og se, at du lander på
    `app.leagly.app/?liga=<kode>` **med koden i behold** — og at previewet
    stadig tegnes.
-3. **Login virker på den nye adresse.** Beviser, at Turnstile-værtsnavnet blev
+   **Bestået 21. august 2026** (aflæst af ejeren, trin 8). Det er det eneste af
+   de otte beviser, der måler et rigtigt delt link frem for en konfiguration:
+   redirectets 308 (bevis 1) siger intet om, hvorvidt `?liga=<kode>` overlever
+   turen, og en tabt kode ville have ramt hvert invitationslink, der er delt før
+   flytningen — tavst, og først synligt for modtageren.
+3. ✅ **Login virker på den nye adresse.** Beviser, at Turnstile-værtsnavnet blev
    tilføjet, og ikke bare at widgeten tegnes.
+   **Bestået 21. august 2026** (aflæst af ejeren, trin 8). Dermed er trin 5 ikke
+   længere kun *meldt*: et login kan ikke lykkes, hvis Cloudflare afviser
+   værtsnavnet, så beviset måler indstillingen og ikke widgetens tegning —
+   forskellen står i [`OPRETTELSE.md`](./OPRETTELSE.md) trin 5.
 3b. ✅ **`/api/` redirigerer IKKE.** `curl -I https://prediction-champ.vercel.app/api/sync-live`
    → **ikke** 308 (401/405 er det rigtige svar uden hemmeligheden). Beviser
    `(?!api/)` i trin 6, altså at de ni cron-jobs stadig rammer noget. Kør den i
@@ -274,11 +304,20 @@ link og ikke en konfiguration, der ser rigtig ud.
    bygger af Site URL, så linjen måler indstillingen direkte og ikke en
    omdirigering, der tilfældigvis ender rigtigt. Samme aflæsning bekræftede, at
    afsenderen går gennem Resend (`AmazonSES` i headeren, `B25`).
-5. **`og:url` i kildekoden på `app.leagly.app` siger `app.leagly.app`.**
+5. ✅ **`og:url` i kildekoden på `app.leagly.app` siger `app.leagly.app`.**
    Adressen stemples ind ved build fra `VERCEL_PROJECT_PRODUCTION_URL`
-   (`vite.config.js`), så den bør følge med af sig selv — **men det er en
-   antagelse, indtil den er aflæst.** Gør den ikke, er faldbacken i samme fil
-   stedet at rette.
+   (`vite.config.js`), så den bør følge med af sig selv — **men det var en
+   antagelse, indtil den blev aflæst.** **Bestået 21. august 2026** (aflæst af
+   ejeren, trin 8).
+   **Beviset måler udfaldet og ikke mekanismen**, og forskellen er værd at
+   kende: faldbacken i samme fil er `https://app.leagly.app` — altså PRÆCIS den
+   streng, aflæsningen leder efter. Er `VERCEL_PROJECT_PRODUCTION_URL` tom eller
+   sat til `.vercel.app`-adressen, ser `og:url` derfor stadig rigtig ud. Det
+   gør ikke beviset værdiløst — tagget ER rigtigt, og det er dét, delingen
+   bruger — men det gør, at **næste flytning ikke kan læne sig på det her**:
+   dagen adressen skifter igen, skal faldbacken rettes i hånden, uanset hvad
+   denne aflæsning viste. Byggeloggen skriver `[leagly] OG-adresse: …`, og det
+   er den linje, der kan skelne de to.
 6. ✅ **Hjemmesidens egne headere svarer.** `curl.exe -I https://leagly.app/`
    skal bære `content-security-policy: default-src 'self'; script-src 'none'; …`
    samt `x-content-type-options: nosniff` og `referrer-policy`.
