@@ -861,6 +861,21 @@ jobs:
           psql -h localhost -U postgres -d sharesurfaces -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
           psql -h localhost -U postgres -d sharesurfaces -v ON_ERROR_STOP=1 -b -f sql/tests/analytics_share_surfaces.sql
 
+      # Nævneren under regeltabellens rater (G141). `viewable` er den ene
+      # kolonne i tavlen, ingen kan efterprøve i hånden — og den er nu blevet
+      # forældet TO gange af den samme slags ændring: `G73` satte den for at
+      # fange v2's efterfyldte kort, og v3 fjernede den karrusel, reglen
+      # beskrev, uden at røre reglen. Testen kræver af sig selv, at fixturen
+      # viser fejlen mod skemadumpets GAMLE RPC, før migreringen læses.
+      - name: Test af vis-bar-reglen i regeltabellen
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'create database storyviewable;'
+          psql -h localhost -U postgres -d storyviewable -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/skema.gen.sql" > /dev/null
+          psql -h localhost -U postgres -d storyviewable -v ON_ERROR_STOP=1 -b -f sql/tests/analytics_story_viewable.sql
+
       # Aktive brugere pr. runde (B38). En serie, ingen kan efterprøve i hånden:
       # fire kilder lagt i én spand pr. runde, og hver fejlmåde er et forkert
       # TAL og ikke en fejl. Testen kører de otte mutationer, der faktisk kan

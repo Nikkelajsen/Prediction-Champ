@@ -1,10 +1,14 @@
 // Sektion 6: Story Engine pr. regel — genereret, vis-bart, vist, delt, afvist.
 //
-// "Vis-bar" er ikke pynt ved siden af "genereret" (G73): karusellen på Hjem
-// henter kun den NUVÆRENDE rundes kort, så et kort skrevet efter dets egen
-// runde var forbi — hele v2's efterfyldning — kunne aldrig nå en skærm. Det er
-// dét tal, raterne regner på, og kolonnen står med for at gøre forskellen
-// synlig frem for at skjule den i en nævner.
+// "Vis-bar" er ikke pynt ved siden af "genereret" (G73): et kort, der aldrig
+// kunne nå en skærm, hører ikke til i en nævner. Det er dét tal, raterne regner
+// på, og kolonnen står med for at gøre forskellen synlig frem for at skjule den.
+//
+// REGLEN ER TO REGLER SIDEN v3 (G141): rundekortene måles på karusellen, som
+// kun hentede den nuværende rundes kort, mens et v3-dagskort måles på sit eget
+// vindue — fra det blev skrevet, til det næste dagskort afløste det, dog højst
+// 48 timer. Teksten nedenfor siger begge dele, fordi den forrige udgave kun
+// sagde den første og dermed forklarede en flade, appen ikke har mere.
 
 import { loadAnalyticsStories, storyRuleRows } from "../../lib/analytics.js";
 
@@ -34,7 +38,7 @@ function StoriesSection({ token, days }) {
           <StatGroup title="Samlet">
             <StatTile label="Historier genereret" value={data.generated_total} hint={`til ${data.users_reached} brugere`} info={<M id="story_rules" />} />
             <StatTile label="Kunne vises" value={viewableTotal}
-              hint={unviewable > 0 ? `${unviewable} nåede aldrig en skærm` : "alle nåede karusellen"} info={<M id="story_viewable" />} />
+              hint={unviewable > 0 ? `${unviewable} nåede aldrig en skærm` : "alle kunne nås"} info={<M id="story_viewable" />} />
             <StatTile label="Dækning" value={coverage === null ? "—" : `${coverage} %`}
               hint={`${data.users_reached} af ${data.users_with_rounds} med en låst runde`} info={<M id="story_coverage" />} />
           </StatGroup>
@@ -83,8 +87,9 @@ function StoriesSection({ token, days }) {
           </div>
           <p style={{ ...muted, margin: 0, fontSize: 11 }}>
             <b>Genereret</b> og <b>afvist</b> er rigtige rækker i <code>stories</code> og dermed præcise.
-            <b> Vis-bar</b> er de af dem, der blev skrevet, mens deres egen runde stadig var den nuværende —
-            karusellen henter kun den runde, så et efterfyldt kort kunne aldrig nå en skærm.
+            <b> Vis-bar</b> er de af dem, der overhovedet kunne nå en skærm. For rundekortene vil det sige
+            skrevet, mens deres egen runde stadig var den nuværende; for dagskortene, at kortet nåede at være
+            det nyeste i mere end nul minutter, før næste dag afløste det.
             <b> Procenterne regner på vis-bar, ikke på genereret.</b>
             <b> Vist</b> og <b>delt</b> kommer fra hændelsesloggen og er et <b>gulv</b> — en lav visningsrate kan
             lige så godt være tabt logning som en historie, ingen så. Sammenlign regler med hinanden, ikke med et ideal.

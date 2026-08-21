@@ -247,6 +247,26 @@ En lav rate kan lige så godt betyde tabt logning som manglende visning. Sammenl
 > kortet BLEV genereret. Forskellen mellem de to tal er selv oplysningen, og
 > derfor står vis-bar som en synlig kolonne frem for kun som en nævner.
 
+> ⚠️ **Rettet efter levering (21. august 2026, `G141`): vis-bar har TO regler,
+> fordi fladen fik to.** Reglen ovenfor er karusellens, og karusellen findes
+> ikke mere. Story Engine v3 viser ét dagskort ad gangen: `loadDayCard` henter
+> den nyeste `day_key` og viser den kun under 48 timer gammel. **Et v3-dagskorts
+> vindue går derfor fra `created_at` og frem til det tidligste af (a) 48 timer og
+> (b) det øjeblik, et kort med en nyere `day_key` blev skrevet til samme bruger**
+> — er vinduet nul minutter, kunne kortet aldrig nå en skærm. Æra-skellet er
+> `news_value is not null`: rundekortene og v2's dagskort levede i karusellen og
+> beholder reglen ovenfor uændret.
+>
+> Uden skellet målte nævneren en flade, der var væk — altså `G73`s egen rettelse,
+> forældet af v3 — og `A33`-aflæsningen satte tal på: **halvdelen af de hundrede
+> v3-dagskort havde et vindue på nul minutter.** Det er `G73`s fejlklasse en gang
+> til, og pointen er, at den kom af en ændring et helt andet sted end i tavlen.
+>
+> **De døde kort bliver stående i tabellen** (`G142`). De holdes ude af nævneren,
+> ikke ude af motoren: vinduet er en *model* af `loadDayCard` og ikke en
+> observation — et afvist nyere kort lader et ældre komme frem — så en motor, der
+> sprang dagen over, ville fjerne kort, brugeren kunne have set.
+
 > ⚠️ **Rettet efter levering (5. august 2026).** Her stod: *"En visningsrate over
 > 100 % er derfor umulig."* **Det passer ikke**, og aflæsningen viste det: tabellen
 > havde 200 % (`Vandt runden`), 400 % (`Månedens Champion`) og 133 % (`Premiereugen`).

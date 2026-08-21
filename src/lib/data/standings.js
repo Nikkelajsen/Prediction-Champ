@@ -56,9 +56,71 @@ async function loadRatingBoard(token) {
   return assignRanks(rows, (a, b) => b.rating - a.rating);
 }
 
+// ---------- Hjem: rating-kortet UDEN at hente ranglisten (G139) ----------
+//
+// Hjem bruger ét kort: din rating, din placering, antallet og formkurven.
+// Indtil 21. august 2026 hentede den `loadRatingBoard()` — HVER brugers rating
+// OG hvert profilnavn — for at læse fire tal ud af svaret. Kaldet voksede med
+// brugerbasen og landede i `A34`s egress-loft, længe før nogen ville mærke det
+// i skærmen. Værre: `db.select` rammer PostgREST' tavse loft på 1000 rækker, så
+// en app med tusind ratede brugere ville have vist et for lavt `total` og en
+// placering regnet på en afkortet liste — uden en fejl nogen steder. Samme fælde
+// som `G106` og "· 0 kampe" (DOCUMENTATION.md §13).
+//
+// PLACERINGEN SKAL GIVE PRÆCIS SAMME TAL SOM RANGLISTEN, ellers lyver Hjem om
+// den liste, den linker til. To ting skal derfor med, og begge er lette at tabe:
+//
+//   1. **Delt placering afgøres på den VISTE (afrundede) rating.**
+//      `loadRatingBoard` runder først og kalder så `assignRanks` med
+//      `b.rating - a.rating`, så placeringen er "antallet foran + 1" målt på
+//      hele tal. `Math.round(x) > n` er ensbetydende med `x >= n + 0.5` — derfor
+//      `rating=gte.<min afrundede + 0.5>` og ikke `gt.<min rå rating>`, som
+//      ville tælle en nabo med samme viste tal som foran mig.
+//   2. **Lukkede konti tæller ikke.** De filtreres fra de globale lister i
+//      klienten (se hovedet i denne fil), så en optælling i databasen ser dem,
+//      ranglisten ikke viser. De trækkes fra igen her — via `selectIn`, så en
+//      voksende mængde lukkede konti ikke kan sprænge URL'en (`chunked.js`).
+//
+// Svaret er `{ none: true }`, når brugeren ikke har en rating endnu — samme
+// gyldige tilstand som før, ikke en fejl.
+async function loadRatingSnapshot(token, userId) {
+  const [mine, lukkede] = await Promise.all([
+    db.select(token, "ratings", `user_id=eq.${userId}&scope=eq.ALL&select=rating,provisional`),
+    db.select(token, "profiles", `anonymized_at=not.is.null&select=id`),
+  ]);
+  const me = mine?.[0];
+  if (!me) return { none: true };
+  const rating = Math.round(Number(me.rating));
+
+  // `db.count` er `count=exact` + `limit=0`: databasen tæller, og svaret er
+  // upåvirket af rækkeloftet. Det er hele grunden til, at tallet må hentes sådan
+  // og ikke ved at måle en liste.
+  const [lukkedeRatings, foran, ialt] = await Promise.all([
+    selectIn(token, "ratings", "user_id", lukkede.map((p) => p.id), `&scope=eq.ALL&select=rating`),
+    db.count(token, "ratings", `scope=eq.ALL&rating=gte.${rating + 0.5}`),
+    db.count(token, "ratings", `scope=eq.ALL`),
+  ]);
+  const lukketForan = lukkedeRatings.filter((r) => Math.round(Number(r.rating)) > rating).length;
+  return {
+    rating,
+    rank: foran - lukketForan + 1,
+    total: ialt - lukkedeRatings.length,
+    provisional: me.provisional,
+  };
+}
+
 // map of user_id -> rating, for showing rating next to names in any standings
-async function loadRatingMap(token) {
-  const ratings = await db.select(token, "ratings", `scope=eq.ALL&select=user_id,rating,provisional`);
+//
+// `userIds` er valgfri og afgrænser opslaget til de brugere, kaldet faktisk
+// skal sætte et tal ved (`G139`). `BoardScreen` sender konkurrencens deltagere —
+// otte navne skal ikke koste hele ratingtabellen. `ChampionshipTab` sender
+// INGEN liste, og det er et valg og ikke en forglemmelse: dens lister er selv
+// globale, så opslaget er proportionalt med det, skærmen viser, og deltagerne
+// kendes først efter at månedens/rundens stilling er hentet.
+async function loadRatingMap(token, userIds = null) {
+  const ratings = userIds
+    ? await selectIn(token, "ratings", "user_id", userIds, `&scope=eq.ALL&select=user_id,rating,provisional`)
+    : await db.select(token, "ratings", `scope=eq.ALL&select=user_id,rating,provisional`);
   return new Map(ratings.map((r) => [r.user_id, { rating: Math.round(Number(r.rating)), provisional: r.provisional }]));
 }
 
@@ -66,10 +128,17 @@ async function loadRatingMap(token) {
 // Kolonner: user_id, scope, round_key, rating_after, delta, round_score, matches_predicted, rnk.
 // Formkurve-prik pr. runde ud fra rundens ratingændring (delta): grøn=stærk, gul=middel, grå=svag.
 // Fejler kaldet (fx tom tabel), degraderer vi pænt til ingen form/bevægelse.
-async function loadRatingHistory(token) {
+// `userId` er valgfri og afgrænser til én bruger (`G139`). Hjem bruger kun sin
+// egen række, og hele tabellen er én række pr. bruger PR. RUNDE — den passerer
+// derfor rækkeloftet hurtigere end nogen anden læsning i appen, og fordi
+// sorteringen er `round_key.asc`, ville afkortningen ramme netop de SENESTE
+// runder, altså dem formkurven er lavet af. Rating-fanen sender ingen id og
+// henter fortsat alle; dén afgrænsning kan ikke laves her, fordi skærmen viser
+// en formkurve pr. bruger på hele ranglisten.
+async function loadRatingHistory(token, userId = null) {
   try {
     const rows = await db.select(token, "rating_history",
-      `scope=eq.ALL&select=user_id,round_key,delta&order=round_key.asc`);
+      `scope=eq.ALL${userId ? `&user_id=eq.${userId}` : ""}&select=user_id,round_key,delta&order=round_key.asc`);
     if (!rows || !rows.length) return new Map();
     const byUser = {};
     for (const r of rows) { (byUser[r.user_id] ||= []).push(r); }
@@ -193,4 +262,4 @@ async function loadSeasonBoard(token, leagueId) {
   return { season, rows, totalMatches, playedMatches, isComplete: totalMatches > 0 && playedMatches === totalMatches };
 }
 
-export { loadRatingBoard, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard };
+export { loadRatingBoard, loadRatingSnapshot, loadRatingMap, loadRatingHistory, currentMonthKey, loadMonthlyBoard, loadMonthsAvailable, loadRoundsAvailable, loadRoundBoard, loadSeasonBoard };

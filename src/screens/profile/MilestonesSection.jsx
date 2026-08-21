@@ -4,7 +4,7 @@
 // Ren flytning ud af `ProfileScreen.jsx` (G1, august 2026).
 import { Share2 } from "lucide-react";
 import { C, iconBtn } from "../../ui/theme.js";
-import { Card, Eyebrow, InfoDot } from "../../ui/components.jsx";
+import { Card, Eyebrow, InfoDot, TekstLink } from "../../ui/components.jsx";
 
 function MilestonesSection({ hasMilestones, visibleMilestones, milestones, milestoneExpanded, hiddenCount, setMilestoneExpanded, shareMilestone }) {
   if (!hasMilestones) return null;
@@ -59,10 +59,10 @@ function MilestonesSection({ hasMilestones, visibleMilestones, milestones, miles
             ))}
           </div>
           {!milestoneExpanded && hiddenCount > 0 && (
-            <p style={{ color: C.muted, fontSize: 13, marginTop: 8, marginBottom: 0, cursor: "pointer", textDecoration: "underline" }}
+            <TekstLink style={{ color: C.muted, fontSize: 13, display: "block", marginTop: 8, marginBottom: 0 }}
                onClick={() => setMilestoneExpanded(true)}>
               Vis alle {milestones.length} milepæle
-            </p>
+            </TekstLink>
           )}
         </div>
       )}

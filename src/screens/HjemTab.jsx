@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import { ChevronRight, Clock, Check, RefreshCw } from "lucide-react";
 import { formatKickoff } from "../lib/scoring.js";
-import { computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadDayCard, loadHomePlacements, loadLatestStory, loadRatingBoard, loadRatingHistory, ratingSnapshot } from "../lib/data.js";
+import { computeCurrentRound, computeHomeTips, currentMonthKey, daFullDate, dismissStory, fmtCountdown, loadDayCard, loadHomePlacements, loadLatestStory, loadRatingHistory, loadRatingSnapshot, ratingSnapshot } from "../lib/data.js";
 import { isFresh, roundStorySuperseded, ROUND_STORY_MAX_AGE_MS } from "../lib/stories.js";
 import { readUserFlag, writeUserFlag, readSeenStories, markStorySeen, CARD_KEY } from "../lib/localFlags.js";
 import { C, btnGhost, btnGreen, font, iconBtn } from "../ui/theme.js";
@@ -150,8 +150,8 @@ function HjemTab({ token, userId, profile, competitions, goTab, openPredictions,
 
       // rating-snapshot
       try {
-        const [board, hist] = await Promise.all([loadRatingBoard(token), loadRatingHistory(token)]);
-        if (!cancelled) setSnapshot(ratingSnapshot(board, hist, userId));
+        const [snap, hist] = await Promise.all([loadRatingSnapshot(token, userId), loadRatingHistory(token, userId)]);
+        if (!cancelled) setSnapshot(ratingSnapshot(snap, hist, userId));
       } catch { if (!cancelled) setSnapshot({ none: true }); }
 
       // placeringer: månedschampionship + hver privat konkurrence. Reglerne —

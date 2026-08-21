@@ -25,7 +25,7 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A59` · `B42` · `G145` · `I26`.**
+**Næste ledige: `A59` · `B42` · `G146` · `I26`.**
 *(`B40` er brugt 18. august 2026 til Indstillinger-skærmen med push-kontakten —
 leveret direkte uden en backlog-række; se `CHANGELOG.md`/`DECISIONS.md`. `B41`
 er brugt 21. august 2026 til Tier 1-bestillingen af `#73`.)*
@@ -60,7 +60,7 @@ Tom.
 
 ## Prioriteret rækkefølge
 
-Alle 34 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 31 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -106,9 +106,7 @@ Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-| # | Hvad | Note |
-|---|---|---|
-| `G141` | Analytics-tavlens `viewable` regner dagskort efter KARUSELLENS regel | `admin_analytics_stories` måler vis-bar som `created_at < round_key + 7 dage` — v2's karrusel, som hentede den nuværende rundes kort. v3 har ingen karrusel: `loadDayCard` henter den nyeste `day_key` og viser den kun under 48 timer gammel. Tallet er derfor forkert for `period = 'day'`, og det er nævneren under BÅDE visnings- og afvisningsraten, altså `G73`s egen rettelse, der er blevet forældet af v3. Den rigtige regel står allerede skrevet og efterprøvet i `sql/story_engine_v3_measure.sql` (vinduet fra `created_at` til det tidligste af 48 timer og næste `day_key`) — rettelsen er at flytte den ind i RPC'en for `period = 'day'` og lade runde-kortene beholde den gamle. Fundet ved `A33`-aflæsningen 21. august 2026 |
+Tomt.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -116,15 +114,13 @@ Tomt.
 
 ### Tier 4 — Datarisiko med en lunte
 
-Tomt.
+| # | Hvad | Note |
+|---|---|---|
+| `G145` | De globale lister har intet værn mod PostgREST' tavse loft på 1000 rækker | `G139` rettede Hjem og konkurrence-boardet, men fandt klassen: **otte `db.select` i `data/standings.js` alene læser upagineret lister, der vokser med brugere, runder eller kampe.** Loftet er tavst — svaret bliver bare kortere — så skaden er en skærm, der viser for lidt, uden en fejl noget sted. **De ordnede er de mildeste:** `loadRatingBoard`, `loadMonthlyBoard`, `loadRoundBoard` og `loadSeasonBoard` sender `order=`, så det er BUNDEN, der falder væk; champion og top er sikre, men en spiller under nr. 1000 kan ikke finde sig selv. **De uordnede er de skarpe:** `loadMonthsAvailable` (én række pr. bruger pr. måned), `loadRoundsAvailable` (**én række pr. spillet kamp**) og `loadRatingMap` uden en liste taber VILKÅRLIGE rækker — det ses som runder og måneder, der mangler i vælgerne, og som ratingtal, der mangler ved navne. `loadRatingHistory` uden et bruger-id er den nærmeste af alle: én række pr. bruger PR. RUNDE, sorteret `round_key.asc`, så afkortningen rammer netop de SENESTE runder — altså dem, formkurven på Rating-fanen er lavet af. **Ingen af dem er MÅLT:** om nogen allerede er over loftet, kan kun aflæses i produktion (`A32`), og `loadRoundsAvailable` er den, der skal spørges først — `select count(*) from matches m join seasons s on s.id = m.season_id join leagues l on l.id = s.league_id where l.is_official and m.home_score is not null`. Kuren findes allerede i repoet i to former: `db.count()` (`G106`, `G139`), når det er et TAL, der skal bruges, og et `distinct`-view eller en RPC, når det er en LISTE — `loadMonthsAvailable` og `loadRoundsAvailable` henter i dag tusindvis af rækker for at lave et `Set` i klienten. Fundet ved `G139` 21. august 2026 |
 
 ### Tier 5 — Robusthed og vedligehold
 
-| # | Hvad | Note |
-|---|---|---|
-| `G140` | "Vis hele stillingen" er et `<p>` med `onClick` | Fladen kan hverken nås med tastaturet eller trykkes af skærmbilled-harnessen, som kun kan klikke på knapper — så den ene vej til din egen række i en stilling på 25 er lukket for tastaturbrugere OG usynlig for `npm run screenshots`. Rettelsen er at gøre den til en `button` med den styling, den allerede har. Fundet ved `A44`-eftersynet 21. august 2026 |
-| `G142` | Halvdelen af v3-dagskortene kan pr. konstruktion aldrig vises | 50 af 100 kort havde et vindue på nul minutter ved `A33`-aflæsningen 21. august 2026: et kort med en større `day_key` fandtes for samme bruger allerede i det øjeblik, de blev skrevet, og `loadDayCard` henter altid den nyeste. Bagstopperens dagsløkke skriver flere dages kort i samme kørsel, så det ældste er dødt i fødslen. **Det er ikke oplagt en fejl** — man vil næppe vise tre dages gamle kort efter hinanden — men det gør hvert eneste "genereret"-tal misvisende (`G73`s klasse), og det bruger motorens dyreste arbejde på rækker, ingen kan nå. To veje: lad dagsløkken springe en dag over, der allerede er afløst, eller behold rækkerne som analysedata og hold dem ude af tællingerne. Spørgsmålet skal besvares FØR `G141`, som ellers retter en nævner, der stadig tæller døde kort |
-| `G139` | Hjem og konkurrence-boardet henter hele den globale ratingtabel | `loadRatingBoard` henter **hver** brugers rating OG hvert profilnavn — Hjem bruger svaret til ét kort: din egen rating, din placering og antallet (`ratingSnapshot`). `loadRatingMap` gør det samme i `BoardScreen` for at sætte et ratingtal ved otte deltagere. Begge kald vokser med brugerbasen og lander i `A34`s egress-loft, længe før nogen mærker dem i skærmen. Kuren er billig og kræver ingen migrering: egen række plus en `count=exact` på `rating=gt.<din>` til Hjem, og `user_id=in.(deltagerne)` på boardet. Fundet ved `A44`-aflæsningen 21. august 2026. |
+Tomt.
 
 ### Tier 6 — Venter på en udløser
 
@@ -215,7 +211,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | G123 | **Ingen generisk vagt for `drop function` + `revoke` i `sql/`.** | `G119` (14. august 2026) fravalgte en tekstlæsende kontrol, der kræver `revoke execute … from public` efter hvert `drop function` — kun to forekomster fandtes, og en vagt over to koster mere at vedligeholde, end den kan fange. Flyttet til Tier 6: en tredje forekomst gør det til et mønster. | Lille, men ikke før udløseren |
 | G129 | **Et afvist dagskort kan genopstå.** `generate_daily_stories(p_day)` sletter og gen-indsætter dagens rækker ved en gen-kørsel; den nye række har et nyt `id`, og `dismissed_at` blev i graven sammen med den gamle. | Udløses kun af en gen-kørsel EFTER at dagen er gjort færdig — i praksis en resultatrettelse bagud på præcis den dag, brugeren afviste. **Kanten er kendt og står allerede skrevet ved koden** (`src/lib/data/activity.js`, `dismissStory`), tilføjet sammen med `I25` 15. august 2026, som var det, der gav dagskortet et Afvis-kryds overhovedet. Rækken findes, fordi begrundelsen ellers kun ville stå ét sted og aldrig blive taget op igen — ikke fordi den skal rettes nu. Kuren er en `dismissed`-liste pr. `(user_id, day_key)`, altså en tabel, en policy og en ekstra læsning i `loadDayCard` for en kant, ingen endnu har meldt. Flyttet til Tier 6 med den første melding som udløser. | Lille—mellem, men ikke før udløseren |
 | G132 | **Ingen generisk vagt for SELECT-policies, der kalder en funktion, som slår deres egen tabel op.** Mønstret spærrer enhver skrivning med `Prefer: return=representation`. | `G130` gjorde oprettelse af en konkurrence umulig i fem dage, og fejlen var usynlig for enhver læsetest. En vagt over `pg_policies` kunne fange den ved migreringstid. | Mellem — kræver at vagten kan se ind i funktionskroppen (`pg_get_functiondef`) og skelne en selv-opslående funktion fra en harmløs. **Venter på en anden forekomst** (`G123`s disciplin). |
-| G139 | **Hjem og konkurrence-boardet henter hele den globale ratingtabel.** `loadRatingBoard` (`src/lib/data/standings.js`) henter hver brugers rating og hvert profilnavn; Hjem bruger svaret til ét kort — egen rating, egen placering og antallet (`ratingSnapshot` i `src/lib/data/home.js`). `loadRatingMap` gør det samme i `BoardScreen` for at sætte et ratingtal ved otte deltagere. | Prisen er usynlig i dag og vokser lineært med brugerbasen: appen er REST-fetch-tung, og `A34`s første loft er egress. Rækken er ikke en fejl, men det billigste sted at bremse væksten, når den kommer. | Lille — egen række plus `count=exact` på `rating=gt.<din>` til Hjem, `user_id=in.(deltagerne)` på boardet. Ingen migrering. |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
 
 ## Ideer
@@ -258,21 +253,31 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (fireogfyrretyvende kørsel) — `G144` bygget: stimen kan sige, at den brød
+### 21. august 2026 (seksogfyrretyvende kørsel) — Tier 5 kørt tom: `G140` og `G139`
 
-**Listen er 35 → 34.** Halvdelen af `STREAK_STATUS` var uskrevet: 💤-teksten
-kunne kun rammes ved et brud på SAMME kampdag som sidste hit. Rettelsen er én
-gren mere i `_sd_streak` (`or naeste_dag = p_day`); `alive` behøvede ingen
-ændring.
+**Listen er 32 → 30. Tier 1–5 er alle tomme.**
 
-**To valg er målt frem for antaget**, og begge tal står i koden: `max(next_day)`
-koster 6 % på dagsmotoren mod `array_agg(… desc)[1]`'s 17 % og giver det samme;
-og `distinct on (user_id)` ændrer ikke ét kort i dag — mutationen slipper
-igennem — men holder den form, `_sd_scored`s join på brugeren alene forudsætter.
+**`G140`:** de tre "vis mere"-flader var `<p onClick>` — hverken tastatur,
+skærmlæser eller skærmbilled-harnessen kunne nå dem. `Auth.jsx` havde svaret
+liggende i sin egen lokale kopi siden `G28`; den er nu `TekstLink` i
+`ui/components.jsx`, og alle fire steder bruger den.
 
-**Læren:** *en tekst, ingen har set, er ikke leveret. `STREAK_STATUS` havde to
-grene i koden, én i virkeligheden, og forskellen kunne kun ses ved at KØRE
-motoren — ingen gennemlæsning fangede den på fjorten dage.*
+**`G139`:** Hjem hentede hele den globale ratingtabel for at vise fire tal.
+Kortet slår nu sin egen række op og lader databasen TÆLLE resten
+(`count=exact`), og formkurven hentes kun for én bruger. `BoardScreen` henter kun
+konkurrencens deltagere. To ting skulle med, og begge er lette at tabe: delt
+placering afgøres på den AFRUNDEDE rating (`gte.<min + 0.5>`, ikke `gt.<rå>`), og
+lukkede konti tæller ikke.
 
-🔴 **`#47 story_engine_v3.sql` skal gen-køres i Supabase.** Kun funktionen, ingen
-rækker, ingen frontend-ændring at merge sammen med.
+**Læren:** *en flytning af en udregning fra klienten til databasen har præcis én
+farlig fejlmåde — et tal, der er næsten rigtigt. Derfor er vagten en
+ækvivalenstest mod ranglisten og ikke en liste af påstande; og skærmbilledet af
+Hjem er byte-identisk, hvilket er den samme påstand kørt gennem hele appen.*
+
+**Indbakken er ryddet i samme ombæring: én linje blev `G145` i Tier 4** —
+listen er derfor 30 → 31. `G139` rettede to kald og blotlagde en klasse: otte
+upaginerede `db.select` i den samme fil, mod lister der vokser. De uordnede af dem
+(`loadRoundsAvailable`, `loadMonthsAvailable`) taber vilkårlige rækker, og
+`loadRatingHistory` uden bruger-id taber de nyeste runder, fordi den sorterer
+stigende. Ingen af dem er målt — det kræver produktion (`A32`), og forespørgslen
+står i rækken.

@@ -19,7 +19,7 @@ import { auth } from "../lib/supabase.js";
 import { invitationsPitch } from "../lib/data.js";
 import { turnstileAktiv } from "../lib/turnstile.js";
 import { C, btnGreen, fieldFull, muted, wrapOuter } from "../ui/theme.js";
-import { Card } from "../ui/components.jsx";
+import { Card, TekstLink } from "../ui/components.jsx";
 import { Turnstile, TurnstileVenter } from "../ui/Turnstile.jsx";
 import { Wordmark } from "../ui/Wordmark.jsx";
 import { findDokument, MINDSTEALDER } from "../lib/legal.js";
@@ -57,16 +57,14 @@ function LinkButton({ onClick, children, style }) {
 // og lægger sig som sin egen blok, hvilket river sætningen fra hinanden.
 // `type="button"` er stadig ikke til forhandling, selvom linjen ligger uden
 // for formularen — reglen er billigere at holde ubetinget end at vurdere.
-function TekstLink({ onClick, children }) {
-  return (
-    <button type="button" onClick={onClick} style={{
-      background: "none", border: "none", padding: 0, font: "inherit",
-      color: C.green, textDecoration: "underline", cursor: "pointer",
-    }}>
-      {children}
-    </button>
-  );
-}
+//
+// Knappen selv bor i `ui/components.jsx` siden `G140` (21. august 2026). Den
+// stod her som en lokal kopi, og de tre "vis mere"-flader i resten af appen
+// kunne derfor ikke se, at svaret allerede fandtes — de blev `<p onClick>`.
+// Kun farven er skærmens egen.
+const JuraLink = ({ onClick, children }) => (
+  <TekstLink onClick={onClick} style={{ color: C.green }}>{children}</TekstLink>
+);
 
 // Jura-linjen (B4). Én komponent, to former, så teksten ikke står to steder.
 //
@@ -80,17 +78,17 @@ function JuraLinje({ mode, onÅbn }) {
     return (
       <p style={stil}>
         Ved at oprette en konto accepterer du{" "}
-        <TekstLink onClick={() => onÅbn("vilkaar")}>brugervilkårene</TekstLink> og{" "}
-        <TekstLink onClick={() => onÅbn("privatliv")}>privatlivspolitikken</TekstLink>.
+        <JuraLink onClick={() => onÅbn("vilkaar")}>brugervilkårene</JuraLink> og{" "}
+        <JuraLink onClick={() => onÅbn("privatliv")}>privatlivspolitikken</JuraLink>.
         {" "}Du skal være mindst {MINDSTEALDER} år.
       </p>
     );
   }
   return (
     <p style={stil}>
-      <TekstLink onClick={() => onÅbn("privatliv")}>Privatlivspolitik</TekstLink>
+      <JuraLink onClick={() => onÅbn("privatliv")}>Privatlivspolitik</JuraLink>
       {" · "}
-      <TekstLink onClick={() => onÅbn("vilkaar")}>Brugervilkår</TekstLink>
+      <JuraLink onClick={() => onÅbn("vilkaar")}>Brugervilkår</JuraLink>
     </p>
   );
 }
