@@ -25,11 +25,12 @@ foreslås tre gange.
 ROADMAP — `A11` er fx også navnet på en logadvarsel i `api/_shared.js`.
 `B#` ubygget · `G#` teknisk gæld · `I#` ideer. Spec-lokale ID'er (`K2`, `F1`)
 beholder deres eget navn og linker til spec'en.
-**Næste ledige: `A58` · `B41` · `G138` · `I26`.**
+**Næste ledige: `A58` · `B42` · `G138` · `I26`.**
 *(`B40` er brugt 18. august 2026 til Indstillinger-skærmen med push-kontakten —
-leveret direkte uden en backlog-række; se `CHANGELOG.md`/`DECISIONS.md`.)*
+leveret direkte uden en backlog-række; se `CHANGELOG.md`/`DECISIONS.md`. `B41`
+er brugt 21. august 2026 til Tier 1-bestillingen af `#73`.)*
 *(G-tallet stod på `G130` til 17. august 2026 og var forældet: `G130` og `G134`
-var leveret, og `G131`–`G133` er rækker i denne fil. `G135` er brugt samme dag.
+var leveret; `G131`–`G133` var rækker her og er leveret 21. august 2026. `G135` er brugt 17. august.
 Slå efter med `grep -rhoE "\bG1[0-9][0-9]\b" docs/ sql/ src/ api/ | sort -u | tail`
 frem for at stole på linjen her.)*
 
@@ -59,7 +60,7 @@ eller en linje i "Forkastede ideer".
 
 ## Prioriteret rækkefølge
 
-Alle 36 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -105,9 +106,7 @@ Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
-| # | Hvad | Note |
-|---|---|---|
-| `G136` | Skema-eksportens `\restrict`-token gør "datoen står stille" til en falsk påstand | `#251`s eksport viste det direkte: to kørsler i træk, hvor kun kropslinjer med `\restrict`/`\unrestrict` og hovedets dato ændrede sig — pg_dump 17 skriver et NYT tilfældigt token i hvert dump, og tokenet ligger EFTER "SLUT PÅ GENERERET HOVED", altså inde i den "krop", `schema-export.yml` sammenligner for at afgøre, om noget faktisk ændrede sig (`G112`). Databasen var uændret begge gange; filen så alligevel ud til at have ændret sig. **Det er ikke kun kommentarens løfte, der lyver** — på standardgrens-vejen ville HVER ugentlig cron-kørsel nu åbne en "skema-drift opdaget"-pull request uden drift i, præcis den falske alarm, `G112` blev bygget for at undgå. Kuren er at lade `krop()` også klippe `\restrict …`/`\unrestrict …`-linjerne af, før de to udgaver sammenlignes. |
+Tomt.
 
 ### Tier 3 — Brugerværdi oven på noget, der allerede findes
 
@@ -115,16 +114,11 @@ Tomt.
 
 ### Tier 4 — Datarisiko med en lunte
 
-| # | Hvad | Note |
-|---|---|---|
-| `G133` | `createCompetition()`s tre skrivninger deler ingen transaktion | Konkurrencen, deltageren og kampene skrives som tre adskilte PostgREST-kald (`src/lib/data/competitions.js`). Fejler nummer to eller tre, står der en konkurrence uden deltager eller uden kampe — og den retter sig aldrig selv: klienten viser den, stillingen er tom, og ingen kontrol leder efter den. Kuren findes allerede som mønster: `create_group()` (`#50`) er en `security definer`-RPC, der skriver ligaen OG ejerens medlemskab i én sætning, netop for at undgå den halve tilstand. **Lunten er kort, men findes:** `G130` fik hvert eneste forsøg til at fejle på skrivning ÉT, hvor der intet efterlades — havde fejlen ligget et kald senere, ville hver bruger have efterladt en halv konkurrence i fem dage. |
+Tomt.
 
 ### Tier 5 — Robusthed og vedligehold
 
-| # | Hvad | Note |
-|---|---|---|
-| `G131` | Analytics-panelets ⓘ-liste i testen vedligeholdes i hånden og er allerede ufuldstændig | `analytics.test.js` bærer en håndskrevet liste over de ⓘ-id'er, panelet slår op, og `story_viewable` mangler allerede. Vagten er dermed svagere, end den ser ud: den kan kun fange et id, nogen huskede at skrive ind. Spørgsmålet, der skal afgøres først, er, om listen kan **udledes af JSX'en** frem for vedligeholdes — kan den, forsvinder gælden helt; kan den ikke, er en test, der lister sig selv, ikke meget bedre end ingen. |
-| `G137` | Stillingens rundemodal kan vise en anden rækkefølge end Hjem og Tip | `groupIntoRounds()` (`src/lib/scoring.js`) sorterer kampe på kickoff og bruger holdnavn kun som ligestillingsbryder — men `competitionState.js` kalder den UDEN navne-funktion, mens `home.js` og tip-skærmens dagsgruppering (`groupIntoDays`) gør. To eller flere kampe med IDENTISK kickoff (en runde, der spilles samtidig — set før hos Bundesligaens sidste spillerunde) sorterer derfor efter holdets UUID i rundemodalen og efter navn de øvrige steder: samme runde kan stå i to rækkefølger. Set 21. august 2026 under `B39`-udrulningen af det korte holdnavn — reglen bor ikke i selve navnet, men i at ÉT argument mangler. Rettelsen er billig: `teamName`-mappet findes allerede i `competitionState.js`, lige før kaldet. |
+Tomt.
 
 ### Tier 6 — Venter på en udløser
 
@@ -217,12 +211,8 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | G1 | **`MainApp.jsx` (~582 linjer) er den sidste store skærmfil.** | Sidste rest af fil-opdelingen fra 30. juli 2026. **De fire andre er delt 5. august 2026** — `AdminScreen` 434 → 67 (fire paneler i `screens/admin/`), `HjemTab` 672 → 411 (tre kort i `screens/hjem/`), `ProfileScreen` 480 → 241 (fem sektioner i `screens/profile/`) og `CreateCompetitionScreen` 444 → 394. Komponent-flytningerne er rene: intet JSX-element og ingen brugertekst er ændret, kun fordelt. **Det, der var værd at hente, var ikke linjetallet, men de to lib-moduler:** `data/createSources.js` og de to nye funktioner i `data/home.js` lå som `useEffect`-kroppe og kunne kun efterprøves i hånden; de har nu 27 tests, hvoraf tre vogter regler, der fejler TAVST (kampantal pr. turnering, `G35`; kamp-puljens mærkbare afkortning; en fejlende konkurrence springes over frem for at vælte hele Hjem). Samme snit og samme begrundelse som `MainApp`s invitations-flows fik samme dag. **Det, der er tilbage i `MainApp`, ER navigations-tilstandsmaskinen** plus render-træet — altså `A23`s emne — og rækken er derfor flyttet til Tier 6 med `A23` som udløser. | Lille — men gated af `A23` |
 | G123 | **Ingen generisk vagt for `drop function` + `revoke` i `sql/`.** | `G119` (14. august 2026) fravalgte en tekstlæsende kontrol, der kræver `revoke execute … from public` efter hvert `drop function` — kun to forekomster fandtes, og en vagt over to koster mere at vedligeholde, end den kan fange. Flyttet til Tier 6: en tredje forekomst gør det til et mønster. | Lille, men ikke før udløseren |
 | G129 | **Et afvist dagskort kan genopstå.** `generate_daily_stories(p_day)` sletter og gen-indsætter dagens rækker ved en gen-kørsel; den nye række har et nyt `id`, og `dismissed_at` blev i graven sammen med den gamle. | Udløses kun af en gen-kørsel EFTER at dagen er gjort færdig — i praksis en resultatrettelse bagud på præcis den dag, brugeren afviste. **Kanten er kendt og står allerede skrevet ved koden** (`src/lib/data/activity.js`, `dismissStory`), tilføjet sammen med `I25` 15. august 2026, som var det, der gav dagskortet et Afvis-kryds overhovedet. Rækken findes, fordi begrundelsen ellers kun ville stå ét sted og aldrig blive taget op igen — ikke fordi den skal rettes nu. Kuren er en `dismissed`-liste pr. `(user_id, day_key)`, altså en tabel, en policy og en ekstra læsning i `loadDayCard` for en kant, ingen endnu har meldt. Flyttet til Tier 6 med den første melding som udløser. | Lille—mellem, men ikke før udløseren |
-| G131 | **Analytics-panelets ⓘ-liste i testen vedligeholdes i hånden.** `analytics.test.js` lister de ⓘ-id'er, panelet slår op, og `story_viewable` mangler allerede — vagten kan kun fange et id, nogen huskede at skrive ind. | En vagt, der er svagere end den ser ud, er værre end ingen: den giver tryghed uden dækning. Samme fejlklasse som `B8` og `G44` — en sund måling, der skjuler en syg. | Lille, hvis listen kan udledes af JSX'en; ellers er spørgsmålet, om testen er værd at beholde i sin nuværende form. |
 | G132 | **Ingen generisk vagt for SELECT-policies, der kalder en funktion, som slår deres egen tabel op.** Mønstret spærrer enhver skrivning med `Prefer: return=representation`. | `G130` gjorde oprettelse af en konkurrence umulig i fem dage, og fejlen var usynlig for enhver læsetest. En vagt over `pg_policies` kunne fange den ved migreringstid. | Mellem — kræver at vagten kan se ind i funktionskroppen (`pg_get_functiondef`) og skelne en selv-opslående funktion fra en harmløs. **Venter på en anden forekomst** (`G123`s disciplin). |
-| G133 | **`createCompetition()`s tre skrivninger deler ingen transaktion.** Konkurrencen, deltageren og kampene er tre adskilte PostgREST-kald. | Fejler nummer to eller tre, står der en halv konkurrence, som aldrig retter sig selv, og som ingen kontrol leder efter. | Mellem — kuren er en `security definer`-RPC efter `create_group()`s mønster (`#50`), som skriver alle tre i én sætning. |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
-| G136 | **Skema-eksportens `\restrict`-token gør "datoen står stille" til en falsk påstand.** `#251` viste det direkte: to eksporter i træk mod en uændret database gav en diff, fordi pg_dump 17 skriver et nyt tilfældigt token ved hvert dump, og tokenet ligger inde i den "krop", sammenligningen måler. | På standardgrenen ville HVER ugentlig cron-kørsel nu åbne en falsk "skema-drift"-pull request — den nøjagtige alarm, `G112` blev bygget for at undgå. | Lille — `krop()` skal klippe `\restrict`/`\unrestrict`-linjerne af før sammenligningen |
-| G137 | **Stillingens rundemodal sorterer kampe med identisk kickoff efter holdets uuid, ikke navn** (`src/ui/components.jsx`, kilden er `competitionState.js`s bare `groupIntoRounds(ms)`). `home.js` og tip-skærmens dagsgruppering bruger begge navnet. | Samme runde kan derfor vise kampene i to forskellige rækkefølger, afhængig af hvilken skærm man ser den fra — kun mærkbart, når to+ kampe deler kickoff-tidspunkt. | Lille — ét argument: `teamName`-mappet findes allerede i funktionen |
 
 ## Ideer
 
@@ -264,26 +254,29 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (syvogtredivte kørsel) — indbakken tømt: to gæld-rækker, ingen bygget
+### 21. august 2026 (otteogtredivte kørsel) — Tier 2, 4 og 5 kørt tomme: fire gæld-rækker leveret, én bestilling tilbage
 
-**Listen er 34 → 36.** To nye rækker, begge fundet undervejs i `B39`-arbejdet
-og noteret frem for rettet med det samme, fordi ingen af dem hørte til den
-opgave.
+**Listen er 36 → 32.** Fire rækker leveret (`G136`, `G133`, `G131`, `G137`),
+og den ene nye — `B41`, ejerens bestilling af `#73 create_competition.sql`
+FØR merge — blev kørt i produktion og staging samme dag og er slettet igen.
+Tier 1–5 er dermed alle tomme.
 
-**`G136` (Tier 2) — skema-eksportens egen dato-garanti er blevet falsk.**
-`#251`s eksport (samme dag) viste det direkte: to kørsler i træk mod en
-UÆNDRET database gav alligevel en diff, fordi pg_dump 17 skriver et nyt
-tilfældigt `\restrict`-token ved hvert dump, og tokenet ligger inde i den
-"krop", `schema-export.yml` sammenligner for at afgøre, om noget rent faktisk
-ændrede sig. Databasen stod stille; filen så ikke sådan ud. Værre: på
-standardgrenen ville hver eneste ugentlige cron-kørsel nu åbne en falsk
-"skema-drift"-pull request — den nøjagtige alarm, `G112` blev bygget for at
-undgå.
+**`G136` (Tier 2):** `schema-export.yml`s `krop()` klipper nu også
+`\restrict`/`\unrestrict`-linjerne af før sammenligningen, så pg_dump 17's
+tilfældige token ikke længere kan åbne en falsk skema-drift-PR.
 
-**`G137` (Tier 5) — stillingens rundemodal kan vise en anden rækkefølge end
-Hjem og Tip.** `competitionState.js` kalder `groupIntoRounds(ms)` UDEN
-navne-funktion, mens `home.js` og tip-skærmens dagsgruppering begge gør. To
-kampe med identisk kickoff (en runde, der spilles samtidig) sorterer derfor
-efter holdets uuid ét sted og efter navn de øvrige. Rettelsen er ét argument —
-`teamName`-mappet findes allerede i funktionen — men blev bevidst ikke taget
-med: den ændrer en rækkefølge, ingen bad om, i en opgave om navne.
+**`G133` (Tier 4):** konkurrence-oprettelsens tre skrivninger er ÉN
+transaktion — `create_competition()` (`#73`) efter `create_group()`s mønster,
+klienten kalder den, og `sql/tests/create_competition.sql` fremkalder begge
+vinduer i CI med den gamle vejs halve konkurrence som negativ kontrol.
+
+**`G131` (Tier 5):** analytics-testens ⓘ-liste UDLEDES nu af JSX'en frem for at
+vedligeholdes — spørgsmålet i rækken faldt ud til "ja, den kan udledes", så
+gælden forsvandt helt. Udledningen fandt straks de to id'er, den håndskrevne
+liste manglede (`story_viewable`, `invite_funnel`), og ligheden kræves nu begge
+veje, så en død ordbogs-række også fanges.
+
+**`G137` (Tier 5):** rundemodalens `groupIntoRounds(ms)` fik sit manglende
+navne-argument, så samtidige kampe sorterer som på Hjem og Tip; en test i
+`data.test.js` vender uuid'er og navne mod hinanden, så regressionen ikke kan
+komme tavst tilbage.

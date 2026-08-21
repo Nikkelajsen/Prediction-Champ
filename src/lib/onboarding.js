@@ -138,9 +138,10 @@ async function loadStarterTournaments(token, leagues) {
 // intet permanent invite-link, og intet der består, når sæsonen slutter.
 //
 // Rækkefølgen er bindende: createGroup skriver opretteren som `admin`, og
-// FØRST derefter indsættes deltager-rækken. Omvendt ville A8-triggeren
-// (sql/group_membership_invariant.sql) nå at lave en `member`-række først, og
-// admin-insertet ville kollidere med den.
+// FØRST derefter skriver `create_competition()` deltager-rækken (G133 — begge
+// er RPC'er nu, men rækkefølgen mellem dem er den samme). Omvendt ville
+// A8-triggeren (sql/group_membership_invariant.sql) nå at lave en
+// `member`-række først, og admin-insertet ville kollidere med den.
 //
 // Delvis fejl rulles IKKE tilbage: lykkes ligaen men ikke konkurrencen, er en
 // tom liga et brugbart resultat (den kan bruges, inviteres til og slettes af

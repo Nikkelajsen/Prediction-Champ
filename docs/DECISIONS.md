@@ -15,6 +15,50 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `G133`: skrivningen flyttes til én RPC — udvælgelsen bliver i klienten, og policies smalnes ikke
+
+**Beslutning:** `create_competition()` (`#73`) tager de FÆRDIGE værdier — navn,
+liga, mode, `mode_params` og kamplisten — og udfører kun de tre skrivninger i
+én transaktion. Kampudvælgelsen (filterTippable, startrunde-valget, hold- og
+periodefiltrene) bliver i klienten, og de tre insert-policies står urørte.
+
+**Hvorfor snittet ligger der.** Vinduet, `G133` beskrev, sidder udelukkende i
+skrivningen: tre PostgREST-kald er tre transaktioner. Udvælgelsen er derimod
+fem modes' forretningslogik, læser kun offentligt læsbare tabeller og er dækket
+af klientens egne tests — at flytte den ind i funktionen ville flytte det meste
+af `createCompetition()` for at lukke et vindue, der ikke er dér. Reglen "en ny
+konkurrence skal høre til en liga" bliver også i klienten af samme grund som
+altid (den kan ikke være `not null`: `on delete set null`).
+
+**Hvorfor policies ikke smalnes i samme ombæring.** Samme rækkefølge-lære som
+`#57`/`#58`: den gamle klients direkte inserts er lovlige, til deployet er
+ude, og en smalning nu ville lukke oprettelsen for den. Til forskel fra `#58`
+er smalningen her heller ikke bestilt bagefter — `joinCompetition` skriver
+stadig `competition_participants` direkte, så policyen skal blive, og de to
+andre tabellers insert-policies koster intet at lade stå. Skulle de smalnes en
+dag, er det sin egen opgave med sit eget deploy-hegn.
+
+**Følge for udrulningen:** `#73` er en ren tilføjelse og kan køres når som
+helst — men den SKAL være kørt, før klienten udrulles, for den nye
+`createCompetition()` kalder kun RPC'en. Bestillingen står som `B41` i
+backloggens Tier 1.
+
+## 21. august 2026 — `G131`: ⓘ-listen udledes af kilden, og ligheden kræves begge veje
+
+**Beslutning:** `analytics.test.js` vedligeholder ikke længere en liste over
+panelets ⓘ-id'er — den læser `<M id="…">`-kaldene ud af `src/screens/` og
+kræver, at mængden er præcis lig `METRICS`' nøgler.
+
+**Hvorfor.** Rækkens eget spørgsmål var, om listen kunne udledes af JSX'en —
+den kunne (alle 44 kaldesteder er streng-literaler, og et dynamisk `<M id={…}>`
+afvises nu, så det bliver ved med at være sandt). Den håndskrevne liste
+manglede allerede to id'er (`story_viewable`, `invite_funnel`), hvilket er
+selve fejlklassen: en vagt, der kun kender det, nogen huskede at skrive ind,
+giver tryghed uden dækning. Ligheden kræves BEGGE veje, fordi de to fejl er
+lige tavse — et ⓘ uden ordbogs-række forsvinder bare fra skærmen (`metricInfo`
+→ null), og en ordbogs-række uden kaldested er dødt indhold, ingen læser
+korrektur på. Samme princip som story-katalogets SQL-læsende vagt i samme fil.
+
 ## 21. august 2026 — `B39`: det korte holdnavn gælder HELE appen, og reglen bor ét sted
 
 **Beslutning (produktejeren):** det korte holdnavn vises **overalt, hvor et

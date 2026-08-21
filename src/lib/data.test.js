@@ -376,6 +376,30 @@ describe("computeCompetitionState (konkurrence-stillingen)", () => {
     const { rows } = await computeCompetitionState("token", "c1", RULES);
     expect(rows[0].total).toBe(12);
   });
+
+  it("sorterer samtidige kampe på holdNAVN — samme orden som Hjem og Tip (G137)", async () => {
+    // To kampe med IDENTISK kickoff (en runde spillet samtidig). Uuid'erne
+    // vender OMVENDT af navnene, så den gamle adfærd — id som tiebreak, fordi
+    // navnefunktionen manglede — ville vise runden i modsat rækkefølge af Hjem
+    // og Tip. Rundemodalen læser `allRounds` direkte, så ordenen her ER visning.
+    mockTables({
+      competition_participants: [{ user_id: "u1", joined_at: "2026-01-01T00:00:00Z" }],
+      profiles: [{ id: "u1", display_name: "Anna" }],
+      competition_matches: [{ match_id: "mA" }, { match_id: "mB" }],
+      matches: [
+        { id: "mA", kickoff_at: "2026-07-06T18:00:00Z", round_key: "2026-07-06", home_team_id: "zz-agf", away_team_id: "yy-ob", home_score: null, away_score: null },
+        { id: "mB", kickoff_at: "2026-07-06T18:00:00Z", round_key: "2026-07-06", home_team_id: "aa-vejle", away_team_id: "bb-viborg", home_score: null, away_score: null },
+      ],
+      predictions: [],
+      teams: [
+        { id: "zz-agf", name: "AGF" }, { id: "yy-ob", name: "OB" },
+        { id: "aa-vejle", name: "Vejle" }, { id: "bb-viborg", name: "Viborg" },
+      ],
+      competition_status: [{ concluded: false }],
+    });
+    const { allRounds } = await computeCompetitionState("token", "c1", RULES);
+    expect(allRounds[0].matches.map((m) => m._home)).toEqual(["AGF", "Vejle"]);
+  });
 });
 
 describe("loadLatestStory (latest_story-view)", () => {
@@ -739,6 +763,10 @@ describe("computeHomeTips: allTipped vs. nothingToTip", () => {
 // ---------- createCompetition (udtrukket fra CreateCompetitionScreen) ----------
 // Skriveren har nu to kaldesteder (opret-skærmen og onboarding-guiden), så
 // rækkeformen og rækkefølgen testes her frem for inde i en af skærmene.
+//
+// Skrivningen er ÉT RPC-kald (`create_competition()`, G133) — konkurrencen,
+// deltageren og kampene i samme transaktion. Testene læser derfor kaldets body,
+// hvor de før læste tre `db.insert`-kald; påstandene om rækkeform er de samme.
 describe("createCompetition", () => {
   // Én sæson: runde 1 er færdigspillet, runde 2 og 3 er ikke. En ny konkurrence
   // skal starte på 0 point, så kun runde 2 og 3 må komme med.
@@ -751,13 +779,22 @@ describe("createCompetition", () => {
   // Hver ny konkurrence skal høre til en liga (august 2026), så testene sender
   // den samme liga med, med mindre de netop handler om det manglende felt.
   const create = (spec) => createCompetition("token", "u1", { groupId: "g1", ...spec });
-  const insertedRow = (table) => db.insert.mock.calls.find((c) => c[1] === table)?.[2][0];
-  const matchRows = () => db.insert.mock.calls.find((c) => c[1] === "competition_matches")?.[2] || [];
+  // RPC-kaldets body, oversat til rækkens form, så påstandene kan stå, som da
+  // klienten skrev rækken selv. `logEvent` deler restFetch-mocken, så kaldet
+  // findes på stien og ikke som "det første".
+  const rpcBody = () => restFetch.mock.calls.find((c) => String(c[0]).endsWith("/rpc/create_competition"))?.[1]?.body;
+  const insertedRow = () => {
+    const b = rpcBody();
+    return b && { name: b.p_name, group_id: b.p_group_id, league_id: b.p_league_id, season_id: b.p_season_id, mode: b.p_mode, mode_params: b.p_mode_params };
+  };
+  const matchRows = () => (rpcBody()?.p_match_ids || []).map((id) => ({ match_id: id }));
 
   function setup(matches = seasonMatches) {
     db.select.mockResolvedValue(matches);
-    db.insert.mockImplementation(async (token, table, rows) =>
-      (table === "competitions" ? [{ id: "c1", ...rows[0] }] : undefined));
+    restFetch.mockImplementation(async (path, { body } = {}) =>
+      (String(path).endsWith("/rpc/create_competition")
+        ? { id: "c1", name: body.p_name, group_id: body.p_group_id, league_id: body.p_league_id, season_id: body.p_season_id, mode: body.p_mode, mode_params: body.p_mode_params }
+        : null));
   }
 
   // Perioden kunne indtil august 2026 kun dække ÉN turnering: opret-skærmen
@@ -770,7 +807,7 @@ describe("createCompetition", () => {
       startDate: "2026-08-01", endDate: "2026-08-31",
     });
 
-    expect(insertedRow("competitions")).toMatchObject({
+    expect(insertedRow()).toMatchObject({
       mode: "time_range",
       league_id: null,
       season_id: null,
@@ -792,7 +829,7 @@ describe("createCompetition", () => {
       tournaments: [{ leagueId: "L1", seasonId: "S1" }],
       leagueId: "L1", seasonId: "S1", startDate: "2026-08-01", endDate: "2026-08-31",
     });
-    const row = insertedRow("competitions");
+    const row = insertedRow();
     expect(row.league_id).toBe("L1");
     expect(row.season_id).toBe("S1");
     expect(row.mode_params.tournaments).toBeUndefined();
@@ -813,10 +850,15 @@ describe("createCompetition", () => {
       tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     });
 
-    expect(insertedRow("competitions")).toMatchObject({
+    expect(insertedRow()).toMatchObject({
       name: "Superligaen 2026/27", league_id: "L1", season_id: "S1", group_id: "g1",
-      mode: "full_season", mode_params: {}, created_by: "u1",
+      mode: "full_season", mode_params: {},
     });
+    // `created_by` sendes IKKE med (G133): RPC'en sætter den selv af auth.uid(),
+    // så der findes ikke et bruger-id at forfalske. Nøglelisten er lukket — en
+    // spec-nøgle, der siver ind i kaldet, er samme fejl som `rules`-testen vogter.
+    expect(Object.keys(rpcBody()).sort()).toEqual(
+      ["p_group_id", "p_league_id", "p_match_ids", "p_mode", "p_mode_params", "p_name", "p_season_id"]);
     expect(matchRows().map((r) => r.match_id)).toEqual(["m3", "m4"]);
     expect(res.matchCount).toBe(2);
   });
@@ -854,8 +896,7 @@ describe("createCompetition", () => {
   it("henter kickoff med, så låsen kan afgøres", async () => {
     const queries = [];
     db.select.mockImplementation(async (token, table, q) => { queries.push(q); return []; });
-    db.insert.mockImplementation(async (token, table, rows) =>
-      (table === "competitions" ? [{ id: "c1", ...rows[0] }] : undefined));
+    restFetch.mockResolvedValue({ id: "c1" });
     await create({ name: "X", mode: "full_season", tournaments: [{ leagueId: "L1", seasonId: "S1" }] });
     expect(queries[0]).toContain("kickoff_at");
     expect(queries[0]).toContain("kickoff_tbd");
@@ -928,7 +969,7 @@ describe("createCompetition", () => {
       tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     });
 
-    expect(insertedRow("competitions").mode_params).toEqual({});
+    expect(insertedRow().mode_params).toEqual({});
     expect(matchRows().map((r) => r.match_id)).toEqual(["m3", "m4"]); // m4 er mesterskabsspil
   });
 
@@ -938,7 +979,7 @@ describe("createCompetition", () => {
       name: "Gammel kalder", mode: "team", leagueId: "L1", seasonId: "S1", teamId: "T1",
       availableStages: ["Grundspil", "Mesterskabsspil"], selectedStages: ["Grundspil"],
     });
-    expect(insertedRow("competitions").mode_params).toEqual({ team_id: "T1" });
+    expect(insertedRow().mode_params).toEqual({ team_id: "T1" });
   });
 
   it("flere turneringer gør konkurrencen turneringsløs og gemmer dem i mode_params", async () => {
@@ -951,7 +992,7 @@ describe("createCompetition", () => {
       ],
     });
 
-    const row = insertedRow("competitions");
+    const row = insertedRow();
     expect(row.league_id).toBeNull();
     expect(row.season_id).toBeNull();
     expect(row.mode_params).toEqual({ tournaments: [{ league_id: "L1", season_id: "S1" }, { league_id: "L2", season_id: "S2" }] });
@@ -965,9 +1006,10 @@ describe("createCompetition", () => {
     });
 
     expect(res.matchCount).toBe(0);
-    expect(db.insert.mock.calls.some((c) => c[1] === "competition_matches")).toBe(false);
-    // konkurrencen og deltageren oprettes stadig — den fyldes, når kampprogrammet er lagt
-    expect(insertedRow("competition_participants")).toEqual({ competition_id: "c1", user_id: "u1" });
+    // konkurrencen (og deltageren, som er RPC'ens egen halvdel) oprettes stadig
+    // med en tom kampliste — den fyldes, når kampprogrammet er lagt
+    expect(rpcBody().p_match_ids).toEqual([]);
+    expect(insertedRow().name).toBe("For sent");
   });
 
   // `rules` sendes slet ikke længere (G3, august 2026). Kolonnen er `not null`
@@ -981,7 +1023,7 @@ describe("createCompetition", () => {
     setup();
     const t = [{ leagueId: "L1", seasonId: "S1" }];
     await create({ name: "A", mode: "full_season", tournaments: t, openDaysBefore: 7 });
-    expect(insertedRow("competitions")).not.toHaveProperty("rules");
+    expect(insertedRow()).not.toHaveProperty("rules");
   });
 
   it("custom bruger de valgte kampe og er turneringsløs", async () => {
@@ -990,7 +1032,7 @@ describe("createCompetition", () => {
       name: "Håndplukket", mode: "custom", matchIds: ["x1", "x2"],
     });
 
-    expect(insertedRow("competitions")).toMatchObject({ league_id: null, season_id: null, mode: "custom", mode_params: {} });
+    expect(insertedRow()).toMatchObject({ league_id: null, season_id: null, mode: "custom", mode_params: {} });
     expect(matchRows().map((r) => r.match_id)).toEqual(["x1", "x2"]);
     expect(res.matchCount).toBe(2);
   });
@@ -1001,7 +1043,7 @@ describe("createCompetition", () => {
       .rejects.toThrow("Vælg mindst én turnering");
     await expect(create({ name: "A", mode: "custom", matchIds: [] }))
       .rejects.toThrow("Vælg mindst én kamp");
-    expect(db.insert).not.toHaveBeenCalled();
+    expect(rpcBody()).toBeUndefined();
   });
 
   // En liga-løs konkurrence kan ikke oprettes længere (august 2026). Reglen står
@@ -1013,7 +1055,7 @@ describe("createCompetition", () => {
     await expect(createCompetition("token", "u1", {
       name: "Uden liga", mode: "full_season", tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     })).rejects.toThrow("Vælg eller opret den liga");
-    expect(db.insert).not.toHaveBeenCalled();
+    expect(rpcBody()).toBeUndefined();
   });
 
   // ---------- Favorithold (I14): den nye teams-liste ----------
@@ -1024,7 +1066,7 @@ describe("createCompetition", () => {
       name: "Kun FCK", mode: "team",
       teams: [{ leagueId: "L1", seasonId: "S1", teamId: "T1" }],
     });
-    expect(insertedRow("competitions")).toMatchObject({
+    expect(insertedRow()).toMatchObject({
       league_id: "L1", season_id: "S1", mode: "team", mode_params: { team_id: "T1" },
     });
     // kun ikke-spillede runder kommer med, som for full_season
@@ -1040,7 +1082,7 @@ describe("createCompetition", () => {
         { leagueId: "L2", seasonId: "S2", teamId: "T9" },
       ],
     });
-    const row = insertedRow("competitions");
+    const row = insertedRow();
     expect(row.league_id).toBeNull();
     expect(row.season_id).toBeNull();
     // `tournaments` er ikke pynt: efterfyldningens coversSeason() afgør
@@ -1056,7 +1098,7 @@ describe("createCompetition", () => {
     await expect(create({
       name: "A", mode: "team", teams: [{ leagueId: "L1", seasonId: null, teamId: null }],
     })).rejects.toThrow("Vælg mindst ét hold");
-    expect(db.insert).not.toHaveBeenCalled();
+    expect(rpcBody()).toBeUndefined();
   });
 
   // ---------- Quick League (I14): rounds-parameteren ----------
@@ -1066,13 +1108,13 @@ describe("createCompetition", () => {
     await create({
       name: "Quick League", mode: "random", matchIds: ["x1"], randomCount: 8, rounds: 6,
     });
-    expect(insertedRow("competitions").mode_params).toEqual({ count: 8, rounds: 6 });
+    expect(insertedRow().mode_params).toEqual({ count: 8, rounds: 6 });
 
-    db.insert.mockClear();
+    restFetch.mockClear();
     await create({
       name: "Quick Pick", mode: "random", matchIds: ["x1"], randomCount: 8, rounds: 1,
     });
-    expect(insertedRow("competitions").mode_params).toEqual({ count: 8 });
+    expect(insertedRow().mode_params).toEqual({ count: 8 });
   });
 
   // ---------- kårings-tilvalget (I13): awards i alle grene ----------
@@ -1083,22 +1125,22 @@ describe("createCompetition", () => {
       name: "Sæson", mode: "full_season", awards: true,
       tournaments: [{ leagueId: "L1", seasonId: "S1" }],
     });
-    expect(insertedRow("competitions").mode_params).toEqual({ awards: true });
+    expect(insertedRow().mode_params).toEqual({ awards: true });
 
-    db.insert.mockClear();
+    restFetch.mockClear();
     await create({
       name: "Hold", mode: "team", awards: true,
       teams: [{ leagueId: "L1", seasonId: "S1", teamId: "T1" }],
     });
-    expect(insertedRow("competitions").mode_params).toEqual({ team_id: "T1", awards: true });
+    expect(insertedRow().mode_params).toEqual({ team_id: "T1", awards: true });
 
-    db.insert.mockClear();
+    restFetch.mockClear();
     await create({ name: "Custom", mode: "custom", awards: true, matchIds: ["x1"] });
-    expect(insertedRow("competitions").mode_params).toEqual({ awards: true });
+    expect(insertedRow().mode_params).toEqual({ awards: true });
 
-    db.insert.mockClear();
+    restFetch.mockClear();
     await create({ name: "Custom uden", mode: "custom", matchIds: ["x1"] });
-    expect(insertedRow("competitions").mode_params).toEqual({});
+    expect(insertedRow().mode_params).toEqual({});
   });
 });
 
