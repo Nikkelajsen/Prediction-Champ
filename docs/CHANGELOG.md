@@ -33,9 +33,10 @@ bestilling** (`B41`: kør `#73` før merge). De fire leverancer:
   Dækket af `sql/tests/create_competition.sql` i CI mod det rigtige skema:
   begge vinduer fremkaldes med en spærre, den gamle vejs halve konkurrence
   vises som negativ kontrol, og et opdigtet kamp-id fælder hele kaldet på
-  fremmednøglen. 🔴 **`#73` skal køres i Supabase (produktion og staging), FØR
-  denne ændring udrulles** — den nye klient kalder kun RPC'en. Bestillingen
-  står som `B41` i backloggens Tier 1.
+  fremmednøglen. ~~🔴 `#73` skal køres i Supabase (produktion og staging), FØR
+  denne ændring udrulles~~ **kørt i produktion og staging samme dag** (ejeren),
+  så `B41`-bestillingen i Tier 1 er lukket igen, og rækkefølgen kør-så-merge er
+  efterlevet.
 - **`G131` — analytics-testens ⓘ-liste udledes nu af JSX'en.** Rækkens eget
   spørgsmål ("kan listen udledes?") faldt ud til ja, så gælden forsvandt helt:
   `analytics.test.js` læser `<M id="…">`-kaldene ud af `src/screens/` og

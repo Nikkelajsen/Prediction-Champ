@@ -60,7 +60,7 @@ eller en linje i "Forkastede ideer".
 
 ## Prioriteret rækkefølge
 
-Alle 33 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -102,9 +102,7 @@ produktion er ejerens arbejde, og der bygges ingen vej udenom. Det, der kan
 gøres billigere, er bestillingen — `sql/checks/` installerer intet og kan
 køres på et minut.
 
-| # | Hvad | Note |
-|---|---|---|
-| `B41` | Kør `#73 create_competition.sql` i produktionen og staging — **FØR** `G133`-klienten merges | Ren tilføjelse og sikker at køre når som helst (én funktion + grants, ingen policy, ingen række) — men den nye `createCompetition()` kalder KUN RPC'en, så mod en database uden den svarer oprettelsen 404. Rækkefølgen er kør-så-merge, som `#57`/`#58` bare med fortegnet den anden vej. Verifikationen står nederst i filen; se `sql/README.md` `#73` |
+Tomt.
 
 ### Tier 2 — Billige rettelser, hvor koden lyver
 
@@ -205,7 +203,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | B28 | **Gentag CL's kickoff-aflæsning, når ligafasen er lodtrukket** | Champions League var den ene af fem turneringer, [`docs/reviews/football-data-kickoff-aflaesning-2026-08-07.md`](./reviews/football-data-kickoff-aflaesning-2026-08-07.md) ikke kunne dække — leverandøren havde pr. 1. august 2026 endnu ikke oprettet sæsonen 2026, fordi ligafasen ikke var lodtrukket (`B8`, lukket 1. august 2026). De fire aflæste turneringer delte sig i to: kun Bundesliga sender en ren midnats-pladsholder (`status: SCHEDULED` + `00:00`), de tre andre sender et opdigtet klokkeslæt for hver ufastsat kamp uden nogen markør at skelne på. Om CL ligner Bundesliga eller de tre andre, afgør om `kickoff_tbd` overhovedet kan sættes for turneringen (og dermed om `G84`s kontrol kan se den) — og er kun kendt, når svaret aflæses. | Lille (samme PowerShell-opslag, gentaget) |
 | B12 | **Mål, om "Anbefalet" på Sæson-kortet flytter fordelingen** | Mærket blev sat på i `A22` netop for at flytte, hvilken mode nye brugere vælger, men effekten er aldrig aflæst — og et anbefalings-mærke, der ikke virker, er værre end ingen, fordi det bruger den plads, der skulle guide. `competition_created` bærer allerede `metadata.mode`, så før/efter kan opgøres uden ny instrumentering. Samme opslag svarer på `I15`s åbne spørgsmål om, hvorvidt Ugens kupon-kortet bruges. Forespørgslen står i [`features/analytics-v1.md`](./features/analytics-v1.md) §5F sammen med de tre forbehold, svaret skal læses med (lille datamængde, lossy hændelseslog, og at kort-rækkefølgen blev vendt samme dag som mærkatet kom på). **Rækken har stået siden august 2026 med teksten "tilbage står at køre den" — og da den blev kørt 5. august 2026, kunne den ikke:** vinduet partitionerede på `(e.created_at < m.fra)`, som hverken står i `group by` eller er aggregeret, så PostgreSQL afviste den med `42803`. Perioden udledes nu i en CTE, efterprøvet mod PostgreSQL 16.13. **Anden kørsel samme dag afslørede, at kilden var forkert valgt:** hændelsesloggen svarede med tre oprettelser i alt, alle `random` — plausibelt nok ved ~20 testbrugere, men ubrugeligt, fordi `analytics_events` først findes fra 30. juli 2026, så "før mærkatet" var to døgn og ikke appens historik. `competitions.mode` + `created_at` bærer samme oplysning som **rigtige rækker over hele historikken**, og spec'ens §5F er byttet om, så tabellen er den primære kilde og hændelsen kontrollen. **Opslaget er kørt 5. august 2026, og svaret er "ikke endnu":** hele appens historik rummer **syv** konkurrencer — 6 før mærkatet (`time_range` 2, `random` 2, `full_season` 2) og **1** efter (`random`). Med n=1 i den ene periode kan ingen fordeling måles, hvilket er præcis rækkens eget første forbehold. Rækken er derfor flyttet til Tier 6 med en udløser, der kan aflæses med samme opslag: **tosifret `antal` i `efter`-perioden.** Det, der er leveret, er ikke svaret, men at spørgsmålet nu kan stilles — forespørgslen kunne hverken køre eller pege på den rigtige kilde, da rækken blev skrevet. | Lille (opslag) |
 | B32 | **Fjern Champions League's "Fra ligafasen"-forbehold på hjemmesidens turneringsliste** | `site/index.html`s turnerings-sektion (merget 13. august 2026) viser Champions League med mærkatet "Fra ligafasen", fordi ligafasen endnu ikke er lodtrukket (samme forudsætning som `B8`/`B28`). Mærkatet skal fjernes samtidig med, at `B28`s kickoff-aflæsning gentages for CL. | Lille — én linje, samme udløser som `B28` |
-| B41 | **Kør `#73 create_competition.sql` i produktionen og staging — FØR `G133`-klienten merges** | `G133` flyttede konkurrence-oprettelsens tre skrivninger ind i én `security definer`-RPC (`create_competition()`), og den nye `createCompetition()` i `src/lib/data/competitions.js` kalder KUN den. Filen selv er en ren tilføjelse og sikker at køre når som helst — men udrulles klienten først, svarer oprettelsen 404, og ingen kan oprette en konkurrence. Samme rækkefølgekrav som `#57`/`#58`, bare med fortegnet den anden vej: her er det MIGRERINGEN, der skal først. Verifikationsopslagene (funktion, anon-afvisning, tælling af halve konkurrencer) står nederst i filen | Lille — ét editor-skridt, før merge |
 
 ## Teknisk gæld
 
@@ -259,10 +256,10 @@ kan se, hvad der lige er sket, uden at læse hele listen.
 
 ### 21. august 2026 (otteogtredivte kørsel) — Tier 2, 4 og 5 kørt tomme: fire gæld-rækker leveret, én bestilling tilbage
 
-**Listen er 36 → 33.** Fire rækker leveret (`G136`, `G133`, `G131`, `G137`),
-én ny række skrevet: `B41` i Tier 1 er ejerens bestilling af `#73
-create_competition.sql`, som SKAL køres i produktionen og staging, FØR denne
-grens klient merges — den nye `createCompetition()` kalder kun RPC'en.
+**Listen er 36 → 32.** Fire rækker leveret (`G136`, `G133`, `G131`, `G137`),
+og den ene nye — `B41`, ejerens bestilling af `#73 create_competition.sql`
+FØR merge — blev kørt i produktion og staging samme dag og er slettet igen.
+Tier 1–5 er dermed alle tomme.
 
 **`G136` (Tier 2):** `schema-export.yml`s `krop()` klipper nu også
 `\restrict`/`\unrestrict`-linjerne af før sammenligningen, så pg_dump 17's
