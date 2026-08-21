@@ -53,9 +53,12 @@ over stimen (28), hvilket er `G143`s dominans-fund i praksis. Fire mutationer
 prøvet, tre fanget; den fjerde er `distinct on`, som pr. konstruktion ikke kan
 ses.
 
-🔴 **`sql/story_engine_v3.sql` (#47) skal gen-køres i Supabase.** Kun funktionen
-ændres; ingen rækker røres, ingen anden fil skal med, og der er **ingen
+✅ **`sql/story_engine_v3.sql` (#47) er gen-kørt i Supabase 21. august 2026.** Kun
+funktionen ændres; ingen rækker røres, ingen anden fil skal med, og der er **ingen
 frontend-ændring at merge sammen med** — teksten har ligget i motoren hele tiden.
+Kørslen aflæses med `select pg_get_functiondef('public.generate_daily_stories(date)'::regprocedure)
+like '%naeste_dag%';` — filen har selv lærepengen om, at en gen-kørsel ikke giver
+nogen kvittering, man kan se på.
 Adfærdsændring ved kørsel: en bruger, hvis stime på 5+ brød i dag, kan nu få
 stimekortet i stedet for dagens facit. Backloggen er 35 → 34. Spec'ens §13.11 og
 [`DECISIONS.md`](./DECISIONS.md) bærer resten.
