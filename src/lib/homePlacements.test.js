@@ -111,27 +111,38 @@ describe("loadHomePlacements", () => {
   });
 });
 
+// Siden `G139` (21. august 2026) er `ratingSnapshot` en ren FLETNING af to
+// opslag frem for en udregning på en hentet rangliste: tallene kommer fra
+// `loadRatingSnapshot()` (efterprøvet i `data/standings.test.js`), formkurven
+// fra `loadRatingHistory()`. Det, der kan gå galt uden et netværk, er
+// fletningen — og det er dét, der måles her.
 describe("ratingSnapshot", () => {
-  const board = [
-    { userId: "andet", rating: 1600, rank: 1 },
-    { userId: MIG, rating: 1500, rank: 2, provisional: true },
-  ];
+  const snap = { rating: 1500, rank: 2, total: 2, provisional: true };
 
-  it("samler rating, bevægelse, form og ægte placering", () => {
+  it("samler tallene og formkurven til ét kort", () => {
     const hist = new Map([[MIG, { move: -3, form: [1, 0, 1] }]]);
-    expect(ratingSnapshot(board, hist, MIG)).toEqual({
+    expect(ratingSnapshot(snap, hist, MIG)).toEqual({
       rating: 1500, move: -3, form: [1, 0, 1], rank: 2, total: 2, provisional: true,
     });
   });
 
   it("nulstiller bevægelse og form, når historikken mangler brugeren", () => {
-    expect(ratingSnapshot(board, new Map(), MIG)).toMatchObject({ move: 0, form: [] });
+    expect(ratingSnapshot(snap, new Map(), MIG)).toMatchObject({ move: 0, form: [] });
   });
 
   // "Ikke på ranglisten" er en gyldig tilstand — en ny bruger uden en afsluttet
-  // runde — og ikke en fejl. Kortet viser sin egen tomme udgave.
-  it("svarer { none: true } for en bruger uden en række", () => {
-    expect(ratingSnapshot(board, new Map(), "ukendt")).toEqual({ none: true });
+  // runde — og ikke en fejl. Kortet viser sin egen tomme udgave. Opslaget
+  // svarer `{ none: true }`, og fletningen må ikke lave det om til et kort med
+  // en formkurve og ingen tal.
+  it("bærer { none: true } uændret igennem", () => {
+    expect(ratingSnapshot({ none: true }, new Map([[MIG, { move: 9, form: [2] }]]), MIG))
+      .toEqual({ none: true });
+  });
+
+  // Fejler opslaget, degraderer HjemTab til `{ none: true }` — men et `null`
+  // eller `undefined` må ikke kunne komme igennem som et halvt kort.
+  it("tåler et manglende opslag", () => {
+    expect(ratingSnapshot(null, new Map(), MIG)).toEqual({ none: true });
   });
 });
 

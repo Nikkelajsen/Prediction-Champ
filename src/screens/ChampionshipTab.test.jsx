@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 // 2026). Skærmen selv eksporterer dem ikke længere — testen skal ramme dér,
 // hvor koden bor, ikke gennem en gennemgangsluge, der kan blive stående som
 // den eneste bruger.
-import { StandingsTable, Champions, FullStandingsModal, pageOfUser } from "./championship/StandingsTable.jsx";
+import { StandingsTable, Champions, FullStandingsModal, Standings, pageOfUser } from "./championship/StandingsTable.jsx";
 import { CardHead } from "./championship/CardHead.jsx";
 import { pickSeasonLeague, boardTitle, scopeNote } from "./championship/scope.js";
 import { assignRanks, sortStandings } from "../lib/standings.js";
@@ -41,6 +41,40 @@ describe("StandingsTable (placering, ikke listeindeks)", () => {
       row("u1", "Anna", { total: 12 }), row("u2", "Bo", { total: 8 }), row("u3", "Carl", { total: 5 }),
     ])} userId="u1" isComplete={false} />);
     expect(rankCells(html)).toEqual(["1", "2", "3"]);
+  });
+});
+
+// `G140` (21. august 2026): vejen til hele stillingen var et `<p>` med en
+// `onClick`. Det er ikke en betjening — den kan hverken nås med tabulator eller
+// aktiveres med Enter/mellemrum, og skærmbilled-harnessen
+// (`scripts/screenshots/boot.js`) kan kun trykke på `button`, så den ene vej til
+// din egen række i en stilling på 25 var lukket for tastaturbrugere OG usynlig
+// for de billeder, der viser appen frem.
+//
+// Påstanden læser MARKUPPEN og ikke en stilart: det er elementtypen, der
+// afgjorde begge dele, og en `<p>`, der bare fik `role="button"` på, ville
+// stadig ikke kunne trykkes af harnessen.
+describe("Standings: vejen til hele stillingen er en knap (G140)", () => {
+  const seks = board([
+    row("u1", "Anna"), row("u2", "Bo"), row("u3", "Carl", { total: 9 }),
+    row("u4", "Dea", { total: 8 }), row("u5", "Ely", { total: 7 }), row("u6", "Fay", { total: 6 }),
+  ]);
+
+  it("tegner «Vis hele stillingen» som en <button type=\"button\">", () => {
+    const html = renderToStaticMarkup(
+      <Standings rows={seks} userId="u6" isComplete title="Månedschampionship" onOpenFull={() => {}} />);
+    const i = html.indexOf("Vis hele stillingen");
+    expect(i, "linjen mangler helt").toBeGreaterThan(-1);
+    const åbning = html.slice(html.lastIndexOf("<", i), i);
+    expect(åbning, `fladen er ${åbning.slice(0, 40)}… og ikke en knap`).toMatch(/^<button [^>]*type="button"/);
+  });
+
+  // Modprøven: uden den ville påstanden ovenfor også være opfyldt af en linje,
+  // der aldrig vises. Linket findes først, når der ER mere end de fem viste.
+  it("viser den ikke, når hele stillingen allerede står der", () => {
+    const html = renderToStaticMarkup(
+      <Standings rows={seks.slice(0, 5)} userId="u1" isComplete title="Månedschampionship" onOpenFull={() => {}} />);
+    expect(html).not.toContain("Vis hele stillingen");
   });
 });
 

@@ -9,7 +9,7 @@ import { useState } from "react";
 import { Crown, ChevronLeft, ChevronRight } from "lucide-react";
 import { leaders } from "../../lib/standings.js";
 import { C, font, muted, pagerBtn, thStyle } from "../../ui/theme.js";
-import { Modal, PlayerName } from "../../ui/components.jsx";
+import { Modal, PlayerName, TekstLink } from "../../ui/components.jsx";
 import { TIEBREAK_HINT } from "./scope.js";
 
 // Stilling i samme format som liga (BoardScreen): en rigtig tabel med kolonne-
@@ -171,10 +171,10 @@ function Standings({ rows, userId, isComplete, ratingMap, title, onOpenFull, ope
     <>
       <StandingsTable rows={rows.slice(0, 5)} userId={userId} isComplete={isComplete} ratingMap={ratingMap} openProfile={openProfile} />
       {rows.length > 5 && (
-        <p style={{ ...muted, marginTop: 8, marginBottom: 0, cursor: "pointer", textDecoration: "underline" }}
+        <TekstLink style={{ ...muted, display: "block", marginTop: 8, marginBottom: 0 }}
           onClick={() => onOpenFull({ title, rows, isComplete })}>
           Vis hele stillingen ({rows.length}) →
-        </p>
+        </TekstLink>
       )}
       <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>{TIEBREAK_HINT(rows)}</div>
     </>

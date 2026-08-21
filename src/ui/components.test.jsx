@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 // renderToStaticMarkup frem for en jsdom-opsætning: PlayerName er ren markup,
 // og projektet skal ikke have et komponent-testbibliotek for den ene komponents skyld.
 import { renderToStaticMarkup } from "react-dom/server";
-import { PlayerName, UserRoundPredictions, EmptyCompetitions, InviteCode, StatTile, StatGroup, MiniBars, StateChip, SignalRow, ScoreInput, Modal } from "./components.jsx";
+import { PlayerName, TekstLink, UserRoundPredictions, EmptyCompetitions, InviteCode, StatTile, StatGroup, MiniBars, StateChip, SignalRow, ScoreInput, Modal } from "./components.jsx";
 
 describe("PlayerName", () => {
   it("renderes som ren tekst uden onOpenProfile", () => {
@@ -41,6 +41,29 @@ describe("PlayerName", () => {
 // Pointvisningen skal sige det samme overalt: PointsPill har altid vist 0 som "0",
 // mens runde-overlayet skrev "+0" for et forkert gæt — og "Sådan virker det"
 // lover "0 ellers".
+// `TekstLink` er svaret på `G140`: tre "vis mere"-flader var `<p onClick>`, og
+// `Auth.jsx` havde den rigtige form liggende i sin egen lokale kopi. Det, der
+// gør komponenten værd at have, er de to ting, en fjerde flade ellers ville
+// gætte forkert på — elementtypen og `type="button"`.
+describe("TekstLink (G140)", () => {
+  it("er en knap, der ikke sender en formular", () => {
+    const html = renderToStaticMarkup(<TekstLink onClick={() => {}}>Vis alle</TekstLink>);
+    expect(html).toMatch(/^<button /);
+    expect(html).toContain('type="button"');
+    expect(html).toContain("Vis alle");
+  });
+
+  // `style` skal kunne overskrive ALT, også `display`. De tre kaldssteder er
+  // blokke på deres egen linje, hvor en knaps inline-block ville samle et
+  // linjeafstands-mellemrum op, som en `<p>` ikke havde.
+  it("lader kaldsstedet overskrive udseendet, display med", () => {
+    const html = renderToStaticMarkup(
+      <TekstLink onClick={() => {}} style={{ display: "block", color: "#0f0" }}>Vis alle</TekstLink>);
+    expect(html).toContain("display:block");
+    expect(html).toContain("color:#0f0");
+  });
+});
+
 describe("UserRoundPredictions: pointvisning", () => {
   const round = {
     key: "2026-07-14",

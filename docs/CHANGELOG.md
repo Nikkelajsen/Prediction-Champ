@@ -9,6 +9,67 @@ dokumentation skal kunne læses uden at læse historikken med.
 
 ---
 
+21. august 2026 (sjette kørsel) — Tier 5 kørt tom: `G140` og `G139`
+
+**`G140`: tre "vis mere"-flader var ikke betjeninger.** "Vis hele stillingen",
+"Vis alle N milepæle" og "Vis alle N runder" var `<p>` med en `onClick`. En
+sådan flade kan hverken nås med tabulator eller aktiveres med Enter/mellemrum,
+har ingen rolle for en skærmlæser, og skærmbilled-harnessen
+(`scripts/screenshots/boot.js`) kan kun trykke på `button` — så den ene vej til
+din egen række i en stilling på 25 var lukket for tastaturbrugere OG usynlig for
+de billeder, der viser appen frem.
+
+**Svaret fandtes allerede — i en lokal kopi.** `Auth.jsx` rettede præcis denne
+fejl i `G28` og lagde en link-formet `<button>` i sin egen fil, hvor ingen anden
+skærm kunne se den. Knappen hedder nu `TekstLink` og bor i `ui/components.jsx`;
+alle fire steder bruger den, og `style` lægges sidst, så kaldsstedet bestemmer
+farve, skriftstørrelse og `display`. Vagt: `TekstLink` i `components.test.jsx`
+plus en påstand i `ChampionshipTab.test.jsx`, der læser MARKUPPEN — det var
+elementtypen, der afgjorde begge dele, så en `<p>` med `role="button"` ville
+stadig ikke kunne trykkes af harnessen.
+
+**`G139`: Hjem hentede hele den globale ratingtabel for at vise fire tal.**
+`loadRatingBoard()` henter hver brugers rating OG hvert profilnavn; Hjem brugte
+svaret til ét kort. Prisen var to lofter, ikke ét: `A34`s egress-budget, og
+PostgREST' tavse grænse på 1000 rækker, hvor svaret bare bliver kortere — en app
+med tusind ratede brugere ville have vist et for lavt antal og en placering
+regnet på en afkortet liste, uden en fejl nogen steder. Samme fælde som `G106`.
+
+**Kortet slår nu sin egen række op og lader databasen TÆLLE resten**
+(`db.count`, altså `count=exact`, som er upåvirket af rækkeloftet). To ting
+skulle med, og begge er lette at tabe:
+
+1. **Delt placering afgøres på den VISTE (afrundede) rating.** `Math.round(x) >
+   n` er ensbetydende med `x >= n + 0.5`, så optællingen er
+   `rating=gte.<min afrundede + 0.5>`. Et `gt.<min rå rating>` ville sige, at en
+   nabo med samme viste tal er foran mig.
+2. **Lukkede konti tæller ikke.** De filtreres fra de globale lister i klienten,
+   så en optælling i databasen ser en række, ranglisten ikke viser. De trækkes
+   fra igen — via `selectIn`, så en voksende mængde ikke kan sprænge URL'en.
+
+**Formkurven ramte samme loft, værre.** `loadRatingHistory()` hentede én række
+pr. bruger PR. RUNDE, sorteret `round_key.asc` — afkortningen ville altså ramme
+netop de seneste runder, som er dem, formkurven er lavet af. Hjem henter nu kun
+sin egen. `BoardScreen` henter kun konkurrencens deltagere; `ChampionshipTab`
+sender bevidst ingen liste, fordi dens egne lister er globale.
+
+**Vagten er en ÆKVIVALENSTEST og ikke en liste af påstande** (ny
+`src/lib/data/standings.test.js`). En flytning af en udregning fra klienten til
+databasen har præcis én farlig fejlmåde: et tal, der er *næsten* rigtigt — og
+Hjem linker til den rangliste, den skal stemme med. Begge veje drives derfor af
+den samme fixture, hvor en nabo deler placering på det afrundede tal og en lukket
+konto står foran begge. Seks mutationer efterprøvet, alle fanget.
+
+**Og den samme påstand kørt gennem hele appen: skærmbillederne er
+byte-identiske.** `npm run screenshots` giver samme fire PNG'er som før — også
+`hjem.png`, hvor rating-kortet står. At billedet ER følsomt over for kortet er
+efterprøvet ved at få opslaget til at svare tomt: da flyttede filen sig.
+
+1551 tests (14 nye), lint på loftet (7 advarsler), grønt build. Ingen SQL, ingen
+migrering.
+
+---
+
 21. august 2026 (femte kørsel) — Tier 2 kørt tom: `G141` rettet, `G142` afgjort
 
 **Analytics-tavlens `viewable` regnede dagskortene efter en flade, der ikke
@@ -53,10 +114,10 @@ efterfølger-opslaget, brugerfiltret droppet, `greatest(0, …)` fjernet,
 v3-reglen brugt på rundekortene, og æra-skellet erstattet af `period` alene —
 alle fem fanget. 1536 tests, lint på loftet (7 advarsler), grønt build.
 
-🔴 **`#17 analytics_dashboard.sql` skal gen-køres i Supabase.** Kun funktionen,
-ingen rækker, ingen frontend-ændring at merge sammen med — svarets form er
-uændret. Synlig følge ved kørslen: `viewable_total` og regeltabellens visnings-
-og afvisningsrater flytter sig for dagskortene.
+✅ **`#17 analytics_dashboard.sql` er gen-kørt i Supabase 21. august 2026.**
+Kun funktionen, ingen rækker, ingen frontend-ændring at merge sammen med —
+svarets form er uændret. Synlig følge af kørslen: `viewable_total` og
+regeltabellens visnings- og afvisningsrater flytter sig for dagskortene.
 
 ---
 

@@ -71,6 +71,40 @@ const PlayerName = ({ userId, name, you = false, onOpenProfile, truncate = false
   );
 };
 // Form guide dots — grønne = stærk runde, gul = middel, grå = svag
+// En LINK-formet knap. Ser ud som et link, ER en `<button>` — fordi det er
+// dét, den gør: ændrer noget på den side, man står på, frem for at gå et sted
+// hen.
+//
+// HVORFOR DEN FINDES SOM KOMPONENT (`G140`, 21. august 2026). Appen havde tre
+// "vis mere"-flader skrevet som `<p>` med en `onClick`: hele stillingen, alle
+// milepæle og alle runder. En `<p onClick>` er ikke en betjening — den kan
+// hverken nås med tabulator eller aktiveres med Enter/mellemrum, den har ingen
+// rolle for en skærmlæser, og skærmbilled-harnessen (`scripts/screenshots/`)
+// kan kun trykke på `button`, så fladen var også usynlig for netop de billeder,
+// der skal vise appen frem. `Auth.jsx` havde gjort det rigtigt siden `G28` — men
+// i sin egen lokale kopi, som ingen anden skærm kunne få øje på. Derfor bor den
+// her nu: en fjerde flade skal kunne arve svaret frem for at genopfinde fejlen.
+//
+// `type="button"` er ikke til forhandling, heller ikke uden for en formular:
+// reglen er billigere at holde ubetinget end at vurdere.
+//
+// `style` lægges SIDST og må overskrive alt — farve, skriftstørrelse, margener
+// og `display`. De tre "vis mere"-flader er blokke på deres egen linje og
+// sender `display: "block"` med, fordi en knap ellers er inline-block og ville
+// samle et linjeafstands-mellemrum op, en `<p>` ikke havde.
+function TekstLink({ onClick, children, style, ariaLabel }) {
+  return (
+    <button type="button" onClick={onClick} aria-label={ariaLabel} style={{
+      background: "none", border: "none", padding: 0, margin: 0,
+      font: "inherit", color: "inherit", textAlign: "left",
+      cursor: "pointer", textDecoration: "underline",
+      ...style,
+    }}>
+      {children}
+    </button>
+  );
+}
+
 const FormDots = ({ form }) => (
   <span style={{ display: "inline-flex", gap: 3 }}>
     {(form || []).map((f, i) => (
@@ -656,4 +690,4 @@ function PctGrid({ columns, rows }) {
   );
 }
 
-export { Card, Collapsible, FoldChevron, Eyebrow, H, PlayerName, FormDots, Move, Modal, InfoDot, InviteCode, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill, EmptyCompetitions, StatTile, StatGroup, MiniBars, StateChip, SignalRow, PctGrid };
+export { Card, Collapsible, FoldChevron, Eyebrow, H, PlayerName, TekstLink, FormDots, Move, Modal, InfoDot, InviteCode, BackBar, ScoreInput, RoundPager, UserRoundPredictions, LiveBadge, FinalBadge, PointsPill, EmptyCompetitions, StatTile, StatGroup, MiniBars, StateChip, SignalRow, PctGrid };

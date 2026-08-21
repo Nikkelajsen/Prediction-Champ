@@ -54,13 +54,13 @@ Skriv én linje. Intet ID, ingen begrundelse, ingen formatering — det er hele
 pointen. Ryddes ved næste session: hvert punkt får et ID og en række nedenfor,
 eller en linje i "Forkastede ideer".
 
-Tom.
+- Rating-fanen og Championships lister henter stadig hele tabellen uden værn mod PostgREST' tavse loft på 1000 rækker — samme fælde som G106, bare på de globale lister
 
 ---
 
 ## Prioriteret rækkefølge
 
-Alle 32 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
+Alle 30 åbne punkter i den rækkefølge, de bør tages — ikke efter ID og ikke efter
 størrelse. **Hvert punkt står præcis ét sted.** Tabellerne længere nede er
 opslagsværket (hvad er `G32`?); denne er svaret på "hvad nu?".
 
@@ -118,10 +118,7 @@ Tomt.
 
 ### Tier 5 — Robusthed og vedligehold
 
-| # | Hvad | Note |
-|---|---|---|
-| `G140` | "Vis hele stillingen" er et `<p>` med `onClick` | Fladen kan hverken nås med tastaturet eller trykkes af skærmbilled-harnessen, som kun kan klikke på knapper — så den ene vej til din egen række i en stilling på 25 er lukket for tastaturbrugere OG usynlig for `npm run screenshots`. Rettelsen er at gøre den til en `button` med den styling, den allerede har. Fundet ved `A44`-eftersynet 21. august 2026 |
-| `G139` | Hjem og konkurrence-boardet henter hele den globale ratingtabel | `loadRatingBoard` henter **hver** brugers rating OG hvert profilnavn — Hjem bruger svaret til ét kort: din egen rating, din placering og antallet (`ratingSnapshot`). `loadRatingMap` gør det samme i `BoardScreen` for at sætte et ratingtal ved otte deltagere. Begge kald vokser med brugerbasen og lander i `A34`s egress-loft, længe før nogen mærker dem i skærmen. Kuren er billig og kræver ingen migrering: egen række plus en `count=exact` på `rating=gt.<din>` til Hjem, og `user_id=in.(deltagerne)` på boardet. Fundet ved `A44`-aflæsningen 21. august 2026. |
+Tomt.
 
 ### Tier 6 — Venter på en udløser
 
@@ -212,7 +209,6 @@ begrundelse, og rækken her slettes. `Afgøres` er en **udløser**, ikke en dato
 | G123 | **Ingen generisk vagt for `drop function` + `revoke` i `sql/`.** | `G119` (14. august 2026) fravalgte en tekstlæsende kontrol, der kræver `revoke execute … from public` efter hvert `drop function` — kun to forekomster fandtes, og en vagt over to koster mere at vedligeholde, end den kan fange. Flyttet til Tier 6: en tredje forekomst gør det til et mønster. | Lille, men ikke før udløseren |
 | G129 | **Et afvist dagskort kan genopstå.** `generate_daily_stories(p_day)` sletter og gen-indsætter dagens rækker ved en gen-kørsel; den nye række har et nyt `id`, og `dismissed_at` blev i graven sammen med den gamle. | Udløses kun af en gen-kørsel EFTER at dagen er gjort færdig — i praksis en resultatrettelse bagud på præcis den dag, brugeren afviste. **Kanten er kendt og står allerede skrevet ved koden** (`src/lib/data/activity.js`, `dismissStory`), tilføjet sammen med `I25` 15. august 2026, som var det, der gav dagskortet et Afvis-kryds overhovedet. Rækken findes, fordi begrundelsen ellers kun ville stå ét sted og aldrig blive taget op igen — ikke fordi den skal rettes nu. Kuren er en `dismissed`-liste pr. `(user_id, day_key)`, altså en tabel, en policy og en ekstra læsning i `loadDayCard` for en kant, ingen endnu har meldt. Flyttet til Tier 6 med den første melding som udløser. | Lille—mellem, men ikke før udløseren |
 | G132 | **Ingen generisk vagt for SELECT-policies, der kalder en funktion, som slår deres egen tabel op.** Mønstret spærrer enhver skrivning med `Prefer: return=representation`. | `G130` gjorde oprettelse af en konkurrence umulig i fem dage, og fejlen var usynlig for enhver læsetest. En vagt over `pg_policies` kunne fange den ved migreringstid. | Mellem — kræver at vagten kan se ind i funktionskroppen (`pg_get_functiondef`) og skelne en selv-opslående funktion fra en harmløs. **Venter på en anden forekomst** (`G123`s disciplin). |
-| G139 | **Hjem og konkurrence-boardet henter hele den globale ratingtabel.** `loadRatingBoard` (`src/lib/data/standings.js`) henter hver brugers rating og hvert profilnavn; Hjem bruger svaret til ét kort — egen rating, egen placering og antallet (`ratingSnapshot` i `src/lib/data/home.js`). `loadRatingMap` gør det samme i `BoardScreen` for at sætte et ratingtal ved otte deltagere. | Prisen er usynlig i dag og vokser lineært med brugerbasen: appen er REST-fetch-tung, og `A34`s første loft er egress. Rækken er ikke en fejl, men det billigste sted at bremse væksten, når den kommer. | Lille — egen række plus `count=exact` på `rating=gt.<din>` til Hjem, `user_id=in.(deltagerne)` på boardet. Ingen migrering. |
 | G8 | **Multi-turnerings-`full_season` er uafprøvet mod rigtige data.** `mode_params.tournaments` har aldrig været skrevet i produktion (nul rækker, 31. juli 2026), så stien er kun dækket af unit-tests — både ved oprettelsen (`createCompetition` i `src/lib/data/competitions.js`) og i `coversSeason` i `api/_backfill.js`. | Ufarlig indtil den første multi-turneringskonkurrence oprettes; dét er tidspunktet at kigge efter. **`A16` (1. august 2026) skærper den lidt:** gennemgangen viste, at `random` og `custom` allerede i dag leverer det tvær-turnerings-scenarie, feltet skulle have leveret — så den *adfærd*, man ville teste, findes i produktion, mens netop denne kodesti stadig ikke gør. Fejler den, fejler den derfor tavst i et hjørne, ingen har haft brug for endnu. **`A22` (1. august 2026) udvider skriversiden:** Favorithold med flere hold skriver nu OGSÅ `mode_params.tournaments` (plus `team_ids`), så den første rigtige multi-konkurrence kan lige så vel blive en hold-konkurrence — uanset hvilken, efterses den i Admin → Drift, når den kommer. **Præmissen om, at rækken var faldet, holdt IKKE — opslaget er kørt 5. august 2026 og svarede tomt.** Formodningen var, at `B2`s testcase 3 (godkendt mod produktionsdata 2. august, [`features/turnering-2.md`](./features/turnering-2.md) §6) *er* præcis denne kodesti, og at godkendelsen derfor måtte have efterladt en række. Det gjorde den ikke: testcasen er klikket igennem, ikke gemt — en godkendt test og en skrevet række er to forskellige ting, og kun den ene kan aflæses bagefter. **Nul rækker rammer bredere end antaget:** `A22`s Favorithold med flere hold skriver også `mode_params.tournaments`, så tallet siger, at *ingen* af de to skrivere nogensinde har kørt i produktion. Stien er dermed fortsat kun dækket af unit-tests, og rækken er ikke længere et opslag, men en ventetid — den flyttes til Tier 6 med den første rigtige multi-turneringskonkurrence som udløser. Efterses i Admin → Drift, når den kommer. | Lille (eftersyn, når udløseren kommer) |
 
 ## Ideer
@@ -255,24 +251,23 @@ er `DECISIONS.md` (hvorfor) og `CHANGELOG.md` (hvad), som begge er skrevet til
 at vokse. Denne fil er ikke. Formålet med afsnittet er ét: at den næste session
 kan se, hvad der lige er sket, uden at læse hele listen.
 
-### 21. august 2026 (femogfyrretyvende kørsel) — Tier 2 kørt tom: `G141` rettet, `G142` afgjort
+### 21. august 2026 (seksogfyrretyvende kørsel) — Tier 5 kørt tom: `G140` og `G139`
 
-**Listen er 34 → 32.** Tier 1–4 er alle tomme; Tier 5 bærer `G140` og `G139`.
+**Listen er 32 → 30. Tier 1–5 er alle tomme.**
 
-**`G141`:** analytics-tavlens `viewable` målte dagskortene på karusellens regel
-— den flade, v3 fjernede. Hver række måles nu på sin egen: v3-dagskortene på
-deres vindue (`created_at` → det tidligste af 48 timer og næste `day_key` for
-samme bruger), rundekortene og v2's dagskort på karusellen som før. Udtrykket er
-**ordret** `_vindue` fra `sql/story_engine_v3_measure.sql`.
+**`G140`:** de tre "vis mere"-flader var `<p onClick>` — hverken tastatur,
+skærmlæser eller skærmbilled-harnessen kunne nå dem. `Auth.jsx` havde svaret
+liggende i sin egen lokale kopi siden `G28`; den er nu `TekstLink` i
+`ui/components.jsx`, og alle fire steder bruger den.
 
-**`G142` blev afgjort og ikke bygget:** de døde kort bliver stående som
-analysedata og holdes ude af nævneren. Vinduet er en *model* af `loadDayCard` —
-et afvist nyere kort lader et ældre komme frem — så tallet 50 er et loft, og en
-dagsløkke, der sprang dagen over, ville betale med rigtige kort.
+**`G139`:** Hjem hentede hele den globale ratingtabel for at vise fire tal.
+Kortet slår nu sin egen række op og lader databasen TÆLLE resten
+(`count=exact`), og formkurven hentes kun for én bruger. `BoardScreen` henter kun
+konkurrencens deltagere. To ting skulle med, og begge er lette at tabe: delt
+placering afgøres på den AFRUNDEDE rating (`gte.<min + 0.5>`, ikke `gt.<rå>`), og
+lukkede konti tæller ikke.
 
-**Læren:** *en nævner måler den flade, den blev skrevet til. Fjernes fladen,
-bliver nævneren forkert uden at nogen rører den — og reglen står i tavlen, som
-ligger længst væk fra den ændring, der gjorde den forkert.*
-
-🔴 **`#17 analytics_dashboard.sql` skal gen-køres i Supabase.** Kun funktionen,
-ingen rækker, ingen frontend-ændring at merge sammen med.
+**Læren:** *en flytning af en udregning fra klienten til databasen har præcis én
+farlig fejlmåde — et tal, der er næsten rigtigt. Derfor er vagten en
+ækvivalenstest mod ranglisten og ikke en liste af påstande; og skærmbilledet af
+Hjem er byte-identisk, hvilket er den samme påstand kørt gennem hele appen.*

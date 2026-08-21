@@ -205,17 +205,20 @@ async function loadHomePlacements(token, userId, competitions, monthKey) {
 }
 
 // ---------- Hjem: rating-snapshot ----------
-// Ét objekt til kortet øverst. `rank` er ranglistens ÆGTE placering (delt ved
-// samme rating) og ikke listeindekset. Står brugeren ikke på ranglisten,
+// Ét objekt til kortet øverst, flettet af to opslag: tallene fra
+// `loadRatingSnapshot()` (rating, ægte placering, antal, provisorisk) og
+// formkurven fra `loadRatingHistory()`. Står brugeren ikke på ranglisten,
 // svares `{ none: true }` — det er en gyldig tilstand og ikke en fejl.
-function ratingSnapshot(board, hist, userId) {
-  const me = board.find((r) => r.userId === userId);
-  if (!me) return { none: true };
+//
+// FLETNINGEN ER SKILT FRA OPSLAGENE MED VILJE: `rank` og `total` regnes nu i
+// databasen (`G139`, 21. august 2026) frem for ved at tælle en hentet liste, og
+// den regning har sine egne påstande i `data/standings.test.js`. Her står kun
+// det, der kan gå galt uden et netværk — at en manglende formkurve ikke må
+// vælte kortet.
+function ratingSnapshot(snap, hist, userId) {
+  if (!snap || snap.none) return { none: true };
   const h = hist.get(userId) || {};
-  return {
-    rating: me.rating, move: h.move || 0, form: h.form || [],
-    rank: me.rank, total: board.length, provisional: me.provisional,
-  };
+  return { ...snap, move: h.move || 0, form: h.form || [] };
 }
 
 // ---------- dato/tid-formattering til Hjem ----------

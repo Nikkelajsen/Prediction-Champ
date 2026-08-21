@@ -10,7 +10,7 @@ import { logEvent } from "../lib/analytics.js";
 import { shareText, shareImage, inviteShareText } from "../lib/share.js";
 import { drawStandings, standingsHeight, standingsShareText } from "../lib/shareCanvas.js";
 import { C, btnGhost, btnGold, font, iconBtn, muted, thStyle } from "../ui/theme.js";
-import { BackBar, Card, EmptyCompetitions, InviteCode, PlayerName, UserRoundPredictions } from "../ui/components.jsx";
+import { BackBar, Card, EmptyCompetitions, InviteCode, PlayerName, TekstLink, UserRoundPredictions } from "../ui/components.jsx";
 
 // Én kåringslinje pr. periode: "🏅 Ugens bedste · 12/08 – 18/08: Nikolaj (14
 // point)". Delt førsteplads er flere rækker med samme period_key — de samles
@@ -105,7 +105,9 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
       try {
         const result = await computeCompetitionState(token, selectedCompId, { signal: ctrl.signal });
         try {
-          const ratingMap = await loadRatingMap(token);
+          // Kun konkurrencens egne deltagere (G139) — et ratingtal ved otte
+          // navne skal ikke koste hele den globale ratingtabel.
+          const ratingMap = await loadRatingMap(token, result.rows.map((r) => r.userId));
           result.rows.forEach((row) => {
             const rt = ratingMap.get(row.userId);
             if (rt) { row.rating = rt.rating; row.provisional = rt.provisional; }
@@ -411,10 +413,10 @@ function BoardScreen({ token, userId, competitions, initialCompId, inviterName, 
             </table>
           </div>
           {roundsDesc.length > 3 && (
-            <p style={{ ...muted, marginTop: 10, marginBottom: 0, cursor: "pointer", textDecoration: "underline" }}
+            <TekstLink style={{ ...muted, display: "block", marginTop: 10, marginBottom: 0 }}
               onClick={() => setShowAllRounds(!showAllRounds)}>
               {showAllRounds ? "Vis kun de 3 seneste" : `Vis alle ${roundsDesc.length} runder`}
-            </p>
+            </TekstLink>
           )}
         </Card>
       )}

@@ -15,6 +15,94 @@ man ved ikke, om forudsætningen stadig holder.
 
 ---
 
+## 21. august 2026 — `G139`: Hjems rating-kort tæller i databasen, og placeringen skal stemme med ranglisten
+
+**Beslutning:** Hjem henter ikke længere `loadRatingBoard()`. Kortet slår sin
+egen ratingrække op og lader databasen tælle placeringen og antallet
+(`db.count`, `count=exact`). Formkurven hentes kun for brugeren selv.
+`BoardScreen` henter kun konkurrencens deltagere; `ChampionshipTab` gør det
+bevidst ikke.
+
+**Begrundelse.** Rækken var skrevet som en egress-sag (`A34`s loft), men prisen
+var dobbelt: `db.select` rammer PostgREST' tavse grænse på 1000 rækker, hvor
+svaret bare bliver kortere. Med tusind ratede brugere ville Hjem have vist et for
+lavt `total` og en placering regnet på en afkortet liste — uden en fejl nogen
+steder. Det er `G106`s fælde og "· 0 kampe"-fælden (§13) en gang til, og den
+gør rækken til andet end en optimering.
+
+**Det svære var ikke at tælle, men at tælle DET SAMME.** Kortet linker til
+ranglisten, så "nr. 4 af 25" og listens "4." skal være det samme tal, ellers
+lyver den ene om den anden uden at nogen af dem ser forkerte ud hver for sig. To
+regler skulle med:
+
+- **Delt placering afgøres på den VISTE rating.** Ranglisten runder først og
+  deler placering ved samme hele tal. `Math.round(x) > n` er ensbetydende med
+  `x >= n + 0.5`, så optællingen er `rating=gte.<min afrundede + 0.5>`. Rækkens
+  eget forslag — `count=exact` på `rating=gt.<din>` — ville have talt en nabo med
+  samme viste tal som foran mig. **Kuren i en backlog-række er et forslag, ikke
+  en specifikation.**
+- **Lukkede konti tæller ikke.** De filtreres fra de globale lister i KLIENTEN
+  (bevidst, så en lukket konto ikke kan flytte beregnede tal), og en optælling i
+  databasen ser dem derfor. De trækkes fra igen, og opslaget går gennem
+  `selectIn`, så en voksende mængde ikke kan sprænge URL'en.
+
+**Vagten er en ækvivalenstest og ikke en liste af påstande.** En flytning af en
+udregning fra klient til database har præcis én farlig fejlmåde: et tal, der er
+*næsten* rigtigt. Begge veje drives derfor af den samme fixture, og påstanden er,
+at de svarer ens; fixturen indeholder både en delt placering og en lukket konto
+foran mig, så de to fælder faktisk stilles op. Seks mutationer, alle fanget.
+
+**Og den blev efterprøvet gennem hele appen:** `npm run screenshots` giver
+byte-identiske PNG'er, `hjem.png` med rating-kortet inklusive. At billedet er
+FØLSOMT over for kortet er bevist ved at lade opslaget svare tomt — da flyttede
+filen sig. Uden den modprøve ville et identisk billede ikke betyde noget.
+
+**`ChampionshipTab` afgrænses IKKE, og det er et valg.** Dens lister er selv
+globale, så opslaget er proportionalt med det, skærmen viser, og deltagerne
+kendes først, når månedens eller rundens stilling er hentet. Rating-fanen og de
+globale lister har fortsat intet værn mod rækkeloftet; det er noteret i
+backloggens indbakke frem for løst her.
+
+---
+
+## 21. august 2026 — `G140`: en link-formet knap bor ét sted, ikke i hver skærms egen kopi
+
+**Beslutning:** de tre "vis mere"-flader (`Vis hele stillingen`,
+`Vis alle N milepæle`, `Vis alle N runder`) er `<button type="button">` frem for
+`<p onClick>`, og knappen selv er `TekstLink` i `ui/components.jsx`. `Auth.jsx`
+bruger den samme og beholder kun sin farve.
+
+**Begrundelse.** En `<p>` med en `onClick` er ikke en betjening: den kan hverken
+nås med tabulator eller aktiveres med Enter/mellemrum, og den har ingen rolle for
+en skærmlæser. Dertil kommer en pris, der er særegen for dette repo:
+skærmbilled-harnessen trykker på `button` og intet andet
+(`scripts/screenshots/boot.js`), så en `<p onClick>` er en flade, de billeder,
+der skal vise appen frem, per konstruktion ikke kan nå.
+
+**Det bærende valg er, at rettelsen blev en KOMPONENT og ikke tre rettelser.**
+Svaret fandtes allerede: `G28` gjorde præcis dette ved login-skærmens tekstlinks
+i august 2026 — og lagde knappen i `Auth.jsx`s egen fil. Tre skærme skrev derfor
+`<p onClick>` bagefter, ikke fordi nogen var uenig, men fordi den rigtige form lå
+et sted, ingen af dem kiggede. En lokal kopi af et generelt svar er en beslutning,
+der kun gælder den fil, den står i.
+
+**Rækken nævnte én flade; de tre er den samme fejl.** At rette den ene og lade to
+identiske stå ved siden af ville have efterladt et repo, hvor reglen ser ud til at
+være en smagssag.
+
+**Vagten læser markuppen og ikke en stilart**, fordi det er elementtypen, der
+afgør begge dele: en `<p>` med `role="button"` ville stadig ikke kunne trykkes af
+harnessen. Modprøven — at linjen slet ikke vises, når hele stillingen allerede
+står der — hører med, ellers ville påstanden også være opfyldt af en flade, der
+aldrig tegnes.
+
+**Udseendet er uændret, og det er efterprøvet frem for antaget:** alle fire
+skærmbilleder er byte-identiske efter ombygningen. `display: "block"` sendes med
+fra de tre kaldssteder, fordi en knap ellers er inline-block og ville samle et
+linjeafstands-mellemrum op, en `<p>` ikke havde.
+
+---
+
 ## 21. august 2026 — `G142`: de døde dagskort bliver stående i tabellen og holdes ude af nævneren
 
 **Beslutning:** bagstopperens dagsløkke ændres IKKE. Et v3-dagskort, der var
