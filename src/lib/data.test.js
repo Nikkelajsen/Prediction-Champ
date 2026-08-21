@@ -1049,6 +1049,46 @@ describe("createCompetition", () => {
       expect(matchRows().every((r) => r.match_id === "naeste")).toBe(true);
     });
 
+    // `G148`: valget skal STÅ I RÆKKEN, ellers kan efterfyldningen ikke se det.
+    // Den kender kun `mode` og `mode_params` og lagde derfor den fravalgte runde
+    // tilbage ved næste sync — mens den stadig var åben, altså præcis i det
+    // vindue, valget findes til. Feltet er den FØRSTE TILLADTE nøgle, så
+    // efterfyldningen kan sammenligne med `>=`.
+    it("'ny runde' skrives i rækken som from_round (sæson)", async () => {
+      setup(puljen);
+      await create({
+        name: "Sæson", mode: "full_season", startRound: "next",
+        tournaments: [{ leagueId: "L1", seasonId: "S1" }],
+      });
+      expect(insertedRow().mode_params).toEqual({ from_round: NAeSTE });
+    });
+
+    it("'ny runde' skrives i rækken som from_round (ét hold, legacy-formen)", async () => {
+      setup(puljen);
+      await create({ name: "Ét hold", mode: "team", leagueId: "L1", seasonId: "S1", teamId: "T1", startRound: "next" });
+      expect(insertedRow().mode_params).toEqual({ team_id: "T1", from_round: NAeSTE });
+    });
+
+    it("'ny runde' skrives i rækken som from_round (flere hold)", async () => {
+      setup(puljen);
+      await create({
+        name: "To hold", mode: "team", startRound: "next",
+        teams: [{ leagueId: "L1", seasonId: "S1", teamId: "T1" }, { leagueId: "L2", seasonId: "S2", teamId: "T2" }],
+      });
+      expect(insertedRow().mode_params.from_round).toBe(NAeSTE);
+    });
+
+    // Samme regel som `rounds` ved Quick Pick: feltet skrives kun, når det
+    // fravælger noget, så en konkurrence uden fravalg har uændret rækkeform.
+    // Ved "current" er der heller intet at beskytte — det, `filterTippable`
+    // skar væk, var LÅSTE kampe, og en låst kamp betyder, at runden er gået i
+    // gang, hvilket regel 3 allerede spærrer for.
+    it("'indeværende runde' skriver INTET felt", async () => {
+      setup(puljen);
+      await create({ name: "Nu", mode: "full_season", tournaments: [{ leagueId: "L1", seasonId: "S1" }] });
+      expect(insertedRow().mode_params).toEqual({});
+    });
+
     // Perioden har sit svar i startdatoen. To kontroller om det samme ville
     // kunne modsige hinanden, så feltet må IKKE smitte af her.
     it("periode ignorerer startrunden — dens svar ligger i datoerne", async () => {
@@ -1058,6 +1098,7 @@ describe("createCompetition", () => {
         leagueId: "L1", seasonId: "S1", startDate: "2026-08-01", endDate: "2026-08-31",
       });
       expect(matchRows().map((r) => r.match_id)).toEqual(["iuge", "naeste"]);
+      expect(insertedRow().mode_params.from_round).toBeUndefined();
     });
   });
 

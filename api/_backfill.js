@@ -12,7 +12,7 @@
 // "hel sæson"-konkurrence midt i sæsonen — og gør det tavst.
 //
 // ---------------------------------------------------------------------------
-// De tre regler, der gør efterfyldningen sikker
+// De fire regler, der gør efterfyldningen sikker
 //
 // 1. KUN REGEL-BASEREDE MODES. `full_season`, `team` og `time_range` er
 //    defineret af en regel, der kan genudregnes. `custom` og `random` er
@@ -56,6 +56,22 @@
 //    Præcis samme sætning som afsnittet ovenfor, ét niveau højere oppe — og
 //    den kunne ikke ses før, fordi ingen konkurrence har haft mere end én
 //    turnering (`G8`).
+//
+// 4. EN KONKURRENCE VOKSER ALDRIG BAGUD FORBI SIN EGEN STARTRUNDE. Valgte
+//    opretteren "start ved næste runde", står den første tilladte rundenøgle i
+//    `mode_params.from_round` (`G148`, august 2026), og en kamp i en tidligere
+//    runde tilføjes aldrig — heller ikke selv om regel 3 ville tillade den.
+//
+//    De to regler ligner hinanden og løser hver sit. Regel 3 spærrer for en
+//    runde, TIDEN har sat i gang; denne spærrer for en runde, OPRETTEREN har
+//    valgt fra. Netop dét fravalg gøres, mens runden stadig er åben — det er
+//    hele grunden til, at chippen findes — så regel 3 kan pr. definition ikke
+//    dække det: i det vindue, hvor fravalget betyder noget, siger regel 3 ja.
+//    Uden feltet kunne efterfyldningen ikke se forskel på en runde, ingen
+//    havde valgt, og en runde, nogen havde valgt fra.
+//
+//    Rækker fra før feltet har det ikke, og de opfører sig som hidtil: ingen
+//    overgangsregel, samme form som `stages`-mærkatet i regel 2.
 
 import { sbAll } from "./_shared.js";
 
@@ -183,6 +199,10 @@ export function matchesToBackfill({ competition, matches, existingIds, nowMs, lo
       const first = earliest.get(m.round_key);
       return first === undefined || nowMs < first; // regel 3: runden må vokse, indtil dens første kamp låser
     })
+    // Regel 4: startrunden er en bund, konkurrencen aldrig vokser under. Nøglen
+    // er en 'YYYY-MM-DD'-tekst, og sammenligningen sker som tekst — samme form
+    // som `time_range`s datoer nedenfor.
+    .filter((m) => !competition.mode_params?.from_round || m.round_key >= competition.mode_params.from_round)
     .filter((m) => matchesRule(competition, m))
     .map((m) => m.id);
 }

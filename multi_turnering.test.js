@@ -16,6 +16,10 @@
 // Testen her skriver derfor rækken med den RIGTIGE skriver og giver den til den
 // RIGTIGE læser, uden en håndskrevet række imellem. Den kan ikke erstatte en
 // aflæsning i produktion — den kan sikre, at de to ender taler samme sprog.
+//
+// `mode_params.from_round` (`G148`) kom til på nøjagtig samme søm og bevogtes
+// nederst i filen: også dét felt skrives i `src/` og læses i `api/`, og også
+// dér ville en omdøbning i den ene ende lade begge siders egne tests bestå.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -26,6 +30,7 @@ vi.mock("./src/lib/supabase.js", () => ({
 import { db, restFetch } from "./src/lib/supabase.js";
 import { createCompetition } from "./src/lib/data.js";
 import { coversSeason, matchesToBackfill } from "./api/_backfill.js";
+import { currentRoundKey, nextRoundKey } from "./src/lib/scoring.js";
 
 const NOW = Date.parse("2026-08-10T12:00:00Z");
 const iso = (ms) => new Date(ms).toISOString();
@@ -129,5 +134,52 @@ describe("flerturnerings-konkurrencen fra skriver til efterfyldning (G8)", () =>
     expect(række.season_id).toBe("S1");
     expect(række.mode_params.tournaments).toBeUndefined();
     expect(coversSeason(række, "S1")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Samme søm, andet felt: startrunden (`G148`).
+//
+// "Start ved næste runde" var indtil august 2026 kun et filter i oprettelsen.
+// Efterfyldningen kender kun `mode` og `mode_params` og lagde derfor den
+// fravalgte runde tilbage ved næste sync — mens den stadig var åben, altså
+// præcis i det vindue, valget findes til.
+describe("startrunden fra skriver til efterfyldning (G148)", () => {
+  beforeEach(() => {
+    db.select.mockReset();
+    restFetch.mockReset();
+  });
+
+  // Rundenøglerne bygges af den RIGTIGE nuværende runde, så testen måler reglen
+  // og ikke en dato, der forældes.
+  const NU = currentRoundKey();
+  const NAeSTE = nextRoundKey(NU);
+  const om = (min) => new Date(Date.now() + min * 60000).toISOString();
+
+  async function opretFraNaesteRunde() {
+    db.select.mockResolvedValue([
+      { id: "iuge", round_key: NU, kickoff_at: om(4000), home_score: null },
+      { id: "naeste", round_key: NAeSTE, kickoff_at: om(12000), home_score: null },
+    ]);
+    restFetch.mockImplementation(async (path, { body } = {}) =>
+      String(path).endsWith("/rpc/create_competition") ? { id: "c1", ...body } : null);
+    await createCompetition("token", "u1", {
+      groupId: "g1", name: "Fra næste uge", mode: "full_season", startRound: "next",
+      tournaments: [{ leagueId: "L1", seasonId: "S1" }],
+    });
+    return rækkenIBasen();
+  }
+
+  it("efterfyldningen henter aldrig den runde, opretteren valgte fra", async () => {
+    const række = await opretFraNaesteRunde();
+    expect(række.mode_params.from_round).toBe(NAeSTE);
+
+    // Indeværende runde er stadig åben — regel 3 ville sige ja til begge kampe.
+    const kampe = [
+      { id: "iuge-ny", round_key: NU, kickoff_at: om(4000), home_score: null },
+      { id: "naeste-ny", round_key: NAeSTE, kickoff_at: om(12000), home_score: null },
+    ];
+    expect(matchesToBackfill({ competition: række, matches: kampe, existingIds: [], nowMs: Date.now() }))
+      .toEqual(["naeste-ny"]);
   });
 });
